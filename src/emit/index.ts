@@ -24365,12 +24365,21 @@ class Emitter {
             kind === ts.SyntaxKind.SlashEqualsToken ||
             kind === ts.SyntaxKind.PercentEqualsToken ||
             kind === ts.SyntaxKind.AmpersandEqualsToken ||
+            kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
             kind === ts.SyntaxKind.BarEqualsToken ||
+            kind === ts.SyntaxKind.BarBarEqualsToken ||
             kind === ts.SyntaxKind.CaretEqualsToken ||
+            kind === ts.SyntaxKind.QuestionQuestionEqualsToken ||
             kind === ts.SyntaxKind.LessThanLessThanEqualsToken ||
             kind === ts.SyntaxKind.GreaterThanGreaterThanEqualsToken ||
             kind === ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken ||
             kind === ts.SyntaxKind.AsteriskAsteriskEqualsToken;
+    }
+
+    private isSimpleLazyYieldLogicalCompoundAssignmentOperator(kind: ts.SyntaxKind): boolean {
+        return kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken ||
+            kind === ts.SyntaxKind.BarBarEqualsToken ||
+            kind === ts.SyntaxKind.QuestionQuestionEqualsToken;
     }
 
     private isSimpleLazyStableLvaluePart(expr: ts.Expression): boolean {
@@ -24852,6 +24861,10 @@ class Emitter {
             } else {
                 const nextState = nextStateId();
                 this.emitSimpleLazyYieldPreSuspend(buf, stmt, envLocalName);
+                const shouldSuspend = this.simpleLazyLogicalCompoundShouldSuspend(stmt, envLocalName);
+                if (shouldSuspend) {
+                    buf.open(`if (${shouldSuspend})`);
+                }
                 const value = yieldExpr.expression
                     ? this.emitExpr(yieldExpr.expression)
                     : { c: "NULL", ty: T_VOID };
@@ -24863,8 +24876,18 @@ class Emitter {
                 buf.line("*done = false;");
                 buf.line("return;");
                 buf.line(`case ${nextState}:;`);
+                if (this.simpleLazyYieldNeedsResume(stmt)) {
+                    if (ts.isThrowStatement(stmt)) {
+                        buf.line("*state = -1;");
+                        buf.line("*done = true;");
+                    }
+                    this.emitSimpleLazyYieldResume(buf, stmt, "next_arg", envLocalName);
+                }
+                if (shouldSuspend) {
+                    buf.close();
+                }
             }
-            if (this.simpleLazyYieldNeedsResume(stmt)) {
+            if (yieldExpr.asteriskToken && this.simpleLazyYieldNeedsResume(stmt)) {
                 if (ts.isThrowStatement(stmt)) {
                     buf.line("*state = -1;");
                     buf.line("*done = true;");
@@ -25137,6 +25160,40 @@ class Emitter {
         buf.line(`${envLocalName}->${slot.field} = ${this.coerce(current, slot.type, expr.left)};`);
     }
 
+    private nullishExprFromEmitResult(value: EmitResult, node: ts.Expression): string {
+        if (value.ty.kind === "value") return `tsc_value_is_nullish(${value.c})`;
+        if (value.ty.kind === "void") return "true";
+        if (isPointerKind(value.ty)) return `(${value.c} == NULL)`;
+        this.coerce(value, T_BOOLEAN, node);
+        return "false";
+    }
+
+    private simpleLazyLogicalCompoundShouldSuspend(
+        stmt: ts.Statement,
+        envLocalName: string,
+    ): string | null {
+        if (!ts.isExpressionStatement(stmt)) return null;
+        const expr = stmt.expression;
+        if (
+            !ts.isBinaryExpression(expr) ||
+            !this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(expr.operatorToken.kind) ||
+            !this.singleYieldExpressionInExpression(expr.right)
+        ) {
+            return null;
+        }
+        const slot = this.lazyCompoundResumeSlots.get(expr);
+        const current = slot && envLocalName
+            ? { c: `${envLocalName}->${slot.field}`, ty: slot.type }
+            : this.emitExpr(expr.left);
+        if (expr.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken) {
+            return this.truthyExprFromEmitResult(current, expr.left);
+        }
+        if (expr.operatorToken.kind === ts.SyntaxKind.BarBarEqualsToken) {
+            return `!${this.truthyExprFromEmitResult(current, expr.left)}`;
+        }
+        return this.nullishExprFromEmitResult(current, expr.left);
+    }
+
     private emitSimpleLazyYieldResume(buf: CBuf, stmt: ts.Statement, nextArg: string, envLocalName: string): void {
         const resumeValue: EmitResult = { c: nextArg, ty: T_VALUE };
         if (ts.isExpressionStatement(stmt)) {
@@ -25160,6 +25217,10 @@ class Emitter {
                 const lhs = this.emitLvalue(expr.left);
                 const lhsType = this.storageType(expr.left);
                 const value = this.emitSimpleLazyResumeExpression(expr.right, nextArg);
+                if (this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(expr.operatorToken.kind)) {
+                    buf.line(`${lhs} = ${this.coerce(value, lhsType, expr.right)};`);
+                    return;
+                }
                 const slot = this.lazyCompoundResumeSlots.get(expr);
                 const current = slot && envLocalName ? `${envLocalName}->${slot.field}` : lhs;
                 buf.line(`${this.emitSimpleLazyCompoundAssignment(expr, lhs, current, lhsType, value)};`);

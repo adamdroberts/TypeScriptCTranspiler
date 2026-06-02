@@ -1,0 +1,4 @@
+created: <empty>
+steps: false 2 false 3 false 5 false 6 true ready|20|set|false|50|X-done
+state: 50 false
+events: ignored:99|a ready|yield or:2|or:20|b 20|yield nullish:3|nullish:set|c set|arr1 false|yield prop:5|prop:50|box 50|yield and:6|and:X|d X-done
