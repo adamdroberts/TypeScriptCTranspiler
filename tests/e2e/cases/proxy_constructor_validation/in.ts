@@ -31,10 +31,15 @@ const nestedRevokedTarget: any = new Proxy(revokedTarget.proxy, {});
 revokedTarget.revoke();
 
 try {
-    const badRevokedTarget: any = new Proxy(nestedRevokedTarget, mark("q", {}) as any);
-    console.log("bad revoked target:", badRevokedTarget);
+    const acceptedRevokedTarget: any = new Proxy(nestedRevokedTarget, mark("q", {}) as any);
+    console.log("revoked target constructed:", typeof acceptedRevokedTarget);
+    try {
+        console.log("revoked target get:", acceptedRevokedTarget.a);
+    } catch (e: any) {
+        console.log("revoked target get:", e);
+    }
 } catch (e: any) {
-    console.log("bad revoked target:", e);
+    console.log("revoked target constructed:", e);
 }
 
 const revokedHandler: any = Proxy.revocable(mark("s", {}) as any, mark("S", {}) as any);

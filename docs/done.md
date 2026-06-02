@@ -2205,7 +2205,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_construct_new_target_prototype` | Reflect.construct applies newTarget.prototype and observes Proxy get/revocation prototype lookup |
 | `proxy_apply_arguments_list` | Proxy apply traps receive normalized real argument arrays from array-like Reflect.apply inputs |
 | `proxy_construct_arguments_list` | Proxy construct traps receive normalized real argument arrays from array-like Reflect.construct inputs |
-| `proxy_constructor_validation` | Proxy constructor validates target and handler object operands after argument evaluation, rejects revoked Proxy target chains immediately, and leaves revoked handler objects to fail during trap lookup |
+| `proxy_constructor_validation` | Proxy constructor validates target and handler object operands after argument evaluation, accepts revoked Proxy target chains until operation dispatch, and leaves revoked handler objects to fail during trap lookup |
 | `proxy_constructor_ignored_arguments` | Proxy constructor and Proxy.revocable evaluate and ignore trailing arguments |
 | `proxy_object_helper_ignored_arguments` | Proxy Object prototype/extensibility helpers evaluate ignored arguments before trap dispatch |
 | `proxy_reflect_helper_ignored_arguments` | Proxy Reflect prototype/extensibility helpers evaluate ignored arguments before trap dispatch |
