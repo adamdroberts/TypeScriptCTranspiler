@@ -21713,6 +21713,9 @@ class Emitter {
                 "getOwnPropertyDescriptors",
                 "getOwnPropertyNames",
                 "hasOwn",
+                "isExtensible",
+                "isFrozen",
+                "isSealed",
                 "keys",
                 "values",
             ].includes(method);
@@ -21722,6 +21725,7 @@ class Emitter {
                 "get",
                 "getOwnPropertyDescriptor",
                 "has",
+                "isExtensible",
                 "ownKeys",
             ].includes(method);
         }
@@ -48055,6 +48059,7 @@ class Emitter {
         const dynamicObjectArg = (value: string): string => {
             if (mapped.kind === "array") return `tsc_value_array(${value})`;
             if (mapped.kind === "function") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
+            if (mapped.kind === "class") return this.coerce({ c: value, ty: mapped }, T_VALUE, arg);
             return value;
         };
         if (name === "assign") {
@@ -48868,8 +48873,8 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, true)`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.isExtensible currently supports dynamic objects, arrays, functions, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "class") {
+                unsupported(arg, "Object.isExtensible currently supports dynamic objects, typed objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
@@ -48892,8 +48897,8 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.isSealed currently supports dynamic objects, arrays, functions, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "class") {
+                unsupported(arg, "Object.isSealed currently supports dynamic objects, typed objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
@@ -48916,8 +48921,8 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_BOOLEAN, [{ value: obj, node: arg }, ...ignored], ([o]) => `((void)${o}, false)`);
             }
-            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function") {
-                unsupported(arg, "Object.isFrozen currently supports dynamic objects, arrays, functions, and primitives only");
+            if (mapped.kind !== "value" && mapped.kind !== "array" && mapped.kind !== "function" && mapped.kind !== "class") {
+                unsupported(arg, "Object.isFrozen currently supports dynamic objects, typed objects, arrays, functions, and primitives only");
             }
             const obj = this.emitExpr(arg);
             return this.emitSequencedExpr(T_BOOLEAN, [
@@ -51217,7 +51222,7 @@ class Emitter {
                     ], ([t]) => `((void)${t}, true)`);
                 }
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function" || mapped.kind === "class") ? T_VALUE : undefined, node: args[0]! },
                     ...ignored,
                 ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }

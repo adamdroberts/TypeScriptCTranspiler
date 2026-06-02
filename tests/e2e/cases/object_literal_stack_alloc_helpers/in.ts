@@ -23,7 +23,11 @@ function describe(): string {
     const descriptors: any = Object.getOwnPropertyDescriptors(point);
     const flags = [
         Object.hasOwn(point, "y"),
+        Object.isExtensible(point),
+        Object.isFrozen(point),
+        Object.isSealed(point),
         Reflect.has(point, "x"),
+        Reflect.isExtensible(point),
         "x" in point,
         Object.prototype.hasOwnProperty.call(point, "x"),
         Object.prototype.propertyIsEnumerable.call(point, "y"),
