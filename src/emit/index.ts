@@ -17685,6 +17685,7 @@ class Emitter {
 
     private isCommonJsModuleExportsDefaultInitializerValue(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
+        if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (this.isCommonJsRuntimeComputedModuleExportsValue(cur)) return true;
         if (ts.isIdentifier(cur)) {
@@ -17757,6 +17758,7 @@ class Emitter {
 
     private isCommonJsModuleExportsDefaultValue(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
+        if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
         if (this.isUnshadowedUndefinedExpression(cur)) return true;
         if (ts.isPrefixUnaryExpression(cur)) {
@@ -17786,6 +17788,29 @@ class Emitter {
             return this.isCommonJsObjectLiteralDefaultValue(cur);
         }
         return false;
+    }
+
+    private isTopLevelCommonJsThisExpression(expr: ts.Expression): boolean {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (cur.kind !== ts.SyntaxKind.ThisKeyword || !this.isJavaScriptSourceFile(cur.getSourceFile())) {
+            return false;
+        }
+
+        let node: ts.Node = cur;
+        while (node.parent && this.isTransparentExpressionNode(node.parent)) {
+            node = node.parent;
+        }
+        while (
+            node.parent &&
+            ts.isBinaryExpression(node.parent) &&
+            node.parent.right === node &&
+            node.parent.operatorToken.kind === ts.SyntaxKind.EqualsToken
+        ) {
+            node = node.parent;
+        }
+        return !!node.parent &&
+            ts.isExpressionStatement(node.parent) &&
+            ts.isSourceFile(node.parent.parent);
     }
 
     private isCommonJsModuleExportsDefaultPrefixOperator(kind: ts.PrefixUnaryOperator): boolean {
@@ -18526,6 +18551,9 @@ class Emitter {
         let valueNode = this.commonJsExportValueNode(node);
         if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
+            return T_VALUE;
+        }
+        if (ts.isExpression(valueNode) && this.isTopLevelCommonJsThisExpression(valueNode)) {
             return T_VALUE;
         }
         if (ts.isExpression(valueNode) && this.isUnshadowedUndefinedExpression(valueNode)) {
@@ -19506,6 +19534,25 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
+    private emitCurrentCommonJsExportsObjectValue(node: ts.Node): EmitResult {
+        const obj = this.freshTemp("_cjsthis");
+        const pieces = [`tsc_object_t* ${obj} = tsc_object_new()`];
+        for (const exported of this.commonJsExportedMemberDeclarations(node.getSourceFile())) {
+            const cName = this.commonJsExportedDeclarationCName(exported.decl, exported.name);
+            if (!cName) unsupported(exported.decl, `unsupported CommonJS export "${exported.name}" for module.exports = this`);
+            const ty = this.commonJsExportedCType(exported.decl);
+            if (!this.commonJsExportGlobals.has(cName)) {
+                this.commonJsExportGlobals.add(cName);
+                this.globalDecls.line(`static ${ty.c} ${cName};`);
+            }
+            pieces.push(
+                `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(exported.name)}", ${utf8ByteLen(exported.name)}), ${this.coerce({ c: cName, ty }, T_VALUE, node)})`,
+            );
+        }
+        pieces.push(`tsc_value_object(${obj})`);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
     private emitDynamicRequireRestObject(source: EmitResult, excluded: Set<string>, node: ts.Node): EmitResult {
         const sourceTmp = this.freshTemp("_reqrest_src");
         const obj = this.freshTemp("_reqrest");
@@ -20231,6 +20278,9 @@ class Emitter {
 
     private emitCommonJsModuleExportsDefaultValue(expr: ts.Expression): EmitResult {
         const cur = this.unwrapTransparentExpression(expr);
+        if (this.isTopLevelCommonJsThisExpression(cur)) {
+            return this.emitCurrentCommonJsExportsObjectValue(cur);
+        }
         const computed = this.emitCommonJsModuleExportsComputedDefaultValue(cur);
         if (computed) return computed;
         if (ts.isCallExpression(cur)) {

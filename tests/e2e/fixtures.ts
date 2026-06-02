@@ -1649,6 +1649,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-wrapper-globals": cjsPackage("tsc2c-cjs-wrapper-globals", {
         "index.js": 'exports.fileOk = __filename.endsWith("index.js");\nexports.dirOk = __dirname.endsWith("tsc2c-cjs-wrapper-globals");\n',
     }),
+    "tsc2c-cjs-module-exports-this": cjsPackage("tsc2c-cjs-module-exports-this", {
+        "index.js": 'exports.label = "this-default";\nexports.count = 42;\nmodule.exports = this;\n',
+    }),
 };
 
 export async function ensureE2eNodeModuleFixtures(): Promise<void> {
