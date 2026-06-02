@@ -89,6 +89,25 @@ function evaluateConstant(expr: ts.Expression): AotRuntimeConstant | null {
     if (ts.isIdentifier(expr) && expr.text === "undefined") return { kind: "undefined" };
     if (ts.isVoidExpression(expr)) return { kind: "undefined" };
 
+    if (ts.isTemplateExpression(expr)) {
+        let out = expr.head.text;
+        for (const span of expr.templateSpans) {
+            const value = evaluateConstant(span.expression);
+            if (!value) return null;
+            out += String(constantToJsValue(value));
+            out += span.literal.text;
+        }
+        return { kind: "string", value: out };
+    }
+
+    if (ts.isConditionalExpression(expr)) {
+        const condition = evaluateConstant(expr.condition);
+        if (!condition) return null;
+        return Boolean(constantToJsValue(condition))
+            ? evaluateConstant(expr.whenTrue)
+            : evaluateConstant(expr.whenFalse);
+    }
+
     if (ts.isPrefixUnaryExpression(expr)) {
         const value = evaluateConstant(expr.operand);
         if (value?.kind !== "number") return null;
@@ -104,8 +123,20 @@ function evaluateConstant(expr: ts.Expression): AotRuntimeConstant | null {
 
     if (ts.isBinaryExpression(expr)) {
         const left = evaluateConstant(expr.left);
+        if (!left) return null;
+        switch (expr.operatorToken.kind) {
+            case ts.SyntaxKind.BarBarToken:
+                return Boolean(constantToJsValue(left)) ? left : evaluateConstant(expr.right);
+            case ts.SyntaxKind.AmpersandAmpersandToken:
+                return Boolean(constantToJsValue(left)) ? evaluateConstant(expr.right) : left;
+            case ts.SyntaxKind.QuestionQuestionToken:
+                return left.kind === "null" || left.kind === "undefined"
+                    ? evaluateConstant(expr.right)
+                    : left;
+        }
+
         const right = evaluateConstant(expr.right);
-        if (!left || !right) return null;
+        if (!right) return null;
         switch (expr.operatorToken.kind) {
             case ts.SyntaxKind.PlusToken:
                 if (left.kind === "string" || right.kind === "string") {

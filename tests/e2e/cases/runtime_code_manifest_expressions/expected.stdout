@@ -1,0 +1,7 @@
+manifest template: manifest-3
+manifest conditional: selected-eval
+manifest nullish: fallback-eval
+manifest and: false
+manifest or: truthy
+manifest function template: fn-6
+manifest function conditional: selected-fn
