@@ -2415,6 +2415,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `runtime_eval_manifest` | manifest-listed non-constant eval source dispatches to generated AOT constants |
 | `runtime_code_manifest_object` | named runtime-code manifest object maps dispatch eval/function allow-list entries to generated AOT constants |
 | `runtime_code_manifest_expressions` | runtime-code manifest AOT constants accept template expressions, selected conditional branches, and short-circuiting logical/nullish expressions |
+| `runtime_code_manifest_static_unsupported` | static unsupported eval and Function sources reject at compile time even with unrelated runtime-code manifest entries |
 | `runtime_eval_unknown` | expected diagnostic for unknown-source `eval(...)` runtime compilation |
 | `runtime_eval_unsafe_bridge` | `--unsafe-eval --emit-c-only` emits the embedded Node bridge for unknown eval source |
 | `runtime_eval_value_unknown` | first-class global eval value references reject without unsafe eval |

@@ -196,10 +196,14 @@ function permanentLimitDiagnostics(
                 const expr = node.expression;
                 if (ts.isIdentifier(expr)) {
                     if (expr.text === "eval") {
+                        const source = node.arguments[0] ? runtimeCodeStringText(node.arguments[0]!) : "";
+                        const canDispatchRuntimeManifest =
+                            source === null &&
+                            !!(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode));
                         if (
                             !opts.unsafeEval &&
                             !canAotCompileEvalCall(node) &&
-                            !(opts.runtimeCode && runtimeCodeManifestHasEval(opts.runtimeCode))
+                            !canDispatchRuntimeManifest
                         ) {
                             diagnostics.push({
                                 node,
@@ -207,10 +211,14 @@ function permanentLimitDiagnostics(
                             });
                         }
                     } else if (expr.text === "Function") {
+                        const body = functionConstructorBodyText(node);
+                        const canDispatchRuntimeManifest =
+                            body === null &&
+                            !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node));
                         if (
                             !opts.unsafeEval &&
                             !canAotCompileFunctionConstructor(node) &&
-                            !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node))
+                            !canDispatchRuntimeManifest
                         ) {
                             diagnostics.push({
                                 node,
@@ -281,10 +289,14 @@ function permanentLimitDiagnostics(
                 ts.isIdentifier(node.expression) &&
                 node.expression.text === "Function"
             ) {
+                const body = functionConstructorBodyText(node);
+                const canDispatchRuntimeManifest =
+                    body === null &&
+                    !!(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node));
                 if (
                     !opts.unsafeEval &&
                     !canAotCompileFunctionConstructor(node) &&
-                    !(opts.runtimeCode && runtimeCodeManifestHasFunctions(opts.runtimeCode) && canAotDispatchFunctionManifest(node))
+                    !canDispatchRuntimeManifest
                 ) {
                     diagnostics.push({
                         node,
