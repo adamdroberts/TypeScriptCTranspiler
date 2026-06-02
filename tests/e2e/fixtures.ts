@@ -1368,6 +1368,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-exports-dynamic-computed": cjsPackage("tsc2c-cjs-module-exports-dynamic-computed", {
         "index.js": 'const suffix = "bel";\nconst entries = [["la" + suffix, "dynamic-computed"], ["count", 71]];\nmodule.exports = Object.fromEntries(entries);\n',
     }),
+    "tsc2c-cjs-module-exports-runtime-named-fallback": cjsPackage("tsc2c-cjs-module-exports-runtime-named-fallback", {
+        "index.js": 'const empty = String(Date.now()).slice(9999);\nconst labelKey = "la" + empty + "bel";\nconst doubleKey = "dou" + empty + "ble";\nmodule.exports = Object.fromEntries([\n  [labelKey, "runtime-named-fallback"],\n  ["count", 184],\n  [doubleKey, function double(value) { return value * 5; }]\n]);\n',
+    }),
     "tsc2c-cjs-runtime-typeof-default-package": cjsPackage("tsc2c-cjs-runtime-typeof-default-package", {
         "index.js": 'const maybeObject = { label: "typeof-default" };\nmodule.exports = typeof maybeObject;\n',
     }),
