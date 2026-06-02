@@ -1,2 +1,3 @@
 scheduler: pending pending pending pending pending
 ignored: pending pending DOEWY
+delayed:dynamic|first|done
