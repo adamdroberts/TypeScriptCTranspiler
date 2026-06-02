@@ -68,7 +68,10 @@ static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
 static tsc_value_t array_proto_get_index(tsc_value_t receiver, size_t index) {
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* array = (tsc_array_t*)value_ptr(receiver);
-        return index < array->len ? TSC_ARR(tsc_value_t, array, index) : tsc_value_undefined();
+        if (index >= array->len) return tsc_value_undefined();
+        char key_buf[32];
+        snprintf(key_buf, sizeof key_buf, "%zu", index);
+        return tsc_value_get_prop_receiver(receiver, tsc_str_from_cstr(key_buf), receiver);
     }
     return tsc_value_get_index(receiver, (double)index);
 }
@@ -868,6 +871,9 @@ bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
 
 bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a || tsc_str_is_length_key(key)) return false;
+    if (a->props && tsc_object_has_own(a->props, key)) {
+        return tsc_object_property_is_enumerable(a->props, key);
+    }
     size_t idx = 0;
     if (tsc_str_array_index(key, &idx) && idx < a->len) return true;
     return a->props && tsc_object_property_is_enumerable(a->props, key);
