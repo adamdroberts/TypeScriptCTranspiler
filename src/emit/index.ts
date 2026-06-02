@@ -266,6 +266,7 @@ class Emitter {
     private immediateAdapters = new Map<string, string>();
     private timeoutAdapters = new Map<string, string>();
     private timersPromisesSetTimeoutAdapters = 0;
+    private timersPromisesSchedulerWaitAdapters = 0;
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
@@ -40470,24 +40471,53 @@ class Emitter {
         switch (name) {
             case "wait": {
                 const delay = call.arguments[0];
-                if (delay && !this.isZeroDelayLiteral(delay)) {
-                    unsupported(delay, "timers/promises.scheduler.wait in this subset requires an omitted delay or literal 0 delay");
-                }
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.scheduler.wait");
-                const specs: SequencedCallArg[] = [];
-                if (delay && this.shouldEvaluateSideEffectfulVoidDefault(delay)) {
-                    specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
+                const zeroDelay = !delay || this.isZeroDelayLiteral(delay);
+                if (zeroDelay) {
+                    const specs: SequencedCallArg[] = [];
+                    if (delay && this.shouldEvaluateSideEffectfulVoidDefault(delay)) {
+                        specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
+                    }
+                    if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
+                        specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+                    }
+                    specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
+                    return this.emitSequencedExpr(
+                        mapped,
+                        specs,
+                        () => "tsc_promise_resolve(tsc_value_undefined())",
+                    );
                 }
+
+                const specs: SequencedCallArg[] = [
+                    { value: this.emitExpr(delay), target: T_NUMBER, node: delay },
+                ];
                 if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
                     specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                 }
                 specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
-                return this.emitSequencedExpr(
-                    mapped,
-                    specs,
-                    () => "tsc_promise_resolve(tsc_value_undefined())",
-                );
+                return this.emitSequencedExpr(mapped, specs, ([delayVar]) => {
+                    const callbackName = `tsc_timers_promises_scheduler_wait_${this.timersPromisesSchedulerWaitAdapters++}`;
+                    const envType = `${callbackName}_env_t`;
+
+                    this.structDecls.open(`typedef struct ${envType}`);
+                    this.structDecls.line("tsc_promise_t* promise;");
+                    this.structDecls.close(` ${envType};`);
+
+                    this.protos.line(`void ${callbackName}(void* env);`);
+
+                    const buf = new CBuf();
+                    buf.open(`void ${callbackName}(void* env)`);
+                    buf.line(`${envType}* state = (${envType}*)env;`);
+                    buf.line("tsc_promise_fulfill_in_place(state->promise, tsc_value_undefined());");
+                    buf.close();
+                    this.closureDefs.write(buf.toString());
+
+                    const env = this.freshTemp("_schedulerWaitEnv");
+                    const promiseVar = this.freshTemp("_promise");
+                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; tsc_set_timeout(${callbackName}, ${env}, ${delayVar!}); ${promiseVar}; })`;
+                });
             }
             case "yield": {
                 return this.emitSequencedExpr(

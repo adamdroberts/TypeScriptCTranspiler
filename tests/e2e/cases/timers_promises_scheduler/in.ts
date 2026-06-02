@@ -9,6 +9,7 @@ let optionWait = "pending";
 let ignoredWait = "pending";
 let ignoredYield = "pending";
 let ignoredOrder = "";
+const delayedOrder: string[] = [];
 
 const noSignal = undefined;
 const refDisabled = false;
@@ -45,3 +46,16 @@ timersPromises.scheduler.yield((ignoredOrder += "Y", 2)).then((_value: any): voi
 
 console.log("scheduler:", namedWait, aliasWait, defaultYield, namespaceWait, optionWait);
 console.log("ignored:", ignoredWait, ignoredYield, ignoredOrder);
+
+scheduler.wait(30).then((_value: any): void => {
+    delayedOrder.push("first");
+});
+
+const dynamicDelay = 15;
+timersPromisesNs.scheduler.wait(dynamicDelay).then((_value: any): void => {
+    delayedOrder.push("dynamic");
+});
+
+timersPromises.scheduler.wait(50).then((_value: any): void => {
+    console.log("delayed:" + delayedOrder.join("|") + "|done");
+});
