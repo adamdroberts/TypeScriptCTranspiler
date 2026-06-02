@@ -35741,14 +35741,25 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([v, digits]) => `tsc_value_method_to_precision(${v}, ${digits})`);
             case "toLocaleString":
-                return this.emitSequencedExpr(
-                    T_STRING,
-                    [
-                        { value: recv, target: T_VALUE, node: call.expression },
-                        ...this.ignoredArgumentSpecs(args, 0),
-                    ],
-                    ([v]) => `tsc_value_method_to_locale_string(${v})`,
-                );
+                {
+                    const localeArgs = Array.from(args, (arg) => this.emitExpr(arg));
+                    return this.emitSequencedExpr(
+                        T_STRING,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            ...localeArgs.map((value, index) => ({ value, target: T_VALUE, node: args[index]! })),
+                        ],
+                        ([v, ...vals]) => {
+                            const av = this.freshTemp("_locale_args");
+                            const pieces = [`tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, vals.length)})`];
+                            for (const value of vals) {
+                                pieces.push(`tsc_array_push_value(${av}, ${value})`);
+                            }
+                            pieces.push(`tsc_value_method_to_locale_string_args(${v}, ${av})`);
+                            return `({ ${pieces.join("; ")}; })`;
+                        },
+                    );
+                }
             case "valueOf":
                 return this.emitSequencedExpr(
                     T_VALUE,

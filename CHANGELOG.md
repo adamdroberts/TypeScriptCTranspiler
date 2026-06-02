@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic `Array.prototype.toLocaleString(...)` now forwards locale/options arguments to object element `toLocaleString` calls instead of only evaluating and discarding them. Test: `dynamic_array_to_string`.
 - Dynamic and detached `Array.prototype.sort(...)` / `toSorted(...)` calls now reject non-callable comparators even for empty or single-element array and array-like receivers. Test: `dynamic_array_prototype_sort_comparator`.
 - Runtime string allocations now initialize cached hash metadata before dynamic object, map, and JSON-derived string-key lookups use hash-based buckets. Test: `string_hash_dynamic_keys`.
 - `EventEmitter.listeners(...)` and once-wrapper `.rawListeners(...)[i].listener` values now remain directly callable through boxed dynamic dispatch / `Reflect.apply(...)` instead of reaching an internal function-identity panic. Test: `event_emitter_listener_apply`.
