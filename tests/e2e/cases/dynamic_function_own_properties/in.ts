@@ -18,6 +18,12 @@ const desc: any = Object.getOwnPropertyDescriptor(fn, "extra");
 console.log("desc:", desc.value, desc.writable, desc.enumerable, desc.configurable);
 console.log("delete:", delete fn.extra, Object.hasOwn(fn, "extra"), fn.extra);
 
+fn[0] = "zero";
+fn[1.5] = "half";
+fn[-1] = "minus";
+fn[4294967295] = "max";
+console.log("numeric:", fn[0], fn[1.5], fn[-1], fn[4294967295], Object.hasOwn(fn, "0"), Object.hasOwn(fn, "1.5"), Object.hasOwn(fn, "-1"), Object.hasOwn(fn, "4294967295"));
+
 function Target(this: any): void {}
 const target: any = Target as any;
 Object.assign(target, { a: 1, b: 2 });
