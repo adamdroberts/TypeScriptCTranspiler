@@ -24444,7 +24444,8 @@ class Emitter {
         return sourceTy.kind === "array" ||
             sourceTy.kind === "string" ||
             sourceTy.kind === "set" ||
-            sourceTy.kind === "class";
+            sourceTy.kind === "class" ||
+            sourceTy.kind === "value";
     }
 
     private isSimpleLazyYieldCompoundAssignmentOperator(kind: ts.SyntaxKind): boolean {
@@ -24635,8 +24636,11 @@ class Emitter {
             }
             arrayExpr = custom.c;
             sourceElemType = custom.ty.elem!;
+        } else if (source.ty.kind === "value") {
+            arrayExpr = `tsc_value_iter_values(${source.c})`;
+            sourceElemType = T_VALUE;
         } else {
-            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, sets, and custom iterables");
+            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, sets, custom iterables, and dynamic iterable values");
         }
         buf.line(`${envLocalName}->yield_star_arr_${slot} = ${arrayExpr};`);
         buf.line(`${envLocalName}->yield_star_idx_${slot} = 0;`);
