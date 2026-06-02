@@ -850,6 +850,7 @@ bool tsc_str_array_index(const tsc_str_t* key, size_t* out) {
         if (value > (SIZE_MAX - digit) / 10) return false;
         value = value * 10 + digit;
     }
+    if (value >= 4294967295ULL) return false;
     *out = value;
     return true;
 }
