@@ -119,6 +119,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
             if (atText.length > 0) return atText;
+            const joinText = resolveStaticArrayJoinCall(node);
+            if (joinText.length > 0) return joinText;
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -473,6 +475,57 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupe(out);
     };
 
+    const resolveStaticArrayJoinCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "join") return [];
+        const init = resolveCollectionExpression(callee.expression);
+        if (!init || !ts.isArrayLiteralExpression(init)) return [];
+
+        const separatorArg = call.arguments[0];
+        if (separatorArg && ts.isSpreadElement(separatorArg)) return [];
+        const separators = !separatorArg || isStaticUndefinedExpression(separatorArg)
+            ? [","]
+            : resolve(separatorArg);
+        if (separators.length === 0) return [];
+
+        const elements: string[][] = [];
+        for (const element of init.elements) {
+            if (ts.isSpreadElement(element)) return [];
+            if (element.kind === ts.SyntaxKind.OmittedExpression) {
+                elements.push([""]);
+                continue;
+            }
+            if (isStaticUndefinedExpression(element) || element.kind === ts.SyntaxKind.NullKeyword) {
+                elements.push([""]);
+                continue;
+            }
+            const values = resolve(element);
+            if (values.length === 0) return [];
+            elements.push(values);
+        }
+
+        const out: string[] = [];
+        for (const separator of separators) {
+            let joined = [""];
+            for (let index = 0; index < elements.length; index++) {
+                const values = elements[index]!;
+                const next: string[] = [];
+                for (const prefix of joined) {
+                    for (const value of values) {
+                        next.push(index === 0 ? value : `${prefix}${separator}${value}`);
+                        if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                    }
+                }
+                joined = dedupe(next);
+                if (joined.length === 0) return [];
+            }
+            out.push(...joined);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
     const resolveStaticArrayAccess = (
         init: ts.ArrayLiteralExpression,
         keyExpr: ts.Expression | ts.Identifier,
@@ -555,6 +608,20 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             keys.push(Number(text));
         }
         return keys;
+    };
+
+    const isStaticUndefinedExpression = (node: ts.Expression): boolean => {
+        const cur = unwrapStaticExpression(node);
+        if (cur.kind === ts.SyntaxKind.UndefinedKeyword) return true;
+        if (ts.isIdentifier(cur) && cur.text === "undefined") return true;
+        if (ts.isVoidExpression(cur)) return true;
+        if (!ts.isIdentifier(cur)) return false;
+        const decl = earlierConstStringDeclaration(cur) ?? topLevelConstStringDeclaration(cur);
+        if (!decl?.initializer || seen.has(decl)) return false;
+        seen.add(decl);
+        const value = isStaticUndefinedExpression(decl.initializer);
+        seen.delete(decl);
+        return value;
     };
 
     return dedupe(resolve(expr));
