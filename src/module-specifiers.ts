@@ -281,7 +281,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     const flattenArrayLiteral = (array: ts.ArrayLiteralExpression): ts.ArrayLiteralExpression | null => {
-        const elements: ts.ArrayLiteralElement[] = [];
+        const elements: ts.Expression[] = [];
         for (const element of array.elements) {
             if (!ts.isSpreadElement(element)) {
                 elements.push(element);
