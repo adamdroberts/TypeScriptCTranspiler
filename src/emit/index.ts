@@ -22231,6 +22231,12 @@ class Emitter {
 
     private nonEscapingArrayResultUseIsSafe(expr: ts.Expression): boolean {
         const parent = expr.parent;
+        if (ts.isParenthesizedExpression(parent)) {
+            return this.nonEscapingArrayResultUseIsSafe(parent);
+        }
+        if (ts.isExpressionStatement(parent)) {
+            return true;
+        }
         if (
             ts.isVariableDeclaration(parent) &&
             parent.initializer === expr &&
@@ -22257,6 +22263,16 @@ class Emitter {
         if (
             (ts.isForOfStatement(parent) || ts.isForInStatement(parent)) &&
             parent.expression === expr
+        ) {
+            return true;
+        }
+        if (ts.isCallExpression(parent) && this.nonEscapingArraySafeCallArgument(parent, expr)) {
+            return true;
+        }
+        if (
+            ts.isCallExpression(parent) &&
+            this.nonEscapingArrayObjectPrototypeValueOfCallArgument(parent, expr) &&
+            this.nonEscapingArrayValueOfResultUseIsSafe(parent)
         ) {
             return true;
         }

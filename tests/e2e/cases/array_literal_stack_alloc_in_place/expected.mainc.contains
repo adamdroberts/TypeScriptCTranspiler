@@ -1,2 +1,4 @@
 tsc_array_t _values_stack
 double _values_stack_data
+tsc_array_t _checks_stack
+double _checks_stack_data
