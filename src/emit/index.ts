@@ -25431,6 +25431,12 @@ class Emitter {
             };
         }
         if (ts.isBinaryExpression(expr)) {
+            if (expr.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
+                const left = this.singleYieldExpressionInExpression(expr.left)
+                    ? this.emitSimpleLazyResumeExpression(expr.left, nextArg)
+                    : this.emitExpr(expr.left);
+                return this.emitInstanceOfWithLeft(expr, left);
+            }
             const left = this.singleYieldExpressionInExpression(expr.left)
                 ? this.emitSimpleLazyResumeExpression(expr.left, nextArg)
                 : this.emitExpr(expr.left);
@@ -30385,20 +30391,32 @@ class Emitter {
 
     private emitInstanceOf(bin: ts.BinaryExpression): EmitResult {
         const left = this.emitExpr(bin.left);
+        return this.emitInstanceOfWithLeft(bin, left);
+    }
+
+    private emitInstanceOfWithLeft(bin: ts.BinaryExpression, left: EmitResult): EmitResult {
         if (left.ty.kind !== "class" || !left.ty.className) {
-            unsupported(bin.left, "instanceof left side must be a class value");
+            if (left.ty.kind !== "value") {
+                unsupported(bin.left, "instanceof left side must be a class value");
+            }
         }
-        const leftDecl = this.findClassDecl(left.ty.className);
-        if (!leftDecl) unsupported(bin.left, "instanceof on interface-shaped value");
         if (!ts.isIdentifier(bin.right)) {
             unsupported(bin.right, "instanceof right side must be a class identifier");
         }
         const rightDecl = this.findClassDecl(bin.right.text);
         if (!rightDecl) unsupported(bin.right, "instanceof right side must be a class");
+        if (left.ty.kind === "class") {
+            const leftDecl = this.findClassDecl(left.ty.className!);
+            if (!leftDecl) unsupported(bin.left, "instanceof on interface-shaped value");
+        }
+        const leftValue = left.ty.kind === "value"
+            ? this.coerce(left, classType(bin.right.text), bin.left)
+            : left.c;
+        const leftType = left.ty.kind === "value" ? classType(bin.right.text) : left.ty;
         const tv = this.freshTemp("_io");
         return {
             c:
-                `({ ${left.ty.c} ${tv} = ${left.c}; ` +
+                `({ ${leftType.c} ${tv} = ${leftValue}; ` +
                 `${tv} != NULL && tsc_instanceof(${tv}->__tsc_type, "${escapeCString(bin.right.text)}"); })`,
             ty: T_BOOLEAN,
         };
