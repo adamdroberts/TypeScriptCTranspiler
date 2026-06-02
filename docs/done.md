@@ -1861,6 +1861,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_computed_object_keys_values_exports` | CommonJS computed named-export metadata accepts finite Object.keys/Object.values indexed export keys over static object literals |
 | `node_modules_commonjs_computed_object_entries_exports` | CommonJS computed named-export metadata accepts finite Object.entries indexed key export names over static object literals |
 | `node_modules_commonjs_computed_own_property_names_exports` | CommonJS computed named-export metadata accepts finite Object.getOwnPropertyNames indexed export keys over static object literals |
+| `node_modules_commonjs_computed_object_wrapper_enum_exports` | CommonJS computed named-export metadata accepts finite object enumeration keys over object-preserving static object literal wrappers |
 | `node_modules_commonjs_module_exports_object_from_entries_named` | narrow CommonJS package `module.exports = Object.fromEntries([...])` static entry-array default/named export metadata plus whole-value default |
 | `node_modules_commonjs_module_exports_object_from_entries_computed_named` | narrow CommonJS package `module.exports = Object.fromEntries([...])` static computed-key default/named export metadata |
 | `node_modules_commonjs_module_exports_object_from_entries_finite_keys` | narrow CommonJS package `module.exports = Object.fromEntries([...])` named export metadata with finite dynamic key alternatives |
