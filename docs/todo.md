@@ -130,6 +130,7 @@ This is the next item that most directly expands what programs can be written ag
   - Finite dynamic `require(...)` proofs flatten static string-array spread elements before resolving array index, `.at(...)`, and `.join(...)` specifiers into the AOT module graph. Test: `dynamic_require_static_array_spread`.
   - Finite dynamic `require(...)` proofs resolve zero-argument static string `.toLowerCase()` and `.toUpperCase()` specifiers into the AOT module graph. Test: `dynamic_require_static_string_case`.
   - Finite dynamic `require(...)` proofs resolve zero-argument static string `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` specifiers into the AOT module graph. Test: `dynamic_require_static_string_trim`.
+  - Finite dynamic `require(...)` proofs resolve static string `.slice(...)` and `.substring(...)` specifiers with finite integer bounds into the AOT module graph. Test: `dynamic_require_static_string_range`.
   - Finite dynamic `require(...)` proofs resolve indexed `Object.keys({...})` and `Object.values({...})` specifiers over static object literals into the AOT module graph. Test: `dynamic_require_static_object_keys_values`.
   - Finite dynamic `require(...)` proofs resolve indexed `Object.entries({...})[idx][0]` key specifiers and `[idx][1]` static string value specifiers over static object literals into the AOT module graph. Test: `dynamic_require_static_object_entries`.
   - Basic `allowJs: true` package-source loading is implemented for pure ESM JavaScript packages; broader JS package patterns remain

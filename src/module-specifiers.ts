@@ -125,6 +125,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (caseText.length > 0) return caseText;
             const trimText = resolveStaticStringTrimCall(node);
             if (trimText.length > 0) return trimText;
+            const rangeText = resolveStaticStringRangeCall(node);
+            if (rangeText.length > 0) return rangeText;
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -594,6 +596,40 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return value.trim();
             }
         }));
+    };
+
+    const resolveStaticStringRangeCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "slice" && method !== "substring") return [];
+        const values = resolve(callee.expression);
+        if (values.length === 0) return [];
+
+        const startArg = call.arguments[0];
+        const endArg = call.arguments[1];
+        const starts = !startArg || isStaticUndefinedExpression(startArg)
+            ? [undefined]
+            : resolveStaticIntegerKeys(startArg);
+        if (starts.length === 0) return [];
+        const ends = !endArg || isStaticUndefinedExpression(endArg)
+            ? [undefined]
+            : resolveStaticIntegerKeys(endArg);
+        if (ends.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const start of starts) {
+                for (const end of ends) {
+                    out.push(method === "slice"
+                        ? value.slice(start, end)
+                        : value.substring(start ?? 0, end));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticArrayAccess = (
