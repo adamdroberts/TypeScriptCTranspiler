@@ -1,0 +1,10 @@
+created
+start
+yield: 1 number
+yield: two string
+yield: true boolean
+after array
+yield: a string
+yield: z string
+after string
+return: done
