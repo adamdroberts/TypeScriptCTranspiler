@@ -1,3 +1,3 @@
 {
-  "description": "events.once returns a Promise settled by the next EventEmitter emit or error"
+  "description": "events.once returns a Promise settled by the next EventEmitter emit or error, with handlers queued asynchronously"
 }

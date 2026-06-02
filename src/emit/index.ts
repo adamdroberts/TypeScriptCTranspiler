@@ -38823,7 +38823,7 @@ class Emitter {
             }
             case "once": {
                 if (args.length < 2) unsupported(call, "events.once expects emitter, eventName, and optional options");
-                this.eventEmitterOnceOptions(args[2], "events.once");
+                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.once");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitEventEmitterEventName(args[1]!);
                 const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -38835,6 +38835,7 @@ class Emitter {
                 if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
                     specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
                 }
+                specs.push(...optionSpecs);
                 specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
                 return this.emitSequencedExpr(mapped, specs, ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
             }
@@ -38914,13 +38915,14 @@ class Emitter {
         );
     }
 
-    private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): void {
-        if (!options || this.isUndefinedLikeExpression(options)) return;
+    private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): SequencedCallArg[] {
+        if (!options || this.isUndefinedLikeExpression(options)) return [];
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(options)) return;
+        if (this.isUndefinedLikeExpression(options)) return [];
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
+        const specs: SequencedCallArg[] = [];
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support property assignments`);
@@ -38930,10 +38932,10 @@ class Emitter {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
             const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
-            if (!this.isUndefinedExpression(valueNode)) {
-                unsupported(prop.initializer, `${label}.signal requires AbortSignal support`);
-            }
+            if (this.isUndefinedExpression(valueNode)) continue;
+            specs.push({ value: this.emitExpr(prop.initializer), target: T_VOID, node: prop.initializer });
         }
+        return specs;
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
@@ -44658,7 +44660,11 @@ class Emitter {
         unsupported(call, `fs.${name} (Phase 10 sync subset only)`);
     }
 
-    private emitFsMkdirOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; mode: SequencedCallArg } {
+    private emitFsMkdirOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        allowSignal = false,
+    ): { recursive: boolean; mode: SequencedCallArg } {
         const defaultMode: SequencedCallArg = { value: { c: "511.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) {
             return { recursive: false, mode: { ...defaultMode, node: options ?? undefined } };
@@ -44679,7 +44685,7 @@ class Emitter {
         let modeArg = defaultMode;
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support recursive and mode property assignments`);
+                unsupported(prop, `${label} options only support recursive, mode${allowSignal ? ", and signal" : ""} property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "recursive") {
@@ -44704,6 +44710,9 @@ class Emitter {
                 const mode = this.emitExpr(modeNode);
                 if (mode.ty.kind !== "number") unsupported(prop.initializer, `${label}.mode must be numeric in this subset`);
                 modeArg = { value: mode, target: T_NUMBER, node: modeNode };
+                continue;
+            }
+            if (allowSignal && key === "signal") {
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
@@ -44762,6 +44771,7 @@ class Emitter {
         allowed: readonly string[],
         label: string,
         ignoredNumberKeys: readonly string[] = [],
+        allowSignal = false,
     ): Record<string, boolean> {
         const out: Record<string, boolean> = {};
         for (const key of allowed) out[key] = false;
@@ -44773,10 +44783,13 @@ class Emitter {
         }
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support boolean property assignments${ignoredNumberKeys.length ? " plus numeric retry options" : ""}`);
+                unsupported(prop, `${label} options only support boolean property assignments${ignoredNumberKeys.length ? " plus numeric retry options" : ""}${allowSignal ? " plus signal" : ""}`);
             }
             const key = this.staticPropertyName(prop.name);
             const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (allowSignal && key === "signal") {
+                continue;
+            }
             if (key && ignoredNumberKeys.includes(key)) {
                 if (this.isUndefinedExpression(valueNode)) {
                     continue;
@@ -45650,11 +45663,12 @@ class Emitter {
             case "mkdir": {
                 if (args.length < 1) unsupported(call, "fs.promises.mkdir needs path and optional options");
                 const p = this.emitExpr(args[0]!);
-                const options = this.emitFsMkdirOptions(args[1], `fs.promises.${name}`);
+                const options = this.emitFsMkdirOptions(args[1], `fs.promises.${name}`, true);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     ...optionSpecs,
@@ -45669,11 +45683,12 @@ class Emitter {
             case "rm": {
                 if (args.length < 1) unsupported(call, "fs.promises.rm needs path and optional options");
                 const p = this.emitExpr(args[0]!);
-                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
+                const options = this.emitFsBooleanOptions(args[1], ["recursive", "force"], `fs.promises.${name}`, ["maxRetries", "retryDelay"], true);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     ...optionSpecs,
@@ -45687,11 +45702,12 @@ class Emitter {
                 if (args.length < 1) unsupported(call, `fs.promises.${name} needs a path${name === "rmdir" ? " and optional options" : ""}`);
                 const p = this.emitExpr(args[0]!);
                 if (name === "rmdir") {
-                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`, ["maxRetries", "retryDelay"]);
+                    const options = this.emitFsBooleanOptions(args[1], ["recursive"], `fs.promises.${name}`, ["maxRetries", "retryDelay"], true);
                     const optionSpecs: SequencedCallArg[] = [];
                     if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                         optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                     }
+                    optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                     return this.emitSequencedExpr(mapped, [
                         this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                         ...optionSpecs,
