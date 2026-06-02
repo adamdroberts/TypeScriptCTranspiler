@@ -2762,7 +2762,7 @@ void value_flat_push(tsc_array_t* out, tsc_value_t value, int depth) {
 }
 
 tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth) {
-    if (!value_is_box(recv) || (value_tag(recv) != TSC_VALUE_TAG_ARRAY && value_tag(recv) != TSC_VALUE_TAG_OBJECT)) return tsc_value_undefined();
+    if (!value_is_box(recv) || (value_tag(recv) != TSC_VALUE_TAG_ARRAY && value_tag(recv) != TSC_VALUE_TAG_OBJECT && value_tag(recv) != TSC_VALUE_TAG_STRING)) return tsc_value_undefined();
     double depth_num = tsc_value_is_undefined(depth) ? 1.0 : tsc_value_as_num(depth);
     int depth_i = isnan(depth_num) || depth_num < 0 ? 0 : (isinf(depth_num) || depth_num > INT_MAX ? INT_MAX : (int)depth_num);
     size_t len = (size_t)tsc_value_length(recv);
@@ -2951,7 +2951,7 @@ tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv, tsc_value_t compare_fn)
         tsc_value_t copy = tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
         return tsc_value_method_sort(copy, compare_fn);
     }
-    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
         return tsc_value_method_sort(
             tsc_value_array(value_array_like_slice(recv, 0.0, tsc_value_length(recv))),
             compare_fn
@@ -2966,7 +2966,7 @@ tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         return tsc_value_array(tsc_array_with(a, tsc_value_as_num(index), &value));
     }
-    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
         size_t len = (size_t)tsc_value_length(recv);
         int64_t at = value_array_strict_index(tsc_value_as_num(index), len);
         tsc_array_t* copy = value_array_like_slice(recv, 0.0, (double)len);
@@ -2982,7 +2982,7 @@ tsc_value_t tsc_value_method_to_spliced(tsc_value_t recv, tsc_value_t start, tsc
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
         return tsc_value_array(tsc_array_to_spliced(a, tsc_value_as_num(start), tsc_value_as_num(delete_count), argc, items));
     }
-    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
         size_t len = (size_t)tsc_value_length(recv);
         size_t at = argc <= 0 ? 0 : value_array_forward_start(len, value_slice_arg(start, 0.0));
         size_t del = 0;
