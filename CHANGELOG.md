@@ -21,6 +21,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Lazy generator `yield*` lowering now delegates over typed `Map` sources by materializing `[key, value]` entries like the eager generator path. Test: `generator_lazy_yield_star_map`.
 - Lazy generator `yield*` lowering now delegates over dynamic array and string values through the existing boxed iterator materialization path. Test: `generator_lazy_yield_star_dynamic`.
 - `Math.f16round(...)` now lowers through the typed Math dispatcher with half-precision round-to-even behavior and ignored trailing-argument evaluation. Test: `math_int32_float`.
 - Lazy generator lowering now resumes single suspended `yield` values inside `delete` and postfix update expressions. Test: `generator_lazy_yield_delete_postfix`.
