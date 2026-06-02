@@ -645,6 +645,12 @@ const packages: Record<string, PackageFixture> = {
             "main.js": 'exports.__esModule = true;\nconst labelSource = { label: "primary", fallbackLabel: "fallback" };\nconst fnSource = { double: true, triple: true };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.entries(labelSource)[labelIndex][0]] = "object-entries-computed";\nmodule.exports[Object.entries(fnSource)[fnIndex][0]] = function double(value) { return value * 6; };\n',
         },
     },
+    "tsc2c-cjs-computed-object-entry-values-exports": {
+        packageJson: { name: "tsc2c-cjs-computed-object-entry-values-exports", version: "1.0.0", main: "main.js" },
+        files: {
+            "main.js": 'exports.__esModule = true;\nconst labelSource = { primary: "label", fallback: "fallbackLabel" };\nconst fnSource = { main: "double", alt: "triple" };\n/** @type {0 | 1} */\nlet labelIndex = Date.now() >= 0 ? 0 : 1;\n/** @type {0 | 1} */\nlet fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[Object.entries(labelSource)[labelIndex][1]] = "object-entry-values-computed";\nmodule.exports[Object.entries(fnSource)[fnIndex][1]] = function double(value) { return value * 9; };\n',
+        },
+    },
     "tsc2c-cjs-computed-own-property-names-exports": {
         packageJson: { name: "tsc2c-cjs-computed-own-property-names-exports", version: "1.0.0", main: "main.js" },
         files: {

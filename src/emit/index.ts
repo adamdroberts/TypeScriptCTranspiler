@@ -47142,7 +47142,9 @@ class Emitter {
         const cur = this.unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
         const tupleIndices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
-        if (tupleIndices.length !== 1 || tupleIndices[0] !== 0) return [];
+        if (tupleIndices.length !== 1) return [];
+        const tupleIndex = tupleIndices[0]!;
+        if (tupleIndex !== 0 && tupleIndex !== 1) return [];
 
         const inner = this.unwrapTransparentExpression(cur.expression);
         if (!ts.isElementAccessExpression(inner) || !inner.argumentExpression) return [];
@@ -47162,9 +47164,17 @@ class Emitter {
         const slots: string[][] = [];
         for (const prop of object.properties) {
             if (ts.isSpreadAssignment(prop)) return [];
-            const propNames = prop.name ? this.staticPropertyNames(prop.name) : [];
-            if (propNames.length === 0) return [];
-            slots.push(propNames);
+            if (tupleIndex === 0) {
+                const propNames = prop.name ? this.staticPropertyNames(prop.name) : [];
+                if (propNames.length === 0) return [];
+                slots.push(propNames);
+                continue;
+            }
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return [];
+            const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            const values = this.staticComputedPropertyExpressionTexts(valueExpr);
+            if (values.length === 0) return [];
+            slots.push(values);
         }
 
         const out: string[] = [];
