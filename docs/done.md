@@ -462,7 +462,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Detached `Array.prototype` in-place methods for `fill`, `copyWithin`, and `reverse` operate on dynamic array-like object receivers, including sparse slot preservation for copy and reverse operations. Test: `array_prototype_array_like_inplace`
 - Detached `Array.prototype.sort` mutates dynamic array-like object receivers with default string ordering, including inherited numeric slots and deletion of trailing absent slots. Test: `array_prototype_array_like_sort`
 - Detached dynamic `Array.prototype.sort` and `toSorted` calls honor runtime comparator callbacks for dynamic arrays and array-like object receivers, including non-callable comparator validation before sorting even when the receiver is empty or has one element. Test: `dynamic_array_prototype_sort_comparator`
-- `Array.prototype.flat` is available through the shared dynamic Array prototype and operates on dynamic array-like object receivers, including inherited numeric slots and skipped holes. Test: `array_prototype_array_like_flat`
+- `Array.prototype.flat` is available through the shared dynamic Array prototype and operates on dynamic array-like object receivers and nested array proxies through proxy-aware indexed reads, including inherited numeric slots and skipped holes. Test: `array_prototype_array_like_flat`
 - Dynamic arrays inherit callable mutating and copy-returning `Array.prototype` methods for `pop`, `push`, `shift`, `unshift`, `concat`, `slice`, `fill`, `copyWithin`, `splice`, `sort`, `toSorted`, `with`, `toSpliced`, `reverse`, and `toReversed`, including detached `Reflect.apply(...)` calls backed by the existing dynamic array helper semantics. Test: `dynamic_array_prototype_mutators`
 - Dynamic arrays inherit callable higher-order `Array.prototype` methods for `forEach`, `map`, `flatMap`, `filter`, `some`, `every`, `find`, `findIndex`, `findLast`, `findLastIndex`, `reduce`, and `reduceRight`, including detached `Reflect.apply(...)` calls with boxed callbacks and optional receiver binding where applicable. Test: `dynamic_array_prototype_hof`
 - Detached dynamic `Array.prototype` finder callbacks read `undefined` for indexes beyond a dynamic array's current length if the callback shrinks the receiver after iteration length capture. Test: `dynamic_array_prototype_hof_length_shrink`
@@ -2353,7 +2353,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_prototype_array_like_copy` | detached Array.prototype slice/toReversed over dynamic array-like object receivers |
 | `array_prototype_array_like_copy_more` | detached Array.prototype toSorted/with/toSpliced over dynamic array-like object receivers |
 | `array_prototype_concat_generic` | detached Array.prototype concat treats ordinary array-like receivers as generic items while preserving array/proxy-array spread behavior |
-| `array_prototype_array_like_flat` | detached Array.prototype flat over dynamic array-like object receivers |
+| `array_prototype_array_like_flat` | detached Array.prototype flat over dynamic array-like object receivers and nested array proxies |
 | `array_prototype_array_like_hof` | detached Array.prototype higher-order methods over dynamic array-like object receivers |
 | `array_prototype_array_like_inplace` | detached Array.prototype fill/copyWithin/reverse over dynamic array-like object receivers |
 | `array_prototype_array_like_mutators` | detached Array.prototype push/pop/shift/unshift over dynamic array-like object receivers |
