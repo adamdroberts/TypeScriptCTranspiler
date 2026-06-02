@@ -4,6 +4,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+### Fixed
+- CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
+
 ### Added
 - CommonJS whole-value `module.exports = Object.*(...)` defaults now unwrap TypeScript-only assertion wrappers around supported `Object.assign`, `Object.fromEntries`, `Object.defineProperty`, `Object.defineProperties`, and `Object.create` calls. Test: `node_modules_commonjs_module_exports_call_assertion_wrappers`.
 - CommonJS computed named-export metadata now accepts finite `Object.entries({...})[idx][1]` export keys over static object literal values. Test: `node_modules_commonjs_computed_object_entry_values_exports`.

@@ -17903,6 +17903,7 @@ class Emitter {
     ): {
         left: ts.PropertyAccessExpression;
         right: ts.ObjectLiteralExpression;
+        sourceRight: ts.Expression;
         exportLefts: CommonJsExportAccess[];
     } | null {
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
@@ -17937,7 +17938,7 @@ class Emitter {
             if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
             unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, static literal-value exports, and bounded runtime-computed default initializers only");
         }
-        return { left: assignment.left, right, exportLefts: assignment.exportLefts };
+        return { left: assignment.left, right, sourceRight: assignment.right, exportLefts: assignment.exportLefts };
     }
 
     private commonJsReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
@@ -18695,6 +18696,7 @@ class Emitter {
         assignment: {
             left: ts.PropertyAccessExpression;
             right: ts.ObjectLiteralExpression;
+            sourceRight: ts.Expression;
             exportLefts?: CommonJsExportAccess[];
         },
     ): void {
@@ -18704,7 +18706,12 @@ class Emitter {
                 this.commonJsExportGlobals.add(cName);
                 this.globalDecls.line(`static ${T_VALUE.c} ${cName};`);
             }
-            const value = this.emitCommonJsObjectLiteralDefaultValue(assignment.right);
+            const sourceRight = this.unwrapTransparentExpression(assignment.sourceRight);
+            let value: EmitResult | null = null;
+            if (ts.isCallExpression(sourceRight)) {
+                value = this.emitCommonJsModuleExportsObjectWrapperDefaultValue(sourceRight);
+            }
+            value ??= this.emitCommonJsObjectLiteralDefaultValue(assignment.right);
             if (assignment.exportLefts?.length) {
                 const tmp = this.freshTemp("_cjsobj");
                 buf.line(`${T_VALUE.c} ${tmp} = ${value.c};`);
@@ -19994,13 +20001,22 @@ class Emitter {
                 if (
                     ts.isCallExpression(right) &&
                     (
-                        this.commonJsModuleExportsObjectWrapperValueExportCall(right) ||
+                        (
+                            this.commonJsModuleExportsObjectWrapperValueExportCall(right) &&
+                            !this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(right)
+                        ) ||
                         (
                             this.commonJsModuleExportsObjectFromEntriesValueExportCall(right) &&
                             !this.canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(right)
                         ) ||
-                        this.commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(right) ||
-                        this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(right)
+                        (
+                            this.commonJsModuleExportsObjectWrapperFromEntriesValueExportCall(right) &&
+                            !this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(right)
+                        ) ||
+                        (
+                            this.commonJsModuleExportsObjectWrapperDescriptorValueExportCall(right) &&
+                            !this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(right)
+                        )
                     )
                 ) {
                     continue;
@@ -20009,6 +20025,22 @@ class Emitter {
             }
         }
         return null;
+    }
+
+    private commonJsModuleExportsMutableObjectWrapperWholeValue(sf: ts.SourceFile): boolean {
+        for (const stmt of this.commonJsExportCandidateStatements(sf)) {
+            const chain = this.commonJsModuleExportsValueAssignmentChain(stmt);
+            const right = chain ? this.unwrapTransparentExpression(chain.right) : null;
+            if (
+                right &&
+                ts.isCallExpression(right) &&
+                this.isCommonJsModuleExportsObjectWrapperCall(right) &&
+                this.canEmitCommonJsModuleExportsObjectWrapperWholeValue(right)
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private commonJsAccessMemberName(access: CommonJsExportAccess): string | null {
@@ -20024,6 +20056,7 @@ class Emitter {
         const name = this.commonJsAccessMemberName(access);
         if (name == null) return null;
         const info = this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName, "require");
+        if (info && this.commonJsModuleExportsMutableObjectWrapperWholeValue(info.sf)) return null;
         return info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
     }
 
@@ -20145,10 +20178,57 @@ class Emitter {
         return null;
     }
 
+    private emitCommonJsModuleExportsObjectWrapperDefaultValue(call: ts.CallExpression): EmitResult | null {
+        const callName = this.objectStaticCallName(call);
+        const wrapperArity =
+            callName === "freeze" ||
+            callName === "seal" ||
+            callName === "preventExtensions"
+                ? 1
+                : callName === "setPrototypeOf"
+                    ? 2
+                    : null;
+        if (wrapperArity === null) return null;
+        if (call.arguments.length < wrapperArity) {
+            unsupported(call, `Object.${callName} expects ${wrapperArity} argument${wrapperArity === 1 ? "" : "s"}`);
+        }
+
+        const targetArg = call.arguments[0]!;
+        const target = this.isCommonJsModuleExportsDefaultInitializerValue(targetArg)
+            ? this.emitCommonJsModuleExportsDefaultValue(targetArg)
+            : this.emitExpr(targetArg);
+        const specs: SequencedCallArg[] = [{ value: target, target: T_VALUE, node: targetArg }];
+
+        if (callName === "setPrototypeOf") {
+            const protoArg = call.arguments[1]!;
+            const proto = this.isCommonJsModuleExportsDefaultInitializerValue(protoArg)
+                ? this.emitCommonJsModuleExportsDefaultValue(protoArg)
+                : this.emitExpr(protoArg);
+            specs.push({ value: proto, target: T_VALUE, node: protoArg });
+        }
+
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, wrapperArity));
+        return this.emitSequencedExpr(T_VALUE, specs, ([targetValue, prototypeValue]) => {
+            if (callName === "setPrototypeOf") {
+                return `({ tsc_value_object_set_prototype_of(${targetValue}, ${prototypeValue}); ${targetValue}; })`;
+            }
+            const runtimeCall = callName === "freeze"
+                ? "tsc_value_freeze"
+                : callName === "seal"
+                    ? "tsc_value_seal"
+                    : "tsc_value_prevent_extensions";
+            return `({ if (!${runtimeCall}(${targetValue})) tsc_throw_str(tsc_str_from_cstr("Object.${callName} failed")); ${targetValue}; })`;
+        });
+    }
+
     private emitCommonJsModuleExportsDefaultValue(expr: ts.Expression): EmitResult {
         const cur = this.unwrapTransparentExpression(expr);
         const computed = this.emitCommonJsModuleExportsComputedDefaultValue(cur);
         if (computed) return computed;
+        if (ts.isCallExpression(cur)) {
+            const wrapper = this.emitCommonJsModuleExportsObjectWrapperDefaultValue(cur);
+            if (wrapper) return wrapper;
+        }
         if (this.isCommonJsObjectLiteralExportValue(cur)) {
             return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
         }
@@ -31214,19 +31294,14 @@ class Emitter {
         if (!this.isRequireBindingInitializer(call)) {
             const exportDecl = this.requireCallModuleExportsDeclaration(call);
             if (exportDecl) {
-                const cName = this.declarationCName(exportDecl);
-                if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
+                const cName = this.ensureCommonJsModuleExportsGlobal(exportDecl, spec);
                 return { c: cName, ty: this.commonJsExportedCType(exportDecl) };
             }
             return this.emitCommonJsRequireModuleValue(call, spec);
         } else {
             const exportDecl = this.requireCallModuleExportsDeclaration(call);
             if (exportDecl) {
-                const cName = this.declarationCName(exportDecl);
-                if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
-                if (!this.commonJsExportGlobals.has(cName)) {
-                    return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
-                }
+                const cName = this.ensureCommonJsModuleExportsGlobal(exportDecl, spec);
                 const ty = this.commonJsExportedCType(exportDecl);
                 return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
             }
@@ -31242,12 +31317,9 @@ class Emitter {
         if (!info) unsupported(call, `unresolved require("${spec}")`);
         const exportDecl = this.commonJsModuleExportsValueDeclaration(info.sf);
         if (exportDecl) {
-            const cName = this.declarationCName(exportDecl);
-            if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
-            if (this.commonJsExportGlobals.has(cName)) {
-                const ty = this.commonJsExportedCType(exportDecl);
-                return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
-            }
+            const cName = this.ensureCommonJsModuleExportsGlobal(exportDecl, spec);
+            const ty = this.commonJsExportedCType(exportDecl);
+            return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
         }
         const exportedMembers = this.commonJsExportedMemberDeclarations(info.sf);
         if (exportedMembers.length > 0) {
@@ -31265,6 +31337,17 @@ class Emitter {
             return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
         }
         return { c: `tsc_value_object(tsc_object_new())`, ty: T_VALUE };
+    }
+
+    private ensureCommonJsModuleExportsGlobal(exportDecl: ts.Node, spec: string): string {
+        const cName = this.declarationCName(exportDecl);
+        if (!cName) unsupported(exportDecl, `unsupported CommonJS module.exports value for require("${spec}")`);
+        if (!this.commonJsExportGlobals.has(cName)) {
+            const ty = this.commonJsExportedCType(exportDecl);
+            this.commonJsExportGlobals.add(cName);
+            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        }
+        return cName;
     }
 
     private emitFiniteCommonJsRequireDispatch(call: ts.CallExpression, specs: string[]): EmitResult {
