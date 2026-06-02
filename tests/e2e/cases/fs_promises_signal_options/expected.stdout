@@ -1,2 +1,2 @@
-seen: write;read;stat;lstat;
-read: signal ok
+seen: write;append;read;stat;lstat;
+read: signal ok|append ok

@@ -45022,7 +45022,11 @@ class Emitter {
         return { ...out, encoding, mode };
     }
 
-    private validateFsAppendFileOptions(options: ts.Expression | undefined, label: string): { exclusive: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
+    private validateFsAppendFileOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        allowSignal = false,
+    ): { exclusive: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
         const out = { exclusive: false };
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
@@ -45060,7 +45064,7 @@ class Emitter {
         }
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support encoding, flag, mode, and flush property assignments`);
+                unsupported(prop, `${label} options only support encoding, flag, mode, flush${allowSignal ? ", and signal" : ""} property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "encoding") {
@@ -45084,6 +45088,8 @@ class Emitter {
                 if (this.fsBooleanOptionValue(flushNode) === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
+            } else if (allowSignal && key === "signal") {
+                continue;
             } else {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -45330,7 +45336,7 @@ class Emitter {
             }
             case "appendFile": {
                 if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
-                const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile");
+                const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile", true);
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
@@ -45338,6 +45344,7 @@ class Emitter {
                 if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
                     optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[2]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.appendFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
