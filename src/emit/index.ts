@@ -47478,6 +47478,8 @@ class Emitter {
         if (!ts.isElementAccessExpression(cur) || !cur.argumentExpression) return [];
         const indices = this.staticFiniteNumericIndexValues(cur.argumentExpression);
         if (indices.length === 0) return [];
+        const literalValues = this.staticArrayLiteralIndexedAccessPropertyTexts(cur.expression, indices);
+        if (literalValues.length > 0) return literalValues;
         const collectionType = this.checker.getTypeAtLocation(cur.expression);
         const tupleAwareChecker = this.checker as ts.TypeChecker & {
             isTupleType?: (type: ts.Type) => boolean;
@@ -47508,6 +47510,39 @@ class Emitter {
         return texts.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES ? [] : texts;
     }
 
+    private staticArrayLiteralIndexedAccessPropertyTexts(
+        expr: ts.Expression,
+        indices: readonly number[],
+    ): string[] {
+        const array = this.staticArrayLiteralExpression(expr);
+        if (!array) return [];
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const index of indices) {
+            const element = array.elements[index];
+            if (!element || ts.isSpreadElement(element) || ts.isOmittedExpression(element)) return [];
+            const text = this.staticComputedPropertyExpression(element);
+            if (text === null) return [];
+            if (seen.has(text)) continue;
+            seen.add(text);
+            out.push(text);
+            if (out.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
+        }
+        return out;
+    }
+
+    private staticArrayLiteralExpression(expr: ts.Expression): ts.ArrayLiteralExpression | null {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (ts.isArrayLiteralExpression(cur)) return cur;
+        if (!ts.isIdentifier(cur)) return null;
+        const sym = this.symbolForIdentifier(cur);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
+        if ((ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) === 0) return null;
+        const init = this.unwrapTransparentExpression(decl.initializer);
+        return ts.isArrayLiteralExpression(init) ? init : null;
+    }
+
     private staticArrayLiteralElementType(type: ts.Type): ts.Type | null {
         const symbolName = type.getSymbol()?.getName();
         if (symbolName !== "Array" && symbolName !== "ReadonlyArray") return null;
@@ -47517,7 +47552,8 @@ class Emitter {
     }
 
     private staticFiniteNumericIndexValues(expr: ts.Expression): number[] {
-        const values = this.staticNumberLiteralValuesFromType(this.checker.getTypeAtLocation(expr));
+        const values = this.staticNumberLiteralValuesFromType(this.checker.getTypeAtLocation(expr)) ??
+            this.staticFiniteNumericIndexExpressionValues(expr, new Set());
         if (!values) return [];
         const out: number[] = [];
         const seen = new Set<number>();
@@ -47529,6 +47565,43 @@ class Emitter {
             if (out.length > MAX_STATIC_COMPUTED_PROPERTY_ALTERNATIVES) return [];
         }
         return out;
+    }
+
+    private staticFiniteNumericIndexExpressionValues(
+        expr: ts.Expression,
+        seenConsts: Set<ts.Symbol>,
+    ): number[] | null {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (ts.isNumericLiteral(cur)) return [Number(cur.text)];
+        if (
+            ts.isPrefixUnaryExpression(cur) &&
+            (cur.operator === ts.SyntaxKind.PlusToken || cur.operator === ts.SyntaxKind.MinusToken) &&
+            ts.isNumericLiteral(this.unwrapTransparentExpression(cur.operand))
+        ) {
+            const operand = this.unwrapTransparentExpression(cur.operand) as ts.NumericLiteral;
+            const value = Number(operand.text);
+            return [cur.operator === ts.SyntaxKind.MinusToken ? -value : value];
+        }
+        if (ts.isConditionalExpression(cur)) {
+            const whenTrue = this.staticFiniteNumericIndexExpressionValues(cur.whenTrue, seenConsts);
+            const whenFalse = this.staticFiniteNumericIndexExpressionValues(cur.whenFalse, seenConsts);
+            if (!whenTrue || !whenFalse) return null;
+            return [...whenTrue, ...whenFalse];
+        }
+        if (ts.isIdentifier(cur)) {
+            const sym = this.symbolForIdentifier(cur);
+            if (!sym || seenConsts.has(sym)) return null;
+            const decl = sym.valueDeclaration ?? sym.declarations?.[0];
+            if (!decl || !ts.isVariableDeclaration(decl) || !decl.initializer) return null;
+            if ((ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) === 0) return null;
+            seenConsts.add(sym);
+            try {
+                return this.staticFiniteNumericIndexExpressionValues(decl.initializer, seenConsts);
+            } finally {
+                seenConsts.delete(sym);
+            }
+        }
+        return null;
     }
 
     private staticNumberLiteralValuesFromType(ty: ts.Type): number[] | null {

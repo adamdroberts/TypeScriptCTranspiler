@@ -672,6 +672,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-dynamic-computed-exports": cjsPackage("tsc2c-cjs-dynamic-computed-exports", {
         "index.js": 'let enabled = true;\nconst labelKey = enabled ? "label" : "fallbackLabel";\nconst fnKey = enabled ? "double" : "triple";\nexports[labelKey] = "dynamic-computed";\nmodule.exports[fnKey] = function double(value) { return value * 2; };\n',
     }),
+    "tsc2c-cjs-computed-array-index-exports": cjsPackage("tsc2c-cjs-computed-array-index-exports", {
+        "index.js": 'exports.__esModule = true;\nconst labelKeys = ["label", "fallbackLabel"];\nconst fnKeys = ["double", "triple"];\nconst labelIndex = Date.now() >= 0 ? 0 : 1;\nconst fnIndex = Date.now() >= 0 ? 0 : 1;\nexports[labelKeys[labelIndex]] = "array-index-computed";\nmodule.exports[fnKeys[fnIndex]] = function double(value) { return value * 11; };\n',
+    }),
     "tsc2c-cjs-jsdoc-union-computed-exports": cjsPackage("tsc2c-cjs-jsdoc-union-computed-exports", {
         "index.js": 'exports.__esModule = true;\n/** @type {"label" | "fallbackLabel"} */\nlet labelKey;\n/** @type {"double" | "triple"} */\nlet fnKey;\nif (Date.now() >= 0) {\n  labelKey = "label";\n  fnKey = "double";\n} else {\n  labelKey = "fallbackLabel";\n  fnKey = "triple";\n}\nexports[labelKey] = "jsdoc-union-computed";\nmodule.exports[fnKey] = function double(value) { return value * 2; };\n',
     }),
