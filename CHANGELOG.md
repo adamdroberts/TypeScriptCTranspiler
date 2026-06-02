@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic array index deletion now clears the dense array slot when deleting a configurable own index descriptor stored in array side properties, so later reads do not resurrect the stale element value. Test: `dynamic_array_accessor_properties`.
 - Proxy `ownKeys` validation no longer requires accessor function targets to report a non-existent `prototype` key, while still rejecting extra `prototype` reports on non-extensible accessor functions. Test: `proxy_function_prototype_invariants`.
 - CommonJS computed named-export metadata now accepts checker-proven single literal keys, including JavaScript JSDoc single-literal keys, not only finite literal unions. Test: `node_modules_commonjs_jsdoc_single_computed_exports`.
 - Proxy `defineProperty` result validation now permits compatible non-configurable writable data properties to be reported as non-writable, while still rejecting non-writable-to-writable and fixed-value changes. Tests: `proxy_get_set_define_invariants`, `proxy_array_define_invariants`, `proxy_function_prototype_invariants`.
