@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Immediate `fs.promises.realpath(...)`, `readlink(...)`, and `mkdtemp(...)` now accept and evaluate `signal` option values in supported encoding option objects. Test: `fs_promises_signal_options`.
 - Immediate `fs.promises.appendFile(...)` now accepts and evaluates `signal` option values in the bounded sync-backed subset, matching the existing read/write/readdir/stat/lstat signal-option handling. Test: `fs_promises_signal_options`.
 - `new Promise(...)` resolve/reject callbacks now settle the returned promise safely from scheduled callbacks instead of retaining stack-backed executor state. Test: `promise_executor_async_settle`.
 - Dynamic array numeric index reads now consult the array prototype chain for out-of-length indexes, matching string-keyed property reads and `Reflect.has(...)`. Test: `dynamic_index_assignment`.

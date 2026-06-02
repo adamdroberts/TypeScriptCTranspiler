@@ -44803,7 +44803,11 @@ class Emitter {
         return specs;
     }
 
-    private validateFsEncodingOptions(options: ts.Expression | undefined, label: string): "utf8" | "hex" | "base64" | "buffer" {
+    private validateFsEncodingOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        allowSignal = false,
+    ): "utf8" | "hex" | "base64" | "buffer" {
         if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return "utf8";
@@ -44831,9 +44835,12 @@ class Emitter {
         let result: "utf8" | "hex" | "base64" | "buffer" = "utf8";
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support encoding property assignments`);
+                unsupported(prop, `${label} options only support encoding${allowSignal ? " and signal" : ""} property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
+            if (allowSignal && key === "signal") {
+                continue;
+            }
             if (key !== "encoding") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -45442,12 +45449,13 @@ class Emitter {
             }
             case "realpath": {
                 if (args.length < 1) unsupported(call, "fs.promises.realpath needs a path and optional UTF-8/hex/base64/buffer encoding options");
-                const result = this.validateFsEncodingOptions(args[1], "fs.promises.realpath");
+                const result = this.validateFsEncodingOptions(args[1], "fs.promises.realpath", true);
                 const p = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.realpath path"),
                     ...optionSpecs,
@@ -45462,12 +45470,13 @@ class Emitter {
             }
             case "readlink": {
                 if (args.length < 1) unsupported(call, "fs.promises.readlink needs a path and optional UTF-8/hex/base64/buffer encoding options");
-                const result = this.validateFsEncodingOptions(args[1], "fs.promises.readlink");
+                const result = this.validateFsEncodingOptions(args[1], "fs.promises.readlink", true);
                 const p = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readlink path"),
                     ...optionSpecs,
@@ -45507,12 +45516,13 @@ class Emitter {
             }
             case "mkdtemp": {
                 if (args.length < 1) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/hex/base64/buffer encoding options");
-                const result = this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp");
+                const result = this.validateFsEncodingOptions(args[1], "fs.promises.mkdtemp", true);
                 const prefix = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(prefix, args[0]!, "fs.promises.mkdtemp prefix"),
                     ...optionSpecs,
