@@ -4,9 +4,13 @@ sync force true: new
 sync preserve: 12000
 sync mode excl: fs.cpSync: could not copy path
 sync side: new
+sync filter false: false
+sync filter true: new
+events: sync-options|promise-options
 promise force false: old-promise
 promise errorOnExist: fs.cpSync: could not copy path
 promise preserve: 12000
 promise mode excl: fs.cpSync: could not copy path
 promise side: new
-events: sync-options|promise-options
+promise filter false: false
+promise filter true: new

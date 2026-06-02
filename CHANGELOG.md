@@ -32,6 +32,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- `fs.cpSync(...)` and immediate `fs.promises.cp(...)` now accept a bounded static `filter` option for side-effect-free functions returning boolean literals, including no-op copies for statically false filters. Test: `fs_cp_options`.
 - Immediate `fs.promises.mkdir(...)`, `rm(...)`, and `rmdir(...)`, plus static `events.once(...)`, now accept and evaluate `signal` option values in the bounded immediate subset. Tests: `fs_promises_signal_options`, `event_emitter_once_options`.
 - Finite dynamic `require(...)` proofs now resolve static string `.replace(...)` and `.replaceAll(...)` specifiers with finite string search/replacement alternatives into the AOT module graph. Test: `dynamic_require_static_string_replace`.
 - `os.userInfo({ encoding: "buffer" })` now returns Buffer-backed `username`, `homedir`, and `shell` fields while preserving UTF-8 defaults and ignored-argument evaluation. Test: `os_user_info`.

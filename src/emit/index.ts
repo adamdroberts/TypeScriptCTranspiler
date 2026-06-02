@@ -44333,6 +44333,7 @@ class Emitter {
                     const srcPath = values[0]!;
                     const destPath = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
+                    if (!options.copy) return "(void)0";
                     return `tsc_fs_cp_sync_opts(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"})`;
                 });
             }
@@ -44720,8 +44721,8 @@ class Emitter {
         return { recursive, mode: modeArg };
     }
 
-    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; mode: SequencedCallArg } {
-        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false };
+    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; copy: boolean; mode: SequencedCallArg } {
+        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false, copy: true };
         let mode: SequencedCallArg = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
@@ -44745,6 +44746,14 @@ class Emitter {
                 mode = { value, target: T_NUMBER, node: modeNode };
                 continue;
             }
+            if (key === "filter") {
+                const value = this.fsCpFilterOptionValue(prop.initializer, label);
+                if (value === null) {
+                    unsupported(prop.initializer, `${label}.filter must be a side-effect-free function returning a boolean literal in this subset`);
+                }
+                out.copy = value;
+                continue;
+            }
             if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks" && key !== "preserveTimestamps") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -44764,6 +44773,34 @@ class Emitter {
             else out.preserveTimestamps = value;
         }
         return { ...out, mode };
+    }
+
+    private fsCpFilterOptionValue(expr: ts.Expression, label: string): boolean | null {
+        const resolved = this.resolveSideEffectFreeEarlierConstExpression(expr);
+        if (this.isUndefinedExpression(resolved)) return true;
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(resolved);
+        if (!ts.isArrowFunction(unwrapped) && !ts.isFunctionExpression(unwrapped)) {
+            unsupported(expr, `${label}.filter must be a function in this subset`);
+        }
+        let returned: ts.Expression | null = null;
+        if (ts.isArrowFunction(unwrapped)) {
+            if (!ts.isBlock(unwrapped.body)) {
+                returned = unwrapped.body;
+            } else {
+                const body = unwrapped.body;
+                if (body.statements.length !== 1) return null;
+                const stmt = body.statements[0]!;
+                if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+                returned = stmt.expression;
+            }
+        } else {
+            const body = unwrapped.body;
+            if (!body || body.statements.length !== 1) return null;
+            const stmt = body.statements[0]!;
+            if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+            returned = stmt.expression;
+        }
+        return this.sideEffectFreeBooleanLiteralValue(returned, new Set());
     }
 
     private emitFsBooleanOptions(
@@ -45743,6 +45780,7 @@ class Emitter {
                     const srcPath = values[0]!;
                     const destPath = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
+                    if (!options.copy) return settle("tsc_promise_resolve(tsc_value_undefined())");
                     return settle(`({ tsc_fs_cp_sync_opts(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`);
                 });
             }
