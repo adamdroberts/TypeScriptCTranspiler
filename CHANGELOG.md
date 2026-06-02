@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS unary-wrapped IIFEs such as `!function (...) { ... }(...)` now preserve finite AOT require and named-export metadata when wrapper parameters receive `require`, `module`, and `exports`. Test: `node_modules_commonjs_unary_iife_wrapper`.
 - Runtime-code manifest AOT constants now accept template expressions, selected conditional branches, and short-circuiting logical/nullish expressions without enabling unsafe eval. Test: `runtime_code_manifest_expressions`.
 - Finite dynamic `require(...)` proofs now resolve `array.at(idx)` specifiers over static string arrays and const aliases, including proven negative `.at(...)` indexes, into the AOT module graph. Test: `dynamic_require_static_array_at`.
 - CommonJS outer factory wrappers invoked through static `Reflect.apply(factory, receiver, [require, module, exports])` or `factory.bind(receiver)(require, module, exports)` now preserve finite AOT require and named-export metadata, and CommonJS namespace member calls can use exported function arity when JavaScript inference reports a zero-arg signature. Tests: `node_modules_commonjs_factory_wrapper_reflect_bind`, `node_modules_commonjs_factory_wrapper`.

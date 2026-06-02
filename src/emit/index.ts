@@ -18023,6 +18023,10 @@ class Emitter {
         if (!ts.isExpressionStatement(stmt)) return null;
         let expr = stmt.expression;
         while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        if (ts.isPrefixUnaryExpression(expr)) {
+            expr = expr.operand;
+            while (ts.isParenthesizedExpression(expr)) expr = expr.expression;
+        }
         if (!ts.isCallExpression(expr)) return null;
         const factory = this.commonJsFactoryWrapperInvocation(expr);
         if (factory && ts.isBlock(factory.fn.body)) return factory.fn.body.statements;
