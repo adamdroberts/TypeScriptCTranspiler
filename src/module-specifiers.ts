@@ -280,6 +280,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }).filter((value) => value !== ""));
     };
 
+    const flattenArrayLiteral = (array: ts.ArrayLiteralExpression): ts.ArrayLiteralExpression | null => {
+        const elements: ts.ArrayLiteralElement[] = [];
+        for (const element of array.elements) {
+            if (!ts.isSpreadElement(element)) {
+                elements.push(element);
+                if (elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+                continue;
+            }
+            const spread = resolveCollectionExpression(element.expression);
+            if (!spread || !ts.isArrayLiteralExpression(spread)) return null;
+            for (const spreadElement of spread.elements) {
+                if (ts.isSpreadElement(spreadElement)) return null;
+                elements.push(spreadElement);
+                if (elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+            }
+        }
+        return ts.factory.createArrayLiteralExpression(elements);
+    };
+
     const resolveCollectionExpression = (node: ts.Expression): ts.Expression | null => {
         let cur = node;
         while (
@@ -339,6 +358,10 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     }
                 }
             }
+        }
+
+        if (ts.isArrayLiteralExpression(cur)) {
+            return flattenArrayLiteral(cur);
         }
 
         return cur;
