@@ -47475,7 +47475,7 @@ class Emitter {
             case "uptime": return ret(T_NUMBER, `tsc_os_uptime()`);
             case "loadavg": return ret(arrayType(T_NUMBER), `tsc_os_loadavg()`);
             case "userInfo":
-                this.validateOsUserInfoOptions(call.arguments[0]);
+                const userInfoEncoding = this.validateOsUserInfoOptions(call.arguments[0]);
                 const specs: SequencedCallArg[] = [];
                 if (call.arguments[0] && this.shouldEvaluateSideEffectfulVoidDefault(call.arguments[0])) {
                     specs.push({ value: this.emitExpr(call.arguments[0]), target: T_VOID, node: call.arguments[0] });
@@ -47484,7 +47484,7 @@ class Emitter {
                 return this.emitSequencedExpr(
                     T_VALUE,
                     specs,
-                    () => `tsc_os_user_info()`,
+                    () => `tsc_os_user_info_opts(tsc_str_from_lit("${userInfoEncoding}", ${userInfoEncoding.length}))`,
                 );
             case "cpus": {
                 // Minimal: return an array-of-empty-objects of length cpu_count.
@@ -47632,13 +47632,14 @@ class Emitter {
         unsupported(call, `querystring.${name}`);
     }
 
-    private validateOsUserInfoOptions(options: ts.Expression | undefined): void {
-        if (!options || this.isUndefinedLikeExpression(options)) return;
+    private validateOsUserInfoOptions(options: ts.Expression | undefined): "utf8" | "buffer" {
+        if (!options || this.isUndefinedLikeExpression(options)) return "utf8";
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(resolvedOptions)) return;
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return "utf8";
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, "os.userInfo options must be an object literal in this subset");
         }
+        let result: "utf8" | "buffer" = "utf8";
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, "os.userInfo options only support encoding property assignments");
@@ -47652,10 +47653,15 @@ class Emitter {
                 continue;
             }
             const encoding = this.sideEffectFreeStringLiteralText(valueNode, new Set());
-            if (encoding === null || (encoding !== "utf8" && encoding !== "utf-8")) {
-                unsupported(prop.initializer, "os.userInfo currently supports UTF-8 encoding options only");
+            if (encoding === "utf8" || encoding === "utf-8") {
+                result = "utf8";
+            } else if (encoding === "buffer") {
+                result = "buffer";
+            } else {
+                unsupported(prop.initializer, "os.userInfo currently supports UTF-8 or buffer encoding options only");
             }
         }
+        return result;
     }
 
     private emitUtilCall(call: ts.CallExpression, name: string): EmitResult {

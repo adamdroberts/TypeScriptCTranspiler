@@ -1150,7 +1150,7 @@ interface OS {
     setPriority(pidOrPriority: number, priority?: number, ...ignored: any[]): void;
 }
 interface OSUserInfoOptions {
-    encoding?: FSEncoding;
+    encoding?: FSEncoding | FSBufferEncoding;
 }
 declare const os: OS;
 declare module "os" {

@@ -4800,17 +4800,31 @@ tsc_array_t* tsc_os_loadavg(void) {
     return a;
 }
 
-tsc_value_t tsc_os_user_info(void) {
+tsc_value_t tsc_os_user_info_opts(const tsc_str_t* encoding) {
     uid_t uid = getuid();
     gid_t gid = getgid();
     struct passwd* pw = getpwuid(uid);
     tsc_object_t* out = tsc_object_new();
     tsc_object_set(out, tsc_str_from_lit("uid", 3), tsc_value_num((double)uid));
     tsc_object_set(out, tsc_str_from_lit("gid", 3), tsc_value_num((double)gid));
-    tsc_object_set(out, tsc_str_from_lit("username", 8), tsc_value_string(tsc_str_from_cstr(pw && pw->pw_name ? pw->pw_name : "")));
-    tsc_object_set(out, tsc_str_from_lit("homedir", 7), tsc_value_string(pw && pw->pw_dir ? tsc_str_from_cstr(pw->pw_dir) : tsc_os_homedir()));
-    tsc_object_set(out, tsc_str_from_lit("shell", 5), tsc_value_string(tsc_str_from_cstr(pw && pw->pw_shell ? pw->pw_shell : "")));
+    tsc_str_t* username = tsc_str_from_cstr(pw && pw->pw_name ? pw->pw_name : "");
+    tsc_str_t* homedir = pw && pw->pw_dir ? tsc_str_from_cstr(pw->pw_dir) : tsc_os_homedir();
+    tsc_str_t* shell = tsc_str_from_cstr(pw && pw->pw_shell ? pw->pw_shell : "");
+    bool buffer_encoding = encoding && tsc_str_eq(encoding, tsc_str_from_lit("buffer", 6));
+    if (buffer_encoding) {
+        tsc_object_set(out, tsc_str_from_lit("username", 8), tsc_value_buffer(tsc_buffer_from_str(username, NULL)));
+        tsc_object_set(out, tsc_str_from_lit("homedir", 7), tsc_value_buffer(tsc_buffer_from_str(homedir, NULL)));
+        tsc_object_set(out, tsc_str_from_lit("shell", 5), tsc_value_buffer(tsc_buffer_from_str(shell, NULL)));
+    } else {
+        tsc_object_set(out, tsc_str_from_lit("username", 8), tsc_value_string(username));
+        tsc_object_set(out, tsc_str_from_lit("homedir", 7), tsc_value_string(homedir));
+        tsc_object_set(out, tsc_str_from_lit("shell", 5), tsc_value_string(shell));
+    }
     return tsc_value_object(out);
+}
+
+tsc_value_t tsc_os_user_info(void) {
+    return tsc_os_user_info_opts(NULL);
 }
 
 #if !defined(_WIN32)
