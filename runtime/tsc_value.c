@@ -1535,9 +1535,14 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         if (tsc_str_is_length_key(key)) return false;
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
-        if (a->props && tsc_object_has_own(a->props, key)) return tsc_object_delete(a->props, key);
         size_t idx = 0;
-        if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
+        bool is_index = a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len;
+        if (a->props && tsc_object_has_own(a->props, key)) {
+            if (!tsc_object_delete(a->props, key)) return false;
+            if (is_index) TSC_ARR(tsc_value_t, a, idx) = tsc_value_undefined();
+            return true;
+        }
+        if (is_index) {
             if (a->sealed || a->frozen) return false;
             TSC_ARR(tsc_value_t, a, idx) = tsc_value_undefined();
             return true;
