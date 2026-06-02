@@ -572,7 +572,7 @@ bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);
     if (a->es != sizeof(tsc_value_t)) return false;
     size_t idx = (size_t)index;
-    if (a->frozen) return false;
+    if (a->frozen || !a->length_writable) return false;
     if (idx >= a->len && !a->extensible) return false;
     while (a->len < idx) {
         tsc_value_t undef = tsc_value_undefined();
@@ -592,7 +592,7 @@ bool tsc_value_array_set_length(tsc_array_t* a, tsc_value_t value) {
     if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw) return false;
     if (raw > (double)SIZE_MAX) return false;
     size_t len = (size_t)raw;
-    if (a->frozen) return false;
+    if (a->frozen || !a->length_writable) return false;
     if (a->sealed && len != a->len) return false;
     if (len > a->len && !a->extensible) return false;
     while (a->len < len) {
@@ -657,7 +657,7 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) {
-            bool current_writable = !a->frozen;
+            bool current_writable = !a->frozen && a->length_writable;
             bool next_writable = has_writable ? writable : current_writable;
             bool next_enumerable = has_enumerable ? enumerable : false;
             bool next_configurable = has_configurable ? configurable : false;
@@ -669,8 +669,9 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
                 if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw || raw > (double)SIZE_MAX) return false;
                 return (size_t)raw == a->len;
             }
-            if (!next_writable) return false;
-            return has_value ? tsc_value_array_set_length(a, value) : true;
+            if (has_value && !tsc_value_array_set_length(a, value)) return false;
+            if (!next_writable) a->length_writable = false;
+            return true;
         }
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
@@ -1730,7 +1731,7 @@ tsc_value_t value_descriptor_from_array_index(const tsc_array_t* src, size_t idx
 tsc_value_t value_descriptor_from_array_length(const tsc_array_t* src) {
     tsc_object_t* desc = tsc_object_new();
     tsc_object_set(desc, tsc_str_from_lit("value", 5), tsc_value_num((double)(src ? src->len : 0)));
-    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(src ? !src->frozen : true));
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(src ? (!src->frozen && src->length_writable) : true));
     tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
     tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(false));
     return tsc_value_object(desc);
@@ -2636,7 +2637,7 @@ tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator) {
 tsc_value_t tsc_value_method_pop(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (a->sealed || a->frozen) return tsc_value_undefined();
+        if (a->sealed || a->frozen || !a->length_writable) return tsc_value_undefined();
         if (a->len == 0) return tsc_value_undefined();
         tsc_value_t v = TSC_ARR(tsc_value_t, a, a->len - 1);
         tsc_array_pop_raw(a);
@@ -2660,7 +2661,7 @@ tsc_value_t tsc_value_method_pop(tsc_value_t recv) {
 tsc_value_t tsc_value_method_push(tsc_value_t recv, tsc_value_t value) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (a->sealed || a->frozen || !a->extensible) return tsc_value_num((double)a->len);
+        if (a->sealed || a->frozen || !a->extensible || !a->length_writable) return tsc_value_num((double)a->len);
         tsc_array_push_raw(a, &value);
         return tsc_value_num((double)a->len);
     }
@@ -2678,7 +2679,7 @@ tsc_value_t tsc_value_method_push(tsc_value_t recv, tsc_value_t value) {
 tsc_value_t tsc_value_method_shift(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (a->sealed || a->frozen) return tsc_value_undefined();
+        if (a->sealed || a->frozen || !a->length_writable) return tsc_value_undefined();
         if (a->len == 0) return tsc_value_undefined();
         tsc_value_t v = TSC_ARR(tsc_value_t, a, 0);
         tsc_array_shift_raw(a);
@@ -2704,7 +2705,7 @@ tsc_value_t tsc_value_method_shift(tsc_value_t recv) {
 tsc_value_t tsc_value_method_unshift(tsc_value_t recv, tsc_value_t value) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (a->sealed || a->frozen || !a->extensible) return tsc_value_num((double)a->len);
+        if (a->sealed || a->frozen || !a->extensible || !a->length_writable) return tsc_value_num((double)a->len);
         tsc_array_unshift_raw(a, &value);
         return tsc_value_num((double)a->len);
     }
@@ -2807,6 +2808,7 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
         size_t tail_start = (size_t)(at + del);
         size_t tail_len = a->len - tail_start;
         size_t new_len = a->len - (size_t)del + insert_len;
+        if (new_len != a->len && !a->length_writable) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
         if (new_len > a->len && !a->extensible) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
         tsc_array_reserve(a, new_len > 0 ? new_len : 1);
         if (insert_len != (size_t)del && tail_len > 0) {
