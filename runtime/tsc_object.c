@@ -1786,9 +1786,13 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
     }
     if (proxy && value_is_box(proxy->proxy_target) && value_tag(proxy->proxy_target) == TSC_VALUE_TAG_FUNCTION) {
         const tsc_function_identity_t* target = (const tsc_function_identity_t*)value_ptr(proxy->proxy_target);
+        bool target_has_prototype =
+            target &&
+            target->kind != TSC_FUNCTION_IDENTITY_GETTER &&
+            target->kind != TSC_FUNCTION_IDENTITY_SETTER;
         if (!str_array_contains(keys, tsc_str_from_lit("length", 6)) ||
             !str_array_contains(keys, tsc_str_from_lit("name", 4)) ||
-            !str_array_contains(keys, tsc_str_from_lit("prototype", 9))) {
+            (target_has_prototype && !str_array_contains(keys, tsc_str_from_lit("prototype", 9)))) {
             tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap result missing non-configurable key"));
         }
         if (target->props) {
@@ -1805,7 +1809,11 @@ static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_
         if (!target->extensible) {
             for (size_t i = 0; i < keys->len; i++) {
                 tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
-                if (tsc_str_is_length_key(key) || str_lit_eq(key, "name") || str_lit_eq(key, "prototype")) {
+                if (
+                    tsc_str_is_length_key(key) ||
+                    str_lit_eq(key, "name") ||
+                    (target_has_prototype && str_lit_eq(key, "prototype"))
+                ) {
                     continue;
                 }
                 if (!target->props || object_find(target->props, key) < 0) {

@@ -10,6 +10,7 @@ function ExactFunction(this: any): void {}
 function ExtraClosedFunction(this: any): void {}
 function PrototypeDescriptor(this: any): void {}
 function LockedPrototype(this: any): void {}
+function AccessorHolder(this: any): void {}
 const events: string[] = [];
 
 function mark(label: string): string {
@@ -56,6 +57,22 @@ function extraClosedFunctionKeys(target: any): string[] {
   events.push("extra closed function keys");
   return ["length", "name", "prototype", "ghost"];
 }
+
+function exactAccessorKeys(target: any): string[] {
+  events.push("exact accessor keys");
+  return ["length", "name"];
+}
+
+function extraClosedAccessorKeys(target: any): string[] {
+  events.push("extra closed accessor keys");
+  return ["length", "name", "prototype"];
+}
+
+function readAccessor(this: any): string {
+  return "accessor";
+}
+
+function writeAccessor(this: any, next: string): void {}
 
 function realFunctionDescriptor(target: any, prop: any): any {
   events.push("real function desc:" + String(prop));
@@ -203,6 +220,22 @@ try {
   console.log("extra closed function keys:", Reflect.ownKeys(extraClosedFunctionProxy, mark("extra closed function keys")).join(","));
 } catch (err: any) {
   console.log("extra closed function keys:", err);
+}
+
+const accessorHolder: any = AccessorHolder as any;
+Object.defineProperty(accessorHolder, "value", { get: readAccessor, set: writeAccessor, configurable: true });
+const accessorFns: any = Object.getOwnPropertyDescriptor(accessorHolder, "value");
+const getterTarget: any = accessorFns.get;
+const getterProxy: any = new Proxy(getterTarget, { ownKeys: exactAccessorKeys as any });
+console.log("accessor function keys:", Reflect.ownKeys(getterProxy, mark("accessor function keys")).join(","));
+
+const setterTarget: any = accessorFns.set;
+Object.preventExtensions(setterTarget);
+const extraClosedAccessorProxy: any = new Proxy(setterTarget, { ownKeys: extraClosedAccessorKeys as any });
+try {
+  console.log("extra closed accessor keys:", Reflect.ownKeys(extraClosedAccessorProxy, mark("extra closed accessor keys")).join(","));
+} catch (err: any) {
+  console.log("extra closed accessor keys:", err);
 }
 
 const prototypeDescriptorTarget: any = PrototypeDescriptor as any;
