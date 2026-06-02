@@ -139,6 +139,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Non-escaping local typed object literals and `new Class(...)` values that flow through same-block alias chains remain stack-allocated when the aliases only use safe property access and read-only inspections. Test: `object_literal_stack_alloc_alias`
 - Non-escaping local typed object literals and `new Class(...)` values that flow through same-block assignment alias chains remain stack-allocated when the aliases only use safe property access and read-only inspections. Test: `object_literal_stack_alloc_alias_assignment_direct`
 - Non-escaping local typed object literals and `new Class(...)` values that flow through `Object.prototype.valueOf.call(...)` remain stack-allocated when the returned receiver stays within safe same-block property access and inspection uses. Test: `object_literal_stack_alloc_value_of`
+- Closure-captured local typed object literals and same-block aliases fall back to heap storage so returned/nested closures cannot retain stack-backed object storage. Test: `object_literal_stack_alloc_closure_capture`
 - Non-escaping local typed array literals that only flow through same-block element reads/writes and readonly `.length` reads are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc`
 - Non-escaping local typed array literals used through receiver-safe readonly/copying array methods such as `join(...)` are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_method`
 - Non-escaping local typed array literals used through non-growing mutating methods `pop(...)` and `shift(...)` are stack-allocated instead of GC-allocated. Test: `array_literal_stack_alloc_mutation`
@@ -2058,6 +2059,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_literal_stack_alloc_alias` | non-escaping typed object literal and class locals use stack storage through safe same-block alias chains |
 | `object_literal_stack_alloc_alias_assignment_direct` | non-escaping typed object literal and class locals use stack storage through safe same-block assignment alias chains |
 | `object_literal_stack_alloc_value_of` | non-escaping typed object literal and class locals use stack storage through safe `Object.prototype.valueOf.call` receiver returns |
+| `object_literal_stack_alloc_closure_capture` | closure-captured typed object literal locals fall back to heap storage |
 | `array_literal_stack_alloc` | non-escaping typed array literal locals use stack storage |
 | `array_literal_stack_alloc_method` | non-escaping typed array literal locals use stack storage through receiver-safe methods |
 | `array_literal_stack_alloc_mutation` | non-escaping typed array literal locals use stack storage through non-growing mutating methods |

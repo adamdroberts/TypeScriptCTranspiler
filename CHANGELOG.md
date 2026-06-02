@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Closure-captured local typed object literals and same-block aliases now fall back to heap storage so returned/nested closures cannot retain stack-backed object storage. Test: `object_literal_stack_alloc_closure_capture`.
 - Overflowing timer delays, including `Infinity` and values above Node's 32-bit timer cap, now normalize to a bounded short runtime delay instead of becoming zero-delay callbacks or enormous sleeps. Test: `timers_delay_overflow`.
 - Statically known unsupported `eval(...)`, `Function(...)`, and `new Function(...)` source strings now fail compile-time diagnostics even when unrelated runtime-code manifest entries exist, preserving manifest AOT dispatch for genuinely dynamic source strings and keeping unsafe fallback gated behind `--unsafe-eval`. Test: `runtime_code_manifest_static_unsupported`.
 - Unmarked CommonJS packages with an explicit `exports.default` property now keep default imports and namespace `.default` reads pointed at the whole `module.exports` object, while named `default` imports still use the explicit property. Test: `node_modules_commonjs_mixed_interop_default`.
