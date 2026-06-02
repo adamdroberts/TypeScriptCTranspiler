@@ -911,6 +911,7 @@ class Emitter {
                 this.isSideEffectFreeObjectPrototypeToLocaleStringCall(expr, seenConsts) ||
                 this.isSideEffectFreeObjectPrototypeReadonlyCall(expr, seenConsts) ||
                 this.isSideEffectFreePrimitiveObjectValueOfCall(expr, seenConsts) ||
+                this.isSideEffectFreePrimitiveMethodCall(expr, seenConsts) ||
                 this.isSideEffectFreeStaticCall(expr, seenConsts) ||
                 this.isSideEffectFreeGlobalCall(expr, seenConsts);
         }
