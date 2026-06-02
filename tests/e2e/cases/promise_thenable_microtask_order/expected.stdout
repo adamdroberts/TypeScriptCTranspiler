@@ -1,0 +1,2 @@
+sync: get|after resolve
+done: get|after resolve|call|queued|fulfilled:value

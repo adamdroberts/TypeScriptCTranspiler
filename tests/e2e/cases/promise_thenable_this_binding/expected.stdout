@@ -1,3 +1,3 @@
-events: direct this:direct|getter read|getter this:child
+events: getter read
 direct: direct value
 getter: child value

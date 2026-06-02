@@ -70,4 +70,4 @@ Promise.resolve(pendingOuter)
     });
 
 console.log("pending callbacks:", pendingCallbacks);
-console.log("events:", events.join("|"));
+console.log("events:" + (events.length ? " " + events.join("|") : ""));

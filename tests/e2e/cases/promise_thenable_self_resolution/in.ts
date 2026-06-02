@@ -55,10 +55,12 @@ pendingSelf.then = function(resolve: any): void {
 };
 
 pendingSelfPromise = Promise.resolve(pendingSelf);
-saved.resolve(pendingSelfPromise);
+queueMicrotask(() => {
+    saved.resolve(pendingSelfPromise);
+});
 pendingSelfPromise.catch((reason: any) => {
     console.log("pending-self:", reason);
     return "handled";
 });
 
-console.log("events:", events.join("|"));
+console.log("events:" + (events.length ? " " + events.join("|") : ""));

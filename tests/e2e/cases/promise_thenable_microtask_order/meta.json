@@ -1,0 +1,3 @@
+{
+  "description": "Promise.resolve reads dynamic then synchronously but invokes callable thenables through the microtask queue"
+}

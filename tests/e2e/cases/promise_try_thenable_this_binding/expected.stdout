@@ -1,3 +1,3 @@
-events: direct this:try-direct|getter read|getter this:try-child
+events: getter read
 try direct: try-direct value
 try getter: try-child value

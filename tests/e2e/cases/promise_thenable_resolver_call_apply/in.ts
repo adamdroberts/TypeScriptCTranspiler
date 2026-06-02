@@ -28,4 +28,4 @@ Promise.resolve(applyReject)
         return "handled";
     });
 
-console.log("events:", events.join("|"));
+console.log("events:" + (events.length ? " " + events.join("|") : ""));
