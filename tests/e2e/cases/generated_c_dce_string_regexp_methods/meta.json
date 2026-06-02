@@ -1,0 +1,3 @@
+{
+  "description": "generated-C DCE prunes unused string match/matchAll/search calls with fresh RegExp operands"
+}
