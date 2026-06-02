@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS whole-value `module.exports = Object.*(...)` defaults now unwrap TypeScript-only assertion wrappers around supported `Object.assign`, `Object.fromEntries`, `Object.defineProperty`, `Object.defineProperties`, and `Object.create` calls. Test: `node_modules_commonjs_module_exports_call_assertion_wrappers`.
 - CommonJS computed named-export metadata now accepts finite `Object.entries({...})[idx][1]` export keys over static object literal values. Test: `node_modules_commonjs_computed_object_entry_values_exports`.
 - CommonJS whole-value `module.exports = [head, ...tail]` array spread defaults now lower through the boxed AOT package-source path. Test: `node_modules_commonjs_module_exports_array_spread_default`.
 - CommonJS computed named-export metadata now accepts finite `Object.keys` / `Object.values` / `Object.entries` / `Object.getOwnPropertyNames` export keys over static object literals wrapped in `Object.freeze`, `Object.seal`, `Object.preventExtensions`, or `Object.setPrototypeOf`. Test: `node_modules_commonjs_computed_object_wrapper_enum_exports`.

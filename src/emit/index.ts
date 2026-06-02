@@ -15619,8 +15619,7 @@ class Emitter {
         ) {
             return null;
         }
-        let right: ts.Expression = expr.right;
-        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        const right = this.unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsObjectAssignValueExportCall(right)
             : null;
@@ -15644,14 +15643,30 @@ class Emitter {
         ) {
             return false;
         }
+        return !!this.commonJsModuleExportsValueAssignmentParentForCall(call);
+    }
+
+    private commonJsModuleExportsValueAssignmentParentForCall(call: ts.CallExpression): ts.BinaryExpression | null {
+        let source: ts.Expression = call;
         let parent: ts.Node = call.parent;
-        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
+        while (
+            ts.isParenthesizedExpression(parent) ||
+            ts.isAsExpression(parent) ||
+            ts.isTypeAssertionExpression(parent) ||
+            ts.isNonNullExpression(parent) ||
+            ts.isSatisfiesExpression(parent)
+        ) {
+            source = parent;
+            parent = parent.parent;
+        }
         return ts.isBinaryExpression(parent) &&
-            parent.right === call &&
+            parent.right === source &&
             parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
             ts.isPropertyAccessExpression(parent.left) &&
             this.isModuleExportsAccess(parent.left) &&
-            ts.isExpressionStatement(parent.parent);
+            ts.isExpressionStatement(parent.parent)
+            ? parent
+            : null;
     }
 
     private commonJsModuleExportsObjectAssignExportSources(call: ts.CallExpression): readonly ts.Expression[] {
@@ -15680,8 +15695,7 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsObjectAssignWholeValue(expr: ts.Expression): boolean {
-        let cur: ts.Expression = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (
             !ts.isCallExpression(cur) ||
             !ts.isPropertyAccessExpression(cur.expression) ||
@@ -15729,8 +15743,7 @@ class Emitter {
         ) {
             return null;
         }
-        let right: ts.Expression = expr.right;
-        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        const right = this.unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsObjectFromEntriesValueExportCall(right)
             : null;
@@ -15791,14 +15804,7 @@ class Emitter {
 
     private isCommonJsModuleExportsObjectFromEntriesValueCall(call: ts.CallExpression): boolean {
         if (this.objectStaticCallName(call) !== "fromEntries" || call.arguments.length !== 1) return false;
-        let parent: ts.Node = call.parent;
-        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
-        return ts.isBinaryExpression(parent) &&
-            parent.right === call &&
-            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            ts.isPropertyAccessExpression(parent.left) &&
-            this.isModuleExportsAccess(parent.left) &&
-            ts.isExpressionStatement(parent.parent);
+        return !!this.commonJsModuleExportsValueAssignmentParentForCall(call);
     }
 
     private commonJsObjectFromEntriesExportEntries(source: ts.Expression): Array<ts.ArrayLiteralExpression | ts.PropertyAssignment> | null {
@@ -15925,8 +15931,7 @@ class Emitter {
     }
 
     private isCommonJsObjectFromEntriesExportValue(expr: ts.Expression): boolean {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) return true;
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (ts.isIdentifier(cur)) return !!this.requireBindingModuleExportsDeclaration(cur);
@@ -16071,17 +16076,14 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsObjectFromEntriesWholeValue(expr: ts.Expression): boolean {
-        let cur = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur) || !this.isCommonJsModuleExportsObjectFromEntriesValueCall(cur)) return true;
-        let source = cur.arguments[0]!;
-        while (ts.isParenthesizedExpression(source)) source = source.expression;
+        const source = this.unwrapTransparentExpression(cur.arguments[0]!);
         let resolvedSource = source;
         if (ts.isIdentifier(source)) {
             const initializer = this.commonJsObjectFromEntriesSourceIdentifierInitializer(source);
             if (!initializer) return true;
-            resolvedSource = initializer;
-            while (ts.isParenthesizedExpression(resolvedSource)) resolvedSource = resolvedSource.expression;
+            resolvedSource = this.unwrapTransparentExpression(initializer);
         }
         if (ts.isCallExpression(resolvedSource) && this.objectStaticCallName(resolvedSource) === "entries") return false;
         return !(
@@ -16674,14 +16676,7 @@ class Emitter {
 
     private isCommonJsModuleExportsDefinePropertiesValueCall(call: ts.CallExpression): boolean {
         if (!this.isObjectDefinePropertiesCall(call)) return false;
-        let parent: ts.Node = call.parent;
-        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
-        return ts.isBinaryExpression(parent) &&
-            parent.right === call &&
-            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            ts.isPropertyAccessExpression(parent.left) &&
-            this.isModuleExportsAccess(parent.left) &&
-            ts.isExpressionStatement(parent.parent);
+        return !!this.commonJsModuleExportsValueAssignmentParentForCall(call);
     }
 
     private commonJsModuleExportsDefinePropertiesValueExports(stmt: ts.Statement): CommonJsDefinePropertiesExport[] | null {
@@ -16695,8 +16690,7 @@ class Emitter {
         ) {
             return null;
         }
-        let right: ts.Expression = expr.right;
-        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        const right = this.unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsDefinePropertiesValueExportCall(right)
             : null;
@@ -16760,8 +16754,7 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsDefinePropertiesWholeValue(expr: ts.Expression): boolean {
-        let cur: ts.Expression = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur) || !this.isObjectDefinePropertiesCall(cur)) return true;
         const descriptorEntries = this.commonJsDefinePropertiesExportDescriptorEntries(cur.arguments[1]!);
         if (!descriptorEntries) return false;
@@ -16777,14 +16770,7 @@ class Emitter {
 
     private isCommonJsModuleExportsObjectCreateValueCall(call: ts.CallExpression): boolean {
         if (!this.isObjectCreateCall(call) || call.arguments.length < 2) return false;
-        let parent: ts.Node = call.parent;
-        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
-        return ts.isBinaryExpression(parent) &&
-            parent.right === call &&
-            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            ts.isPropertyAccessExpression(parent.left) &&
-            this.isModuleExportsAccess(parent.left) &&
-            ts.isExpressionStatement(parent.parent);
+        return !!this.commonJsModuleExportsValueAssignmentParentForCall(call);
     }
 
     private commonJsModuleExportsObjectCreateValueExports(stmt: ts.Statement): CommonJsDefinePropertiesExport[] | null {
@@ -16798,8 +16784,7 @@ class Emitter {
         ) {
             return null;
         }
-        let right: ts.Expression = expr.right;
-        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        const right = this.unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsObjectCreateValueExportCall(right)
             : null;
@@ -16813,8 +16798,7 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsObjectCreateWholeValue(expr: ts.Expression): boolean {
-        let cur: ts.Expression = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur) || !this.isObjectCreateCall(cur) || cur.arguments.length < 2) return true;
         const descriptorEntries = this.commonJsDefinePropertiesExportDescriptorEntries(cur.arguments[1]!);
         if (!descriptorEntries) return false;
@@ -17427,14 +17411,7 @@ class Emitter {
 
     private isCommonJsModuleExportsDefinePropertyValueCall(call: ts.CallExpression): boolean {
         if (!this.isObjectDefinePropertyCall(call)) return false;
-        let parent: ts.Node = call.parent;
-        while (ts.isParenthesizedExpression(parent)) parent = parent.parent;
-        return ts.isBinaryExpression(parent) &&
-            parent.right === call &&
-            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            ts.isPropertyAccessExpression(parent.left) &&
-            this.isModuleExportsAccess(parent.left) &&
-            ts.isExpressionStatement(parent.parent);
+        return !!this.commonJsModuleExportsValueAssignmentParentForCall(call);
     }
 
     private commonJsModuleExportsDefinePropertyValueExport(stmt: ts.Statement): CommonJsDefinePropertyExport | null {
@@ -17448,8 +17425,7 @@ class Emitter {
         ) {
             return null;
         }
-        let right: ts.Expression = expr.right;
-        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        const right = this.unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsDefinePropertyValueExportCall(right)
             : null;
@@ -17471,8 +17447,7 @@ class Emitter {
         ) {
             return null;
         }
-        let right: ts.Expression = expr.right;
-        while (ts.isParenthesizedExpression(right)) right = right.expression;
+        const right = this.unwrapTransparentExpression(expr.right);
         return ts.isCallExpression(right)
             ? this.commonJsModuleExportsDefinePropertyValueExportCallEntries(right)
             : null;
@@ -17530,8 +17505,7 @@ class Emitter {
     }
 
     private canEmitCommonJsModuleExportsDefinePropertyWholeValue(expr: ts.Expression): boolean {
-        let cur: ts.Expression = expr;
-        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        const cur = this.unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur) || !this.isObjectDefinePropertyCall(cur)) return true;
         if (this.commonJsDescriptorObjectUsesFromEntriesDescriptors(cur.arguments[0]!)) return false;
         const exportInfo = this.commonJsDefinePropertyExportFromKeyAndDescriptor(cur, cur.arguments[1]!, cur.arguments[2]!);
