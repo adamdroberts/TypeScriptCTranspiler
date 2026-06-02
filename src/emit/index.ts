@@ -6820,7 +6820,10 @@ class Emitter {
             case "matchAll":
             case "search":
                 return args.length >= 1 &&
-                    this.isSideEffectFreeRegExpPatternString(args[0]!, seenConsts) &&
+                    (
+                        this.isSideEffectFreeRegExpPatternString(args[0]!, seenConsts) ||
+                        this.isSideEffectFreeFreshRegExpOperand(args[0]!, seenConsts)
+                    ) &&
                     allArgsPure(1);
             default:
                 return false;
