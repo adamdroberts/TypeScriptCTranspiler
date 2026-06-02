@@ -26071,6 +26071,52 @@ class Emitter {
         ) {
             return this.emitEquality(bin, left, right, true);
         }
+        if (op === ts.SyntaxKind.InKeyword) {
+            if (right.ty.kind === "class") {
+                const props = this.typedObjectPropertyNames(this.checker.getTypeAtLocation(bin.right), right.ty);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: right, node: bin.right },
+                    { value: left, target: T_STRING, node: bin.left },
+                ], ([objC, keyC]) => {
+                    const checks = props.map((name) =>
+                        `tsc_str_eq(${keyC}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
+                    );
+                    return `({ (void)${objC}; ${checks.length > 0 ? checks.join(" || ") : "false"}; })`;
+                });
+            }
+            if (right.ty.kind === "array") {
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: right, node: bin.right },
+                    { value: left, target: T_STRING, node: bin.left },
+                ], ([array, key]) => `tsc_value_has_prop(tsc_value_array(${array}), ${key})`);
+            }
+            if (right.ty.kind === "buffer") {
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: right, node: bin.right },
+                    { value: left, target: T_STRING, node: bin.left },
+                ], ([buffer, keyC]) => {
+                    const source = this.freshTemp("_boh_src");
+                    const idx = this.freshTemp("_boh_i");
+                    const out = this.freshTemp("_boh");
+                    const idxKey = this.freshTemp("_boh_key");
+                    return `({ tsc_buffer_t* const ${source} = ${buffer}; bool ${out} = tsc_str_eq(${keyC}, tsc_str_from_lit("length", 6)); for (size_t ${idx} = 0; ${idx} < ${source}->len && !${out}; ${idx}++) { tsc_str_t* ${idxKey} = tsc_str_from_int((int64_t)${idx}); if (tsc_str_eq(${keyC}, ${idxKey})) { ${out} = true; break; } } ${out}; })`;
+                });
+            }
+            if (right.ty.kind !== "value") {
+                unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
+            }
+            return this.emitSequencedExpr(
+                T_BOOLEAN,
+                [
+                    { value: left, target: T_STRING, node: bin.left },
+                    { value: right, target: T_VALUE, node: bin.right },
+                ],
+                ([key, obj]) => {
+                    const cache = this.freshTemp("_cache");
+                    return `({ static tsc_prop_cache_t ${cache}; tsc_value_has_prop_cached(${obj}, ${key}, &${cache}); })`;
+                },
+            );
+        }
         if (
             op === ts.SyntaxKind.LessThanToken ||
             op === ts.SyntaxKind.LessThanEqualsToken ||
