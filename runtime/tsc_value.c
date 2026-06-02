@@ -594,12 +594,19 @@ bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
     return true;
 }
 
+static bool array_length_to_size(tsc_value_t value, size_t* out) {
+    double raw = tsc_value_as_num(value);
+    if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw || raw > 4294967295.0) {
+        tsc_throw_str(tsc_str_from_cstr("RangeError: Invalid array length"));
+    }
+    *out = (size_t)raw;
+    return true;
+}
+
 bool tsc_value_array_set_length(tsc_array_t* a, tsc_value_t value) {
     if (!a || a->es != sizeof(tsc_value_t)) return false;
-    double raw = tsc_value_as_num(value);
-    if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw) return false;
-    if (raw > (double)SIZE_MAX) return false;
-    size_t len = (size_t)raw;
+    size_t len = 0;
+    array_length_to_size(value, &len);
     if (a->frozen || !a->length_writable) return false;
     if (a->sealed && len != a->len) return false;
     if (len > a->len && !a->extensible) return false;
@@ -673,9 +680,9 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             if (!current_writable) {
                 if (next_writable) return false;
                 if (!has_value) return true;
-                double raw = tsc_value_as_num(value);
-                if (isnan(raw) || isinf(raw) || raw < 0.0 || floor(raw) != raw || raw > (double)SIZE_MAX) return false;
-                return (size_t)raw == a->len;
+                size_t len = 0;
+                array_length_to_size(value, &len);
+                return len == a->len;
             }
             if (has_value && !tsc_value_array_set_length(a, value)) return false;
             if (!next_writable) a->length_writable = false;

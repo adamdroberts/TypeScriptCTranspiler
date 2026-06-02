@@ -2,3 +2,9 @@ index: true red|cyan
 expanded: 4 undefined gold 0|1|2|3
 length: true 2 red|cyan
 unsupported flags: false red
+length nan RangeError: Invalid array length
+length float RangeError: Invalid array length
+length overflow RangeError: Invalid array length
+length object nan RangeError: Invalid array length
+length negative zero: 0
+length string: true 2
