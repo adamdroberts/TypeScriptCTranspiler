@@ -117,6 +117,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isCallExpression(node)) {
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
+            const atText = resolveStaticArrayAtCall(node);
+            if (atText.length > 0) return atText;
         }
         if (ts.isTemplateExpression(node)) {
             let out = [node.head.text];
@@ -444,6 +446,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupe(out);
     };
 
+    const resolveStaticArrayAtCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "at") return [];
+        const init = resolveCollectionExpression(callee.expression);
+        if (!init || !ts.isArrayLiteralExpression(init)) return [];
+
+        const elements: string[][] = [];
+        for (const element of init.elements) {
+            if (ts.isSpreadElement(element)) return [];
+            const values = resolve(element);
+            if (values.length === 0) return [];
+            elements.push(values);
+        }
+
+        const keys = resolveStaticIntegerKeys(call.arguments[0]!);
+        if (keys.length === 0) return [];
+        const out: string[] = [];
+        for (const key of keys) {
+            const index = key < 0 ? elements.length + key : key;
+            const values = index >= 0 ? elements[index] : undefined;
+            if (!values) return [];
+            out.push(...values);
+        }
+        return dedupe(out);
+    };
+
     const resolveStaticArrayAccess = (
         init: ts.ArrayLiteralExpression,
         keyExpr: ts.Expression | ts.Identifier,
@@ -504,6 +533,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const keys: number[] = [];
         for (const text of texts) {
             if (!/^(0|[1-9][0-9]*)$/.test(text)) return [];
+            keys.push(Number(text));
+        }
+        return keys;
+    };
+
+    const resolveStaticIntegerKeys = (keyExpr: ts.Expression | ts.Identifier): number[] => {
+        if (ts.isNumericLiteral(keyExpr)) return [Number(keyExpr.text)];
+        if (
+            ts.isPrefixUnaryExpression(keyExpr) &&
+            keyExpr.operator === ts.SyntaxKind.MinusToken &&
+            ts.isNumericLiteral(keyExpr.operand)
+        ) {
+            return [-Number(keyExpr.operand.text)];
+        }
+        const texts = resolveKeyTexts(keyExpr);
+        if (texts.length === 0) return [];
+        const keys: number[] = [];
+        for (const text of texts) {
+            if (!/^-?(0|[1-9][0-9]*)$/.test(text)) return [];
             keys.push(Number(text));
         }
         return keys;
