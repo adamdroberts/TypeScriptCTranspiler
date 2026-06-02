@@ -334,6 +334,11 @@ static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, t
 }
 
 static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_array_t* av = (tsc_array_t*)env;
+    av->iter_pos = av->len;
+    av->is_lazy_generator = false;
+    av->state = -1;
+    av->iter_return_consumed = true;
     tsc_value_t err = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_str_t* errStr = tsc_value_to_string(err);
     tsc_throw_str(errStr);
