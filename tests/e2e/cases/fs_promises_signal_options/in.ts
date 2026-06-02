@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { lstat, readFile, stat, writeFile } from "node:fs/promises";
 
 const tmpPath = "/tmp/tsc2c-fs-promises-signal-options.txt";
 let seen = "";
@@ -17,6 +17,9 @@ readFile(tmpPath, { encoding: "utf8", signal: mark("read") }).then((text: string
 });
 
 writeFile(tmpPath, "signal ok\n", { signal: void 0 });
+stat(tmpPath, { signal: mark("stat") } as any);
+lstat(tmpPath, { signal: mark("lstat") } as any);
+stat(tmpPath, { signal: void 0 } as any);
 
 setImmediate((): void => {
     console.log("seen:", seen);

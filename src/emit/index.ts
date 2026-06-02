@@ -45195,7 +45195,11 @@ class Emitter {
         }
     }
 
-    private validateFsStatsOptions(options: ts.Expression | undefined, label: string): { throwIfNoEntry: boolean } {
+    private validateFsStatsOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        allowSignal = false,
+    ): { throwIfNoEntry: boolean } {
         let throwIfNoEntry = true;
         if (!options) return { throwIfNoEntry };
         if (this.isUndefinedLikeExpression(options)) return { throwIfNoEntry };
@@ -45206,7 +45210,7 @@ class Emitter {
         }
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support bigint and throwIfNoEntry property assignments`);
+                unsupported(prop, `${label} options only support bigint, throwIfNoEntry${allowSignal ? ", and signal" : ""} property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "bigint") {
@@ -45230,6 +45234,9 @@ class Emitter {
                     unsupported(prop.initializer, `${label}.throwIfNoEntry must be a boolean literal in this subset`);
                 }
                 throwIfNoEntry = value;
+                continue;
+            }
+            if (allowSignal && key === "signal") {
                 continue;
             }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
@@ -45396,13 +45403,14 @@ class Emitter {
             }
             case "stat": {
                 if (args.length < 1) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry } options");
-                const options = this.validateFsStatsOptions(args[1], "fs.promises.stat");
+                const options = this.validateFsStatsOptions(args[1], "fs.promises.stat", true);
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.stat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.stat path"),
                     ...optionSpecs,
@@ -45411,13 +45419,14 @@ class Emitter {
             }
             case "lstat": {
                 if (args.length < 1) unsupported(call, "fs.promises.lstat needs path and optional { bigint: false, throwIfNoEntry } options");
-                const options = this.validateFsStatsOptions(args[1], "fs.promises.lstat");
+                const options = this.validateFsStatsOptions(args[1], "fs.promises.lstat", true);
                 if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.lstat result must be Promise<FSStats>");
                 const p = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.lstat path"),
                     ...optionSpecs,
