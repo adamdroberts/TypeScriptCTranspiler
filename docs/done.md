@@ -2501,6 +2501,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `for_in` | for-in over typed classes/interfaces, typed arrays, and dynamic objects with continue/break |
 | `map_entries` | typed Map<K, V>.entries() returning ObjectEntry<V, K>[] |
+| `node_modules_commonjs_computed_object_entry_values_exports` | CommonJS computed named-export metadata accepts finite Object.entries object value keys |
 | `node_modules_commonjs_module_exports_runtime_function_default` | CommonJS whole-value module.exports conditional, logical, and nullish defaults can select inline function values |
 | `node_modules_commonjs_module_exports_runtime_update_delete_default` | CommonJS whole-value module.exports postfix, delete, and comma defaults lower as boxed values |
 | `node_modules_commonjs_module_exports_array_spread_default` | CommonJS whole-value module.exports array spread defaults lower through the boxed AOT package-source path |
