@@ -1,0 +1,5 @@
+grow: b|c 5 a x y z d false
+shrink: b|c 3 a x d false
+omitted: b|c 1 a false
+undefined: 0 4 a x b c
+sparse: |c| 3 3 a x e false false
