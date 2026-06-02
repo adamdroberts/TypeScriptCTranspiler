@@ -884,6 +884,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-array": cjsPackage("tsc2c-cjs-module-array", {
         "index.js": "module.exports = [2, 4, 8];\n",
     }),
+    "tsc2c-cjs-module-array-spread-default": cjsPackage("tsc2c-cjs-module-array-spread-default", {
+        "index.js": 'const head = ["alpha", "beta"];\nconst tail = [3, "delta"];\nmodule.exports = ["start", ...head, ...tail, "end"];\n',
+    }),
     "tsc2c-cjs-module-arrow": cjsPackage("tsc2c-cjs-module-arrow", {
         "index.js": "module.exports = (value) => value * 2;\n",
     }),

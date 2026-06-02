@@ -17745,9 +17745,10 @@ class Emitter {
         }
         if (ts.isArrayLiteralExpression(cur)) {
             return cur.elements.every((element) =>
-                !ts.isSpreadElement(element) &&
                 element.kind !== ts.SyntaxKind.OmittedExpression &&
-                this.isCommonJsModuleExportsDefaultInitializerValue(element),
+                (ts.isSpreadElement(element)
+                    ? this.isCommonJsModuleExportsArraySpreadValue(element.expression)
+                    : this.isCommonJsModuleExportsDefaultInitializerValue(element)),
             );
         }
         if (ts.isObjectLiteralExpression(cur)) {
@@ -17774,6 +17775,12 @@ class Emitter {
         return false;
     }
 
+    private isCommonJsModuleExportsArraySpreadValue(expr: ts.Expression): boolean {
+        const cur = this.unwrapTransparentExpression(expr);
+        return this.isCommonJsModuleExportsDefaultInitializerValue(cur) ||
+            this.isCommonJsModuleExportsSpreadValue(cur);
+    }
+
     private isCommonJsModuleExportsDefaultValue(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
@@ -17795,9 +17802,10 @@ class Emitter {
         }
         if (ts.isArrayLiteralExpression(cur)) {
             return cur.elements.every((element) =>
-                !ts.isSpreadElement(element) &&
                 element.kind !== ts.SyntaxKind.OmittedExpression &&
-                this.isCommonJsModuleExportsDefaultInitializerValue(element),
+                (ts.isSpreadElement(element)
+                    ? this.isCommonJsModuleExportsArraySpreadValue(element.expression)
+                    : this.isCommonJsModuleExportsDefaultInitializerValue(element)),
             );
         }
         if (ts.isObjectLiteralExpression(cur)) {
@@ -20174,6 +20182,9 @@ class Emitter {
             return this.emitCommonJsObjectLiteralDefaultValue(cur);
         }
         if (ts.isArrayLiteralExpression(cur)) {
+            if (cur.elements.some(ts.isSpreadElement)) {
+                return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+            }
             const av = this.freshTemp("_cjsarr");
             const pieces: string[] = [
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, cur.elements.length)})`,
