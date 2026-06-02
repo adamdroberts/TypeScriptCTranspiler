@@ -1345,9 +1345,15 @@ interface FSStatsNoEntryOptions {
     bigint?: false;
     throwIfNoEntry: false;
 }
+interface FSPromisesStatsOptions extends FSStatsOptions {
+    signal?: any;
+}
 interface FSMkdirOptions {
     recursive?: boolean;
     mode?: number;
+}
+interface FSPromisesMkdirOptions extends FSMkdirOptions {
+    signal?: any;
 }
 interface FSRmOptions {
     recursive?: boolean;
@@ -1355,10 +1361,16 @@ interface FSRmOptions {
     maxRetries?: number;
     retryDelay?: number;
 }
+interface FSPromisesRmOptions extends FSRmOptions {
+    signal?: any;
+}
 interface FSRmdirOptions {
     recursive?: boolean;
     maxRetries?: number;
     retryDelay?: number;
+}
+interface FSPromisesRmdirOptions extends FSRmdirOptions {
+    signal?: any;
 }
 interface FSCpOptions {
     recursive?: boolean;
@@ -1384,7 +1396,11 @@ interface FSBufferEncodingOptions {
 interface FSPathResultEncodingOptions {
     encoding?: FSPathResultEncoding | null;
 }
+interface FSPromisesPathResultEncodingOptions extends FSPathResultEncodingOptions {
+    signal?: any;
+}
 type FSPathResultEncodingOption = FSPathResultEncoding | null | FSPathResultEncodingOptions;
+type FSPromisesPathResultEncodingOption = FSPathResultEncoding | null | FSPromisesPathResultEncodingOptions;
 type FSReadFileFlag = "r" | "rs" | "r+" | "rs+";
 interface FSReadFileOptions {
     encoding?: FSReadFileStringEncoding;
@@ -1424,24 +1440,41 @@ interface FSAppendFileOptions {
     flush?: boolean;
 }
 type FSAppendFileEncodingOptions = FSFileContentEncoding | null | FSAppendFileOptions;
+interface FSPromisesAppendFileOptions extends FSAppendFileOptions {
+    signal?: any;
+}
+type FSPromisesAppendFileEncodingOptions = FSFileContentEncoding | null | FSPromisesAppendFileOptions;
 interface FSReaddirOptions {
     encoding?: FSReaddirStringEncoding | null;
     recursive?: boolean;
     withFileTypes?: false;
 }
 type FSReaddirStringOptions = FSReaddirStringEncoding | null | FSReaddirOptions;
+interface FSPromisesReaddirOptions extends FSReaddirOptions {
+    signal?: any;
+}
+type FSPromisesReaddirStringOptions = FSReaddirStringEncoding | null | FSPromisesReaddirOptions;
 interface FSReaddirBufferOptions {
     encoding: FSBufferEncoding;
     recursive?: boolean;
     withFileTypes?: false;
+}
+interface FSPromisesReaddirBufferOptions extends FSReaddirBufferOptions {
+    signal?: any;
 }
 interface FSReaddirDirentOptions {
     encoding?: FSReaddirStringEncoding;
     recursive?: boolean;
     withFileTypes: true;
 }
+interface FSPromisesReaddirDirentOptions extends FSReaddirDirentOptions {
+    signal?: any;
+}
 type FSFileEncodingOptions = FSEncoding | FSEncodingOptions;
 type FSFileBufferEncodingOptions = FSBufferEncoding | FSBufferEncodingOptions;
+interface FSPromisesFileBufferEncodingOptions extends FSBufferEncodingOptions {
+    signal?: any;
+}
 type FSPathLike = string | Buffer | URL;
 type FSFileTime = number | Date;
 type FSSymlinkType = "file" | "dir" | "junction";
@@ -1516,21 +1549,21 @@ interface FSPromises {
     readFile(path: FSPathLike, options: FSPromisesReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
     readFile(path: FSPathLike, options?: FSPromisesReadFileStringOptions, ...ignored: any[]): Promise<string>;
     writeFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
-    appendFile(path: FSPathLike, data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
-    readdir(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
-    readdir(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
-    readdir(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
+    appendFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
+    readdir(path: FSPathLike, options: FSBufferEncoding | FSPromisesReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
+    readdir(path: FSPathLike, options: FSPromisesReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
+    readdir(path: FSPathLike, options?: FSPromisesReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
     statfs(path: FSPathLike, options?: FSStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
-    stat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
-    lstat(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): Promise<FSStats>;
-    realpath(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
-    realpath(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
-    readlink(path: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
-    readlink(path: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
+    stat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
+    lstat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
+    realpath(path: FSPathLike, options: FSBufferEncoding | FSPromisesFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
+    realpath(path: FSPathLike, options?: FSPromisesPathResultEncodingOption, ...ignored: any[]): Promise<string>;
+    readlink(path: FSPathLike, options: FSBufferEncoding | FSPromisesFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
+    readlink(path: FSPathLike, options?: FSPromisesPathResultEncodingOption, ...ignored: any[]): Promise<string>;
     symlink(target: FSPathLike, path: FSPathLike, type?: FSSymlinkType, ...ignored: any[]): Promise<void>;
     link(existingPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): Promise<void>;
-    mkdtemp(prefix: FSPathLike, options: FSFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
-    mkdtemp(prefix: FSPathLike, options?: FSPathResultEncodingOption, ...ignored: any[]): Promise<string>;
+    mkdtemp(prefix: FSPathLike, options: FSBufferEncoding | FSPromisesFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
+    mkdtemp(prefix: FSPathLike, options?: FSPromisesPathResultEncodingOption, ...ignored: any[]): Promise<string>;
     truncate(path: FSPathLike, len?: number, ...ignored: any[]): Promise<void>;
     utimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
     lutimes(path: FSPathLike, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
@@ -1538,10 +1571,10 @@ interface FSPromises {
     lchown(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): Promise<void>;
     chmod(path: FSPathLike, mode: number, ...ignored: any[]): Promise<void>;
     access(path: FSPathLike, mode?: number, ...ignored: any[]): Promise<void>;
-    mkdir(path: FSPathLike, options?: number | FSMkdirOptions | null, ...ignored: any[]): Promise<void>;
+    mkdir(path: FSPathLike, options?: number | FSPromisesMkdirOptions | null, ...ignored: any[]): Promise<void>;
     unlink(path: FSPathLike, ...ignored: any[]): Promise<void>;
-    rm(path: FSPathLike, options?: FSRmOptions, ...ignored: any[]): Promise<void>;
-    rmdir(path: FSPathLike, options?: FSRmdirOptions, ...ignored: any[]): Promise<void>;
+    rm(path: FSPathLike, options?: FSPromisesRmOptions, ...ignored: any[]): Promise<void>;
+    rmdir(path: FSPathLike, options?: FSPromisesRmdirOptions, ...ignored: any[]): Promise<void>;
     cp(src: FSPathLike, dest: FSPathLike, options?: FSCpOptions, ...ignored: any[]): Promise<void>;
     copyFile(src: FSPathLike, dest: FSPathLike, mode?: number, ...ignored: any[]): Promise<void>;
     rename(oldPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): Promise<void>;

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Bundled `fs.promises` declarations now expose the already-lowered `signal` option objects for immediate sync-backed `appendFile`, `readdir`, `stat`, `lstat`, `realpath`, `readlink`, `mkdtemp`, `mkdir`, `rm`, and `rmdir` calls. Test: `fs_promises_signal_options`.
 - Dynamic array index deletion now clears the dense array slot when deleting a configurable own index descriptor stored in array side properties, so later reads do not resurrect the stale element value. Test: `dynamic_array_accessor_properties`.
 - Proxy `ownKeys` validation no longer requires accessor function targets to report a non-existent `prototype` key, while still rejecting extra `prototype` reports on non-extensible accessor functions. Test: `proxy_function_prototype_invariants`.
 - CommonJS computed named-export metadata now accepts checker-proven single literal keys, including JavaScript JSDoc single-literal keys, not only finite literal unions. Test: `node_modules_commonjs_jsdoc_single_computed_exports`.

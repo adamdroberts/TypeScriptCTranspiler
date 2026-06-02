@@ -14,7 +14,7 @@ function mark(label: string): any {
 }
 
 writeFile(tmpPath, "signal ok\n", { encoding: "utf8", signal: mark("write") });
-appendFile(tmpPath, "append ok\n", { encoding: "utf8", signal: mark("append") } as any);
+appendFile(tmpPath, "append ok\n", { encoding: "utf8", signal: mark("append") });
 
 readFile(tmpPath, { encoding: "utf8", signal: mark("read") }).then((text: string): string => {
     readBack = text;
@@ -22,18 +22,18 @@ readFile(tmpPath, { encoding: "utf8", signal: mark("read") }).then((text: string
 });
 
 writeFile(tmpPath, "signal ok\n", { signal: void 0 });
-stat(tmpPath, { signal: mark("stat") } as any);
-lstat(tmpPath, { signal: mark("lstat") } as any);
-stat(tmpPath, { signal: void 0 } as any);
-realpath(tmpPath, { encoding: "utf8", signal: mark("realpath") } as any);
-readlink("/proc/self/exe", { encoding: "utf8", signal: mark("readlink") } as any);
-mkdtemp(dirPrefix, { encoding: "utf8", signal: mark("mkdtemp") } as any);
-mkdir(mkdirPath, { recursive: true, mode: 0o700, signal: mark("mkdir") } as any);
-mkdir(rmdirPath, { signal: void 0 } as any);
-rmdir(rmdirPath, { signal: mark("rmdir") } as any);
-mkdir(rmPath, { recursive: true } as any);
+stat(tmpPath, { signal: mark("stat") });
+lstat(tmpPath, { signal: mark("lstat") });
+stat(tmpPath, { signal: void 0 });
+realpath(tmpPath, { encoding: "utf8", signal: mark("realpath") });
+readlink("/proc/self/exe", { encoding: "utf8", signal: mark("readlink") });
+mkdtemp(dirPrefix, { encoding: "utf8", signal: mark("mkdtemp") });
+mkdir(mkdirPath, { recursive: true, mode: 0o700, signal: mark("mkdir") });
+mkdir(rmdirPath, { signal: void 0 });
+rmdir(rmdirPath, { signal: mark("rmdir") });
+mkdir(rmPath, { recursive: true });
 writeFile(rmPath + "/file.txt", "remove me");
-rm(rmPath, { recursive: true, force: true, signal: mark("rm") } as any);
+rm(rmPath, { recursive: true, force: true, signal: mark("rm") });
 
 setImmediate((): void => {
     console.log("seen:", seen);
