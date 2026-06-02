@@ -135,7 +135,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `interface` declarations → C struct types (no runtime overhead); `extends` emits inherited fields in base-first order for field access and typed Object/Reflect field-list helpers. Tests: `interfaces`, `interface_inheritance`
 - Object literals typed against an interface/class → allocated + field-assigned. Test: `interfaces`
 - Non-escaping local typed object literals that only flow through same-block property reads/writes are stack-allocated instead of GC-allocated. Test: `object_literal_stack_alloc`
-- Non-escaping local typed object literals and `new Class(...)` values used as targets for read-only Object/Reflect/Object-prototype inspection helpers are stack-allocated instead of GC-allocated. Test: `object_literal_stack_alloc_helpers`
+- Non-escaping local typed object literals and `new Class(...)` values used as targets for read-only Object/Reflect/Object-prototype inspection helpers, including extensibility and integrity inspectors, are stack-allocated instead of GC-allocated. Test: `object_literal_stack_alloc_helpers`
 - Non-escaping local typed object literals and `new Class(...)` values that flow through same-block alias chains remain stack-allocated when the aliases only use safe property access and read-only inspections. Test: `object_literal_stack_alloc_alias`
 - Non-escaping local typed object literals and `new Class(...)` values that flow through same-block assignment alias chains remain stack-allocated when the aliases only use safe property access and read-only inspections. Test: `object_literal_stack_alloc_alias_assignment_direct`
 - Non-escaping local typed object literals and `new Class(...)` values that flow through `Object.prototype.valueOf.call(...)` remain stack-allocated when the returned receiver stays within safe same-block property access and inspection uses. Test: `object_literal_stack_alloc_value_of`
@@ -2061,7 +2061,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_prototype_accessor_primitives` | legacy Object prototype accessor helpers on primitive receivers with getter/setter validation |
 | `object_proto_accessor` | legacy __proto__ dynamic getter and setter behavior |
 | `object_literal_stack_alloc` | non-escaping typed object literal locals use stack storage |
-| `object_literal_stack_alloc_helpers` | non-escaping typed object literal and class locals use stack storage through read-only Object/Reflect/Object-prototype helpers |
+| `object_literal_stack_alloc_helpers` | non-escaping typed object literal and class locals use stack storage through read-only Object/Reflect/Object-prototype helpers, including extensibility and integrity inspectors |
 | `object_literal_stack_alloc_alias` | non-escaping typed object literal and class locals use stack storage through safe same-block alias chains |
 | `object_literal_stack_alloc_alias_assignment_direct` | non-escaping typed object literal and class locals use stack storage through safe same-block assignment alias chains |
 | `object_literal_stack_alloc_value_of` | non-escaping typed object literal and class locals use stack storage through safe `Object.prototype.valueOf.call` receiver returns |
