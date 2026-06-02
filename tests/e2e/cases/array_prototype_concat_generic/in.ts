@@ -10,3 +10,8 @@ console.log("mixed:", mixed.length, mixed[0].label, mixed[1], mixed[2], mixed[3]
 const arr: any = [1, 2];
 const copy: any = Reflect.apply(proto.concat, arr, []);
 console.log("array:", copy.join("|"), copy === arr);
+
+const proxyReceiver: any = new Proxy(["p", "q"], {});
+const proxyArg: any = new Proxy(["r", "s"], {});
+const proxyConcat: any = Reflect.apply(proto.concat, proxyReceiver, [proxyArg, "tail"]);
+console.log("proxy:", proxyConcat.join("|"), proxyConcat.length);
