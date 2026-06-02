@@ -62,6 +62,11 @@ function realFunctionDescriptor(target: any, prop: any): any {
   return Reflect.getOwnPropertyDescriptor(target, prop);
 }
 
+function trueDefine(target: any, prop: any, desc: any): boolean {
+  events.push("define:" + String(prop));
+  return true;
+}
+
 function writablePrototypeDescriptor(target: any, prop: any): any {
   events.push("writable prototype desc:" + String(prop));
   if (prop === "prototype") {
@@ -210,6 +215,13 @@ console.log(
   prototypeDesc.configurable,
   prototypeDesc.value === prototypeDescriptorTarget.prototype,
 );
+
+const prototypeDefineProxy: any = new Proxy(prototypeDescriptorTarget, { defineProperty: trueDefine as any });
+try {
+  console.log("prototype define downgrade:", Reflect.defineProperty(prototypeDefineProxy, "prototype", { writable: false }, mark("prototype define downgrade")));
+} catch (err: any) {
+  console.log("prototype define downgrade:", err);
+}
 
 const nonWritablePrototypeProxy: any = new Proxy(prototypeDescriptorTarget, { getOwnPropertyDescriptor: nonWritablePrototypeDescriptor as any });
 try {

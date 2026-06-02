@@ -140,6 +140,20 @@ try {
 }
 console.log("define fixed same:", Reflect.defineProperty(fixedDefineProxy, "x", { value: 1 }, mark("define fixed same")));
 
+const writableDefineTarget: any = {};
+Object.defineProperty(writableDefineTarget, "x", {
+    value: 1,
+    writable: true,
+    enumerable: true,
+    configurable: false,
+});
+const writableDefineProxy: any = new Proxy(writableDefineTarget, { defineProperty: trueDefine as any });
+try {
+    console.log("define writable downgrade:", Reflect.defineProperty(writableDefineProxy, "x", { writable: false }, mark("define writable downgrade")));
+} catch (e: any) {
+    console.log("define writable downgrade:", e);
+}
+
 const accessorDefineTarget: any = {};
 Object.defineProperty(accessorDefineTarget, "x", {
     get: returnsUndefined as any,

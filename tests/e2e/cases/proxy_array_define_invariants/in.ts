@@ -71,4 +71,14 @@ console.log(
         configurable: false,
     }, mark("sealed compatible")),
 );
+try {
+    console.log(
+        "sealed downgrade:",
+        Reflect.defineProperty(sealedProxy, "0", {
+            writable: false,
+        }, mark("sealed downgrade")),
+    );
+} catch (err: any) {
+    console.log("sealed downgrade:", err);
+}
 console.log("events:", events.join("|"));
