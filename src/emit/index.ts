@@ -7236,6 +7236,7 @@ class Emitter {
             if (name === "AggregateError") return this.isSideEffectFreeAggregateErrorConstructorArgs(args, seenConsts);
             if (name === "URL") return this.isSideEffectFreeURLConstructorArgs(args, seenConsts);
             if (name === "URLSearchParams") return this.isSideEffectFreeURLSearchParamsConstructorArgs(args, seenConsts);
+            if (name === "Array") return this.isSideEffectFreeArrayConstructorArgs(args, seenConsts);
             if (name === "ArrayBuffer") return this.isSideEffectFreeArrayBufferConstructorArgs(args, seenConsts);
             if (name === "DataView") return this.isSideEffectFreeDataViewConstructorArgs(args, seenConsts);
             if (name === "Map") {
@@ -7309,6 +7310,24 @@ class Emitter {
         return this.isSideEffectFreePrimitiveNumberCoercion(errorArgs[0]!, seenConsts) &&
             errorArgs.slice(1).every((arg) =>
                 this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
+        );
+    }
+
+    private isSideEffectFreeArrayConstructorArgs(
+        args: ts.NodeArray<ts.Expression>,
+        seenConsts: Set<ts.Symbol>,
+    ): boolean {
+        if (args.length === 0) return true;
+        if (args.length === 1) {
+            const length = this.sideEffectFreeNumericLiteralSameValueZeroValue(args[0]!, seenConsts);
+            return length !== null &&
+                Number.isFinite(length) &&
+                Number.isInteger(length) &&
+                length >= 0 &&
+                length <= 0xffffffff;
+        }
+        return Array.from(args).every((arg) =>
+            this.isSideEffectFreeTopLevelConstInitializer(arg, seenConsts)
         );
     }
 
