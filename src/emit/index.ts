@@ -37988,7 +37988,7 @@ class Emitter {
         const name = "tsc_promise_executor_env_t";
         if (!this.promiseExecutorEnvDeclared) {
             this.globalDecls.open(`typedef struct ${name}`);
-            this.globalDecls.line("tsc_promise_t** result;");
+            this.globalDecls.line("tsc_promise_t* promise;");
             this.globalDecls.close(` ${name};`);
             this.promiseExecutorEnvDeclared = true;
         }
@@ -38008,10 +38008,10 @@ class Emitter {
         buf.open(`void ${name}(void* env, ${type.c} value)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         if (type.kind === "fsstats") {
-            buf.line("if (!*state->result) *state->result = tsc_promise_resolve_fs_stats(value);");
+            buf.line("tsc_promise_adopt_into(state->promise, tsc_promise_resolve_fs_stats(value));");
         } else {
             const boxed = this.coerce({ c: "value", ty: type }, T_VALUE, node);
-            buf.line(`if (!*state->result) *state->result = tsc_promise_resolve_thenable(${boxed});`);
+            buf.line(`tsc_promise_adopt_into(state->promise, tsc_promise_resolve_thenable(${boxed}));`);
         }
         buf.close();
         buf.line();
@@ -38032,7 +38032,7 @@ class Emitter {
         buf.open(`void ${name}(void* env, ${type.c} reason)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
         const boxed = this.coerce({ c: "reason", ty: type }, T_VALUE, node);
-        buf.line(`if (!*state->result) *state->result = tsc_promise_reject(${boxed});`);
+        buf.line(`tsc_promise_reject_in_place(state->promise, ${boxed});`);
         buf.close();
         buf.line();
         this.closureDefs.write(buf.toString());
@@ -52889,8 +52889,9 @@ class Emitter {
                 const result = this.freshTemp("_promise_executor_result");
                 const state = this.freshTemp("_promise_executor_env");
                 const pieces: string[] = [
-                    `tsc_promise_t* ${result} = NULL`,
-                    `${envType} ${state} = { &${result} }`,
+                    `tsc_promise_t* ${result} = tsc_promise_pending()`,
+                    `${envType}* ${state} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`,
+                    `${state}->promise = ${result}`,
                 ];
                 const callArgs = [`${exec}->env`];
                 if (executorType.thisParam) callArgs.push("tsc_value_undefined()");
@@ -52906,14 +52907,14 @@ class Emitter {
                         : this.ensurePromiseRejectAdapter(valueParam, executorArg);
                     pieces.push(`${param.c} ${fn} = (${param.c})TSC_GC_MALLOC(sizeof(${param.closureName}))`);
                     pieces.push(`${fn}->fn = ${adapter}`);
-                    pieces.push(`${fn}->env = &${state}`);
+                    pieces.push(`${fn}->env = ${state}`);
                     callArgs.push(fn);
                 }
                 const eh = this.freshTemp("_promise_executor_eh");
                 pieces.push(`tsc_try_frame_t ${eh}`);
                 pieces.push(`tsc_try_push(&${eh})`);
-                pieces.push(`if (setjmp(${eh}.jb) == 0) { (void)${exec}->fn(${callArgs.join(", ")}); tsc_try_pop(); } else if (!${result}) { ${result} = tsc_promise_reject(tsc_value_string(tsc_current_error())); }`);
-                pieces.push(`${result} ? ${result} : tsc_promise_pending()`);
+                pieces.push(`if (setjmp(${eh}.jb) == 0) { (void)${exec}->fn(${callArgs.join(", ")}); tsc_try_pop(); } else { tsc_promise_reject_in_place(${result}, tsc_value_string(tsc_current_error())); }`);
+                pieces.push(result);
                 return `({ ${pieces.join("; ")}; })`;
             });
         }
