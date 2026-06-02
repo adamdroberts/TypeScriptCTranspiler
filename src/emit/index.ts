@@ -21794,13 +21794,17 @@ class Emitter {
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
         if (!scope || !ts.isBlock(scope)) return null;
-        if (this.blockContainsNestedFunctionLike(scope)) return null;
 
         let escapes = false;
         let extraCapacity = 0;
         const visit = (n: ts.Node): void => {
             if (escapes) return;
-            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (n !== scope && ts.isFunctionLike(n)) {
+                if (this.nodeContainsSymbolReference(n, sym, ts.isIdentifier(d.name) ? d.name : undefined)) {
+                    escapes = true;
+                }
+                return;
+            }
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
                 const parent = n.parent;
@@ -22305,7 +22309,12 @@ class Emitter {
         let safe = true;
         const visit = (n: ts.Node): void => {
             if (!safe) return;
-            if (n !== scope && ts.isFunctionLike(n)) return;
+            if (n !== scope && ts.isFunctionLike(n)) {
+                if (this.nodeContainsSymbolReference(n, sym, ts.isIdentifier(d.name) ? d.name : undefined)) {
+                    safe = false;
+                }
+                return;
+            }
             if (ts.isIdentifier(n) && this.checker.getSymbolAtLocation(n) === sym) {
                 if (n === d.name) return;
                 if (!this.nonEscapingArrayValueOfAliasUseIsSafe(n)) {

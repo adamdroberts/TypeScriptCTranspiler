@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Basic escape analysis now stack-allocates non-escaping typed array literal locals in blocks that contain unrelated nested functions, while closure-captured arrays still fall back to heap storage. Tests: `array_literal_stack_alloc_uncaptured_nested_function`, `array_literal_stack_alloc_closure_capture`.
 - Finite dynamic `require(...)` proofs now resolve static string `.slice(...)` and `.substring(...)` specifiers with finite integer bounds into the AOT module graph. Test: `dynamic_require_static_string_range`.
 - Finite dynamic `require(...)` proofs now resolve zero-argument static string `.trim()`, `.trimStart()`, `.trimEnd()`, `.trimLeft()`, and `.trimRight()` specifiers into the AOT module graph. Test: `dynamic_require_static_string_trim`.
 - CommonJS whole-value `module.exports = value instanceof Class` defaults now lower through the boxed AOT package-source path as boolean values. Test: `node_modules_commonjs_module_exports_instanceof_default`.
