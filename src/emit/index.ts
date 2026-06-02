@@ -19362,6 +19362,12 @@ class Emitter {
             this.isModuleRequireAccess(unwrapped);
     }
 
+    private isCommonJsModuleRequireCallee(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapSideEffectFreeStaticExpression(expr);
+        if (this.isModuleRequireAccess(unwrapped)) return true;
+        return ts.isIdentifier(unwrapped) && this.isCommonJsModuleRequireAliasIdentifier(unwrapped);
+    }
+
     private isCommonJsRequireAliasIdentifier(id: ts.Identifier): boolean {
         if (this.isCommonJsIifeRequireParameterIdentifier(id)) return true;
         const sym = this.symbolForIdentifier(id);
@@ -19390,6 +19396,33 @@ class Emitter {
         return false;
     }
 
+    private isCommonJsModuleRequireAliasIdentifier(id: ts.Identifier): boolean {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isParameter(decl) && this.isCommonJsModuleRequireAliasParameter(decl)) {
+            return true;
+        }
+        if (decl && ts.isBindingElement(decl) && this.isCommonJsModuleRequireAliasBindingElement(decl)) {
+            return true;
+        }
+        if (decl && ts.isVariableDeclaration(decl) && this.isCommonJsModuleRequireAliasDeclaration(decl)) {
+            return true;
+        }
+        for (const stmt of id.getSourceFile().statements) {
+            if (!ts.isVariableStatement(stmt)) continue;
+            for (const fallbackDecl of stmt.declarationList.declarations) {
+                if (
+                    ts.isIdentifier(fallbackDecl.name) &&
+                    fallbackDecl.name.text === id.text &&
+                    this.isCommonJsModuleRequireAliasDeclaration(fallbackDecl)
+                ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private isCommonJsRequireAliasDeclaration(decl: ts.VariableDeclaration): boolean {
         if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
         const init = this.unwrapSideEffectFreeStaticExpression(decl.initializer);
@@ -19398,9 +19431,21 @@ class Emitter {
             this.isCommonJsRequireBindExpression(init);
     }
 
+    private isCommonJsModuleRequireAliasDeclaration(decl: ts.VariableDeclaration): boolean {
+        if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
+        const init = this.unwrapSideEffectFreeStaticExpression(decl.initializer);
+        return this.isModuleRequireAccess(init) ||
+            (ts.isIdentifier(init) && this.isCommonJsModuleRequireAliasIdentifier(init));
+    }
+
     private isCommonJsRequireAliasParameter(param: ts.ParameterDeclaration): boolean {
         const arg = this.commonJsIifeParameterArgument(param);
         return !!arg && this.isCommonJsRequireCallee(arg);
+    }
+
+    private isCommonJsModuleRequireAliasParameter(param: ts.ParameterDeclaration): boolean {
+        const arg = this.commonJsIifeParameterArgument(param);
+        return !!arg && this.isCommonJsModuleRequireCallee(arg);
     }
 
     private commonJsIifeParameterArgument(param: ts.ParameterDeclaration): ts.Expression | null {
@@ -19485,7 +19530,7 @@ class Emitter {
             return false;
         }
         const thisArg = this.unwrapSideEffectFreeStaticExpression(init.arguments[0]!);
-        return ts.isIdentifier(thisArg) && this.isCommonJsModuleIdentifier(thisArg);
+        return this.isCommonJsRequireThisArg(target, thisArg);
     }
 
     private isCommonJsModuleRequireAliasBindingElement(element: ts.BindingElement): boolean {
@@ -19497,6 +19542,16 @@ class Emitter {
             ts.isVariableDeclaration(decl) &&
             !!decl.initializer &&
             this.isCommonJsModuleAliasInitializer(decl.initializer);
+    }
+
+    private isCommonJsRequireThisArg(callee: ts.Expression, thisArg: ts.Expression): boolean {
+        const unwrappedThisArg = this.unwrapSideEffectFreeStaticExpression(thisArg);
+        if (this.isCommonJsModuleRequireCallee(callee)) {
+            return this.isCommonJsModuleThisArg(unwrappedThisArg);
+        }
+        return this.isCommonJsModuleThisArg(unwrappedThisArg) ||
+            unwrappedThisArg.kind === ts.SyntaxKind.NullKeyword ||
+            this.isUndefinedExpression(unwrappedThisArg);
     }
 
     private commonJsModuleMetadataValue(name: string, sf: ts.SourceFile | undefined): EmitResult | null {
@@ -19584,7 +19639,7 @@ class Emitter {
             callee.name.text === "call" &&
             this.isCommonJsRequireCallee(callee.expression) &&
             expr.arguments.length === 2 &&
-            this.isCommonJsModuleThisArg(expr.arguments[0]!)
+            this.isCommonJsRequireThisArg(callee.expression, expr.arguments[0]!)
         ) {
             return expr.arguments[1]!;
         }
@@ -19593,7 +19648,7 @@ class Emitter {
             callee.name.text === "apply" &&
             this.isCommonJsRequireCallee(callee.expression) &&
             expr.arguments.length === 2 &&
-            this.isCommonJsModuleThisArg(expr.arguments[0]!)
+            this.isCommonJsRequireThisArg(callee.expression, expr.arguments[0]!)
         ) {
             const specList = expr.arguments[1]!;
             return this.staticSingleRequireApplySpecifierArgument(specList);
@@ -19605,7 +19660,7 @@ class Emitter {
             callee.name.text === "apply" &&
             expr.arguments.length === 3 &&
             this.isCommonJsRequireCallee(expr.arguments[0]!) &&
-            this.isCommonJsModuleThisArg(expr.arguments[1]!)
+            this.isCommonJsRequireThisArg(expr.arguments[0]!, expr.arguments[1]!)
         ) {
             const specList = expr.arguments[2]!;
             return this.staticSingleRequireApplySpecifierArgument(specList);

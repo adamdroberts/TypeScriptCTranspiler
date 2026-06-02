@@ -844,7 +844,7 @@ export function commonJsRequireSpecifierArgument(
         callee.name.text === "call" &&
         isCommonJsRequireCallee(callee.expression, requireAliases, moduleAliases) &&
         expr.arguments.length === 2 &&
-        isCommonJsModuleThisArg(expr.arguments[0]!, moduleAliases)
+        isCommonJsRequireThisArg(callee.expression, expr.arguments[0]!, moduleAliases)
     ) {
         return expr.arguments[1]!;
     }
@@ -853,7 +853,7 @@ export function commonJsRequireSpecifierArgument(
         callee.name.text === "apply" &&
         isCommonJsRequireCallee(callee.expression, requireAliases, moduleAliases) &&
         expr.arguments.length === 2 &&
-        isCommonJsModuleThisArg(expr.arguments[0]!, moduleAliases)
+        isCommonJsRequireThisArg(callee.expression, expr.arguments[0]!, moduleAliases)
     ) {
         const specList = expr.arguments[1]!;
         return staticSingleRequireApplySpecifierArgument(specList);
@@ -865,7 +865,7 @@ export function commonJsRequireSpecifierArgument(
         callee.name.text === "apply" &&
         expr.arguments.length === 3 &&
         isCommonJsRequireCallee(expr.arguments[0]!, requireAliases, moduleAliases) &&
-        isCommonJsModuleThisArg(expr.arguments[1]!, moduleAliases)
+        isCommonJsRequireThisArg(expr.arguments[0]!, expr.arguments[1]!, moduleAliases)
     ) {
         const specList = expr.arguments[2]!;
         return staticSingleRequireApplySpecifierArgument(specList);
@@ -896,6 +896,24 @@ function isCommonJsModuleThisArg(expr: ts.Expression, moduleAliases: Set<string>
     return ts.isIdentifier(unwrapped) && (unwrapped.text === "module" || moduleAliases.has(unwrapped.text));
 }
 
+function isCommonJsRequireThisArg(callee: ts.Expression, thisArg: ts.Expression, moduleAliases: Set<string>): boolean {
+    const unwrappedCallee = unwrapStaticExpression(callee);
+    const unwrappedThisArg = unwrapStaticExpression(thisArg);
+    if (isCommonJsModuleRequireAccess(unwrappedCallee, moduleAliases)) {
+        return isCommonJsModuleThisArg(unwrappedThisArg, moduleAliases);
+    }
+    return isCommonJsModuleThisArg(unwrappedThisArg, moduleAliases) ||
+        unwrappedThisArg.kind === ts.SyntaxKind.NullKeyword ||
+        (ts.isIdentifier(unwrappedThisArg) && unwrappedThisArg.text === "undefined");
+}
+
+function isCommonJsModuleRequireAccess(expr: ts.Expression, moduleAliases: Set<string>): boolean {
+    return ts.isPropertyAccessExpression(expr) &&
+        expr.name.text === "require" &&
+        ts.isIdentifier(expr.expression) &&
+        (expr.expression.text === "module" || moduleAliases.has(expr.expression.text));
+}
+
 export function isCommonJsRequireCallee(
     expr: ts.Expression,
     requireAliases: Set<string>,
@@ -905,10 +923,7 @@ export function isCommonJsRequireCallee(
     if (isCommonJsModuleRequireBindExpression(unwrapped, requireAliases, moduleAliases)) return true;
     return (ts.isIdentifier(unwrapped) && (unwrapped.text === "require" || requireAliases.has(unwrapped.text))) ||
         (
-            ts.isPropertyAccessExpression(unwrapped) &&
-            unwrapped.name.text === "require" &&
-            ts.isIdentifier(unwrapped.expression) &&
-            (unwrapped.expression.text === "module" || moduleAliases.has(unwrapped.expression.text))
+            isCommonJsModuleRequireAccess(unwrapped, moduleAliases)
         );
 }
 
@@ -925,17 +940,12 @@ function isCommonJsModuleRequireBindExpression(
     if (ts.isIdentifier(target)) {
         if (target.text !== "require" && !requireAliases.has(target.text)) return false;
     } else {
-        if (
-            !ts.isPropertyAccessExpression(target) ||
-            target.name.text !== "require" ||
-            !ts.isIdentifier(target.expression) ||
-            (target.expression.text !== "module" && !moduleAliases.has(target.expression.text))
-        ) {
+        if (!isCommonJsModuleRequireAccess(target, moduleAliases)) {
             return false;
         }
     }
     const thisArg = unwrapStaticExpression(unwrapped.arguments[0]!);
-    return ts.isIdentifier(thisArg) && (thisArg.text === "module" || moduleAliases.has(thisArg.text));
+    return isCommonJsRequireThisArg(target, thisArg, moduleAliases);
 }
 
 function topLevelConstStringDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
