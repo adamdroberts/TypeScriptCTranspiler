@@ -576,10 +576,10 @@ tsc_value_t tsc_value_get_index(tsc_value_t v, double index) {
     if (isnan(index) || isinf(index) || index < 0 || floor(index) != index || index >= 4294967295.0) {
         return tsc_value_get_prop(v, tsc_str_from_num(index));
     }
-    if ((size_t)index >= a->len) {
-        return tsc_value_undefined();
-    }
     tsc_str_t* key = tsc_str_from_num(index);
+    if ((size_t)index >= a->len) {
+        return tsc_value_get_prop_receiver(a->prototype, key, v);
+    }
     if (a->props && tsc_object_has_own(a->props, key)) {
         return tsc_object_get_receiver(a->props, key, v);
     }
