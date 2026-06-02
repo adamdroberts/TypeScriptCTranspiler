@@ -39044,6 +39044,7 @@ class Emitter {
                 ty: T_VALUE,
             };
             if (method === "resolve4") {
+                this.dnsResolveOptions(optionsNode, "dns.resolve4");
                 const addresses: EmitResult = {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                     ty: arrayType(T_STRING),
@@ -39052,6 +39053,7 @@ class Emitter {
                 return `({ tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); (void)${callbackCall}; })`;
             }
             if (method === "resolve6") {
+                this.dnsResolveOptions(optionsNode, "dns.resolve6");
                 const addresses: EmitResult = {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
                     ty: arrayType(T_STRING),
@@ -39233,6 +39235,39 @@ class Emitter {
         return out;
     }
 
+    private dnsResolveOptions(options: ts.Expression | undefined, label: string): void {
+        if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return;
+        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return;
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        for (const prop of options.properties) {
+            let key: string | null = null;
+            let valueNode: ts.Expression | undefined;
+            if (ts.isPropertyAssignment(prop)) {
+                key = this.staticPropertyName(prop.name);
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                key = prop.name.text;
+                valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.name);
+            } else {
+                unsupported(prop, `${label} options only support property assignments and shorthand property assignments`);
+            }
+            if (key !== "ttl") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            if (this.isUndefinedExpression(valueNode)) continue;
+            const ttl = this.dnsLookupBooleanValue(valueNode);
+            if (ttl === null) {
+                unsupported(valueNode, `${label}.ttl must be a boolean literal in this subset`);
+            }
+            if (ttl) {
+                unsupported(valueNode, `${label}.ttl true requires TTL object results, which are not in this string-array subset`);
+            }
+        }
+    }
+
     private shouldEvaluateDnsDefaultOptions(options: ts.Expression): boolean {
         return this.shouldEvaluateSideEffectfulVoidDefault(options);
     }
@@ -39316,6 +39351,7 @@ class Emitter {
             const result = this.freshTemp("_dns");
             const out = this.freshTemp("_dns_promise");
             if (method === "resolve4") {
+                this.dnsResolveOptions(optionsNode, "dns.promises.resolve4");
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
                     `tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); ` +
@@ -39325,6 +39361,7 @@ class Emitter {
                     `${out}; })`;
             }
             if (method === "resolve6") {
+                this.dnsResolveOptions(optionsNode, "dns.promises.resolve6");
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
                     `tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); ` +
