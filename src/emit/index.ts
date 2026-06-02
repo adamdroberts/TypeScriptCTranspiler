@@ -139,6 +139,7 @@ interface CommonJsDefinePropertiesExport {
 interface CommonJsDefinePropertyExport {
     call: ts.CallExpression;
     name: string;
+    names: string[];
     right: ts.Expression;
 }
 
@@ -15169,7 +15170,7 @@ class Emitter {
         }
         if (target && ts.isCallExpression(target)) {
             const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(target);
-            if (defineExport?.name === "default") return target;
+            if (defineExport?.names.includes("default")) return target;
         }
 
         const raw = this.checker.getSymbolAtLocation(id);
@@ -15183,6 +15184,10 @@ class Emitter {
         const sf = info?.sf;
         if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
         if (!this.hasCommonJsEsModuleMarker(sf)) {
+            const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
+            if (defaultMember && !this.isDirectCommonJsDefaultExportAccess(defaultMember)) {
+                return defaultMember;
+            }
             return sf;
         }
         const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
@@ -15315,7 +15320,9 @@ class Emitter {
         }
         if (ts.isCallExpression(decl)) {
             const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(decl);
-            if (defineExport) return this.commonJsDefinePropertyExportCName(defineExport.call, defineExport.name);
+            if (defineExport && defineExport.names.length === 1) {
+                return this.commonJsDefinePropertyExportCName(defineExport.call, defineExport.name);
+            }
         }
         if (ts.isShorthandPropertyAssignment(decl)) {
             const valueDecl = this.commonJsObjectExportValueDeclaration(decl);
@@ -17438,13 +17445,18 @@ class Emitter {
         key: ts.Expression,
         descriptor: ts.Expression,
     ): CommonJsDefinePropertyExport | null {
-        const name = this.staticComputedPropertyExpression(key);
-        if (!name || name === "__esModule") return null;
+        const seen = new Set<string>();
+        const names = this.staticComputedPropertyExpressionTexts(key).filter((name) => {
+            if (name === "__esModule" || seen.has(name)) return false;
+            seen.add(name);
+            return true;
+        });
+        if (names.length === 0) return null;
         const descriptorObject = this.commonJsDefinePropertyExportDescriptor(descriptor);
         if (!descriptorObject) return null;
         const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
         if (!right) return null;
-        return { call, name, right };
+        return { call, name: names[0]!, names, right };
     }
 
     private isCommonJsModuleExportsDefinePropertyValueCall(call: ts.CallExpression): boolean {
@@ -18583,12 +18595,28 @@ class Emitter {
         return node;
     }
 
+    private closureDeclarationCType(fn: ClosureLikeDeclaration): CType {
+        const sig = this.checker.getSignatureFromDeclaration(fn);
+        if (!sig) unsupported(fn, "could not resolve closure signature");
+        const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
+        const params = runtimeParams.map((p) => {
+            if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
+            return this.prepareType(mapType(p, this.checker));
+        });
+        const ret = this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
+        const thisType = this.signatureThisType(sig, fn);
+        return this.prepareType(functionType(params, ret, thisType ?? undefined));
+    }
+
     private commonJsExportedCType(node: ts.Node): CType {
         if (ts.isSourceFile(node)) {
             return T_VALUE;
         }
         let valueNode = this.commonJsExportValueNode(node);
         if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
+        if (ts.isFunctionExpression(valueNode) || ts.isArrowFunction(valueNode) || ts.isMethodDeclaration(valueNode)) {
+            return this.closureDeclarationCType(valueNode);
+        }
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
             return T_VALUE;
         }
@@ -18883,16 +18911,34 @@ class Emitter {
 
     private emitCommonJsDefinePropertyExport(
         buf: CBuf,
-        assignment: { call: ts.CallExpression; name: string; right: ts.Expression },
+        assignment: CommonJsDefinePropertyExport,
     ): void {
-        const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
         const ty = this.commonJsExportedCType(assignment.call);
-        if (!this.commonJsExportGlobals.has(cName)) {
-            this.commonJsExportGlobals.add(cName);
-            this.globalDecls.line(`static ${ty.c} ${cName};`);
+        for (const name of assignment.names) {
+            const cName = this.commonJsDefinePropertyExportCName(assignment.call, name);
+            if (!this.commonJsExportGlobals.has(cName)) {
+                this.commonJsExportGlobals.add(cName);
+                this.globalDecls.line(`static ${ty.c} ${cName};`);
+            }
         }
         const value = this.emitExpr(assignment.right);
-        buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
+        const valueTmp = this.freshTemp("_cjsexp");
+        buf.line(`${ty.c} ${valueTmp} = ${this.coerce(value, ty, assignment.right)};`);
+        if (assignment.names.length === 1) {
+            const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
+            buf.line(`${cName} = ${valueTmp};`);
+            return;
+        }
+        const key = assignment.call.arguments[1]!;
+        const keyValue = this.emitExpr(key);
+        const keyTmp = this.freshTemp("_cjsexp_key");
+        buf.line(`tsc_str_t* ${keyTmp} = ${this.coerce(keyValue, T_STRING, key)};`);
+        assignment.names.forEach((name, index) => {
+            const cName = this.commonJsDefinePropertyExportCName(assignment.call, name);
+            const keyword = index === 0 ? "if" : "else if";
+            buf.line(`${keyword} (tsc_str_eq(${keyTmp}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))) { ${cName} = ${valueTmp}; }`);
+        });
+        buf.line(`else { tsc_throw_str(tsc_str_from_cstr("CommonJS defineProperty export key resolved outside finite AOT set")); }`);
     }
 
     private emitCommonJsDefinePropertiesExport(
@@ -19078,6 +19124,12 @@ class Emitter {
     }
 
     private commonJsExportedDeclarationCName(decl: ts.Node, exportName: string): string | null {
+        if (ts.isCallExpression(decl)) {
+            const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(decl);
+            if (defineExport?.names.includes(exportName)) {
+                return this.commonJsDefinePropertyExportCName(defineExport.call, exportName);
+            }
+        }
         const cName = this.declarationCName(decl);
         if (cName) return cName;
         if (
@@ -19087,6 +19139,11 @@ class Emitter {
             return this.commonJsExportCNameForName(decl, exportName);
         }
         return null;
+    }
+
+    private isDirectCommonJsDefaultExportAccess(decl: ts.Node): boolean {
+        return (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
+            this.commonJsExportNames(decl).includes("default");
     }
 
     private isModuleExportsAccess(expr: ts.PropertyAccessExpression): boolean {
@@ -19941,7 +19998,9 @@ class Emitter {
                         out.push({ name: exported.name, decl: exported.entry });
                     }
                 } else {
-                    out.push({ name: moduleDefinePropertyExport.name, decl: moduleDefinePropertyExport.call });
+                    for (const name of moduleDefinePropertyExport.names) {
+                        out.push({ name, decl: moduleDefinePropertyExport.call });
+                    }
                 }
                 continue;
             }
@@ -19995,7 +20054,9 @@ class Emitter {
             }
             const defineExport = this.commonJsDefinePropertyExport(stmt);
             if (defineExport) {
-                out.push({ name: defineExport.name, decl: defineExport.call });
+                for (const name of defineExport.names) {
+                    out.push({ name, decl: defineExport.call });
+                }
                 continue;
             }
             if (this.commonJsExportPlaceholderAssignment(stmt)) continue;
