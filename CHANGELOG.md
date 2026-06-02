@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- CommonJS factory wrappers now preserve finite AOT require and named-export metadata when factory parameters receive static `require(...)` results directly. Test: `node_modules_commonjs_factory_wrapper_require_argument`.
 - Finite dynamic `require(...)` proofs now flatten static string-array spread elements before resolving array index, `.at(...)`, and `.join(...)` specifiers into the AOT module graph. Test: `dynamic_require_static_array_spread`.
 - CommonJS computed named-export metadata now accepts static string-array `.join(...)` export keys through the finite AOT computed-property resolver. Test: `node_modules_commonjs_computed_string_exports`.
 - Finite dynamic `require(...)` proofs now resolve static string-array `.join(...)` specifiers, including static separator aliases and `undefined` separator defaults, into the AOT module graph. Test: `dynamic_require_static_array_join`.
