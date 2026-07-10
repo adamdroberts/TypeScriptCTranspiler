@@ -40676,20 +40676,35 @@ class Emitter {
                         specs.push({ value: this.emitExpr(delay), target: T_VOID, node: delay });
                     }
                     const valueNode = call.arguments[1];
+                    const signalValue = this.emitTimersPromisesSignal(options);
                     const optionSpecs: SequencedCallArg[] = [];
+                    if (signalValue) {
+                        optionSpecs.push({ value: signalValue, target: T_VALUE, node: options });
+                    }
                     if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
                         optionSpecs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                     }
                     optionSpecs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
                     if (!valueNode) {
-                        return this.emitSequencedExpr(mapped, [...specs, ...optionSpecs], () => "tsc_promise_resolve(tsc_value_undefined())");
+                        return this.emitSequencedExpr(mapped, [...specs, ...optionSpecs], (values) => {
+                            const signal = signalValue ? values[specs.length]! : null;
+                            return signal
+                                ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : tsc_promise_resolve(tsc_value_undefined()))`
+                                : "tsc_promise_resolve(tsc_value_undefined())";
+                        });
                     }
                     const value = this.emitExpr(valueNode);
                     return this.emitSequencedExpr(mapped, [
                         ...specs,
                         { value, node: valueNode },
                         ...optionSpecs,
-                    ], (values) => this.promiseResolveResult({ c: values[specs.length]!, ty: value.ty }, valueNode));
+                    ], (values) => {
+                        const signal = signalValue ? values[specs.length + 1]! : null;
+                        const resolved = this.promiseResolveResult({ c: values[specs.length]!, ty: value.ty }, valueNode);
+                        return signal
+                            ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolved})`
+                            : resolved;
+                    });
                 }
 
                 const specs: SequencedCallArg[] = [];
@@ -40702,6 +40717,8 @@ class Emitter {
                 if (valueNode && value) {
                     specs.push({ value, target: storedValueType, node: valueNode });
                 }
+                const signalValue = this.emitTimersPromisesSignal(options);
+                if (signalValue) specs.push({ value: signalValue, target: T_VALUE, node: options });
                 if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
                     specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                 }
@@ -40715,6 +40732,7 @@ class Emitter {
 
                     this.structDecls.open(`typedef struct ${envType}`);
                     this.structDecls.line("tsc_promise_t* promise;");
+                    if (signalValue) this.structDecls.line("tsc_value_t signal;");
                     if (valueNode) this.structDecls.line(`${storedValueType.c} value;`);
                     this.structDecls.close(` ${envType};`);
 
@@ -40745,7 +40763,10 @@ class Emitter {
                         `${env}->promise = ${promiseVar}`,
                     ];
                     if (valueNode) pieces.push(`${env}->value = ${valueVar}`);
+                    const signalVar = signalValue ? args[valueNode ? 2 : 1]! : null;
+                    if (signalValue) pieces.push(`${env}->signal = ${signalVar}`);
                     pieces.push(`tsc_set_timeout(${callbackName}, ${env}, ${delayVar})`);
+                    if (signalValue) pieces.push(`tsc_abort_signal_add_promise(${signalVar}, ${promiseVar})`);
                     return `({ ${pieces.join("; ")}; ${promiseVar}; })`;
                 });
             }
@@ -40852,10 +40873,24 @@ class Emitter {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
             const value = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (key === "signal") continue;
             if (this.isUndefinedExpression(value)) continue;
             if (key === "ref" && this.sideEffectFreeBooleanLiteralValue(value, new Set()) !== null) continue;
             unsupported(prop.initializer, `${label}.${key} must be undefined${key === "ref" ? " or a boolean literal" : ""} in this immediate subset`);
         }
+    }
+
+    private emitTimersPromisesSignal(options: ts.Expression | undefined): EmitResult | null {
+        if (!options || this.isUndefinedLikeExpression(options)) return null;
+        const unwrapped = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (!ts.isObjectLiteralExpression(unwrapped)) return null;
+        const prop = unwrapped.properties.find((candidate) =>
+            ts.isPropertyAssignment(candidate) && this.staticPropertyName(candidate.name) === "signal",
+        );
+        if (!prop || !ts.isPropertyAssignment(prop)) return null;
+        const value = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedLikeExpression(value)) return null;
+        return this.emitExpr(prop.initializer);
     }
 
     private ensureImmediateAdapter(expr: ts.Expression, type: CType, argTypes: readonly CType[]): string {
