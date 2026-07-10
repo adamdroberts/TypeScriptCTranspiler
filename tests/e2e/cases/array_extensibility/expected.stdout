@@ -21,6 +21,7 @@ sealed push: Array.prototype.push cannot mutate a sealed or frozen array
 sealed pop: Array.prototype.pop cannot mutate a sealed or frozen array
 sealed shift: Array.prototype.shift cannot mutate a sealed or frozen array
 sealed unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
+sealed splice: Array.prototype.splice cannot mutate a sealed or frozen array
 sealed fill: 5|5
 sealed define props failed: Object.defineProperties failed
 sealed define props: 2 6|5
@@ -34,6 +35,7 @@ frozen push: Array.prototype.push cannot mutate a sealed or frozen array
 frozen pop: Array.prototype.pop cannot mutate a sealed or frozen array
 frozen shift: Array.prototype.shift cannot mutate a sealed or frozen array
 frozen unshift: Array.prototype.unshift cannot mutate a sealed or frozen array
+frozen splice: Array.prototype.splice cannot mutate a sealed or frozen array
 frozen fill: Array.prototype.fill cannot mutate a frozen array
 frozen copyWithin: Array.prototype.copyWithin cannot mutate a frozen array
 frozen reverse: Array.prototype.reverse cannot mutate a frozen array
