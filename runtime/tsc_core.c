@@ -160,7 +160,16 @@ static double g_next_timer_id = 1.0;
 typedef struct {
     tsc_object_t* signal;
     bool aborted;
+    tsc_promise_t** promises;
+    size_t promise_len;
+    size_t promise_cap;
 } tsc_abort_controller_state_t;
+
+static tsc_abort_controller_state_t* abort_signal_state(tsc_value_t signal) {
+    if (!value_is_box(signal) || value_tag(signal) != TSC_VALUE_TAG_OBJECT) return NULL;
+    tsc_object_t* object = (tsc_object_t*)value_ptr(signal);
+    return object && object->class_ptr ? (tsc_abort_controller_state_t*)object->class_ptr : NULL;
+}
 
 static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
@@ -172,13 +181,20 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
         : tsc_value_string(tsc_str_from_lit("AbortError", 10));
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(true));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), reason);
+    for (size_t i = 0; i < state->promise_len; i++) {
+        tsc_promise_reject_in_place(state->promises[i], reason);
+    }
+    state->promise_len = 0;
     return tsc_value_undefined();
 }
 
 tsc_value_t tsc_abort_controller_new(void) {
     tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)TSC_GC_MALLOC(sizeof(tsc_abort_controller_state_t));
-    state->signal = tsc_object_new();
+    state->signal = tsc_object_new_class(state);
     state->aborted = false;
+    state->promises = NULL;
+    state->promise_len = 0;
+    state->promise_cap = 0;
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(false));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), tsc_value_undefined());
 
@@ -195,6 +211,27 @@ tsc_value_t tsc_abort_controller_new(void) {
         )
     );
     return tsc_value_object(controller);
+}
+
+bool tsc_abort_signal_is_aborted(tsc_value_t signal) {
+    tsc_abort_controller_state_t* state = abort_signal_state(signal);
+    return state ? state->aborted : false;
+}
+
+void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise) {
+    if (!promise) return;
+    tsc_abort_controller_state_t* state = abort_signal_state(signal);
+    if (!state) return;
+    if (state->aborted) {
+        tsc_promise_reject_in_place(promise, tsc_value_get_prop(tsc_value_object(state->signal), tsc_str_from_lit("reason", 6)));
+        return;
+    }
+    if (state->promise_len == state->promise_cap) {
+        size_t next = state->promise_cap ? state->promise_cap * 2 : 4;
+        state->promises = (tsc_promise_t**)TSC_GC_REALLOC(state->promises, next * sizeof(tsc_promise_t*));
+        state->promise_cap = next;
+    }
+    state->promises[state->promise_len++] = promise;
 }
 
 /* Forward decls for helpers used across sections. */
