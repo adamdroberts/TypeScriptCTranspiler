@@ -23,6 +23,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Static sparse `any[]` reads and searches now preserve holes for `at`, `indexOf`, `lastIndexOf`, and `includes`. Test: `array_delete_hole_join`.
 - Static sparse `any[]` `pop()` and `shift()` now return `undefined` for deleted tail and head slots. Test: `array_delete_hole_join`.
 - Static sparse `any[]` higher-order array methods now skip holes where required, preserve holes in `map`, and expose `undefined` to `find*`. Test: `array_delete_hole_join`.
+- Static `Array.from` now materializes sparse `any[]` holes as `undefined` for both no-mapper and mapper forms. Test: `array_delete_hole_join`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.

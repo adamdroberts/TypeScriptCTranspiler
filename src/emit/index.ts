@@ -36625,7 +36625,9 @@ class Emitter {
             const iv = this.freshTemp("_af_i");
             const item = this.freshTemp("_af_item");
             const mapped = this.freshTemp("_af_mapped");
-            const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
+            const itemExpr = t.kind === "value"
+                ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
+                : `TSC_ARR(${t.c}, ${src}, ${iv})`;
             const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv, callbackThisArg);
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
@@ -36808,7 +36810,17 @@ class Emitter {
         return this.emitSequencedExpr(
             resultArrayType ?? r.ty,
             [{ value: r, node: itemsArg }, ...ignored],
-            ([arr]) => `tsc_array_slice(${arr}, 0, (double)${arr}->len)`,
+            ([arr]) => {
+                if (r.ty.elem?.kind !== "value") return `tsc_array_slice(${arr}, 0, (double)${arr}->len)`;
+                const src = this.freshTemp("_array_from_src");
+                const out = this.freshTemp("_array_from_out");
+                const iv = this.freshTemp("_array_from_i");
+                const value = this.freshTemp("_array_from_value");
+                return `({ tsc_array_t* const ${src} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${src}->len ? ${src}->len : 1); ` +
+                    `for (size_t ${iv} = 0; ${iv} < ${src}->len; ${iv}++) { ` +
+                    `tsc_value_t ${value} = tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(tsc_value_t, ${src}, ${iv}) : tsc_value_undefined(); ` +
+                    `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
+            },
         );
     }
 

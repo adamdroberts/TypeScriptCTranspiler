@@ -37,3 +37,6 @@ let everyCalls = 0;
 const hasThree = hofValues.some(someHole);
 const allPositive = hofValues.every(everyHole);
 console.log("hof holes:", forEachCalls, Object.keys(mappedHoles).join("|"), Object.hasOwn(mappedHoles, "1"), mapCalls, flatMappedHoles.join("|"), flatMapCalls, filteredHoles.join("|"), filterCalls, reducedHoles, foundHoleIndex, hasThree, someCalls, allPositive, everyCalls);
+const fromHoles: any[] = Array.from(hofValues);
+const fromMappedHoles: string[] = Array.from(hofValues, (value: any) => value === undefined ? "missing" : String(value));
+console.log("from holes:", Object.keys(fromHoles).join("|"), Object.hasOwn(fromHoles, "1"), fromHoles[1], fromMappedHoles.join("|"));
