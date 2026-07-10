@@ -40788,8 +40788,13 @@ class Emitter {
                     if (valueNode) pieces.push(`${env}->value = ${valueVar}`);
                     const signalVar = signalValue ? args[valueNode ? 2 : 1]! : null;
                     if (signalValue) pieces.push(`${env}->signal = ${signalVar}`);
-                    pieces.push(`tsc_set_timeout(${callbackName}, ${env}, ${delayVar})`);
-                    if (signalValue) pieces.push(`tsc_abort_signal_add_promise(${signalVar}, ${promiseVar})`);
+                    if (signalValue) {
+                        pieces.push(`double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, ${delayVar})`);
+                        pieces.push(`tsc_abort_signal_add_promise(${signalVar}, ${promiseVar})`);
+                        pieces.push(`tsc_abort_signal_add_timeout(${signalVar}, _timeout_id)`);
+                    } else {
+                        pieces.push(`tsc_set_timeout(${callbackName}, ${env}, ${delayVar})`);
+                    }
                     return `({ ${pieces.join("; ")}; ${promiseVar}; })`;
                 });
             }
@@ -40893,8 +40898,10 @@ class Emitter {
                     const promiseVar = this.freshTemp("_promise");
                     const signalVar = signalValue ? args[signalSpecIndex]! : null;
                     const signalAssignment = signalValue ? `${env}->signal = ${signalVar}; ` : "";
-                    const signalRegistration = signalValue ? ` tsc_abort_signal_add_promise(${signalVar}, ${promiseVar});` : "";
-                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${signalAssignment}tsc_set_timeout(${callbackName}, ${env}, ${delayVar!});${signalRegistration} ${promiseVar}; })`;
+                    const timerRegistration = signalValue
+                        ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, ${delayVar!}); tsc_abort_signal_add_promise(${signalVar}, ${promiseVar}); tsc_abort_signal_add_timeout(${signalVar}, _timeout_id);`
+                        : `tsc_set_timeout(${callbackName}, ${env}, ${delayVar!});`;
+                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${signalAssignment}${timerRegistration} ${promiseVar}; })`;
                 });
             }
             case "yield": {

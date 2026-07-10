@@ -163,6 +163,9 @@ typedef struct {
     tsc_promise_t** promises;
     size_t promise_len;
     size_t promise_cap;
+    double* timeout_ids;
+    size_t timeout_len;
+    size_t timeout_cap;
     tsc_value_t* listeners;
     size_t listener_len;
     size_t listener_cap;
@@ -215,6 +218,10 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
         tsc_promise_reject_in_place(state->promises[i], reason);
     }
     state->promise_len = 0;
+    for (size_t i = 0; i < state->timeout_len; i++) {
+        tsc_clear_timeout(state->timeout_ids[i]);
+    }
+    state->timeout_len = 0;
     return tsc_value_undefined();
 }
 
@@ -287,6 +294,9 @@ tsc_value_t tsc_abort_controller_new(void) {
     state->promises = NULL;
     state->promise_len = 0;
     state->promise_cap = 0;
+    state->timeout_ids = NULL;
+    state->timeout_len = 0;
+    state->timeout_cap = 0;
     state->listeners = NULL;
     state->listener_len = 0;
     state->listener_cap = 0;
@@ -358,6 +368,22 @@ void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise) {
         state->promise_cap = next;
     }
     state->promises[state->promise_len++] = promise;
+}
+
+void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id) {
+    if (timeout_id <= 0.0) return;
+    tsc_abort_controller_state_t* state = abort_signal_state(signal);
+    if (!state) return;
+    if (state->aborted) {
+        tsc_clear_timeout(timeout_id);
+        return;
+    }
+    if (state->timeout_len == state->timeout_cap) {
+        size_t next = state->timeout_cap ? state->timeout_cap * 2 : 4;
+        state->timeout_ids = (double*)TSC_GC_REALLOC(state->timeout_ids, next * sizeof(double));
+        state->timeout_cap = next;
+    }
+    state->timeout_ids[state->timeout_len++] = timeout_id;
 }
 
 /* Forward decls for helpers used across sections. */
