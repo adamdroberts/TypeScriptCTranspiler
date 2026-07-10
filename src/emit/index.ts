@@ -42379,6 +42379,9 @@ class Emitter {
         const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_a");
         const iv = this.freshTemp("_i");
+        const elementExpr = et.kind === "value"
+            ? `(tsc_array_index_present(${av}, ${iv}) ? TSC_ARR(${et.c}, ${av}, ${iv}) : tsc_value_undefined())`
+            : `TSC_ARR(${et.c}, ${av}, ${iv})`;
 
         // Build a body-expression factory: given elem/idx/acc C expressions,
         // returns the C expression and C type of the callback's result.
@@ -42415,7 +42418,7 @@ class Emitter {
                 paramBindings.push({
                     name: mangleIdent(elemSlot.name.text),
                     type: et,
-                    src: `TSC_ARR(${et.c}, ${av}, ${iv})`,
+                    src: elementExpr,
                 });
             }
             if (idxSlot && ts.isIdentifier(idxSlot.name)) {
@@ -42458,11 +42461,11 @@ class Emitter {
                 const callArgs: string[] = [];
                 if (method === "reduce" || method === "reduceRight") {
                     callArgs.push("_acc_rd");
-                    if (params.length >= 2) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
+                    if (params.length >= 2) callArgs.push(elementExpr);
                     if (params.length >= 3) callArgs.push(`(double)${iv}`);
                     if (params.length >= 4) callArgs.push(av);
                 } else {
-                    if (params.length >= 1) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
+                    if (params.length >= 1) callArgs.push(elementExpr);
                     if (params.length >= 2) callArgs.push(`(double)${iv}`);
                     if (params.length >= 3) callArgs.push(av);
                 }
@@ -42500,11 +42503,11 @@ class Emitter {
                 const callArgs: string[] = [];
                 if (method === "reduce" || method === "reduceRight") {
                     callArgs.push("_acc_rd");
-                    if (paramCount >= 2) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
+                    if (paramCount >= 2) callArgs.push(elementExpr);
                     if (paramCount >= 3) callArgs.push(`(double)${iv}`);
                     if (paramCount >= 4) callArgs.push(av);
                 } else {
-                    if (paramCount >= 1) callArgs.push(`TSC_ARR(${et.c}, ${av}, ${iv})`);
+                    if (paramCount >= 1) callArgs.push(elementExpr);
                     if (paramCount >= 2) callArgs.push(`(double)${iv}`);
                     if (paramCount >= 3) callArgs.push(av);
                 }
@@ -42532,7 +42535,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ ${bindings} (void)(${bodyC}); } (void)0; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} (void)(${bodyC}); } } (void)0; })`,
                     ty: T_VOID,
                 };
             case "map":
@@ -42543,8 +42546,9 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${bodyType.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ ${bindings} ${bodyType.c} _r = ${bodyC}; ` +
-                        `tsc_array_push_raw(_dst, &_r); } _dst; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${bodyType.c} _r = ${bodyC}; ` +
+                        `tsc_array_push_raw(_dst, &_r); } else { ${bodyType.c} _hole = {0}; ` +
+                        `tsc_array_push_raw(_dst, &_hole); tsc_array_mark_hole(_dst, _dst->len - 1); } } _dst; })`,
                     ty: arrayType(bodyType),
                 };
             case "flatMap": {
@@ -42559,9 +42563,9 @@ class Emitter {
                             `${thisArgSetup}` +
                             `${ignoredSetup}` +
                             `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
-                            `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                            `{ ${bindings} ${inner.c} _r = ${bodyC}; ` +
-                            `${push}; } _dst; })`,
+                        `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${inner.c} _r = ${bodyC}; ` +
+                        `${push}; } } _dst; })`,
                         ty: arrayType(inner),
                     };
                 }
@@ -42572,8 +42576,8 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ ${bindings} tsc_array_t* _r = ${bodyC}; ` +
-                        `tsc_array_append(_dst, _r); } _dst; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} tsc_array_t* _r = ${bodyC}; ` +
+                        `tsc_array_append(_dst, _r); } } _dst; })`,
                     ty: arrayType(inner),
                 };
             }
@@ -42585,8 +42589,8 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${et.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ ${et.c} _el = TSC_ARR(${et.c}, ${av}, ${iv}); ${bindings} ` +
-                        `if (${bodyC}) tsc_array_push_raw(_dst, &_el); } _dst; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${et.c} _el = TSC_ARR(${et.c}, ${av}, ${iv}); ${bindings} ` +
+                        `if (${bodyC}) tsc_array_push_raw(_dst, &_el); } } _dst; })`,
                     ty: recv.ty,
                 };
             case "reduce": {
@@ -42602,15 +42606,18 @@ class Emitter {
                 }
                 const initC = initR
                     ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = 0;`
-                    : `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value")); ` +
-                        `${accType.c} ${accName} = TSC_ARR(${accType.c}, ${av}, 0); size_t ${iv}_start = 1;`;
+                    : `${accType.c} ${accName}; size_t ${iv}_start = 0; bool ${iv}_found = false; ` +
+                        `for (; ${iv}_start < ${av}->len; ${iv}_start++) { ` +
+                        `if (tsc_array_index_present(${av}, ${iv}_start)) { ${accName} = TSC_ARR(${accType.c}, ${av}, ${iv}_start); ` +
+                        `${iv}_start++; ${iv}_found = true; break; } } ` +
+                        `if (!${iv}_found) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value"));`;
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${initC} ` +
                         `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } ${accName}; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
                     ty: accType,
                 };
             }
@@ -42625,15 +42632,18 @@ class Emitter {
                 }
                 const initC = initR
                     ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = ${av}->len;`
-                    : `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value")); ` +
-                        `${accType.c} ${accName} = TSC_ARR(${accType.c}, ${av}, ${av}->len - 1); size_t ${iv}_start = ${av}->len - 1;`;
+                    : `${accType.c} ${accName}; size_t ${iv}_start = ${av}->len; bool ${iv}_found = false; ` +
+                        `while (${iv}_start > 0) { ${iv}_start--; ` +
+                        `if (tsc_array_index_present(${av}, ${iv}_start)) { ${accName} = TSC_ARR(${accType.c}, ${av}, ${iv}_start); ` +
+                        `${iv}_found = true; break; } } ` +
+                        `if (!${iv}_found) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value"));`;
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
                         `${initC} ` +
                         `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) ` +
-                        `{ ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } ${accName}; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
                     ty: accType,
                 };
             }
@@ -42643,8 +42653,8 @@ class Emitter {
                 const resultType = boxedResult ? T_VALUE : et;
                 const missing = boxedResult ? "tsc_value_undefined()" : `(${et.c})0`;
                 const found = boxedResult
-                    ? this.coerce({ c: `TSC_ARR(${et.c}, ${av}, ${iv})`, ty: et }, T_VALUE, call)
-                    : `TSC_ARR(${et.c}, ${av}, ${iv})`;
+                    ? this.coerce({ c: elementExpr, ty: et }, T_VALUE, call)
+                    : elementExpr;
                 const forward = method === "find";
                 return {
                     c:
@@ -42665,7 +42675,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv}) || ${et.kind === "value" ? "true" : "false"}) { ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } } _r; })`,
                     ty: T_NUMBER,
                 };
             case "findLastIndex":
@@ -42675,7 +42685,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
-                        `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv}) || ${et.kind === "value" ? "true" : "false"}) { ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } } _r; })`,
                     ty: T_NUMBER,
                 };
             case "some":
@@ -42685,7 +42695,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_r; ${iv}++) ` +
-                        `{ ${bindings} if (${bodyC}) _r = true; } _r; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} if (${bodyC}) _r = true; } } _r; })`,
                     ty: T_BOOLEAN,
                 };
             case "every":
@@ -42695,7 +42705,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && _r; ${iv}++) ` +
-                        `{ ${bindings} if (!(${bodyC})) _r = false; } _r; })`,
+                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} if (!(${bodyC})) _r = false; } } _r; })`,
                     ty: T_BOOLEAN,
                 };
         }
