@@ -1,3 +1,4 @@
 method: function 2 a b
 proto: function 2 a b
-missing receiver: [Symbol.iterator] call target is not iterable
+identity: true true values
+missing receiver: Array.prototype.values receiver is null or undefined
