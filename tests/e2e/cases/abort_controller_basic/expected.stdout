@@ -1,0 +1,3 @@
+initial: false undefined
+aborted: true cancelled
+idempotent: true cancelled
