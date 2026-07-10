@@ -3066,24 +3066,7 @@ static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_v
     return (double)tsc_str_cmp(tsc_value_to_string(left), tsc_value_to_string(right));
 }
 
-tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
-    value_sort_validate_compare_fn(compare_fn);
-    if (!value_is_box(recv)) return recv;
-    tsc_array_t* a = NULL;
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        a = (tsc_array_t*)value_ptr(recv);
-        if (a->frozen) return recv;
-    } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
-        size_t len = (size_t)tsc_value_length(recv);
-        a = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-        for (size_t i = 0; i < len; i++) {
-            if (!value_array_like_has_index(recv, i)) continue;
-            tsc_value_t value = tsc_value_get_index(recv, (double)i);
-            tsc_array_push_raw(a, &value);
-        }
-    } else {
-        return recv;
-    }
+static void value_sort_array_values(tsc_array_t* a, tsc_value_t compare_fn) {
     for (size_t i = 1; i < a->len; i++) {
         tsc_value_t key = TSC_ARR(tsc_value_t, a, i);
         size_t j = i;
@@ -3095,6 +3078,45 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
         }
         TSC_ARR(tsc_value_t, a, j) = key;
     }
+}
+
+tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
+    value_sort_validate_compare_fn(compare_fn);
+    if (!value_is_box(recv)) return recv;
+    tsc_array_t* a = NULL;
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
+        a = (tsc_array_t*)value_ptr(recv);
+        if (a->frozen) return recv;
+        if (a->holes) {
+            tsc_array_t* compact = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
+            for (size_t i = 0; i < a->len; i++) {
+                if (tsc_array_index_present(a, i)) {
+                    tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
+                    tsc_array_push_raw(compact, &value);
+                }
+            }
+            value_sort_array_values(compact, compare_fn);
+            for (size_t i = 0; i < compact->len; i++) {
+                TSC_ARR(tsc_value_t, a, i) = TSC_ARR(tsc_value_t, compact, i);
+                tsc_array_clear_hole(a, i);
+            }
+            for (size_t i = compact->len; i < a->len; i++) {
+                tsc_array_mark_hole(a, i);
+            }
+            return recv;
+        }
+    } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        size_t len = (size_t)tsc_value_length(recv);
+        a = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+        for (size_t i = 0; i < len; i++) {
+            if (!value_array_like_has_index(recv, i)) continue;
+            tsc_value_t value = tsc_value_get_index(recv, (double)i);
+            tsc_array_push_raw(a, &value);
+        }
+    } else {
+        return recv;
+    }
+    value_sort_array_values(a, compare_fn);
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)tsc_value_length(recv);
         for (size_t i = 0; i < a->len; i++) {

@@ -36052,20 +36052,39 @@ class Emitter {
                     `tsc_array_t* const ${av} = tsc_array_slice(${src}, 0.0, (double)${src}->len);`
                 : `tsc_value_t const ${base} = ${value}; tsc_array_t* const ${av} = tsc_value_as_array(${base});`;
             const result = copyFirst ? `tsc_value_array(${av})` : base;
-            return `({ ${init} ` +
-                `if (!${av}->frozen) { ` +
-                `for (size_t ${iv} = 1; ${iv} < ${av}->len; ${iv}++) { ` +
-                `tsc_value_t ${kv} = TSC_ARR(tsc_value_t, ${av}, ${iv}); ` +
+            const sortLoop = (arrayName: string): string =>
+                `for (size_t ${iv} = 1; ${iv} < ${arrayName}->len; ${iv}++) { ` +
+                `tsc_value_t ${kv} = TSC_ARR(tsc_value_t, ${arrayName}, ${iv}); ` +
                 `size_t ${jv} = ${iv}; ` +
                 `while (${jv} > 0) { ` +
-                `tsc_value_t ${aName} = TSC_ARR(tsc_value_t, ${av}, ${jv} - 1); ` +
+                `tsc_value_t ${aName} = TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1); ` +
                 `tsc_value_t ${bName} = ${kv}; ` +
                 `${bindings.length ? `${bindings.join("; ")}; ` : ""}` +
                 `double ${cmp} = ${cmpExpr}; ` +
                 `if (${cmp} <= 0) break; ` +
-                `TSC_ARR(tsc_value_t, ${av}, ${jv}) = TSC_ARR(tsc_value_t, ${av}, ${jv} - 1); ` +
+                `TSC_ARR(tsc_value_t, ${arrayName}, ${jv}) = TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1); ` +
                 `${jv}--; } ` +
-                `TSC_ARR(tsc_value_t, ${av}, ${jv}) = ${kv}; } } ${result}; })`;
+                `TSC_ARR(tsc_value_t, ${arrayName}, ${jv}) = ${kv}; }`;
+            const compact = this.freshTemp("_dynsort_compact");
+            const sourceIndex = this.freshTemp("_dynsort_src_i");
+            const item = this.freshTemp("_dynsort_item");
+            const sortBody =
+                `if (${av}->holes) { ` +
+                `tsc_array_t* ${compact} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
+                `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
+                `if (tsc_array_index_present(${av}, ${sourceIndex})) { ` +
+                `tsc_value_t ${item} = TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}); ` +
+                `tsc_array_push_raw(${compact}, &${item}); } } ` +
+                `${sortLoop(compact)} ` +
+                `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
+                `TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}) = TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex}); ` +
+                `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
+                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) ` +
+                `tsc_array_mark_hole(${av}, ${sourceIndex}); ` +
+                `} else { ${sortLoop(av)} }`;
+            return `({ ${init} ` +
+                `if (!${av}->frozen) { ` +
+                `${sortBody} } ${result}; })`;
         });
     }
 
@@ -42729,21 +42748,43 @@ class Emitter {
             unsupported(cb, "sort comparator must be inline arrow or function reference");
         }
         specs.push(...this.ignoredArgumentSpecs(call.arguments, consumed));
+        const sortLoop = (arrayName: string): string =>
+            `for (size_t ${iv} = 1; ${iv} < ${arrayName}->len; ${iv}++) { ` +
+                `${et.c} ${kv} = TSC_ARR(${et.c}, ${arrayName}, ${iv}); ` +
+                `size_t ${jv} = ${iv}; ` +
+                `while (${jv} > 0) { ` +
+                `${et.c} ${aName} = TSC_ARR(${et.c}, ${arrayName}, ${jv} - 1); ` +
+                `${et.c} ${bName} = ${kv}; ` +
+                `double _cmp = ${cmpExpr}; ` +
+                `if (_cmp <= 0) break; ` +
+                `TSC_ARR(${et.c}, ${arrayName}, ${jv}) = TSC_ARR(${et.c}, ${arrayName}, ${jv} - 1); ` +
+                `${jv}--; } ` +
+                `TSC_ARR(${et.c}, ${arrayName}, ${jv}) = ${kv}; }`;
+        let sortBody = sortLoop(av);
+        if (et.c === T_VALUE.c) {
+            const compact = this.freshTemp("_sort_compact");
+            const sourceIndex = this.freshTemp("_sort_src_i");
+            const item = this.freshTemp("_sort_item");
+            sortBody =
+                `if (${av}->holes) { ` +
+                `tsc_array_t* ${compact} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
+                `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
+                `if (tsc_array_index_present(${av}, ${sourceIndex})) { ` +
+                `tsc_value_t ${item} = TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}); ` +
+                `tsc_array_push_raw(${compact}, &${item}); } } ` +
+                `${sortLoop(compact)} ` +
+                `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
+                `TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}) = TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex}); ` +
+                `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
+                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) ` +
+                `tsc_array_mark_hole(${av}, ${sourceIndex}); ` +
+                `} else { ${sortLoop(av)} }`;
+        }
         return this.emitSequencedExpr(recv.ty, specs, ([arr]) =>
             `({ tsc_array_t* const ${av} = ${arr}; ` +
                 comparatorSetup +
                 `if (!${av}->frozen) { ` +
-                `for (size_t ${iv} = 1; ${iv} < ${av}->len; ${iv}++) { ` +
-                `${et.c} ${kv} = TSC_ARR(${et.c}, ${av}, ${iv}); ` +
-                `size_t ${jv} = ${iv}; ` +
-                `while (${jv} > 0) { ` +
-                `${et.c} ${aName} = TSC_ARR(${et.c}, ${av}, ${jv} - 1); ` +
-                `${et.c} ${bName} = ${kv}; ` +
-                `double _cmp = ${cmpExpr}; ` +
-                `if (_cmp <= 0) break; ` +
-                `TSC_ARR(${et.c}, ${av}, ${jv}) = TSC_ARR(${et.c}, ${av}, ${jv} - 1); ` +
-                `${jv}--; } ` +
-                `TSC_ARR(${et.c}, ${av}, ${jv}) = ${kv}; } } ${av}; })`,
+                `${sortBody} } ${av}; })`,
         );
     }
 
