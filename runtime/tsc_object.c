@@ -125,11 +125,11 @@ static tsc_value_t object_prototype_value_of(void* env, tsc_value_t this_arg, ts
     return this_arg;
 }
 
-static void object_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, tsc_generic_function_t fn) {
+static void object_prototype_define_method(tsc_object_t* prototype, const char* name, size_t len, double arity, tsc_generic_function_t fn) {
     tsc_object_define(
         prototype,
         tsc_str_from_lit(name, len),
-        tsc_value_function_generic(fn, NULL),
+        tsc_value_function_builtin_named(fn, NULL, arity, tsc_str_from_lit(name, len)),
         true,
         false,
         true
@@ -140,12 +140,12 @@ tsc_value_t tsc_value_object_prototype(void) {
     static tsc_object_t* prototype = NULL;
     if (!prototype) {
         prototype = tsc_object_alloc(tsc_value_null());
-        object_prototype_define_method(prototype, "hasOwnProperty", 14, object_prototype_has_own_property);
-        object_prototype_define_method(prototype, "isPrototypeOf", 13, object_prototype_is_prototype_of);
-        object_prototype_define_method(prototype, "propertyIsEnumerable", 20, object_prototype_property_is_enumerable);
-        object_prototype_define_method(prototype, "toLocaleString", 14, object_prototype_to_locale_string);
-        object_prototype_define_method(prototype, "toString", 8, object_prototype_to_string);
-        object_prototype_define_method(prototype, "valueOf", 7, object_prototype_value_of);
+        object_prototype_define_method(prototype, "hasOwnProperty", 14, 1.0, object_prototype_has_own_property);
+        object_prototype_define_method(prototype, "isPrototypeOf", 13, 1.0, object_prototype_is_prototype_of);
+        object_prototype_define_method(prototype, "propertyIsEnumerable", 20, 1.0, object_prototype_property_is_enumerable);
+        object_prototype_define_method(prototype, "toLocaleString", 14, 0.0, object_prototype_to_locale_string);
+        object_prototype_define_method(prototype, "toString", 8, 0.0, object_prototype_to_string);
+        object_prototype_define_method(prototype, "valueOf", 7, 0.0, object_prototype_value_of);
     }
     return tsc_value_object(prototype);
 }
