@@ -819,8 +819,8 @@ tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str
     state->pending = tsc_array_new(sizeof(tsc_promise_t*), 4);
     state->closed = false;
     tsc_object_t* iterator = tsc_object_new();
-    tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_generic_named(event_async_iterator_next, state, 0.0, tsc_str_from_lit("next", 4)));
-    tsc_object_set(iterator, tsc_str_from_lit("return", 6), tsc_value_function_generic_named(event_async_iterator_return, state, 0.0, tsc_str_from_lit("return", 6)));
+    tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(event_async_iterator_next, state, 0.0, tsc_str_from_lit("next", 4)));
+    tsc_object_set(iterator, tsc_str_from_lit("return", 6), tsc_value_function_builtin_named(event_async_iterator_return, state, 0.0, tsc_str_from_lit("return", 6)));
     tsc_event_emitter_on(ee, event, event_async_iterator_listener, state, state, false, false);
     return tsc_value_object(iterator);
 }
