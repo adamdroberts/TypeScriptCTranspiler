@@ -42405,7 +42405,7 @@ class Emitter {
                 return this.emitSequencedExpr(recv.ty, specs, (vals) => {
                     const arr = vals[0]!;
                     const end = hasEnd ? vals[3]! : `(double)${arr}->len`;
-                    return `({ if (!${arr}->frozen) tsc_array_copy_within(${arr}, ${vals[1]}, ${vals[2]}, ${end}); ${arr}; })`;
+                    return `({ if (${arr}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin cannot mutate a frozen array")); tsc_array_copy_within(${arr}, ${vals[1]}, ${vals[2]}, ${end}); ${arr}; })`;
                 });
             }
             case "flat":
