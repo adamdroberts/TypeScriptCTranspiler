@@ -29760,6 +29760,29 @@ class Emitter {
         const source = this.emitExpr(expr.expression);
         const promise = this.prepareType(source.ty);
         const awaited = this.prepareType(mapTsType(expr, this.checker.getTypeAtLocation(expr), this.checker));
+        if (promise.kind === "value") {
+            return this.emitSequencedExpr(awaited, [
+                { value: source, target: promise, node: expr.expression },
+            ], ([value]) => {
+                const p = this.freshTemp("_await_dynamic");
+                let fulfilled: string;
+                if (awaited.kind === "fsstats") {
+                    fulfilled = `tsc_promise_fs_stats_value(${p})`;
+                } else if (awaited.kind === "buffer") {
+                    fulfilled = `tsc_promise_buffer_value(${p})`;
+                } else if (awaited.kind === "array") {
+                    fulfilled = `tsc_promise_array_value(${p})`;
+                } else if (awaited.kind === "void" || awaited.kind === "never") {
+                    fulfilled = `(void)tsc_promise_value(${p})`;
+                } else {
+                    fulfilled = this.coerce({ c: `tsc_promise_value(${p})`, ty: T_VALUE }, awaited, expr);
+                }
+                const rejected = this.tryDepth > 0
+                    ? `tsc_throw_str(tsc_value_to_string(tsc_promise_reason(${p})))`
+                    : `return tsc_promise_reject(tsc_promise_reason(${p}))`;
+                return `({ tsc_promise_t* const ${p} = tsc_promise_resolve_thenable(${value}); if (tsc_promise_is_rejected(${p})) { ${rejected}; } if (tsc_promise_is_pending(${p})) return tsc_promise_pending(); ${fulfilled}; })`;
+            });
+        }
         if (promise.kind !== "promise") {
             return this.emitSequencedExpr(awaited, [
                 { value: source, target: awaited, node: expr.expression },
