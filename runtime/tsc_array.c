@@ -73,6 +73,16 @@ static tsc_array_t* array_proto_items(tsc_array_t* args, size_t start) {
     return items;
 }
 
+static tsc_array_t* array_proto_locale_args(tsc_array_t* args) {
+    size_t count = args ? (args->len < 2 ? args->len : 2) : 0;
+    tsc_array_t* locale_args = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
+    for (size_t i = 0; i < count; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, args, i);
+        tsc_array_push_raw(locale_args, &value);
+    }
+    return locale_args;
+}
+
 static tsc_value_t array_proto_callback_arg(tsc_array_t* args, const char* method) {
     if (!args || args->len == 0) {
         tsc_throw_str(tsc_str_from_cstr(method));
@@ -284,8 +294,8 @@ static tsc_value_t array_prototype_to_string(void* env, tsc_value_t this_arg, ts
 
 static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
-    (void)args;
     array_prototype_require_receiver(this_arg, "toLocaleString");
+    tsc_array_t* locale_args = array_proto_locale_args(args);
     double len_num = tsc_value_length(this_arg);
     if (isnan(len_num) || len_num <= 0.0) {
         return tsc_value_string(tsc_str_from_lit("", 0));
@@ -297,7 +307,7 @@ static tsc_value_t array_prototype_to_locale_string(void* env, tsc_value_t this_
         if (i > 0) out = tsc_str_concat(out, sep);
         tsc_value_t value = tsc_value_get_index(this_arg, (double)i);
         if (!tsc_value_is_nullish(value)) {
-            out = tsc_str_concat(out, tsc_value_method_to_locale_string_args(value, args));
+            out = tsc_str_concat(out, tsc_value_method_to_locale_string_args(value, locale_args));
         }
     }
     return tsc_value_string(out);

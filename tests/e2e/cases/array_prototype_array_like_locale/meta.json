@@ -1,0 +1,3 @@
+{
+  "description": "detached Array.prototype.toLocaleString forwards only locales and options to array-like elements"
+}

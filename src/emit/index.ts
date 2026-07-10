@@ -35888,12 +35888,13 @@ class Emitter {
                 ], ([v, digits]) => `tsc_value_method_to_precision(${v}, ${digits})`);
             case "toLocaleString":
                 {
-                    const localeArgs = Array.from(args, (arg) => this.emitExpr(arg));
+                    const localeArgs = Array.from(args.slice(0, 2), (arg) => this.emitExpr(arg));
                     return this.emitSequencedExpr(
                         T_STRING,
                         [
                             { value: recv, target: T_VALUE, node: call.expression },
                             ...localeArgs.map((value, index) => ({ value, target: T_VALUE, node: args[index]! })),
+                            ...this.ignoredArgumentSpecs(args, 2),
                         ],
                         ([v, ...vals]) => {
                             const av = this.freshTemp("_locale_args");

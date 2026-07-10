@@ -1,5 +1,6 @@
 values: 1,true,,,x
 locale: 1,true,,,x
 nested: 1,2,3,4,5
-custom locale: locale:obj:fr:short,77:fr,,,tail
+custom locale: locale:obj:fr:short:undefined,77:fr,,,tail
+custom locale trailing: locale:obj:fr:short:undefined,77:fr,,,tail
 bad locale: toLocaleString is not a function
