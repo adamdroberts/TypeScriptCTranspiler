@@ -1,0 +1,3 @@
+{
+  "description": "Reflect.preventExtensions rejects fixed built-in targets with a compile-time diagnostic"
+}

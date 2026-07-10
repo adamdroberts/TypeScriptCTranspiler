@@ -123,6 +123,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `this` → `self` inside methods and ctor
 - `new Foo(args)` / `new Foo(...args)` → `Foo_new(args)`. Test: `classes`
 - `Reflect.construct(Foo, args)` works for statically known class constructors with array-literal, array-literal-spread, typed-array, and dynamic-array argument lists, including standard class decorator replacement constructors for ordinary and erased generic classes. Tests: `reflect_construct`, `class_decorator_reflect_construct`, `generic_class_decorator_reflect_construct`
+- `Reflect.preventExtensions(...)` boxes primitive and typed class targets through the existing dynamic target path, rejects fixed built-in targets with a precise compile-time diagnostic, and preserves runtime object-target validation for primitives. Tests: `reflect_object_target_validation`, `reflect_fixed_builtin_prevent_reject`
 - Field access `obj.x`, field assignment `obj.x = v`. Test: `classes`
 - Named class getter and setter accessors lower to C calls for instance and static property reads/writes, including string/number literal, const-literal, and asserted static-expression computed accessor names. Plain setter assignments, numeric/string compound setter assignments, and logical setter assignments return the JavaScript assignment value. Tests: `class_accessors_basic`, `class_accessors_compound`, `class_accessors_logical`, `class_computed_accessors`, `class_computed_nonliteral_members`
 - **Single inheritance** via `extends` — base fields laid out at struct head for safe up-cast. Test: `inheritance`

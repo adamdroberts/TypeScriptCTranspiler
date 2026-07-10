@@ -51895,9 +51895,12 @@ class Emitter {
                 const ignored = this.ignoredArgumentSpecs(args, 1);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
+                if (this.isFixedBuiltinIntegrityType(mapped)) {
+                    unsupported(args[0]!, "Reflect.preventExtensions does not support fixed built-in targets in this subset");
+                }
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function") ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, target: mapped.kind === "array" ? undefined : T_VALUE, node: args[0]! },
                     ...ignored,
                 ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
             }
