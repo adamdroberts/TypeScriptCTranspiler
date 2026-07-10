@@ -1,0 +1,3 @@
+{
+  "description": "timers/promises scheduler.yield settles asynchronously through the immediate queue"
+}
