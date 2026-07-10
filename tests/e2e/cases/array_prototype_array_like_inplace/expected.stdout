@@ -3,3 +3,6 @@ copyWithin: true a a b d
 reverse: true c b a
 reverse sparse: undefined a false true
 copyWithin sparse: undefined d undefined d false true
+closed fill: Array.prototype.fill could not write array-like element
+closed copyWithin: Array.prototype.copyWithin could not write array-like element
+sealed reverse: Array.prototype.reverse could not delete array-like element

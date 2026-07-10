@@ -3252,7 +3252,9 @@ tsc_value_t tsc_value_method_fill(tsc_value_t recv, tsc_value_t value, tsc_value
         size_t to = value_array_forward_start((size_t)len, e);
         if (to < from) to = from;
         for (size_t i = from; i < to; i++) {
-            tsc_value_set_index(recv, (double)i, value);
+            if (!tsc_value_set_index(recv, (double)i, value)) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.fill could not write array-like element"));
+            }
         }
     }
     return recv;
@@ -3285,9 +3287,11 @@ tsc_value_t tsc_value_method_copy_within(tsc_value_t recv, tsc_value_t target, t
             for (size_t i = 0; i < count; i++) {
                 size_t to_index = to + i;
                 if (present[i]) {
-                    tsc_value_set_index(recv, (double)to_index, values[i]);
-                } else {
-                    tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to_index));
+                    if (!tsc_value_set_index(recv, (double)to_index, values[i])) {
+                        tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not write array-like element"));
+                    }
+                } else if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to_index))) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not delete array-like element"));
                 }
             }
         }
@@ -3308,14 +3312,18 @@ tsc_value_t tsc_value_method_reverse(tsc_value_t recv) {
             tsc_value_t lower_value = lower_present ? tsc_value_get_index(recv, (double)lower) : tsc_value_undefined();
             tsc_value_t upper_value = upper_present ? tsc_value_get_index(recv, (double)upper) : tsc_value_undefined();
             if (upper_present) {
-                tsc_value_set_index(recv, (double)lower, upper_value);
-            } else {
-                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)lower));
+                if (!tsc_value_set_index(recv, (double)lower, upper_value)) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not write array-like element"));
+                }
+            } else if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)lower))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not delete array-like element"));
             }
             if (lower_present) {
-                tsc_value_set_index(recv, (double)upper, lower_value);
-            } else {
-                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)upper));
+                if (!tsc_value_set_index(recv, (double)upper, lower_value)) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not write array-like element"));
+                }
+            } else if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)upper))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not delete array-like element"));
             }
         }
     }
