@@ -19,6 +19,12 @@ async function evaluatedOnce(): Promise<number> {
     return value + sideEffect;
 }
 
+async function dynamicPromise(): Promise<string> {
+    const promise: any = Promise.resolve("dynamic");
+    const value = await promise;
+    return value + "!";
+}
+
 numberValue().then((value: number): void => {
     console.log("number:", value);
 });
@@ -29,4 +35,8 @@ stringValue().then((value: string): void => {
 
 evaluatedOnce().then((value: number): void => {
     console.log("once:", value, sideEffect);
+});
+
+dynamicPromise().then((value: string): void => {
+    console.log("dynamic promise:", value);
 });
