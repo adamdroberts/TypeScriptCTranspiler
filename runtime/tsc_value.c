@@ -139,6 +139,10 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
     return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_GENERIC);
 }
 
+tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
+    return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_CLOSURE);
+}
+
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
     return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
 }
