@@ -1,5 +1,6 @@
 initial: false undefined
 abort event: abort
+onabort: abort
 aborted: true cancelled
 idempotent: true cancelled
 throwIfAborted: cancelled
