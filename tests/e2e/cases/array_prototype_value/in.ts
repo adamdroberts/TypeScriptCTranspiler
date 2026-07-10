@@ -10,4 +10,10 @@ console.log("length descriptor:", lengthDescriptor.value, lengthDescriptor.writa
 const map: any = proto.map;
 const mapDescriptor: any = Reflect.getOwnPropertyDescriptor(proto, "map");
 console.log("method metadata:", map.name, map.length, Reflect.has(map, "prototype"), mapDescriptor.writable, mapDescriptor.enumerable, mapDescriptor.configurable);
+const nameDescriptor: any = Reflect.getOwnPropertyDescriptor(map, "name");
+const arityDescriptor: any = Reflect.getOwnPropertyDescriptor(map, "length");
+console.log("function descriptors:", nameDescriptor.writable, nameDescriptor.enumerable, nameDescriptor.configurable, arityDescriptor.writable, arityDescriptor.enumerable, arityDescriptor.configurable);
+const every: any = proto.every;
+console.log("delete name:", Reflect.deleteProperty(every, "name"), Object.hasOwn(every, "name"));
+console.log("redefine:", Reflect.defineProperty(every, "name", { value: "all" }), Reflect.defineProperty(every, "length", { value: 3 }), every.name, every.length);
 console.log("method:", Reflect.apply(join, ["a", "b"], ["-"]));

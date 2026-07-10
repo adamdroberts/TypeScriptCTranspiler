@@ -2438,7 +2438,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_prototype_array_like_sort` | detached Array.prototype sort over dynamic array-like object receivers |
 | `array_prototype_array_like_splice` | detached Array.prototype splice mutates dynamic array-like object receivers |
 | `array_prototypes` | typed array Object/Reflect prototype reads and writes with non-extensible guards |
-| `array_prototype_value` | static Array.prototype value identity, prototype, own-key, and detached method behavior |
+| `array_prototype_value` | static Array.prototype identity, own keys, detached methods, and configurable built-in function name/length descriptors |
 | `object_prototype_value` | static Object.prototype value identity, null parent, non-enumerable methods, and detached calls |
 | `dynamic_array_at` | dynamic Array.at positive and negative index lookup |
 | `dynamic_array_accessor_properties` | dynamic array own string-key accessor descriptors with receiver-aware get/set |
