@@ -24,3 +24,12 @@ console.log(
     Object.hasOwn(inherited, "1"),
     inherited.length,
 );
+
+const frozen: any = { 0: "b", 1: "a", length: 2 };
+Object.freeze(frozen);
+try {
+    Reflect.apply(proto.sort, frozen, []);
+    console.log("frozen:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen:", err);
+}

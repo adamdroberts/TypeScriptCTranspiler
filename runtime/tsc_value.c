@@ -3144,10 +3144,14 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)tsc_value_length(recv);
         for (size_t i = 0; i < a->len; i++) {
-            tsc_value_set_index(recv, (double)i, TSC_ARR(tsc_value_t, a, i));
+            if (!tsc_value_set_index(recv, (double)i, TSC_ARR(tsc_value_t, a, i))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element"));
+            }
         }
         for (size_t i = a->len; i < len; i++) {
-            tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i));
+            if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element"));
+            }
         }
     }
     return recv;
