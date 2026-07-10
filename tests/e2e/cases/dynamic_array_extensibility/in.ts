@@ -75,7 +75,12 @@ try {
 } catch (err: any) {
     console.log("frozen pop:", err);
 }
-console.log("frozen fill:", frozenMethods.fill("q").join("|"));
+try {
+    frozenMethods.fill("q");
+    console.log("frozen fill:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen fill:", err);
+}
 try {
     frozenMethods.sort();
     console.log("frozen sort:", "unexpected success");

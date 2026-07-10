@@ -22,5 +22,5 @@ sealed pop: Array.prototype.pop cannot mutate a sealed or frozen array
 sealed fill: q|q
 frozen push: Array.prototype.push cannot mutate a sealed or frozen array
 frozen pop: Array.prototype.pop cannot mutate a sealed or frozen array
-frozen fill: z|a
+frozen fill: Array.prototype.fill cannot mutate a frozen array
 frozen sort: Array.prototype.sort cannot mutate a frozen array
