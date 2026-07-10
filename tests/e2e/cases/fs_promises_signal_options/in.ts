@@ -57,6 +57,12 @@ realpath(tmpPath, { encoding: "utf8", signal: abortedController.signal }).catch(
 readlink("/proc/self/exe", { encoding: "utf8", signal: abortedController.signal }).catch((reason: any) => {
     console.log("aborted readlink:", reason);
 });
+stat(tmpPath, { signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted stat:", reason);
+});
+lstat(tmpPath, { signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted lstat:", reason);
+});
 
 setImmediate((): void => {
     console.log("seen:", seen);
