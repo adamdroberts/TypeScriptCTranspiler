@@ -36,6 +36,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `AbortController` now exposes a dynamic `signal` with `aborted`/`reason` state and idempotent `abort(reason?)`; timer and I/O cancellation remain separate work. Test: `abort_controller_basic`.
 - `AbortSignal` now supports `throwIfAborted()`, `addEventListener("abort", listener)`, and `removeEventListener("abort", listener)`; `timers/promises.setTimeout`, `setImmediate`, and `scheduler.wait` honor pre-aborted signals, while pending delayed promises reject on abort. Test: `abort_controller_basic`.
 - `fs.promises.readFile` now rejects before synchronous I/O when passed an already-aborted signal. Test: `fs_promises_signal_options`.
+- `fs.promises.writeFile` now rejects before synchronous I/O when passed an already-aborted signal. Test: `fs_promises_signal_options`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
