@@ -82,6 +82,12 @@ try {
     console.log("frozen fill:", err);
 }
 try {
+    frozenMethods.copyWithin(0, 1);
+    console.log("frozen copyWithin:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen copyWithin:", err);
+}
+try {
     frozenMethods.sort();
     console.log("frozen sort:", "unexpected success");
 } catch (err: any) {
