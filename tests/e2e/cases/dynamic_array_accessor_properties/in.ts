@@ -77,4 +77,7 @@ console.log("index reads:", Reflect.apply(proto.join, arr, ["/"]), Reflect.apply
 console.log("index set:", Reflect.set(arr, "1", "set-index"), arr[1], seen);
 console.log("index delete:", Reflect.deleteProperty(arr, "1"), arr[1], Reflect.apply(proto.join, arr, ["/"]));
 console.log("index keys:", Object.keys(arr).join("|"), Object.values(arr).join("|"));
+console.log("index absent:", Object.hasOwn(arr, "1"), Reflect.has(arr, "1"), Object.getOwnPropertyDescriptor(arr, "1") === undefined);
+arr[1] = "restored";
+console.log("index restore:", arr[1], Object.hasOwn(arr, "1"), Object.keys(arr).join("|"));
 console.log("metadata:", Reflect.defineProperty(arr, "length", { get: readOnly }), Reflect.defineProperty(arr, "0", { get: readOnly }), Object.getOwnPropertyDescriptor(arr, "length").get);

@@ -28,6 +28,7 @@ typedef struct tsc_array {
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
     tsc_object_t* props;
+    tsc_object_t* holes;
     void* data;
 } tsc_array_t;
 typedef tsc_value_t (*tsc_generic_function_t)(void* env, tsc_value_t this_arg, tsc_array_t* args);

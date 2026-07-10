@@ -538,6 +538,7 @@ typedef struct tsc_array {
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
     tsc_object_t* props;
+    tsc_object_t* holes;
     void* data;
 } tsc_array_t;
 
@@ -565,6 +566,9 @@ tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size);
 double tsc_array_length(const tsc_array_t* a);
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key);
 bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key);
+bool tsc_array_index_present(const tsc_array_t* a, size_t index);
+void tsc_array_mark_hole(tsc_array_t* a, size_t index);
+void tsc_array_clear_hole(tsc_array_t* a, size_t index);
 void tsc_array_oob(const tsc_array_t* a, double i);
 
 #define TSC_ARR(T, a, i) (((T*)((a)->data))[(size_t)(i)])

@@ -412,7 +412,7 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
             return tsc_value_function_generic(tsc_value_generator_throw, a);
         }
         size_t idx = 0;
-        if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
+        if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) {
             if (a->props && tsc_object_has_own(a->props, key)) {
                 return tsc_object_get_receiver(a->props, key, v);
             }
@@ -599,6 +599,9 @@ tsc_value_t tsc_value_get_index(tsc_value_t v, double index) {
     if ((size_t)index >= a->len) {
         return tsc_value_get_prop_receiver(a->prototype, key, v);
     }
+    if (!tsc_array_index_present(a, (size_t)index)) {
+        return tsc_value_get_prop_receiver(a->prototype, key, v);
+    }
     if (a->props && tsc_object_has_own(a->props, key)) {
         return tsc_object_get_receiver(a->props, key, v);
     }
@@ -640,8 +643,11 @@ bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value) {
     } else {
         tsc_str_t* key = tsc_str_from_num(index);
         if (a->props && tsc_object_has_own(a->props, key)) {
-            return tsc_object_set_receiver(a->props, key, value, v);
+            bool ok = tsc_object_set_receiver(a->props, key, value, v);
+            if (ok) tsc_array_clear_hole(a, idx);
+            return ok;
         }
+        tsc_array_clear_hole(a, idx);
         TSC_ARR(tsc_value_t, a, idx) = value;
     }
     return true;
@@ -745,7 +751,7 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
         }
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
-            bool exists = idx < a->len;
+            bool exists = tsc_array_index_present(a, idx) || (a->props && tsc_object_has_own(a->props, key));
             bool current_writable = !a->frozen;
             bool current_enumerable = true;
             bool current_configurable = !a->sealed && !a->frozen;
@@ -764,7 +770,9 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
                 return false;
             }
             if (!next_writable || !next_enumerable) return false;
-            return has_value ? tsc_value_set_index(v, (double)idx, value) : true;
+            if (has_value && !tsc_value_set_index(v, (double)idx, value)) return false;
+            tsc_array_clear_hole(a, idx);
+            return true;
         }
         return tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
@@ -954,14 +962,16 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
         if (tsc_str_is_length_key(key)) return false;
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
-            bool exists = idx < a->len;
+            bool exists = tsc_array_index_present(a, idx) || (a->props && tsc_object_has_own(a->props, key));
             if (exists) {
                 bool current_configurable = !a->sealed && !a->frozen;
                 bool next_configurable = has_configurable ? configurable : current_configurable;
                 bool next_enumerable = has_enumerable ? enumerable : true;
                 if (!current_configurable) return false;
                 if (a->frozen) return false;
-                return tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, next_enumerable, true, next_configurable, true);
+                bool ok = tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, next_enumerable, true, next_configurable, true);
+                if (ok) tsc_array_clear_hole(a, idx);
+                return ok;
             }
             if (!a->extensible) return false;
             if (idx > a->len && !a->length_writable) return false;
@@ -973,7 +983,9 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
                 tsc_value_t undef = tsc_value_undefined();
                 tsc_array_push_raw(a, &undef);
             }
-            return tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
+            bool ok = tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
+            if (ok) tsc_array_clear_hole(a, idx);
+            return ok;
         }
         return tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
     }
@@ -1553,11 +1565,15 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
         bool is_index = a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len;
         if (a->props && tsc_object_has_own(a->props, key)) {
             if (!tsc_object_delete(a->props, key)) return false;
-            if (is_index) TSC_ARR(tsc_value_t, a, idx) = tsc_value_undefined();
+            if (is_index) {
+                tsc_array_mark_hole(a, idx);
+                TSC_ARR(tsc_value_t, a, idx) = tsc_value_undefined();
+            }
             return true;
         }
         if (is_index) {
             if (a->sealed || a->frozen) return false;
+            tsc_array_mark_hole(a, idx);
             TSC_ARR(tsc_value_t, a, idx) = tsc_value_undefined();
             return true;
         }
@@ -1698,7 +1714,7 @@ tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
     if (!src) return out;
     for (size_t i = 0; i < src->len; i++) {
         tsc_str_t* key = tsc_str_from_int((int64_t)i);
-        if (include_length || tsc_array_property_is_enumerable_key(src, key)) {
+        if (tsc_array_index_present(src, i) && (include_length || tsc_array_property_is_enumerable_key(src, key))) {
             tsc_array_push_raw(out, &key);
         }
     }
@@ -1859,7 +1875,7 @@ tsc_value_t value_descriptor_from_array_key(const tsc_array_t* src, const tsc_st
         return tsc_value_get_own_property_descriptor(tsc_value_object(src->props), (tsc_str_t*)key);
     }
     size_t idx = 0;
-    if (src->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < src->len) {
+    if (src->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && tsc_array_index_present(src, idx)) {
         return value_descriptor_from_array_index(src, idx);
     }
     return tsc_value_undefined();
@@ -1939,6 +1955,7 @@ tsc_value_t value_descriptors_from_array(const tsc_array_t* src) {
     if (!src) return tsc_value_object(out);
     if (src->es == sizeof(tsc_value_t)) {
         for (size_t i = 0; i < src->len; i++) {
+            if (!tsc_array_index_present(src, i)) continue;
             tsc_object_set(out, tsc_str_from_int((int64_t)i), value_descriptor_from_array_index(src, i));
         }
     }
