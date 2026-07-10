@@ -2,6 +2,13 @@ declare const AbortController: { new(): any };
 import { scheduler, setImmediate as immediate, setTimeout as delay } from "node:timers/promises";
 
 const controller: any = new AbortController();
+console.log("methods:", controller.abort.name, controller.abort.length, Object.hasOwn(controller.abort, "prototype"), controller.signal.throwIfAborted.name, controller.signal.throwIfAborted.length, Object.hasOwn(controller.signal.throwIfAborted, "prototype"), controller.signal.addEventListener.name, controller.signal.addEventListener.length, Object.hasOwn(controller.signal.addEventListener, "prototype"));
+try {
+    Reflect.construct(controller.abort, []);
+    console.log("construct:", "ok");
+} catch (err: any) {
+    console.log("construct:", err);
+}
 controller.signal.addEventListener("abort", (event: any) => {
     console.log("abort event:", event.type);
 });
