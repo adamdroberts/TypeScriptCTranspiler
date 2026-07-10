@@ -578,11 +578,20 @@ static tsc_value_t array_prototype_map(void* env, tsc_value_t this_arg, tsc_arra
     size_t len = array_proto_length(this_arg);
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
     for (size_t i = 0; i < len; i++) {
-        tsc_value_t mapped = tsc_value_undefined();
         if (array_proto_has_index(this_arg, i)) {
-            mapped = array_proto_apply_callback(callback, callback_this, array_proto_get_index(this_arg, i), i, this_arg);
+            tsc_value_t mapped = array_proto_apply_callback(
+                callback,
+                callback_this,
+                array_proto_get_index(this_arg, i),
+                i,
+                this_arg
+            );
+            tsc_array_push_value(out, mapped);
+        } else {
+            tsc_value_t hole = tsc_value_undefined();
+            tsc_array_push_value(out, hole);
+            tsc_array_mark_hole(out, i);
         }
-        tsc_array_push_value(out, mapped);
     }
     return tsc_value_array(out);
 }
