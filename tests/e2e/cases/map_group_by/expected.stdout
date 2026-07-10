@@ -26,3 +26,4 @@ map-source buckets: 3
 map-source front: red:1,blue:2
 map-source large: green:3,gold:4
 map-source small: gray:0
+sparse array: 1 present|present-again
