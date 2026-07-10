@@ -1,0 +1,3 @@
+shift: a 1 false undefined
+unshift: 4 0|1|3 false undefined
+leading hole: undefined 0 b
