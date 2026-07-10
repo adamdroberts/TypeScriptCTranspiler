@@ -5,3 +5,5 @@ unshift: 4 4 z y b c
 empty: undefined undefined 0
 closed push: Array.prototype.push could not add array-like element
 sealed pop: Array.prototype.pop could not delete array-like element
+sealed shift: Array.prototype.shift could not delete array-like element
+closed unshift: Array.prototype.unshift could not add array-like element

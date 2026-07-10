@@ -2864,15 +2864,23 @@ tsc_value_t tsc_value_method_shift(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)tsc_value_length(recv);
         if (len == 0) {
-            tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num(0.0));
+            if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num(0.0))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift could not update array-like length"));
+            }
             return tsc_value_undefined();
         }
         tsc_value_t first = tsc_value_get_index(recv, 0.0);
         for (size_t i = 1; i < len; i++) {
-            tsc_value_set_index(recv, (double)(i - 1), tsc_value_get_index(recv, (double)i));
+            if (!tsc_value_set_index(recv, (double)(i - 1), tsc_value_get_index(recv, (double)i))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift could not move array-like element"));
+            }
         }
-        tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)(len - 1)));
-        tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)(len - 1)));
+        if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)(len - 1)))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift could not delete array-like element"));
+        }
+        if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)(len - 1)))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift could not update array-like length"));
+        }
         return first;
     }
     return tsc_value_undefined();
@@ -2888,11 +2896,16 @@ tsc_value_t tsc_value_method_unshift(tsc_value_t recv, tsc_value_t value) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)tsc_value_length(recv);
         for (size_t i = len; i > 0; i--) {
-            tsc_value_set_index(recv, (double)i, tsc_value_get_index(recv, (double)(i - 1)));
+            if (!tsc_value_set_index(recv, (double)i, tsc_value_get_index(recv, (double)(i - 1)))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift could not move array-like element"));
+            }
         }
-        if (tsc_value_set_index(recv, 0.0, value)) {
-            len++;
-            tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)len));
+        if (!tsc_value_set_index(recv, 0.0, value)) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift could not add array-like element"));
+        }
+        len++;
+        if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)len))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift could not update array-like length"));
         }
         return tsc_value_num((double)len);
     }
