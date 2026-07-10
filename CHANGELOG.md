@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
 - `Array.prototype` builtin methods now expose standard `name` and `length` metadata and no synthetic constructable `prototype` property, while preserving their callable descriptors. Test: `array_prototype_value`.
 - `Array.prototype.length` now exposes the standard non-writable, non-enumerable, non-configurable zero-length descriptor and rejects later writes. Test: `array_prototype_value`.
 - Global and prototype `Array` now expose a stable callable/constructable constructor value, including `Array(...items)`, `new Array(...items)`, single numeric length construction, and `Array.prototype.constructor` metadata. Test: `array_prototype_constructor`.
