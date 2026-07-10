@@ -9,3 +9,4 @@ shift hole: undefined 1 true last
 hof holes: 2 0|2 false 2 2|6 2 1|3 2 4 1 true 2 true 2
 from holes: 0|1|2 true undefined 1|missing|3
 iter holes: 0|1|2 true undefined 1 undefined
+for-of holes: 1|undefined|3|

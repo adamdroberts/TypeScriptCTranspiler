@@ -27886,8 +27886,11 @@ class Emitter {
             `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
         );
         const qual = bindingIsConst ? " const" : "";
+        const element = elemType.kind === "value"
+            ? `(tsc_array_index_present(${arrVar}, ${idxVar}) ? TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar}) : tsc_value_undefined())`
+            : `TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar})`;
         buf.line(
-            `${elemType.c}${qual} ${bindingName} = TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar});`,
+            `${elemType.c}${qual} ${bindingName} = ${element};`,
         );
         this.emitStmtInBlock(buf, fos.statement);
         buf.close();
@@ -28235,7 +28238,10 @@ class Emitter {
         buf.open(
             `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
         );
-        buf.line(`tsc_value_t const ${entryVar} = TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar});`);
+        buf.line(
+            `tsc_value_t const ${entryVar} = tsc_array_index_present(${arrVar}, ${idxVar}) ` +
+            `? TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar}) : tsc_value_undefined();`,
+        );
         for (const binding of bindings) {
             const value: EmitResult = {
                 c: `tsc_value_get_index(${entryVar}, ${binding.index}.0)`,
