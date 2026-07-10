@@ -40,6 +40,7 @@ frozen fill: Array.prototype.fill cannot mutate a frozen array
 frozen copyWithin: Array.prototype.copyWithin cannot mutate a frozen array
 frozen reverse: Array.prototype.reverse cannot mutate a frozen array
 frozen sort: Array.prototype.sort cannot mutate a frozen array
+sealed sparse sort: Array.prototype.sort cannot reorder a sealed sparse array
 frozen define same: true false true false
 frozen define signed zero: true false
 frozen length negative zero: true
