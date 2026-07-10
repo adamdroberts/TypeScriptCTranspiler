@@ -316,7 +316,7 @@ tsc_value_t tsc_abort_controller_new(void) {
     tsc_object_set(
         state->signal,
         tsc_str_from_lit("throwIfAborted", 14),
-        tsc_value_function_generic_named(
+        tsc_value_function_builtin_named(
             abort_signal_throw_if_aborted,
             state,
             0.0,
@@ -326,7 +326,7 @@ tsc_value_t tsc_abort_controller_new(void) {
     tsc_object_set(
         state->signal,
         tsc_str_from_lit("addEventListener", 16),
-        tsc_value_function_generic_named(
+        tsc_value_function_builtin_named(
             abort_signal_add_event_listener,
             state,
             2.0,
@@ -336,7 +336,7 @@ tsc_value_t tsc_abort_controller_new(void) {
     tsc_object_set(
         state->signal,
         tsc_str_from_lit("removeEventListener", 19),
-        tsc_value_function_generic_named(
+        tsc_value_function_builtin_named(
             abort_signal_remove_event_listener,
             state,
             2.0,
@@ -349,7 +349,7 @@ tsc_value_t tsc_abort_controller_new(void) {
     tsc_object_set(
         controller,
         tsc_str_from_lit("abort", 5),
-        tsc_value_function_generic_named(
+        tsc_value_function_builtin_named(
             abort_controller_abort,
             state,
             0.0,

@@ -526,7 +526,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Object.groupBy` passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `object_group_by`
 - `Array.fromAsync` mapper callbacks receive `undefined` for deleted indexes in static sparse `any[]` sources. Test: `array_from_async`
 - Dynamic `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled` read sparse array indexes through array iteration semantics, resolving deleted indexes as `undefined`. Test: `promise_combinators_dynamic`
-- `AbortController` exposes dynamic `signal.aborted`/`signal.reason` state and idempotent `abort(reason?)`; broader I/O cancellation remains separate work. Test: `abort_controller_basic`
+- `AbortController` exposes dynamic `signal.aborted`/`signal.reason` state and idempotent `abort(reason?)`; controller/signal methods are non-constructable built-ins with standard names/arities and no own `prototype`. Broader I/O cancellation remains separate work. Test: `abort_controller_basic`
 - `AbortSignal` exposes `throwIfAborted()`, abort event listener registration/removal, and synchronous abort dispatch; `timers/promises.setTimeout`, `setImmediate`, and `scheduler.wait` honor pre-aborted signals, reject pending promises on abort, and cancel their queued timeout/immediate handles. Tests: `abort_controller_basic`, `timers_promises_abort_cancels_timeout`, `timers_promises_immediate_async`, `timers_promises_scheduler_wait_zero_async`
 - `fs.promises.readFile` rejects before synchronous I/O when passed an already-aborted signal. Test: `fs_promises_signal_options`
 - `fs.promises.writeFile` rejects before synchronous I/O when passed an already-aborted signal. Test: `fs_promises_signal_options`
