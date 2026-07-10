@@ -40901,10 +40901,27 @@ class Emitter {
                         mapped,
                         specs,
                         (values) => {
+                            const callbackName = `tsc_timers_promises_scheduler_wait_${this.timersPromisesSchedulerWaitAdapters++}`;
+                            const envType = `${callbackName}_env_t`;
                             const signal = signalValue ? values[signalSpecIndex]! : null;
-                            return signal
-                                ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : tsc_promise_resolve(tsc_value_undefined()))`
-                                : "tsc_promise_resolve(tsc_value_undefined())";
+                            this.structDecls.open(`typedef struct ${envType}`);
+                            this.structDecls.line("tsc_promise_t* promise;");
+                            if (signal) this.structDecls.line("tsc_value_t signal;");
+                            this.structDecls.close(` ${envType};`);
+                            this.protos.line(`void ${callbackName}(void* env);`);
+                            const buf = new CBuf();
+                            buf.open(`void ${callbackName}(void* env)`);
+                            buf.line(`${envType}* state = (${envType}*)env;`);
+                            buf.line("tsc_promise_fulfill_in_place(state->promise, tsc_value_undefined());");
+                            buf.close();
+                            this.closureDefs.write(buf.toString());
+                            const env = this.freshTemp("_schedulerWaitEnv");
+                            const promiseVar = this.freshTemp("_promise");
+                            const signalAssignment = signal ? `${env}->signal = ${signal}; ` : "";
+                            const timerRegistration = signal
+                                ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, 0.0); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_timeout(${signal}, _timeout_id);`
+                                : `tsc_set_timeout(${callbackName}, ${env}, 0.0);`;
+                            return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${signalAssignment}${timerRegistration} ${promiseVar}; })`;
                         },
                     );
                 }
