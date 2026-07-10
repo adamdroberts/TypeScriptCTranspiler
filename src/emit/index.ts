@@ -36926,7 +36926,9 @@ class Emitter {
                             : items.ty.kind === "value"
                                 ? `tsc_value_array_from_values(${itemsExpr})`
                                 : itemsExpr;
-                const itemExpr = `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
+                const itemExpr = items.ty.kind === "array" && sourceType.kind === "value"
+                    ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${sourceType.c}, ${src}, ${iv}) : tsc_value_undefined())`
+                    : `TSC_ARR(${sourceType.c}, ${src}, ${iv})`;
                 const { bindings, body } = this.bindArrayFromCallback(mapfnArg, sourceType, elem, item, iv, callbackThisArg);
                 const fulfill = this.coerce(this.promiseFulfilledValue(elem, promise), elem, call);
                 const pushMapped = body.ty.kind === "promise"

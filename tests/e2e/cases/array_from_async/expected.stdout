@@ -22,3 +22,4 @@ async mapper thisArg: 31|32
 mapper ignored: 42 TE
 async mapper reject: mapper bad
 async mapper throw: mapper throw
+async sparse: a|missing|c
