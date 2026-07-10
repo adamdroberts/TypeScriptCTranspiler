@@ -1,6 +1,6 @@
 {
   "requires": ["./dynamic_export"],
   "exports": {
-    "dynamic_export.js": ["label", "count"]
+    "dynamic_export.js": ["label", "count", "mode"]
   }
 }
