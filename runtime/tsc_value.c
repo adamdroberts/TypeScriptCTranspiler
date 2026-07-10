@@ -411,13 +411,13 @@ tsc_value_t tsc_value_get_prop(tsc_value_t v, const tsc_str_t* key) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
         if (str_lit_eq(key, "next")) {
-            return tsc_value_function_generic(tsc_value_generator_next, a);
+            return tsc_value_function_builtin_named(tsc_value_generator_next, a, 1.0, tsc_str_from_lit("next", 4));
         }
         if (str_lit_eq(key, "return")) {
-            return tsc_value_function_generic(tsc_value_generator_return, a);
+            return tsc_value_function_builtin_named(tsc_value_generator_return, a, 1.0, tsc_str_from_lit("return", 6));
         }
         if (str_lit_eq(key, "throw")) {
-            return tsc_value_function_generic(tsc_value_generator_throw, a);
+            return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
         }
         size_t idx = 0;
         if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) {
@@ -513,13 +513,13 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
         tsc_array_t* a = (tsc_array_t*)value_ptr(v);
         if (tsc_str_is_length_key(key)) return tsc_value_num((double)a->len);
         if (str_lit_eq(key, "next")) {
-            return tsc_value_function_generic(tsc_value_generator_next, a);
+            return tsc_value_function_builtin_named(tsc_value_generator_next, a, 1.0, tsc_str_from_lit("next", 4));
         }
         if (str_lit_eq(key, "return")) {
-            return tsc_value_function_generic(tsc_value_generator_return, a);
+            return tsc_value_function_builtin_named(tsc_value_generator_return, a, 1.0, tsc_str_from_lit("return", 6));
         }
         if (str_lit_eq(key, "throw")) {
-            return tsc_value_function_generic(tsc_value_generator_throw, a);
+            return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
         }
         size_t idx = 0;
         if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
