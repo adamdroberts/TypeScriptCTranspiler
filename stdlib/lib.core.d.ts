@@ -36,6 +36,13 @@ interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterato
     [Symbol.iterator](): Generator<T, TReturn, TNext>;
 }
 
+interface PromiseLike<T> {
+    then<TResult1 = T, TResult2 = never>(
+        onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+        onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+        ...ignored: any[]
+    ): PromiseLike<TResult1 | TResult2>;
+}
 interface Promise<T> {
     then<TResult = T, TRejectResult = never>(onfulfilled: ((value: T) => TResult | Promise<TResult>) | undefined, onrejected: (reason: any) => TRejectResult | Promise<TRejectResult>, ...ignored: any[]): Promise<TResult | TRejectResult>;
     then<TResult = T>(onfulfilled?: (value: T) => TResult | Promise<TResult>, ...ignored: any[]): Promise<TResult>;

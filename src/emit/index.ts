@@ -29117,6 +29117,13 @@ class Emitter {
                 buf.line("return tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
+            if (ts.isAwaitExpression(r.expression) && this.tryDepth === 0) {
+                const awaitedSource = this.emitExpr(r.expression.expression);
+                if (this.prepareType(awaitedSource.ty).kind === "promise") {
+                    buf.line(`return tsc_promise_adopt(${awaitedSource.c});`);
+                    return;
+                }
+            }
             const expr = this.emitExpr(r.expression);
             if (expr.ty.kind === "promise") {
                 buf.line(`return tsc_promise_adopt(${expr.c});`);
