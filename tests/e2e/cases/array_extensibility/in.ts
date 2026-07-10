@@ -113,6 +113,11 @@ report("frozen fill", (): any => frozen.fill(9).join("|"));
 report("frozen copyWithin", (): any => frozen.copyWithin(0, 1).join("|"));
 report("frozen reverse", (): any => frozen.reverse().join("|"));
 report("frozen sort", (): any => frozen.sort().join("|"));
+
+const sealedSparse: any = [3, 1, 2];
+delete sealedSparse[1];
+Object.seal(sealedSparse);
+report("sealed sparse sort", (): any => sealedSparse.sort().join("|"));
 console.log(
     "frozen define same:",
     Reflect.defineProperty(frozen, "0", { value: 3, writable: false, enumerable: true, configurable: false }),
