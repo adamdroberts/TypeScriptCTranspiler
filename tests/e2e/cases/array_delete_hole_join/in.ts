@@ -52,3 +52,5 @@ const dynamicSpread: any[] = [...dynamicSparse];
 console.log("spread holes:", Object.keys(staticSpread).join("|"), staticSpread[1], Object.keys(dynamicSpread).join("|"), dynamicSpread[1]);
 function collectSpread(...values: any[]): string { return values.join("|"); }
 console.log("call spread holes:", collectSpread(...hofValues));
+const arrayOfSpread: any[] = Array.of(...hofValues);
+console.log("Array.of spread holes:", Object.keys(arrayOfSpread).join("|"), arrayOfSpread[1]);
