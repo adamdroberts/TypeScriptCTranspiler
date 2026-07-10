@@ -119,6 +119,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
             if (atText.length > 0) return atText;
+            const stringIndexText = resolveStaticStringIndexCall(node);
+            if (stringIndexText.length > 0) return stringIndexText;
             const joinText = resolveStaticArrayJoinCall(node);
             if (joinText.length > 0) return joinText;
             const caseText = resolveStaticStringCaseCall(node);
@@ -574,6 +576,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupe(values.map((value) => {
             return method === "toLowerCase" ? value.toLowerCase() : value.toUpperCase();
         }));
+    };
+
+    const resolveStaticStringIndexCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "charAt" && method !== "at") return [];
+        const values = resolve(callee.expression);
+        const indices = resolveStaticIntegerKeys(call.arguments[0]!);
+        if (values.length === 0 || indices.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const index of indices) {
+                if (method === "at" && (index < -value.length || index >= value.length)) return [];
+                out.push(method === "charAt" ? value.charAt(index) : value.at(index)!);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticStringTrimCall = (call: ts.CallExpression): string[] => {
