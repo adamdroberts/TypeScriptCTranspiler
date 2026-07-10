@@ -25865,7 +25865,13 @@ class Emitter {
                         const value = this.freshTemp("_dynspread_v");
                         const elem = r.ty.elem!;
                         const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
-                        const boxed = this.coerce(current, T_VALUE, e.expression);
+                        const boxed = this.coerce(
+                            elem.kind === "value"
+                                ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
+                                : current,
+                            T_VALUE,
+                            e.expression,
+                        );
                         pieces.push(
                             `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${av}, &${value}); } }`
                         );
@@ -54434,9 +54440,17 @@ class Emitter {
                 unsupported(e, "sparse array literals");
             if (ts.isSpreadElement(e)) {
                 const r = this.emitExpr(e.expression);
-                if (r.ty.kind !== "array")
-                    unsupported(e, "spread must be an array");
-                pieces.push(`tsc_array_append(${av}, ${r.c})`);
+                if (r.ty.kind === "value") {
+                    if (et.kind !== "value") unsupported(e, "dynamic spread into a typed array requires an any[] result");
+                    pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(${this.coerce(r, T_VALUE, e.expression)}))`);
+                    continue;
+                }
+                if (r.ty.kind !== "array") unsupported(e, "spread must be an array");
+                if (r.ty.elem?.kind === "value") {
+                    pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(tsc_value_array(${r.c})))`);
+                } else {
+                    pieces.push(`tsc_array_append(${av}, ${r.c})`);
+                }
                 continue;
             }
             const r = this.emitExpr(e as ts.Expression);

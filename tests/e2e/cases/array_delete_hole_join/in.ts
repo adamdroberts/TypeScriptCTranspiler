@@ -46,3 +46,7 @@ console.log("iter holes:", Object.keys(iteratorValues).join("|"), Object.hasOwn(
 let forOfHoles = "";
 for (const value of hofValues) forOfHoles += String(value) + "|";
 console.log("for-of holes:", forOfHoles);
+const staticSpread: any[] = [...hofValues];
+const dynamicSparse: any = hofValues;
+const dynamicSpread: any[] = [...dynamicSparse];
+console.log("spread holes:", Object.keys(staticSpread).join("|"), staticSpread[1], Object.keys(dynamicSpread).join("|"), dynamicSpread[1]);
