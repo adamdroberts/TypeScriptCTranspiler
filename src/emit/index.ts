@@ -45189,6 +45189,17 @@ class Emitter {
         return specs;
     }
 
+    private fsSignalOptionValue(options: ts.Expression | undefined): EmitResult | null {
+        if (!options || this.isUndefinedLikeExpression(options)) return null;
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions) || !ts.isObjectLiteralExpression(resolvedOptions)) return null;
+        const prop = resolvedOptions.properties.find((candidate) =>
+            ts.isPropertyAssignment(candidate) && this.staticPropertyName(candidate.name) === "signal",
+        );
+        if (!prop || !ts.isPropertyAssignment(prop) || this.isUndefinedLikeExpression(prop.initializer)) return null;
+        return this.emitExpr(prop.initializer);
+    }
+
     private validateFsEncodingOptions(
         options: ts.Expression | undefined,
         label: string,
@@ -45687,20 +45698,27 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/hex/base64/buffer/null encoding/flag options");
                 const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile", true);
                 const p = this.emitExpr(args[0]!);
+                const signalValue = this.fsSignalOptionValue(args[1]);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
-                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
+                const signalSpecIndex = optionSpecs.length + 1;
+                if (signalValue) optionSpecs.push({ value: signalValue, target: T_VALUE, node: args[1] });
+                else optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readFile path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => {
+                ], (values) => {
+                    const path = values[0]!;
                     const read = result === "buffer"
                         ? `tsc_promise_resolve_buffer(tsc_fs_read_file_buffer_sync(${path!}))`
                         : `tsc_promise_resolve(tsc_value_string(${this.emitFsReadFileResult(path!, result)}))`;
-                    return settle(read);
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    return settle(signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${read})`
+                        : read);
                 });
             }
             case "writeFile": {
