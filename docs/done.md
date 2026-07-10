@@ -1275,7 +1275,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_last_index_of` | Array.lastIndexOf |
 | `array_of` | Array.of typed array construction |
 | `array_prototype_constructor` | callable/constructable Array value and Array.prototype.constructor metadata |
-| `array_symbol_iterator_method` | detached dynamic Array [Symbol.iterator] method values |
+| `array_symbol_iterator_method` | detached dynamic Array [Symbol.iterator] method values with Array.prototype.values function identity |
 | `array_own_properties` | typed array own-property checks |
 | `array_property_descriptors` | typed array Object/Reflect property descriptors |
 | `array_reduce_no_initial` | Array.reduce/reduceRight using the first/last element as the initial accumulator |

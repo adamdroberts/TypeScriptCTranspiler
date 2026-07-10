@@ -2242,18 +2242,10 @@ tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {
     return tsc_value_undefined();
 }
 
-static tsc_value_t tsc_value_symbol_iterator_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
-    (void)args;
-    return tsc_value_symbol_iterator(this_arg);
-}
-
 tsc_value_t tsc_value_symbol_iterator_method_value(void) {
-    return tsc_value_function_builtin_named(
-        tsc_value_symbol_iterator_method,
-        NULL,
-        0.0,
-        tsc_str_from_lit("[Symbol.iterator]", 17)
+    return tsc_value_get_prop(
+        tsc_value_array(tsc_array_prototype()),
+        tsc_str_from_lit("values", 6)
     );
 }
 
