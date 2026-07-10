@@ -1,0 +1,3 @@
+{
+  "description": "aborting timers/promises setTimeout rejects immediately and cancels its pending runtime timeout"
+}
