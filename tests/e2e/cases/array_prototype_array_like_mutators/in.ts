@@ -26,3 +26,21 @@ try {
 } catch (err: any) {
     console.log("sealed pop:", err);
 }
+
+const sealedShift: any = { 0: "a", 1: "b", length: 2 };
+Object.seal(sealedShift);
+try {
+    Reflect.apply(proto.shift, sealedShift, []);
+    console.log("sealed shift:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed shift:", err);
+}
+
+const closedUnshift: any = { length: 0 };
+Object.preventExtensions(closedUnshift);
+try {
+    Reflect.apply(proto.unshift, closedUnshift, ["x"]);
+    console.log("closed unshift:", "unexpected success");
+} catch (err: any) {
+    console.log("closed unshift:", err);
+}
