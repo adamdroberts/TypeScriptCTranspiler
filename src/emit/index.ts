@@ -40812,9 +40812,24 @@ class Emitter {
                 if (!valueNode) {
                     return this.emitSequencedExpr(mapped, optionSpecs, (values) => {
                         const signal = signalValue ? values[0]! : null;
-                        return signal
-                            ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : tsc_promise_resolve(tsc_value_undefined()))`
-                            : "tsc_promise_resolve(tsc_value_undefined())";
+                        const callbackName = `tsc_timers_promises_setImmediate_${this.timersPromisesSetTimeoutAdapters++}`;
+                        const envType = `${callbackName}_env_t`;
+                        this.structDecls.open(`typedef struct ${envType}`);
+                        this.structDecls.line("tsc_promise_t* promise;");
+                        this.structDecls.close(` ${envType};`);
+                        this.protos.line(`void ${callbackName}(void* env);`);
+                        const buf = new CBuf();
+                        buf.open(`void ${callbackName}(void* env)`);
+                        buf.line(`${envType}* state = (${envType}*)env;`);
+                        buf.line("tsc_promise_fulfill_in_place(state->promise, tsc_value_undefined());");
+                        buf.close();
+                        this.closureDefs.write(buf.toString());
+                        const env = this.freshTemp("_immediateEnv");
+                        const promiseVar = this.freshTemp("_promise");
+                        const registration = signal
+                            ? `double _immediate_id = tsc_set_immediate(${callbackName}, ${env}); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_immediate(${signal}, _immediate_id);`
+                            : `tsc_set_immediate(${callbackName}, ${env});`;
+                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${registration} ${promiseVar}; })`;
                     });
                 }
                 const value = this.emitExpr(valueNode);
@@ -40823,10 +40838,37 @@ class Emitter {
                     ...optionSpecs,
                 ], (values) => {
                     const signal = signalValue ? values[1]! : null;
-                    const resolved = this.promiseResolveResult({ c: values[0]!, ty: value.ty }, valueNode);
-                    return signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolved})`
-                        : resolved;
+                    const callbackName = `tsc_timers_promises_setImmediate_${this.timersPromisesSetTimeoutAdapters++}`;
+                    const envType = `${callbackName}_env_t`;
+                    const storedValueType = value.ty.kind !== "void" ? value.ty : T_VALUE;
+                    this.structDecls.open(`typedef struct ${envType}`);
+                    this.structDecls.line("tsc_promise_t* promise;");
+                    if (signal) this.structDecls.line("tsc_value_t signal;");
+                    this.structDecls.line(`${storedValueType.c} value;`);
+                    this.structDecls.close(` ${envType};`);
+                    this.protos.line(`void ${callbackName}(void* env);`);
+                    const buf = new CBuf();
+                    buf.open(`void ${callbackName}(void* env)`);
+                    buf.line(`${envType}* state = (${envType}*)env;`);
+                    const stored = this.prepareType(storedValueType);
+                    if (stored.kind === "promise") {
+                        buf.line(`tsc_promise_adopt_into(state->promise, state->value);`);
+                    } else if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array") {
+                        buf.line(`tsc_promise_fulfill_in_place_ptr(state->promise, state->value);`);
+                    } else {
+                        const fulfilled = this.coerce({ c: "state->value", ty: storedValueType }, T_VALUE, valueNode);
+                        buf.line(`tsc_promise_fulfill_in_place(state->promise, ${fulfilled});`);
+                    }
+                    buf.close();
+                    this.closureDefs.write(buf.toString());
+                    const env = this.freshTemp("_immediateEnv");
+                    const promiseVar = this.freshTemp("_promise");
+                    const valueVar = this.coerce({ c: values[0]!, ty: value.ty }, storedValueType, valueNode);
+                    const signalAssignment = signal ? `${env}->signal = ${signal}; ` : "";
+                    const registration = signal
+                        ? `double _immediate_id = tsc_set_immediate(${callbackName}, ${env}); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_immediate(${signal}, _immediate_id);`
+                        : `tsc_set_immediate(${callbackName}, ${env});`;
+                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${env}->value = ${valueVar}; ${signalAssignment}${registration} ${promiseVar}; })`;
                 });
             }
         }
