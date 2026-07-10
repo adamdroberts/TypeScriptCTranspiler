@@ -33,3 +33,30 @@ console.log(
     Object.hasOwn(sparseCopy, "0"),
     Object.hasOwn(sparseCopy, "1"),
 );
+
+const closedFill: any = { length: 1 };
+Object.preventExtensions(closedFill);
+try {
+    Reflect.apply(proto.fill, closedFill, ["x"]);
+    console.log("closed fill:", "unexpected success");
+} catch (err: any) {
+    console.log("closed fill:", err);
+}
+
+const closedCopy: any = { 1: "b", length: 2 };
+Object.preventExtensions(closedCopy);
+try {
+    Reflect.apply(proto.copyWithin, closedCopy, [0, 1, 2]);
+    console.log("closed copyWithin:", "unexpected success");
+} catch (err: any) {
+    console.log("closed copyWithin:", err);
+}
+
+const sealedReverse: any = { 0: "a", length: 2 };
+Object.seal(sealedReverse);
+try {
+    Reflect.apply(proto.reverse, sealedReverse, []);
+    console.log("sealed reverse:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed reverse:", err);
+}
