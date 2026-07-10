@@ -113,7 +113,7 @@ async function invokeCcWithCxx(opts: CcOptions): Promise<CcResult> {
         const isCxx = /\.(cc|cpp|cxx)$/i.test(source);
         const compiler = isCxx ? cxxCommand() : ccCommand();
         const args = [
-            isCxx ? "-std=c++17" : "-std=c11",
+            isCxx ? "-std=c++20" : "-std=c11",
             ...commonFlags,
             ...includeFlags,
             ...extraFlags,
