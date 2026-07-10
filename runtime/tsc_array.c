@@ -2,6 +2,61 @@
 
 /* ---------------- arrays ---------------- */
 
+static bool array_prototype_initializing = false;
+static bool array_prototype_initialized = false;
+static bool array_constructor_initialized = false;
+static tsc_value_t array_constructor_value;
+
+static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    size_t count = args ? args->len : 0;
+    if (count == 1) {
+        tsc_value_t first = TSC_ARR(tsc_value_t, args, 0);
+        if (!value_is_box(first)) {
+            double length = tsc_value_as_num(first);
+            if (!isfinite(length) || length < 0.0 || floor(length) != length || length > 4294967295.0) {
+                tsc_throw_str(tsc_str_from_cstr("Array length must be a finite non-negative integer"));
+            }
+            tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), (size_t)length);
+            tsc_value_t undef = tsc_value_undefined();
+            for (size_t i = 0; i < (size_t)length; i++) tsc_array_push_raw(out, &undef);
+            return tsc_value_array(out);
+        }
+    }
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
+    for (size_t i = 0; i < count; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, args, i);
+        tsc_array_push_raw(out, &value);
+    }
+    return tsc_value_array(out);
+}
+
+tsc_value_t tsc_array_constructor_value(void) {
+    if (!array_constructor_initialized) {
+        array_constructor_value = tsc_value_function_generic_named(
+            array_constructor_generic,
+            NULL,
+            1.0,
+            tsc_str_from_lit("Array", 5)
+        );
+        array_constructor_initialized = true;
+    }
+    if (array_prototype_initializing) {
+        return array_constructor_value;
+    }
+    if (array_prototype_initialized) {
+        (void)tsc_value_set_prop(
+            array_constructor_value,
+            tsc_str_from_lit("prototype", 9),
+            tsc_value_array(tsc_array_prototype())
+        );
+    } else if (!array_prototype_initializing) {
+        (void)tsc_array_prototype();
+    }
+    return array_constructor_value;
+}
+
 static tsc_value_t array_proto_arg(tsc_array_t* args, size_t index) {
     return args && index < args->len
         ? TSC_ARR(tsc_value_t, args, index)
@@ -720,6 +775,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
     static bool initialized = false;
     static tsc_value_t prototype;
     if (!initialized) {
+        array_prototype_initializing = true;
         tsc_array_t* proto = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
         proto->len = 0;
         proto->cap = 0;
@@ -779,6 +835,21 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_define_method(proto->props, "reduce", 6, array_prototype_reduce);
         array_prototype_define_method(proto->props, "reduceRight", 11, array_prototype_reduce_right);
         prototype = tsc_value_array(proto);
+        array_prototype_initialized = true;
+        (void)tsc_value_set_prop(
+            tsc_array_constructor_value(),
+            tsc_str_from_lit("prototype", 9),
+            prototype
+        );
+        tsc_object_define(
+            proto->props,
+            tsc_str_from_lit("constructor", 11),
+            tsc_array_constructor_value(),
+            true,
+            false,
+            true
+        );
+        array_prototype_initializing = false;
         initialized = true;
     }
     return prototype;

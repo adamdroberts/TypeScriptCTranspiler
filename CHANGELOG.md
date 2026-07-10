@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Global and prototype `Array` now expose a stable callable/constructable constructor value, including `Array(...items)`, `new Array(...items)`, single numeric length construction, and `Array.prototype.constructor` metadata. Test: `array_prototype_constructor`.
 - Module-level `events.on(...)` now evaluates its supported optional `signal` value before creating the bounded async iterator; real AbortSignal cancellation remains deferred. Test: `event_emitter_on_options`.
 - `Reflect.preventExtensions(...)` now boxes primitive and typed class targets before runtime validation instead of emitting raw C scalars or class pointers, and rejects fixed built-in targets with a precise compile-time diagnostic. Tests: `reflect_object_target_validation`, `reflect_fixed_builtin_prevent_reject`.
 - Bundled `fs.promises` declarations now expose the already-lowered `signal` option objects for immediate sync-backed `appendFile`, `readdir`, `stat`, `lstat`, `realpath`, `readlink`, `mkdtemp`, `mkdir`, `rm`, and `rmdir` calls. Test: `fs_promises_signal_options`.
