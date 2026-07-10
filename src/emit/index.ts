@@ -41918,7 +41918,7 @@ class Emitter {
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
                         `if (${av}->len > 0 && tsc_array_index_present(${av}, 0)) ` +
                         `${rv} = TSC_ARR(${et.c}, ${av}, 0); ` +
-                        `if (!${av}->sealed && !${av}->frozen && ${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
+                        `if (${av}->frozen || (${av}->sealed && ${av}->len > 0)) tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array")); else if (${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
                 );
             }
             case "unshift": {
@@ -41933,7 +41933,7 @@ class Emitter {
                     unshifts.push(`tsc_array_unshift_raw(${av}, &${vv})`);
                 }
                 if (unshifts.length > 0) {
-                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen && ${av}->length_writable) { ${unshifts.join("; ")}; }`);
+                    pieces.push(`if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift cannot mutate a sealed or frozen array")); else if (${av}->extensible && ${av}->length_writable) { ${unshifts.join("; ")}; }`);
                 }
                 pieces.push(`tsc_array_length(${av})`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };

@@ -81,6 +81,8 @@ console.log("sealed new:", Reflect.set(sealed, "2", 3), sealed.length);
 console.log("sealed delete:", Reflect.deleteProperty(sealed, "0"), sealed[0]);
 report("sealed push", (): any => sealed.push(11));
 report("sealed pop", (): any => sealed.pop());
+report("sealed shift", (): any => sealed.shift());
+report("sealed unshift", (): any => sealed.unshift(11));
 console.log("sealed fill:", sealed.fill(5).join("|"));
 report("sealed define props failed", (): any => Object.defineProperties(sealed, {
     "0": { value: 6, writable: true, enumerable: true, configurable: false },
@@ -103,6 +105,8 @@ console.log("frozen set:", Reflect.set(frozen, "0", 30), frozen[0]);
 console.log("frozen delete:", Reflect.deleteProperty(frozen, "0"), frozen[0]);
 report("frozen push", (): any => frozen.push(5));
 report("frozen pop", (): any => frozen.pop());
+report("frozen shift", (): any => frozen.shift());
+report("frozen unshift", (): any => frozen.unshift(5));
 report("frozen fill", (): any => frozen.fill(9).join("|"));
 report("frozen copyWithin", (): any => frozen.copyWithin(0, 1).join("|"));
 report("frozen reverse", (): any => frozen.reverse().join("|"));
