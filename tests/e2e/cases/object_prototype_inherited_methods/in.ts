@@ -9,6 +9,13 @@ console.log("array:", arr.hasOwnProperty("0"), arr.hasOwnProperty("length"), arr
 console.log("function:", fnAny.hasOwnProperty("length"), fnAny.hasOwnProperty("name"), fnAny.propertyIsEnumerable("length"), fnAny.toString(), fnAny.toLocaleString(), fnAny.valueOf() === fnAny);
 
 const objectProto: any = Object.getPrototypeOf({});
+console.log("metadata:", objectProto.hasOwnProperty.name, objectProto.hasOwnProperty.length, Object.hasOwn(objectProto.hasOwnProperty, "prototype"), objectProto.toString.name, objectProto.toString.length, Object.hasOwn(objectProto.toString, "prototype"));
+try {
+    Reflect.construct(objectProto.hasOwnProperty, []);
+    console.log("construct:", "ok");
+} catch (err: any) {
+    console.log("construct:", err);
+}
 console.log("prototype:", Object.keys(objectProto).join("|"), objectProto.propertyIsEnumerable("toString"), objectProto.isPrototypeOf(arr), objectProto.isPrototypeOf(fnAny));
 console.log("has:", "hasOwnProperty" in obj, Reflect.has(arr, "hasOwnProperty"), Reflect.has(fnAny, "valueOf"));
 
