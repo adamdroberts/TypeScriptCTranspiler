@@ -619,6 +619,7 @@ tsc_value_t tsc_abort_controller_new(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);
 void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise);
 void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id);
+void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id);
 
 bool tsc_value_is_truthy(tsc_value_t v);
 bool tsc_value_number_is_integer(tsc_value_t v);

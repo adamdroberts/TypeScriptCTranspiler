@@ -166,6 +166,9 @@ typedef struct {
     double* timeout_ids;
     size_t timeout_len;
     size_t timeout_cap;
+    double* immediate_ids;
+    size_t immediate_len;
+    size_t immediate_cap;
     tsc_value_t* listeners;
     size_t listener_len;
     size_t listener_cap;
@@ -222,6 +225,10 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
         tsc_clear_timeout(state->timeout_ids[i]);
     }
     state->timeout_len = 0;
+    for (size_t i = 0; i < state->immediate_len; i++) {
+        tsc_clear_immediate(state->immediate_ids[i]);
+    }
+    state->immediate_len = 0;
     return tsc_value_undefined();
 }
 
@@ -297,6 +304,9 @@ tsc_value_t tsc_abort_controller_new(void) {
     state->timeout_ids = NULL;
     state->timeout_len = 0;
     state->timeout_cap = 0;
+    state->immediate_ids = NULL;
+    state->immediate_len = 0;
+    state->immediate_cap = 0;
     state->listeners = NULL;
     state->listener_len = 0;
     state->listener_cap = 0;
@@ -384,6 +394,22 @@ void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id) {
         state->timeout_cap = next;
     }
     state->timeout_ids[state->timeout_len++] = timeout_id;
+}
+
+void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id) {
+    if (immediate_id <= 0.0) return;
+    tsc_abort_controller_state_t* state = abort_signal_state(signal);
+    if (!state) return;
+    if (state->aborted) {
+        tsc_clear_immediate(immediate_id);
+        return;
+    }
+    if (state->immediate_len == state->immediate_cap) {
+        size_t next = state->immediate_cap ? state->immediate_cap * 2 : 4;
+        state->immediate_ids = (double*)TSC_GC_REALLOC(state->immediate_ids, next * sizeof(double));
+        state->immediate_cap = next;
+    }
+    state->immediate_ids[state->immediate_len++] = immediate_id;
 }
 
 /* Forward decls for helpers used across sections. */
