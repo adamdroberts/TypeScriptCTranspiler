@@ -34,6 +34,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Finite dynamic `require(...)` proofs now resolve static string `.repeat(...)` specifiers for bounded finite integer counts into the AOT module graph. Test: `dynamic_require_static_string_repeat`.
 - Finite dynamic `require(...)` proofs now resolve static string `.normalize(...)` specifiers for NFC, NFD, NFKC, NFKD, and omitted/undefined default forms into the AOT module graph. Test: `dynamic_require_static_string_normalize`.
 - `dns.resolve4(...)`, `dns.resolve6(...)`, and their immediate promise forms now accept bounded `{ ttl: false | undefined }` option objects while continuing to return string arrays. Tests: `dns_resolve4`, `dns_resolve6`.
 - `fs.cpSync(...)` and immediate `fs.promises.cp(...)` now accept a bounded static `filter` option for side-effect-free functions returning boolean literals, including no-op copies for statically false filters. Test: `fs_cp_options`.

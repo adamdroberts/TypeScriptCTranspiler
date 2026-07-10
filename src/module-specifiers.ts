@@ -127,6 +127,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (trimText.length > 0) return trimText;
             const normalizeText = resolveStaticStringNormalizeCall(node);
             if (normalizeText.length > 0) return normalizeText;
+            const repeatText = resolveStaticStringRepeatCall(node);
+            if (repeatText.length > 0) return repeatText;
             const rangeText = resolveStaticStringRangeCall(node);
             if (rangeText.length > 0) return rangeText;
             const replaceText = resolveStaticStringReplaceCall(node);
@@ -619,6 +621,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const value of values) {
             for (const form of forms) {
                 out.push(value.normalize(form));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringRepeatCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "repeat") return [];
+        const values = resolve(callee.expression);
+        const counts = resolveStaticIntegerKeys(call.arguments[0]!);
+        if (values.length === 0 || counts.length === 0) return [];
+        if (counts.some((count) => count < 0 || count > 256)) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            for (const count of counts) {
+                if (value.length * count > 4096) return [];
+                out.push(value.repeat(count));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
