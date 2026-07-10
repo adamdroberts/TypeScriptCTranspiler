@@ -1222,11 +1222,28 @@ tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, 
     int64_t room = len - to;
     if (count > room) count = room;
     if (count > 0) {
+        bool* source_present = NULL;
+        if (a->holes && a->es == sizeof(tsc_value_t)) {
+            source_present = (bool*)TSC_GC_MALLOC((size_t)count * sizeof(bool));
+            for (int64_t i = 0; i < count; i++) {
+                source_present[i] = tsc_array_index_present(a, (size_t)from + (size_t)i);
+            }
+        }
         memmove(
             (char*)a->data + (size_t)to * a->es,
             (char*)a->data + (size_t)from * a->es,
             (size_t)count * a->es
         );
+        if (source_present) {
+            for (int64_t i = 0; i < count; i++) {
+                size_t target = (size_t)to + (size_t)i;
+                if (source_present[i]) {
+                    tsc_array_clear_hole(a, target);
+                } else {
+                    tsc_array_mark_hole(a, target);
+                }
+            }
+        }
     }
     return a;
 }
