@@ -199,6 +199,17 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
             );
         }
     }
+    tsc_value_t onabort = tsc_value_get_prop(
+        tsc_value_object(state->signal),
+        tsc_str_from_lit("onabort", 7)
+    );
+    if (tsc_value_is_callable(onabort)) {
+        (void)tsc_value_apply_function(
+            onabort,
+            tsc_value_object(state->signal),
+            tsc_value_array(event_args)
+        );
+    }
     state->listener_len = 0;
     for (size_t i = 0; i < state->promise_len; i++) {
         tsc_promise_reject_in_place(state->promises[i], reason);
@@ -281,6 +292,7 @@ tsc_value_t tsc_abort_controller_new(void) {
     state->listener_cap = 0;
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(false));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), tsc_value_undefined());
+    tsc_object_set(state->signal, tsc_str_from_lit("onabort", 7), tsc_value_undefined());
     tsc_object_set(
         state->signal,
         tsc_str_from_lit("throwIfAborted", 14),

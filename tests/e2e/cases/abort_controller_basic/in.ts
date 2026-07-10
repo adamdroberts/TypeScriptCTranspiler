@@ -10,6 +10,9 @@ const removedListener = (_event: any) => {
 };
 controller.signal.addEventListener("abort", removedListener);
 controller.signal.removeEventListener("abort", removedListener);
+controller.signal.onabort = (event: any) => {
+    console.log("onabort:", event.type);
+};
 console.log("initial:", controller.signal.aborted, controller.signal.reason);
 controller.abort("cancelled");
 console.log("aborted:", controller.signal.aborted, controller.signal.reason);
