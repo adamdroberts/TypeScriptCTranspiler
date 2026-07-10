@@ -41814,7 +41814,7 @@ class Emitter {
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
                         `${emitForwardStartDecls(`${av}->len`, fv, sv)}; ` +
                         `double _r = -1.0; for (size_t ${iv} = ${sv}; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (${eqExpr}) { _r = (double)${iv}; break; } } _r; })`
+                        `{ if (tsc_array_index_present(${av}, ${iv}) && ${eqExpr}) { _r = (double)${iv}; break; } } _r; })`
                     );
                 });
             }
@@ -41847,7 +41847,7 @@ class Emitter {
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
                         `${emitLastStartDecls(`${av}->len`, fv, sv, ok)}; double _r = -1.0; ` +
                         `if (${ok}) { size_t ${iv} = ${sv} + 1; while (${iv} > 0) ` +
-                        `{ ${iv}--; if (${eqExpr}) { _r = (double)${iv}; break; } } } _r; })`
+                        `{ ${iv}--; if (tsc_array_index_present(${av}, ${iv}) && ${eqExpr}) { _r = (double)${iv}; break; } } } _r; })`
                     );
                 });
             }
@@ -41879,7 +41879,9 @@ class Emitter {
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
                         `${emitForwardStartDecls(`${av}->len`, fv, sv)}; ` +
                         `bool _f = false; for (size_t ${iv} = ${sv}; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (${eqExpr}) { _f = true; break; } } _f; })`
+                        `{ if (!tsc_array_index_present(${av}, ${iv})) { ` +
+                        `${et.kind === "value" ? `if (tsc_value_is_undefined(${tv})) _f = true;` : ``} ` +
+                        `} else if (${eqExpr}) { _f = true; } if (_f) break; } _f; })`
                     );
                 });
             }
@@ -41896,7 +41898,8 @@ class Emitter {
                     const av = this.freshTemp("_arr");
                     const nv = this.freshTemp("_at");
                     const rv = this.freshTemp("_atv");
-                    return `({ tsc_array_t* const ${av} = ${arr}; double ${nv} = ${idx}; if (isnan(${nv})) ${nv} = 0.0; if (${nv} < 0) ${nv} = (double)${av}->len + ${nv}; ${et.c} ${rv} = (${et.c})0; if (!isinf(${nv}) && ${nv} >= 0 && ${nv} < (double)${av}->len) ${rv} = TSC_ARR(${et.c}, ${av}, (size_t)${nv}); ${rv}; })`;
+                    const missing = et.kind === "value" ? "tsc_value_undefined()" : `(${et.c})0`;
+                    return `({ tsc_array_t* const ${av} = ${arr}; double ${nv} = ${idx}; if (isnan(${nv})) ${nv} = 0.0; if (${nv} < 0) ${nv} = (double)${av}->len + ${nv}; ${et.c} ${rv} = ${missing}; if (!isinf(${nv}) && ${nv} >= 0 && ${nv} < (double)${av}->len && tsc_array_index_present(${av}, (size_t)${nv})) ${rv} = TSC_ARR(${et.c}, ${av}, (size_t)${nv}); ${rv}; })`;
                 });
             }
             case "reverse": {

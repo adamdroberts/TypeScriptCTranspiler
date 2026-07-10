@@ -7,3 +7,4 @@ const entries: any = Object.entries(values);
 console.log("entries:", entries[0][0] + ":" + entries[0][1] + "|" + entries[1][0] + ":" + entries[1][1]);
 const descriptors: any = Object.getOwnPropertyDescriptors(values);
 console.log("descriptors:", Object.keys(descriptors).join("|"), Object.hasOwn(descriptors, "1"), Object.hasOwn(descriptors, "2"));
+console.log("reads:", values.at(1), values.indexOf(undefined), values.lastIndexOf(undefined), values.includes(undefined), values.includes("missing"));

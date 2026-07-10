@@ -20,6 +20,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Static `Object.getOwnPropertyNames` now omits deleted array indexes while retaining `length`. Test: `array_delete_hole_join`.
 - Static `Object.values` and `Object.entries` now compact away deleted array indexes. Test: `array_delete_hole_join`.
 - Static array property descriptors now omit deleted indexes in single and bulk descriptor paths. Test: `array_delete_hole_join`.
+- Static sparse `any[]` reads and searches now preserve holes for `at`, `indexOf`, `lastIndexOf`, and `includes`. Test: `array_delete_hole_join`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
