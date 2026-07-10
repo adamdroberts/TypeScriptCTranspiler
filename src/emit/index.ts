@@ -45787,16 +45787,20 @@ class Emitter {
                 if (args.length < 1) unsupported(call, "fs.promises.readdir needs path and optional UTF-8/hex/base64/buffer encoding or withFileTypes options");
                 const options = this.validateFsReaddirOptions(args[1], "fs.promises.readdir", true);
                 const p = this.emitExpr(args[0]!);
+                const signalValue = this.fsSignalOptionValue(args[1]);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
-                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
+                const signalSpecIndex = 1 + optionSpecs.length;
+                if (signalValue) optionSpecs.push({ value: signalValue, target: T_VALUE, node: args[1] });
+                else optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.readdir path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => {
+                ], (values) => {
+                    const path = values[0]!;
                     const fn = options.withFileTypes
                         ? options.recursive
                             ? "tsc_fs_readdir_recursive_dirents_sync"
@@ -45813,10 +45817,13 @@ class Emitter {
                         : options.encoding === "hex" || options.encoding === "base64"
                             ? this.emitFsStringArrayEncodingResult(`${fn}(${path!})`, options.encoding)
                             : `${fn}(${path!})`;
-                    if (mapped.elem?.kind === "array") {
-                        return settle(`tsc_promise_resolve_array(${value})`);
-                    }
-                    return settle(`tsc_promise_resolve(tsc_value_array(${value}))`);
+                    const resolved = mapped.elem?.kind === "array"
+                        ? `tsc_promise_resolve_array(${value})`
+                        : `tsc_promise_resolve(tsc_value_array(${value}))`;
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    return settle(signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolved})`
+                        : resolved);
                 });
             }
             case "statfs": {

@@ -1,4 +1,4 @@
-import { appendFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { appendFile, lstat, mkdir, mkdtemp, readFile, readlink, readdir, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
 
 declare const AbortController: { new(): any };
 
@@ -47,6 +47,9 @@ writeFile(tmpPath, "should not write\n", { signal: abortedController.signal }).c
 });
 appendFile(tmpPath, "should not append\n", { signal: abortedController.signal }).catch((reason: any) => {
     console.log("aborted append:", reason);
+});
+readdir("/tmp", { signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted readdir:", reason);
 });
 
 setImmediate((): void => {
