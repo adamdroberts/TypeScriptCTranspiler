@@ -48980,9 +48980,14 @@ class Emitter {
             }
             if (mapped.kind === "array") {
                 const value = this.emitExpr(arg);
-                return this.emitSequencedExpr(arrayType(mapped.elem ?? T_VALUE), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) =>
-                    `tsc_array_slice(${arr}, 0.0, (double)${arr}->len)`,
-                );
+                const valueType = mapped.elem ?? T_VALUE;
+                return this.emitSequencedExpr(arrayType(valueType), [{ value, target: mapped, node: arg }, ...ignored], ([arr]) => {
+                    const source = this.freshTemp("_osv_src");
+                    const out = this.freshTemp("_osv");
+                    const idx = this.freshTemp("_osv_i");
+                    const current = this.freshTemp("_osv_value");
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { ${valueType.c} ${current} = TSC_ARR(${valueType.c}, ${source}, ${idx}); tsc_array_push_raw(${out}, &${current}); } } ${out}; })`;
+                });
             }
             if (mapped.kind !== "class")
                 unsupported(arg, "Object.values on non-object (Phase 3)");
@@ -49076,7 +49081,7 @@ class Emitter {
                     const idx = this.freshTemp("_oae_i");
                     const entry = this.freshTemp("_oae_entry");
                     const current = `TSC_ARR(${valueType.c}, ${source}, ${idx})`;
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, valueType, current)}; tsc_array_push_raw(${out}, &${entry}); } ${out}; })`;
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${idx}); ${this.objectEntrySet(entry, valueType, current)}; tsc_array_push_raw(${out}, &${entry}); } } ${out}; })`;
                 });
             }
             const value = this.emitExpr(arg);
