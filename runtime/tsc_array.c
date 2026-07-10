@@ -1020,6 +1020,19 @@ void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
 
 tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
     if (a->len < 2) return a;
+    tsc_object_t* reversed_holes = NULL;
+    if (a->holes) {
+        reversed_holes = tsc_object_new();
+        tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
+        for (size_t i = 0; i < keys->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            size_t index = 0;
+            if (tsc_str_array_index(key, &index) && index < a->len) {
+                tsc_str_t* reversed = tsc_str_from_int((int64_t)(a->len - index - 1));
+                (void)tsc_object_set(reversed_holes, reversed, tsc_value_bool(true));
+            }
+        }
+    }
     char* lo = (char*)a->data;
     char* hi = lo + (a->len - 1) * a->es;
     char tmp[256]; /* element size limit for stack swap; larger uses heap */
@@ -1031,6 +1044,7 @@ tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
         lo += a->es;
         hi -= a->es;
     }
+    if (a->holes) a->holes = reversed_holes;
     return a;
 }
 
@@ -1177,6 +1191,11 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     tsc_array_t* r = tsc_array_new(a->es, n > 0 ? n : 1);
     if (n > 0) memcpy(r->data, (char*)a->data + (size_t)i0 * a->es, n * a->es);
     r->len = n;
+    if (a->holes && a->es == sizeof(tsc_value_t)) {
+        for (size_t i = 0; i < n; i++) {
+            if (!tsc_array_index_present(a, (size_t)i0 + i)) tsc_array_mark_hole(r, i);
+        }
+    }
     return r;
 }
 
