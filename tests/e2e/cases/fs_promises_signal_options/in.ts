@@ -42,6 +42,9 @@ abortedController.abort("fs cancelled");
 readFile(tmpPath, { encoding: "utf8", signal: abortedController.signal }).catch((reason: any) => {
     console.log("aborted:", reason);
 });
+writeFile(tmpPath, "should not write\n", { signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted write:", reason);
+});
 
 setImmediate((): void => {
     console.log("seen:", seen);
