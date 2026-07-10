@@ -8,6 +8,13 @@ console.log("aborted:", controller.signal.aborted, controller.signal.reason);
 controller.abort("ignored");
 console.log("idempotent:", controller.signal.aborted, controller.signal.reason);
 
+try {
+    controller.signal.throwIfAborted();
+    console.log("unexpected throwIfAborted success");
+} catch (reason) {
+    console.log("throwIfAborted:", reason);
+}
+
 delay(25, "late", { signal: controller.signal }).then((_value: any) => {
     console.log("unexpected timer fulfillment");
 }).catch((reason: any) => {

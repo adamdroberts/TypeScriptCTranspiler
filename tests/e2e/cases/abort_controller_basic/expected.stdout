@@ -1,6 +1,7 @@
 initial: false undefined
 aborted: true cancelled
 idempotent: true cancelled
+throwIfAborted: cancelled
 immediate aborted: cancelled
 scheduler aborted: cancelled
 timer aborted: cancelled
