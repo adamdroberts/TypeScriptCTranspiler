@@ -40773,20 +40773,33 @@ class Emitter {
             case "setImmediate": {
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.setImmediate");
+                const signalValue = this.emitTimersPromisesSignal(options);
                 const optionSpecs: SequencedCallArg[] = [];
+                if (signalValue) optionSpecs.push({ value: signalValue, target: T_VALUE, node: options });
                 if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
                     optionSpecs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                 }
                 optionSpecs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
                 const valueNode = call.arguments[0];
                 if (!valueNode) {
-                    return this.emitSequencedExpr(mapped, optionSpecs, () => "tsc_promise_resolve(tsc_value_undefined())");
+                    return this.emitSequencedExpr(mapped, optionSpecs, (values) => {
+                        const signal = signalValue ? values[0]! : null;
+                        return signal
+                            ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : tsc_promise_resolve(tsc_value_undefined()))`
+                            : "tsc_promise_resolve(tsc_value_undefined())";
+                    });
                 }
                 const value = this.emitExpr(valueNode);
                 return this.emitSequencedExpr(mapped, [
                     { value, node: valueNode },
                     ...optionSpecs,
-                ], ([resolved]) => this.promiseResolveResult({ c: resolved!, ty: value.ty }, valueNode));
+                ], (values) => {
+                    const signal = signalValue ? values[1]! : null;
+                    const resolved = this.promiseResolveResult({ c: values[0]!, ty: value.ty }, valueNode);
+                    return signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolved})`
+                        : resolved;
+                });
             }
         }
         unsupported(call, `timers/promises.${name}`);
@@ -40800,6 +40813,7 @@ class Emitter {
                 const delay = call.arguments[0];
                 const options = call.arguments[1];
                 this.validateTimersPromisesOptions(options, "timers/promises.scheduler.wait");
+                const signalValue = this.emitTimersPromisesSignal(options);
                 const zeroDelay = !delay || this.isZeroDelayLiteral(delay);
                 if (zeroDelay) {
                     const specs: SequencedCallArg[] = [];
@@ -40809,11 +40823,18 @@ class Emitter {
                     if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
                         specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                     }
+                    const signalSpecIndex = specs.length;
+                    if (signalValue) specs.push({ value: signalValue, target: T_VALUE, node: options });
                     specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
                     return this.emitSequencedExpr(
                         mapped,
                         specs,
-                        () => "tsc_promise_resolve(tsc_value_undefined())",
+                        (values) => {
+                            const signal = signalValue ? values[signalSpecIndex]! : null;
+                            return signal
+                                ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : tsc_promise_resolve(tsc_value_undefined()))`
+                                : "tsc_promise_resolve(tsc_value_undefined())";
+                        },
                     );
                 }
 
@@ -40823,13 +40844,17 @@ class Emitter {
                 if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
                     specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
                 }
+                const signalSpecIndex = specs.length;
+                if (signalValue) specs.push({ value: signalValue, target: T_VALUE, node: options });
                 specs.push(...this.ignoredArgumentSpecs(call.arguments, 2));
-                return this.emitSequencedExpr(mapped, specs, ([delayVar]) => {
+                return this.emitSequencedExpr(mapped, specs, (args) => {
+                    const delayVar = args[0]!;
                     const callbackName = `tsc_timers_promises_scheduler_wait_${this.timersPromisesSchedulerWaitAdapters++}`;
                     const envType = `${callbackName}_env_t`;
 
                     this.structDecls.open(`typedef struct ${envType}`);
                     this.structDecls.line("tsc_promise_t* promise;");
+                    if (signalValue) this.structDecls.line("tsc_value_t signal;");
                     this.structDecls.close(` ${envType};`);
 
                     this.protos.line(`void ${callbackName}(void* env);`);
@@ -40843,7 +40868,10 @@ class Emitter {
 
                     const env = this.freshTemp("_schedulerWaitEnv");
                     const promiseVar = this.freshTemp("_promise");
-                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; tsc_set_timeout(${callbackName}, ${env}, ${delayVar!}); ${promiseVar}; })`;
+                    const signalVar = signalValue ? args[signalSpecIndex]! : null;
+                    const signalAssignment = signalValue ? `${env}->signal = ${signalVar}; ` : "";
+                    const signalRegistration = signalValue ? ` tsc_abort_signal_add_promise(${signalVar}, ${promiseVar});` : "";
+                    return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${signalAssignment}tsc_set_timeout(${callbackName}, ${env}, ${delayVar!});${signalRegistration} ${promiseVar}; })`;
                 });
             }
             case "yield": {
