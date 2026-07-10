@@ -41888,7 +41888,7 @@ class Emitter {
                     pushes.push(`if (${av}->len + 1 > ${av}->cap) tsc_array_reserve(${av}, ${av}->len + 1); TSC_ARR(${et.c}, ${av}, ${av}->len) = ${vv}; ${av}->len++`);
                 }
                 if (pushes.length > 0) {
-                    pieces.push(`if (${av}->extensible && !${av}->sealed && !${av}->frozen && ${av}->length_writable) { ${pushes.join("; ")}; }`);
+                    pieces.push(`if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push cannot mutate a sealed or frozen array")); else if (${av}->extensible && ${av}->length_writable) { ${pushes.join("; ")}; }`);
                 }
                 pieces.push(`(double)${av}->len`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
@@ -41904,7 +41904,7 @@ class Emitter {
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
                         `if (${av}->len > 0 && tsc_array_index_present(${av}, ${av}->len - 1)) ` +
                         `${rv} = TSC_ARR(${et.c}, ${av}, ${av}->len - 1); ` +
-                        `if (!${av}->sealed && !${av}->frozen && ${av}->length_writable) tsc_array_pop_raw(${av}); ${rv}; })`,
+                        `if (${av}->frozen || (${av}->sealed && ${av}->len > 0 && tsc_array_index_present(${av}, ${av}->len - 1))) tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop cannot mutate a sealed or frozen array")); else if (${av}->length_writable) tsc_array_pop_raw(${av}); ${rv}; })`,
                 );
             }
             case "shift": {

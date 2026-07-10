@@ -17,7 +17,8 @@ sealed desc: true false
 sealed set: true 10
 sealed new: false 2
 sealed delete: false 10
-sealed push: 2 10|2
+sealed push: Array.prototype.push cannot mutate a sealed or frozen array
+sealed pop: Array.prototype.pop cannot mutate a sealed or frozen array
 sealed fill: 5|5
 sealed define props failed: Object.defineProperties failed
 sealed define props: 2 6|5
@@ -27,7 +28,8 @@ frozen: false true true
 frozen desc: false false
 frozen set: false 3
 frozen delete: false 3
-frozen push: 2 3|4
+frozen push: Array.prototype.push cannot mutate a sealed or frozen array
+frozen pop: Array.prototype.pop cannot mutate a sealed or frozen array
 frozen fill: Array.prototype.fill cannot mutate a frozen array
 frozen copyWithin: Array.prototype.copyWithin cannot mutate a frozen array
 frozen reverse: Array.prototype.reverse cannot mutate a frozen array
