@@ -188,6 +188,20 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
     return tsc_value_undefined();
 }
 
+static tsc_value_t abort_signal_throw_if_aborted(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)env;
+    if (state && state->aborted) {
+        tsc_value_t reason = tsc_value_get_prop(
+            tsc_value_object(state->signal),
+            tsc_str_from_lit("reason", 6)
+        );
+        tsc_throw_str(tsc_value_to_string(reason));
+    }
+    return tsc_value_undefined();
+}
+
 tsc_value_t tsc_abort_controller_new(void) {
     tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)TSC_GC_MALLOC(sizeof(tsc_abort_controller_state_t));
     state->signal = tsc_object_new_class(state);
@@ -197,6 +211,16 @@ tsc_value_t tsc_abort_controller_new(void) {
     state->promise_cap = 0;
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(false));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), tsc_value_undefined());
+    tsc_object_set(
+        state->signal,
+        tsc_str_from_lit("throwIfAborted", 14),
+        tsc_value_function_generic_named(
+            abort_signal_throw_if_aborted,
+            state,
+            0.0,
+            tsc_str_from_lit("throwIfAborted", 14)
+        )
+    );
 
     tsc_object_t* controller = tsc_object_new();
     tsc_object_set(controller, tsc_str_from_lit("signal", 6), tsc_value_object(state->signal));
