@@ -2206,6 +2206,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `object_static_nullish_define_properties` | Object descriptor definition helpers reject static nullish targets after argument evaluation |
 | `primitive_object_methods` | Number/Boolean toString/toLocaleString/valueOf primitive methods |
 | `reflect_apply` | Reflect.apply over statically known function values and array/spread argument lists |
+| `reflect_first_class` | first-class Reflect identity and non-constructable built-in method metadata with dynamic dispatch |
 | `reflect_apply_validation` | dynamic Reflect.apply catchable target and argumentsList validation |
 | `reflect_arguments_array_like` | dynamic Reflect.apply and Reflect.construct object ArrayLike argumentsList values |
 | `reflect_arguments_function_array_like` | dynamic Reflect.apply and Reflect.construct function ArrayLike argumentsList values |

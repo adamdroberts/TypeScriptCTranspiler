@@ -3,4 +3,6 @@ get-has: 1 true true
 own: x 1
 set-delete: true 2 true false
 extensible: true true false
+metadata: apply 3 false get 2 false
+construct: Reflect.construct target is not a supported constructor
 apply: 5

@@ -12,4 +12,11 @@ function add(a: number, b: number): number {
 }
 
 const apply: any = r.apply;
+console.log("metadata:", apply.name, apply.length, Object.hasOwn(apply, "prototype"), r.get.name, r.get.length, Object.hasOwn(r.get, "prototype"));
+try {
+    Reflect.construct(apply, []);
+    console.log("construct:", "ok");
+} catch (err: any) {
+    console.log("construct:", err);
+}
 console.log("apply:", apply(add, undefined, [2, 3]));
