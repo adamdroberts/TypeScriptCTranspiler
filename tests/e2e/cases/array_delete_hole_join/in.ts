@@ -43,3 +43,6 @@ console.log("from holes:", Object.keys(fromHoles).join("|"), Object.hasOwn(fromH
 const iteratorValues = hofValues.values();
 const iteratorEntries = hofValues.entries();
 console.log("iter holes:", Object.keys(iteratorValues).join("|"), Object.hasOwn(iteratorValues, "1"), iteratorValues[1], iteratorEntries[1][0], iteratorEntries[1][1]);
+let forOfHoles = "";
+for (const value of hofValues) forOfHoles += String(value) + "|";
+console.log("for-of holes:", forOfHoles);
