@@ -22,8 +22,8 @@ emitter.emit("ready", "ok", 3);
 let onceValue = "";
 ready.then((args: any[]): string => {
     onceValue = String(args[0]) + ":" + String(args[1]);
+    console.log("once:", onceValue);
     return onceValue;
 });
-console.log("once:", onceValue);
 
 events.defaultMaxListeners = previous;
