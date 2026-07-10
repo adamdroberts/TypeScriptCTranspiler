@@ -41676,7 +41676,9 @@ class Emitter {
             return (
                 `({ tsc_array_t* const ${av} = ${arr}; tsc_str_t* _r = tsc_str_from_lit("", 0); ` +
                 `tsc_str_t* _s = ${sep}; for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); _r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`
+                `{ if (${iv} > 0) _r = tsc_str_concat(_r, _s); ` +
+                `if (tsc_array_index_present(${av}, ${iv})) ` +
+                `_r = tsc_str_concat(_r, ${stringify(`TSC_ARR(${et.c}, ${av}, ${iv})`)}); } _r; })`
             );
         };
         const emitForwardStartDecls = (len: string, from: string, out: string): string =>
@@ -48893,7 +48895,7 @@ class Emitter {
                     const out = this.freshTemp("_oak");
                     const idx = this.freshTemp("_oak_i");
                     const key = this.freshTemp("_oak_key");
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } ${out}; })`;
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len ? ${source}->len : 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } } ${out}; })`;
                 });
             }
             if (mapped.kind !== "class")
@@ -51180,7 +51182,9 @@ class Emitter {
                 `} else { ` +
                     `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
                         `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                        `if (tsc_str_eq(${keyC}, _idx_key)) { ${out} = !${arrC}->sealed && !${arrC}->frozen; break; } ` +
+                        `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
+                            `if (!${arrC}->sealed && !${arrC}->frozen) tsc_array_mark_hole(${arrC}, ${idx}); ` +
+                            `${out} = !${arrC}->sealed && !${arrC}->frozen; break; } ` +
                     `} ` +
                 `}`,
                 out,
