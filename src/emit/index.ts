@@ -38840,7 +38840,14 @@ class Emitter {
                 return this.emitSequencedExpr(mapped, specs, ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
             }
             case "on": {
-                unsupported(call, "events.on async iterator helper requires async iterator lowering");
+                if (args.length < 2) unsupported(call, "events.on expects emitter, eventName, and optional options");
+                const emitter = this.emitExpr(args[0]!);
+                const eventName = this.emitEventEmitterEventName(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
+                    { value: eventName, target: T_STRING, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([ee, event]) => `tsc_event_emitter_on_async_iterator(${ee}, ${event})`);
             }
             case "setMaxListeners": {
                 if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");

@@ -723,3 +723,97 @@ tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t
     }
     return promise;
 }
+
+typedef struct {
+    tsc_event_emitter_t* emitter;
+    tsc_str_t* event;
+    tsc_array_t* queued;
+    tsc_array_t* pending;
+    bool closed;
+} tsc_event_async_iterator_t;
+
+static tsc_value_t event_async_iterator_result(tsc_value_t value, bool done) {
+    tsc_object_t* result = tsc_object_new();
+    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    return tsc_value_object(result);
+}
+
+static void event_async_iterator_remove_first(tsc_array_t* values) {
+    if (!values || values->len == 0) return;
+    if (values->len > 1) {
+        memmove(values->data, (char*)values->data + values->es, (values->len - 1) * values->es);
+    }
+    values->len--;
+}
+
+static void event_async_iterator_resolve_pending(tsc_event_async_iterator_t* state, tsc_array_t* args) {
+    if (!state || state->pending->len == 0) return;
+    tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+    event_async_iterator_remove_first(state->pending);
+    tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_array(event_args_copy_as_values(args)), false));
+}
+
+static void event_async_iterator_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    (void)emitter;
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
+    if (!state || state->closed) return;
+    if (state->pending->len > 0) {
+        event_async_iterator_resolve_pending(state, args);
+        return;
+    }
+    tsc_array_t* copy = event_args_copy_as_values(args);
+    tsc_array_push_raw(state->queued, &copy);
+}
+
+static void event_async_iterator_close(tsc_event_async_iterator_t* state) {
+    if (!state || state->closed) return;
+    state->closed = true;
+    tsc_event_emitter_off(state->emitter, state->event, event_async_iterator_listener, state);
+    while (state->pending->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        event_async_iterator_remove_first(state->pending);
+        tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
+    }
+    state->queued->len = 0;
+}
+
+static tsc_value_t event_async_iterator_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
+    if (!state || state->closed) {
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+    }
+    if (state->queued->len > 0) {
+        tsc_array_t* values = TSC_ARR(tsc_array_t*, state->queued, 0);
+        event_async_iterator_remove_first(state->queued);
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_array(values), false)));
+    }
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_array_push_raw(state->pending, &promise);
+    return tsc_value_promise(promise);
+}
+
+static tsc_value_t event_async_iterator_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
+    event_async_iterator_close(state);
+    tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(value, true)));
+}
+
+tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str_t* event) {
+    if (!ee || !event) return tsc_value_undefined();
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_event_async_iterator_t));
+    state->emitter = ee;
+    state->event = event;
+    state->queued = tsc_array_new(sizeof(tsc_array_t*), 4);
+    state->pending = tsc_array_new(sizeof(tsc_promise_t*), 4);
+    state->closed = false;
+    tsc_object_t* iterator = tsc_object_new();
+    tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_generic_named(event_async_iterator_next, state, 0.0, tsc_str_from_lit("next", 4)));
+    tsc_object_set(iterator, tsc_str_from_lit("return", 6), tsc_value_function_generic_named(event_async_iterator_return, state, 0.0, tsc_str_from_lit("return", 6)));
+    tsc_event_emitter_on(ee, event, event_async_iterator_listener, state, state, false, false);
+    return tsc_value_object(iterator);
+}
