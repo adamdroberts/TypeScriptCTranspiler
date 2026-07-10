@@ -88,6 +88,12 @@ try {
     console.log("frozen copyWithin:", err);
 }
 try {
+    frozenMethods.reverse();
+    console.log("frozen reverse:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen reverse:", err);
+}
+try {
     frozenMethods.sort();
     console.log("frozen sort:", "unexpected success");
 } catch (err: any) {
