@@ -3283,7 +3283,10 @@ tsc_value_t tsc_value_method_copy_within(tsc_value_t recv, tsc_value_t target, t
     double e = value_slice_arg(end, len_num);
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (!a->frozen) tsc_array_copy_within(a, t, s, e);
+        if (a->frozen) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin cannot mutate a frozen array"));
+        }
+        tsc_array_copy_within(a, t, s, e);
     } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)len_num;
         size_t to = value_array_forward_start(len, t);
