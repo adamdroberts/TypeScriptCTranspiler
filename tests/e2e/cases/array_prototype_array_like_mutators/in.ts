@@ -8,3 +8,21 @@ console.log("unshift:", Reflect.apply(proto.unshift, like, ["z", "y"]), like.len
 
 const empty: any = { length: 0 };
 console.log("empty:", Reflect.apply(proto.pop, empty, []), Reflect.apply(proto.shift, empty, []), empty.length);
+
+const closed: any = { length: 0 };
+Object.preventExtensions(closed);
+try {
+    Reflect.apply(proto.push, closed, ["x"]);
+    console.log("closed push:", "unexpected success");
+} catch (err: any) {
+    console.log("closed push:", err);
+}
+
+const sealed: any = { 0: "a", length: 1 };
+Object.seal(sealed);
+try {
+    Reflect.apply(proto.pop, sealed, []);
+    console.log("sealed pop:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed pop:", err);
+}

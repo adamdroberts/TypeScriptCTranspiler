@@ -2813,13 +2813,19 @@ tsc_value_t tsc_value_method_pop(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)tsc_value_length(recv);
         if (len == 0) {
-            tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num(0.0));
+            if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num(0.0))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop could not update array-like length"));
+            }
             return tsc_value_undefined();
         }
         size_t last = len - 1;
         tsc_value_t value = tsc_value_get_index(recv, (double)last);
-        tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)last));
-        tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)last));
+        if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)last))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop could not delete array-like element"));
+        }
+        if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)last))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop could not update array-like length"));
+        }
         return value;
     }
     return tsc_value_undefined();
@@ -2834,9 +2840,12 @@ tsc_value_t tsc_value_method_push(tsc_value_t recv, tsc_value_t value) {
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t len = (size_t)tsc_value_length(recv);
-        if (tsc_value_set_index(recv, (double)len, value)) {
-            len++;
-            tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)len));
+        if (!tsc_value_set_index(recv, (double)len, value)) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.push could not add array-like element"));
+        }
+        len++;
+        if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)len))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.push could not update array-like length"));
         }
         return tsc_value_num((double)len);
     }
