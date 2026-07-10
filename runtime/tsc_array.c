@@ -1007,15 +1007,49 @@ void tsc_array_pop_raw(tsc_array_t* a) {
 
 void tsc_array_shift_raw(tsc_array_t* a) {
     if (a->len == 0) return;
+    tsc_object_t* shifted_holes = NULL;
+    if (a->holes && a->es == sizeof(tsc_value_t)) {
+        shifted_holes = tsc_object_new();
+        tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
+        for (size_t i = 0; i < keys->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            size_t index = 0;
+            if (tsc_str_array_index(key, &index) && index > 0 && index < a->len) {
+                (void)tsc_object_set(
+                    shifted_holes,
+                    tsc_str_from_int((int64_t)(index - 1)),
+                    tsc_value_bool(true)
+                );
+            }
+        }
+    }
     memmove(a->data, (char*)a->data + a->es, (a->len - 1) * a->es);
     a->len--;
+    a->holes = shifted_holes;
 }
 
 void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
+    tsc_object_t* shifted_holes = NULL;
+    if (a->holes && a->es == sizeof(tsc_value_t)) {
+        shifted_holes = tsc_object_new();
+        tsc_array_t* keys = tsc_object_own_keys_dyn(a->holes);
+        for (size_t i = 0; i < keys->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            size_t index = 0;
+            if (tsc_str_array_index(key, &index) && index < a->len) {
+                (void)tsc_object_set(
+                    shifted_holes,
+                    tsc_str_from_int((int64_t)(index + 1)),
+                    tsc_value_bool(true)
+                );
+            }
+        }
+    }
     if (a->len + 1 > a->cap) tsc_array_reserve(a, a->len + 1);
     memmove((char*)a->data + a->es, a->data, a->len * a->es);
     memcpy(a->data, elem, a->es);
     a->len++;
+    a->holes = shifted_holes;
 }
 
 tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
