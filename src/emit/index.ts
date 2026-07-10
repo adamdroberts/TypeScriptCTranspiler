@@ -50831,7 +50831,7 @@ class Emitter {
                 `} else { ` +
                     `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
                         `tsc_str_t* _idx_key = tsc_str_from_int((int64_t)${idx}); ` +
-                        `if (tsc_str_eq(${keyC}, _idx_key)) { ` +
+                        `if (tsc_str_eq(${keyC}, _idx_key) && tsc_array_index_present(${arrC}, ${idx})) { ` +
                             `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
                             `${out} = tsc_value_object(${elemDesc}); ` +
                             `break; ` +
@@ -50861,9 +50861,10 @@ class Emitter {
             const pieces = [
                 `tsc_object_t* ${out} = tsc_object_new()`,
                 `for (size_t ${idx} = 0; ${idx} < ${arrC}->len; ${idx}++) { ` +
+                    `if (tsc_array_index_present(${arrC}, ${idx})) { ` +
                     `tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); ` +
                     `${this.typedArrayDescriptorInit(elemDesc, elemValue, `!${arrC}->frozen`, "true", `!${arrC}->sealed && !${arrC}->frozen`)}; ` +
-                    `tsc_object_set(${out}, ${key}, tsc_value_object(${elemDesc})); ` +
+                    `tsc_object_set(${out}, ${key}, tsc_value_object(${elemDesc})); } ` +
                 `}`,
                 `{ ${this.typedArrayDescriptorInit(lenDesc, `tsc_value_num((double)${arrC}->len)`, `!${arrC}->frozen && ${arrC}->length_writable`, "false", "false")}; ` +
                     `tsc_object_set(${out}, tsc_str_from_lit("length", 6), tsc_value_object(${lenDesc})); }`,
