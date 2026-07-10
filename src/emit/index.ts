@@ -29506,6 +29506,9 @@ class Emitter {
 
         if (ts.isIdentifier(expr)) {
             // Built-in global identifiers.
+            if (this.isUnshadowedGlobalIdentifier(expr, "Array")) {
+                return { c: "tsc_array_constructor_value()", ty: T_VALUE };
+            }
             if (this.isUnshadowedGlobalIdentifier(expr, "eval")) {
                 return { c: "tsc_value_function_generic(tsc_builtin_eval, NULL)", ty: T_VALUE };
             }
@@ -32114,6 +32117,9 @@ class Emitter {
         }
         if (name === "Number") {
             return this.emitNumberConstructor(call);
+        }
+        if (name === "Array") {
+            return this.emitDynamicValueCall(call, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
         if (name === "Symbol") {
             return this.emitSymbolConstructor(call);
@@ -52667,6 +52673,9 @@ class Emitter {
                 { value: handler, target: T_VALUE, node: args[1]! },
                 ...this.ignoredArgumentSpecs(args, 2),
             ], ([t, h]) => `tsc_proxy_new(${t}, ${h})`);
+        }
+        if (ctorExpr.text === "Array" && this.isUnshadowedGlobalIdentifier(ctorExpr, "Array")) {
+            return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
         const cls = targetClassDecl?.name?.text ?? this.identifierName(ctorExpr);

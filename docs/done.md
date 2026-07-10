@@ -196,6 +196,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.hasOwnProperty(key, ...ignored)` / `.propertyIsEnumerable(key, ...ignored)` plus `Object.hasOwn(array, key)`, `Reflect.has(array, key)`, and the `in` operator check typed array indexes and the non-enumerable `length` own property. Direct inherited calls evaluate ignored extra arguments. Tests: `array_own_properties`, `array_object_method_ignored_arguments`
 - `Object.getOwnPropertyDescriptor(array, key)`, `Object.getOwnPropertyDescriptors(array)`, and `Reflect.getOwnPropertyDescriptor(array, key)` return typed array index and `length` data descriptors. Test: `array_property_descriptors`
 - `Array.from(string)` — returns an array of one-code-point strings via `tsc_str_chars`. Test: `array_from_string`
+- `Array(...items)` / `new Array(...items)` — first-class callable and constructable Array values with stable `Array.prototype.constructor` metadata; a single valid numeric argument creates a bounded dense array of `undefined` values. Test: `array_prototype_constructor`
 - `.indexOf(x, fromIndex?, ...ignored)`, `.lastIndexOf(x, fromIndex?, ...ignored)`, `.includes(x, fromIndex?, ...ignored)` — with proper per-element-type equality, SameValueZero `includes(NaN)` behavior, JS-style from-index clamping including explicit `undefined` positions, and ignored extra-argument evaluation. Tests: `array_last_index_of`, `array_search_from_index`, `array_includes_same_value_zero`, `array_read_ignored_arguments`
 - `.sort(cmp?, ...ignored)` / `.toSorted(cmp?, ...ignored)` — JS-style default string-conversion sort for omitted or explicit `undefined` comparators after evaluating ignored extra arguments; `toSorted` returns a sorted copy. Tests: `array_sort_default`, `array_to_sorted`, `array_sort_ignored_arguments`
 - `.sort((a, b) => cmp, ...ignored)` / `.toSorted((a, b) => cmp, ...ignored)` — inline insertion sort after evaluating ignored extra arguments; accepts inline expression-body and single-return block-body callbacks, named function references, and first-class closure comparator values. Tests: `wordcount`, `array_to_sorted`, `array_sort_ignored_arguments`
@@ -1219,6 +1220,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_keys_values` | Array.keys index arrays and Array.values shallow copies |
 | `array_last_index_of` | Array.lastIndexOf |
 | `array_of` | Array.of typed array construction |
+| `array_prototype_constructor` | callable/constructable Array value and Array.prototype.constructor metadata |
 | `array_own_properties` | typed array own-property checks |
 | `array_property_descriptors` | typed array Object/Reflect property descriptors |
 | `array_reduce_no_initial` | Array.reduce/reduceRight using the first/last element as the initial accumulator |
