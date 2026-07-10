@@ -18,7 +18,7 @@ This is the next item that most directly expands what programs can be written ag
 ## 2. Dependent phases
 
 - **Phase 6 — `async`/`await` + libuv event loop**
-  - Remaining work: suspend/resume `await` state-machine lowering, broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle and executor-resolved thenable/nested-promise subset, full async function edge cases, real timer signal handling, and future async I/O on top of libuv.
+  - Remaining work: suspend/resume `await` state-machine lowering, broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle and executor-resolved thenable/nested-promise subset, full async function edge cases, and future async I/O on top of libuv.
 
 - **Phase 7 remainder — ES language features**
   - Remaining work: general lazy generator state-machine lowering beyond the current bounded sequential subset, bidirectional `.next(value)` into arbitrary suspended `yield` expressions, `try` control flow across suspension points, `async function*`, broader iterator protocol edge cases including lazy generator-backed iterables beyond the narrow subset, and async iterables.
