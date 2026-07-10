@@ -121,3 +121,9 @@ Array.fromAsync([1], throwingMapper).catch((reason) => {
 Array.fromAsync([1], (_value) => new Promise<number>(() => {})).then((_values) => {
     console.log("async mapper pending should not run");
 });
+
+const sparseAsync: any[] = ["a", "b", "c"];
+delete sparseAsync[1];
+Array.fromAsync(sparseAsync, (value: any) => value === undefined ? "missing" : value).then((values) => {
+    console.log("async sparse:", values.join("|"));
+});

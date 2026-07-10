@@ -513,6 +513,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `Array.of(...sparseArray)` materializes deleted indexes as `undefined` in the result. Test: `array_delete_hole_join`
 - `Map.groupBy` passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `map_group_by`
 - `Object.groupBy` passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `object_group_by`
+- `Array.fromAsync` mapper callbacks receive `undefined` for deleted indexes in static sparse `any[]` sources. Test: `array_from_async`
 - `Object.prototype.isPrototypeOf.call(proto, value)` dispatches AOT over dynamic prototype chains including array and function targets, returns false for non-object receivers/values, and preserves ignored argument side effects. Tests: `object_prototype_is_prototype_of_call`, `object_prototype_is_prototype_of_arrays_functions`
 - `Object.prototype.hasOwnProperty.call(value, key)` and `Object.prototype.propertyIsEnumerable.call(value, key)` dispatch AOT over typed interface/class objects, dynamic objects, arrays, strings, Buffers, and primitive receivers while preserving ignored argument side effects. Test: `object_prototype_call`
 - `Object.prototype.hasOwnProperty.call(...)`, `propertyIsEnumerable.call(...)`, `isPrototypeOf.call(...)`, `toLocaleString.call(...)`, and `valueOf.call(...)` reject nullish dynamic receivers after evaluating arguments, while `Object.prototype.toString.call(...)` still returns `[object Null]` / `[object Undefined]`. Test: `object_prototype_nullish_call`
