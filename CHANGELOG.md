@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Fixed
 - Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`.
+- Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
