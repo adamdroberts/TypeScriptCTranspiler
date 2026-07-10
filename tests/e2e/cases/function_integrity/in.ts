@@ -21,6 +21,9 @@ function TypedDefine(this: any, value: number): void {}
 function TypedDelete(this: any): void {}
 function ZeroLength(this: any): void {}
 
+const ArrowValue: any = ((value: number): number => value) as any;
+const FunctionValue: any = (function NamedValue(value: number): number { return value; }) as any;
+
 const first: any = Stable as any;
 const second: any = Stable as any;
 const stableProto: any = { marker: "stable" };
@@ -34,6 +37,13 @@ const names: any = Object.getOwnPropertyNames(first);
 const ownKeys: any = Reflect.ownKeys(first);
 console.log("function length:", first.length, Reflect.get(first, "length"));
 console.log("function name:", first.name, Reflect.get(first, "name"));
+console.log("constructability:", Object.hasOwn(ArrowValue, "prototype"), Object.hasOwn(FunctionValue, "prototype"), Reflect.ownKeys(ArrowValue).join(","), Reflect.ownKeys(FunctionValue).join(","));
+try {
+    Reflect.construct(ArrowValue, []);
+    console.log("arrow construct:", "ok");
+} catch (err: any) {
+    console.log("arrow construct:", err);
+}
 console.log("function own:", Object.hasOwn(first, "length"), Object.hasOwn(first, "name"), Object.hasOwn(first, "prototype"), Object.keys(first).length, names.length, names[0], names[1], names[2], ownKeys.length, ownKeys[0], ownKeys[1], ownKeys[2]);
 console.log("length desc:", lengthDesc.value, lengthDesc.writable, lengthDesc.enumerable, lengthDesc.configurable);
 console.log("name desc:", nameDesc.value, nameDesc.writable, nameDesc.enumerable, nameDesc.configurable);

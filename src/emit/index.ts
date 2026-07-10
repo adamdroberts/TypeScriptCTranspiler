@@ -55082,7 +55082,7 @@ class Emitter {
                     );
                 }
                 case "function":
-                    return `tsc_value_function_generic_named(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
+                    return `${this.functionValueIsConstructable(node) ? "tsc_value_function_generic_named" : "tsc_value_function_closure_named"}(${this.ensureDynamicFunctionAdapter(node, r.ty)}, ${r.c}, ${(r.ty.params ?? []).length}.0, ${this.functionValueNameLiteral(node)})`;
                 case "class":
                     return this.classValueBoxExpression(r, node);
                 case "date":
@@ -55140,6 +55140,38 @@ class Emitter {
                 ? current.name.text
                 : "";
         return `tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)})`;
+    }
+
+    private functionValueIsConstructable(node: ts.Node): boolean {
+        let current = node;
+        while (
+            ts.isParenthesizedExpression(current) ||
+            ts.isAsExpression(current) ||
+            ts.isTypeAssertionExpression(current) ||
+            ts.isSatisfiesExpression(current) ||
+            ts.isNonNullExpression(current)
+        ) {
+            current = current.expression;
+        }
+        if (ts.isFunctionExpression(current) || ts.isFunctionDeclaration(current)) return true;
+        if (!ts.isIdentifier(current)) return false;
+        const symbol = this.checker.getSymbolAtLocation(current);
+        const declaration = symbol?.valueDeclaration ?? symbol?.declarations?.[0];
+        if (declaration && ts.isFunctionDeclaration(declaration)) return true;
+        if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer) {
+            let initializer: ts.Expression = declaration.initializer;
+            while (
+                ts.isParenthesizedExpression(initializer) ||
+                ts.isAsExpression(initializer) ||
+                ts.isTypeAssertionExpression(initializer) ||
+                ts.isSatisfiesExpression(initializer) ||
+                ts.isNonNullExpression(initializer)
+            ) {
+                initializer = initializer.expression;
+            }
+            return ts.isFunctionExpression(initializer);
+        }
+        return false;
     }
 
     private ensureDynamicFunctionAdapter(node: ts.Node, type: CType): string {
