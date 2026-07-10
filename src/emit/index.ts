@@ -53948,6 +53948,21 @@ class Emitter {
             return { c: moduleNsMember, ty };
         }
         const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        const isArrayPrototypeReceiver =
+            ts.isPropertyAccessExpression(ea.expression) &&
+            ts.isIdentifier(ea.expression.expression) &&
+            ea.expression.name.text === "prototype" &&
+            this.isUnshadowedGlobalIdentifier(ea.expression.expression, "Array");
+        if (
+            this.isSymbolIteratorExpression(ea.argumentExpression) &&
+            (recv.ty.kind === "value" || isArrayPrototypeReceiver)
+        ) {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: recv }],
+                () => "tsc_value_symbol_iterator_method_value()",
+            );
+        }
         if (recv.ty.kind === "array") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);

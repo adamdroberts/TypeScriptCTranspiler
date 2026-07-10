@@ -37,6 +37,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Dynamic array-like values now expose a first-class `[Symbol.iterator]` method value for detached calls and `Reflect.apply(...)`, with missing receivers rejected through the existing iterator error path. Test: `array_symbol_iterator_method`.
 - Async functions now preserve delayed settlement for no-`try` tail-position `return await pendingPromise` by adopting the source Promise directly. General await continuation/state-machine lowering remains deferred. Test: `async_await_tail_pending`.
 - Module-level `events.on(...)` now returns a bounded dynamic async-iterator surface with queued event tuples, pending Promise settlement, and `.return(...)` close behavior. Full `for await...of`, `AbortSignal`, and async-generator lowering remain deferred. Test: `event_emitter_on_async_iterator`.
 - Finite dynamic `require(...)` proofs now resolve static string `.concat(...)` specifiers from finite string argument alternatives into the AOT module graph. Test: `dynamic_require_static_string_concat`.

@@ -2201,6 +2201,21 @@ tsc_value_t tsc_value_symbol_iterator(tsc_value_t v) {
     return tsc_value_undefined();
 }
 
+static tsc_value_t tsc_value_symbol_iterator_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return tsc_value_symbol_iterator(this_arg);
+}
+
+tsc_value_t tsc_value_symbol_iterator_method_value(void) {
+    return tsc_value_function_generic_named(
+        tsc_value_symbol_iterator_method,
+        NULL,
+        0.0,
+        tsc_str_from_lit("[Symbol.iterator]", 17)
+    );
+}
+
 tsc_array_t* tsc_value_array_from_values(tsc_value_t v) {
     if (tsc_value_is_nullish(v)) {
         tsc_throw_str(tsc_str_from_cstr("Array.from source must not be null or undefined"));
