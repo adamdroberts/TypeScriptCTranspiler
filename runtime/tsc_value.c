@@ -2985,7 +2985,6 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     if (!value_is_box(recv)) return tsc_value_undefined();
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (a->sealed || a->frozen) return tsc_value_array(tsc_array_new(sizeof(tsc_value_t), 1));
         int64_t len = (int64_t)a->len;
         double start_num = value_slice_arg(start, 0.0);
         int64_t at = isnan(start_num) ? 0 : (int64_t)start_num;
@@ -3004,6 +3003,11 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
                 del = (int64_t)del_num;
                 if (del > len - at) del = len - at;
             }
+        }
+
+        size_t insert_len = items ? items->len : 0;
+        if ((a->sealed || a->frozen) && (del > 0 || insert_len > 0)) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice cannot mutate a sealed or frozen array"));
         }
 
         return tsc_value_array(tsc_array_splice(

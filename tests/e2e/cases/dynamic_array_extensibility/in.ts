@@ -72,6 +72,12 @@ try {
     console.log("sealed unshift:", err);
 }
 console.log("sealed fill:", sealedMethods.fill("q").join("|"));
+try {
+    sealedMethods.splice(0, 1);
+    console.log("sealed splice:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed splice:", err);
+}
 
 const frozenMethods: any = ["z", "a"];
 Object.freeze(frozenMethods);
@@ -116,6 +122,12 @@ try {
     console.log("frozen reverse:", "unexpected success");
 } catch (err: any) {
     console.log("frozen reverse:", err);
+}
+try {
+    frozenMethods.splice(0, 1);
+    console.log("frozen splice:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen splice:", err);
 }
 try {
     frozenMethods.sort();
