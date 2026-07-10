@@ -1756,6 +1756,18 @@ tsc_array_t* value_array_values(const tsc_array_t* src) {
     return out;
 }
 
+static tsc_array_t* value_array_iter_values(const tsc_array_t* src) {
+    tsc_array_materialize_all((tsc_array_t*)src);
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), src ? src->len : 1);
+    if (!src || src->es != sizeof(tsc_value_t)) return out;
+    tsc_value_t recv = tsc_value_array((tsc_array_t*)src);
+    for (size_t i = 0; i < src->len; i++) {
+        tsc_value_t value = tsc_value_get_index(recv, (double)i);
+        tsc_array_push_raw(out, &value);
+    }
+    return out;
+}
+
 tsc_array_t* value_array_entries(const tsc_array_t* src) {
     tsc_array_materialize_all((tsc_array_t*)src);
     size_t side_len = src && src->props ? src->props->len : 0;
@@ -1798,9 +1810,7 @@ static tsc_array_t* value_array_entries_numeric(const tsc_array_t* src) {
     for (size_t i = 0; i < src->len; i++) {
         tsc_array_t* pair = tsc_array_new(sizeof(tsc_value_t), 2);
         tsc_value_t key = tsc_value_num((double)i);
-        tsc_value_t value = src->props && src->props->len > 0
-            ? tsc_value_get_index(recv, (double)i)
-            : TSC_ARR(tsc_value_t, src, i);
+        tsc_value_t value = tsc_value_get_index(recv, (double)i);
         tsc_array_push_raw(pair, &key);
         tsc_array_push_raw(pair, &value);
         tsc_value_t boxed = tsc_value_array(pair);
@@ -2208,7 +2218,7 @@ double tsc_value_length(tsc_value_t v) {
 
 tsc_array_t* tsc_value_iter_values(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_values((const tsc_array_t*)value_ptr(v));
+        return value_array_iter_values((const tsc_array_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_values((const tsc_str_t*)value_ptr(v));
@@ -2252,7 +2262,7 @@ tsc_array_t* tsc_value_array_from_values(tsc_value_t v) {
         tsc_throw_str(tsc_str_from_cstr("Array.from source must not be null or undefined"));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_values((const tsc_array_t*)value_ptr(v));
+        return value_array_iter_values((const tsc_array_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_values((const tsc_str_t*)value_ptr(v));
@@ -2265,7 +2275,7 @@ tsc_array_t* tsc_value_collection_constructor_values(tsc_value_t v) {
         return tsc_array_new(sizeof(tsc_value_t), 1);
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
-        return value_array_values((const tsc_array_t*)value_ptr(v));
+        return value_array_iter_values((const tsc_array_t*)value_ptr(v));
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_STRING) {
         return value_string_values((const tsc_str_t*)value_ptr(v));
@@ -3329,7 +3339,7 @@ tsc_value_t tsc_value_method_values(tsc_value_t recv) {
             }
             return tsc_value_array(out);
         }
-        return tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
+        return tsc_value_array(value_array_iter_values(a));
     }
     if (value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
     size_t len = (size_t)tsc_value_length(recv);
