@@ -187,7 +187,11 @@ console.log("proxy function has missing:", Reflect.has(proxyHas, "missing"));
 
 const proxyDefineTarget: any = ProxyDefine as any;
 const proxyDefine: any = new Proxy(proxyDefineTarget, { defineProperty: trueDefine as any });
-console.log("proxy function define same:", Reflect.defineProperty(proxyDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }));
+try {
+    console.log("proxy function define same:", Reflect.defineProperty(proxyDefine, "length", { value: 1, writable: false, enumerable: false, configurable: false }));
+} catch (err: any) {
+    console.log("proxy function define same:", err);
+}
 try {
     console.log("proxy function define changed:", Reflect.defineProperty(proxyDefine, "length", { value: 9 }));
 } catch (err: any) {
