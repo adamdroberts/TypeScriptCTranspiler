@@ -46,6 +46,8 @@ tsc_value_t tsc_value_string(tsc_str_t* s);
 tsc_value_t tsc_value_object(tsc_object_t* o);
 tsc_value_t tsc_value_array(tsc_array_t* a);
 tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
+tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
+tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_value_t tsc_node_eval(tsc_str_t* source);
@@ -167,6 +169,25 @@ v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, 
 tsc_value_t callNodeFunction(void* rawEnv, tsc_value_t thisArg, tsc_array_t* args);
 void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
 
+tsc_value_t fromV8Function(v8::Isolate* isolate, v8::Local<v8::Function> function) {
+    NodeFunctionEnv* env = new NodeFunctionEnv();
+    env->fn.Reset(isolate, function);
+    v8::String::Utf8Value nameUtf8(isolate, function->GetName());
+    tsc_str_t* name = *nameUtf8 ? tsc_str_from_cstr(*nameUtf8) : tsc_str_from_lit("", 0);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    v8::Local<v8::Value> lengthValue;
+    double length = 0.0;
+    if (
+        function->Get(context, v8::String::NewFromUtf8Literal(isolate, "length")).ToLocal(&lengthValue) &&
+        lengthValue->IsNumber()
+    ) {
+        length = lengthValue->NumberValue(context).FromMaybe(0.0);
+    }
+    return function->IsConstructor()
+        ? tsc_value_function_generic_named(callNodeFunction, env, length, name)
+        : tsc_value_function_closure_named(callNodeFunction, env, length, name);
+}
+
 v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, tsc_value_t value) {
     if (!valueIsBox(value)) {
         double number;
@@ -220,9 +241,7 @@ tsc_value_t fromV8(v8::Isolate* isolate, v8::Local<v8::Value> value) {
         if (number.IsJust()) return tsc_value_num(number.FromJust());
     }
     if (value->IsFunction()) {
-        NodeFunctionEnv* env = new NodeFunctionEnv();
-        env->fn.Reset(isolate, v8::Local<v8::Function>::Cast(value));
-        return tsc_value_function_generic(callNodeFunction, env);
+        return fromV8Function(isolate, v8::Local<v8::Function>::Cast(value));
     }
     if (value->IsObject()) {
         v8::Local<v8::Object> object;
@@ -435,9 +454,7 @@ extern "C" tsc_value_t tsc_node_function(tsc_str_t* body) {
     if (!script->Run(context).ToLocal(&result) || !result->IsFunction()) {
         tsc_panic("embedded Node bridge: Function source did not produce a callable");
     }
-    NodeFunctionEnv* env = new NodeFunctionEnv();
-    env->fn.Reset(isolate, v8::Local<v8::Function>::Cast(result));
-    return tsc_value_function_generic(callNodeFunction, env);
+    return fromV8Function(isolate, v8::Local<v8::Function>::Cast(result));
 #endif
 }
 
