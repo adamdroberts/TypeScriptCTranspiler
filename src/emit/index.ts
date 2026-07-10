@@ -17486,7 +17486,11 @@ class Emitter {
         descriptor: ts.Expression,
     ): CommonJsDefinePropertyExport | null {
         const seen = new Set<string>();
-        const names = this.staticComputedPropertyExpressionTexts(key).filter((name) => {
+        const staticNames = this.staticComputedPropertyExpressionTexts(key);
+        const candidateNames = staticNames.length > 0
+            ? staticNames
+            : this.commonJsManifestExportNamesForFile(call.getSourceFile().fileName);
+        const names = candidateNames.filter((name) => {
             if (name === "__esModule" || seen.has(name)) return false;
             seen.add(name);
             return true;
@@ -17497,6 +17501,11 @@ class Emitter {
         const right = this.commonJsDefinePropertyExportDescriptorValue(descriptorObject);
         if (!right) return null;
         return { call, name: names[0]!, names, right };
+    }
+
+    private commonJsManifestExportNamesForFile(fileName: string): string[] {
+        const manifest = this.options.dynamicRequires;
+        return manifest ? dynamicRequireExportNamesForFile(manifest, fileName) : [];
     }
 
     private isCommonJsModuleExportsDefinePropertyValueCall(call: ts.CallExpression): boolean {
@@ -18967,12 +18976,14 @@ class Emitter {
         const value = this.emitExpr(assignment.right);
         const valueTmp = this.freshTemp("_cjsexp");
         buf.line(`${ty.c} ${valueTmp} = ${this.coerce(value, ty, assignment.right)};`);
-        if (assignment.names.length === 1) {
+        const key = assignment.call.arguments[1]!;
+        const usesManifestKey = this.staticComputedPropertyExpressionTexts(key).length === 0 &&
+            this.commonJsManifestExportNamesForFile(assignment.call.getSourceFile().fileName).length > 0;
+        if (assignment.names.length === 1 && !usesManifestKey) {
             const cName = this.commonJsDefinePropertyExportCName(assignment.call, assignment.name);
             buf.line(`${cName} = ${valueTmp};`);
             return;
         }
-        const key = assignment.call.arguments[1]!;
         const keyValue = this.emitExpr(key);
         const keyTmp = this.freshTemp("_cjsexp_key");
         buf.line(`tsc_str_t* ${keyTmp} = ${this.coerce(keyValue, T_STRING, key)};`);
@@ -19181,8 +19192,7 @@ class Emitter {
     }
 
     private commonJsManifestExportNames(expr: ts.ElementAccessExpression): string[] {
-        const manifest = this.options.dynamicRequires;
-        return manifest ? dynamicRequireExportNamesForFile(manifest, expr.getSourceFile().fileName) : [];
+        return this.commonJsManifestExportNamesForFile(expr.getSourceFile().fileName);
     }
 
     private commonJsExportUsesManifestKey(expr: ts.ElementAccessExpression): boolean {
