@@ -1,3 +1,5 @@
+methods next 0 false return 0 false
+construct Reflect.construct target is not a supported constructor
 first false one 2
 second false two
 closed true closed
