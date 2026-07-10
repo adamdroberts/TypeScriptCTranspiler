@@ -36475,10 +36475,14 @@ class Emitter {
             const initC = initial
                 ? `tsc_value_t ${acc} = ${initial}; size_t ${iv}_start = ${av}->len;`
                 : method === "reduce"
-                    ? `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value")); ` +
-                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, 0); size_t ${iv}_start = 1;`
-                    : `if (${av}->len == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value")); ` +
-                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${av}->len - 1); size_t ${iv}_start = ${av}->len - 1;`;
+                    ? `size_t ${iv}_start = 0; ` +
+                        `while (${iv}_start < ${av}->len && !tsc_array_index_present(${av}, ${iv}_start)) ${iv}_start++; ` +
+                        `if (${iv}_start == ${av}->len) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value")); ` +
+                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${iv}_start); ${iv}_start++;`
+                    : `size_t ${iv}_start = ${av}->len; ` +
+                        `while (${iv}_start > 0 && !tsc_array_index_present(${av}, ${iv}_start - 1)) ${iv}_start--; ` +
+                        `if (${iv}_start == 0) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value")); ` +
+                        `tsc_value_t ${acc} = TSC_ARR(tsc_value_t, ${av}, ${iv}_start - 1); ${iv}_start--;`;
             const loop = method === "reduce"
                 ? `for (size_t ${iv} = ${initial ? "0" : `${iv}_start`}; ${iv} < ${av}->len; ${iv}++) `
                 : `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) `;
