@@ -135,3 +135,13 @@ try {
 } catch (err: any) {
     console.log("frozen sort:", err);
 }
+
+const sealedSparse: any = [3, 1, 2];
+delete sealedSparse[1];
+Object.seal(sealedSparse);
+try {
+    sealedSparse.sort();
+    console.log("sealed sparse sort:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed sparse sort:", err);
+}
