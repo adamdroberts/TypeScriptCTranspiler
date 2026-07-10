@@ -15,3 +15,10 @@ const entries: any = Reflect.apply(proto.entries, text, []);
 console.log("iters:", keys.join("|"), values.join("|"), entries[2].join(":"));
 
 console.log("string-slice:", text.slice(1, 3));
+
+try {
+    Reflect.apply(proto.sort, text, []);
+    console.log("sort:", "unexpected success");
+} catch (err: any) {
+    console.log("sort:", err);
+}
