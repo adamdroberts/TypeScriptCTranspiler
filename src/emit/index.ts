@@ -36232,7 +36232,8 @@ class Emitter {
                 `${thisArgSetup}` +
                 `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                `{ ${bindings.join("; ")}; (void)(${body.c}); } (void)0; })`,
+                `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings.join("; ")}; ` +
+                `(void)(${body.c}); } } (void)0; })`,
             );
         }
         if (method === "map") {
@@ -36278,7 +36279,8 @@ class Emitter {
                 `${thisArgSetup}` +
                 `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                `{ ${bindings.join("; ")}; if (${cond}) { ${result} = true; break; } } ${result}; })`,
+                `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings.join("; ")}; ` +
+                `if (${cond}) { ${result} = true; break; } } } ${result}; })`,
             );
         }
         if (method === "every") {
@@ -36290,7 +36292,8 @@ class Emitter {
                 `${thisArgSetup}` +
                 `${ignoredSetup}` +
                 `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                `{ ${bindings.join("; ")}; if (!(${cond})) { ${result} = false; break; } } ${result}; })`,
+                `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings.join("; ")}; ` +
+                `if (!(${cond})) { ${result} = false; break; } } } ${result}; })`,
             );
         }
         if (method === "find") {
