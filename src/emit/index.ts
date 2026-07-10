@@ -34823,6 +34823,36 @@ class Emitter {
                 `tsc_array_t* ${av} = tsc_array_new(sizeof(${et.c}), ${Math.max(1, call.arguments.length)})`,
             ];
             for (const arg of call.arguments) {
+                if (ts.isSpreadElement(arg)) {
+                    const source = this.emitExpr(arg.expression);
+                    if (source.ty.kind === "value") {
+                        if (et.kind !== "value") unsupported(arg, "dynamic Array.of spread requires an any[] result");
+                        pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(${this.coerce(source, T_VALUE, arg.expression)}))`);
+                        continue;
+                    }
+                    if (source.ty.kind === "string") {
+                        if (et.kind !== "string") unsupported(arg, "string Array.of spread requires a string[] result");
+                        pieces.push(`tsc_array_append(${av}, tsc_str_chars(${source.c}))`);
+                        continue;
+                    }
+                    if (source.ty.kind !== "array" || !source.ty.elem) unsupported(arg, "Array.of spread expects an array, string, or dynamic iterable");
+                    const src = this.freshTemp("_array_of_spread_src");
+                    const idx = this.freshTemp("_array_of_spread_i");
+                    const value = this.freshTemp("_array_of_spread_value");
+                    const elem = source.ty.elem;
+                    if (sameCType(elem, et) && elem.kind !== "value") {
+                        pieces.push(`tsc_array_append(${av}, ${source.c})`);
+                    } else if (sameCType(elem, et) && et.kind === "value") {
+                        pieces.push(`tsc_array_append(${av}, tsc_value_iter_values(tsc_value_array(${source.c})))`);
+                    } else {
+                        const current = elem.kind === "value"
+                            ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
+                            : { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                        const coerced = this.coerce(current, et, arg.expression);
+                        pieces.push(`{ tsc_array_t* const ${src} = ${source.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { ${et.c} ${value} = ${coerced}; tsc_array_push_raw(${av}, &${value}); } }`);
+                    }
+                    continue;
+                }
                 const value = this.emitExpr(arg);
                 const tmp = this.freshTemp("_array_of_el");
                 pieces.push(`${et.c} ${tmp} = ${this.coerce(value, et, arg)}`);

@@ -28,6 +28,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Static sparse `any[]` `for...of` iteration now yields `undefined` for deleted indexes. Test: `array_delete_hole_join`.
 - Sparse array spread now materializes deleted indexes as `undefined` for static and dynamic array sources, and dynamic iterator values/entries use dense indexed reads. Test: `array_delete_hole_join`.
 - Sparse arrays passed through function-value, rest-parameter, and Reflect argument spread now pass `undefined` for deleted indexes. Test: `array_delete_hole_join`.
+- `Array.of(...sparseArray)` now materializes deleted indexes as `undefined` in the result. Test: `array_delete_hole_join`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
