@@ -19,3 +19,21 @@ console.log("undefined:", explicitRemoved.length, explicitUndefined.length, expl
 const sparse: any = { 0: "a", 2: "c", 4: "e", length: 5 };
 const sparseRemoved: any = Reflect.apply(proto.splice, sparse, [1, 3, "x"]);
 console.log("sparse:", sparseRemoved.join("|"), sparseRemoved.length, sparse.length, sparse[0], sparse[1], sparse[2], "3" in sparse, "4" in sparse);
+
+const sealed: any = { 0: "a", length: 1 };
+Object.seal(sealed);
+try {
+    Reflect.apply(proto.splice, sealed, [0, 1]);
+    console.log("sealed:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed:", err);
+}
+
+const closed: any = { length: 0 };
+Object.preventExtensions(closed);
+try {
+    Reflect.apply(proto.splice, closed, [0, 0, "x"]);
+    console.log("closed:", "unexpected success");
+} catch (err: any) {
+    console.log("closed:", err);
+}

@@ -3032,13 +3032,17 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
         for (size_t from = at + del; from < len; from++) {
             size_t to = from - shift;
             if (value_array_like_has_index(recv, from)) {
-                tsc_value_set_index(recv, (double)to, tsc_value_get_index(recv, (double)from));
-            } else {
-                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to));
+                if (!tsc_value_set_index(recv, (double)to, tsc_value_get_index(recv, (double)from))) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not move array-like element"));
+                }
+            } else if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not delete array-like element"));
             }
         }
         for (size_t i = new_len; i < len; i++) {
-            tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i));
+            if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not delete array-like element"));
+            }
         }
     } else if (insert_len > del) {
         size_t shift = insert_len - del;
@@ -3046,17 +3050,23 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
             size_t source = from - 1;
             size_t to = source + shift;
             if (value_array_like_has_index(recv, source)) {
-                tsc_value_set_index(recv, (double)to, tsc_value_get_index(recv, (double)source));
-            } else {
-                tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to));
+                if (!tsc_value_set_index(recv, (double)to, tsc_value_get_index(recv, (double)source))) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not move array-like element"));
+                }
+            } else if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)to))) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not delete array-like element"));
             }
         }
     }
 
     for (size_t i = 0; i < insert_len; i++) {
-        tsc_value_set_index(recv, (double)(at + i), TSC_ARR(tsc_value_t, items, i));
+        if (!tsc_value_set_index(recv, (double)(at + i), TSC_ARR(tsc_value_t, items, i))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not add array-like element"));
+        }
     }
-    tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)new_len));
+    if (!tsc_value_set_prop(recv, tsc_str_from_lit("length", 6), tsc_value_num((double)new_len))) {
+        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not update array-like length"));
+    }
     return tsc_value_array(removed);
 }
 
