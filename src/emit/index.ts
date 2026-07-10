@@ -42010,7 +42010,16 @@ class Emitter {
                 return this.emitSequencedExpr(
                     recv.ty,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) => `({ tsc_array_t* const ${av} = ${arr}; tsc_array_slice(${av}, 0, (double)${av}->len); })`,
+                    ([arr]) => {
+                        if (et.kind !== "value") return `({ tsc_array_t* const ${av} = ${arr}; tsc_array_slice(${av}, 0, (double)${av}->len); })`;
+                        const out = this.freshTemp("_values");
+                        const iv = this.freshTemp("_i");
+                        const value = this.freshTemp("_value");
+                        return `({ tsc_array_t* const ${av} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
+                            `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
+                            `tsc_value_t ${value} = tsc_array_index_present(${av}, ${iv}) ? TSC_ARR(tsc_value_t, ${av}, ${iv}) : tsc_value_undefined(); ` +
+                            `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
+                    },
                 );
             }
             case "entries": {
@@ -42027,7 +42036,9 @@ class Emitter {
                         `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${av}->len ? ${av}->len : 1); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
                         `${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${iv}); ` +
-                        `${this.objectEntrySet(entry, et, `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
+                        `${this.objectEntrySet(entry, et, et.kind === "value"
+                            ? `(tsc_array_index_present(${av}, ${iv}) ? TSC_ARR(${et.c}, ${av}, ${iv}) : tsc_value_undefined())`
+                            : `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
                         `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
                 );
             }

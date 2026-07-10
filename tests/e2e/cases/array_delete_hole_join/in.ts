@@ -40,3 +40,6 @@ console.log("hof holes:", forEachCalls, Object.keys(mappedHoles).join("|"), Obje
 const fromHoles: any[] = Array.from(hofValues);
 const fromMappedHoles: string[] = Array.from(hofValues, (value: any) => value === undefined ? "missing" : String(value));
 console.log("from holes:", Object.keys(fromHoles).join("|"), Object.hasOwn(fromHoles, "1"), fromHoles[1], fromMappedHoles.join("|"));
+const iteratorValues = hofValues.values();
+const iteratorEntries = hofValues.entries();
+console.log("iter holes:", Object.keys(iteratorValues).join("|"), Object.hasOwn(iteratorValues, "1"), iteratorValues[1], iteratorEntries[1][0], iteratorEntries[1][1]);
