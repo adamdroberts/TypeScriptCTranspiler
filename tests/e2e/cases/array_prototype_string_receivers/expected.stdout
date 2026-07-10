@@ -4,3 +4,4 @@ copy: true bc true acba
 iters: 0|1|2|3 a|b|c|a 2:c
 string-slice: bc
 sort: Array.prototype.sort cannot sort a string receiver
+mutators: Array.prototype.fill cannot mutate a string receiver Array.prototype.copyWithin cannot mutate a string receiver Array.prototype.reverse cannot mutate a string receiver Array.prototype.push cannot mutate a string receiver Array.prototype.pop cannot mutate a string receiver Array.prototype.shift cannot mutate a string receiver Array.prototype.unshift cannot mutate a string receiver Array.prototype.splice cannot mutate a string receiver

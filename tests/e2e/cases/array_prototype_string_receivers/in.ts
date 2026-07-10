@@ -22,3 +22,23 @@ try {
 } catch (err: any) {
     console.log("sort:", err);
 }
+
+function attemptMutation(method: any, args: any[]): any {
+    try {
+        return "unexpected success: " + String(Reflect.apply(method, text, args));
+    } catch (err: any) {
+        return String(err);
+    }
+}
+
+console.log(
+    "mutators:",
+    attemptMutation(proto.fill, ["x"]),
+    attemptMutation(proto.copyWithin, [0, 1]),
+    attemptMutation(proto.reverse, []),
+    attemptMutation(proto.push, ["x"]),
+    attemptMutation(proto.pop, []),
+    attemptMutation(proto.shift, []),
+    attemptMutation(proto.unshift, ["x"]),
+    attemptMutation(proto.splice, [0, 1])
+);
