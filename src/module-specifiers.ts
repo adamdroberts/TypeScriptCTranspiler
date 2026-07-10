@@ -129,6 +129,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (normalizeText.length > 0) return normalizeText;
             const repeatText = resolveStaticStringRepeatCall(node);
             if (repeatText.length > 0) return repeatText;
+            const padText = resolveStaticStringPadCall(node);
+            if (padText.length > 0) return padText;
             const rangeText = resolveStaticStringRangeCall(node);
             if (rangeText.length > 0) return rangeText;
             const replaceText = resolveStaticStringReplaceCall(node);
@@ -641,6 +643,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 if (value.length * count > 4096) return [];
                 out.push(value.repeat(count));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringPadCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "padStart" && method !== "padEnd") return [];
+        const values = resolve(callee.expression);
+        const lengths = resolveStaticIntegerKeys(call.arguments[0]!);
+        const fills = call.arguments.length === 1 ? [" "] : resolve(call.arguments[1]!);
+        if (values.length === 0 || lengths.length === 0 || fills.length === 0) return [];
+        if (lengths.some((length) => length < 0 || length > 4096)) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            for (const length of lengths) {
+                for (const fill of fills) {
+                    const padded = method === "padStart"
+                        ? value.padStart(length, fill)
+                        : value.padEnd(length, fill);
+                    if (padded.length > 4096) return [];
+                    out.push(padded);
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
             }
         }
         return dedupe(out);
