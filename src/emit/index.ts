@@ -42381,7 +42381,7 @@ class Emitter {
                     let next = 2;
                     const start = hasStart ? vals[next++]! : "0.0";
                     const end = hasEnd ? vals[next++]! : `(double)${arr}->len`;
-                    return `({ if (!${arr}->frozen) tsc_array_fill(${arr}, &(${et.c}){${vals[1]}}, ${start}, ${end}); ${arr}; })`;
+                    return `({ if (${arr}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.fill cannot mutate a frozen array")); tsc_array_fill(${arr}, &(${et.c}){${vals[1]}}, ${start}, ${end}); ${arr}; })`;
                 });
             }
             case "copyWithin": {
