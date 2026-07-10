@@ -123,7 +123,7 @@ static size_t array_proto_length(tsc_value_t receiver) {
 
 static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
-        return index < ((const tsc_array_t*)value_ptr(receiver))->len;
+        return tsc_array_index_present((const tsc_array_t*)value_ptr(receiver), index);
     }
     char key_buf[32];
     snprintf(key_buf, sizeof key_buf, "%zu", index);
@@ -805,6 +805,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->env = NULL;
         proto->lazy_next = NULL;
         proto->props = tsc_object_new();
+        proto->holes = NULL;
         proto->data = NULL;
         array_prototype_define_method(proto->props, "toString", 8, 0.0, array_prototype_to_string);
         array_prototype_define_method(proto->props, "toLocaleString", 14, 0.0, array_prototype_to_locale_string);
@@ -889,6 +890,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->env = NULL;
     a->lazy_next = NULL;
     a->props = tsc_object_new();
+    a->holes = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -912,6 +914,7 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->env = NULL;
     a->lazy_next = NULL;
     a->props = tsc_object_new();
+    a->holes = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;
     return a;
 }
@@ -943,11 +946,28 @@ bool tsc_str_array_index(const tsc_str_t* key, size_t* out) {
     return true;
 }
 
+bool tsc_array_index_present(const tsc_array_t* a, size_t index) {
+    if (!a || index >= a->len) return false;
+    if (!a->holes) return true;
+    return !tsc_object_has_own(a->holes, tsc_str_from_int((int64_t)index));
+}
+
+void tsc_array_mark_hole(tsc_array_t* a, size_t index) {
+    if (!a || index >= a->len) return;
+    if (!a->holes) a->holes = tsc_object_new();
+    (void)tsc_object_set(a->holes, tsc_str_from_int((int64_t)index), tsc_value_bool(true));
+}
+
+void tsc_array_clear_hole(tsc_array_t* a, size_t index) {
+    if (!a || !a->holes) return;
+    (void)tsc_object_delete(a->holes, tsc_str_from_int((int64_t)index));
+}
+
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a) return false;
     if (tsc_str_is_length_key(key)) return true;
     size_t idx = 0;
-    if (tsc_str_array_index(key, &idx) && idx < a->len) return true;
+    if (tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) return true;
     return a->props && tsc_object_has_own(a->props, key);
 }
 
@@ -957,7 +977,7 @@ bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t*
         return tsc_object_property_is_enumerable(a->props, key);
     }
     size_t idx = 0;
-    if (tsc_str_array_index(key, &idx) && idx < a->len) return true;
+    if (tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) return true;
     return a->props && tsc_object_property_is_enumerable(a->props, key);
 }
 
@@ -973,12 +993,16 @@ void tsc_array_reserve(tsc_array_t* a, size_t new_cap) {
 
 void tsc_array_push_raw(tsc_array_t* a, const void* elem) {
     if (a->len + 1 > a->cap) tsc_array_reserve(a, a->len + 1);
+    tsc_array_clear_hole(a, a->len);
     memcpy((char*)a->data + a->len * a->es, elem, a->es);
     a->len++;
 }
 
 void tsc_array_pop_raw(tsc_array_t* a) {
-    if (a->len > 0) a->len--;
+    if (a->len > 0) {
+        tsc_array_clear_hole(a, a->len - 1);
+        a->len--;
+    }
 }
 
 void tsc_array_shift_raw(tsc_array_t* a) {
