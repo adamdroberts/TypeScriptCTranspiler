@@ -125,6 +125,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (caseText.length > 0) return caseText;
             const trimText = resolveStaticStringTrimCall(node);
             if (trimText.length > 0) return trimText;
+            const normalizeText = resolveStaticStringNormalizeCall(node);
+            if (normalizeText.length > 0) return normalizeText;
             const rangeText = resolveStaticStringRangeCall(node);
             if (rangeText.length > 0) return rangeText;
             const replaceText = resolveStaticStringReplaceCall(node);
@@ -598,6 +600,29 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return value.trim();
             }
         }));
+    };
+
+    const resolveStaticStringNormalizeCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "normalize") return [];
+        const values = resolve(callee.expression);
+        if (values.length === 0) return [];
+        const formArg = call.arguments[0];
+        const forms = !formArg || isStaticUndefinedExpression(formArg)
+            ? ["NFC"]
+            : resolve(formArg);
+        if (forms.length === 0 || forms.some((form) => !["NFC", "NFD", "NFKC", "NFKD"].includes(form))) {
+            return [];
+        }
+        const out: string[] = [];
+        for (const value of values) {
+            for (const form of forms) {
+                out.push(value.normalize(form));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticStringRangeCall = (call: ts.CallExpression): string[] => {
