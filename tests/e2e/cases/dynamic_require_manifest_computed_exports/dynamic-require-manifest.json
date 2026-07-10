@@ -1,0 +1,6 @@
+{
+  "requires": ["./dynamic_export"],
+  "exports": {
+    "dynamic_export.ts": ["label"]
+  }
+}

@@ -4,6 +4,7 @@ import * as path from "node:path";
 export interface DynamicRequireManifest {
     specifiers: string[];
     byFile?: Record<string, string[]>;
+    exportNamesByFile?: Record<string, string[]>;
     baseDir?: string;
 }
 
@@ -20,7 +21,7 @@ export async function loadDynamicRequireManifest(
 ): Promise<DynamicRequireManifest> {
     if (!manifestPath) return emptyDynamicRequireManifest();
     const raw = await fs.readFile(manifestPath, "utf8");
-    const parsed = JSON.parse(raw) as { requires?: unknown };
+    const parsed = JSON.parse(raw) as { requires?: unknown; exports?: unknown };
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
         throw new Error("dynamic require manifest must be a JSON object");
     }
@@ -43,10 +44,41 @@ export async function loadDynamicRequireManifest(
         throw new Error("dynamic require manifest requires at least one specifier");
     }
     const byFile = manifestRequireSpecifiersByFile(parsed.requires);
+    const exportNamesByFile = manifestExportNamesByFile(parsed.exports);
     return {
         specifiers,
-        ...(byFile ? { byFile, baseDir: path.dirname(path.resolve(manifestPath)) } : {}),
+        ...((byFile || exportNamesByFile) ? { baseDir: path.dirname(path.resolve(manifestPath)) } : {}),
+        ...(byFile ? { byFile } : {}),
+        ...(exportNamesByFile ? { exportNamesByFile } : {}),
     };
+}
+
+function manifestExportNamesByFile(exports: unknown): Record<string, string[]> | null {
+    if (exports === undefined) return null;
+    if (!exports || typeof exports !== "object" || Array.isArray(exports)) {
+        throw new Error("dynamic require manifest exports must be an object map");
+    }
+    const byFile: Record<string, string[]> = {};
+    for (const [fileName, rawNames] of Object.entries(exports)) {
+        if (fileName.length === 0) {
+            throw new Error("dynamic require manifest export file keys must be non-empty strings");
+        }
+        if (!Array.isArray(rawNames) || rawNames.length === 0) {
+            throw new Error("dynamic require manifest export entries require at least one name");
+        }
+        const seen = new Set<string>();
+        const names: string[] = [];
+        for (const rawName of rawNames) {
+            if (typeof rawName !== "string" || rawName.length === 0) {
+                throw new Error("dynamic require manifest export names must be non-empty strings");
+            }
+            if (seen.has(rawName)) continue;
+            seen.add(rawName);
+            names.push(rawName);
+        }
+        byFile[fileName] = names;
+    }
+    return byFile;
 }
 
 function manifestRequireSpecifiers(requires: unknown): unknown[] | null {
@@ -94,6 +126,19 @@ export function dynamicRequireSpecifiersForFile(
     if (!manifest.byFile) return manifest.specifiers;
     const matched = dynamicRequireMappedSpecifiersForFile(manifest, fileName);
     return matched ?? [];
+}
+
+export function dynamicRequireExportNamesForFile(
+    manifest: DynamicRequireManifest,
+    fileName: string,
+): string[] {
+    if (!manifest.exportNamesByFile) return [];
+    const normalizedFile = canonicalManifestFilePath(fileName);
+    const baseDir = manifest.baseDir ?? process.cwd();
+    for (const [rawPattern, names] of Object.entries(manifest.exportNamesByFile)) {
+        if (normalizedFile === canonicalManifestFilePath(rawPattern, baseDir)) return names;
+    }
+    return [];
 }
 
 function dynamicRequireMappedSpecifiersForFile(
