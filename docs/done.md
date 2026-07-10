@@ -2291,7 +2291,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `proxy_revocable_reflect_ops` | revoked object Proxy values throw through Reflect helper paths |
 | `proxy_revocable_revoke_function` | Proxy.revocable revoke functions are idempotent and receiver-independent |
 | `proxy_handler_types` | Proxy handler validation accepts arrays and functions in addition to standard objects |
-| `proxy_ownkeys_result_validation` | Proxy ownKeys trap results must be arrays after ignored-argument evaluation and trap dispatch |
+| `proxy_ownkeys_result_validation` | Proxy ownKeys trap results must be array-like objects after ignored-argument evaluation and trap dispatch |
+| `proxy_ownkeys_array_like` | Proxy ownKeys accepts object array-like trap results for Reflect.ownKeys and Object.keys while preserving order and enumerability filtering |
 | `proxy_ownkeys_entry_validation` | Proxy ownKeys non-string entry validation after ignored-argument evaluation and trap dispatch |
 | `proxy_ownkeys_invariants` | Proxy ownKeys duplicate, non-configurable, and non-extensible target invariant checks after ignored-argument evaluation and trap dispatch |
 | `proxy_ownkeys_helper_ignored_arguments` | Object enumeration and Reflect.ownKeys on Proxy evaluate ignored arguments before ownKeys dispatch |

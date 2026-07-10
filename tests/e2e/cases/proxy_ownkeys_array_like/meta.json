@@ -1,0 +1,3 @@
+{
+  "description": "Proxy ownKeys accepts array-like object results for Reflect.ownKeys and Object.keys"
+}

@@ -1738,6 +1738,30 @@ static tsc_str_t* proxy_own_key_to_string(tsc_value_t v) {
     return tsc_str_from_lit("", 0);
 }
 
+static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_array_t* keys);
+
+static tsc_array_t* proxy_own_keys_result_to_list(const tsc_object_t* proxy, tsc_value_t result) {
+    if (
+        !value_is_box(result) ||
+        (
+            value_tag(result) != TSC_VALUE_TAG_ARRAY &&
+            value_tag(result) != TSC_VALUE_TAG_OBJECT &&
+            value_tag(result) != TSC_VALUE_TAG_FUNCTION
+        )
+    ) {
+        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap must return an array-like object"));
+    }
+    size_t length = (size_t)tsc_value_length(result);
+    tsc_array_t* keys = tsc_array_new(sizeof(tsc_str_t*), length ? length : 1);
+    for (size_t i = 0; i < length; i++) {
+        tsc_value_t item = tsc_value_get_index(result, (double)i);
+        tsc_str_t* key = proxy_own_key_to_string(item);
+        tsc_array_push_raw(keys, &key);
+    }
+    validate_proxy_own_keys_result(proxy, keys);
+    return keys;
+}
+
 static void validate_proxy_own_keys_result(const tsc_object_t* proxy, const tsc_array_t* keys) {
     if (!keys) return;
     for (size_t i = 0; i < keys->len; i++) {
@@ -1855,28 +1879,14 @@ tsc_array_t* tsc_object_keys_dyn(const tsc_object_t* o) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        if (value_is_box(res) && value_tag(res) == TSC_VALUE_TAG_ARRAY) {
-            tsc_array_t* arr = (tsc_array_t*)value_ptr(res);
-            tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), arr->len);
-            for (size_t i = 0; i < arr->len; i++) {
-                tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
-                tsc_str_t* key = proxy_own_key_to_string(v);
-                if (str_array_contains(result, key)) {
-                    tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap returned duplicate key"));
-                }
-                tsc_array_push_raw(result, &key);
-            }
-            validate_proxy_own_keys_result(o, result);
-            tsc_array_t* enumerable = tsc_array_new(sizeof(tsc_str_t*), result->len);
-            for (size_t i = 0; i < result->len; i++) {
-                tsc_str_t* key = TSC_ARR(tsc_str_t*, result, i);
-                if (!tsc_object_property_is_enumerable(o, key)) continue;
-                tsc_array_push_raw(enumerable, &key);
-            }
-            return enumerable;
+        tsc_array_t* result = proxy_own_keys_result_to_list(o, res);
+        tsc_array_t* enumerable = tsc_array_new(sizeof(tsc_str_t*), result->len);
+        for (size_t i = 0; i < result->len; i++) {
+            tsc_str_t* key = TSC_ARR(tsc_str_t*, result, i);
+            if (!tsc_object_property_is_enumerable(o, key)) continue;
+            tsc_array_push_raw(enumerable, &key);
         }
-        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap must return an array"));
-        return tsc_array_new(sizeof(tsc_str_t*), 1);
+        return enumerable;
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
     for (size_t i = 0; i < o->len; i++) {
@@ -1899,19 +1909,7 @@ tsc_array_t* tsc_object_own_keys_dyn(const tsc_object_t* o) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(args, o->proxy_target);
         tsc_value_t res = tsc_value_apply_function(trap, o->proxy_handler, tsc_value_array(args));
-        if (value_is_box(res) && value_tag(res) == TSC_VALUE_TAG_ARRAY) {
-            tsc_array_t* arr = (tsc_array_t*)value_ptr(res);
-            tsc_array_t* result = tsc_array_new(sizeof(tsc_str_t*), arr->len);
-            for (size_t i = 0; i < arr->len; i++) {
-                tsc_value_t v = TSC_ARR(tsc_value_t, arr, i);
-                tsc_str_t* key = proxy_own_key_to_string(v);
-                tsc_array_push_raw(result, &key);
-            }
-            validate_proxy_own_keys_result(o, result);
-            return result;
-        }
-        tsc_throw_str(tsc_str_from_cstr("Proxy ownKeys trap must return an array"));
-        return tsc_array_new(sizeof(tsc_str_t*), 1);
+        return proxy_own_keys_result_to_list(o, res);
     }
     tsc_array_t* a = tsc_array_new(sizeof(tsc_str_t*), o->len);
     for (size_t i = 0; i < o->len; i++) {
