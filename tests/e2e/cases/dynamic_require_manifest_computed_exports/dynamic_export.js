@@ -12,12 +12,12 @@ function descriptorsKey() {
 
 exports[exportKey()] = "manifest-backed";
 Object.defineProperty(exports, descriptorKey(), {
-    value: "seven",
+    value: 7,
     enumerable: true,
 });
 Object.defineProperties(exports, {
     [descriptorsKey()]: {
-        value: "many",
+        value: true,
         enumerable: true,
     },
 });
