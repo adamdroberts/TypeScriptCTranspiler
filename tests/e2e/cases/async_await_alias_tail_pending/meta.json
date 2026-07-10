@@ -1,0 +1,3 @@
+{
+  "description": "a direct const-await-return alias adopts a pending Promise"
+}

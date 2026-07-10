@@ -24431,8 +24431,18 @@ class Emitter {
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
             if (!fd.body) unsupported(fd, "function without body");
-            this.emitStmtList(this.defs, fd.body.statements);
-            this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
+            const directAwaitAlias = this.directAsyncAwaitReturnAlias(fd.body);
+            if (directAwaitAlias) {
+                const source = this.emitExpr(directAwaitAlias.expression);
+                if (this.prepareType(source.ty).kind === "promise") {
+                    this.defs.line(`return tsc_promise_adopt(${source.c});`);
+                } else {
+                    this.defs.line(`return ${this.promiseResolveResult(source, directAwaitAlias.expression)};`);
+                }
+            } else {
+                this.emitStmtList(this.defs, fd.body.statements);
+                this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
+            }
         } finally {
             if (thisType) this.functionThisStack.pop();
             this.cellScopes.pop();
@@ -24441,6 +24451,23 @@ class Emitter {
         }
         this.defs.close();
         this.defs.line();
+    }
+
+    private directAsyncAwaitReturnAlias(body: ts.Block): ts.AwaitExpression | null {
+        if (body.statements.length !== 2) return null;
+        const declaration = body.statements[0];
+        const result = body.statements[1];
+        if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
+        if (!(declaration.declarationList.flags & ts.NodeFlags.Const)) return null;
+        if (declaration.declarationList.declarations.length !== 1) return null;
+        const variable = declaration.declarationList.declarations[0]!;
+        if (!ts.isIdentifier(variable.name) || !variable.initializer || !ts.isAwaitExpression(variable.initializer)) {
+            return null;
+        }
+        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const variableSymbol = this.symbolForIdentifier(variable.name);
+        const resultSymbol = this.symbolForIdentifier(result.expression);
+        return variableSymbol && variableSymbol === resultSymbol ? variable.initializer : null;
     }
 
     private isAsyncDeclaration(node: ts.Node): boolean {
