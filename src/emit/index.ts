@@ -45758,11 +45758,14 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
                 if (d.ty.kind !== "string" && d.ty.kind !== "buffer") unsupported(args[1]!, "fs.promises.appendFile data must be string or Buffer");
+                const signalValue = this.fsSignalOptionValue(args[2]);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
                     optionSpecs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
                 }
-                optionSpecs.push(...this.fsSignalOptionSpecs(args[2]));
+                const signalSpecIndex = 2 + optionSpecs.length;
+                if (signalValue) optionSpecs.push({ value: signalValue, target: T_VALUE, node: args[2] });
+                else optionSpecs.push(...this.fsSignalOptionSpecs(args[2]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.appendFile path"),
                     { value: d, target: d.ty.kind === "buffer" ? T_BUFFER : T_STRING, node: args[1]! },
@@ -45773,7 +45776,11 @@ class Emitter {
                     const path = values[0]!;
                     const data = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
-                    return settle(`({ ${this.emitFsWriteFileCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode)}; tsc_promise_resolve(tsc_value_undefined()); })`);
+                    const append = `({ ${this.emitFsWriteFileCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode)}; tsc_promise_resolve(tsc_value_undefined()); })`;
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    return settle(signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${append})`
+                        : append);
                 });
             }
             case "readdir": {
