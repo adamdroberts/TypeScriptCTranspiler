@@ -228,7 +228,11 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
         return ident->code.getter(ident->env, this_arg);
     }
-    if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN) {
+    if (
+        ident->kind == TSC_FUNCTION_IDENTITY_GENERIC ||
+        ident->kind == TSC_FUNCTION_IDENTITY_CLOSURE ||
+        ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN
+    ) {
         return ident->code.generic(ident->env, this_arg, list);
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
