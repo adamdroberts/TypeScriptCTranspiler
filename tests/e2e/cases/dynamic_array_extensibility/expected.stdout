@@ -23,4 +23,4 @@ sealed fill: q|q
 frozen push: 2 z|a
 frozen pop: undefined z|a
 frozen fill: z|a
-frozen sort: z|a
+frozen sort: Array.prototype.sort cannot mutate a frozen array

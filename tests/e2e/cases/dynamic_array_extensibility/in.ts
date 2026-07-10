@@ -56,4 +56,9 @@ Object.freeze(frozenMethods);
 console.log("frozen push:", frozenMethods.push("x"), frozenMethods.join("|"));
 console.log("frozen pop:", frozenMethods.pop(), frozenMethods.join("|"));
 console.log("frozen fill:", frozenMethods.fill("q").join("|"));
-console.log("frozen sort:", frozenMethods.sort().join("|"));
+try {
+    frozenMethods.sort();
+    console.log("frozen sort:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen sort:", err);
+}
