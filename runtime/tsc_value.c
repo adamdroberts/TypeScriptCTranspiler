@@ -3110,7 +3110,9 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
     tsc_array_t* a = NULL;
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         a = (tsc_array_t*)value_ptr(recv);
-        if (a->frozen) return recv;
+        if (a->frozen) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array"));
+        }
         if (a->holes) {
             tsc_array_t* compact = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
             for (size_t i = 0; i < a->len; i++) {
