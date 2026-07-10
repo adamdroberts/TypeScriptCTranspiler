@@ -6,3 +6,4 @@ descriptors: 0|2|length false true
 reads: undefined -1 -1 true false
 pop hole: undefined 1 true
 shift hole: undefined 1 true last
+hof holes: 2 0|2 false 2 2|6 2 1|3 2 4 1 true 2 true 2

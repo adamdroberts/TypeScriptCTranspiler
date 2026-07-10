@@ -14,3 +14,26 @@ console.log("pop hole:", tailHole.pop(), tailHole.length, Object.hasOwn(tailHole
 const headHole: any[] = ["first", "last"];
 delete headHole[0];
 console.log("shift hole:", headHole.shift(), headHole.length, Object.hasOwn(headHole, "0"), headHole[0]);
+const hofValues: any[] = [1, 2, 3];
+delete hofValues[1];
+let forEachCalls = 0;
+let mapCalls = 0;
+let flatMapCalls = 0;
+let filterCalls = 0;
+function countForEach(_value: any): number { forEachCalls++; return forEachCalls; }
+function mapHole(value: any): any { mapCalls++; return value * 2; }
+function flatMapHole(value: any): any[] { flatMapCalls++; return [value * 2]; }
+function filterHole(value: any): boolean { filterCalls++; return value % 2 === 1; }
+function someHole(value: any): boolean { someCalls++; return value === 3; }
+function everyHole(value: any): boolean { everyCalls++; return value > 0; }
+hofValues.forEach(countForEach);
+const mappedHoles = hofValues.map(mapHole);
+const flatMappedHoles = hofValues.flatMap(flatMapHole);
+const filteredHoles = hofValues.filter(filterHole);
+const reducedHoles = hofValues.reduce((total: number, value: any) => total + Number(value), 0);
+const foundHoleIndex = hofValues.findIndex((value: any) => value === undefined);
+let someCalls = 0;
+let everyCalls = 0;
+const hasThree = hofValues.some(someHole);
+const allPositive = hofValues.every(everyHole);
+console.log("hof holes:", forEachCalls, Object.keys(mappedHoles).join("|"), Object.hasOwn(mappedHoles, "1"), mapCalls, flatMappedHoles.join("|"), flatMapCalls, filteredHoles.join("|"), filterCalls, reducedHoles, foundHoleIndex, hasThree, someCalls, allPositive, everyCalls);
