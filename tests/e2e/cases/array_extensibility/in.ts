@@ -112,6 +112,7 @@ report("frozen splice", (): any => frozen.splice(0, 1));
 report("frozen fill", (): any => frozen.fill(9).join("|"));
 report("frozen copyWithin", (): any => frozen.copyWithin(0, 1).join("|"));
 report("frozen reverse", (): any => frozen.reverse().join("|"));
+report("frozen sort", (): any => frozen.sort().join("|"));
 console.log(
     "frozen define same:",
     Reflect.defineProperty(frozen, "0", { value: 3, writable: false, enumerable: true, configurable: false }),

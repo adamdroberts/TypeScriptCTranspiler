@@ -42974,7 +42974,7 @@ class Emitter {
         return this.emitSequencedExpr(recv.ty, specs, ([arr]) =>
             `({ tsc_array_t* const ${av} = ${arr}; ` +
                 comparatorSetup +
-                `if (!${av}->frozen) { ` +
+                `if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array")); else { ` +
                 `${sortBody} } ${av}; })`,
         );
     }
