@@ -1,4 +1,5 @@
 aborted: fs cancelled
 aborted write: fs cancelled
+aborted append: fs cancelled
 seen: write;append;read;stat;lstat;realpath;readlink;mkdtemp;mkdir;rmdir;rm;
 read: signal ok|append ok
