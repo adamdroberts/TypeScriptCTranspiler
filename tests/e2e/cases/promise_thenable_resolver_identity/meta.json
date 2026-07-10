@@ -1,0 +1,3 @@
+{
+  "description": "thenable resolve and reject callbacks are callable non-constructable resolving functions"
+}

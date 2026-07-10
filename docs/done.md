@@ -1680,6 +1680,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_thenable_getter_edges` | Promise.resolve handles primitive passthrough plus throwing and non-callable dynamic then getters |
 | `promise_thenable_inherited_then` | Promise.resolve assimilates inherited dynamic then methods and getters |
 | `promise_thenable_recursive` | immediate dynamic thenables recursively assimilate settled nested thenables |
+| `promise_thenable_resolver_identity` | thenable resolve/reject callbacks are non-constructable length-one resolving functions without own prototype metadata |
 | `promise_thenable_resolver_call_apply` | dynamic thenable resolve and reject functions work through call/apply |
 | `promise_thenable_self_resolution` | dynamic thenables that resolve to themselves or create immediate cycles reject instead of recursing |
 | `promise_thenable_throw_after_settle` | dynamic thenable throws after settlement preserve the first settlement |

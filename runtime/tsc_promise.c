@@ -169,8 +169,8 @@ static void promise_thenable_job(void* env) {
     tsc_try_push(&eh);
     if (setjmp(eh.jb) == 0) {
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
-        tsc_value_t resolve = tsc_value_function_generic_arity(promise_thenable_resolve, state, 1.0);
-        tsc_value_t reject = tsc_value_function_generic_arity(promise_thenable_reject, state, 1.0);
+        tsc_value_t resolve = tsc_value_function_closure_named(promise_thenable_resolve, state, 1.0, tsc_str_from_lit("", 0));
+        tsc_value_t reject = tsc_value_function_closure_named(promise_thenable_reject, state, 1.0, tsc_str_from_lit("", 0));
         tsc_array_push_value(args, resolve);
         tsc_array_push_value(args, reject);
         (void)tsc_value_apply_function(state->then_fn, state->thenable, tsc_value_array(args));
