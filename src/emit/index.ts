@@ -53315,6 +53315,13 @@ class Emitter {
                 ...this.ignoredArgumentSpecs(args, 2),
             ], ([eventType]) => `tsc_event_new(${eventType}, ${cancelable})`);
         }
+        if (cls === "AbortController") {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                this.ignoredArgumentSpecs(n.arguments ?? [], 0),
+                () => "tsc_abort_controller_new()",
+            );
+        }
         if (cls === "Date") {
             const args = n.arguments ?? [];
             if (args.length === 0) return { c: "tsc_date_new_now()", ty: T_DATE };

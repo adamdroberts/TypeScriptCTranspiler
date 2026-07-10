@@ -157,6 +157,46 @@ static size_t g_timeout_len = 0;
 static size_t g_timeout_cap = 0;
 static double g_next_timer_id = 1.0;
 
+typedef struct {
+    tsc_object_t* signal;
+    bool aborted;
+} tsc_abort_controller_state_t;
+
+static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)env;
+    if (!state || state->aborted) return tsc_value_undefined();
+    state->aborted = true;
+    tsc_value_t reason = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(true));
+    tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), reason);
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_abort_controller_new(void) {
+    tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)TSC_GC_MALLOC(sizeof(tsc_abort_controller_state_t));
+    state->signal = tsc_object_new();
+    state->aborted = false;
+    tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(false));
+    tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), tsc_value_undefined());
+
+    tsc_object_t* controller = tsc_object_new();
+    tsc_object_set(controller, tsc_str_from_lit("signal", 6), tsc_value_object(state->signal));
+    tsc_object_set(
+        controller,
+        tsc_str_from_lit("abort", 5),
+        tsc_value_function_generic_named(
+            abort_controller_abort,
+            state,
+            0.0,
+            tsc_str_from_lit("abort", 5)
+        )
+    );
+    return tsc_value_object(controller);
+}
+
 /* Forward decls for helpers used across sections. */
 tsc_str_t* str_alloc(size_t len);
 tsc_str_t* str_from_base64_bytes(const uint8_t* data, size_t len);
