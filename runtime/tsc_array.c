@@ -166,6 +166,14 @@ static bool array_proto_is_string_receiver(tsc_value_t receiver) {
     return value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_STRING;
 }
 
+static void array_proto_reject_string_mutation(tsc_value_t receiver, const char* method) {
+    if (array_proto_is_string_receiver(receiver)) {
+        char message[128];
+        snprintf(message, sizeof message, "Array.prototype.%s cannot mutate a string receiver", method);
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+}
+
 static bool array_proto_is_empty_primitive_receiver(tsc_value_t receiver) {
     if (!value_is_box(receiver)) return true;
     tsc_value_tag_t tag = value_tag(receiver);
@@ -393,12 +401,14 @@ static tsc_value_t array_prototype_pop(void* env, tsc_value_t this_arg, tsc_arra
     (void)env;
     (void)args;
     array_prototype_require_receiver(this_arg, "pop");
+    array_proto_reject_string_mutation(this_arg, "pop");
     return tsc_value_method_pop(this_arg);
 }
 
 static tsc_value_t array_prototype_push(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "push");
+    array_proto_reject_string_mutation(this_arg, "push");
     size_t count = args ? args->len : 0;
     if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_num((double)count);
     for (size_t i = 0; i < count; i++) {
@@ -411,12 +421,14 @@ static tsc_value_t array_prototype_shift(void* env, tsc_value_t this_arg, tsc_ar
     (void)env;
     (void)args;
     array_prototype_require_receiver(this_arg, "shift");
+    array_proto_reject_string_mutation(this_arg, "shift");
     return tsc_value_method_shift(this_arg);
 }
 
 static tsc_value_t array_prototype_unshift(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "unshift");
+    array_proto_reject_string_mutation(this_arg, "unshift");
     size_t count = args ? args->len : 0;
     if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_num((double)count);
     for (size_t i = count; i > 0; i--) {
@@ -450,6 +462,7 @@ static tsc_value_t array_prototype_slice(void* env, tsc_value_t this_arg, tsc_ar
 static tsc_value_t array_prototype_fill(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "fill");
+    array_proto_reject_string_mutation(this_arg, "fill");
     if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
     return tsc_value_method_fill(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
 }
@@ -457,6 +470,7 @@ static tsc_value_t array_prototype_fill(void* env, tsc_value_t this_arg, tsc_arr
 static tsc_value_t array_prototype_copy_within(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "copyWithin");
+    array_proto_reject_string_mutation(this_arg, "copyWithin");
     if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
     return tsc_value_method_copy_within(this_arg, array_proto_arg(args, 0), array_proto_arg(args, 1), array_proto_arg(args, 2));
 }
@@ -464,6 +478,7 @@ static tsc_value_t array_prototype_copy_within(void* env, tsc_value_t this_arg, 
 static tsc_value_t array_prototype_splice(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "splice");
+    array_proto_reject_string_mutation(this_arg, "splice");
     if (array_proto_is_empty_primitive_receiver(this_arg)) return array_proto_empty_array();
     int argc = args && args->len <= (size_t)INT_MAX ? (int)args->len : INT_MAX;
     return tsc_value_method_splice(
@@ -539,6 +554,7 @@ static tsc_value_t array_prototype_reverse(void* env, tsc_value_t this_arg, tsc_
     (void)env;
     (void)args;
     array_prototype_require_receiver(this_arg, "reverse");
+    array_proto_reject_string_mutation(this_arg, "reverse");
     if (array_proto_is_empty_primitive_receiver(this_arg)) return this_arg;
     return tsc_value_method_reverse(this_arg);
 }
