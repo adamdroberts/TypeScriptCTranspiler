@@ -233,6 +233,28 @@ static tsc_value_t abort_signal_add_event_listener(void* env, tsc_value_t this_a
     return tsc_value_undefined();
 }
 
+static tsc_value_t abort_signal_remove_event_listener(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)env;
+    tsc_value_t type = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t listener = args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    if (!state || !tsc_str_eq(tsc_value_to_string(type), tsc_str_from_lit("abort", 5))) {
+        return tsc_value_undefined();
+    }
+    for (size_t i = 0; i < state->listener_len; i++) {
+        if (tsc_value_object_is(state->listeners[i], listener)) {
+            memmove(
+                state->listeners + i,
+                state->listeners + i + 1,
+                (state->listener_len - i - 1) * sizeof(tsc_value_t)
+            );
+            state->listener_len--;
+            break;
+        }
+    }
+    return tsc_value_undefined();
+}
+
 static tsc_value_t abort_signal_throw_if_aborted(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
@@ -277,6 +299,16 @@ tsc_value_t tsc_abort_controller_new(void) {
             state,
             2.0,
             tsc_str_from_lit("addEventListener", 16)
+        )
+    );
+    tsc_object_set(
+        state->signal,
+        tsc_str_from_lit("removeEventListener", 19),
+        tsc_value_function_generic_named(
+            abort_signal_remove_event_listener,
+            state,
+            2.0,
+            tsc_str_from_lit("removeEventListener", 19)
         )
     );
 

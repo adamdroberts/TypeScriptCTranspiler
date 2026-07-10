@@ -5,6 +5,11 @@ const controller: any = new AbortController();
 controller.signal.addEventListener("abort", (event: any) => {
     console.log("abort event:", event.type);
 });
+const removedListener = (_event: any) => {
+    console.log("unexpected removed event");
+};
+controller.signal.addEventListener("abort", removedListener);
+controller.signal.removeEventListener("abort", removedListener);
 console.log("initial:", controller.signal.aborted, controller.signal.reason);
 controller.abort("cancelled");
 console.log("aborted:", controller.signal.aborted, controller.signal.reason);
