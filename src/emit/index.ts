@@ -42059,7 +42059,7 @@ class Emitter {
                 return this.emitSequencedExpr(
                     recv.ty,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) => `({ tsc_array_t* const ${av} = ${arr}; if (!${av}->frozen) tsc_array_reverse(${av}); ${av}; })`,
+                    ([arr]) => `({ tsc_array_t* const ${av} = ${arr}; if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse cannot mutate a frozen array")); tsc_array_reverse(${av}); ${av}; })`,
                 );
             }
             case "toReversed": {
