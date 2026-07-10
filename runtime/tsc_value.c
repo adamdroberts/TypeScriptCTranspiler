@@ -3129,6 +3129,9 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
         if (a->frozen) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array"));
         }
+        if (a->sealed && a->holes) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot reorder a sealed sparse array"));
+        }
         if (a->holes) {
             tsc_array_t* compact = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
             for (size_t i = 0; i < a->len; i++) {

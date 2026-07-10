@@ -32,3 +32,4 @@ frozen copyWithin: Array.prototype.copyWithin cannot mutate a frozen array
 frozen reverse: Array.prototype.reverse cannot mutate a frozen array
 frozen splice: Array.prototype.splice cannot mutate a sealed or frozen array
 frozen sort: Array.prototype.sort cannot mutate a frozen array
+sealed sparse sort: Array.prototype.sort cannot reorder a sealed sparse array
