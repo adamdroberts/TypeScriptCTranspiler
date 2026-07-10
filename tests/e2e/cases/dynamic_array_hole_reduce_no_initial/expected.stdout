@@ -1,0 +1,3 @@
+reduce: 5 1
+reduceRight: 4 1
+empty: Array.reduce: empty array with no initial value
