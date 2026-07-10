@@ -40712,22 +40712,65 @@ class Emitter {
                     if (!valueNode) {
                         return this.emitSequencedExpr(mapped, [...specs, ...optionSpecs], (values) => {
                             const signal = signalValue ? values[specs.length]! : null;
-                            return signal
-                                ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : tsc_promise_resolve(tsc_value_undefined()))`
-                                : "tsc_promise_resolve(tsc_value_undefined())";
+                            const callbackName = `tsc_timers_promises_setTimeout_${this.timersPromisesSetTimeoutAdapters++}`;
+                            const envType = `${callbackName}_env_t`;
+                            this.structDecls.open(`typedef struct ${envType}`);
+                            this.structDecls.line("tsc_promise_t* promise;");
+                            if (signal) this.structDecls.line("tsc_value_t signal;");
+                            this.structDecls.close(` ${envType};`);
+                            this.protos.line(`void ${callbackName}(void* env);`);
+                            const buf = new CBuf();
+                            buf.open(`void ${callbackName}(void* env)`);
+                            buf.line(`${envType}* state = (${envType}*)env;`);
+                            buf.line("tsc_promise_fulfill_in_place(state->promise, tsc_value_undefined());");
+                            buf.close();
+                            this.closureDefs.write(buf.toString());
+                            const env = this.freshTemp("_timeoutEnv");
+                            const promiseVar = this.freshTemp("_promise");
+                            const timerRegistration = signal
+                                ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, 0.0); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_timeout(${signal}, _timeout_id);`
+                                : `tsc_set_timeout(${callbackName}, ${env}, 0.0);`;
+                            return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${timerRegistration} ${promiseVar}; })`;
                         });
                     }
                     const value = this.emitExpr(valueNode);
+                    const storedValueType = value.ty.kind !== "void" ? value.ty : T_VALUE;
                     return this.emitSequencedExpr(mapped, [
                         ...specs,
-                        { value, node: valueNode },
+                        { value, target: storedValueType, node: valueNode },
                         ...optionSpecs,
                     ], (values) => {
                         const signal = signalValue ? values[specs.length + 1]! : null;
-                        const resolved = this.promiseResolveResult({ c: values[specs.length]!, ty: value.ty }, valueNode);
-                        return signal
-                            ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolved})`
-                            : resolved;
+                        const callbackName = `tsc_timers_promises_setTimeout_${this.timersPromisesSetTimeoutAdapters++}`;
+                        const envType = `${callbackName}_env_t`;
+                        this.structDecls.open(`typedef struct ${envType}`);
+                        this.structDecls.line("tsc_promise_t* promise;");
+                        if (signal) this.structDecls.line("tsc_value_t signal;");
+                        this.structDecls.line(`${storedValueType.c} value;`);
+                        this.structDecls.close(` ${envType};`);
+                        this.protos.line(`void ${callbackName}(void* env);`);
+                        const buf = new CBuf();
+                        buf.open(`void ${callbackName}(void* env)`);
+                        buf.line(`${envType}* state = (${envType}*)env;`);
+                        const stored = this.prepareType(storedValueType);
+                        if (stored.kind === "promise") {
+                            buf.line("tsc_promise_adopt_into(state->promise, state->value);");
+                        } else if (stored.kind === "fsstats" || stored.kind === "buffer" || stored.kind === "array") {
+                            buf.line("tsc_promise_fulfill_in_place_ptr(state->promise, state->value);");
+                        } else {
+                            const fulfilled = this.coerce({ c: "state->value", ty: storedValueType }, T_VALUE, valueNode);
+                            buf.line(`tsc_promise_fulfill_in_place(state->promise, ${fulfilled});`);
+                        }
+                        buf.close();
+                        this.closureDefs.write(buf.toString());
+                        const env = this.freshTemp("_timeoutEnv");
+                        const promiseVar = this.freshTemp("_promise");
+                        const valueVar = values[specs.length]!;
+                        const signalAssignment = signal ? `${env}->signal = ${signal}; ` : "";
+                        const timerRegistration = signal
+                            ? `double _timeout_id = tsc_set_timeout(${callbackName}, ${env}, 0.0); tsc_abort_signal_add_promise(${signal}, ${promiseVar}); tsc_abort_signal_add_timeout(${signal}, _timeout_id);`
+                            : `tsc_set_timeout(${callbackName}, ${env}, 0.0);`;
+                        return `({ tsc_promise_t* ${promiseVar} = tsc_promise_pending(); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->promise = ${promiseVar}; ${env}->value = ${valueVar}; ${signalAssignment}${timerRegistration} ${promiseVar}; })`;
                     });
                 }
 
