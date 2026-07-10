@@ -1,5 +1,9 @@
 const badTarget: any = 1;
 const validTarget: any = { value: 1 };
+class Box {
+    constructor(public value: number) {}
+}
+const typedTarget = new Box(2);
 let trace = "";
 
 function proto(label: string, value: any): any {
@@ -36,8 +40,15 @@ try {
 } catch (e: any) {
     console.log("prevent target:", e);
 }
+
+try {
+    console.log("prevent primitive:", Reflect.preventExtensions(1));
+} catch (e: any) {
+    console.log("prevent primitive:", e);
+}
 console.log("trace:", trace);
 
 console.log("valid before:", Reflect.isExtensible(validTarget));
 console.log("valid prevent:", Reflect.preventExtensions(validTarget));
 console.log("valid after:", Reflect.isExtensible(validTarget));
+console.log("typed class:", Reflect.preventExtensions(typedTarget));
