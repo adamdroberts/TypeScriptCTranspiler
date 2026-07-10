@@ -1,5 +1,7 @@
 import { appendFile, lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, rmdir, stat, writeFile } from "node:fs/promises";
 
+declare const AbortController: { new(): any };
+
 const tmpPath = "/tmp/tsc2c-fs-promises-signal-options.txt";
 const dirPrefix = "/tmp/tsc2c-fs-promises-signal-options-dir-";
 const mkdirPath = "/tmp/tsc2c-fs-promises-signal-options-mkdir";
@@ -34,6 +36,12 @@ rmdir(rmdirPath, { signal: mark("rmdir") });
 mkdir(rmPath, { recursive: true });
 writeFile(rmPath + "/file.txt", "remove me");
 rm(rmPath, { recursive: true, force: true, signal: mark("rm") });
+
+const abortedController: any = new AbortController();
+abortedController.abort("fs cancelled");
+readFile(tmpPath, { encoding: "utf8", signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted:", reason);
+});
 
 setImmediate((): void => {
     console.log("seen:", seen);
