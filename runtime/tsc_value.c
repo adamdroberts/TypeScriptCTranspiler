@@ -86,25 +86,23 @@ void* tsc_value_as_class(tsc_value_t v) {
     return NULL;
 }
 
-tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
-    return tsc_value_function_generic_arity(fn, env, 0.0);
-}
-
-tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length) {
-    return tsc_value_function_generic_named(fn, env, length, tsc_str_from_lit("", 0));
-}
-
-tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
+static tsc_value_t tsc_value_function_named_kind(
+    tsc_generic_function_t fn,
+    void* env,
+    double length,
+    tsc_str_t* name,
+    tsc_function_identity_kind_t kind
+) {
     if (!name) name = tsc_str_from_lit("", 0);
     for (tsc_function_identity_t* cur = g_function_identities; cur; cur = cur->next) {
-        if (cur->kind == TSC_FUNCTION_IDENTITY_GENERIC && cur->code.generic == fn && cur->env == env) {
+        if (cur->kind == kind && cur->code.generic == fn && cur->env == env) {
             if (length > cur->length) cur->length = length;
             if ((!cur->name || cur->name->len == 0) && name->len > 0) cur->name = name;
             return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)cur);
         }
     }
     tsc_function_identity_t* id = (tsc_function_identity_t*)TSC_GC_MALLOC(sizeof(tsc_function_identity_t));
-    id->kind = TSC_FUNCTION_IDENTITY_GENERIC;
+    id->kind = kind;
     id->extensible = true;
     id->sealed = false;
     id->frozen = false;
@@ -119,6 +117,22 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
     id->next = g_function_identities;
     g_function_identities = id;
     return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)id);
+}
+
+tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env) {
+    return tsc_value_function_generic_arity(fn, env, 0.0);
+}
+
+tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length) {
+    return tsc_value_function_generic_named(fn, env, length, tsc_str_from_lit("", 0));
+}
+
+tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
+    return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_GENERIC);
+}
+
+tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name) {
+    return tsc_value_function_named_kind(fn, env, length, name, TSC_FUNCTION_IDENTITY_BUILTIN);
 }
 
 static bool value_is_callable_function(tsc_value_t v) {
@@ -202,7 +216,7 @@ tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_v
     if (ident->kind == TSC_FUNCTION_IDENTITY_GETTER) {
         return ident->code.getter(ident->env, this_arg);
     }
-    if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
+    if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC || ident->kind == TSC_FUNCTION_IDENTITY_BUILTIN) {
         return ident->code.generic(ident->env, this_arg, list);
     }
     if (ident->kind == TSC_FUNCTION_IDENTITY_EVENT_LISTENER) {
@@ -356,7 +370,7 @@ static tsc_value_t tsc_function_own_prototype(tsc_function_identity_t* ident, ts
 }
 
 static bool tsc_function_has_prototype_metadata(const tsc_function_identity_t* fn) {
-    return fn && fn->kind != TSC_FUNCTION_IDENTITY_GETTER && fn->kind != TSC_FUNCTION_IDENTITY_SETTER;
+    return fn && fn->kind == TSC_FUNCTION_IDENTITY_GENERIC;
 }
 
 static bool tsc_function_metadata_key(const tsc_function_identity_t* fn, const tsc_str_t* key) {
@@ -2208,7 +2222,7 @@ static tsc_value_t tsc_value_symbol_iterator_method(void* env, tsc_value_t this_
 }
 
 tsc_value_t tsc_value_symbol_iterator_method_value(void) {
-    return tsc_value_function_generic_named(
+    return tsc_value_function_builtin_named(
         tsc_value_symbol_iterator_method,
         NULL,
         0.0,
