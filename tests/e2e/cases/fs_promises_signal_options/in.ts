@@ -66,6 +66,9 @@ lstat(tmpPath, { signal: abortedController.signal }).catch((reason: any) => {
 mkdtemp(dirPrefix, { encoding: "utf8", signal: abortedController.signal }).catch((reason: any) => {
     console.log("aborted mkdtemp:", reason);
 });
+mkdir(mkdirPath + "-aborted", { signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted mkdir:", reason);
+});
 
 setImmediate((): void => {
     console.log("seen:", seen);
