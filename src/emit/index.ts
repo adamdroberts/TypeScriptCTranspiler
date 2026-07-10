@@ -50236,7 +50236,9 @@ class Emitter {
                 : items.ty.kind === "value"
                     ? `tsc_value_iter_values(${itemsExpr})`
                     : itemsExpr;
-            const itemExpr = `TSC_ARR(${t.c}, ${src}, ${iv})`;
+            const itemExpr = items.ty.kind === "array" && t.kind === "value"
+                ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
+                : `TSC_ARR(${t.c}, ${src}, ${iv})`;
 
             const cb = keyArg;
             const bindings: string[] = [];

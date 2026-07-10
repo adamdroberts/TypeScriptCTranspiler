@@ -54,3 +54,8 @@ const mapGroups = Object.groupBy(sourceMap, (entry, index) => {
 console.log("map front:", JSON.stringify(mapGroups.front));
 console.log("map large:", JSON.stringify(mapGroups.large));
 console.log("map small:", JSON.stringify(mapGroups.small));
+
+const sparseValues: any[] = ["present", "missing", "present-again"];
+delete sparseValues[1];
+const sparseGroups: any = Object.groupBy(sparseValues, (value: any) => value === undefined ? "missing" : "present");
+console.log("sparse array:", JSON.stringify(sparseGroups.missing), JSON.stringify(sparseGroups.present));
