@@ -2394,6 +2394,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_template_literal_numeric_type` | numeric and boolean literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_template_literal_primitive_type` | bigint, null, and undefined literal placeholders inside finite template-literal string type aliases provide AOT dynamic require alternatives |
 | `dynamic_require_manifest` | explicit dynamic require manifest compiles a non-finite `require(variable)` allow-list into the AOT graph and finite runtime dispatch |
+| `dynamic_require_manifest_computed_exports` | manifest-listed runtime-computed CommonJS export names compile to finite AOT dispatch with boxed storage for heterogeneous export value types |
 | `dynamic_require_manifest_affix` | dynamic require manifests filter file allow-list entries by static prefix/suffix proofs from non-finite specifier expressions |
 | `dynamic_require_manifest_invalid_root` | dynamic require manifests reject non-object top-level JSON values before reading `requires` |
 | `dynamic_require_manifest_by_file_exact` | dynamic require manifest by-file entries require exact normalized caller file paths |

@@ -18661,8 +18661,26 @@ class Emitter {
         return this.prepareType(functionType(params, ret, thisType ?? undefined));
     }
 
+    private isManifestBackedCommonJsExport(node: ts.Node): boolean {
+        if (ts.isElementAccessExpression(node)) {
+            return this.commonJsExportUsesManifestKey(node);
+        }
+        if (ts.isCallExpression(node)) {
+            const assignment = this.commonJsDefinePropertyExportForCallDeclaration(node);
+            const key = assignment?.call.arguments[1];
+            return !!key && this.staticComputedPropertyExpressionTexts(key).length === 0 &&
+                this.commonJsManifestExportNamesForFile(node.getSourceFile().fileName).length > 0;
+        }
+        if (ts.isPropertyAssignment(node)) {
+            const assignment = this.commonJsDefinePropertiesExportEntry(node);
+            return !!assignment?.key && this.staticComputedPropertyExpressionTexts(assignment.key).length === 0 &&
+                this.commonJsManifestExportNamesForFile(node.getSourceFile().fileName).length > 0;
+        }
+        return false;
+    }
+
     private commonJsExportedCType(node: ts.Node): CType {
-        if (ts.isSourceFile(node)) {
+        if (ts.isSourceFile(node) || this.isManifestBackedCommonJsExport(node)) {
             return T_VALUE;
         }
         let valueNode = this.commonJsExportValueNode(node);
@@ -19028,7 +19046,7 @@ class Emitter {
             : ts.isPropertyAssignment(assignment.entry)
                 ? this.emitExpr(assignment.entry.initializer)
             : unsupported(assignment.entry, "CommonJS Object.defineProperties export requires a value");
-        const ty = value.ty;
+        const ty = this.isManifestBackedCommonJsExport(assignment.entry) ? T_VALUE : value.ty;
         for (const name of names) {
             const cName = this.commonJsDefinePropertyExportCName(assignment.call, name);
             if (!this.commonJsExportGlobals.has(cName)) {
