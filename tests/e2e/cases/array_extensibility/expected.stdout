@@ -10,7 +10,7 @@ object define: true 3 7
 define props: true 3 11|2|33
 define props length: 2 11|2
 define props strings: 2 x|y
-delete typed: true 2 keep|drop
+delete typed: true 2 keep|
 seal identity: true
 sealed: false true false
 sealed desc: true false
