@@ -54190,6 +54190,17 @@ class Emitter {
                 }
             }
         }
+        const isStaticArrayPrototypeProperty =
+            ts.isPropertyAccessExpression(pa.expression) &&
+            ts.isIdentifier(pa.expression.expression) &&
+            pa.expression.name.text === "prototype" &&
+            this.isUnshadowedGlobalIdentifier(pa.expression.expression, "Array");
+        if (isStaticArrayPrototypeProperty && pa.name.text !== "length") {
+            return {
+                c: `tsc_value_get_prop(tsc_value_array(tsc_array_prototype()), tsc_str_from_lit("${escapeCString(pa.name.text)}", ${utf8ByteLen(pa.name.text)}))`,
+                ty: T_VALUE,
+            };
+        }
         const recv = precomputedReceiver ?? this.emitExpr(pa.expression);
         const isOpt = !!pa.questionDotToken;
         if (recv.ty.kind === "string" && pa.name.text === "length") {

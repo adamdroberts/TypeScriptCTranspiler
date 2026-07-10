@@ -1,4 +1,5 @@
 method: function 2 a b
 proto: function 2 a b
 identity: true true values
+named: map 1 A|B
 missing receiver: Array.prototype.values receiver is null or undefined
