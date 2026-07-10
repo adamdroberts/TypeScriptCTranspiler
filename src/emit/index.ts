@@ -49194,7 +49194,7 @@ class Emitter {
                     const idx = this.freshTemp("_apn_i");
                     const key = this.freshTemp("_apn_key");
                     const lenKey = this.freshTemp("_apn_len");
-                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len + 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } tsc_str_t* ${lenKey} = tsc_str_from_lit("length", 6); tsc_array_push_raw(${out}, &${lenKey}); ${out}; })`;
+                    return `({ tsc_array_t* const ${source} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), ${source}->len + 1); for (size_t ${idx} = 0; ${idx} < ${source}->len; ${idx}++) { if (tsc_array_index_present(${source}, ${idx})) { tsc_str_t* ${key} = tsc_str_from_int((int64_t)${idx}); tsc_array_push_raw(${out}, &${key}); } } tsc_str_t* ${lenKey} = tsc_str_from_lit("length", 6); tsc_array_push_raw(${out}, &${lenKey}); ${out}; })`;
                 });
             }
             if (mapped.kind === "function") {
