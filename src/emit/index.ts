@@ -59,6 +59,7 @@ import {
 } from "../native-addons";
 import {
     dynamicRequireManifestHasEntries,
+    dynamicRequireExportNamesForFile,
     dynamicRequireSpecifiersForFile,
     emptyDynamicRequireManifest,
     type DynamicRequireManifest,
@@ -18746,7 +18747,8 @@ class Emitter {
                 this.globalDecls.line(`static ${ty.c} ${cName};`);
             }
         }
-        const keyTmp = ts.isElementAccessExpression(assignment.left) && names.length > 1
+        const keyTmp = ts.isElementAccessExpression(assignment.left) &&
+            (names.length > 1 || this.commonJsExportUsesManifestKey(assignment.left))
             ? this.emitCommonJsExportKey(buf, assignment.left)
             : null;
         const value = this.emitExpr(assignment.right);
@@ -18770,7 +18772,8 @@ class Emitter {
                     this.globalDecls.line(`static ${ty.c} ${cName};`);
                 }
             }
-            const keyTmp = ts.isElementAccessExpression(left) && names.length > 1
+            const keyTmp = ts.isElementAccessExpression(left) &&
+                (names.length > 1 || this.commonJsExportUsesManifestKey(left))
                 ? this.emitCommonJsExportKey(buf, left)
                 : null;
             return { left, names, keyTmp };
@@ -18797,7 +18800,7 @@ class Emitter {
         valueTmp: string,
         keyTmp: string | null,
     ): void {
-        if (names.length === 1 || !keyTmp) {
+        if (!keyTmp) {
             const cName = this.commonJsExportCNameForName(left, names[0]!);
             buf.line(`${cName} = ${valueTmp};`);
             return;
@@ -18854,7 +18857,8 @@ class Emitter {
                 for (const left of assignment.exportLefts) {
                     const names = this.commonJsExportNames(left);
                     if (names.length === 0) unsupported(left, "unsupported CommonJS export assignment");
-                    const keyTmp = ts.isElementAccessExpression(left) && names.length > 1
+                    const keyTmp = ts.isElementAccessExpression(left) &&
+                        (names.length > 1 || this.commonJsExportUsesManifestKey(left))
                         ? this.emitCommonJsExportKey(buf, left)
                         : null;
                     for (const name of names) {
@@ -19163,18 +19167,27 @@ class Emitter {
         }
         if (ts.isElementAccessExpression(expr)) {
             const names = this.staticComputedPropertyExpressionTexts(expr.argumentExpression);
-            if (names.length === 0) return [];
             if (
                 ts.isIdentifier(expr.expression) &&
                 (expr.expression.text === "exports" || this.isCommonJsExportsAliasIdentifier(expr.expression))
             ) {
-                return names;
+                return names.length > 0 ? names : this.commonJsManifestExportNames(expr);
             }
             if (ts.isPropertyAccessExpression(expr.expression) && this.isModuleExportsAccess(expr.expression)) {
-                return names;
+                return names.length > 0 ? names : this.commonJsManifestExportNames(expr);
             }
         }
         return [];
+    }
+
+    private commonJsManifestExportNames(expr: ts.ElementAccessExpression): string[] {
+        const manifest = this.options.dynamicRequires;
+        return manifest ? dynamicRequireExportNamesForFile(manifest, expr.getSourceFile().fileName) : [];
+    }
+
+    private commonJsExportUsesManifestKey(expr: ts.ElementAccessExpression): boolean {
+        return this.staticComputedPropertyExpressionTexts(expr.argumentExpression).length === 0 &&
+            this.commonJsManifestExportNames(expr).length > 0;
     }
 
     private commonJsExportCNameForName(node: ts.Node, name: string): string {
