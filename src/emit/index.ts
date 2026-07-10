@@ -36349,7 +36349,8 @@ class Emitter {
             `${ignoredSetup}` +
             `tsc_array_t* ${dst} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-            `{ ${bindings.join("; ")}; if (${cond}) tsc_array_push_raw(${dst}, &${elem}); } ` +
+            `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings.join("; ")}; ` +
+            `if (${cond}) tsc_array_push_raw(${dst}, &${elem}); } } ` +
             `tsc_value_array(${dst}); })`,
         );
     }

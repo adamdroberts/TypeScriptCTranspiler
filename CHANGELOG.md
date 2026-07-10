@@ -11,6 +11,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Dynamic array `sort` and `toSorted` now sort present values while moving sparse holes to the end. Test: `dynamic_array_hole_sort`.
 - Dynamic array splice now reuses hole-preserving mutation logic for dynamic receivers. Test: `dynamic_array_hole_dynamic_splice`.
 - Dynamic array `map` now skips sparse source holes and preserves corresponding holes in the result. Test: `dynamic_array_hole_map`.
+- Dynamic array `filter` now skips sparse source holes before invoking callbacks. Test: `dynamic_array_hole_filter`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
