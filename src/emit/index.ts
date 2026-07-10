@@ -36484,7 +36484,8 @@ class Emitter {
                 : `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) `;
             return `({ tsc_array_t* const ${av} = tsc_value_as_array(${value}); ` +
                 `${initC} ${loop}` +
-                `{ ${bindings.join("; ")}; ${acc} = ${reduced}; } ${acc}; })`;
+                `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings.join("; ")}; ` +
+                `${acc} = ${reduced}; } } ${acc}; })`;
         });
     }
 
