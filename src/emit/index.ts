@@ -16918,7 +16918,11 @@ class Emitter {
                 unsupported(entry, "CommonJS Object.defineProperties exports require static descriptor properties");
             }
             const seen = new Set<string>();
-            const names = this.staticPropertyNames(entry.name).filter((name) => {
+            const staticNames = this.staticPropertyNames(entry.name);
+            const candidateNames = staticNames.length > 0
+                ? staticNames
+                : this.commonJsManifestExportNamesForFile(call.getSourceFile().fileName);
+            const names = candidateNames.filter((name) => {
                 if (name === "__esModule" || seen.has(name)) return false;
                 seen.add(name);
                 return true;
@@ -19034,7 +19038,10 @@ class Emitter {
         }
         const valueTmp = this.freshTemp("_cjsexp");
         buf.line(`${ty.c} ${valueTmp} = ${this.coerce(value, ty, valueNode)};`);
-        if (names.length === 1 || !assignment.key) {
+        const usesManifestKey = !!assignment.key &&
+            this.staticComputedPropertyExpressionTexts(assignment.key).length === 0 &&
+            this.commonJsManifestExportNamesForFile(assignment.call.getSourceFile().fileName).length > 0;
+        if (!assignment.key || (names.length === 1 && !usesManifestKey)) {
             for (const name of names) {
                 const cName = this.commonJsDefinePropertyExportCName(assignment.call, name);
                 buf.line(`${cName} = ${valueTmp};`);
