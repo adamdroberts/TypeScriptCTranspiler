@@ -1191,7 +1191,6 @@ int64_t array_range_index(double value, int64_t len, double fallback) {
 }
 
 tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count, int argc, const tsc_array_t* items) {
-    if (a->sealed || a->frozen || !a->length_writable) return tsc_array_new(a->es, 1);
     int64_t len = (int64_t)a->len;
     int64_t at = argc <= 0 ? 0 : array_range_index(start, len, 0.0);
     int64_t del = 0;
@@ -1205,6 +1204,10 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
     }
 
     size_t insert_len = items ? items->len : 0;
+    if ((a->sealed || a->frozen) && (del > 0 || insert_len > 0)) {
+        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice cannot mutate a sealed or frozen array"));
+    }
+    if (!a->length_writable) return tsc_array_new(a->es, 1);
     size_t new_len = a->len - (size_t)del + insert_len;
     if (new_len != a->len && !a->length_writable) return tsc_array_new(a->es, 1);
     if (new_len > a->len && !a->extensible) return tsc_array_new(a->es, 1);

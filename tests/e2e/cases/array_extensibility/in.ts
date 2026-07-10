@@ -83,6 +83,7 @@ report("sealed push", (): any => sealed.push(11));
 report("sealed pop", (): any => sealed.pop());
 report("sealed shift", (): any => sealed.shift());
 report("sealed unshift", (): any => sealed.unshift(11));
+report("sealed splice", (): any => sealed.splice(0, 1));
 console.log("sealed fill:", sealed.fill(5).join("|"));
 report("sealed define props failed", (): any => Object.defineProperties(sealed, {
     "0": { value: 6, writable: true, enumerable: true, configurable: false },
@@ -107,6 +108,7 @@ report("frozen push", (): any => frozen.push(5));
 report("frozen pop", (): any => frozen.pop());
 report("frozen shift", (): any => frozen.shift());
 report("frozen unshift", (): any => frozen.unshift(5));
+report("frozen splice", (): any => frozen.splice(0, 1));
 report("frozen fill", (): any => frozen.fill(9).join("|"));
 report("frozen copyWithin", (): any => frozen.copyWithin(0, 1).join("|"));
 report("frozen reverse", (): any => frozen.reverse().join("|"));
