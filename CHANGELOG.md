@@ -34,6 +34,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - CommonJS `require(...)` of whole `module.exports = Object.freeze` / `Object.seal` / `Object.preventExtensions` / `Object.setPrototypeOf` wrapper defaults now returns the emitted runtime object instead of a synthesized plain named-export object, preserving prototype and integrity state. Test: `node_modules_commonjs_module_exports_object_runtime_defaults`.
 
 ### Added
+- Finite dynamic `require(...)` proofs now resolve static string `.concat(...)` specifiers from finite string argument alternatives into the AOT module graph. Test: `dynamic_require_static_string_concat`.
 - Finite dynamic `require(...)` proofs now resolve static string `.charAt(...)` and in-range `.at(...)` specifiers for finite integer indexes into the AOT module graph. Test: `dynamic_require_static_string_index`.
 - Finite dynamic `require(...)` proofs now resolve static string `.padStart(...)` and `.padEnd(...)` specifiers for bounded finite integer targets and static fill strings into the AOT module graph. Test: `dynamic_require_static_string_padding`.
 - Finite dynamic `require(...)` proofs now resolve static string `.repeat(...)` specifiers for bounded finite integer counts into the AOT module graph. Test: `dynamic_require_static_string_repeat`.
