@@ -69,6 +69,12 @@ mkdtemp(dirPrefix, { encoding: "utf8", signal: abortedController.signal }).catch
 mkdir(mkdirPath + "-aborted", { signal: abortedController.signal }).catch((reason: any) => {
     console.log("aborted mkdir:", reason);
 });
+rm(rmPath, { recursive: true, force: true, signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted rm:", reason);
+});
+rmdir(rmdirPath, { signal: abortedController.signal }).catch((reason: any) => {
+    console.log("aborted rmdir:", reason);
+});
 
 setImmediate((): void => {
     console.log("seen:", seen);
