@@ -38848,13 +38848,21 @@ class Emitter {
             }
             case "on": {
                 if (args.length < 2) unsupported(call, "events.on expects emitter, eventName, and optional options");
+                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.on");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitEventEmitterEventName(args[1]!);
-                return this.emitSequencedExpr(T_VALUE, [
+                const specs: SequencedCallArg[] = [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
-                    ...this.ignoredArgumentSpecs(args, 2),
-                ], ([ee, event]) => `tsc_event_emitter_on_async_iterator(${ee}, ${event})`);
+                ];
+                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                    specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
+                }
+                specs.push(...optionSpecs);
+                specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
+                return this.emitSequencedExpr(T_VALUE, specs, ([ee, event]) =>
+                    `tsc_event_emitter_on_async_iterator(${ee}, ${event})`,
+                );
             }
             case "setMaxListeners": {
                 if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");
