@@ -17,10 +17,10 @@ frozen set: false 3
 frozen length: false 2
 frozen delete: false 3
 frozen define same: true false true false
-sealed push: 2 m|n
-sealed pop: undefined m|n
+sealed push: Array.prototype.push cannot mutate a sealed or frozen array
+sealed pop: Array.prototype.pop cannot mutate a sealed or frozen array
 sealed fill: q|q
-frozen push: 2 z|a
-frozen pop: undefined z|a
+frozen push: Array.prototype.push cannot mutate a sealed or frozen array
+frozen pop: Array.prototype.pop cannot mutate a sealed or frozen array
 frozen fill: z|a
 frozen sort: Array.prototype.sort cannot mutate a frozen array

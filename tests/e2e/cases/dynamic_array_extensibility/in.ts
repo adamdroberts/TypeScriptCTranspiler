@@ -47,14 +47,34 @@ console.log(
 
 const sealedMethods: any = ["m", "n"];
 Object.seal(sealedMethods);
-console.log("sealed push:", sealedMethods.push("x"), sealedMethods.join("|"));
-console.log("sealed pop:", sealedMethods.pop(), sealedMethods.join("|"));
+try {
+    sealedMethods.push("x");
+    console.log("sealed push:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed push:", err);
+}
+try {
+    sealedMethods.pop();
+    console.log("sealed pop:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed pop:", err);
+}
 console.log("sealed fill:", sealedMethods.fill("q").join("|"));
 
 const frozenMethods: any = ["z", "a"];
 Object.freeze(frozenMethods);
-console.log("frozen push:", frozenMethods.push("x"), frozenMethods.join("|"));
-console.log("frozen pop:", frozenMethods.pop(), frozenMethods.join("|"));
+try {
+    frozenMethods.push("x");
+    console.log("frozen push:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen push:", err);
+}
+try {
+    frozenMethods.pop();
+    console.log("frozen pop:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen pop:", err);
+}
 console.log("frozen fill:", frozenMethods.fill("q").join("|"));
 try {
     frozenMethods.sort();
