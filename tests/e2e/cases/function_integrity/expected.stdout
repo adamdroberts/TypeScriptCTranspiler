@@ -2,8 +2,8 @@ same boxed: true true
 function length: 2 2
 function name: Stable Stable
 function own: true true true 0 3 length name prototype 3 length name prototype
-length desc: 2 false false false
-name desc: Stable false false false
+length desc: 2 false false true
+name desc: Stable false false true
 prototype desc: true true false false true
 shared proto: stable
 shared extensible: false false
@@ -18,7 +18,7 @@ typed reflect proto: reflect
 typed reflect prevent: true true false
 typed function define: true true false 1
 typed function prototype define: true true
-typed function delete: false false true true true
+typed function delete: true true true false false
 function length samevalue: true false true
 function length samevalue object: Object.defineProperty failed
 seal before: false false
@@ -28,15 +28,15 @@ proxy length: 0 0
 proxy name: Proxied Proxied
 proxy seal: true true true
 proxy freeze: true true true
-proxy function get length: Proxy get trap cannot report different value for non-configurable non-writable key
-proxy function set length: Proxy set trap cannot report success changing non-configurable non-writable key
-proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report different value for non-configurable non-writable key
+proxy function get length: 9
+proxy function set length: true
+proxy function desc name: Proxy getOwnPropertyDescriptor trap cannot report configurable key as non-configurable
 proxy function keys missing: Proxy ownKeys trap result missing non-configurable key
 proxy function keys complete: 3
 proxy function keys extra: Proxy ownKeys trap result included extra key on non-extensible target
-proxy function has length: Proxy has trap cannot report false for non-configurable key
+proxy function has length: false
 proxy function has missing: false
-proxy function define same: true
-proxy function define changed: Proxy defineProperty trap cannot change non-configurable non-writable key
-proxy function delete length: Proxy deleteProperty trap cannot report deletion of non-configurable key
+proxy function define same: Proxy defineProperty trap cannot report configurable key as non-configurable
+proxy function define changed: true
+proxy function delete length: true
 proxy function delete missing: true
