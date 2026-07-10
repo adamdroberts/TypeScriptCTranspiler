@@ -32,6 +32,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `Map.groupBy` now passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `map_group_by`.
 - `Object.groupBy` now passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `object_group_by`.
 - `Array.fromAsync` mapper callbacks now receive `undefined` for deleted indexes in static sparse `any[]` sources. Test: `array_from_async`.
+- Dynamic Promise combinators now read sparse array indexes through array iteration semantics, resolving deleted indexes as `undefined`. Test: `promise_combinators_dynamic`.
 - Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.

@@ -56,3 +56,13 @@ Promise.allSettled(new Set<any>([Promise.resolve("set-done"), Promise.reject("se
     console.log("settled set dynamic:", first.status, first.value, second.status, second.reason, third.status, third.value);
     return items;
 });
+
+const sparse: any[] = ["a", "b", "c"];
+delete sparse[1];
+Promise.all(sparse).then((values: any[]) => {
+    console.log("all sparse:", JSON.stringify(values));
+});
+
+Promise.allSettled(sparse).then((items: any[]) => {
+    console.log("settled sparse:", JSON.stringify(items));
+});

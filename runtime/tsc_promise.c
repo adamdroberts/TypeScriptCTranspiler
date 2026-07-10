@@ -62,6 +62,13 @@ static bool promise_seen_contains(tsc_array_t* seen, tsc_value_t value) {
     return false;
 }
 
+static tsc_value_t promise_dynamic_item(const tsc_array_t* src, size_t index) {
+    if (!src || src->es != sizeof(tsc_value_t) || index >= src->len) {
+        return tsc_value_undefined();
+    }
+    return tsc_value_get_index(tsc_value_array((tsc_array_t*)src), (double)index);
+}
+
 void tsc_promise_trigger_callbacks(tsc_promise_t* p) {
     if (!p || !p->callbacks) return;
     for (size_t i = 0; i < p->callbacks_len; i++) {
@@ -272,7 +279,7 @@ tsc_promise_t* tsc_promise_all_dynamic(tsc_array_t* src) {
         tsc_array_push_raw(state->values, &value);
     }
     for (size_t i = 0; src && i < src->len; i++) {
-        tsc_promise_t* item = tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, src, i));
+        tsc_promise_t* item = tsc_promise_resolve_thenable(promise_dynamic_item(src, i));
         if (tsc_promise_is_rejected(item)) {
             state->settled = true;
             tsc_promise_reject_in_place(state->result, tsc_promise_reason(item));
@@ -325,7 +332,7 @@ tsc_promise_t* tsc_promise_race_dynamic(tsc_array_t* src) {
     state->result = tsc_promise_pending();
     state->settled = false;
     for (size_t i = 0; src && i < src->len; i++) {
-        tsc_promise_t* item = tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, src, i));
+        tsc_promise_t* item = tsc_promise_resolve_thenable(promise_dynamic_item(src, i));
         if (tsc_promise_is_pending(item)) {
             tsc_promise_race_dynamic_item_t* env = (tsc_promise_race_dynamic_item_t*)TSC_GC_MALLOC(sizeof(tsc_promise_race_dynamic_item_t));
             env->state = state;
@@ -395,7 +402,7 @@ tsc_promise_t* tsc_promise_any_dynamic(tsc_array_t* src) {
         tsc_array_push_raw(state->errors, &value);
     }
     for (size_t i = 0; src && i < src->len; i++) {
-        tsc_promise_t* item = tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, src, i));
+        tsc_promise_t* item = tsc_promise_resolve_thenable(promise_dynamic_item(src, i));
         if (tsc_promise_is_fulfilled(item)) {
             state->settled = true;
             tsc_promise_fulfill_in_place(state->result, tsc_promise_value(item));
@@ -468,7 +475,7 @@ tsc_promise_t* tsc_promise_all_settled_dynamic(tsc_array_t* src) {
         tsc_array_push_raw(state->values, &value);
     }
     for (size_t i = 0; src && i < src->len; i++) {
-        tsc_promise_t* item = tsc_promise_resolve_thenable(TSC_ARR(tsc_value_t, src, i));
+        tsc_promise_t* item = tsc_promise_resolve_thenable(promise_dynamic_item(src, i));
         if (tsc_promise_is_pending(item)) {
             tsc_promise_all_settled_dynamic_item_t* env = (tsc_promise_all_settled_dynamic_item_t*)TSC_GC_MALLOC(sizeof(tsc_promise_all_settled_dynamic_item_t));
             env->state = state;
