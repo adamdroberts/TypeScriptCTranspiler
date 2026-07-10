@@ -136,3 +136,10 @@ const smallEntries = entryBuckets.get("small");
 console.log("map-source front:", frontEntries === undefined ? "(none)" : joinEntries(frontEntries));
 console.log("map-source large:", largeEntries === undefined ? "(none)" : joinEntries(largeEntries));
 console.log("map-source small:", smallEntries === undefined ? "(none)" : joinEntries(smallEntries));
+
+const sparseValues: any[] = ["present", "missing", "present-again"];
+delete sparseValues[1];
+const sparseGroups: Map<string, any[]> = Map.groupBy(sparseValues, (value: any) => value === undefined ? "missing" : "present");
+const missingGroup = sparseGroups.get("missing");
+const presentGroup = sparseGroups.get("present");
+console.log("sparse array:", missingGroup === undefined ? "(none)" : missingGroup.length, presentGroup === undefined ? "(none)" : presentGroup.join("|"));
