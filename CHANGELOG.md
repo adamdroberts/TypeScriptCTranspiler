@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Array.prototype` builtin methods now expose standard `name` and `length` metadata and no synthetic constructable `prototype` property, while preserving their callable descriptors. Test: `array_prototype_value`.
 - `Array.prototype.length` now exposes the standard non-writable, non-enumerable, non-configurable zero-length descriptor and rejects later writes. Test: `array_prototype_value`.
 - Global and prototype `Array` now expose a stable callable/constructable constructor value, including `Array(...items)`, `new Array(...items)`, single numeric length construction, and `Array.prototype.constructor` metadata. Test: `array_prototype_constructor`.
 - Module-level `events.on(...)` now evaluates its supported optional `signal` value before creating the bounded async iterator; real AbortSignal cancellation remains deferred. Test: `event_emitter_on_options`.

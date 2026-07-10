@@ -83,6 +83,7 @@ typedef enum {
     TSC_FUNCTION_IDENTITY_EVENT_LISTENER,
     TSC_FUNCTION_IDENTITY_EVENT_RAW_LISTENER,
     TSC_FUNCTION_IDENTITY_GENERIC,
+    TSC_FUNCTION_IDENTITY_BUILTIN,
 } tsc_function_identity_kind_t;
 
 typedef struct tsc_function_identity {
@@ -378,6 +379,7 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
 tsc_value_t tsc_function_default_prototype(void);
 tsc_value_t tsc_value_function_generic_arity(tsc_generic_function_t fn, void* env, double length);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
+tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity);
 tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* env, void* identity, uint64_t order, bool once);
 bool str_lit_eq(const tsc_str_t* s, const char* lit);
