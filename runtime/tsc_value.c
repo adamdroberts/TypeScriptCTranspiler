@@ -3258,7 +3258,10 @@ tsc_value_t tsc_value_method_fill(tsc_value_t recv, tsc_value_t value, tsc_value
     double e = value_slice_arg(end, len);
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        if (!a->frozen) tsc_array_fill(a, &value, s, e);
+        if (a->frozen) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.fill cannot mutate a frozen array"));
+        }
+        tsc_array_fill(a, &value, s, e);
     } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         size_t from = value_array_forward_start((size_t)len, s);
         size_t to = value_array_forward_start((size_t)len, e);
