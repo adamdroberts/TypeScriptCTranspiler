@@ -7,6 +7,8 @@ function report(label: string, fn: () => any): void {
 }
 
 const direct: any = Proxy.revocable({ value: 1 }, {});
+console.log("metadata:", direct.revoke.name, direct.revoke.length, Object.hasOwn(direct.revoke, "prototype"));
+report("construct", (): any => Reflect.construct(direct.revoke, []));
 console.log("direct before:", direct.proxy.value);
 console.log("direct first:", direct.revoke("ignored"));
 console.log("direct second:", direct.revoke());

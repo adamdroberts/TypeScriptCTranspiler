@@ -2067,7 +2067,12 @@ tsc_value_t tsc_proxy_revocable(tsc_value_t target, tsc_value_t handler) {
 
     tsc_value_t* env = (tsc_value_t*)TSC_GC_MALLOC(sizeof(tsc_value_t));
     *env = proxy;
-    tsc_value_t revoke_fn = tsc_value_function_generic(tsc_proxy_revoke, env);
+    tsc_value_t revoke_fn = tsc_value_function_closure_named(
+        tsc_proxy_revoke,
+        env,
+        0.0,
+        tsc_str_from_lit("", 0)
+    );
     tsc_object_set(ret, tsc_str_from_lit("revoke", 6), revoke_fn);
 
     return tsc_value_object(ret);
