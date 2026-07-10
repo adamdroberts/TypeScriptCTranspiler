@@ -46100,7 +46100,10 @@ class Emitter {
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
-                optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
+                const signalValue = this.fsSignalOptionValue(args[1]);
+                const signalSpecIndex = 1 + optionSpecs.length;
+                if (signalValue) optionSpecs.push({ value: signalValue, target: T_VALUE, node: args[1] });
+                else optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     ...optionSpecs,
@@ -46109,7 +46112,11 @@ class Emitter {
                 ], (values) => {
                     const path = values[0]!;
                     const mode = values[1 + optionSpecs.length]!;
-                    return settle(`({ tsc_fs_mkdir_sync_opts(${path}, ${options.recursive ? "true" : "false"}, ${mode}); tsc_promise_resolve(tsc_value_undefined()); })`);
+                    const mkdir = `({ tsc_fs_mkdir_sync_opts(${path}, ${options.recursive ? "true" : "false"}, ${mode}); tsc_promise_resolve(tsc_value_undefined()); })`;
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    return settle(signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${mkdir})`
+                        : mkdir);
                 });
             }
             case "rm": {
