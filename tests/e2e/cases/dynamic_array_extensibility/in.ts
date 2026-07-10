@@ -59,6 +59,18 @@ try {
 } catch (err: any) {
     console.log("sealed pop:", err);
 }
+try {
+    sealedMethods.shift();
+    console.log("sealed shift:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed shift:", err);
+}
+try {
+    sealedMethods.unshift("x");
+    console.log("sealed unshift:", "unexpected success");
+} catch (err: any) {
+    console.log("sealed unshift:", err);
+}
 console.log("sealed fill:", sealedMethods.fill("q").join("|"));
 
 const frozenMethods: any = ["z", "a"];
@@ -74,6 +86,18 @@ try {
     console.log("frozen pop:", "unexpected success");
 } catch (err: any) {
     console.log("frozen pop:", err);
+}
+try {
+    frozenMethods.shift();
+    console.log("frozen shift:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen shift:", err);
+}
+try {
+    frozenMethods.unshift("x");
+    console.log("frozen unshift:", "unexpected success");
+} catch (err: any) {
+    console.log("frozen unshift:", err);
 }
 try {
     frozenMethods.fill("q");
