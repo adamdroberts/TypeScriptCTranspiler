@@ -3994,7 +3994,7 @@ static void reflect_define_method(tsc_object_t* reflect, const char* name, size_
     tsc_object_define(
         reflect,
         tsc_str_from_lit(name, len),
-        tsc_value_function_generic_named(fn, NULL, arity, tsc_str_from_lit(name, len)),
+        tsc_value_function_builtin_named(fn, NULL, arity, tsc_str_from_lit(name, len)),
         true,
         false,
         true
