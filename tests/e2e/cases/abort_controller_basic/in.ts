@@ -2,6 +2,9 @@ declare const AbortController: { new(): any };
 import { scheduler, setImmediate as immediate, setTimeout as delay } from "node:timers/promises";
 
 const controller: any = new AbortController();
+controller.signal.addEventListener("abort", (event: any) => {
+    console.log("abort event:", event.type);
+});
 console.log("initial:", controller.signal.aborted, controller.signal.reason);
 controller.abort("cancelled");
 console.log("aborted:", controller.signal.aborted, controller.signal.reason);

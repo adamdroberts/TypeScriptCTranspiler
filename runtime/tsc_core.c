@@ -163,6 +163,9 @@ typedef struct {
     tsc_promise_t** promises;
     size_t promise_len;
     size_t promise_cap;
+    tsc_value_t* listeners;
+    size_t listener_len;
+    size_t listener_cap;
 } tsc_abort_controller_state_t;
 
 static tsc_abort_controller_state_t* abort_signal_state(tsc_value_t signal) {
@@ -181,10 +184,52 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
         : tsc_value_string(tsc_str_from_lit("AbortError", 10));
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(true));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), reason);
+    tsc_object_t* event = tsc_object_new();
+    tsc_object_set(event, tsc_str_from_lit("type", 4), tsc_value_string(tsc_str_from_lit("abort", 5)));
+    tsc_object_set(event, tsc_str_from_lit("target", 6), tsc_value_object(state->signal));
+    tsc_array_t* event_args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_value_t event_value = tsc_value_object(event);
+    tsc_array_push_raw(event_args, &event_value);
+    for (size_t i = 0; i < state->listener_len; i++) {
+        if (tsc_value_is_callable(state->listeners[i])) {
+            (void)tsc_value_apply_function(
+                state->listeners[i],
+                tsc_value_object(state->signal),
+                tsc_value_array(event_args)
+            );
+        }
+    }
+    state->listener_len = 0;
     for (size_t i = 0; i < state->promise_len; i++) {
         tsc_promise_reject_in_place(state->promises[i], reason);
     }
     state->promise_len = 0;
+    return tsc_value_undefined();
+}
+
+static tsc_value_t abort_signal_add_event_listener(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)env;
+    tsc_value_t type = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t listener = args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    if (!state || !tsc_str_eq(tsc_value_to_string(type), tsc_str_from_lit("abort", 5)) || !tsc_value_is_callable(listener)) {
+        return tsc_value_undefined();
+    }
+    if (state->aborted) {
+        tsc_object_t* event = tsc_object_new();
+        tsc_object_set(event, tsc_str_from_lit("type", 4), tsc_value_string(tsc_str_from_lit("abort", 5)));
+        tsc_array_t* event_args = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_value_t event_value = tsc_value_object(event);
+        tsc_array_push_raw(event_args, &event_value);
+        (void)tsc_value_apply_function(listener, tsc_value_object(state->signal), tsc_value_array(event_args));
+        return tsc_value_undefined();
+    }
+    if (state->listener_len == state->listener_cap) {
+        size_t next = state->listener_cap ? state->listener_cap * 2 : 4;
+        state->listeners = (tsc_value_t*)TSC_GC_REALLOC(state->listeners, next * sizeof(tsc_value_t));
+        state->listener_cap = next;
+    }
+    state->listeners[state->listener_len++] = listener;
     return tsc_value_undefined();
 }
 
@@ -209,6 +254,9 @@ tsc_value_t tsc_abort_controller_new(void) {
     state->promises = NULL;
     state->promise_len = 0;
     state->promise_cap = 0;
+    state->listeners = NULL;
+    state->listener_len = 0;
+    state->listener_cap = 0;
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(false));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), tsc_value_undefined());
     tsc_object_set(
@@ -219,6 +267,16 @@ tsc_value_t tsc_abort_controller_new(void) {
             state,
             0.0,
             tsc_str_from_lit("throwIfAborted", 14)
+        )
+    );
+    tsc_object_set(
+        state->signal,
+        tsc_str_from_lit("addEventListener", 16),
+        tsc_value_function_generic_named(
+            abort_signal_add_event_listener,
+            state,
+            2.0,
+            tsc_str_from_lit("addEventListener", 16)
         )
     );
 
