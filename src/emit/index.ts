@@ -33154,7 +33154,9 @@ class Emitter {
                     const idx = this.freshTemp("_spread_args_i");
                     const value = this.freshTemp("_spread_args_value");
                     const elem = r.ty.elem!;
-                    const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                    const current = elem.kind === "value"
+                        ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
+                        : { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
                     pieces.push(
                         `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${this.coerce(current, T_VALUE, arg.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
                     );
@@ -33888,7 +33890,9 @@ class Emitter {
                 const iv = this.freshTemp("_si");
                 const vv = this.freshTemp("_sv");
                 const item: EmitResult = {
-                    c: `TSC_ARR(${r.ty.elem.c}, ${sv}, ${iv})`,
+                    c: r.ty.elem.kind === "value"
+                        ? `(tsc_array_index_present(${sv}, ${iv}) ? TSC_ARR(${r.ty.elem.c}, ${sv}, ${iv}) : tsc_value_undefined())`
+                        : `TSC_ARR(${r.ty.elem.c}, ${sv}, ${iv})`,
                     ty: r.ty.elem,
                 };
                 steps.push(`tsc_array_t* ${sv} = ${r.c}`);
@@ -51664,7 +51668,9 @@ class Emitter {
                     const idx = this.freshTemp("_reflect_spread_i");
                     const value = this.freshTemp("_reflect_spread_value");
                     const elem = r.ty.elem!;
-                    const current = { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
+                    const current = elem.kind === "value"
+                        ? { c: `(tsc_array_index_present(${src}, ${idx}) ? TSC_ARR(${elem.c}, ${src}, ${idx}) : tsc_value_undefined())`, ty: elem }
+                        : { c: `TSC_ARR(${elem.c}, ${src}, ${idx})`, ty: elem };
                     pieces.push(
                         `{ tsc_array_t* const ${src} = ${r.c}; for (size_t ${idx} = 0; ${idx} < ${src}->len; ${idx}++) { tsc_value_t ${value} = ${this.coerce(current, T_VALUE, element.expression)}; tsc_array_push_raw(${av}, &${value}); } }`,
                     );

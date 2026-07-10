@@ -50,3 +50,5 @@ const staticSpread: any[] = [...hofValues];
 const dynamicSparse: any = hofValues;
 const dynamicSpread: any[] = [...dynamicSparse];
 console.log("spread holes:", Object.keys(staticSpread).join("|"), staticSpread[1], Object.keys(dynamicSpread).join("|"), dynamicSpread[1]);
+function collectSpread(...values: any[]): string { return values.join("|"); }
+console.log("call spread holes:", collectSpread(...hofValues));
