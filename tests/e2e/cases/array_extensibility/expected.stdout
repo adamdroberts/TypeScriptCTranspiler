@@ -29,7 +29,7 @@ frozen set: false 3
 frozen delete: false 3
 frozen push: 2 3|4
 frozen fill: 3|4
-frozen reverse: 3|4
+frozen reverse: Array.prototype.reverse cannot mutate a frozen array
 frozen define same: true false true false
 frozen define signed zero: true false
 frozen length negative zero: true

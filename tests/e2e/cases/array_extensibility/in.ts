@@ -102,7 +102,7 @@ console.log("frozen set:", Reflect.set(frozen, "0", 30), frozen[0]);
 console.log("frozen delete:", Reflect.deleteProperty(frozen, "0"), frozen[0]);
 console.log("frozen push:", frozen.push(5), frozen.join("|"));
 console.log("frozen fill:", frozen.fill(9).join("|"));
-console.log("frozen reverse:", frozen.reverse().join("|"));
+report("frozen reverse", (): any => frozen.reverse().join("|"));
 console.log(
     "frozen define same:",
     Reflect.defineProperty(frozen, "0", { value: 3, writable: false, enumerable: true, configurable: false }),
