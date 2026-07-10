@@ -8,3 +8,9 @@ console.log("entries:", entries[0][0] + ":" + entries[0][1] + "|" + entries[1][0
 const descriptors: any = Object.getOwnPropertyDescriptors(values);
 console.log("descriptors:", Object.keys(descriptors).join("|"), Object.hasOwn(descriptors, "1"), Object.hasOwn(descriptors, "2"));
 console.log("reads:", values.at(1), values.indexOf(undefined), values.lastIndexOf(undefined), values.includes(undefined), values.includes("missing"));
+const tailHole: any[] = ["first", "last"];
+delete tailHole[1];
+console.log("pop hole:", tailHole.pop(), tailHole.length, Object.hasOwn(tailHole, "0"));
+const headHole: any[] = ["first", "last"];
+delete headHole[0];
+console.log("shift hole:", headHole.shift(), headHole.length, Object.hasOwn(headHole, "0"), headHole[0]);

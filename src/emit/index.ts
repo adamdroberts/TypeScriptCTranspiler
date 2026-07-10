@@ -41748,24 +41748,28 @@ class Emitter {
             case "pop": {
                 const av = this.freshTemp("_arr");
                 const rv = this.freshTemp("_pv");
+                const missing = et.kind === "value" ? "tsc_value_undefined()" : `(${et.c})0`;
                 return this.emitSequencedExpr(
                     et,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([arr]) =>
-                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ` +
-                        `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, ${av}->len - 1) : (${et.c})0); ` +
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
+                        `if (${av}->len > 0 && tsc_array_index_present(${av}, ${av}->len - 1)) ` +
+                        `${rv} = TSC_ARR(${et.c}, ${av}, ${av}->len - 1); ` +
                         `if (!${av}->sealed && !${av}->frozen && ${av}->length_writable) tsc_array_pop_raw(${av}); ${rv}; })`,
                 );
             }
             case "shift": {
                 const av = this.freshTemp("_arr");
                 const rv = this.freshTemp("_pv");
+                const missing = et.kind === "value" ? "tsc_value_undefined()" : `(${et.c})0`;
                 return this.emitSequencedExpr(
                     et,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([arr]) =>
-                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ` +
-                        `(${av}->len > 0 ? TSC_ARR(${et.c}, ${av}, 0) : (${et.c})0); ` +
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
+                        `if (${av}->len > 0 && tsc_array_index_present(${av}, 0)) ` +
+                        `${rv} = TSC_ARR(${et.c}, ${av}, 0); ` +
                         `if (!${av}->sealed && !${av}->frozen && ${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
                 );
             }
