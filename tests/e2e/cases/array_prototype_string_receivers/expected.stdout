@@ -3,3 +3,4 @@ search: false true -1 1 3
 copy: true bc true acba
 iters: 0|1|2|3 a|b|c|a 2:c
 string-slice: bc
+sort: Array.prototype.sort cannot sort a string receiver

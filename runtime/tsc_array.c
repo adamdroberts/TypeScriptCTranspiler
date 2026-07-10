@@ -478,6 +478,9 @@ static tsc_value_t array_prototype_splice(void* env, tsc_value_t this_arg, tsc_a
 static tsc_value_t array_prototype_sort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     array_prototype_require_receiver(this_arg, "sort");
+    if (array_proto_is_string_receiver(this_arg)) {
+        tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot sort a string receiver"));
+    }
     if (array_proto_is_empty_primitive_receiver(this_arg)) {
         tsc_value_t cmp = array_proto_arg(args, 0);
         if (!tsc_value_is_undefined(cmp) && !tsc_value_is_callable(cmp)) {
