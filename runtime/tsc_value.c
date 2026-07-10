@@ -2892,13 +2892,19 @@ tsc_value_t tsc_value_method_concat(tsc_value_t recv, tsc_value_t value) {
     size_t value_len = tsc_value_is_array(value) ? (size_t)tsc_value_length(value) : 1;
     tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), recv_len + value_len);
     for (size_t i = 0; i < recv_len; i++) {
+        tsc_str_t* key = tsc_str_from_int((int64_t)i);
+        bool present = tsc_value_has_prop(recv, key);
         tsc_value_t item = tsc_value_get_index(recv, (double)i);
         tsc_array_push_raw(out, &item);
+        if (!present) tsc_array_mark_hole(out, out->len - 1);
     }
     if (tsc_value_is_array(value)) {
         for (size_t i = 0; i < value_len; i++) {
+            tsc_str_t* key = tsc_str_from_int((int64_t)i);
+            bool present = tsc_value_has_prop(value, key);
             tsc_value_t item = tsc_value_get_index(value, (double)i);
             tsc_array_push_raw(out, &item);
+            if (!present) tsc_array_mark_hole(out, out->len - 1);
         }
     } else {
         tsc_array_push_raw(out, &value);

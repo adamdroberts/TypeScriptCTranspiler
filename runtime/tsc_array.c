@@ -1062,10 +1062,59 @@ int64_t array_strict_index(double value, int64_t len) {
     return (int64_t)value;
 }
 
+static void array_copy_holes_range(
+    const tsc_array_t* src,
+    size_t source_start,
+    tsc_array_t* dst,
+    size_t destination_start,
+    size_t count
+) {
+    if (!src || !dst || src->es != sizeof(tsc_value_t) || dst->es != sizeof(tsc_value_t) || !src->holes) return;
+    for (size_t i = 0; i < count; i++) {
+        if (!tsc_array_index_present(src, source_start + i)) {
+            tsc_array_mark_hole(dst, destination_start + i);
+        }
+    }
+}
+
+static tsc_object_t* array_spliced_holes(
+    const tsc_array_t* src,
+    size_t start,
+    size_t delete_count,
+    const tsc_array_t* items
+) {
+    if (!src || src->es != sizeof(tsc_value_t) || (!src->holes && (!items || !items->holes))) return NULL;
+    tsc_object_t* holes = tsc_object_new();
+    size_t insert_len = items ? items->len : 0;
+    size_t tail_start = start + delete_count;
+    size_t tail_len = src->len - tail_start;
+    if (src->holes) {
+        for (size_t i = 0; i < start; i++) {
+            if (!tsc_array_index_present(src, i)) {
+                (void)tsc_object_set(holes, tsc_str_from_int((int64_t)i), tsc_value_bool(true));
+            }
+        }
+        for (size_t i = 0; i < tail_len; i++) {
+            if (!tsc_array_index_present(src, tail_start + i)) {
+                (void)tsc_object_set(holes, tsc_str_from_int((int64_t)(start + insert_len + i)), tsc_value_bool(true));
+            }
+        }
+    }
+    if (items && items->holes) {
+        for (size_t i = 0; i < insert_len; i++) {
+            if (!tsc_array_index_present(items, i)) {
+                (void)tsc_object_set(holes, tsc_str_from_int((int64_t)(start + i)), tsc_value_bool(true));
+            }
+        }
+    }
+    return holes;
+}
+
 tsc_array_t* tsc_array_with(const tsc_array_t* a, double index, const void* elem) {
     int64_t at = array_strict_index(index, (int64_t)a->len);
     tsc_array_t* copy = tsc_array_slice(a, 0.0, (double)a->len);
     memcpy((char*)copy->data + (size_t)at * copy->es, elem, copy->es);
+    tsc_array_clear_hole(copy, (size_t)at);
     return copy;
 }
 
@@ -1098,6 +1147,7 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
     if (new_len != a->len && !a->length_writable) return tsc_array_new(a->es, 1);
     if (new_len > a->len && !a->extensible) return tsc_array_new(a->es, 1);
 
+    tsc_object_t* next_holes = array_spliced_holes(a, (size_t)at, (size_t)del, items);
     tsc_array_t* removed = tsc_array_slice(a, (double)at, (double)(at + del));
     size_t tail_start = (size_t)(at + del);
     size_t tail_len = a->len - tail_start;
@@ -1113,6 +1163,7 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
         memcpy((char*)a->data + (size_t)at * a->es, items->data, insert_len * a->es);
     }
     a->len = new_len;
+    a->holes = next_holes;
     return removed;
 }
 
@@ -1146,6 +1197,7 @@ tsc_array_t* tsc_array_to_spliced(const tsc_array_t* a, double start, double del
         memcpy((char*)out->data + out->len * out->es, (char*)a->data + tail_start * a->es, tail_len * a->es);
         out->len += tail_len;
     }
+    out->holes = array_spliced_holes(a, (size_t)at, (size_t)del, items);
     return out;
 }
 
@@ -1156,6 +1208,7 @@ tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, doub
     if (i1 < i0) i1 = i0;
     for (int64_t i = i0; i < i1; i++) {
         memcpy((char*)a->data + (size_t)i * a->es, elem, a->es);
+        tsc_array_clear_hole(a, (size_t)i);
     }
     return a;
 }
@@ -1203,7 +1256,9 @@ tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src) {
     if (src->len == 0) return dst;
     tsc_array_reserve(dst, dst->len + src->len);
     memcpy((char*)dst->data + dst->len * dst->es, src->data, src->len * src->es);
+    size_t source_offset = dst->len;
     dst->len += src->len;
+    array_copy_holes_range(src, 0, dst, source_offset, src->len);
     return dst;
 }
 
