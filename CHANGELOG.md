@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Array.prototype` own-key predicates now hide the runtime-only `valueOf` shim from `Object.hasOwn(...)` / inherited `hasOwnProperty(...)` while preserving inherited `Reflect.has(..., "valueOf")` behavior. Test: `array_prototype_value`.
 - Direct static `Object.getOwnPropertyDescriptor(Array.prototype, stringKey)` and `Reflect.getOwnPropertyDescriptor(Array.prototype, stringKey)` now expose standard Array prototype string descriptors without falling through the typed-array-only descriptor path. Test: `array_prototype_value`.
 - Static `Object.getOwnPropertyDescriptors(Array.prototype)` now exposes the same standard string-named descriptor map as the focused `Array.prototype` own-name helper. Test: `array_prototype_value`.
 - Static `Object.getOwnPropertyNames(Array.prototype)` and the string-name portion of static `Reflect.ownKeys(Array.prototype)` now expose the standard Array prototype own-name surface. Test: `array_prototype_value`.

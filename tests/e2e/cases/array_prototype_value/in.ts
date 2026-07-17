@@ -15,6 +15,7 @@ const staticMapDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype
 const staticConstructorDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, "constructor");
 const staticValueOfDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, "valueOf");
 console.log("static string descriptors:", staticMapDescriptor.value === proto.map, staticMapDescriptor.writable, staticMapDescriptor.enumerable, staticMapDescriptor.configurable, staticConstructorDescriptor.value === Array, staticConstructorDescriptor.writable, staticConstructorDescriptor.enumerable, staticConstructorDescriptor.configurable, staticValueOfDescriptor === undefined);
+console.log("own checks:", Object.hasOwn(Array.prototype, "map"), Object.hasOwn(Array.prototype, "valueOf"), proto.hasOwnProperty("constructor"), proto.propertyIsEnumerable("map"), Reflect.has(Array.prototype, "map"), Reflect.has(Array.prototype, "valueOf"));
 const lengthDescriptor: any = Reflect.getOwnPropertyDescriptor(proto, "length");
 console.log("length descriptor:", lengthDescriptor.value, lengthDescriptor.writable, lengthDescriptor.enumerable, lengthDescriptor.configurable, Reflect.set(proto, "length", 1), proto.length);
 const map: any = proto.map;
