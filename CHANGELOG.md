@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Array `shift` now performs indexed moves and deletion before throwing when a non-writable `length` prevents the final length update, preserving the specified partial mutation. Test: `array_length_writable_descriptor`.
 - Array `pop` now deletes the last configurable element before throwing when a non-writable `length` prevents the final length update, preserving the specified partial mutation. Test: `array_length_writable_descriptor`.
 - Array `push` now throws when adding to a non-extensible array or writing a non-writable `length`; zero-argument `push()` also performs the required `length` write. Tests: `array_length_writable_descriptor`, `array_extensibility`.
 - Statically typed `any[]` `toLocaleString` now uses inherited-aware indexed reads, invokes each non-nullish element's locale method, and forwards locale/options arguments. Test: `dynamic_array_inherited_to_locale_string`.
