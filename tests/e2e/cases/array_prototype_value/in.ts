@@ -84,3 +84,10 @@ console.log("symbol enumerability after define:", proto.propertyIsEnumerable(Sym
 const detachedIteratorEnumerable: boolean = Object.prototype.propertyIsEnumerable.call(proto, Symbol.iterator);
 const detachedArrayUnscopablesEnumerable: boolean = Object.prototype.propertyIsEnumerable.call([], Symbol.unscopables);
 console.log("detached symbol enumerability:", detachedIteratorEnumerable, detachedArrayUnscopablesEnumerable);
+const deletedMapMethod: boolean = delete proto.map;
+const namesAfterMapDelete: string[] = Object.getOwnPropertyNames(Array.prototype);
+const aliasNamesAfterMapDelete: string[] = Object.getOwnPropertyNames(proto);
+const definedCustomStringKey: boolean = Object.defineProperty(proto, "customArrayProtoEdge", { value: 42, writable: true, enumerable: false, configurable: true }) === proto;
+const namesAfterCustomStringKey: string[] = Object.getOwnPropertyNames(Array.prototype);
+const customStringDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, "customArrayProtoEdge");
+console.log("string key mutation:", deletedMapMethod, !namesAfterMapDelete.includes("map"), !aliasNamesAfterMapDelete.includes("map"), !Reflect.has([], "map"), definedCustomStringKey, namesAfterCustomStringKey.includes("customArrayProtoEdge"), customStringDescriptor.value, customStringDescriptor.enumerable);

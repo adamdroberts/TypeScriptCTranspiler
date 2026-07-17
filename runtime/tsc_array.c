@@ -943,54 +943,8 @@ bool tsc_array_prototype_define_symbol_desc(tsc_symbol_t* key, tsc_value_t value
     return true;
 }
 
-static void array_prototype_push_name(tsc_array_t* out, const char* name, size_t len) {
-    tsc_str_t* key = tsc_str_from_lit(name, len);
-    tsc_array_push_raw(out, &key);
-}
-
 tsc_array_t* tsc_array_prototype_own_property_names(void) {
-    tsc_array_t* out = tsc_array_new(sizeof(tsc_str_t*), 40);
-    array_prototype_push_name(out, "length", 6);
-    array_prototype_push_name(out, "constructor", 11);
-    array_prototype_push_name(out, "at", 2);
-    array_prototype_push_name(out, "concat", 6);
-    array_prototype_push_name(out, "copyWithin", 10);
-    array_prototype_push_name(out, "fill", 4);
-    array_prototype_push_name(out, "find", 4);
-    array_prototype_push_name(out, "findIndex", 9);
-    array_prototype_push_name(out, "findLast", 8);
-    array_prototype_push_name(out, "findLastIndex", 13);
-    array_prototype_push_name(out, "lastIndexOf", 11);
-    array_prototype_push_name(out, "pop", 3);
-    array_prototype_push_name(out, "push", 4);
-    array_prototype_push_name(out, "reverse", 7);
-    array_prototype_push_name(out, "shift", 5);
-    array_prototype_push_name(out, "unshift", 7);
-    array_prototype_push_name(out, "slice", 5);
-    array_prototype_push_name(out, "sort", 4);
-    array_prototype_push_name(out, "splice", 6);
-    array_prototype_push_name(out, "includes", 8);
-    array_prototype_push_name(out, "indexOf", 7);
-    array_prototype_push_name(out, "join", 4);
-    array_prototype_push_name(out, "keys", 4);
-    array_prototype_push_name(out, "entries", 7);
-    array_prototype_push_name(out, "values", 6);
-    array_prototype_push_name(out, "forEach", 7);
-    array_prototype_push_name(out, "filter", 6);
-    array_prototype_push_name(out, "flat", 4);
-    array_prototype_push_name(out, "flatMap", 7);
-    array_prototype_push_name(out, "map", 3);
-    array_prototype_push_name(out, "every", 5);
-    array_prototype_push_name(out, "some", 4);
-    array_prototype_push_name(out, "reduce", 6);
-    array_prototype_push_name(out, "reduceRight", 11);
-    array_prototype_push_name(out, "toReversed", 10);
-    array_prototype_push_name(out, "toSorted", 8);
-    array_prototype_push_name(out, "toSpliced", 9);
-    array_prototype_push_name(out, "with", 4);
-    array_prototype_push_name(out, "toLocaleString", 14);
-    array_prototype_push_name(out, "toString", 8);
-    return out;
+    return value_array_keys(tsc_array_prototype(), true);
 }
 
 tsc_value_t tsc_array_prototype_own_property_descriptor(tsc_str_t* key) {

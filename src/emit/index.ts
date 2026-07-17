@@ -52809,10 +52809,10 @@ class Emitter {
                 if (mapped.kind === "array") {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
-                        { value: target },
+                        { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
                         ...ignored,
-                    ], ([t, k]) => `tsc_reflect_has_prop(tsc_value_array(${t}), ${k})`);
+                    ], ([t, k]) => `tsc_reflect_has_prop(${t}, ${k})`);
                 }
                 if (mapped.kind === "buffer") {
                     return this.emitBufferPropertyKeyCheck(args[0]!, target, args[1]!, true, ignored);
