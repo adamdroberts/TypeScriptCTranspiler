@@ -32,7 +32,7 @@ async function threeAwait(prefix: string): Promise<string> {
     const first = await delay(51, "one");
     const second = await delay(52, prefix + first + "-two");
     const third = await delay(53, second + "-three");
-    return third + "!";
+    return first + ":" + second + ":" + third + "!";
 }
 
 class Worker {
@@ -256,7 +256,7 @@ class Worker {
         const first = await delay(54, "method-one");
         const second = await delay(55, prefix + this.prefix + first);
         const third = await delay(56, second + "-three");
-        return third + "!";
+        return first + ":" + second + ":" + third + "!";
     }
 }
 
@@ -280,7 +280,7 @@ const arrowThreeAwait = async (prefix: string): Promise<string> => {
     const first = await delay(57, "arrow-one");
     const second = await delay(58, prefix + first);
     const third = await delay(59, second + "-three");
-    return third + "!";
+    return first + ":" + second + ":" + third + "!";
 };
 
 suffix().then((value: string): void => {
