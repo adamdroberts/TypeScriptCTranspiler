@@ -215,6 +215,12 @@ class Worker {
         const ignored = await delay(42);
         return this.prefix + "void";
     }
+
+    async expressionlessReturnAfterAwait(): Promise<void> {
+        const value = await delay(43, "done");
+        this.prefix = this.prefix + value;
+        return;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -330,6 +336,11 @@ new Worker("switch-break-").switchBreakAfterAwait("b").then((value: string): voi
 
 new Worker("void-").voidAfterAwait().then((value: string): void => {
     console.log("method-void-await:", value);
+});
+
+const expressionlessWorker = new Worker("exprless-");
+expressionlessWorker.expressionlessReturnAfterAwait().then((_value: any): void => {
+    console.log("method-expressionless-return:", expressionlessWorker.prefix);
 });
 
 arrow().then((value: string): void => {
