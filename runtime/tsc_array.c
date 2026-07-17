@@ -1081,6 +1081,20 @@ void tsc_array_unshift_raw(tsc_array_t* a, const void* elem) {
 
 tsc_array_t* tsc_array_reverse(tsc_array_t* a) {
     if (a->len < 2) return a;
+    if (!a->extensible && a->holes) {
+        for (size_t lower = 0; lower < a->len / 2; lower++) {
+            size_t upper = a->len - lower - 1;
+            bool lower_present = tsc_array_index_present(a, lower);
+            bool upper_present = tsc_array_index_present(a, upper);
+            if (!lower_present && upper_present) {
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not create lower array element"));
+            }
+            if (lower_present && !upper_present) {
+                tsc_array_mark_hole(a, lower);
+                tsc_throw_str(tsc_str_from_cstr("Array.prototype.reverse could not create upper array element"));
+            }
+        }
+    }
     tsc_object_t* reversed_holes = NULL;
     if (a->holes) {
         reversed_holes = tsc_object_new();

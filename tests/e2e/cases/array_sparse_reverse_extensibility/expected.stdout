@@ -1,0 +1,8 @@
+typed lower hole: Array.prototype.reverse could not create lower array element
+typed lower hole state: |2|3 1|2
+typed upper hole: Array.prototype.reverse could not create upper array element
+typed upper hole state: |2| 1
+dynamic lower hole: Array.prototype.reverse could not write array-like element
+dynamic lower hole state: |2|3 1|2
+dynamic upper hole: Array.prototype.reverse could not write array-like element
+dynamic upper hole state: |2| 1
