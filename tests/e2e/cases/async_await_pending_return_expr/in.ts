@@ -15,6 +15,13 @@ async function tagged(prefix: string): Promise<string> {
     return prefix + value;
 }
 
+async function staged(prefix: string): Promise<string> {
+    const value = await delay(14, "stage");
+    const decorated = prefix + value;
+    const finalLabel = decorated + "!";
+    return finalLabel;
+}
+
 class Worker {
     prefix: string;
 
@@ -35,6 +42,13 @@ class Worker {
     async thisPrefixed(): Promise<string> {
         const value = await delay(19, "this-param");
         return this.prefix + value;
+    }
+
+    async stagedThis(suffix: string): Promise<string> {
+        const value = await delay(21, "method-stage");
+        const decorated = this.prefix + value;
+        const finalLabel = decorated + suffix;
+        return finalLabel;
     }
 }
 
@@ -60,6 +74,10 @@ tagged("fn-").then((value: string): void => {
     console.log("tagged:", value);
 });
 
+staged("fn-").then((value: string): void => {
+    console.log("staged:", value);
+});
+
 new Worker("job-").label().then((value: string): void => {
     console.log("method:", value);
 });
@@ -70,6 +88,10 @@ new Worker("job-").prefixed("class-").then((value: string): void => {
 
 new Worker("this-").thisPrefixed().then((value: string): void => {
     console.log("method-this:", value);
+});
+
+new Worker("this-").stagedThis("!").then((value: string): void => {
+    console.log("method-staged-this:", value);
 });
 
 arrow().then((value: string): void => {

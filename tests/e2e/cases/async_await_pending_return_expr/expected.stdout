@@ -1,8 +1,10 @@
 suffix: ready!
 double: 42
 tagged: fn-tag
+staged: fn-stage!
 method: method!
 method-param: class-method-param
 method-this: this-this-param
 arrow: arrow!
+method-staged-this: this-method-stage!
 arrow-param: value-arrow-param
