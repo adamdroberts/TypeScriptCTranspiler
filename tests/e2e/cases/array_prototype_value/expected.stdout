@@ -8,6 +8,7 @@ function descriptors: false false true false false true
 unscopables: object null at|copyWithin|entries|fill|find|findIndex|findLast|findLastIndex|flat|flatMap|includes|keys|toReversed|toSorted|toSpliced|values true true undefined
 symbols: 2 true true Symbol.iterator|Symbol.unscopables
 symbol descriptors: true true false true true false false true
+reflect symbol descriptors: true true false true true false false true
 delete name: true false
 redefine: true true all 3
 method: a-b

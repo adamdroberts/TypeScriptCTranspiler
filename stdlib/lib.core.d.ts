@@ -324,7 +324,7 @@ interface ReflectConstructor {
     deleteProperty(target: any, propertyKey: string, ...ignored: any[]): boolean;
     get(target: any, propertyKey: string, receiver?: any, ...ignored: any[]): any;
     getPrototypeOf(target: any, ...ignored: any[]): any;
-    getOwnPropertyDescriptor(target: any, propertyKey: string, ...ignored: any[]): any;
+    getOwnPropertyDescriptor(target: any, propertyKey: PropertyKey, ...ignored: any[]): any;
     has(target: any, propertyKey: string, ...ignored: any[]): boolean;
     isExtensible(target: any, ...ignored: any[]): boolean;
     ownKeys(target: any, ...ignored: any[]): string[];

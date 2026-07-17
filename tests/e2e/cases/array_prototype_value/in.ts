@@ -18,8 +18,11 @@ console.log("unscopables:", typeof unscopables, Object.getPrototypeOf(unscopable
 const symbolKeys: symbol[] = Object.getOwnPropertySymbols(Array.prototype);
 const iteratorSymbolDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
 const unscopablesDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.unscopables);
+const reflectIteratorDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
+const reflectUnscopablesDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.unscopables);
 console.log("symbols:", symbolKeys.length, symbolKeys[0] === Symbol.iterator, symbolKeys[1] === Symbol.unscopables, symbolKeys[0].description + "|" + symbolKeys[1].description);
 console.log("symbol descriptors:", iteratorSymbolDescriptor.value === proto.values, iteratorSymbolDescriptor.writable, iteratorSymbolDescriptor.enumerable, iteratorSymbolDescriptor.configurable, unscopablesDescriptor.value === unscopables, unscopablesDescriptor.writable, unscopablesDescriptor.enumerable, unscopablesDescriptor.configurable);
+console.log("reflect symbol descriptors:", reflectIteratorDescriptor.value === iteratorSymbolDescriptor.value, reflectIteratorDescriptor.writable, reflectIteratorDescriptor.enumerable, reflectIteratorDescriptor.configurable, reflectUnscopablesDescriptor.value === unscopablesDescriptor.value, reflectUnscopablesDescriptor.writable, reflectUnscopablesDescriptor.enumerable, reflectUnscopablesDescriptor.configurable);
 const every: any = proto.every;
 console.log("delete name:", Reflect.deleteProperty(every, "name"), Object.hasOwn(every, "name"));
 console.log("redefine:", Reflect.defineProperty(every, "name", { value: "all" }), Reflect.defineProperty(every, "length", { value: 3 }), every.name, every.length);
