@@ -49237,6 +49237,23 @@ class Emitter {
             expr.name.text === "unscopables";
     }
 
+    private isStaticArrayPrototypeExpression(expr: ts.Expression): boolean {
+        let current: ts.Expression = expr;
+        while (
+            ts.isParenthesizedExpression(current) ||
+            ts.isAsExpression(current) ||
+            ts.isTypeAssertionExpression(current) ||
+            ts.isSatisfiesExpression(current) ||
+            ts.isNonNullExpression(current)
+        ) {
+            current = current.expression;
+        }
+        return ts.isPropertyAccessExpression(current) &&
+            ts.isIdentifier(current.expression) &&
+            current.name.text === "prototype" &&
+            this.isUnshadowedGlobalIdentifier(current.expression, "Array");
+    }
+
     private objectFieldType(
         objectNode: ts.Node,
         objectType: ts.Type,
@@ -49903,6 +49920,12 @@ class Emitter {
         if (name === "getOwnPropertySymbols") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertySymbols expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (this.isStaticArrayPrototypeExpression(arg)) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_SYMBOL), [{ value: obj, node: arg }, ...ignored], ([o]) =>
+                    `({ (void)${o}; tsc_array_prototype_symbols(); })`,
+                );
+            }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_SYMBOL), [
@@ -49925,6 +49948,24 @@ class Emitter {
         if (name === "getOwnPropertyDescriptor") {
             if (args.length < 2) unsupported(call, "Object.getOwnPropertyDescriptor expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            if (this.isStaticArrayPrototypeExpression(arg) && this.isSymbolIteratorExpression(args[1]!)) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, node: arg },
+                    { value: key, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_iterator_descriptor(); })`);
+            }
+            if (this.isStaticArrayPrototypeExpression(arg) && this.isSymbolUnscopablesExpression(args[1]!)) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, node: arg },
+                    { value: key, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
+            }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
@@ -54738,21 +54779,7 @@ class Emitter {
             return { c: moduleNsMember, ty };
         }
         const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
-        let arrayPrototypeCandidate: ts.Expression = ea.expression;
-        while (
-            ts.isParenthesizedExpression(arrayPrototypeCandidate) ||
-            ts.isAsExpression(arrayPrototypeCandidate) ||
-            ts.isTypeAssertionExpression(arrayPrototypeCandidate) ||
-            ts.isSatisfiesExpression(arrayPrototypeCandidate) ||
-            ts.isNonNullExpression(arrayPrototypeCandidate)
-        ) {
-            arrayPrototypeCandidate = arrayPrototypeCandidate.expression;
-        }
-        const isArrayPrototypeReceiver =
-            ts.isPropertyAccessExpression(arrayPrototypeCandidate) &&
-            ts.isIdentifier(arrayPrototypeCandidate.expression) &&
-            arrayPrototypeCandidate.name.text === "prototype" &&
-            this.isUnshadowedGlobalIdentifier(arrayPrototypeCandidate.expression, "Array");
+        const isArrayPrototypeReceiver = this.isStaticArrayPrototypeExpression(ea.expression);
         if (
             this.isSymbolIteratorExpression(ea.argumentExpression) &&
             (recv.ty.kind === "value" || isArrayPrototypeReceiver)

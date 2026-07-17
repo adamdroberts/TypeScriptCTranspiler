@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Static `Object.getOwnPropertySymbols(Array.prototype)` and symbol-keyed descriptor reads now expose `Symbol.iterator` and `Symbol.unscopables` metadata for the shared Array prototype. Test: `array_prototype_value`.
 - Static `Array.prototype[Symbol.unscopables]` now returns the standard null-prototype unscopables object for supported prototype methods. Test: `array_prototype_value`.
 - `Array.prototype.length` now reports the standard writable, non-enumerable, non-configurable descriptor and accepts ordinary length writes. Test: `array_prototype_value`.
 - Accessor function identities preserved through dynamic function property descriptors now expose ordinary configurable `length` and `name` own properties while still omitting constructable-only `prototype` metadata until user code creates an ordinary property. Test: `dynamic_function_accessor_properties`.
