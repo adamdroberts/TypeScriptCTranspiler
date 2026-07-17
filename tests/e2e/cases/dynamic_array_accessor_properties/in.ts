@@ -81,3 +81,15 @@ console.log("index absent:", Object.hasOwn(arr, "1"), Reflect.has(arr, "1"), Obj
 arr[1] = "restored";
 console.log("index restore:", arr[1], Object.hasOwn(arr, "1"), Object.keys(arr).join("|"));
 console.log("metadata:", Reflect.defineProperty(arr, "length", { get: readOnly }), Reflect.defineProperty(arr, "0", { get: readOnly }), Object.getOwnPropertyDescriptor(arr, "length").get);
+
+const closedAccessor: any = ["raw"];
+Object.preventExtensions(closedAccessor);
+console.log(
+    "closed accessor:",
+    Reflect.defineProperty(closedAccessor, "0", { get: readOnly, enumerable: false, configurable: false }),
+    Object.isExtensible(closedAccessor),
+    closedAccessor[0],
+    Reflect.set(closedAccessor, "0", "changed"),
+    Reflect.deleteProperty(closedAccessor, "0"),
+    "[" + Object.keys(closedAccessor).join("|") + "]",
+);

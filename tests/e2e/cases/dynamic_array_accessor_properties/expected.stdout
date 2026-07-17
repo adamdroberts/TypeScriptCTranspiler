@@ -16,3 +16,4 @@ index keys: 0|marker|label|legacy red|next!|next!|legacy-arr
 index absent: false false true
 index restore: restored true 0|1|marker|label|legacy
 metadata: false true undefined
+closed accessor: true false ro false false []
