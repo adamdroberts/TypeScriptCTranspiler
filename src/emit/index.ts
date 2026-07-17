@@ -55175,6 +55175,29 @@ class Emitter {
     private coerce(r: EmitResult, target: CType, node: ts.Node): string {
         if (r.ty.kind === target.kind) {
             if (
+                target.kind === "array" &&
+                r.ty.elem &&
+                target.elem &&
+                !sameCType(r.ty.elem, target.elem)
+            ) {
+                const tmpIn = this.freshTemp("_arrIn");
+                const tmpOut = this.freshTemp("_arrOut");
+                const idx = this.freshTemp("_idx");
+                const elem = this.freshTemp("_elem");
+                const converted = this.freshTemp("_converted");
+                const convertedExpr = this.coerce({ c: elem, ty: r.ty.elem }, target.elem, node);
+                const holeValue = target.elem.kind === "value" ? "tsc_value_undefined()" : `(${target.elem.c})0`;
+                return (
+                    `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); ` +
+                    `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ` +
+                    `${target.elem.c} ${converted}; if (tsc_array_index_present(${tmpIn}, ${idx})) { ` +
+                    `${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); ${converted} = ${convertedExpr}; ` +
+                    `} else { ${converted} = ${holeValue}; } tsc_array_push_raw(${tmpOut}, &${converted}); ` +
+                    `if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}; })`
+                );
+            }
+            if (
                 target.kind === "class" &&
                 r.ty.className &&
                 target.className &&
