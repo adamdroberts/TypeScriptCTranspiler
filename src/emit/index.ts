@@ -36760,7 +36760,10 @@ class Emitter {
             const itemExpr = t.kind === "value"
                 ? `(tsc_array_index_present(${src}, ${iv}) ? TSC_ARR(${t.c}, ${src}, ${iv}) : tsc_value_undefined())`
                 : `TSC_ARR(${t.c}, ${src}, ${iv})`;
-            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv, callbackThisArg);
+            const itemValueSource = t.kind !== "value" && canBoxArrayFindElement(t)
+                ? { c: `tsc_value_get_index(tsc_value_array(${src}), (double)${iv})`, ty: T_VALUE }
+                : undefined;
+            const { bindings, body } = this.bindArrayFromCallback(mapfnArg, t, u, item, iv, callbackThisArg, itemValueSource);
             const mappedC = this.coerce(body, u, mapfnArg);
             return (
                 `({ tsc_array_t* const ${src} = ${sourceArray(itemsExpr!)}; ` +
@@ -36816,6 +36819,7 @@ class Emitter {
         itemTemp: string,
         indexTemp: string,
         callbackThisArg: string,
+        itemValueSource?: EmitResult,
     ): { bindings: string[]; body: EmitResult } {
         const bindings: string[] = [];
         if (ts.isArrowFunction(cb) || ts.isFunctionExpression(cb)) {
@@ -36827,10 +36831,19 @@ class Emitter {
             const valueParam = params[0];
             const indexParam = params[1];
             if (valueParam && ts.isIdentifier(valueParam.name)) {
-                bindings.push(`${t.c} ${mangleIdent(valueParam.name.text)} = ${itemTemp};`);
+                const target = valueParam.type
+                    ? this.prepareType(mapType(valueParam, this.checker))
+                    : t;
+                const source = target.kind === "value" && itemValueSource
+                    ? itemValueSource
+                    : { c: itemTemp, ty: t };
+                bindings.push(`${target.c} ${mangleIdent(valueParam.name.text)} = ${this.coerce(source, target, valueParam)};`);
             }
             if (indexParam && ts.isIdentifier(indexParam.name)) {
-                bindings.push(`double ${mangleIdent(indexParam.name.text)} = (double)${indexTemp};`);
+                const target = indexParam.type
+                    ? this.prepareType(mapType(indexParam, this.checker))
+                    : T_NUMBER;
+                bindings.push(`${target.c} ${mangleIdent(indexParam.name.text)} = ${this.coerce({ c: `(double)${indexTemp}`, ty: T_NUMBER }, target, indexParam)};`);
             }
             if (thisType) this.functionThisStack.push({ c: callbackThisArg, ty: thisType });
             try {
@@ -36844,7 +36857,7 @@ class Emitter {
             const sig = cbType.getCallSignatures()[0];
             if (!sig) unsupported(cb, "Array.from callback must be callable");
             const sources: EmitResult[] = [
-                { c: itemTemp, ty: t },
+                itemValueSource ?? { c: itemTemp, ty: t },
                 { c: `(double)${indexTemp}`, ty: T_NUMBER },
             ];
             if (this.isDirectCallableIdentifier(cb)) {
