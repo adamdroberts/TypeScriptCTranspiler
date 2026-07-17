@@ -28,6 +28,13 @@ async function twoAwait(prefix: string): Promise<string> {
     return second + "!";
 }
 
+async function threeAwait(prefix: string): Promise<string> {
+    const first = await delay(51, "one");
+    const second = await delay(52, prefix + first + "-two");
+    const third = await delay(53, second + "-three");
+    return third + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -244,6 +251,13 @@ class Worker {
         const second = await delay(48, prefix + this.prefix + first);
         return second + "!";
     }
+
+    async threeAwaitMethod(prefix: string): Promise<string> {
+        const first = await delay(54, "method-one");
+        const second = await delay(55, prefix + this.prefix + first);
+        const third = await delay(56, second + "-three");
+        return third + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -262,6 +276,13 @@ const arrowTwoAwait = async (prefix: string): Promise<string> => {
     return second + "!";
 };
 
+const arrowThreeAwait = async (prefix: string): Promise<string> => {
+    const first = await delay(57, "arrow-one");
+    const second = await delay(58, prefix + first);
+    const third = await delay(59, second + "-three");
+    return third + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -276,6 +297,10 @@ tagged("fn-").then((value: string): void => {
 
 twoAwait("fn-").then((value: string): void => {
     console.log("two-await:", value);
+});
+
+threeAwait("fn-").then((value: string): void => {
+    console.log("three-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -384,6 +409,10 @@ new Worker("method-two-").twoAwaitMethod("class-").then((value: string): void =>
     console.log("method-two-await:", value);
 });
 
+new Worker("method-three-").threeAwaitMethod("class-").then((value: string): void => {
+    console.log("method-three-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -394,4 +423,8 @@ arrowParam("value-").then((value: string): void => {
 
 arrowTwoAwait("value-").then((value: string): void => {
     console.log("arrow-two-await:", value);
+});
+
+arrowThreeAwait("value-").then((value: string): void => {
+    console.log("arrow-three-await:", value);
 });
