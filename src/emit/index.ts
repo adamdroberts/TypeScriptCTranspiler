@@ -42853,6 +42853,13 @@ class Emitter {
         const elementExpr = et.kind === "value"
             ? elementAt(iv)
             : `TSC_ARR(${et.c}, ${av}, ${iv})`;
+        const findVisitsHoles = method === "find" ||
+            method === "findLast" ||
+            method === "findIndex" ||
+            method === "findLastIndex";
+        const callbackElementExpr: EmitResult = findVisitsHoles && et.kind !== "value" && canBoxArrayFindElement(et)
+            ? { c: `tsc_value_get_index(tsc_value_array(${av}), (double)${iv})`, ty: T_VALUE }
+            : { c: elementExpr, ty: et };
 
         // Build a body-expression factory: given elem/idx/acc C expressions,
         // returns the C expression and C type of the callback's result.
@@ -42892,7 +42899,7 @@ class Emitter {
                 paramBindings.push({
                     name: mangleIdent(elemSlot.name.text),
                     type: elemParamType,
-                    src: { c: elementExpr, ty: et },
+                    src: callbackElementExpr,
                     node: elemSlot,
                 });
             }
@@ -43139,7 +43146,7 @@ class Emitter {
                 const resultType = boxedResult ? T_VALUE : et;
                 const missing = boxedResult ? "tsc_value_undefined()" : `(${et.c})0`;
                 const found = boxedResult
-                    ? this.coerce({ c: elementExpr, ty: et }, T_VALUE, call)
+                    ? `tsc_value_get_index(tsc_value_array(${av}), (double)${iv})`
                     : elementExpr;
                 const forward = method === "find";
                 return {

@@ -34,6 +34,14 @@ console.log("first missing local:", missing);
 const idx = nums.findIndex((n) => n === 4);
 console.log("index of 4:", idx);
 
+const sparseFind: number[] = [1, 2, 3];
+delete sparseFind[1];
+const sparseFound = sparseFind.find((n: any, i) => i === 1);
+const sparseFoundLast = sparseFind.findLast((n: any, i) => i === 1);
+const sparseFindIndex = sparseFind.findIndex((n: any, i) => i === 1 && String(n) === "undefined");
+const sparseFindLastIndex = sparseFind.findLastIndex((n: any, i) => i === 1 && String(n) === "undefined");
+console.log("sparse find:", String(sparseFound), String(sparseFoundLast), sparseFindIndex, sparseFindLastIndex);
+
 console.log("has even:", nums.some((n) => n % 2 === 0));
 console.log("all positive:", nums.every((n) => n > 0));
 

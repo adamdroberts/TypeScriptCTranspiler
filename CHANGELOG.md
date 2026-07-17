@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Typed sparse array `find` / `findLast` / `findIndex` / `findLastIndex` now pass deleted indexes through indexed `Get` when callback parameters or results are boxed, exposing `undefined` instead of stale backing storage. Test: `array_hof`.
 - Inline array callbacks with explicitly `any`-typed `ObjectEntry` parameters now receive boxed tuple values, so dynamic tuple indexing like `Object.entries(obj).map((entry: any) => entry[0])` compiles and runs correctly. Test: `object_entries`.
 - CommonJS namespace `.default` reads now prefer explicit static `default` member metadata before falling back to the whole unmarked module value. Tests: `node_modules_commonjs_module_exports_object_from_entries_object_entries_identifier_named`, `node_modules_commonjs_module_exports_object_wrapper_from_entries_object_entries_identifier_variants_named`.
 - Concrete typed array `slice` now preserves hole metadata for every element type, which also fixes sparse receiver and argument copying in typed `concat` and other slice-backed methods. Test: `array_concat_values`.
