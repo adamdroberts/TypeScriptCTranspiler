@@ -4,6 +4,7 @@ own keys: 0 0 0
 reflect: true true
 own names: 40 length true true false
 reflect own names: 40 length true true false
+alias own names: 40 true true false 40 false
 all descriptors: 40 0 true true false
 static string descriptors: true true false true true true false true true
 own checks: true false true false true true
