@@ -58,5 +58,7 @@ const typedHoles: number[] = [1, 2, 3];
 delete typedHoles[1];
 const boxedTypedHoles: any = typedHoles;
 const boxedTypedValues: any = typedHoles.values();
+const boxedTypedArray: any[] = typedHoles;
 console.log("typed boxed holes:", Object.keys(boxedTypedHoles).join("|"), String(boxedTypedHoles[1]), boxedTypedHoles.join("|"));
 console.log("typed boxed values:", Object.keys(boxedTypedValues).join("|"), String(boxedTypedValues[1]), boxedTypedValues.join("|"));
+console.log("typed array to any:", Object.keys(boxedTypedArray).join("|"), String(boxedTypedArray[1]), boxedTypedArray.join("|"));
