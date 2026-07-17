@@ -4,6 +4,7 @@ const globalA: symbol = Symbol.for("shared");
 const globalB: symbol = Symbol.for("shared");
 const iter: symbol = Symbol.iterator;
 const asyncIter: symbol = Symbol.asyncIterator;
+const spreadable: symbol = Symbol.isConcatSpreadable;
 let seen = "";
 
 function mark(label: string): string {
@@ -21,6 +22,7 @@ console.log("string:", localA.toString(), Symbol().toString());
 console.log("typeof:", typeof localA);
 console.log("iterator:", iter === Symbol.iterator, iter.description);
 console.log("async:", asyncIter === Symbol.asyncIterator, asyncIter.description);
+console.log("spreadable:", spreadable === Symbol.isConcatSpreadable, spreadable.description);
 
 const ignoredDesc = Symbol(mark("d"), mark("x"));
 const undefinedDesc = Symbol(undefined, mark("u"));

@@ -8,5 +8,6 @@ string: Symbol(local) Symbol()
 typeof: symbol
 iterator: true Symbol.iterator
 async: true Symbol.asyncIterator
+spreadable: true Symbol.isConcatSpreadable
 ignored desc: d true f
 ignored methods: Symbol(d) Symbol(d) true dxufgktlv

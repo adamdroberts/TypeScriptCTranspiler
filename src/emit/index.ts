@@ -14274,7 +14274,7 @@ class Emitter {
         ) {
             return true;
         }
-        if (this.isSymbolIteratorExpression(unwrapped) || this.isSymbolUnscopablesExpression(unwrapped)) {
+        if (this.isSupportedWellKnownSymbolExpression(unwrapped)) {
             return true;
         }
         if (
@@ -26419,7 +26419,7 @@ class Emitter {
                 });
             }
             if (right.ty.kind === "array") {
-                if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: right, node: bin.right },
                         { value: left, target: T_SYMBOL, node: bin.left },
@@ -26445,7 +26445,7 @@ class Emitter {
             if (right.ty.kind !== "value") {
                 unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
             }
-            if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+            if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
@@ -30612,7 +30612,7 @@ class Emitter {
                     );
                 }
                 if (right.ty.kind === "array") {
-                    if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                    if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
                         return this.emitSequencedExpr(T_BOOLEAN, [
                             { value: right },
                             { value: left, target: T_SYMBOL, node: bin.left },
@@ -30629,7 +30629,7 @@ class Emitter {
                 if (right.ty.kind !== "value") {
                     unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
                 }
-                if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                if (this.isSupportedWellKnownSymbolExpression(bin.left)) {
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
                         [
@@ -32745,7 +32745,7 @@ class Emitter {
             );
         }
         if (mapped.kind === "array") {
-            if (this.isSymbolIteratorExpression(keyNode) || this.isSymbolUnscopablesExpression(keyNode)) {
+            if (this.isSupportedWellKnownSymbolExpression(keyNode)) {
                 const key = this.emitExpr(keyNode);
                 const fn = method === "hasOwnProperty"
                     ? "tsc_value_has_own_symbol_prop"
@@ -32797,7 +32797,7 @@ class Emitter {
                 : `({ (void)${value}; (void)${keyC}; false; })`);
         }
         if (mapped.kind === "value" || mapped.kind === "string") {
-            if (this.isSymbolIteratorExpression(keyNode) || this.isSymbolUnscopablesExpression(keyNode)) {
+            if (this.isSupportedWellKnownSymbolExpression(keyNode)) {
                 const key = this.emitExpr(keyNode);
                 const fn = method === "hasOwnProperty"
                     ? "tsc_value_has_own_symbol_prop"
@@ -32819,7 +32819,7 @@ class Emitter {
             ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
         }
         const key = this.emitExpr(keyNode);
-        if (this.isSymbolIteratorExpression(keyNode) || this.isSymbolUnscopablesExpression(keyNode)) {
+        if (this.isSupportedWellKnownSymbolExpression(keyNode)) {
             const fn = method === "hasOwnProperty"
                 ? "tsc_value_has_own_symbol_prop"
                 : "tsc_value_symbol_property_is_enumerable";
@@ -35509,7 +35509,7 @@ class Emitter {
             }
             case "hasOwnProperty":
                 if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
-                if (this.isSymbolIteratorExpression(args[0]!) || this.isSymbolUnscopablesExpression(args[0]!)) {
+                if (this.isSupportedWellKnownSymbolExpression(args[0]!)) {
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
                         [
@@ -35542,7 +35542,7 @@ class Emitter {
                 );
             case "propertyIsEnumerable":
                 if (args.length < 1) unsupported(call, "propertyIsEnumerable expects at least 1 arg");
-                if (this.isSymbolIteratorExpression(args[0]!) || this.isSymbolUnscopablesExpression(args[0]!)) {
+                if (this.isSupportedWellKnownSymbolExpression(args[0]!)) {
                     return this.emitSequencedExpr(
                         T_BOOLEAN,
                         [
@@ -35617,10 +35617,8 @@ class Emitter {
             }
             case "concat": {
                 if (args.length === 0) {
-                    return this.emitSequencedCall("tsc_value_method_slice", T_VALUE, [
+                    return this.emitSequencedCall("tsc_value_method_concat_empty", T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },
-                        { value: missing, target: T_VALUE, node: call.expression },
-                        { value: missing, target: T_VALUE, node: call.expression },
                     ]);
                 }
                 const specs: SequencedCallArg[] = [
@@ -42465,6 +42463,11 @@ class Emitter {
             }
             case "concat": {
                 if (et.kind === "value") {
+                    if (args.length === 0) {
+                        return this.emitSequencedExpr(recv.ty, [{ value: recv }], ([target]) =>
+                            `tsc_value_as_array(tsc_value_method_concat_empty(tsc_value_array(${target})))`,
+                        );
+                    }
                     const specs: SequencedCallArg[] = [
                         { value: recv },
                     ];
@@ -49344,6 +49347,19 @@ class Emitter {
             expr.name.text === "unscopables";
     }
 
+    private isSymbolIsConcatSpreadableExpression(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "Symbol" &&
+            expr.name.text === "isConcatSpreadable";
+    }
+
+    private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
+        return this.isSymbolIteratorExpression(expr) ||
+            this.isSymbolUnscopablesExpression(expr) ||
+            this.isSymbolIsConcatSpreadableExpression(expr);
+    }
+
     private isStaticArrayPrototypeExpression(expr: ts.Expression): boolean {
         let current: ts.Expression = expr;
         while (
@@ -50079,7 +50095,7 @@ class Emitter {
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
             }
-            if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+            if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_VALUE, [
@@ -50314,7 +50330,7 @@ class Emitter {
         if (name === "hasOwn") {
             if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
-            if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+            if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
@@ -52730,7 +52746,7 @@ class Emitter {
                         ...ignored,
                     ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
                 }
-                if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+                if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_VALUE, [
                         { value: target, target: T_VALUE, node: args[0]! },
@@ -52818,7 +52834,7 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
-                if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+                if (this.isSupportedWellKnownSymbolExpression(args[1]!)) {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
@@ -54628,6 +54644,9 @@ class Emitter {
             }
             if (pa.expression.text === "Symbol" && pa.name.text === "unscopables") {
                 return { c: `tsc_symbol_unscopables()`, ty: T_SYMBOL };
+            }
+            if (pa.expression.text === "Symbol" && pa.name.text === "isConcatSpreadable") {
+                return { c: `tsc_symbol_is_concat_spreadable()`, ty: T_SYMBOL };
             }
         }
         // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")

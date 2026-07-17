@@ -15,6 +15,7 @@ interface SymbolConstructor {
     readonly iterator: symbol;
     readonly asyncIterator: symbol;
     readonly unscopables: symbol;
+    readonly isConcatSpreadable: symbol;
 }
 declare var Symbol: SymbolConstructor;
 
