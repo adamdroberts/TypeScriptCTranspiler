@@ -20,6 +20,9 @@ for (const [name, score] of entries) {
 console.log("pairs:", labels.join("|"));
 console.log("total:", total);
 
+const anyIndexed = entries.map((entry: any) => entry[0] + ":" + entry[1]);
+console.log("any-indexed:", anyIndexed.join("|"));
+
 const rebuilt: Scores = Object.fromEntries(entries);
 console.log("rebuilt:", rebuilt.alice, rebuilt.bob, rebuilt.carol);
 

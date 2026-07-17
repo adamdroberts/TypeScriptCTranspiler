@@ -20736,13 +20736,13 @@ class Emitter {
         const name = this.commonJsAccessMemberName(access);
         if (name == null) return null;
         const info = this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName);
+        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
+        if (commonJsDecl) return commonJsDecl;
         if (name === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
             if (!this.hasCommonJsEsModuleMarker(info.sf)) {
                 return info.sf;
             }
         }
-        const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
-        if (commonJsDecl) return commonJsDecl;
         if (info && this.isJavaScriptSourceFile(info.sf) && this.commonJsModuleExportsValueDeclaration(info.sf)) {
             return info.sf;
         }
@@ -20772,7 +20772,7 @@ class Emitter {
                 : null;
             if (spec) {
                 const name = this.commonJsAccessMemberName(access);
-                if (name && name !== "default") {
+                if (name) {
                     const member = this.emitCommonJsRequireModulePropertyValue(access, spec, name, "import");
                     if (member) return member.c;
                 }
@@ -42870,7 +42870,7 @@ class Emitter {
             if (!sig) unsupported(arrowFn, `${method}: could not resolve callback signature`);
             const thisType = this.signatureThisType(sig, arrowFn);
             const params = arrowFn.parameters.filter((p) => !this.isThisParameter(p));
-            const paramBindings: { name: string; type: CType; src: string }[] = [];
+            const paramBindings: { name: string; type: CType; src: EmitResult; node: ts.Node }[] = [];
             const isReduce = method === "reduce" || method === "reduceRight";
             const accParam = isReduce ? params[0] : undefined;
             const elemSlot = isReduce ? params[1] : params[0];
@@ -42886,26 +42886,38 @@ class Emitter {
                     unsupported(arrowFn, `${method}: callback needs an element parameter`);
             }
             if (elemSlot && ts.isIdentifier(elemSlot.name)) {
+                const elemParamType = elemSlot.type
+                    ? this.prepareType(mapType(elemSlot, this.checker))
+                    : et;
                 paramBindings.push({
                     name: mangleIdent(elemSlot.name.text),
-                    type: et,
-                    src: elementExpr,
+                    type: elemParamType,
+                    src: { c: elementExpr, ty: et },
+                    node: elemSlot,
                 });
             }
             if (idxSlot && ts.isIdentifier(idxSlot.name)) {
+                const idxParamType = idxSlot.type
+                    ? this.prepareType(mapType(idxSlot, this.checker))
+                    : T_NUMBER;
                 paramBindings.push({
                     name: mangleIdent(idxSlot.name.text),
-                    type: T_NUMBER,
-                    src: `(double)${iv}`,
+                    type: idxParamType,
+                    src: { c: `(double)${iv}`, ty: T_NUMBER },
+                    node: idxSlot,
                 });
             }
             if (arraySlot) {
                 if (!ts.isIdentifier(arraySlot.name))
                     unsupported(arrowFn, `${method}: array parameter must be an identifier`);
+                const arrayParamType = arraySlot.type
+                    ? this.prepareType(mapType(arraySlot, this.checker))
+                    : recv.ty;
                 paramBindings.push({
                     name: mangleIdent(arraySlot.name.text),
-                    type: recv.ty,
-                    src: av,
+                    type: arrayParamType,
+                    src: { c: av, ty: recv.ty },
+                    node: arraySlot,
                 });
             }
             const bodyExpr = this.callbackReturnExpression(arrowFn, method);
@@ -42917,7 +42929,7 @@ class Emitter {
                 if (thisType) this.functionThisStack.pop();
             }
             const bindings = paramBindings
-                .map((b) => `${b.type.c} ${b.name} = ${b.src};`)
+                .map((b) => `${b.type.c} ${b.name} = ${this.coerce(b.src, b.type, b.node)};`)
                 .join(" ");
             callbackDetails = { bindings, bodyC: bodyR.c, bodyType: bodyR.ty };
         } else if (ts.isIdentifier(cb)) {
