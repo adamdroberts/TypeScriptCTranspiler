@@ -50,6 +50,22 @@ console.log(
     }),
     items[0],
 );
+const hiddenDesc: any = Object.getOwnPropertyDescriptor(items, "0");
+console.log(
+    "flags:",
+    hiddenDesc.value,
+    hiddenDesc.writable,
+    hiddenDesc.enumerable,
+    hiddenDesc.configurable,
+    Reflect.set(items, "0", "changed"),
+    Reflect.deleteProperty(items, "0"),
+    Object.keys(items).join("|"),
+);
+
+const defaultIndex: any = [];
+console.log("default index:", Reflect.defineProperty(defaultIndex, "2", { value: "x" }), defaultIndex.length, "[" + Object.keys(defaultIndex).join("|") + "]");
+const defaultDesc: any = Object.getOwnPropertyDescriptor(defaultIndex, "2");
+console.log("default flags:", defaultDesc.value, defaultDesc.writable, defaultDesc.enumerable, defaultDesc.configurable);
 
 const lengthTarget: any = [1, 2, 3];
 report("length nan", (): any => Reflect.defineProperty(lengthTarget, "length", { value: NaN }));
