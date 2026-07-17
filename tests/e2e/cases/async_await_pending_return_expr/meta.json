@@ -1,0 +1,3 @@
+{
+  "description": "single pending await followed by a return expression resumes through an async continuation callback"
+}
