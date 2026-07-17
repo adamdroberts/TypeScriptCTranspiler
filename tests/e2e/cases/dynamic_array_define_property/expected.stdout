@@ -6,6 +6,7 @@ flags: hidden false false false false false 1
 default index: true 3 []
 default flags: x false false false
 closed existing: true false closed false false []
+sealed existing: true false writable false false
 length nan RangeError: Invalid array length
 length float RangeError: Invalid array length
 length overflow RangeError: Invalid array length

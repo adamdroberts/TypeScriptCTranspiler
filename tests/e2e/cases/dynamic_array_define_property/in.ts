@@ -79,6 +79,17 @@ console.log(
     "[" + Object.keys(closedExisting).join("|") + "]",
 );
 
+const sealedExisting: any = ["writable"];
+Object.seal(sealedExisting);
+console.log(
+    "sealed existing:",
+    Reflect.defineProperty(sealedExisting, "0", { writable: false }),
+    Reflect.set(sealedExisting, "0", "changed"),
+    sealedExisting[0],
+    Object.getOwnPropertyDescriptor(sealedExisting, "0")!.writable,
+    Object.getOwnPropertyDescriptor(sealedExisting, "0")!.configurable,
+);
+
 const lengthTarget: any = [1, 2, 3];
 report("length nan", (): any => Reflect.defineProperty(lengthTarget, "length", { value: NaN }));
 report("length float", (): any => Reflect.defineProperty(lengthTarget, "length", { value: 1.5 }));
