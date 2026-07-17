@@ -176,6 +176,7 @@ tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key);
 tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym);
 tsc_symbol_t* tsc_symbol_iterator(void);
 tsc_symbol_t* tsc_symbol_async_iterator(void);
+tsc_symbol_t* tsc_symbol_unscopables(void);
 tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym);
 tsc_str_t* tsc_symbol_to_string(const tsc_symbol_t* sym);
 
@@ -546,6 +547,7 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap);
 tsc_array_t* tsc_array_prototype(void);
 tsc_value_t tsc_array_constructor_value(void);
+tsc_value_t tsc_array_unscopables_value(void);
 void tsc_array_materialize_all(tsc_array_t* a);
 tsc_array_t* tsc_array_from_buf(size_t elem_size, const void* src, size_t n);
 void tsc_array_reserve(tsc_array_t* a, size_t new_cap);

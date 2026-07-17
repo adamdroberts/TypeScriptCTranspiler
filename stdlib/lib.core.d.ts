@@ -14,6 +14,7 @@ interface SymbolConstructor {
     keyFor(sym: symbol, ...ignored: any[]): string | undefined;
     readonly iterator: symbol;
     readonly asyncIterator: symbol;
+    readonly unscopables: symbol;
 }
 declare var Symbol: SymbolConstructor;
 
