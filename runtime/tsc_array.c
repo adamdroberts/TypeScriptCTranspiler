@@ -1206,10 +1206,14 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
     if ((a->sealed || a->frozen) && (del > 0 || insert_len > 0)) {
         tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice cannot mutate a sealed or frozen array"));
     }
-    if (!a->length_writable) return tsc_array_new(a->es, 1);
+    size_t old_len = a->len;
     size_t new_len = a->len - (size_t)del + insert_len;
-    if (new_len != a->len && !a->length_writable) return tsc_array_new(a->es, 1);
-    if (new_len > a->len && !a->extensible) return tsc_array_new(a->es, 1);
+    if (new_len > a->len && !a->length_writable) {
+        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not move array-like element"));
+    }
+    if (new_len > a->len && !a->extensible) {
+        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not move array-like element"));
+    }
 
     tsc_object_t* next_holes = array_spliced_holes(a, (size_t)at, (size_t)del, items);
     tsc_array_t* removed = tsc_array_slice(a, (double)at, (double)(at + del));
@@ -1226,8 +1230,12 @@ tsc_array_t* tsc_array_splice(tsc_array_t* a, double start, double delete_count,
     if (insert_len > 0) {
         memcpy((char*)a->data + (size_t)at * a->es, items->data, insert_len * a->es);
     }
-    a->len = new_len;
     a->holes = next_holes;
+    if (!a->length_writable) {
+        for (size_t i = new_len; i < old_len; i++) tsc_array_mark_hole(a, i);
+        tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice could not update array-like length"));
+    }
+    a->len = new_len;
     return removed;
 }
 

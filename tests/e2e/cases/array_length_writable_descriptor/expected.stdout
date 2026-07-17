@@ -11,6 +11,9 @@ dyn after shift: 2 b| 0
 dyn unshift: Array.prototype.unshift could not move array-like element
 dyn empty unshift: Array.prototype.unshift could not update array-like length
 dyn after unshift: 2 a|b
+dyn splice: Array.prototype.splice could not update array-like length
+dyn after splice: 3 b|c| 0|1
+dyn empty splice: Array.prototype.splice could not update array-like length
 typed define: true false 2
 typed push: Array.prototype.push could not update array-like length
 typed empty push: Array.prototype.push could not update array-like length
@@ -24,3 +27,6 @@ typed after shift: 2 2| 0
 typed unshift: Array.prototype.unshift could not move array-like element
 typed empty unshift: Array.prototype.unshift could not update array-like length
 typed after unshift: 2 1|2
+typed splice: Array.prototype.splice could not update array-like length
+typed after splice: 3 2|3| 0|1
+typed empty splice: Array.prototype.splice could not update array-like length
