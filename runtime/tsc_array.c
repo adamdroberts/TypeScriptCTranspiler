@@ -847,6 +847,32 @@ tsc_value_t tsc_array_unscopables_value(void) {
     return array_unscopables_value;
 }
 
+tsc_array_t* tsc_array_prototype_symbols(void) {
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_symbol_t*), 2);
+    tsc_symbol_t* iterator = tsc_symbol_iterator();
+    tsc_symbol_t* unscopables = tsc_symbol_unscopables();
+    tsc_array_push_raw(out, &iterator);
+    tsc_array_push_raw(out, &unscopables);
+    return out;
+}
+
+static tsc_value_t array_symbol_descriptor(tsc_value_t value, bool writable) {
+    tsc_object_t* desc = tsc_object_new();
+    tsc_object_set(desc, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(desc, tsc_str_from_lit("writable", 8), tsc_value_bool(writable));
+    tsc_object_set(desc, tsc_str_from_lit("enumerable", 10), tsc_value_bool(false));
+    tsc_object_set(desc, tsc_str_from_lit("configurable", 12), tsc_value_bool(true));
+    return tsc_value_object(desc);
+}
+
+tsc_value_t tsc_array_symbol_iterator_descriptor(void) {
+    return array_symbol_descriptor(tsc_value_symbol_iterator_method_value(), true);
+}
+
+tsc_value_t tsc_array_symbol_unscopables_descriptor(void) {
+    return array_symbol_descriptor(tsc_array_unscopables_value(), false);
+}
+
 static tsc_value_t tsc_array_default_prototype(void) {
     static bool initialized = false;
     static tsc_value_t prototype;
