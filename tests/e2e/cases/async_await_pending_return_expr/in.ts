@@ -194,8 +194,25 @@ class Worker {
         return "never";
     }
 
+    async switchBreakAfterAwait(kind: string): Promise<string> {
+        const value = await delay(kind === "b" ? 40 : 41, kind);
+        let result = this.prefix;
+        switch (value) {
+            case "a":
+                result = result + "alpha";
+                break;
+            case "b":
+                result = result + "beta";
+                break;
+            default:
+                result = result + "other-" + value;
+                break;
+        }
+        return result;
+    }
+
     async voidAfterAwait(): Promise<string> {
-        const ignored = await delay(40);
+        const ignored = await delay(42);
         return this.prefix + "void";
     }
 }
@@ -305,6 +322,10 @@ new Worker("switch-").switchReturnAfterAwait("a").then((value: string): void => 
 
 new Worker("switch-").switchReturnAfterAwait("z").then((value: string): void => {
     console.log("method-switch-default:", value);
+});
+
+new Worker("switch-break-").switchBreakAfterAwait("b").then((value: string): void => {
+    console.log("method-switch-break:", value);
 });
 
 new Worker("void-").voidAfterAwait().then((value: string): void => {

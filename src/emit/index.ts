@@ -262,6 +262,7 @@ class Emitter {
     private returnStack: CType[] = [];
     private tailFunctionStack: TailFunctionContext[] = [];
     private generatorStack: GeneratorContext[] = [];
+    private activeBreakTargets: Array<string | null> = [];
     private activeContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
@@ -24679,6 +24680,7 @@ class Emitter {
             loopDepth = 0,
             allowContinue = false,
             sourceTryDepth = 0,
+            switchDepth = 0,
         ): boolean => {
             const visitVariableDeclarationList = (
                 declarationList: ts.VariableDeclarationList,
@@ -24708,24 +24710,24 @@ class Emitter {
             }
             if (ts.isBlock(stmt)) {
                 for (const child of stmt.statements) {
-                    if (!visitStatement(child, loopDepth, allowContinue, sourceTryDepth)) return false;
+                    if (!visitStatement(child, loopDepth, allowContinue, sourceTryDepth, switchDepth)) return false;
                 }
                 return true;
             }
             if (ts.isIfStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
-                if (!visitStatement(stmt.thenStatement, loopDepth, allowContinue, sourceTryDepth)) return false;
+                if (!visitStatement(stmt.thenStatement, loopDepth, allowContinue, sourceTryDepth, switchDepth)) return false;
                 if (
                     stmt.elseStatement &&
-                    !visitStatement(stmt.elseStatement, loopDepth, allowContinue, sourceTryDepth)
+                    !visitStatement(stmt.elseStatement, loopDepth, allowContinue, sourceTryDepth, switchDepth)
                 ) return false;
                 return true;
             }
             if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth, switchDepth);
             }
             if (ts.isForStatement(stmt)) {
                 if (stmt.initializer) {
@@ -24744,7 +24746,7 @@ class Emitter {
                     visit(stmt.incrementor);
                     if (!ok) return false;
                 }
-                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth, switchDepth);
             }
             if (ts.isForOfStatement(stmt)) {
                 if (stmt.awaitModifier) return false;
@@ -24756,7 +24758,7 @@ class Emitter {
                 }
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth, switchDepth);
             }
             if (ts.isForInStatement(stmt)) {
                 if (ts.isVariableDeclarationList(stmt.initializer)) {
@@ -24767,10 +24769,10 @@ class Emitter {
                 }
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth, switchDepth);
             }
             if (ts.isBreakStatement(stmt)) {
-                return !stmt.label && loopDepth > 0;
+                return !stmt.label && (loopDepth > 0 || switchDepth > 0);
             }
             if (ts.isContinueStatement(stmt)) {
                 return !stmt.label && allowContinue;
@@ -24788,7 +24790,7 @@ class Emitter {
                 return true;
             }
             if (ts.isTryStatement(stmt)) {
-                if (!visitStatement(stmt.tryBlock, loopDepth, allowContinue, sourceTryDepth + 1)) return false;
+                if (!visitStatement(stmt.tryBlock, loopDepth, allowContinue, sourceTryDepth + 1, switchDepth)) return false;
                 if (stmt.catchClause) {
                     const catchDecl = stmt.catchClause.variableDeclaration;
                     let catchSymbol: ts.Symbol | null = null;
@@ -24798,13 +24800,13 @@ class Emitter {
                         if (!catchSymbol) return false;
                         locals.add(catchSymbol);
                     }
-                    const catchOk = visitStatement(stmt.catchClause.block, loopDepth, allowContinue, sourceTryDepth + 1);
+                    const catchOk = visitStatement(stmt.catchClause.block, loopDepth, allowContinue, sourceTryDepth + 1, switchDepth);
                     if (catchSymbol) locals.delete(catchSymbol);
                     if (!catchOk) return false;
                 }
                 if (
                     stmt.finallyBlock &&
-                    !visitStatement(stmt.finallyBlock, loopDepth, allowContinue, sourceTryDepth + 1)
+                    !visitStatement(stmt.finallyBlock, loopDepth, allowContinue, sourceTryDepth + 1, switchDepth)
                 ) return false;
                 return true;
             }
@@ -24820,7 +24822,7 @@ class Emitter {
                         return false;
                     }
                     for (const child of clause.statements) {
-                        if (!visitStatement(child, loopDepth, allowContinue, sourceTryDepth)) return false;
+                        if (!visitStatement(child, loopDepth, allowContinue, sourceTryDepth, switchDepth + 1)) return false;
                     }
                 }
                 return true;
@@ -26975,7 +26977,8 @@ class Emitter {
         if (ts.isTryStatement(stmt)) return this.emitTry(buf, stmt);
         if (ts.isSwitchStatement(stmt)) return this.emitSwitch(buf, stmt);
         if (stmt.kind === ts.SyntaxKind.BreakStatement) {
-            buf.line("break;");
+            const target = this.activeBreakTargets[this.activeBreakTargets.length - 1];
+            buf.line(target ? `goto ${target};` : "break;");
             return;
         }
         if (stmt.kind === ts.SyntaxKind.ContinueStatement) {
@@ -28137,11 +28140,13 @@ class Emitter {
         s: ts.Statement,
         continueTarget: string | null = null,
     ): void {
+        this.activeBreakTargets.push(null);
         this.activeContinueTargets.push(continueTarget);
         try {
             this.emitStmtInBlock(buf, s);
         } finally {
             this.activeContinueTargets.pop();
+            this.activeBreakTargets.pop();
         }
     }
 
@@ -29798,6 +29803,7 @@ class Emitter {
         const isBool = disc.ty.kind === "boolean";
         if (!isStr && !isBool) requireNumber(sw.expression, disc.ty);
         const dv = this.freshTemp("_sw");
+        const endLabel = this.freshTemp("_switch_end");
         buf.open("");
         buf.line(`${disc.ty.c} ${dv} = ${disc.c};`);
         // Group consecutive empty cases so `case A: case B: <body>` emits as
@@ -29814,39 +29820,45 @@ class Emitter {
             }
             return `(${dv} == ${caseVal.c})`;
         };
-        for (const clause of sw.caseBlock.clauses) {
-            if (clause.kind === ts.SyntaxKind.CaseClause) {
-                pending.push(buildCond(clause.expression));
-                if (clause.statements.length > 0) {
-                    const cond = pending.join(" || ");
-                    if (first) buf.open(`if (${cond})`);
-                    else buf.open(`else if (${cond})`);
-                    first = false;
-                    for (const s of clause.statements) this.emitStmt(buf, s);
-                    buf.close();
-                    pending = [];
+        this.activeBreakTargets.push(endLabel);
+        try {
+            for (const clause of sw.caseBlock.clauses) {
+                if (clause.kind === ts.SyntaxKind.CaseClause) {
+                    pending.push(buildCond(clause.expression));
+                    if (clause.statements.length > 0) {
+                        const cond = pending.join(" || ");
+                        if (first) buf.open(`if (${cond})`);
+                        else buf.open(`else if (${cond})`);
+                        first = false;
+                        for (const s of clause.statements) this.emitStmt(buf, s);
+                        buf.close();
+                        pending = [];
+                    }
                 }
             }
-        }
-        const dflt = sw.caseBlock.clauses.find(
-            (c) => c.kind === ts.SyntaxKind.DefaultClause,
-        ) as ts.DefaultClause | undefined;
-        if (dflt) {
-            // If there are still-pending empty cases before the default, merge
-            // them into the default (they fall through to it).
-            if (pending.length > 0) {
-                const cond = pending.join(" || ");
-                if (first) buf.open(`if (${cond} || true)`);
-                else buf.open(`else if (${cond} || true)`);
-            } else {
-                if (first) buf.open("if (true)");
-                else buf.open("else");
+            const dflt = sw.caseBlock.clauses.find(
+                (c) => c.kind === ts.SyntaxKind.DefaultClause,
+            ) as ts.DefaultClause | undefined;
+            if (dflt) {
+                // If there are still-pending empty cases before the default, merge
+                // them into the default (they fall through to it).
+                if (pending.length > 0) {
+                    const cond = pending.join(" || ");
+                    if (first) buf.open(`if (${cond} || true)`);
+                    else buf.open(`else if (${cond} || true)`);
+                } else {
+                    if (first) buf.open("if (true)");
+                    else buf.open("else");
+                }
+                for (const s of dflt.statements) this.emitStmt(buf, s);
+                buf.close();
+            } else if (pending.length > 0) {
+                // Trailing empty cases with no default — they have no effect.
             }
-            for (const s of dflt.statements) this.emitStmt(buf, s);
-            buf.close();
-        } else if (pending.length > 0) {
-            // Trailing empty cases with no default — they have no effect.
+        } finally {
+            this.activeBreakTargets.pop();
         }
+        buf.line(`${endLabel}:;`);
         buf.close();
     }
 

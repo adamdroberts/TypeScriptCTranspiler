@@ -33,3 +33,23 @@ function color(name: string): string {
 for (const c of ["red", "green", "purple"]) {
     console.log(c, "->", color(c));
 }
+
+function status(code: number): string {
+    let result = "unset";
+    switch (code) {
+        case 200:
+            result = "ok";
+            break;
+        case 404:
+            result = "missing";
+            break;
+        default:
+            result = "other";
+            break;
+    }
+    return result;
+}
+
+for (const code of [200, 404, 500]) {
+    console.log("status", code, "->", status(code));
+}
