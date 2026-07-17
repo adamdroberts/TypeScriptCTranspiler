@@ -22,6 +22,9 @@ alias symbols: 2 true true Symbol.iterator|Symbol.unscopables
 symbol descriptors: true true false true true false false true
 alias symbol descriptors: true true false true true false false true
 reflect symbol descriptors: true true false true true false false true
+bulk descriptor symbols: 2 true true 2 true true
+bulk symbol descriptors: true true true false true true true false false true
+bulk string enumeration: 40 40 40 false false
 delete name: true false
 redefine: true true all 3
 method: a-b

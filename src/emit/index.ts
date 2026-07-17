@@ -55091,7 +55091,7 @@ class Emitter {
             return this.emitSequencedExpr(
                 T_VALUE,
                 [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_symbol_iterator_method(${value})`,
+                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_iterator())`,
             );
         }
         if (isArrayPrototypeReceiver && this.isSymbolUnscopablesExpression(ea.argumentExpression)) {
@@ -55105,7 +55105,7 @@ class Emitter {
             return this.emitSequencedExpr(
                 T_VALUE,
                 [{ value: recv, target: T_VALUE, node: ea.expression }],
-                ([value]) => `tsc_value_symbol_unscopables(${value})`,
+                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_unscopables())`,
             );
         }
         if (recv.ty.kind === "array") {
