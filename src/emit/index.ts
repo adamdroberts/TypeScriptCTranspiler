@@ -42061,15 +42061,19 @@ class Emitter {
                 const av = this.freshTemp("_arr");
                 const pieces: string[] = [`tsc_array_t* const ${av} = ${recv.c}`];
                 const pushes: string[] = [];
+                const values: string[] = [];
                 for (let i = 0; i < args.length; i++) {
                     const r = this.emitExpr(args[i]!);
                     const coerced = this.coerce(r, et, args[i]!);
                     const vv = this.freshTemp("_pv");
                     pieces.push(`${et.c} ${vv} = ${coerced}`);
+                    values.push(vv);
                     pushes.push(`if (${av}->len + 1 > ${av}->cap) tsc_array_reserve(${av}, ${av}->len + 1); TSC_ARR(${et.c}, ${av}, ${av}->len) = ${vv}; ${av}->len++`);
                 }
                 if (pushes.length > 0) {
-                    pieces.push(`if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push cannot mutate a sealed or frozen array")); else if (${av}->extensible && ${av}->length_writable) { ${pushes.join("; ")}; }`);
+                    pieces.push(et.kind === "value"
+                        ? values.map((value) => `tsc_value_method_push(tsc_value_array(${av}), ${value})`).join("; ")
+                        : `if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push cannot mutate a sealed or frozen array")); else if (${av}->extensible && ${av}->length_writable) { ${pushes.join("; ")}; }`);
                 }
                 pieces.push(`(double)${av}->len`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
