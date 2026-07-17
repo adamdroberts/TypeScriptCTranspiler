@@ -42095,11 +42095,12 @@ class Emitter {
                 return this.emitSequencedExpr(
                     et,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) =>
-                        `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
-                        `if (${av}->len > 0 && tsc_array_index_present(${av}, 0)) ` +
-                        `${rv} = TSC_ARR(${et.c}, ${av}, 0); ` +
-                        `if (${av}->frozen || (${av}->sealed && ${av}->len > 0)) tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array")); else if (${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
+                    ([arr]) => et.kind === "value"
+                        ? `tsc_value_method_shift(tsc_value_array(${arr}))`
+                        : `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
+                            `if (${av}->len > 0 && tsc_array_index_present(${av}, 0)) ` +
+                            `${rv} = TSC_ARR(${et.c}, ${av}, 0); ` +
+                            `if (${av}->frozen || (${av}->sealed && ${av}->len > 0)) tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array")); else if (${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
                 );
             }
             case "unshift": {
