@@ -1130,6 +1130,7 @@ void tsc_array_clear_hole(tsc_array_t* a, size_t index) {
 bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a) return false;
     if (tsc_str_is_length_key(key)) return true;
+    if (array_prototype_initialized && a == tsc_array_prototype() && str_lit_eq(key, "valueOf")) return false;
     size_t idx = 0;
     if (tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) return true;
     return a->props && tsc_object_has_own(a->props, key);
@@ -1137,6 +1138,7 @@ bool tsc_array_has_own_key(const tsc_array_t* a, const tsc_str_t* key) {
 
 bool tsc_array_property_is_enumerable_key(const tsc_array_t* a, const tsc_str_t* key) {
     if (!a || tsc_str_is_length_key(key)) return false;
+    if (array_prototype_initialized && a == tsc_array_prototype() && str_lit_eq(key, "valueOf")) return false;
     if (a->props && tsc_object_has_own(a->props, key)) {
         return tsc_object_property_is_enumerable(a->props, key);
     }
