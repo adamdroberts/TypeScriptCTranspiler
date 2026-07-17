@@ -262,6 +262,7 @@ class Emitter {
     private returnStack: CType[] = [];
     private tailFunctionStack: TailFunctionContext[] = [];
     private generatorStack: GeneratorContext[] = [];
+    private activeContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
@@ -24743,7 +24744,7 @@ class Emitter {
                     visit(stmt.incrementor);
                     if (!ok) return false;
                 }
-                return visitStatement(stmt.statement, loopDepth + 1, false, sourceTryDepth);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
             }
             if (ts.isForOfStatement(stmt)) {
                 if (stmt.awaitModifier) return false;
@@ -26978,7 +26979,8 @@ class Emitter {
             return;
         }
         if (stmt.kind === ts.SyntaxKind.ContinueStatement) {
-            buf.line("continue;");
+            const target = this.activeContinueTargets[this.activeContinueTargets.length - 1];
+            buf.line(target ? `goto ${target};` : "continue;");
             return;
         }
         if (stmt.kind === ts.SyntaxKind.EmptyStatement) return;
@@ -28130,6 +28132,19 @@ class Emitter {
         }
     }
 
+    private emitLoopStmtInBlock(
+        buf: CBuf,
+        s: ts.Statement,
+        continueTarget: string | null = null,
+    ): void {
+        this.activeContinueTargets.push(continueTarget);
+        try {
+            this.emitStmtInBlock(buf, s);
+        } finally {
+            this.activeContinueTargets.pop();
+        }
+    }
+
     private isDuplicateSimpleSetAdd(a: ts.Statement, b: ts.Statement): boolean {
         const parse = (stmt: ts.Statement): { recv: string; arg: string } | null => {
             if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
@@ -28153,13 +28168,13 @@ class Emitter {
     private emitWhile(buf: CBuf, ws: ts.WhileStatement): void {
         if (this.staticBooleanValue(ws.expression) === false) return;
         buf.open(`while (${this.emitBoolExpr(ws.expression)})`);
-        this.emitStmtInBlock(buf, ws.statement);
+        this.emitLoopStmtInBlock(buf, ws.statement);
         buf.close();
     }
 
     private emitDoWhile(buf: CBuf, ds: ts.DoStatement): void {
         buf.open("do");
-        this.emitStmtInBlock(buf, ds.statement);
+        this.emitLoopStmtInBlock(buf, ds.statement);
         buf.close(` while (${this.emitBoolExpr(ds.expression)});`);
     }
 
@@ -28214,8 +28229,10 @@ class Emitter {
         }
         const cond = fs.condition ? this.emitBoolExpr(fs.condition) : "1";
         const upd = fs.incrementor ? this.emitExpr(fs.incrementor).c : "";
+        const continueLabel = upd ? this.freshTemp("_for_continue") : null;
         buf.open(`while (${cond})`);
-        this.emitStmtInBlock(buf, fs.statement);
+        this.emitLoopStmtInBlock(buf, fs.statement, continueLabel);
+        if (continueLabel) buf.line(`${continueLabel}:;`);
         if (upd) buf.line(`(void)(${upd});`);
         buf.close();
         buf.close();
@@ -28303,7 +28320,7 @@ class Emitter {
         buf.line(
             `tsc_str_t*${qual} ${bindingName} = TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar});`,
         );
-        this.emitStmtInBlock(buf, fis.statement);
+        this.emitLoopStmtInBlock(buf, fis.statement);
         buf.close();
     }
 
@@ -28416,7 +28433,7 @@ class Emitter {
         buf.line(
             `${elemType.c}${qual} ${bindingName} = ${element};`,
         );
-        this.emitStmtInBlock(buf, fos.statement);
+        this.emitLoopStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
     }
@@ -28574,7 +28591,7 @@ class Emitter {
             buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
             buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
             buf.line(`${entryValueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, entryValueType)};`);
-            this.emitStmtInBlock(buf, fos.statement);
+            this.emitLoopStmtInBlock(buf, fos.statement);
             buf.close();
             buf.close();
             return true;
@@ -28611,7 +28628,7 @@ class Emitter {
         buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
         buf.line(`if (${stepVar}->done) break;`);
         buf.line(`${valueType.c}${qual} ${bindingName} = ${stepVar}->value;`);
-        this.emitStmtInBlock(buf, fos.statement);
+        this.emitLoopStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
         return true;
@@ -28789,7 +28806,7 @@ class Emitter {
                 : restArray;
             buf.line(`${restBinding.type.c}${qual} ${restBinding.name} = ${init};`);
         }
-        this.emitStmtInBlock(buf, fos.statement);
+        this.emitLoopStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
     }
@@ -28847,7 +28864,7 @@ class Emitter {
         buf.line(
             `${valueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, valueType)};`,
         );
-        this.emitStmtInBlock(buf, fos.statement);
+        this.emitLoopStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
     }
@@ -28905,7 +28922,7 @@ class Emitter {
         );
         buf.line(`tsc_str_t*${qual} ${keyName} = ${paramsVar}->items[${idxVar}].name;`);
         buf.line(`tsc_str_t*${qual} ${valueName} = ${paramsVar}->items[${idxVar}].value;`);
-        this.emitStmtInBlock(buf, fos.statement);
+        this.emitLoopStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
     }
@@ -28967,7 +28984,7 @@ class Emitter {
         );
         buf.line(`${keyType.c}${qual} ${keyName} = ${keyAt};`);
         buf.line(`${valueType.c}${qual} ${valueName} = ${valueAt};`);
-        this.emitStmtInBlock(buf, fos.statement);
+        this.emitLoopStmtInBlock(buf, fos.statement);
         buf.close();
         buf.close();
     }
