@@ -52862,9 +52862,9 @@ class Emitter {
                     ], ([t]) => `((void)${t}, true)`);
                 }
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function" || mapped.kind === "class") ? T_VALUE : undefined, node: args[0]! },
+                    { value: target, target: (mapped.kind === "value" || mapped.kind === "function" || mapped.kind === "class" || mapped.kind === "array") ? T_VALUE : undefined, node: args[0]! },
                     ...ignored,
-                ], ([t]) => `tsc_reflect_is_extensible(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
+                ], ([t]) => `tsc_reflect_is_extensible(${t})`);
             }
             case "ownKeys": {
                 if (args.length < 1) unsupported(call, "Reflect.ownKeys expects target");
@@ -52957,9 +52957,9 @@ class Emitter {
                 }
                 const target = this.emitExpr(args[0]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: mapped.kind === "array" ? undefined : T_VALUE, node: args[0]! },
+                    { value: target, target: T_VALUE, node: args[0]! },
                     ...ignored,
-                ], ([t]) => `tsc_reflect_prevent_extensions(${mapped.kind === "array" ? `tsc_value_array(${t})` : t})`);
+                ], ([t]) => `tsc_reflect_prevent_extensions(${t})`);
             }
             case "set": {
                 if (args.length < 3) unsupported(call, "Reflect.set expects target, key, value, and optional receiver");

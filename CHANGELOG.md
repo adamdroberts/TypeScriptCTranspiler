@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Reflect.isExtensible([])` and `Reflect.preventExtensions(array)` now normalize array targets through `tsc_value_t` instead of double-boxing fresh array literals in generated C. Test: `array_prototype_value`.
 - Static `Array.prototype` own-name helpers now reflect live string-key deletion/addition on the shared runtime prototype, and `Reflect.has([], key)` no longer double-boxes fresh array literals. Test: `array_prototype_value`.
 - `%Array.prototype%[Symbol.unscopables]` coverage now verifies the null-prototype object remains extensible, exposes writable/enumerable/configurable data properties, and lacks inherited `Object.prototype` methods. Test: `array_prototype_value`.
 - Detached `Object.prototype.propertyIsEnumerable.call(array, Symbol.iterator | Symbol.unscopables)` now preserves symbol keys for array receivers emitted as dynamic values instead of routing the symbol argument through ignored-value coercion. Test: `array_prototype_value`.
