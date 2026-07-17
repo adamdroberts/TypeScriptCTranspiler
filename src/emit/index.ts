@@ -26416,6 +26416,12 @@ class Emitter {
                 });
             }
             if (right.ty.kind === "array") {
+                if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: right, node: bin.right },
+                        { value: left, target: T_SYMBOL, node: bin.left },
+                    ], ([array, key]) => `tsc_value_has_symbol_prop(tsc_value_array(${array}), ${key})`);
+                }
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: right, node: bin.right },
                     { value: left, target: T_STRING, node: bin.left },
@@ -26435,6 +26441,16 @@ class Emitter {
             }
             if (right.ty.kind !== "value") {
                 unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
+            }
+            if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [
+                        { value: left, target: T_SYMBOL, node: bin.left },
+                        { value: right, target: T_VALUE, node: bin.right },
+                    ],
+                    ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
+                );
             }
             return this.emitSequencedExpr(
                 T_BOOLEAN,
@@ -30587,6 +30603,12 @@ class Emitter {
                     );
                 }
                 if (right.ty.kind === "array") {
+                    if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                        return this.emitSequencedExpr(T_BOOLEAN, [
+                            { value: right },
+                            { value: left, target: T_SYMBOL, node: bin.left },
+                        ], ([array, key]) => `tsc_value_has_symbol_prop(tsc_value_array(${array}), ${key})`);
+                    }
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: right },
                         { value: left, target: T_STRING, node: bin.left },
@@ -30597,6 +30619,16 @@ class Emitter {
                 }
                 if (right.ty.kind !== "value") {
                     unsupported(bin.right, "in currently supports dynamic objects, typed objects, arrays, and buffers only");
+                }
+                if (this.isSymbolIteratorExpression(bin.left) || this.isSymbolUnscopablesExpression(bin.left)) {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: left, target: T_SYMBOL, node: bin.left },
+                            { value: right, target: T_VALUE, node: bin.right },
+                        ],
+                        ([key, obj]) => `tsc_value_has_symbol_prop(${obj}, ${key})`,
+                    );
                 }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
