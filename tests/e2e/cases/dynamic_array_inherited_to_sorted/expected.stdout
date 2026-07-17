@@ -1,3 +1,5 @@
 inherited: 3|2|1 0|1|2 false
 hole: 3|1| 0|1|2 true
 explicit undefined: 3|1| 0|1|2 true
+typed inherited: 3|2|1 0|1|2 false
+typed hole: 3|1| 0|1|2 true false
