@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Existing writable numeric elements on sealed dynamic arrays can now make the permitted one-way transition to non-writable descriptors. Test: `dynamic_array_define_property`.
 - Existing numeric elements on non-extensible dynamic arrays can now be legally redefined with stricter data descriptor flags without making the receiver externally extensible. Test: `dynamic_array_define_property`.
 - Existing configurable numeric elements on non-extensible dynamic arrays can now be converted into accessor descriptors through internal side storage. Test: `dynamic_array_accessor_properties`.
 - Dynamic array numeric data properties now support independent writable, enumerable, and configurable descriptor flags, including default-false descriptors on new indexes with array length and hole bookkeeping. Test: `dynamic_array_define_property`.
