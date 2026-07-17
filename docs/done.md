@@ -439,7 +439,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic and statically typed `any[]` `unshift()` move inherited indexed values and preserve true source holes while evaluating inserted arguments left-to-right. Test: `dynamic_array_inherited_unshift`
 - Dynamic and statically typed `any[]` `pop()` read inherited final indexes and return `undefined` for true final holes before shrinking the array. Test: `dynamic_array_inherited_pop`
 - Dynamic and statically typed `any[]` `shift()` observe inherited indexed values while moving elements and preserve true source holes by deleting destination properties. Test: `dynamic_array_inherited_shift`
-- Dynamic and statically typed `any[]` `copyWithin()` snapshots inherited-aware source presence and values, writing inherited elements and deleting destinations for true source holes. Test: `dynamic_array_inherited_copy_within`
+- Dynamic and statically typed `any[]` `copyWithin()` snapshot inherited-aware source presence and values, honor inherited destination setters, write inherited elements, and delete destinations for true source holes. Test: `dynamic_array_inherited_copy_within`
 - Dynamic array `fill(value, start?, end?)` mutates `tsc_value_t` arrays over the selected range, treating `null` numeric range arguments as zero rather than omitted/defaulted. Test: `dynamic_array_fill`
 - Dynamic array `at(index)` returns the element at a positive or negative index, or `undefined` when out of bounds. Test: `dynamic_array_at`
 - Dynamic array `toReversed()` returns a reversed copy without mutating the receiver. Test: `dynamic_array_to_reversed`
