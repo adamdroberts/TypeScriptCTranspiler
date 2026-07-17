@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic and statically typed `any[]` mutating `sort` now include inherited indexed values in the sorted prefix and preserve the remaining sparse tail as holes. Test: `dynamic_array_inherited_sort`.
 - Dynamic and statically typed `any[]` `splice` now observe inherited indexes in removed and shifted ranges while preserving true holes in both the receiver and removed array. Test: `dynamic_array_inherited_splice`.
 - Dynamic and statically typed `any[]` `unshift` now move inherited indexed values and preserve true source holes while evaluating inserted arguments left-to-right. Test: `dynamic_array_inherited_unshift`.
 - Dynamic and statically typed `any[]` `pop` now reads inherited final indexes and returns `undefined` for true final holes before shrinking the array. Test: `dynamic_array_inherited_pop`.
