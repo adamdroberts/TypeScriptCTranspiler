@@ -121,7 +121,7 @@ interface AsyncAwaitContinuationParam {
 interface AsyncAwaitReturnContinuation {
     variable: ts.Identifier;
     awaitExpr: ts.AwaitExpression;
-    postAwaitStatements: readonly ts.VariableStatement[];
+    postAwaitStatements: readonly ts.Statement[];
     returnExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
@@ -24576,7 +24576,6 @@ class Emitter {
         }
         const params = this.asyncAwaitContinuationParameters(parameters);
         const postAwaitStatements = body.statements.slice(1, -1);
-        if (!postAwaitStatements.every(ts.isVariableStatement)) return null;
         const referenced = this.asyncAwaitContinuationReferences(
             variable.name,
             postAwaitStatements,
@@ -24665,15 +24664,24 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         for (const stmt of postAwaitStatements) {
-            if (!ts.isVariableStatement(stmt) || !(stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
-            for (const decl of stmt.declarationList.declarations) {
-                if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                visit(decl.initializer);
-                if (!ok) return null;
-                const sym = this.symbolForIdentifier(decl.name);
-                if (!sym) return null;
-                locals.add(sym);
+            if (ts.isVariableStatement(stmt)) {
+                if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                    visit(decl.initializer);
+                    if (!ok) return null;
+                    const sym = this.symbolForIdentifier(decl.name);
+                    if (!sym) return null;
+                    locals.add(sym);
+                }
+                continue;
             }
+            if (ts.isExpressionStatement(stmt)) {
+                visit(stmt.expression);
+                if (!ok) return null;
+                continue;
+            }
+            return null;
         }
         visit(returnExpr);
         return ok ? { params: [...referenced.values()], usesThis } : null;
@@ -24735,7 +24743,7 @@ class Emitter {
         promiseType: CType,
         awaitedType: CType,
         variable: ts.Identifier,
-        postAwaitStatements: readonly ts.VariableStatement[],
+        postAwaitStatements: readonly ts.Statement[],
         returnExpr: ts.Expression,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,

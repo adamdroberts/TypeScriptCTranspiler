@@ -50,6 +50,12 @@ class Worker {
         const finalLabel = decorated + suffix;
         return finalLabel;
     }
+
+    async sideEffectThis(): Promise<string> {
+        const value = await delay(23, "side");
+        this.prefix = this.prefix + value;
+        return this.prefix;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -92,6 +98,10 @@ new Worker("this-").thisPrefixed().then((value: string): void => {
 
 new Worker("this-").stagedThis("!").then((value: string): void => {
     console.log("method-staged-this:", value);
+});
+
+new Worker("effect-").sideEffectThis().then((value: string): void => {
+    console.log("method-side-effect:", value);
 });
 
 arrow().then((value: string): void => {

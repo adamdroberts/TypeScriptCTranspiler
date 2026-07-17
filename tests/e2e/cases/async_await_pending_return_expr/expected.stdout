@@ -8,3 +8,4 @@ method-this: this-this-param
 arrow: arrow!
 method-staged-this: this-method-stage!
 arrow-param: value-arrow-param
+method-side-effect: effect-side
