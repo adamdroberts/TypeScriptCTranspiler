@@ -90,6 +90,18 @@ console.log(
     Object.getOwnPropertyDescriptor(sealedExisting, "0")!.configurable,
 );
 
+const shrinkBlocked: any = ["a", "b", "c"];
+Reflect.defineProperty(shrinkBlocked, "1", { configurable: false });
+Reflect.defineProperty(shrinkBlocked, "2", { configurable: true });
+console.log(
+    "shrink blocked:",
+    Reflect.defineProperty(shrinkBlocked, "length", { value: 0, writable: false }),
+    shrinkBlocked.length,
+    Object.keys(shrinkBlocked).join("|"),
+    Object.hasOwn(shrinkBlocked, "2"),
+    Object.getOwnPropertyDescriptor(shrinkBlocked, "length")!.writable,
+);
+
 const lengthTarget: any = [1, 2, 3];
 report("length nan", (): any => Reflect.defineProperty(lengthTarget, "length", { value: NaN }));
 report("length float", (): any => Reflect.defineProperty(lengthTarget, "length", { value: 1.5 }));

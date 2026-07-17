@@ -785,7 +785,10 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
                 array_length_to_size(value, &len);
                 return len == a->len;
             }
-            if (has_value && !tsc_value_array_set_length(a, value)) return false;
+            if (has_value && !tsc_value_array_set_length(a, value)) {
+                if (!next_writable) a->length_writable = false;
+                return false;
+            }
             if (!next_writable) a->length_writable = false;
             return true;
         }

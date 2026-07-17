@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Array length shrink failures now stop at non-configurable numeric descriptors, preserve the required rollback length after deleting higher configurable indexes, and apply a deferred `writable: false` request. Test: `dynamic_array_define_property`.
 - Existing writable numeric elements on sealed dynamic arrays can now make the permitted one-way transition to non-writable descriptors. Test: `dynamic_array_define_property`.
 - Existing numeric elements on non-extensible dynamic arrays can now be legally redefined with stricter data descriptor flags without making the receiver externally extensible. Test: `dynamic_array_define_property`.
 - Existing configurable numeric elements on non-extensible dynamic arrays can now be converted into accessor descriptors through internal side storage. Test: `dynamic_array_accessor_properties`.
