@@ -1,0 +1,4 @@
+map: 4|6 2 true
+filter: 2
+reduce: 5
+hole visits: 1

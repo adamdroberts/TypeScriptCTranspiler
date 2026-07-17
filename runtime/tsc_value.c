@@ -526,7 +526,7 @@ tsc_value_t tsc_value_get_prop_receiver(tsc_value_t v, const tsc_str_t* key, tsc
             return tsc_value_function_builtin_named(tsc_value_generator_throw, a, 1.0, tsc_str_from_lit("throw", 5));
         }
         size_t idx = 0;
-        if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && idx < a->len) {
+        if (a->es == sizeof(tsc_value_t) && tsc_str_array_index(key, &idx) && tsc_array_index_present(a, idx)) {
             if (a->props && tsc_object_has_own(a->props, key)) {
                 return tsc_object_get_receiver(a->props, key, receiver);
             }

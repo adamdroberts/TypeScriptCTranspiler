@@ -122,9 +122,6 @@ static size_t array_proto_length(tsc_value_t receiver) {
 }
 
 static bool array_proto_has_index(tsc_value_t receiver, size_t index) {
-    if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
-        return tsc_array_index_present((const tsc_array_t*)value_ptr(receiver), index);
-    }
     char key_buf[32];
     snprintf(key_buf, sizeof key_buf, "%zu", index);
     return tsc_value_has_prop(receiver, tsc_str_from_cstr(key_buf));
