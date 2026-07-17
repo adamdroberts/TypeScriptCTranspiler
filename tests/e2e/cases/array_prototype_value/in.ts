@@ -47,11 +47,18 @@ const aliasIteratorSymbolDescriptor: any = Object.getOwnPropertyDescriptor(proto
 const aliasUnscopablesDescriptor: any = Reflect.getOwnPropertyDescriptor(proto, Symbol.unscopables);
 const reflectIteratorDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
 const reflectUnscopablesDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.unscopables);
+const allDescriptorSymbols: symbol[] = Object.getOwnPropertySymbols(allDescriptors);
+const aliasAllDescriptorSymbols: symbol[] = Object.getOwnPropertySymbols(aliasAllDescriptors);
+const allIteratorDescriptor: any = allDescriptors[Symbol.iterator];
+const allUnscopablesDescriptor: any = allDescriptors[Symbol.unscopables];
 console.log("symbols:", symbolKeys.length, symbolKeys[0] === Symbol.iterator, symbolKeys[1] === Symbol.unscopables, symbolKeys[0].description + "|" + symbolKeys[1].description);
 console.log("alias symbols:", aliasSymbolKeys.length, aliasSymbolKeys[0] === Symbol.iterator, aliasSymbolKeys[1] === Symbol.unscopables, aliasSymbolKeys[0].description + "|" + aliasSymbolKeys[1].description);
 console.log("symbol descriptors:", iteratorSymbolDescriptor.value === proto.values, iteratorSymbolDescriptor.writable, iteratorSymbolDescriptor.enumerable, iteratorSymbolDescriptor.configurable, unscopablesDescriptor.value === unscopables, unscopablesDescriptor.writable, unscopablesDescriptor.enumerable, unscopablesDescriptor.configurable);
 console.log("alias symbol descriptors:", aliasIteratorSymbolDescriptor.value === proto.values, aliasIteratorSymbolDescriptor.writable, aliasIteratorSymbolDescriptor.enumerable, aliasIteratorSymbolDescriptor.configurable, aliasUnscopablesDescriptor.value === unscopables, aliasUnscopablesDescriptor.writable, aliasUnscopablesDescriptor.enumerable, aliasUnscopablesDescriptor.configurable);
 console.log("reflect symbol descriptors:", reflectIteratorDescriptor.value === iteratorSymbolDescriptor.value, reflectIteratorDescriptor.writable, reflectIteratorDescriptor.enumerable, reflectIteratorDescriptor.configurable, reflectUnscopablesDescriptor.value === unscopablesDescriptor.value, reflectUnscopablesDescriptor.writable, reflectUnscopablesDescriptor.enumerable, reflectUnscopablesDescriptor.configurable);
+console.log("bulk descriptor symbols:", allDescriptorSymbols.length, allDescriptorSymbols[0] === Symbol.iterator, allDescriptorSymbols[1] === Symbol.unscopables, aliasAllDescriptorSymbols.length, aliasAllDescriptorSymbols[0] === Symbol.iterator, aliasAllDescriptorSymbols[1] === Symbol.unscopables);
+console.log("bulk symbol descriptors:", Object.hasOwn(allDescriptors, Symbol.iterator), allIteratorDescriptor.value === proto.values, allIteratorDescriptor.writable, allIteratorDescriptor.enumerable, allIteratorDescriptor.configurable, Object.hasOwn(allDescriptors, Symbol.unscopables), allUnscopablesDescriptor.value === unscopables, allUnscopablesDescriptor.writable, allUnscopablesDescriptor.enumerable, allUnscopablesDescriptor.configurable);
+console.log("bulk string enumeration:", Object.keys(allDescriptors).length, Object.values(allDescriptors).length, Object.entries(allDescriptors).length, Object.hasOwn(allDescriptors, "__tsc_symbol_iterator"), Object.hasOwn(allDescriptors, "__tsc_symbol_unscopables"));
 const every: any = proto.every;
 console.log("delete name:", Reflect.deleteProperty(every, "name"), Object.hasOwn(every, "name"));
 console.log("redefine:", Reflect.defineProperty(every, "name", { value: "all" }), Reflect.defineProperty(every, "length", { value: 3 }), every.name, every.length);

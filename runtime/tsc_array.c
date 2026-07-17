@@ -1055,6 +1055,14 @@ tsc_value_t tsc_array_prototype_own_property_descriptors(void) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, names, i);
         tsc_object_set(out, key, tsc_array_prototype_own_property_descriptor(key));
     }
+    tsc_value_t iterator_desc = tsc_array_symbol_iterator_descriptor();
+    if (!tsc_value_is_undefined(iterator_desc)) {
+        tsc_object_set(out, tsc_str_from_lit("__tsc_symbol_iterator", 21), iterator_desc);
+    }
+    tsc_value_t unscopables_desc = tsc_array_symbol_unscopables_descriptor();
+    if (!tsc_value_is_undefined(unscopables_desc)) {
+        tsc_object_set(out, tsc_str_from_lit("__tsc_symbol_unscopables", 24), unscopables_desc);
+    }
     return tsc_value_object(out);
 }
 
