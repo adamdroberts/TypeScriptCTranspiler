@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- The `in` operator now handles `Array.prototype` well-known symbol keys without stringifying them, including inherited `Symbol.iterator` checks on ordinary arrays. Test: `array_prototype_value`.
 - `Object.prototype.hasOwnProperty(...)` and `propertyIsEnumerable(...)` now handle `Array.prototype` well-known symbol keys without stringifying them, including `.call(...)` usage. Test: `array_prototype_value`.
 - `Object.hasOwn(...)` and `Reflect.has(...)` now handle `Array.prototype` well-known symbol keys without stringifying them, including inherited `Symbol.iterator` checks on ordinary arrays. Test: `array_prototype_value`.
 - Generic `Object.getOwnPropertyDescriptor(...)` and `Reflect.getOwnPropertyDescriptor(...)` over aliased `Array.prototype` values now expose `Symbol.iterator` and `Symbol.unscopables` descriptors without stringifying the symbol key. Test: `array_prototype_value`.
