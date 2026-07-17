@@ -22,6 +22,12 @@ async function staged(prefix: string): Promise<string> {
     return finalLabel;
 }
 
+async function twoAwait(prefix: string): Promise<string> {
+    const first = await delay(45, "one");
+    const second = await Promise.resolve(prefix + first + "-two");
+    return second + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -232,6 +238,12 @@ class Worker {
         this.prefix = this.prefix + value;
         return;
     }
+
+    async twoAwaitMethod(prefix: string): Promise<string> {
+        const first = await delay(47, "method-one");
+        const second = await Promise.resolve(prefix + this.prefix + first);
+        return second + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -244,6 +256,12 @@ const arrowParam = async (prefix: string): Promise<string> => {
     return prefix + value;
 };
 
+const arrowTwoAwait = async (prefix: string): Promise<string> => {
+    const first = await delay(49, "arrow-one");
+    const second = await Promise.resolve(prefix + first);
+    return second + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -254,6 +272,10 @@ doubled().then((value: number): void => {
 
 tagged("fn-").then((value: string): void => {
     console.log("tagged:", value);
+});
+
+twoAwait("fn-").then((value: string): void => {
+    console.log("two-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -358,10 +380,18 @@ expressionlessWorker.expressionlessReturnAfterAwait().then((_value: any): void =
     console.log("method-expressionless-return:", expressionlessWorker.prefix);
 });
 
+new Worker("method-two-").twoAwaitMethod("class-").then((value: string): void => {
+    console.log("method-two-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
 
 arrowParam("value-").then((value: string): void => {
     console.log("arrow-param:", value);
+});
+
+arrowTwoAwait("value-").then((value: string): void => {
+    console.log("arrow-two-await:", value);
 });
