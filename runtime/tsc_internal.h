@@ -225,6 +225,7 @@ typedef struct tsc_event_once_promise_env {
 
 
 extern tsc_function_identity_t* g_function_identities;
+void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, tsc_str_t* name);
 extern double g_event_emitter_default_max_listeners;
 extern bool g_shape_diagnostics_enabled;
 
