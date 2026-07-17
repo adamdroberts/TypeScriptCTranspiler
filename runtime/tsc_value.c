@@ -1578,6 +1578,16 @@ bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key) {
     return false;
 }
 
+bool tsc_value_symbol_property_is_enumerable(tsc_value_t v, tsc_symbol_t* key) {
+    (void)key;
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
+            return false;
+        }
+    }
+    return false;
+}
+
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
     tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_HAS_PROP);
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {

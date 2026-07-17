@@ -264,9 +264,9 @@ interface Object {
     __defineSetter__(p: string, setter: (value: any) => void, ...ignored: any[]): void;
     __lookupGetter__(p: string, ...ignored: any[]): (() => any) | undefined;
     __lookupSetter__(p: string, ...ignored: any[]): ((value: any) => void) | undefined;
-    hasOwnProperty(p: string, ...ignored: any[]): boolean;
+    hasOwnProperty(p: PropertyKey, ...ignored: any[]): boolean;
     isPrototypeOf(v: any, ...ignored: any[]): boolean;
-    propertyIsEnumerable(p: string, ...ignored: any[]): boolean;
+    propertyIsEnumerable(p: PropertyKey, ...ignored: any[]): boolean;
     toLocaleString(...ignored: any[]): string;
     toString(...ignored: any[]): string;
     valueOf(...ignored: any[]): any;

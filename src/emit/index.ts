@@ -32692,6 +32692,17 @@ class Emitter {
             );
         }
         if (mapped.kind === "array") {
+            if (this.isSymbolIteratorExpression(keyNode) || this.isSymbolUnscopablesExpression(keyNode)) {
+                const key = this.emitExpr(keyNode);
+                const fn = method === "hasOwnProperty"
+                    ? "tsc_value_has_own_symbol_prop"
+                    : "tsc_value_symbol_property_is_enumerable";
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: target, target: mapped, node: targetNode },
+                    { value: key, target: T_SYMBOL, node: keyNode },
+                    ...ignored,
+                ], ([value, keyC]) => `${fn}(tsc_value_array(${value}), ${keyC})`);
+            }
             const key = this.emitExpr(keyNode);
             const fn = method === "hasOwnProperty"
                 ? "tsc_array_has_own_key"
@@ -32733,6 +32744,17 @@ class Emitter {
                 : `({ (void)${value}; (void)${keyC}; false; })`);
         }
         if (mapped.kind === "value" || mapped.kind === "string") {
+            if (this.isSymbolIteratorExpression(keyNode) || this.isSymbolUnscopablesExpression(keyNode)) {
+                const key = this.emitExpr(keyNode);
+                const fn = method === "hasOwnProperty"
+                    ? "tsc_value_has_own_symbol_prop"
+                    : "tsc_value_symbol_property_is_enumerable";
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: target, target: T_VALUE, node: targetNode },
+                    { value: key, target: T_SYMBOL, node: keyNode },
+                    ...ignored,
+                ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
+            }
             const key = this.emitExpr(keyNode);
             const fn = method === "hasOwnProperty"
                 ? "tsc_value_has_own_prop"
@@ -32744,6 +32766,16 @@ class Emitter {
             ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
         }
         const key = this.emitExpr(keyNode);
+        if (this.isSymbolIteratorExpression(keyNode) || this.isSymbolUnscopablesExpression(keyNode)) {
+            const fn = method === "hasOwnProperty"
+                ? "tsc_value_has_own_symbol_prop"
+                : "tsc_value_symbol_property_is_enumerable";
+            return this.emitSequencedExpr(T_BOOLEAN, [
+                { value: target, target: T_VALUE, node: targetNode },
+                { value: key, target: T_SYMBOL, node: keyNode },
+                ...ignored,
+            ], ([value, keyC]) => this.objectPrototypeRequireObjectCoercible(method, value!, `${fn}(${value}, ${keyC})`));
+        }
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: target, node: targetNode },
             { value: key, target: T_STRING, node: keyNode },
@@ -35424,6 +35456,17 @@ class Emitter {
             }
             case "hasOwnProperty":
                 if (args.length < 1) unsupported(call, "hasOwnProperty expects at least 1 arg");
+                if (this.isSymbolIteratorExpression(args[0]!) || this.isSymbolUnscopablesExpression(args[0]!)) {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: this.emitExpr(args[0]!), target: T_SYMBOL, node: args[0]! },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([value, key]) => `tsc_value_has_own_symbol_prop(${value}, ${key})`,
+                    );
+                }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
@@ -35446,6 +35489,17 @@ class Emitter {
                 );
             case "propertyIsEnumerable":
                 if (args.length < 1) unsupported(call, "propertyIsEnumerable expects at least 1 arg");
+                if (this.isSymbolIteratorExpression(args[0]!) || this.isSymbolUnscopablesExpression(args[0]!)) {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: recv, target: T_VALUE, node: call.expression },
+                            { value: this.emitExpr(args[0]!), target: T_SYMBOL, node: args[0]! },
+                            ...this.ignoredArgumentSpecs(args, 1),
+                        ],
+                        ([value, key]) => `tsc_value_symbol_property_is_enumerable(${value}, ${key})`,
+                    );
+                }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                     [
