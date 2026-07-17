@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Concrete typed nested-array `flat` now skips holes in both outer and inner arrays instead of appending stale or zeroed backing storage. Test: `array_flat`.
 - Array length shrink failures now stop at non-configurable numeric descriptors, preserve the required rollback length after deleting higher configurable indexes, and apply a deferred `writable: false` request. Test: `dynamic_array_define_property`.
 - Existing writable numeric elements on sealed dynamic arrays can now make the permitted one-way transition to non-writable descriptors. Test: `dynamic_array_define_property`.
 - Existing numeric elements on non-extensible dynamic arrays can now be legally redefined with stricter data descriptor flags without making the receiver externally extensible. Test: `dynamic_array_define_property`.

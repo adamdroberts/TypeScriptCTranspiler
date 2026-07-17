@@ -1371,8 +1371,13 @@ tsc_array_t* tsc_array_append(tsc_array_t* dst, const tsc_array_t* src) {
 tsc_array_t* tsc_array_flat_once(const tsc_array_t* outer, size_t elem_size) {
     tsc_array_t* dst = tsc_array_new(elem_size, outer->len);
     for (size_t i = 0; i < outer->len; i++) {
+        if (!tsc_array_index_present(outer, i)) continue;
         tsc_array_t* inner = TSC_ARR(tsc_array_t*, outer, i);
-        if (inner) tsc_array_append(dst, inner);
+        if (!inner) continue;
+        for (size_t j = 0; j < inner->len; j++) {
+            if (!tsc_array_index_present(inner, j)) continue;
+            tsc_array_push_raw(dst, (const char*)inner->data + j * inner->es);
+        }
     }
     return dst;
 }
