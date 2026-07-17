@@ -1,6 +1,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <limits.h>
+#include <math.h>
 
 extern "C" {
 typedef uint64_t tsc_value_t;
@@ -49,6 +51,10 @@ tsc_value_t tsc_value_function_generic(tsc_generic_function_t fn, void* env);
 tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
+tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args);
+tsc_value_t tsc_value_get_prop(tsc_value_t value, const tsc_str_t* key);
+bool tsc_value_is_constructable(tsc_value_t value);
+double tsc_value_as_num(tsc_value_t value);
 tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_value_t tsc_node_eval(tsc_str_t* source);
 tsc_value_t tsc_node_function(tsc_str_t* body);
@@ -219,8 +225,21 @@ v8::Local<v8::Value> toV8(v8::Isolate* isolate, v8::Local<v8::Context> context, 
         case TSC_VALUE_TAG_FUNCTION: {
             AotFunctionEnv* env = new AotFunctionEnv{ value };
             v8::Local<v8::External> data = v8::External::New(isolate, env);
+            double runtimeLength = tsc_value_as_num(
+                tsc_value_get_prop(value, tsc_str_from_lit("length", 6))
+            );
+            int length = isfinite(runtimeLength) && runtimeLength > 0.0
+                ? static_cast<int>(runtimeLength > INT_MAX ? INT_MAX : floor(runtimeLength))
+                : 0;
+            v8::ConstructorBehavior behavior = tsc_value_is_constructable(value)
+                ? v8::ConstructorBehavior::kAllow
+                : v8::ConstructorBehavior::kThrow;
             v8::Local<v8::Function> fn;
-            if (v8::Function::New(context, aotFunctionCallback, data).ToLocal(&fn)) {
+            if (v8::Function::New(context, aotFunctionCallback, data, length, behavior).ToLocal(&fn)) {
+                tsc_str_t* name = tsc_value_to_string(
+                    tsc_value_get_prop(value, tsc_str_from_lit("name", 4))
+                );
+                fn->SetName(stringToV8(isolate, name));
                 return fn.As<v8::Value>();
             }
             return v8::Undefined(isolate).As<v8::Value>();
@@ -301,7 +320,9 @@ void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     args.lazy_next = nullptr;
     args.data = argc > 0 ? argsData.data() : nullptr;
 
-    tsc_value_t result = tsc_value_apply_function(env->fn, tsc_value_undefined(), tsc_value_array(&args));
+    tsc_value_t result = info.IsConstructCall()
+        ? tsc_value_construct(env->fn, tsc_value_array(&args))
+        : tsc_value_apply_function(env->fn, fromV8(isolate, info.This()), tsc_value_array(&args));
     info.GetReturnValue().Set(toV8(isolate, context, result));
 }
 

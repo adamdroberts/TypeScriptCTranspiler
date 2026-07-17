@@ -623,6 +623,7 @@ void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id);
 void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id);
 
 bool tsc_value_is_truthy(tsc_value_t v);
+bool tsc_value_is_constructable(tsc_value_t v);
 bool tsc_value_number_is_integer(tsc_value_t v);
 bool tsc_value_number_is_finite(tsc_value_t v);
 bool tsc_value_number_is_nan(tsc_value_t v);
