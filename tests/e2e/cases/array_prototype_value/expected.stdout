@@ -15,7 +15,7 @@ symbol proto methods: true false true false
 length descriptor: 0 true false false true 1
 method metadata: map 1 false true false true
 function descriptors: false false true false false true
-unscopables: object null at|copyWithin|entries|fill|find|findIndex|findLast|findLastIndex|flat|flatMap|includes|keys|toReversed|toSorted|toSpliced|values true true undefined
+unscopables: object null at|copyWithin|entries|fill|find|findIndex|findLast|findLastIndex|flat|flatMap|includes|keys|toReversed|toSorted|toSpliced|values true true undefined true true
 symbols: 2 true true Symbol.iterator|Symbol.unscopables
 alias symbols: 2 true true Symbol.iterator|Symbol.unscopables
 symbol descriptors: true true false true true false false true

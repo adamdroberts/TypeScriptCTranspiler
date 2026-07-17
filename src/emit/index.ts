@@ -54974,6 +54974,13 @@ class Emitter {
                 () => "tsc_array_unscopables_value()",
             );
         }
+        if (this.isSymbolUnscopablesExpression(ea.argumentExpression) && (recv.ty.kind === "value" || recv.ty.kind === "array")) {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: recv, target: T_VALUE, node: ea.expression }],
+                ([value]) => `tsc_value_symbol_unscopables(${value})`,
+            );
+        }
         if (recv.ty.kind === "array") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
