@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic and statically typed `any[]` `unshift` now move inherited indexed values and preserve true source holes while evaluating inserted arguments left-to-right. Test: `dynamic_array_inherited_unshift`.
 - Dynamic and statically typed `any[]` `pop` now reads inherited final indexes and returns `undefined` for true final holes before shrinking the array. Test: `dynamic_array_inherited_pop`.
 - Dynamic and statically typed `any[]` `shift` now observe inherited indexed values while moving elements and preserve true source holes by deleting destination properties. Test: `dynamic_array_inherited_shift`.
 - Dynamic and statically typed `any[]` `copyWithin` now snapshot inherited-aware source presence and values, writing inherited elements and deleting destinations for true source holes. Test: `dynamic_array_inherited_copy_within`.
