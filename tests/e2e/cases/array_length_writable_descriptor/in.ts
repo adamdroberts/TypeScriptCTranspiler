@@ -27,6 +27,12 @@ try { dynUnshift.unshift("z"); } catch (error: any) { console.log("dyn unshift:"
 try { dynUnshift.unshift(); } catch (error: any) { console.log("dyn empty unshift:", error); }
 console.log("dyn after unshift:", dynUnshift.length, dynUnshift.join("|"));
 
+const dynSplice: any = ["a", "b", "c"];
+Reflect.defineProperty(dynSplice, "length", { writable: false });
+try { dynSplice.splice(0, 1); } catch (error: any) { console.log("dyn splice:", error); }
+console.log("dyn after splice:", dynSplice.length, dynSplice.join("|"), Object.keys(dynSplice).join("|"));
+try { dynSplice.splice(); } catch (error: any) { console.log("dyn empty splice:", error); }
+
 const typed = [1, 2];
 
 const typedDefined = Reflect.defineProperty(typed, "length", { writable: false });
@@ -55,3 +61,9 @@ Reflect.defineProperty(typedUnshift, "length", { writable: false });
 try { typedUnshift.unshift(0); } catch (error: any) { console.log("typed unshift:", error); }
 try { typedUnshift.unshift(); } catch (error: any) { console.log("typed empty unshift:", error); }
 console.log("typed after unshift:", typedUnshift.length, typedUnshift.join("|"));
+
+const typedSplice = [1, 2, 3];
+Reflect.defineProperty(typedSplice, "length", { writable: false });
+try { typedSplice.splice(0, 1); } catch (error: any) { console.log("typed splice:", error); }
+console.log("typed after splice:", typedSplice.length, typedSplice.join("|"), Object.keys(typedSplice).join("|"));
+try { typedSplice.splice(); } catch (error: any) { console.log("typed empty splice:", error); }
