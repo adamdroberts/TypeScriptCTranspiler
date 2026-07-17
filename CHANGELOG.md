@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic array `slice` now copies inherited numeric properties into own result elements while preserving only genuinely absent indexes as holes. Test: `dynamic_array_inherited_slice`.
 - Dynamic array callback methods now observe inherited numeric properties through `HasProperty` while still skipping true sparse holes. Test: `dynamic_array_inherited_hof`.
 - Dynamic array `indexOf` and `lastIndexOf` now skip deleted holes while still matching inherited numeric properties. Test: `dynamic_array_hole_search`.
 - Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`.

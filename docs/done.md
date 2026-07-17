@@ -498,6 +498,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array index deletion clears stale dense slot values after deleting configurable own index descriptors stored in array side properties. Test: `dynamic_array_accessor_properties`
 - Dynamic array index deletion now preserves hole presence separately from dense storage, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate them and `Array.prototype` HOFs skip the hole. Test: `dynamic_array_accessor_properties`
 - Dynamic array `slice()` and `toReversed()` preserve deleted index holes, including reversing the hole position in the copied array. Test: `dynamic_array_hole_copies`
+- Dynamic array `slice()` uses inherited-aware sparse copy semantics, materializing inherited numeric properties as own result elements while preserving true holes. Test: `dynamic_array_inherited_slice`
 - Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`
 - Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`
 - Dynamic array holes now remap correctly through `shift` and `unshift`. Test: `dynamic_array_hole_shift_unshift`

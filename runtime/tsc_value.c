@@ -2626,6 +2626,8 @@ bool value_array_last_start(size_t len, double from_index, size_t* out) {
     return true;
 }
 
+static bool value_array_like_has_index(tsc_value_t recv, size_t index);
+
 tsc_array_t* value_array_like_slice(tsc_value_t recv, double start, double end) {
     size_t len = (size_t)tsc_value_length(recv);
     size_t from = value_array_forward_start(len, start);
@@ -2635,6 +2637,24 @@ tsc_array_t* value_array_like_slice(tsc_value_t recv, double start, double end) 
     for (size_t i = from; i < to; i++) {
         tsc_value_t value = tsc_value_get_index(recv, (double)i);
         tsc_array_push_raw(out, &value);
+    }
+    return out;
+}
+
+static tsc_array_t* value_array_like_sparse_slice(tsc_value_t recv, double start, double end) {
+    size_t len = (size_t)tsc_value_length(recv);
+    size_t from = value_array_forward_start(len, start);
+    size_t to = value_array_forward_start(len, end);
+    if (to < from) to = from;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), to > from ? to - from : 1);
+    for (size_t i = from; i < to; i++) {
+        size_t target = out->len;
+        if (value_array_like_has_index(recv, i)) {
+            tsc_array_push_value(out, tsc_value_get_index(recv, (double)i));
+        } else {
+            tsc_array_push_value(out, tsc_value_undefined());
+            tsc_array_mark_hole(out, target);
+        }
     }
     return out;
 }
@@ -2649,7 +2669,7 @@ tsc_array_t* value_array_like_to_reversed(tsc_value_t recv) {
     return out;
 }
 
-bool value_array_like_has_index(tsc_value_t recv, size_t index) {
+static bool value_array_like_has_index(tsc_value_t recv, size_t index) {
     char key_buf[32];
     snprintf(key_buf, sizeof key_buf, "%zu", index);
     return tsc_value_has_prop(recv, tsc_str_from_cstr(key_buf));
@@ -3407,7 +3427,7 @@ tsc_value_t tsc_value_method_slice(tsc_value_t recv, tsc_value_t start, tsc_valu
         return tsc_value_string(tsc_str_slice((const tsc_str_t*)value_ptr(recv), s, e));
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        return tsc_value_array(tsc_array_slice((const tsc_array_t*)value_ptr(recv), s, e));
+        return tsc_value_array(value_array_like_sparse_slice(recv, s, e));
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         return tsc_value_array(value_array_like_slice(recv, s, e));
