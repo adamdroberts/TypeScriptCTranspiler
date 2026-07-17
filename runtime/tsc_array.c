@@ -820,8 +820,8 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->extensible = true;
         proto->sealed = false;
         proto->frozen = false;
-        /* Array.prototype's own length is the standard non-writable zero length. */
-        proto->length_writable = false;
+        /* Array.prototype is itself an Array exotic object with writable length. */
+        proto->length_writable = true;
         proto->prototype = tsc_value_object_prototype();
         proto->iter_pos = 0;
         proto->iter_has_return = false;
