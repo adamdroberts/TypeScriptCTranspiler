@@ -56,6 +56,16 @@ class Worker {
         this.prefix = this.prefix + value;
         return this.prefix;
     }
+
+    async conditionalSideEffect(flag: boolean): Promise<string> {
+        const value = await delay(24, "branch");
+        if (flag) {
+            this.prefix = this.prefix + value;
+        } else {
+            this.prefix = this.prefix + "miss";
+        }
+        return this.prefix;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -102,6 +112,10 @@ new Worker("this-").stagedThis("!").then((value: string): void => {
 
 new Worker("effect-").sideEffectThis().then((value: string): void => {
     console.log("method-side-effect:", value);
+});
+
+new Worker("if-").conditionalSideEffect(true).then((value: string): void => {
+    console.log("method-if-side-effect:", value);
 });
 
 arrow().then((value: string): void => {

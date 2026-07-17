@@ -24663,25 +24663,41 @@ class Emitter {
             }
             ts.forEachChild(node, visit);
         };
-        for (const stmt of postAwaitStatements) {
+        const visitStatement = (stmt: ts.Statement): boolean => {
             if (ts.isVariableStatement(stmt)) {
-                if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
+                if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) return false;
                 for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
                     visit(decl.initializer);
-                    if (!ok) return null;
+                    if (!ok) return false;
                     const sym = this.symbolForIdentifier(decl.name);
-                    if (!sym) return null;
+                    if (!sym) return false;
                     locals.add(sym);
                 }
-                continue;
+                return true;
             }
             if (ts.isExpressionStatement(stmt)) {
                 visit(stmt.expression);
-                if (!ok) return null;
-                continue;
+                if (!ok) return false;
+                return true;
             }
-            return null;
+            if (ts.isBlock(stmt)) {
+                for (const child of stmt.statements) {
+                    if (!visitStatement(child)) return false;
+                }
+                return true;
+            }
+            if (ts.isIfStatement(stmt)) {
+                visit(stmt.expression);
+                if (!ok) return false;
+                if (!visitStatement(stmt.thenStatement)) return false;
+                if (stmt.elseStatement && !visitStatement(stmt.elseStatement)) return false;
+                return true;
+            }
+            return false;
+        };
+        for (const stmt of postAwaitStatements) {
+            if (!visitStatement(stmt)) return null;
         }
         visit(returnExpr);
         return ok ? { params: [...referenced.values()], usesThis } : null;
