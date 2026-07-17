@@ -1,0 +1,3 @@
+inherited: inherited|replacement 0|1 false
+dynamic hole: |replacement 0|1 true
+typed hole: |replacement 0|1 true

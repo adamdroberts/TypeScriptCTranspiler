@@ -3245,7 +3245,10 @@ tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value
     if (!value_is_box(recv)) return tsc_value_undefined();
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        return tsc_value_array(tsc_array_with(a, tsc_value_as_num(index), &value));
+        int64_t at = value_array_strict_index(tsc_value_as_num(index), a->len);
+        tsc_array_t* copy = value_array_like_slice(recv, 0.0, (double)a->len);
+        TSC_ARR(tsc_value_t, copy, (size_t)at) = value;
+        return tsc_value_array(copy);
     }
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
         size_t len = (size_t)tsc_value_length(recv);

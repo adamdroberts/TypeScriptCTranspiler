@@ -42481,7 +42481,9 @@ class Emitter {
                     { value: index, target: T_NUMBER, node: args[0]! },
                     { value, target: et, node: args[1]! },
                     ...this.ignoredArgumentSpecs(args, 2),
-                ], (vals) => `tsc_array_with(${vals[0]}, ${vals[1]}, &(${et.c}){${vals[2]}})`);
+                ], (vals) => et.kind === "value"
+                    ? `tsc_value_as_array(tsc_value_method_with(tsc_value_array(${vals[0]}), tsc_value_num(${vals[1]}), ${vals[2]}))`
+                    : `tsc_array_with(${vals[0]}, ${vals[1]}, &(${et.c}){${vals[2]}})`);
             }
             case "splice": {
                 const zero: EmitResult = { c: "0.0", ty: T_NUMBER };

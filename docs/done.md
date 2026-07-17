@@ -500,7 +500,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array `slice()` preserves deleted index holes, while `toReversed()` creates a dense result with holes materialized as own `undefined` properties. Test: `dynamic_array_hole_copies`
 - Dynamic and statically typed `any[]` `toReversed()` copies inherited numeric properties and materializes true holes as own `undefined` elements. Test: `dynamic_array_inherited_to_reversed`
 - Dynamic array `slice()` uses inherited-aware sparse copy semantics, materializing inherited numeric properties as own result elements while preserving true holes. Test: `dynamic_array_inherited_slice`
-- Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`
+- Dynamic array holes survive `concat`, `splice`, and `toSpliced`; `with` creates a dense result and `fill` materializes filled indexes. Test: `dynamic_array_hole_mutations`
+- Dynamic and statically typed `any[]` `with` materializes untouched holes as own `undefined` elements and copies inherited numeric properties before replacing the selected index. Test: `dynamic_array_inherited_with`
 - Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`
 - Dynamic array holes now remap correctly through `shift` and `unshift`. Test: `dynamic_array_hole_shift_unshift`
 - Dynamic array `sort` moves sparse holes to the end, while `toSorted` creates a dense result with holes materialized as trailing own `undefined` elements. Test: `dynamic_array_hole_sort`
