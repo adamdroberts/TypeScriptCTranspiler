@@ -1,0 +1,3 @@
+inherited: first inherited|c 0|1 true
+dynamic hole: first |c 1 false
+typed hole: first |c 1 false
