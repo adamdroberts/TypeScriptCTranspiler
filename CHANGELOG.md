@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Object.hasOwn(...)` and `Reflect.has(...)` now handle `Array.prototype` well-known symbol keys without stringifying them, including inherited `Symbol.iterator` checks on ordinary arrays. Test: `array_prototype_value`.
 - Generic `Object.getOwnPropertyDescriptor(...)` and `Reflect.getOwnPropertyDescriptor(...)` over aliased `Array.prototype` values now expose `Symbol.iterator` and `Symbol.unscopables` descriptors without stringifying the symbol key. Test: `array_prototype_value`.
 - Generic `Object.getOwnPropertySymbols(...)` over aliased `Array.prototype` values now exposes the same `Symbol.iterator` and `Symbol.unscopables` metadata as the focused static helper. Test: `array_prototype_value`.
 - Generic descriptor lookup and descriptor-map generation over aliased `Array.prototype` values now hide the runtime-only `valueOf` shim, matching the focused static descriptor helpers. Test: `array_prototype_value`.

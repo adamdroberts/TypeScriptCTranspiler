@@ -50207,6 +50207,15 @@ class Emitter {
         if (name === "hasOwn") {
             if (args.length < 2) unsupported(call, "Object.hasOwn expects object and key");
             const ignored = this.ignoredArgumentSpecs(args, 2);
+            if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_BOOLEAN, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_SYMBOL, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_has_own_symbol_prop(${o}, ${k})`);
+            }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
@@ -52661,6 +52670,14 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_SYMBOL, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `tsc_reflect_has_symbol_prop(${t}, ${k})`);
+                }
                 if (mapped.kind === "array") {
                     const key = this.emitExpr(args[1]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
