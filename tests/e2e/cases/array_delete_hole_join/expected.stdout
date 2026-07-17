@@ -11,5 +11,5 @@ from holes: 0|1|2 true undefined 1|missing|3
 iter holes: 0|1|2 true undefined 1 undefined
 for-of holes: 1|undefined|3|
 spread holes: 0|1|2 undefined 0|1|2 undefined
-call spread holes: 1|undefined|3
+call spread holes: 1||3
 Array.of spread holes: 0|1|2 undefined
