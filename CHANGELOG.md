@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic `value[Symbol.iterator]` reads now return the Array iterator method only for array values instead of every dynamic value. Test: `array_symbol_iterator_method`.
 - Aliased `Array.prototype[Symbol.unscopables]` and inherited array `Symbol.unscopables` reads now return the shared unscopables object instead of requiring a static `Array.prototype[...]` expression. Test: `array_prototype_value`.
 - The `in` operator now handles `Array.prototype` well-known symbol keys without stringifying them, including inherited `Symbol.iterator` checks on ordinary arrays. Test: `array_prototype_value`.
 - `Object.prototype.hasOwnProperty(...)` and `propertyIsEnumerable(...)` now handle `Array.prototype` well-known symbol keys without stringifying them, including `.call(...)` usage. Test: `array_prototype_value`.

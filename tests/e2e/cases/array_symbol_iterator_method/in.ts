@@ -11,6 +11,10 @@ const protoMapMethod: any = Array.prototype.map;
 const mapped: any = Reflect.apply(protoMapMethod, source, [(value: string) => value.toUpperCase()]);
 console.log("identity:", method === source.values, protoMethod === protoValuesMethod, protoMethod.name);
 console.log("named:", protoMapMethod.name, protoMapMethod.length, mapped.join("|"));
+const plain: any = {};
+const plainMethod: any = plain[Symbol.iterator];
+const typedMethod: any = (["x"] as string[])[Symbol.iterator];
+console.log("plain:", plainMethod === undefined, typeof typedMethod);
 try {
     method();
 } catch (err: any) {
