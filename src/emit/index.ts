@@ -24943,7 +24943,7 @@ class Emitter {
 
         visit(secondSourceExpr, new Set([firstSymbol]));
         if (!ok) return null;
-        if (returnExpr) visit(returnExpr, new Set([secondSymbol]));
+        if (returnExpr) visit(returnExpr, new Set([firstSymbol, secondSymbol]));
         return ok
             ? {
                 params: [...referenced.values()],
@@ -25327,13 +25327,23 @@ class Emitter {
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
     ): string {
+        const firstSymbol = this.symbolForIdentifier(firstVariable);
+        const firstCapture = firstSymbol && firstAwaitedType.kind !== "void"
+            ? {
+                symbol: firstSymbol,
+                name: mangleIdent(firstVariable.text),
+                type: firstAwaitedType,
+                field: `capture_${mangleIdent(firstVariable.text)}`,
+            }
+            : null;
+        const nestedParams = firstCapture ? [...params, firstCapture] : params;
         const secondAdapter = this.ensureAsyncAwaitReturnContinuationAdapter(
             secondPromiseType,
             secondAwaitedType,
             secondVariable,
             [],
             returnExpr,
-            params,
+            nestedParams,
             thisValue,
         );
         const secondEnvType = `${secondAdapter}_env_t`;
@@ -25361,7 +25371,6 @@ class Emitter {
             ? null
             : this.coerce(this.promiseFulfilledValue(firstPromiseType.elem, "_p"), firstAwaitedType, secondAwaitExpr.expression);
         const scope = new Map<ts.Symbol, string>();
-        const firstSymbol = this.symbolForIdentifier(firstVariable);
         if (firstSymbol && firstAwaitedType.kind !== "void") scope.set(firstSymbol, valueVar);
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
@@ -25402,6 +25411,9 @@ class Emitter {
         buf.line(`${envVar}->result_promise = _ret;`);
         for (const param of params) {
             buf.line(`${envVar}->${param.field} = state->${param.field};`);
+        }
+        if (firstCapture) {
+            buf.line(`${envVar}->${firstCapture.field} = ${valueVar};`);
         }
         if (thisValue) {
             buf.line(`${envVar}->this_arg = state->this_arg;`);
