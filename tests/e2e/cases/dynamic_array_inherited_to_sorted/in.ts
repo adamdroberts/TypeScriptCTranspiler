@@ -34,3 +34,25 @@ console.log(
     Object.keys(explicitCopy).join("|"),
     Object.hasOwn(explicitCopy, "2"),
 );
+
+const typedInherited: any[] = [3, 1, 0];
+delete typedInherited[2];
+Object.setPrototypeOf(typedInherited, { 2: 2 });
+const typedInheritedCopy = typedInherited.toSorted(descending);
+console.log(
+    "typed inherited:",
+    typedInheritedCopy.join("|"),
+    Object.keys(typedInheritedCopy).join("|"),
+    Object.hasOwn(typedInherited, "2"),
+);
+
+const typedSparse: any[] = [3, 1, 0];
+delete typedSparse[2];
+const typedSparseCopy = typedSparse.toSorted(descending);
+console.log(
+    "typed hole:",
+    typedSparseCopy.join("|"),
+    Object.keys(typedSparseCopy).join("|"),
+    Object.hasOwn(typedSparseCopy, "2"),
+    Object.hasOwn(typedSparse, "2"),
+);

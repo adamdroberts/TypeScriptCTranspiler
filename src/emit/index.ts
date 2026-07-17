@@ -42536,8 +42536,19 @@ class Emitter {
             case "sort":
                 return this.emitArraySort(call, recv);
             case "toSorted": {
+                const av = this.freshTemp("_to_sorted_src");
+                const boxed = this.freshTemp("_to_sorted_boxed");
+                const out = this.freshTemp("_to_sorted_copy");
+                const iv = this.freshTemp("_to_sorted_i");
+                const value = this.freshTemp("_to_sorted_value");
                 const copy: EmitResult = {
-                    c: `tsc_array_slice(${recv.c}, 0.0, (double)${recv.c}->len)`,
+                    c: et.kind === "value"
+                        ? `({ tsc_array_t* const ${av} = ${recv.c}; tsc_value_t ${boxed} = tsc_value_array(${av}); ` +
+                            `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
+                            `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
+                            `tsc_value_t ${value} = tsc_value_get_index(${boxed}, (double)${iv}); ` +
+                            `tsc_array_push_raw(${out}, &${value}); } ${out}; })`
+                        : `tsc_array_slice(${recv.c}, 0.0, (double)${recv.c}->len)`,
                     ty: recv.ty,
                 };
                 return this.emitArraySort(call, copy);
@@ -43210,6 +43221,11 @@ class Emitter {
             }
         } else {
             unsupported(cb, "sort comparator must be inline arrow or function reference");
+        }
+        if (et.kind === "value") {
+            cmpExpr = `tsc_value_is_undefined(${aName}) ` +
+                `? (tsc_value_is_undefined(${bName}) ? 0.0 : 1.0) ` +
+                `: (tsc_value_is_undefined(${bName}) ? -1.0 : (${cmpExpr}))`;
         }
         specs.push(...this.ignoredArgumentSpecs(call.arguments, consumed));
         const sortLoop = (arrayName: string): string =>
