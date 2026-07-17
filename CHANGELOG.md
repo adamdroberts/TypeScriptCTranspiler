@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Typed sparse array `reverse` now rejects property creation on non-extensible receivers in specification order, including the lower-index deletion that precedes an upper-index creation failure. Test: `array_sparse_reverse_extensibility`.
 - Typed array `splice` now throws on its mandatory non-writable `length` update while preserving prior indexed moves, replacements, deletions, and trailing holes; growth failures occur before mutation. Test: `array_length_writable_descriptor`.
 - Array `unshift` now throws at prohibited extensions on non-extensible or non-writable-length arrays, and zero-argument `unshift()` performs the required length write. Test: `array_length_writable_descriptor`.
 - Array `shift` now performs indexed moves and deletion before throwing when a non-writable `length` prevents the final length update, preserving the specified partial mutation. Test: `array_length_writable_descriptor`.
