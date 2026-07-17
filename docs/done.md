@@ -2462,7 +2462,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_prototype_primitive_receivers` | detached Array.prototype helpers treat non-string primitive number and boolean receivers as zero-length array-like objects |
 | `array_prototype_array_like_copy` | detached Array.prototype slice/toReversed over dynamic array-like object receivers |
 | `array_prototype_array_like_copy_more` | detached Array.prototype toSorted/with/toSpliced over dynamic array-like object receivers |
-| `array_prototype_concat_generic` | detached Array.prototype concat treats ordinary array-like receivers as generic items while preserving array/proxy-array spread behavior |
+| `array_prototype_concat_generic` | detached Array.prototype concat treats ordinary array-like receivers as generic items, honors `Symbol.isConcatSpreadable`, and preserves array/proxy-array spread behavior |
 | `array_prototype_array_like_flat` | detached Array.prototype flat over dynamic array-like object receivers and nested array proxies |
 | `array_prototype_array_like_hof` | detached Array.prototype higher-order methods over dynamic array-like object receivers |
 | `array_prototype_array_like_inplace` | detached Array.prototype fill/copyWithin/reverse over dynamic array-like object receivers |

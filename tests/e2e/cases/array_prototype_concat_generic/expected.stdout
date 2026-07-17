@@ -2,3 +2,6 @@ zero: 1 recv a 1
 mixed: 5 recv x y arg tail
 array: 1|2 false
 proxy: p|q|r|s|tail 5
+spreadable receiver: sr-a|sr-b 2 0|1
+spreadable arg: head|arg-a|arg-b|tail 4
+blocked array: 2 true ba|bb tail

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Array.prototype.concat` now honors `Symbol.isConcatSpreadable` for dynamic receivers and arguments, including array opt-out and spreadable ordinary array-like objects. Tests: `array_prototype_concat_generic`, `symbols`.
 - Dynamic array accessor descriptors for new numeric indices now preserve sparse holes and respect non-writable `length` before growing the array. Test: `dynamic_array_define_property`.
 - `Object.getPrototypeOf([])`, array Object integrity checks, and array-returning `Object.preventExtensions` / `seal` / `freeze` / `setPrototypeOf` now normalize array targets through `tsc_value_t` without double-boxing fresh array literals. Test: `array_prototype_value`.
 - `Reflect.isExtensible([])` and `Reflect.preventExtensions(array)` now normalize array targets through `tsc_value_t` instead of double-boxing fresh array literals in generated C. Test: `array_prototype_value`.
