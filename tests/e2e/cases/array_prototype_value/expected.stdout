@@ -26,3 +26,5 @@ redefine: true true all 3
 method: a-b
 delete iterator symbol: true false false true true true 1 true
 delete unscopables symbol: true false false true true true 0
+define iterator symbol: true false true true true true false true false false
+define unscopables symbol: true true true true true true true true 2

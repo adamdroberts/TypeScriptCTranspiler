@@ -50587,9 +50587,10 @@ class Emitter {
         if (name === "defineProperty") {
             if (args.length < 3) unsupported(call, "Object.defineProperty expects object, key, descriptor");
             const ignored = this.ignoredArgumentSpecs(args, 3);
+            const key = this.emitExpr(args[1]!);
             if (mapped.kind === "array") {
                 const obj = this.emitExpr(arg);
-                if (ts.isObjectLiteralExpression(args[2]!)) {
+                if (ts.isObjectLiteralExpression(args[2]!) && key.ty.kind !== "symbol") {
                     const desc = this.descriptorData(args[2]!);
                     const arrayObj = obj.ty.kind === "array"
                         ? obj
@@ -50601,8 +50602,8 @@ class Emitter {
                 unsupported(arg, "Object.defineProperty currently supports dynamic objects, arrays, and functions only");
             }
             const requiresValueTarget = mapped.kind === "value" || mapped.kind === "void" || primitiveObjectArg;
-            const key = this.emitExpr(args[1]!);
             if (!ts.isObjectLiteralExpression(args[2]!)) {
+                if (key.ty.kind === "symbol") unsupported(args[1]!, "Object.defineProperty symbol keys require an object-literal data descriptor");
                 const descValue = this.emitExpr(args[2]!);
                 const obj = this.emitExpr(arg);
                 const objectDefineReturnType = (mapped.kind === "function" || mapped.kind === "array") ? mapped : T_VALUE;
@@ -50621,6 +50622,7 @@ class Emitter {
             const obj = this.emitExpr(arg);
             const objectDefineReturnType = mapped.kind === "function" ? mapped : T_VALUE;
             if (desc.kind === "accessor") {
+                if (key.ty.kind === "symbol") unsupported(args[1]!, "Object.defineProperty symbol accessor descriptors are not supported yet");
                 const specs: SequencedCallArg[] = [
                     { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -50653,11 +50655,16 @@ class Emitter {
                 objectDefineReturnType,
                 [
                     { value: obj, target: requiresValueTarget ? T_VALUE : undefined, node: arg },
-                    { value: key, target: T_STRING, node: args[1]! },
+                    { value: key, target: key.ty.kind === "symbol" ? T_SYMBOL : T_STRING, node: args[1]! },
                     { value, target: T_VALUE, node: desc.value ?? args[2]! },
                     ...ignored,
                 ],
-                ([o, k, v]) => `({ if (!tsc_value_define_property_desc(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`,
+                ([o, k, v]) => {
+                    const fn = key.ty.kind === "symbol"
+                        ? "tsc_value_define_symbol_property_desc"
+                        : "tsc_value_define_property_desc";
+                    return `({ if (!${fn}(${dynamicObjectArg(o!)}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
+                },
             );
         }
         if (name === "defineProperties") {
@@ -52532,6 +52539,7 @@ class Emitter {
                 }
                 const key = this.emitExpr(args[1]!);
                 if (!ts.isObjectLiteralExpression(args[2]!)) {
+                    if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.defineProperty symbol keys require an object-literal data descriptor");
                     const descValue = this.emitExpr(args[2]!);
                     return this.emitSequencedExpr(T_BOOLEAN, [
                         { value: target, target: T_VALUE, node: args[0]! },
@@ -52542,6 +52550,7 @@ class Emitter {
                 }
                 const desc = this.descriptorData(args[2]!);
                 if (desc.kind === "accessor") {
+                    if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.defineProperty symbol accessor descriptors are not supported yet");
                     const specs: SequencedCallArg[] = [
                         { value: target, target: T_VALUE, node: args[0]! },
                         { value: key, target: T_STRING, node: args[1]! },
@@ -52574,11 +52583,16 @@ class Emitter {
                     T_BOOLEAN,
                     [
                         { value: target, target: T_VALUE, node: args[0]! },
-                        { value: key, target: T_STRING, node: args[1]! },
+                        { value: key, target: key.ty.kind === "symbol" ? T_SYMBOL : T_STRING, node: args[1]! },
                         { value, target: T_VALUE, node: desc.value ?? args[2]! },
                         ...ignored,
                     ],
-                    ([t, k, v]) => `tsc_reflect_define_property_desc(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`,
+                    ([t, k, v]) => {
+                        const fn = key.ty.kind === "symbol"
+                            ? "tsc_reflect_define_symbol_property_desc"
+                            : "tsc_reflect_define_property_desc";
+                        return `${fn}(${t}, ${k}, ${v}, ${desc.hasValue}, ${desc.writable}, ${desc.hasWritable}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})`;
+                    },
                 );
             }
             case "deleteProperty": {

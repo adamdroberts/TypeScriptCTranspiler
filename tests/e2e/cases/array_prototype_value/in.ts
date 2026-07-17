@@ -60,3 +60,15 @@ console.log("delete iterator symbol:", deletedIterator, Object.hasOwn(proto, Sym
 const deletedUnscopables: boolean = delete proto[Symbol.unscopables];
 const symbolsAfterUnscopablesDelete: symbol[] = Object.getOwnPropertySymbols(proto);
 console.log("delete unscopables symbol:", deletedUnscopables, Object.hasOwn(proto, Symbol.unscopables), Reflect.has([], Symbol.unscopables), proto[Symbol.unscopables] === undefined, ([] as any)[Symbol.unscopables] === undefined, Reflect.getOwnPropertyDescriptor(proto, Symbol.unscopables) === undefined, symbolsAfterUnscopablesDelete.length);
+function replacementIterator(this: any): any {
+    return ["custom"].values();
+}
+const definedIterator: boolean = Reflect.defineProperty(proto, Symbol.iterator as any, { value: replacementIterator, writable: false, enumerable: true, configurable: false });
+const redefinedIterator: boolean = Reflect.defineProperty(proto, Symbol.iterator as any, { value: proto.values });
+const iteratorAfterDefine: any = Object.getOwnPropertyDescriptor(proto, Symbol.iterator);
+console.log("define iterator symbol:", definedIterator, redefinedIterator, Object.hasOwn(proto, Symbol.iterator), Reflect.has([], Symbol.iterator), proto[Symbol.iterator] === replacementIterator, ([] as any)[Symbol.iterator] === replacementIterator, iteratorAfterDefine.writable, iteratorAfterDefine.enumerable, iteratorAfterDefine.configurable, Reflect.deleteProperty(proto, Symbol.iterator as any));
+const definedUnscopablesTarget: any = { custom: true };
+const definedUnscopables: boolean = Object.defineProperty(proto, Symbol.unscopables as any, { value: definedUnscopablesTarget, writable: true, enumerable: true, configurable: true }) === proto;
+const unscopablesAfterDefine: any = Reflect.getOwnPropertyDescriptor(proto, Symbol.unscopables);
+const symbolsAfterDefine: symbol[] = Object.getOwnPropertySymbols(proto);
+console.log("define unscopables symbol:", definedUnscopables, Object.hasOwn(proto, Symbol.unscopables), Reflect.has([], Symbol.unscopables), proto[Symbol.unscopables] === definedUnscopablesTarget, ([] as any)[Symbol.unscopables] === definedUnscopablesTarget, unscopablesAfterDefine.writable, unscopablesAfterDefine.enumerable, unscopablesAfterDefine.configurable, symbolsAfterDefine.length);

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Object.defineProperty(...)` and `Reflect.defineProperty(...)` now support data-descriptor redefinition of well-known symbol slots on the shared Array prototype, including custom `Symbol.iterator` / `Symbol.unscopables` values and descriptor flags. Test: `array_prototype_value`.
 - `Reflect.deleteProperty(...)` and `delete` now support well-known symbol keys on the shared Array prototype, and Array prototype symbol reads/has/descriptors observe deleted `Symbol.iterator` / `Symbol.unscopables` slots. Test: `array_prototype_value`.
 - Dynamic `value[Symbol.iterator]` reads now return the Array iterator method only for array values instead of every dynamic value. Test: `array_symbol_iterator_method`.
 - Aliased `Array.prototype[Symbol.unscopables]` and inherited array `Symbol.unscopables` reads now return the shared unscopables object instead of requiring a static `Array.prototype[...]` expression. Test: `array_prototype_value`.
