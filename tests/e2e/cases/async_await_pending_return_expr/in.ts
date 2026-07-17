@@ -183,6 +183,11 @@ class Worker {
         }
         return "never";
     }
+
+    async voidAfterAwait(): Promise<string> {
+        const ignored = await delay(39);
+        return this.prefix + "void";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -286,6 +291,10 @@ new Worker("switch-").switchReturnAfterAwait("a").then((value: string): void => 
 
 new Worker("switch-").switchReturnAfterAwait("z").then((value: string): void => {
     console.log("method-switch-default:", value);
+});
+
+new Worker("void-").voidAfterAwait().then((value: string): void => {
+    console.log("method-void-await:", value);
 });
 
 arrow().then((value: string): void => {

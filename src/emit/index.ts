@@ -125,11 +125,13 @@ interface AsyncAwaitReturnContinuation {
     returnExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
+    usesAwaited: boolean;
 }
 
 interface AsyncAwaitContinuationReferences {
     params: AsyncAwaitContinuationParam[];
     usesThis: boolean;
+    usesAwaited: boolean;
 }
 
 interface AsyncAwaitContinuationReturnTarget {
@@ -24597,6 +24599,7 @@ class Emitter {
             returnExpr: result.expression,
             params: referenced.params,
             thisValue: referenced.usesThis ? thisValue : null,
+            usesAwaited: referenced.usesAwaited,
         };
     }
 
@@ -24635,6 +24638,7 @@ class Emitter {
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         const locals = new Set<ts.Symbol>([awaitedSymbol]);
         let usesThis = false;
+        let usesAwaited = false;
         let ok = true;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
@@ -24653,7 +24657,7 @@ class Emitter {
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 if (sym && locals.has(sym)) {
-                    // allowed
+                    if (sym === awaitedSymbol) usesAwaited = true;
                 } else {
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
                     if (param) {
@@ -24826,7 +24830,7 @@ class Emitter {
             if (!visitStatement(stmt)) return null;
         }
         visit(returnExpr);
-        return ok ? { params: [...referenced.values()], usesThis } : null;
+        return ok ? { params: [...referenced.values()], usesThis, usesAwaited } : null;
     }
 
     private emitAsyncAwaitReturnContinuation(
@@ -24846,7 +24850,7 @@ class Emitter {
             this.checker.getTypeAtLocation(continuation.awaitExpr),
             this.checker,
         ));
-        if (awaitedType.kind === "void" || awaitedType.kind === "never") return false;
+        if (awaitedType.kind === "never" || (awaitedType.kind === "void" && continuation.usesAwaited)) return false;
         const sourcePromise = this.freshTemp("_await_source");
         const resultPromise = this.freshTemp("_await_result");
         const adapter = this.ensureAsyncAwaitReturnContinuationAdapter(
@@ -24910,10 +24914,12 @@ class Emitter {
         const returnVar = this.freshTemp("_await_return");
         const resolvedVar = this.freshTemp("_await_resolved");
         const eh = this.freshTemp("_await_eh");
-        const awaitedValue = this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, returnExpr);
+        const awaitedValue = awaitedType.kind === "void"
+            ? null
+            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, returnExpr);
         const scope = new Map<ts.Symbol, string>();
         const variableSymbol = this.symbolForIdentifier(variable);
-        if (variableSymbol) scope.set(variableSymbol, valueVar);
+        if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
@@ -24934,7 +24940,9 @@ class Emitter {
         buf.line(`tsc_promise_t* ${resolvedVar};`);
         buf.line(`tsc_try_push(&${eh});`);
         buf.open(`if (setjmp(${eh}.jb) == 0)`);
-        buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
+        if (awaitedValue) {
+            buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
+        }
         this.argumentValueScopes.push(scope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let returned: EmitResult;

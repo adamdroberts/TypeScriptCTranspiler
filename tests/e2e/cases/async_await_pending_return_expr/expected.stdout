@@ -23,3 +23,4 @@ method-early-return: return-return
 method-late-return: return-late-return
 method-switch-a: switch-alpha
 method-switch-default: switch-other-z
+method-void-await: void-void
