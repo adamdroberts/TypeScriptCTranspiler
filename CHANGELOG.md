@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Statically typed `any[]` `values()` and `entries()` now perform inherited-aware indexed reads while continuing to yield `undefined` for true holes. Test: `dynamic_array_inherited_iterators`.
 - Statically typed `any[]` `at` now observes inherited indexed values at sparse positive and negative positions while preserving `undefined` for true holes. Test: `dynamic_array_inherited_at`.
 - Statically typed `any[]` `join`/`toString` now observe inherited indexed values and emit empty fields for holes, `null`, and `undefined`, matching dynamic array semantics. Test: `dynamic_array_inherited_join`.
 - Statically typed `any[]` `concat` now matches the dynamic runtime by materializing inherited indexed values and preserving true holes from both receivers and array arguments. Test: `dynamic_array_inherited_concat`.
