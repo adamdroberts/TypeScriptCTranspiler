@@ -717,6 +717,7 @@ bool tsc_reflect_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_val
 bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_own_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key);
+bool tsc_value_symbol_property_is_enumerable(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key);
 bool tsc_value_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache);
