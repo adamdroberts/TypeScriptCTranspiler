@@ -66,6 +66,17 @@ class Worker {
         }
         return this.prefix;
     }
+
+    async branchLet(flag: boolean): Promise<string> {
+        const value = await delay(25, "let");
+        let result = "";
+        if (flag) {
+            result = this.prefix + value;
+        } else {
+            result = this.prefix + "miss";
+        }
+        return result;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -116,6 +127,10 @@ new Worker("effect-").sideEffectThis().then((value: string): void => {
 
 new Worker("if-").conditionalSideEffect(true).then((value: string): void => {
     console.log("method-if-side-effect:", value);
+});
+
+new Worker("branch-").branchLet(true).then((value: string): void => {
+    console.log("method-branch-let:", value);
 });
 
 arrow().then((value: string): void => {
