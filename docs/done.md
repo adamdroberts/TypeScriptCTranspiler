@@ -535,7 +535,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Static sparse `any[]` reads and searches preserve holes for `at`, `indexOf`, `lastIndexOf`, and `includes`. Dynamic array `indexOf` and `lastIndexOf` also skip deleted holes while observing inherited numeric properties. Tests: `array_delete_hole_join`, `dynamic_array_hole_search`
 - Static sparse `any[]` `pop()` and `shift()` return `undefined` for deleted tail and head slots. Test: `array_delete_hole_join`
 - Static sparse `any[]` higher-order array methods skip holes where required, preserve holes in `map`, and expose `undefined` to `find*`. Test: `array_delete_hole_join`
-- Dynamic array callback methods use inherited-aware `HasProperty` semantics, so inherited numeric elements participate while true sparse holes remain skipped. Test: `dynamic_array_inherited_hof`
+- Dynamic and statically typed `any[]` callback methods use inherited-aware indexed checks and reads, so inherited numeric elements participate while true sparse holes remain skipped where required, and `find*` methods visit every index through `Get`. Test: `dynamic_array_inherited_hof`
 - Static `Array.from` materializes sparse `any[]` holes as `undefined` for both no-mapper and mapper forms. Test: `array_delete_hole_join`
 - Static sparse `any[]` `values()` and `entries()` visit deleted indexes as `undefined`. Test: `array_delete_hole_join`
 - Static sparse `any[]` `for...of` iteration yields `undefined` for deleted indexes. Test: `array_delete_hole_join`

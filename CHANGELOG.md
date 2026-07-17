@@ -24,7 +24,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Dynamic array `toSorted` now creates a dense result, materializing holes as own `undefined` elements and sorting inherited numeric properties with the other values. Test: `dynamic_array_inherited_to_sorted`.
 - Dynamic and statically typed `any[]` `toReversed` now create dense results, materializing holes as own `undefined` elements and copying inherited numeric properties. Test: `dynamic_array_inherited_to_reversed`.
 - Dynamic and statically typed `any[]` `slice` now copy inherited numeric properties into own result elements while preserving only genuinely absent indexes as holes. Test: `dynamic_array_inherited_slice`.
-- Dynamic array callback methods now observe inherited numeric properties through `HasProperty` while still skipping true sparse holes. Test: `dynamic_array_inherited_hof`.
+- Dynamic and statically typed `any[]` callback methods now use inherited-aware indexed checks and reads, so inherited numeric properties participate while true holes remain skipped where required, and `find*` methods visit every index through `Get`. Test: `dynamic_array_inherited_hof`.
 - Dynamic array `indexOf` and `lastIndexOf` now skip deleted holes while still matching inherited numeric properties. Test: `dynamic_array_hole_search`.
 - Dynamic array holes survive mutating `concat` and `splice`; `with` and `toSpliced` create dense results, and `fill` materializes filled indexes. Test: `dynamic_array_hole_mutations`.
 - Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`.

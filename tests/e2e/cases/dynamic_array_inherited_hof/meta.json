@@ -1,3 +1,3 @@
 {
-  "description": "dynamic array callback methods observe inherited indexes and skip true holes"
+  "description": "dynamic and typed any-array callback methods observe inherited indexes and hole semantics"
 }
