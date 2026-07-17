@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Concrete typed array `slice` now preserves hole metadata for every element type, which also fixes sparse receiver and argument copying in typed `concat` and other slice-backed methods. Test: `array_concat_values`.
 - Concrete typed nested-array `flat` now skips holes in both outer and inner arrays instead of appending stale or zeroed backing storage. Test: `array_flat`.
 - Array length shrink failures now stop at non-configurable numeric descriptors, preserve the required rollback length after deleting higher configurable indexes, and apply a deferred `writable: false` request. Test: `dynamic_array_define_property`.
 - Existing writable numeric elements on sealed dynamic arrays can now make the permitted one-way transition to non-writable descriptors. Test: `dynamic_array_define_property`.
