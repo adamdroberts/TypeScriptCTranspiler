@@ -1,0 +1,3 @@
+dynamic inherited: inherited-left|b|c|inherited-right 0|1|2|3
+typed inherited: inherited-left|b|c|inherited-right 0|1|2|3
+typed holes: |b|c| 1|2

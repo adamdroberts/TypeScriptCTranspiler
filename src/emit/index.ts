@@ -42298,6 +42298,19 @@ class Emitter {
                 });
             }
             case "concat": {
+                if (et.kind === "value") {
+                    const specs: SequencedCallArg[] = [
+                        { value: recv },
+                    ];
+                    for (const arg of args) {
+                        specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
+                    }
+                    return this.emitSequencedExpr(recv.ty, specs, ([target, ...values]) => {
+                        const out = this.freshTemp("_concat_value");
+                        const calls = values.map((value) => `${out} = tsc_value_method_concat(${out}, ${value})`);
+                        return `({ tsc_value_t ${out} = tsc_value_array(${target}); ${calls.join("; ")}; tsc_value_as_array(${out}); })`;
+                    });
+                }
                 const src = this.freshTemp("_concat_src");
                 const dst = this.freshTemp("_concat_dst");
                 const pieces: string[] = [
