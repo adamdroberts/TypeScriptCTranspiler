@@ -109,8 +109,18 @@ class Worker {
         return result;
     }
 
+    async forContinueAfterAwait(count: number): Promise<string> {
+        const value = await delay(30, "for-continue");
+        let result = this.prefix;
+        for (let index = 0; index < count; index = index + 1) {
+            if (index === 1) continue;
+            result = result + value + index;
+        }
+        return result;
+    }
+
     async forOfAfterAwait(): Promise<string> {
-        const value = await delay(30, "of");
+        const value = await delay(31, "of");
         const parts = [this.prefix, value, "!"];
         let result = "";
         for (const part of parts) {
@@ -120,7 +130,7 @@ class Worker {
     }
 
     async forInAfterAwait(): Promise<string> {
-        const value = await delay(31, "in");
+        const value = await delay(32, "in");
         let result = this.prefix;
         for (const key in [this.prefix, value, "!"]) {
             if (key === "1") continue;
@@ -131,7 +141,7 @@ class Worker {
     }
 
     async loopControlAfterAwait(): Promise<string> {
-        const value = await delay(32, "ctrl");
+        const value = await delay(33, "ctrl");
         let result = this.prefix;
         let index = 0;
         while (index < 5) {
@@ -147,7 +157,7 @@ class Worker {
     }
 
     async tryCatchAfterAwait(): Promise<string> {
-        const value = await delay(33, "try");
+        const value = await delay(34, "try");
         let result = this.prefix;
         try {
             throw value + "!";
@@ -160,19 +170,19 @@ class Worker {
     }
 
     async throwAfterAwait(): Promise<string> {
-        const value = await delay(34, "throw");
+        const value = await delay(35, "throw");
         throw this.prefix + value;
         return "never";
     }
 
     async earlyReturnAfterAwait(flag: boolean): Promise<string> {
-        const value = await delay(flag ? 35 : 36, "return");
+        const value = await delay(flag ? 36 : 37, "return");
         if (flag) return this.prefix + value;
         return this.prefix + "late-" + value;
     }
 
     async switchReturnAfterAwait(kind: string): Promise<string> {
-        const value = await delay(kind === "a" ? 37 : 38, kind);
+        const value = await delay(kind === "a" ? 38 : 39, kind);
         switch (value) {
             case "a":
                 return this.prefix + "alpha";
@@ -185,7 +195,7 @@ class Worker {
     }
 
     async voidAfterAwait(): Promise<string> {
-        const ignored = await delay(39);
+        const ignored = await delay(40);
         return this.prefix + "void";
     }
 }
@@ -254,6 +264,10 @@ new Worker("loop-").loopAfterAwait(2).then((value: string): void => {
 
 new Worker("for-").forAfterAwait(2).then((value: string): void => {
     console.log("method-for:", value);
+});
+
+new Worker("for-continue-").forContinueAfterAwait(3).then((value: string): void => {
+    console.log("method-for-continue:", value);
 });
 
 new Worker("forof-").forOfAfterAwait().then((value: string): void => {
