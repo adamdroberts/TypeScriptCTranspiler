@@ -24694,6 +24694,11 @@ class Emitter {
                 if (stmt.elseStatement && !visitStatement(stmt.elseStatement)) return false;
                 return true;
             }
+            if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt)) {
+                visit(stmt.expression);
+                if (!ok) return false;
+                return visitStatement(stmt.statement);
+            }
             return false;
         };
         for (const stmt of postAwaitStatements) {
