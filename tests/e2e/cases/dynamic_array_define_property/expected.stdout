@@ -1,7 +1,10 @@
 index: true red|cyan
-expanded: 4 undefined gold 0|1|2|3
+expanded: 4 undefined gold 0|1|3
 length: true 2 red|cyan
-unsupported flags: false red
+unsupported flags: true hidden
+flags: hidden false false false false false 1
+default index: true 3 []
+default flags: x false false false
 length nan RangeError: Invalid array length
 length float RangeError: Invalid array length
 length overflow RangeError: Invalid array length

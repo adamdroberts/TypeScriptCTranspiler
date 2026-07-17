@@ -698,6 +698,16 @@ bool tsc_value_array_set_length(tsc_array_t* a, tsc_value_t value) {
     if (a->frozen || !a->length_writable) return false;
     if (a->sealed && len != a->len) return false;
     if (len > a->len && !a->extensible) return false;
+    if (len < a->len && a->props) {
+        for (size_t i = a->len; i > len; i--) {
+            size_t idx = i - 1;
+            tsc_str_t* key = tsc_str_from_int((int64_t)idx);
+            if (tsc_object_has_own(a->props, key) && !tsc_object_delete(a->props, key)) {
+                a->len = idx + 1;
+                return false;
+            }
+        }
+    }
     while (a->len < len) {
         tsc_value_t undef = tsc_value_undefined();
         tsc_array_push_raw(a, &undef);
@@ -781,7 +791,11 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
         }
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
-            bool exists = tsc_array_index_present(a, idx) || (a->props && tsc_object_has_own(a->props, key));
+            bool side_exists = a->props && tsc_object_has_own(a->props, key);
+            if (side_exists) {
+                return tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+            }
+            bool exists = tsc_array_index_present(a, idx);
             bool current_writable = !a->frozen;
             bool current_enumerable = true;
             bool current_configurable = !a->sealed && !a->frozen;
@@ -789,20 +803,35 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             bool next_enumerable = has_enumerable ? enumerable : (exists ? current_enumerable : false);
             bool next_configurable = has_configurable ? configurable : (exists ? current_configurable : false);
             if (exists) {
-                if (next_writable != current_writable || next_enumerable != current_enumerable || next_configurable != current_configurable) return false;
-                if (!current_writable) {
+                if (a->sealed || a->frozen || !a->props->extensible) {
+                    if (next_writable != current_writable || next_enumerable != current_enumerable || next_configurable != current_configurable) return false;
                     if (has_value && !tsc_value_object_is(value, TSC_ARR(tsc_value_t, a, idx))) return false;
                     return true;
                 }
-            } else if (!a->extensible) {
-                return false;
-            } else if (!next_configurable) {
+                tsc_value_t current = TSC_ARR(tsc_value_t, a, idx);
+                if (!tsc_object_define(a->props, key, current, current_writable, current_enumerable, current_configurable)) return false;
+                if (tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable)) {
+                    return true;
+                }
+                (void)tsc_object_delete(a->props, key);
                 return false;
             }
-            if (!next_writable || !next_enumerable) return false;
-            if (has_value && !tsc_value_set_index(v, (double)idx, value)) return false;
-            tsc_array_clear_hole(a, idx);
-            return true;
+            if (!a->extensible || (idx >= a->len && !a->length_writable)) {
+                return false;
+            }
+            size_t old_len = a->len;
+            while (a->len <= idx) {
+                tsc_value_t undef = tsc_value_undefined();
+                tsc_array_push_raw(a, &undef);
+                tsc_array_mark_hole(a, a->len - 1);
+            }
+            bool ok = tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+            if (ok) {
+                tsc_array_clear_hole(a, idx);
+                return true;
+            }
+            a->len = old_len;
+            return false;
         }
         return tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
     }
