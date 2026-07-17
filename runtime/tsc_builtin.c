@@ -15,6 +15,7 @@ static tsc_symbol_t* tsc_symbol_async_iterator_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_unscopables_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_is_concat_spreadable_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_to_string_tag_singleton = NULL;
+static tsc_symbol_t* tsc_symbol_species_singleton = NULL;
 
 tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description) {
     tsc_symbol_t* sym = (tsc_symbol_t*)TSC_GC_MALLOC(sizeof(tsc_symbol_t));
@@ -81,6 +82,14 @@ tsc_symbol_t* tsc_symbol_to_string_tag(void) {
             tsc_symbol_new(tsc_str_from_lit("Symbol.toStringTag", 18));
     }
     return tsc_symbol_to_string_tag_singleton;
+}
+
+tsc_symbol_t* tsc_symbol_species(void) {
+    if (!tsc_symbol_species_singleton) {
+        tsc_symbol_species_singleton =
+            tsc_symbol_new(tsc_str_from_lit("Symbol.species", 14));
+    }
+    return tsc_symbol_species_singleton;
 }
 
 tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym) {

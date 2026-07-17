@@ -179,6 +179,7 @@ tsc_symbol_t* tsc_symbol_async_iterator(void);
 tsc_symbol_t* tsc_symbol_unscopables(void);
 tsc_symbol_t* tsc_symbol_is_concat_spreadable(void);
 tsc_symbol_t* tsc_symbol_to_string_tag(void);
+tsc_symbol_t* tsc_symbol_species(void);
 tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym);
 tsc_str_t* tsc_symbol_to_string(const tsc_symbol_t* sym);
 
@@ -682,6 +683,7 @@ tsc_value_t tsc_value_get_prop_receiver_cached(tsc_value_t v, const tsc_str_t* k
 tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value);
 bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value);
+tsc_value_t tsc_value_get_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
 tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t value);
 bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);

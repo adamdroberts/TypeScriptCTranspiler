@@ -17,6 +17,7 @@ interface SymbolConstructor {
     readonly unscopables: symbol;
     readonly isConcatSpreadable: symbol;
     readonly toStringTag: symbol;
+    readonly species: symbol;
 }
 declare var Symbol: SymbolConstructor;
 
@@ -340,6 +341,7 @@ interface ArrayConstructor {
     new <T>(...items: T[]): T[];
     (...items: any[]): any[];
     readonly prototype: any[];
+    readonly [Symbol.species]: ArrayConstructor;
     isArray(arg: unknown, ...ignored: any[]): arg is any[];
     from(s: string): string[];
     from<T>(arr: T[]): T[];

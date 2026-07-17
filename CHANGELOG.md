@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Array[Symbol.species]` now exposes the standard non-enumerable configurable getter on the Array constructor, and `Symbol.species` is available as a supported well-known symbol. Tests: `array_prototype_constructor`, `symbols`.
 - `Object.prototype.toString.call(...)` now honors string-valued `Symbol.toStringTag` overrides on dynamic object/array/function receivers, including inherited tags. Test: `object_prototype_to_string_call`.
 - `Array.prototype.concat` now honors `Symbol.isConcatSpreadable` for dynamic receivers and arguments, including array opt-out and spreadable ordinary array-like objects. Tests: `array_prototype_concat_generic`, `symbols`.
 - Dynamic array accessor descriptors for new numeric indices now preserve sparse holes and respect non-writable `length` before growing the array. Test: `dynamic_array_define_property`.

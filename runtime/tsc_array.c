@@ -47,6 +47,11 @@ static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, ts
     return tsc_value_array(out);
 }
 
+static tsc_value_t array_constructor_species_getter(void* env, tsc_value_t receiver) {
+    (void)env;
+    return receiver;
+}
+
 tsc_value_t tsc_array_constructor_value(void) {
     if (!array_constructor_initialized) {
         array_constructor_value = tsc_value_function_generic_named(
@@ -54,6 +59,20 @@ tsc_value_t tsc_array_constructor_value(void) {
             NULL,
             1.0,
             tsc_str_from_lit("Array", 5)
+        );
+        (void)tsc_value_define_accessor_desc(
+            array_constructor_value,
+            tsc_str_from_lit("__tsc_symbol_species", 20),
+            array_constructor_species_getter,
+            NULL,
+            true,
+            NULL,
+            NULL,
+            false,
+            false,
+            true,
+            true,
+            true
         );
         array_constructor_initialized = true;
     }

@@ -49361,11 +49361,19 @@ class Emitter {
             expr.name.text === "toStringTag";
     }
 
+    private isSymbolSpeciesExpression(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "Symbol" &&
+            expr.name.text === "species";
+    }
+
     private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
         return this.isSymbolIteratorExpression(expr) ||
             this.isSymbolUnscopablesExpression(expr) ||
             this.isSymbolIsConcatSpreadableExpression(expr) ||
-            this.isSymbolToStringTagExpression(expr);
+            this.isSymbolToStringTagExpression(expr) ||
+            this.isSymbolSpeciesExpression(expr);
     }
 
     private isStaticArrayPrototypeExpression(expr: ts.Expression): boolean {
@@ -50063,7 +50071,7 @@ class Emitter {
                     `({ (void)${o}; tsc_array_prototype_symbols(); })`,
                 );
             }
-            if (mapped.kind === "void") {
+            if (mapped.kind === "void" || mapped.kind === "function") {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_SYMBOL), [
                     { value: obj, target: T_VALUE, node: arg },
@@ -54659,6 +54667,9 @@ class Emitter {
             if (pa.expression.text === "Symbol" && pa.name.text === "toStringTag") {
                 return { c: `tsc_symbol_to_string_tag()`, ty: T_SYMBOL };
             }
+            if (pa.expression.text === "Symbol" && pa.name.text === "species") {
+                return { c: `tsc_symbol_species()`, ty: T_SYMBOL };
+            }
         }
         // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")
         if (this.isProcessEnvObject(pa.expression)) {
@@ -55153,6 +55164,12 @@ class Emitter {
                 const cache = this.freshTemp("_prop_cache");
                 return {
                     c: `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, ${idx.c}, &${cache}); })`,
+                    ty: T_VALUE,
+                };
+            }
+            if (idx.ty.kind === "symbol" && this.isSupportedWellKnownSymbolExpression(ea.argumentExpression)) {
+                return {
+                    c: `tsc_value_get_symbol_prop(${recv.c}, ${idx.c})`,
                     ty: T_VALUE,
                 };
             }
