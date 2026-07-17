@@ -36086,6 +36086,8 @@ class Emitter {
         const jv = this.freshTemp("_j");
         const kv = this.freshTemp("_k");
         const cmp = this.freshTemp("_cmp");
+        const copyIndex = this.freshTemp("_dynsort_copy_i");
+        const copyItem = this.freshTemp("_dynsort_copy_item");
         let aName = this.freshTemp("_sa");
         let bName = this.freshTemp("_sb");
         const bindings: string[] = [];
@@ -36166,8 +36168,11 @@ class Emitter {
             ...this.ignoredArgumentSpecs(call.arguments, 1),
         ], ([value]) => {
             const init = copyFirst
-                ? `tsc_value_t const ${base} = ${value}; tsc_array_t* const ${src} = tsc_value_as_array(${base}); ` +
-                    `tsc_array_t* const ${av} = tsc_array_slice(${src}, 0.0, (double)${src}->len);`
+                ? `tsc_value_t const ${base} = ${value}; size_t const ${src} = (size_t)tsc_value_length(${base}); ` +
+                    `tsc_array_t* const ${av} = tsc_array_new(sizeof(tsc_value_t), ${src} ? ${src} : 1); ` +
+                    `for (size_t ${copyIndex} = 0; ${copyIndex} < ${src}; ${copyIndex}++) { ` +
+                    `tsc_value_t ${copyItem} = tsc_value_get_index(${base}, (double)${copyIndex}); ` +
+                    `tsc_array_push_raw(${av}, &${copyItem}); }`
                 : `tsc_value_t const ${base} = ${value}; tsc_array_t* const ${av} = tsc_value_as_array(${base});`;
             const result = copyFirst ? `tsc_value_array(${av})` : base;
             const sortLoop = (arrayName: string): string =>
@@ -36178,7 +36183,9 @@ class Emitter {
                 `tsc_value_t ${aName} = TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1); ` +
                 `tsc_value_t ${bName} = ${kv}; ` +
                 `${bindings.length ? `${bindings.join("; ")}; ` : ""}` +
-                `double ${cmp} = ${cmpExpr}; ` +
+                `double ${cmp} = tsc_value_is_undefined(${aName}) ` +
+                `? (tsc_value_is_undefined(${bName}) ? 0.0 : 1.0) ` +
+                `: (tsc_value_is_undefined(${bName}) ? -1.0 : ${cmpExpr}); ` +
                 `if (${cmp} <= 0) break; ` +
                 `TSC_ARR(tsc_value_t, ${arrayName}, ${jv}) = TSC_ARR(tsc_value_t, ${arrayName}, ${jv} - 1); ` +
                 `${jv}--; } ` +

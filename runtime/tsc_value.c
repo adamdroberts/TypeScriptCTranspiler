@@ -3140,6 +3140,8 @@ static void value_sort_validate_compare_fn(tsc_value_t compare_fn) {
 }
 
 static double value_sort_compare(tsc_value_t compare_fn, tsc_value_t left, tsc_value_t right) {
+    if (tsc_value_is_undefined(left)) return tsc_value_is_undefined(right) ? 0.0 : 1.0;
+    if (tsc_value_is_undefined(right)) return -1.0;
     if (!tsc_value_is_undefined(compare_fn)) {
         value_sort_validate_compare_fn(compare_fn);
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
@@ -3227,7 +3229,7 @@ tsc_value_t tsc_value_method_to_sorted(tsc_value_t recv, tsc_value_t compare_fn)
     if (!value_is_box(recv)) return recv;
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        tsc_value_t copy = tsc_value_array(tsc_array_slice(a, 0.0, (double)a->len));
+        tsc_value_t copy = tsc_value_array(value_array_like_slice(recv, 0.0, (double)a->len));
         return tsc_value_method_sort(copy, compare_fn);
     }
     if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
