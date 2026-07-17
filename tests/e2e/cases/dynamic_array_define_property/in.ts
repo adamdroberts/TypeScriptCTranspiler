@@ -114,3 +114,54 @@ console.log(
     Reflect.defineProperty(lengthTarget, "length", { value: "2" }),
     lengthTarget.length,
 );
+
+const accessorSparse: any = [];
+console.log(
+    "accessor sparse:",
+    Reflect.defineProperty(accessorSparse, "2", {
+        get: function () {
+            return "tail";
+        },
+        enumerable: true,
+        configurable: true,
+    }),
+    accessorSparse.length,
+    accessorSparse[0],
+    accessorSparse[2],
+    Object.keys(accessorSparse).join("|"),
+    Object.hasOwn(accessorSparse, "0"),
+    Object.hasOwn(accessorSparse, "2"),
+);
+
+const accessorClosedLength: any = [];
+Object.defineProperty(accessorClosedLength, "length", { value: 0, writable: false });
+console.log(
+    "accessor closed length:",
+    Reflect.defineProperty(accessorClosedLength, "0", {
+        get: function () {
+            return "blocked";
+        },
+        configurable: true,
+    }),
+    accessorClosedLength.length,
+    Object.hasOwn(accessorClosedLength, "0"),
+);
+
+const objectAccessorSparse: any = [];
+const objectAccessorResult: any = Object.defineProperty(objectAccessorSparse, "1", {
+    get: function () {
+        return "object-tail";
+    },
+    enumerable: true,
+    configurable: true,
+});
+console.log(
+    "object accessor sparse:",
+    objectAccessorResult === objectAccessorSparse,
+    objectAccessorSparse.length,
+    objectAccessorSparse[0],
+    objectAccessorSparse[1],
+    Object.keys(objectAccessorSparse).join("|"),
+    Object.hasOwn(objectAccessorSparse, "0"),
+    Object.hasOwn(objectAccessorSparse, "1"),
+);

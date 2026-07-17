@@ -2475,7 +2475,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_array_at` | dynamic Array.at positive and negative index lookup |
 | `dynamic_array_accessor_properties` | dynamic array own string-key accessor descriptors with receiver-aware get/set |
 | `dynamic_array_copy_within` | dynamic Array.copyWithin overlapping copy |
-| `dynamic_array_define_property` | dynamic array Object/Reflect defineProperty for dense indexes and length, including invalid length RangeError behavior |
+| `dynamic_array_define_property` | dynamic array Object/Reflect defineProperty for dense indexes, sparse accessor indexes, non-writable length growth rejection, and invalid length RangeError behavior |
 | `dynamic_array_entries` | dynamic Array.entries materialized `[number, value]` arrays |
 | `dynamic_array_extensibility` | dynamic array Object/Reflect extensibility, seal, freeze, compatible frozen descriptor redefinition, and mutator state |
 | `dynamic_array_fill` | dynamic Array.fill range mutation |
