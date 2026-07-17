@@ -37,6 +37,8 @@ const unscopables: any = (Array.prototype as any)[Symbol.unscopables];
 const aliasUnscopablesValue: any = proto[Symbol.unscopables];
 const inheritedUnscopablesValue: any = ([] as any)[Symbol.unscopables];
 console.log("unscopables:", typeof unscopables, Object.getPrototypeOf(unscopables), Object.keys(unscopables).sort().join("|"), unscopables.at, unscopables.values, unscopables.reverse, aliasUnscopablesValue === unscopables, inheritedUnscopablesValue === unscopables);
+const unscopablesValuesDescriptor: any = Object.getOwnPropertyDescriptor(unscopables, "values");
+console.log("unscopables descriptors:", Object.isExtensible(unscopables), unscopablesValuesDescriptor.value, unscopablesValuesDescriptor.writable, unscopablesValuesDescriptor.enumerable, unscopablesValuesDescriptor.configurable, Object.prototype.hasOwnProperty.call(unscopables, "reverse"), unscopables.propertyIsEnumerable === undefined);
 const symbolKeys: symbol[] = Object.getOwnPropertySymbols(Array.prototype);
 const aliasSymbolKeys: symbol[] = Object.getOwnPropertySymbols(proto);
 const iteratorSymbolDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
