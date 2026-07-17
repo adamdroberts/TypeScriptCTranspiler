@@ -52,6 +52,73 @@ static tsc_value_t array_constructor_species_getter(void* env, tsc_value_t recei
     return receiver;
 }
 
+static tsc_value_t array_static_is_array(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t value = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    return tsc_value_bool(tsc_value_is_array(value));
+}
+
+static tsc_value_t array_static_of(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    size_t count = args ? args->len : 0;
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), count ? count : 1);
+    for (size_t i = 0; i < count; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, args, i);
+        tsc_array_push_raw(out, &value);
+    }
+    return tsc_value_array(out);
+}
+
+static tsc_value_t array_static_from(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)this_arg;
+    tsc_value_t source = args && args->len > 0
+        ? TSC_ARR(tsc_value_t, args, 0)
+        : tsc_value_undefined();
+    tsc_value_t mapper = args && args->len > 1
+        ? TSC_ARR(tsc_value_t, args, 1)
+        : tsc_value_undefined();
+    tsc_value_t mapper_this = args && args->len > 2
+        ? TSC_ARR(tsc_value_t, args, 2)
+        : tsc_value_undefined();
+    tsc_array_t* values = tsc_value_array_from_values(source);
+    if (tsc_value_is_undefined(mapper)) {
+        return tsc_value_array(values);
+    }
+    if (!tsc_value_is_callable(mapper)) {
+        tsc_throw_str(tsc_str_from_cstr("Array.from mapper must be callable"));
+    }
+    tsc_array_t* out = tsc_array_new(sizeof(tsc_value_t), values->len ? values->len : 1);
+    for (size_t i = 0; i < values->len; i++) {
+        tsc_value_t value = TSC_ARR(tsc_value_t, values, i);
+        tsc_array_t* cb_args = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(cb_args, value);
+        tsc_array_push_value(cb_args, tsc_value_num((double)i));
+        tsc_value_t mapped = tsc_value_apply_function(mapper, mapper_this, tsc_value_array(cb_args));
+        tsc_array_push_value(out, mapped);
+    }
+    return tsc_value_array(out);
+}
+
+static void array_constructor_define_method(tsc_value_t constructor, const char* name, size_t len, double arity, tsc_generic_function_t fn) {
+    (void)tsc_value_define_property_desc(
+        constructor,
+        tsc_str_from_lit(name, len),
+        tsc_value_function_builtin_named(fn, NULL, arity, tsc_str_from_lit(name, len)),
+        true,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true
+    );
+}
+
 tsc_value_t tsc_array_constructor_value(void) {
     if (!array_constructor_initialized) {
         array_constructor_value = tsc_value_function_generic_named(
@@ -74,6 +141,9 @@ tsc_value_t tsc_array_constructor_value(void) {
             true,
             true
         );
+        array_constructor_define_method(array_constructor_value, "isArray", 7, 1.0, array_static_is_array);
+        array_constructor_define_method(array_constructor_value, "from", 4, 1.0, array_static_from);
+        array_constructor_define_method(array_constructor_value, "of", 2, 0.0, array_static_of);
         array_constructor_initialized = true;
     }
     if (array_prototype_initializing) {

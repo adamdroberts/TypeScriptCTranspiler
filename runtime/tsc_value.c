@@ -882,6 +882,12 @@ static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key) {
     return NULL;
 }
 
+static bool value_is_known_symbol_internal_key(const tsc_str_t* key) {
+    return str_lit_eq(key, "__tsc_symbol_isConcatSpreadable") ||
+        str_lit_eq(key, "__tsc_symbol_toStringTag") ||
+        str_lit_eq(key, "__tsc_symbol_species");
+}
+
 bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable) {
     tsc_str_t* internal_key = value_known_symbol_internal_key(key);
     if (internal_key) {
@@ -2274,6 +2280,7 @@ tsc_array_t* tsc_value_own_keys(tsc_value_t v) {
             for (size_t i = 0; i < side_keys->len; i++) {
                 tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
                 if (tsc_str_is_length_key(key) || str_lit_eq(key, "name")) continue;
+                if (value_is_known_symbol_internal_key(key)) continue;
                 tsc_array_push_raw(out, &key);
             }
         }

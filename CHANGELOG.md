@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- The runtime Array constructor now exposes callable `isArray`, `from`, and `of` static methods with standard writable, non-enumerable, configurable descriptors, and detached static method calls work through the boxed function dispatcher. Test: `array_prototype_constructor`.
 - `Array[Symbol.species]` now exposes the standard non-enumerable configurable getter on the Array constructor, and `Symbol.species` is available as a supported well-known symbol. Tests: `array_prototype_constructor`, `symbols`.
 - `Object.prototype.toString.call(...)` now honors string-valued `Symbol.toStringTag` overrides on dynamic object/array/function receivers, including inherited tags. Test: `object_prototype_to_string_call`.
 - `Array.prototype.concat` now honors `Symbol.isConcatSpreadable` for dynamic receivers and arguments, including array opt-out and spreadable ordinary array-like objects. Tests: `array_prototype_concat_generic`, `symbols`.
