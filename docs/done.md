@@ -544,6 +544,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Sparse array spread materializes deleted indexes as `undefined` for static and dynamic array sources, and dynamic iterator values/entries use dense indexed reads. Test: `array_delete_hole_join`
 - Sparse arrays passed through function-value, rest-parameter, and Reflect argument spread pass `undefined` for deleted indexes. Test: `array_delete_hole_join`
 - `Array.of(...sparseArray)` materializes deleted indexes as `undefined` in the result. Test: `array_delete_hole_join`
+- Sparse typed arrays boxed into dynamic `any` values check index presence before boxing each element, so deleted indexes read as `undefined` rather than stale raw storage. Test: `array_delete_hole_join`
 - `Map.groupBy` passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `map_group_by`
 - `Object.groupBy` passes `undefined` for deleted indexes in static sparse `any[]` sources. Test: `object_group_by`
 - `Array.fromAsync` mapper callbacks receive `undefined` for deleted indexes in static sparse `any[]` sources. Test: `array_from_async`

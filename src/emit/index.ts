@@ -55246,7 +55246,7 @@ class Emitter {
                         const idx = this.freshTemp("_idx");
                         const elem = this.freshTemp("_elem");
                         const boxed = this.coerce({ c: elem, ty: r.ty.elem }, T_VALUE, node);
-                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); tsc_value_t _boxed = ${boxed}; tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
+                        return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed; if (tsc_array_index_present(${tmpIn}, ${idx})) { ${r.ty.elem.c} ${elem} = TSC_ARR(${r.ty.elem.c}, ${tmpIn}, ${idx}); _boxed = ${boxed}; } else { _boxed = tsc_value_undefined(); } tsc_array_push_raw(${tmpOut}, &_boxed); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
                     }
                     return `tsc_value_array(${r.c})`;
                 }

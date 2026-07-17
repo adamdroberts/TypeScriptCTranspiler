@@ -54,3 +54,9 @@ function collectSpread(...values: any[]): string { return values.join("|"); }
 console.log("call spread holes:", collectSpread(...hofValues));
 const arrayOfSpread: any[] = Array.of(...hofValues);
 console.log("Array.of spread holes:", Object.keys(arrayOfSpread).join("|"), arrayOfSpread[1]);
+const typedHoles: number[] = [1, 2, 3];
+delete typedHoles[1];
+const boxedTypedHoles: any = typedHoles;
+const boxedTypedValues: any = typedHoles.values();
+console.log("typed boxed holes:", Object.keys(boxedTypedHoles).join("|"), String(boxedTypedHoles[1]), boxedTypedHoles.join("|"));
+console.log("typed boxed values:", Object.keys(boxedTypedValues).join("|"), String(boxedTypedValues[1]), boxedTypedValues.join("|"));

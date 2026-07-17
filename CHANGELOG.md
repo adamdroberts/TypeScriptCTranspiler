@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Boxing sparse typed arrays into dynamic `any` values now checks hole presence per index, so deleted slots become `undefined` instead of leaking stale backing storage through dynamic reads or boxed `values()` results. Test: `array_delete_hole_join`.
 - `Array.from(typedArray, mapper)` now coerces explicitly typed callback parameters from the declared callback type, and boxed mapper parameters over sparse typed arrays read through indexed `Get` so deleted slots surface as `undefined`. Test: `array_from_mapper`.
 - Typed sparse array `find` / `findLast` / `findIndex` / `findLastIndex` now pass deleted indexes through indexed `Get` when callback parameters or results are boxed, exposing `undefined` instead of stale backing storage. Test: `array_hof`.
 - Inline array callbacks with explicitly `any`-typed `ObjectEntry` parameters now receive boxed tuple values, so dynamic tuple indexing like `Object.entries(obj).map((entry: any) => entry[0])` compiles and runs correctly. Test: `object_entries`.
