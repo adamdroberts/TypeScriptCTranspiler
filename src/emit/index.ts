@@ -52524,6 +52524,22 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                if (this.isStaticArrayPrototypeExpression(args[0]!) && this.isSymbolIteratorExpression(args[1]!)) {
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: target, node: args[0]! },
+                        { value: key, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_iterator_descriptor(); })`);
+                }
+                if (this.isStaticArrayPrototypeExpression(args[0]!) && this.isSymbolUnscopablesExpression(args[1]!)) {
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: target, node: args[0]! },
+                        { value: key, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
+                }
                 if (
                     mapped.kind === "map" ||
                     mapped.kind === "set" ||
