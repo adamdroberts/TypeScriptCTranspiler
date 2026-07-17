@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic array `indexOf` and `lastIndexOf` now skip deleted holes while still matching inherited numeric properties. Test: `dynamic_array_hole_search`.
 - Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`.
 - Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`.
 - Dynamic array holes now remap correctly through `shift` and `unshift`. Test: `dynamic_array_hole_shift_unshift`.
