@@ -8,6 +8,9 @@ dyn shrink: false 2
 dyn same: true 2 false
 dyn shift: Array.prototype.shift could not update array-like length
 dyn after shift: 2 b| 0
+dyn unshift: Array.prototype.unshift could not move array-like element
+dyn empty unshift: Array.prototype.unshift could not update array-like length
+dyn after unshift: 2 a|b
 typed define: true false 2
 typed push: Array.prototype.push could not update array-like length
 typed empty push: Array.prototype.push could not update array-like length
@@ -18,3 +21,6 @@ typed shrink: false 2
 typed same: true 2 false
 typed shift: Array.prototype.shift could not update array-like length
 typed after shift: 2 2| 0
+typed unshift: Array.prototype.unshift could not move array-like element
+typed empty unshift: Array.prototype.unshift could not update array-like length
+typed after unshift: 2 1|2

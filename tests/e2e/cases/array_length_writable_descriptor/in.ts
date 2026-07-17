@@ -21,6 +21,12 @@ Reflect.defineProperty(dynShift, "length", { writable: false });
 try { dynShift.shift(); } catch (error: any) { console.log("dyn shift:", error); }
 console.log("dyn after shift:", dynShift.length, dynShift.join("|"), Object.keys(dynShift).join("|"));
 
+const dynUnshift: any = ["a", "b"];
+Reflect.defineProperty(dynUnshift, "length", { writable: false });
+try { dynUnshift.unshift("z"); } catch (error: any) { console.log("dyn unshift:", error); }
+try { dynUnshift.unshift(); } catch (error: any) { console.log("dyn empty unshift:", error); }
+console.log("dyn after unshift:", dynUnshift.length, dynUnshift.join("|"));
+
 const typed = [1, 2];
 
 const typedDefined = Reflect.defineProperty(typed, "length", { writable: false });
@@ -43,3 +49,9 @@ const typedShift = [1, 2];
 Reflect.defineProperty(typedShift, "length", { writable: false });
 try { typedShift.shift(); } catch (error: any) { console.log("typed shift:", error); }
 console.log("typed after shift:", typedShift.length, typedShift.join("|"), Object.keys(typedShift).join("|"));
+
+const typedUnshift = [1, 2];
+Reflect.defineProperty(typedUnshift, "length", { writable: false });
+try { typedUnshift.unshift(0); } catch (error: any) { console.log("typed unshift:", error); }
+try { typedUnshift.unshift(); } catch (error: any) { console.log("typed empty unshift:", error); }
+console.log("typed after unshift:", typedUnshift.length, typedUnshift.join("|"));
