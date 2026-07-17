@@ -31668,7 +31668,11 @@ class Emitter {
         if (keyExpr) {
             key = this.emitExpr(keyExpr);
             indexAssignment = key.ty.kind === "number";
-            specs.push({ value: key, target: indexAssignment ? T_NUMBER : T_STRING, node: keyExpr });
+            specs.push({
+                value: key,
+                target: indexAssignment ? T_NUMBER : key.ty.kind === "symbol" ? T_SYMBOL : T_STRING,
+                node: keyExpr,
+            });
         }
 
         const logicalOp =
@@ -31704,6 +31708,9 @@ class Emitter {
                                                             : null;
 
         if (op !== ts.SyntaxKind.EqualsToken && !compoundFn && !logicalOp) return null;
+        if (key?.ty.kind === "symbol" && op !== ts.SyntaxKind.EqualsToken) {
+            unsupported(bin.left, "symbol-key dynamic assignment currently supports plain assignment only");
+        }
         if (!logicalOp) {
             specs.push({ value: rhs, target: T_VALUE, node: bin.right });
         }
@@ -31714,12 +31721,17 @@ class Emitter {
                 ? values[1]!
                 : `tsc_str_from_lit("${escapeCString(literalKey!)}", ${utf8ByteLen(literalKey!)})`;
             const out = this.freshTemp("_dynassign");
-            const cache = !indexAssignment ? this.freshTemp("_prop_cache") : null;
+            const symbolAssignment = key?.ty.kind === "symbol";
+            const cache = !indexAssignment && !symbolAssignment ? this.freshTemp("_prop_cache") : null;
             const existing = indexAssignment
                 ? `tsc_value_get_index(${obj}, ${keyC})`
+                : symbolAssignment
+                    ? `tsc_value_undefined()`
                 : `tsc_value_get_prop_cached(${obj}, ${keyC}, &${cache})`;
             const set = (value: string) => indexAssignment
                 ? `tsc_value_set_index(${obj}, ${keyC}, ${value})`
+                : symbolAssignment
+                    ? `tsc_value_set_symbol_prop(${obj}, ${keyC}, ${value})`
                 : `tsc_value_set_prop_cached(${obj}, ${keyC}, ${value}, &${cache})`;
             const prefix = cache ? `static tsc_prop_cache_t ${cache}; ` : "";
             if (logicalOp) {
@@ -52964,6 +52976,7 @@ class Emitter {
                 const key = this.emitExpr(args[1]!);
                 const value = this.emitExpr(args[2]!);
                 if (args[3]) {
+                    if (key.ty.kind === "symbol") unsupported(args[1]!, "Reflect.set symbol keys with explicit receiver are not supported yet");
                     const receiver = this.emitExpr(args[3]!);
                     const cache = this.freshTemp("_prop_cache");
                     return this.emitSequencedExpr(
@@ -52979,6 +52992,18 @@ class Emitter {
                     );
                 }
                 const cache = this.freshTemp("_prop_cache");
+                if (key.ty.kind === "symbol") {
+                    return this.emitSequencedExpr(
+                        T_BOOLEAN,
+                        [
+                            { value: target, target: T_VALUE, node: args[0]! },
+                            { value: key, target: T_SYMBOL, node: args[1]! },
+                            { value, target: T_VALUE, node: args[2]! },
+                            ...ignored,
+                        ],
+                        ([t, k, v]) => `tsc_reflect_set_symbol_prop(${t}, ${k}, ${v})`,
+                    );
+                }
                 return this.emitSequencedExpr(
                     T_BOOLEAN,
                         [
