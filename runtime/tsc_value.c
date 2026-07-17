@@ -159,7 +159,7 @@ bool tsc_value_is_callable(tsc_value_t v) {
     return value_is_callable_function(v);
 }
 
-static bool value_is_constructable_function(tsc_value_t v) {
+bool tsc_value_is_constructable(tsc_value_t v) {
     if (!value_is_box(v)) return false;
     if (value_tag(v) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(v);
@@ -167,7 +167,7 @@ static bool value_is_constructable_function(tsc_value_t v) {
     }
     if (value_tag(v) != TSC_VALUE_TAG_OBJECT) return false;
     tsc_object_t* o = (tsc_object_t*)value_ptr(v);
-    return o && o->is_proxy && value_is_constructable_function(o->proxy_target);
+    return o && o->is_proxy && tsc_value_is_constructable(o->proxy_target);
 }
 
 static tsc_array_t* value_to_argument_list(tsc_value_t args, const char* message) {
@@ -259,7 +259,7 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
     if (value_is_box(target) && value_tag(target) == TSC_VALUE_TAG_FUNCTION) {
         tsc_function_identity_t* ident = (tsc_function_identity_t*)value_ptr(target);
         if (ident->kind == TSC_FUNCTION_IDENTITY_GENERIC) {
-            if (!value_is_constructable_function(new_target)) {
+            if (!tsc_value_is_constructable(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
@@ -286,10 +286,10 @@ tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t 
         tsc_object_t* o = (tsc_object_t*)value_ptr(target);
         if (o->is_proxy) {
             if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'construct' on a proxy that has been revoked"));
-            if (!value_is_constructable_function(o->proxy_target)) {
+            if (!tsc_value_is_constructable(o->proxy_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Proxy construct target must be constructor"));
             }
-            if (!value_is_constructable_function(new_target)) {
+            if (!tsc_value_is_constructable(new_target)) {
                 tsc_throw_str(tsc_str_from_cstr("Reflect.construct newTarget is not a constructor"));
             }
             tsc_array_t* list = value_to_argument_list(args, "Reflect.construct argumentsList must be an array or array-like object");
