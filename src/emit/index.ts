@@ -132,6 +132,10 @@ interface AsyncAwaitContinuationReferences {
     usesThis: boolean;
 }
 
+interface AsyncAwaitContinuationReturnTarget {
+    resultPromise: string;
+}
+
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 type ClosureLikeDeclaration = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
 type LiftableFunctionDeclaration = ts.ArrowFunction | ts.FunctionExpression;
@@ -282,6 +286,7 @@ class Emitter {
     private promiseFinallyAdapters = new Map<string, string>();
     private asyncAwaitReturnContinuationAdapters = 0;
     private asyncAwaitContinuationAdapterDepth = 0;
+    private asyncAwaitContinuationReturnTargets: AsyncAwaitContinuationReturnTarget[] = [];
     private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
@@ -24664,7 +24669,12 @@ class Emitter {
             }
             ts.forEachChild(node, visit);
         };
-        const visitStatement = (stmt: ts.Statement, loopDepth = 0, allowContinue = false): boolean => {
+        const visitStatement = (
+            stmt: ts.Statement,
+            loopDepth = 0,
+            allowContinue = false,
+            sourceTryDepth = 0,
+        ): boolean => {
             const visitVariableDeclarationList = (
                 declarationList: ts.VariableDeclarationList,
                 requireInitializer: boolean,
@@ -24692,21 +24702,24 @@ class Emitter {
             }
             if (ts.isBlock(stmt)) {
                 for (const child of stmt.statements) {
-                    if (!visitStatement(child, loopDepth, allowContinue)) return false;
+                    if (!visitStatement(child, loopDepth, allowContinue, sourceTryDepth)) return false;
                 }
                 return true;
             }
             if (ts.isIfStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
-                if (!visitStatement(stmt.thenStatement, loopDepth, allowContinue)) return false;
-                if (stmt.elseStatement && !visitStatement(stmt.elseStatement, loopDepth, allowContinue)) return false;
+                if (!visitStatement(stmt.thenStatement, loopDepth, allowContinue, sourceTryDepth)) return false;
+                if (
+                    stmt.elseStatement &&
+                    !visitStatement(stmt.elseStatement, loopDepth, allowContinue, sourceTryDepth)
+                ) return false;
                 return true;
             }
             if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement, loopDepth + 1, true);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
             }
             if (ts.isForStatement(stmt)) {
                 if (stmt.initializer) {
@@ -24725,7 +24738,7 @@ class Emitter {
                     visit(stmt.incrementor);
                     if (!ok) return false;
                 }
-                return visitStatement(stmt.statement, loopDepth + 1, false);
+                return visitStatement(stmt.statement, loopDepth + 1, false, sourceTryDepth);
             }
             if (ts.isForOfStatement(stmt)) {
                 if (stmt.awaitModifier) return false;
@@ -24737,7 +24750,7 @@ class Emitter {
                 }
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement, loopDepth + 1, true);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
             }
             if (ts.isForInStatement(stmt)) {
                 if (ts.isVariableDeclarationList(stmt.initializer)) {
@@ -24748,7 +24761,7 @@ class Emitter {
                 }
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement, loopDepth + 1, true);
+                return visitStatement(stmt.statement, loopDepth + 1, true, sourceTryDepth);
             }
             if (ts.isBreakStatement(stmt)) {
                 return !stmt.label && loopDepth > 0;
@@ -24760,8 +24773,16 @@ class Emitter {
                 visit(stmt.expression);
                 return ok;
             }
+            if (ts.isReturnStatement(stmt)) {
+                if (sourceTryDepth > 0) return false;
+                if (stmt.expression) {
+                    visit(stmt.expression);
+                    if (!ok) return false;
+                }
+                return true;
+            }
             if (ts.isTryStatement(stmt)) {
-                if (!visitStatement(stmt.tryBlock, loopDepth, allowContinue)) return false;
+                if (!visitStatement(stmt.tryBlock, loopDepth, allowContinue, sourceTryDepth + 1)) return false;
                 if (stmt.catchClause) {
                     const catchDecl = stmt.catchClause.variableDeclaration;
                     let catchSymbol: ts.Symbol | null = null;
@@ -24771,11 +24792,14 @@ class Emitter {
                         if (!catchSymbol) return false;
                         locals.add(catchSymbol);
                     }
-                    const catchOk = visitStatement(stmt.catchClause.block, loopDepth, allowContinue);
+                    const catchOk = visitStatement(stmt.catchClause.block, loopDepth, allowContinue, sourceTryDepth + 1);
                     if (catchSymbol) locals.delete(catchSymbol);
                     if (!catchOk) return false;
                 }
-                if (stmt.finallyBlock && !visitStatement(stmt.finallyBlock, loopDepth, allowContinue)) return false;
+                if (
+                    stmt.finallyBlock &&
+                    !visitStatement(stmt.finallyBlock, loopDepth, allowContinue, sourceTryDepth + 1)
+                ) return false;
                 return true;
             }
             return false;
@@ -24897,10 +24921,12 @@ class Emitter {
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let returned: EmitResult;
         this.asyncAwaitContinuationAdapterDepth++;
+        this.asyncAwaitContinuationReturnTargets.push({ resultPromise: "_ret" });
         try {
             for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
             returned = this.emitExpr(returnExpr);
         } finally {
+            this.asyncAwaitContinuationReturnTargets.pop();
             this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
@@ -29612,6 +29638,32 @@ class Emitter {
             unsupported(r, "return outside of function");
         }
         const ret = this.returnStack[this.returnStack.length - 1]!;
+        const continuationReturn =
+            this.asyncAwaitContinuationReturnTargets[this.asyncAwaitContinuationReturnTargets.length - 1];
+        if (continuationReturn) {
+            if (!r.expression) {
+                buf.line("tsc_try_pop();");
+                buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
+                buf.line("return;");
+                return;
+            }
+            const expr = this.emitExpr(r.expression);
+            const returnedType = this.prepareType(expr.ty);
+            if (returnedType.kind === "void" || returnedType.kind === "never") {
+                buf.line(`${expr.c};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
+            } else {
+                const returnVar = this.freshTemp("_await_return");
+                const resolvedVar = this.freshTemp("_await_resolved");
+                buf.line(`${returnedType.c} ${returnVar} = ${expr.c};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`tsc_promise_t* ${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, r.expression)};`);
+                buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, ${resolvedVar});`);
+            }
+            buf.line("return;");
+            return;
+        }
         const gen = this.generatorStack[this.generatorStack.length - 1];
         if (gen) {
             if (r.expression) {
