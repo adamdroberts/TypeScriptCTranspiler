@@ -41993,6 +41993,9 @@ class Emitter {
         const et = recv.ty.elem!;
         const args = call.arguments;
         const emitJoinStringExpr = (arr: string, sep: string): string => {
+            if (et.kind === "value") {
+                return `tsc_value_as_string(tsc_value_method_join(tsc_value_array(${arr}), tsc_value_string(${sep})))`;
+            }
             const av = this.freshTemp("_arr");
             const iv = this.freshTemp("_i");
             const stringify = (exprC: string): string => {
