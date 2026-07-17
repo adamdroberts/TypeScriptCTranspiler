@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `Array.prototype.length` now reports the standard writable, non-enumerable, non-configurable descriptor and accepts ordinary length writes. Test: `array_prototype_value`.
 - Accessor function identities preserved through dynamic function property descriptors now expose ordinary configurable `length` and `name` own properties while still omitting constructable-only `prototype` metadata until user code creates an ordinary property. Test: `dynamic_function_accessor_properties`.
 - Typed array coercions across different element ABIs now copy and convert elements instead of reusing the raw array buffer, preserving sparse holes when assigning typed arrays to `any[]`. Test: `array_delete_hole_join`.
 - Boxing sparse typed arrays into dynamic `any` values now checks hole presence per index, so deleted slots become `undefined` instead of leaking stale backing storage through dynamic reads or boxed `values()` results. Test: `array_delete_hole_join`.
