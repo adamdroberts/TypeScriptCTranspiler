@@ -24693,7 +24693,8 @@ class Emitter {
                 return true;
             };
             if (ts.isVariableStatement(stmt)) {
-                return visitVariableDeclarationList(stmt.declarationList, true);
+                const isConst = (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0;
+                return visitVariableDeclarationList(stmt.declarationList, isConst);
             }
             if (ts.isExpressionStatement(stmt)) {
                 visit(stmt.expression);
