@@ -111,6 +111,20 @@ interface AsyncFunctionContext {
     promiseType: CType;
 }
 
+interface AsyncAwaitContinuationParam {
+    symbol: ts.Symbol;
+    name: string;
+    type: CType;
+    field: string;
+}
+
+interface AsyncAwaitReturnContinuation {
+    variable: ts.Identifier;
+    awaitExpr: ts.AwaitExpression;
+    returnExpr: ts.Expression;
+    params: AsyncAwaitContinuationParam[];
+}
+
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
 type ClosureLikeDeclaration = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
 type LiftableFunctionDeclaration = ts.ArrowFunction | ts.FunctionExpression;
@@ -23094,7 +23108,7 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
-                                this.emitAsyncAwaitReturnContinuation(this.defs, m.body));
+                                this.emitAsyncAwaitReturnContinuation(this.defs, m.body, m.parameters));
                         if (!handledAsyncAwait) {
                             this.emitStmtList(this.defs, m.body.statements);
                             if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
@@ -24491,7 +24505,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
-                !this.emitAsyncAwaitReturnContinuation(this.defs, fd.body)) {
+                !this.emitAsyncAwaitReturnContinuation(this.defs, fd.body, fd.parameters)) {
                 this.emitStmtList(this.defs, fd.body.statements);
                 this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
             }
@@ -24534,11 +24548,10 @@ class Emitter {
         return true;
     }
 
-    private asyncAwaitReturnContinuation(body: ts.Block): {
-        variable: ts.Identifier;
-        awaitExpr: ts.AwaitExpression;
-        returnExpr: ts.Expression;
-    } | null {
+    private asyncAwaitReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+    ): AsyncAwaitReturnContinuation | null {
         if (body.statements.length !== 2) return null;
         const declaration = body.statements[0];
         const result = body.statements[1];
@@ -24548,13 +24561,43 @@ class Emitter {
         if (!ts.isIdentifier(variable.name) || !variable.initializer || !ts.isAwaitExpression(variable.initializer)) {
             return null;
         }
-        if (!this.returnExpressionOnlyReferencesAwaitedValue(result.expression, variable.name)) return null;
-        return { variable: variable.name, awaitExpr: variable.initializer, returnExpr: result.expression };
+        const params = this.asyncAwaitContinuationParameters(parameters);
+        const referenced = this.returnExpressionAsyncAwaitReferences(result.expression, variable.name, params);
+        if (!referenced) return null;
+        return { variable: variable.name, awaitExpr: variable.initializer, returnExpr: result.expression, params: referenced };
     }
 
-    private returnExpressionOnlyReferencesAwaitedValue(expr: ts.Expression, awaitedName: ts.Identifier): boolean {
+    private asyncAwaitContinuationParameters(
+        parameters: readonly ts.ParameterDeclaration[],
+    ): AsyncAwaitContinuationParam[] {
+        const params: AsyncAwaitContinuationParam[] = [];
+        for (const param of parameters) {
+            if (this.isThisParameter(param) || !ts.isIdentifier(param.name)) continue;
+            const symbol = this.symbolForIdentifier(param.name);
+            if (!symbol) continue;
+            const type = this.prepareType(mapType(param, this.checker));
+            if (type.kind === "void" || type.kind === "never") continue;
+            const name = mangleIdent(param.name.text);
+            params.push({
+                symbol,
+                name,
+                type,
+                field: `param_${name}`,
+            });
+        }
+        return params;
+    }
+
+    private returnExpressionAsyncAwaitReferences(
+        expr: ts.Expression,
+        awaitedName: ts.Identifier,
+        params: readonly AsyncAwaitContinuationParam[],
+    ): AsyncAwaitContinuationParam[] | null {
         const awaitedSymbol = this.symbolForIdentifier(awaitedName);
-        if (!awaitedSymbol) return false;
+        if (!awaitedSymbol) return null;
+        const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        for (const param of params) paramsBySymbol.set(param.symbol, param);
+        const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         let ok = true;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
@@ -24564,7 +24607,17 @@ class Emitter {
             }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
-                if (sym !== awaitedSymbol) {
+                if (sym === awaitedSymbol) {
+                    // allowed
+                } else {
+                    const param = sym ? paramsBySymbol.get(sym) : undefined;
+                    if (param) {
+                        referenced.set(param.symbol, param);
+                    } else {
+                        ok = false;
+                    }
+                }
+                if (!ok) {
                     ok = false;
                     return;
                 }
@@ -24572,11 +24625,15 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         visit(expr);
-        return ok;
+        return ok ? [...referenced.values()] : null;
     }
 
-    private emitAsyncAwaitReturnContinuation(buf: CBuf, body: ts.Block): boolean {
-        const continuation = this.asyncAwaitReturnContinuation(body);
+    private emitAsyncAwaitReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+    ): boolean {
+        const continuation = this.asyncAwaitReturnContinuation(body, parameters);
         if (!continuation) return false;
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
@@ -24595,6 +24652,7 @@ class Emitter {
             awaitedType,
             continuation.variable,
             continuation.returnExpr,
+            continuation.params,
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
@@ -24603,6 +24661,9 @@ class Emitter {
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->receiver = ${sourcePromise};`);
         buf.line(`${env}->result_promise = ${resultPromise};`);
+        for (const param of continuation.params) {
+            buf.line(`${env}->${param.field} = ${param.name};`);
+        }
         buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
         buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
         buf.close();
@@ -24618,6 +24679,7 @@ class Emitter {
         awaitedType: CType,
         variable: ts.Identifier,
         returnExpr: ts.Expression,
+        params: readonly AsyncAwaitContinuationParam[],
     ): string {
         const name = `tsc_async_await_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -24625,6 +24687,9 @@ class Emitter {
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) {
+            this.structDecls.line(`${param.type.c} ${param.field};`);
+        }
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
         this.protos.line(`void ${name}(void* env);`);
@@ -24637,6 +24702,9 @@ class Emitter {
         const scope = new Map<ts.Symbol, string>();
         const variableSymbol = this.symbolForIdentifier(variable);
         if (variableSymbol) scope.set(variableSymbol, valueVar);
+        for (const param of params) {
+            scope.set(param.symbol, `state->${param.field}`);
+        }
 
         const buf = new CBuf();
         buf.open(`void ${name}(void* env)`);
@@ -33691,7 +33759,7 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
-                                this.emitAsyncAwaitReturnContinuation(body, fnBody));
+                                this.emitAsyncAwaitReturnContinuation(body, fnBody, runtimeParams));
                         if (!handledAsyncAwait) {
                             for (const s of fnBody.statements) this.emitStmt(body, s);
                             if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
@@ -43710,7 +43778,7 @@ class Emitter {
                 const handledAsyncAwait =
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
-                        this.emitAsyncAwaitReturnContinuation(this.defs, info.fn.body));
+                        this.emitAsyncAwaitReturnContinuation(this.defs, info.fn.body, info.fn.parameters));
                 if (!handledAsyncAwait) {
                     for (const s of info.fn.body.statements) this.emitStmt(this.defs, s);
                     if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");

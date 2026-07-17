@@ -1,4 +1,7 @@
 suffix: ready!
 double: 42
+tagged: fn-tag
 method: method!
+method-param: class-method-param
 arrow: arrow!
+arrow-param: value-arrow-param
