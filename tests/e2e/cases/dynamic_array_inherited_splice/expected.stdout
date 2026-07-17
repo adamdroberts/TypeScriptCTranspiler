@@ -1,0 +1,3 @@
+inherited: x|d 0|1 inherited|b| 0|1 false
+dynamic holes: x|d 0|1 |b| 1 false
+typed holes: x|d 0|1 |b| 1 false

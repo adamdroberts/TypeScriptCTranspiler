@@ -3028,14 +3028,9 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     if (!value_is_box(recv)) return tsc_value_undefined();
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
         tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        int64_t len = (int64_t)a->len;
-        double start_num = value_slice_arg(start, 0.0);
-        int64_t at = isnan(start_num) ? 0 : (int64_t)start_num;
-        if (at < 0) at = len + at;
-        if (at < 0) at = 0;
-        if (at > len) at = len;
-
-        int64_t del = 0;
+        size_t len = a->len;
+        size_t at = argc <= 0 ? 0 : value_array_forward_start(len, value_slice_arg(start, 0.0));
+        size_t del = 0;
         if (argc >= 1) {
             double del_num = argc < 2
                 ? (double)(len - at)
@@ -3043,7 +3038,7 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
             if (isinf(del_num) && del_num > 0) {
                 del = len - at;
             } else if (!isnan(del_num) && del_num > 0) {
-                del = (int64_t)del_num;
+                del = (size_t)del_num;
                 if (del > len - at) del = len - at;
             }
         }
@@ -3052,16 +3047,8 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
         if ((a->sealed || a->frozen) && (del > 0 || insert_len > 0)) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.splice cannot mutate a sealed or frozen array"));
         }
-
-        return tsc_value_array(tsc_array_splice(
-            a,
-            (double)at,
-            (double)del,
-            2,
-            items
-        ));
     }
-    if (value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
+    if (value_tag(recv) != TSC_VALUE_TAG_ARRAY && value_tag(recv) != TSC_VALUE_TAG_OBJECT) return tsc_value_undefined();
 
     size_t len = (size_t)tsc_value_length(recv);
     size_t at = argc <= 0 ? 0 : value_array_forward_start(len, value_slice_arg(start, 0.0));
@@ -3082,8 +3069,10 @@ tsc_value_t tsc_value_method_splice(tsc_value_t recv, tsc_value_t start, tsc_val
     size_t new_len = len - del + insert_len;
     tsc_array_t* removed = tsc_array_new(sizeof(tsc_value_t), del ? del : 1);
     for (size_t i = 0; i < del; i++) {
+        bool present = value_array_like_has_index(recv, at + i);
         tsc_value_t value = tsc_value_get_index(recv, (double)(at + i));
         tsc_array_push_raw(removed, &value);
+        if (!present) tsc_array_mark_hole(removed, removed->len - 1);
     }
 
     if (insert_len < del) {

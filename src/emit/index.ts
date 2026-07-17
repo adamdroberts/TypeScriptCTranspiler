@@ -42527,7 +42527,9 @@ class Emitter {
                         pieces.push(`${et.c} ${tmp} = ${item}`);
                         pieces.push(`tsc_array_push_raw(${av}, &${tmp})`);
                     }
-                    pieces.push(`tsc_array_splice(${target}, ${startArg}, ${deleteArg}, ${args.length}, ${av})`);
+                    pieces.push(et.kind === "value"
+                        ? `tsc_value_as_array(tsc_value_method_splice(tsc_value_array(${target}), tsc_value_num(${startArg}), tsc_value_num(${deleteArg}), ${args.length}, ${av}))`
+                        : `tsc_array_splice(${target}, ${startArg}, ${deleteArg}, ${args.length}, ${av})`);
                     return `({ ${pieces.join("; ")}; })`;
                 });
             }
