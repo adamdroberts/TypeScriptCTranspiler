@@ -907,6 +907,11 @@ bool tsc_array_prototype_delete_symbol(tsc_symbol_t* key) {
     return true;
 }
 
+bool tsc_array_prototype_symbol_is_enumerable(tsc_symbol_t* key) {
+    tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
+    return slot && slot->present && slot->enumerable;
+}
+
 tsc_value_t tsc_array_prototype_symbol_value(tsc_symbol_t* key) {
     tsc_array_prototype_symbol_slot_t* slot = array_prototype_symbol_slot_ready(key);
     if (!slot || !slot->present) return tsc_value_undefined();

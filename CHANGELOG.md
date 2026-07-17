@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Symbol-aware `propertyIsEnumerable(...)` now observes redefined `Array.prototype[Symbol.iterator]` / `Array.prototype[Symbol.unscopables]` enumerable flags instead of always reporting false. Test: `array_prototype_value`.
 - Plain assignment and `Reflect.set(...)` now support well-known symbol slots on the shared Array prototype, respecting writable descriptor state for custom `Symbol.iterator` / `Symbol.unscopables` values. Test: `array_prototype_value`.
 - `Object.defineProperty(...)` and `Reflect.defineProperty(...)` now support data-descriptor redefinition of well-known symbol slots on the shared Array prototype, including custom `Symbol.iterator` / `Symbol.unscopables` values and descriptor flags. Test: `array_prototype_value`.
 - `Reflect.deleteProperty(...)` and `delete` now support well-known symbol keys on the shared Array prototype, and Array prototype symbol reads/has/descriptors observe deleted `Symbol.iterator` / `Symbol.unscopables` slots. Test: `array_prototype_value`.

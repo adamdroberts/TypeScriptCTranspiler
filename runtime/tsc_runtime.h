@@ -554,6 +554,7 @@ tsc_value_t tsc_array_prototype_own_property_descriptors(void);
 tsc_array_t* tsc_array_prototype_symbols(void);
 bool tsc_array_prototype_has_symbol(tsc_symbol_t* key);
 bool tsc_array_prototype_delete_symbol(tsc_symbol_t* key);
+bool tsc_array_prototype_symbol_is_enumerable(tsc_symbol_t* key);
 tsc_value_t tsc_array_prototype_symbol_value(tsc_symbol_t* key);
 bool tsc_array_prototype_define_symbol_desc(tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 tsc_value_t tsc_array_symbol_iterator_descriptor(void);
