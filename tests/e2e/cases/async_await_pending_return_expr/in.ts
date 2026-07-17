@@ -159,6 +159,19 @@ class Worker {
         if (flag) return this.prefix + value;
         return this.prefix + "late-" + value;
     }
+
+    async switchReturnAfterAwait(kind: string): Promise<string> {
+        const value = await delay(kind === "a" ? 35 : 36, kind);
+        switch (value) {
+            case "a":
+                return this.prefix + "alpha";
+            case "b":
+                return this.prefix + "beta";
+            default:
+                return this.prefix + "other-" + value;
+        }
+        return "never";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -250,6 +263,14 @@ new Worker("return-").earlyReturnAfterAwait(true).then((value: string): void => 
 
 new Worker("return-").earlyReturnAfterAwait(false).then((value: string): void => {
     console.log("method-late-return:", value);
+});
+
+new Worker("switch-").switchReturnAfterAwait("a").then((value: string): void => {
+    console.log("method-switch-a:", value);
+});
+
+new Worker("switch-").switchReturnAfterAwait("z").then((value: string): void => {
+    console.log("method-switch-default:", value);
 });
 
 arrow().then((value: string): void => {

@@ -24802,6 +24802,23 @@ class Emitter {
                 ) return false;
                 return true;
             }
+            if (ts.isSwitchStatement(stmt)) {
+                visit(stmt.expression);
+                if (!ok) return false;
+                for (const clause of stmt.caseBlock.clauses) {
+                    if (ts.isCaseClause(clause)) {
+                        visit(clause.expression);
+                        if (!ok) return false;
+                    }
+                    if (clause.statements.length > 0 && !this.statementListAlwaysExits(clause.statements)) {
+                        return false;
+                    }
+                    for (const child of clause.statements) {
+                        if (!visitStatement(child, loopDepth, allowContinue, sourceTryDepth)) return false;
+                    }
+                }
+                return true;
+            }
             return false;
         };
         for (const stmt of postAwaitStatements) {

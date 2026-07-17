@@ -20,3 +20,5 @@ method-try-catch: try-caught-try!-finally
 method-throw: reject-throw
 method-early-return: return-return
 method-late-return: return-late-return
+method-switch-a: switch-alpha
+method-switch-default: switch-other-z
