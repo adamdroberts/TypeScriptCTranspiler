@@ -11,7 +11,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 This is the next item that most directly expands what programs can be written against `tsc2c`.
 
 - **Phase 6 — `async`/`await` + libuv event loop**
-  - Remaining work: general suspend/resume `await` state-machine lowering beyond the current direct tail-await, direct awaited-alias return, and single awaited local plus final return-expression continuation subsets, where the final expression path may include synchronous initialized post-await `const` / `let` locals, expression statements, or `if`/`else` blocks and read the awaited local, direct function parameters, and method `this`; broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle and executor-resolved thenable/nested-promise subset; full async function edge cases; and future async I/O on top of libuv.
+  - Remaining work: general suspend/resume `await` state-machine lowering beyond the current direct tail-await, direct awaited-alias return, and single awaited local plus final return-expression continuation subsets, where the final expression path may include synchronous initialized post-await `const` / `let` locals, expression statements, `if`/`else` blocks, or `while` / `do while` loops and read the awaited local, direct function parameters, and method `this`; broader thenable assimilation edge cases outside the immediate dynamic settled/nested/self-resolution/cycle and executor-resolved thenable/nested-promise subset; full async function edge cases; and future async I/O on top of libuv.
 
 ---
 

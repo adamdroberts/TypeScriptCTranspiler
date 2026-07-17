@@ -11,3 +11,4 @@ arrow-param: value-arrow-param
 method-side-effect: effect-side
 method-if-side-effect: if-branch
 method-branch-let: branch-let
+method-loop: loop-looploop

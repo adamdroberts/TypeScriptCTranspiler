@@ -77,6 +77,17 @@ class Worker {
         }
         return result;
     }
+
+    async loopAfterAwait(count: number): Promise<string> {
+        const value = await delay(26, "loop");
+        let result = this.prefix;
+        let index = 0;
+        while (index < count) {
+            result = result + value;
+            index = index + 1;
+        }
+        return result;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -131,6 +142,10 @@ new Worker("if-").conditionalSideEffect(true).then((value: string): void => {
 
 new Worker("branch-").branchLet(true).then((value: string): void => {
     console.log("method-branch-let:", value);
+});
+
+new Worker("loop-").loopAfterAwait(2).then((value: string): void => {
+    console.log("method-loop:", value);
 });
 
 arrow().then((value: string): void => {
