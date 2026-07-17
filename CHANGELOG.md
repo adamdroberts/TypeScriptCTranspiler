@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic array `toSorted` now creates a dense result, materializing holes as own `undefined` elements and sorting inherited numeric properties with the other values. Test: `dynamic_array_inherited_to_sorted`.
 - Dynamic and statically typed `any[]` `toReversed` now create dense results, materializing holes as own `undefined` elements and copying inherited numeric properties. Test: `dynamic_array_inherited_to_reversed`.
 - Dynamic array `slice` now copies inherited numeric properties into own result elements while preserving only genuinely absent indexes as holes. Test: `dynamic_array_inherited_slice`.
 - Dynamic array callback methods now observe inherited numeric properties through `HasProperty` while still skipping true sparse holes. Test: `dynamic_array_inherited_hof`.
@@ -12,7 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`.
 - Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`.
 - Dynamic array holes now remap correctly through `shift` and `unshift`. Test: `dynamic_array_hole_shift_unshift`.
-- Dynamic array `sort` and `toSorted` now sort present values while moving sparse holes to the end. Test: `dynamic_array_hole_sort`.
+- Dynamic array `sort` moves sparse holes to the end, while `toSorted` materializes them as trailing own `undefined` elements. Test: `dynamic_array_hole_sort`.
 - Dynamic array splice now reuses hole-preserving mutation logic for dynamic receivers. Test: `dynamic_array_hole_dynamic_splice`.
 - Dynamic array `map` now skips sparse source holes and preserves corresponding holes in the result. Test: `dynamic_array_hole_map`.
 - Dynamic array `filter` now skips sparse source holes before invoking callbacks. Test: `dynamic_array_hole_filter`.

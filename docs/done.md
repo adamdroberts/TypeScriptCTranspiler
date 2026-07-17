@@ -503,7 +503,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array holes now survive `concat`, `with`, `splice`, and `toSpliced`, while `fill` correctly materializes filled indexes. Test: `dynamic_array_hole_mutations`
 - Dynamic array `copyWithin` now preserves source holes and clears destination holes when values are copied. Test: `dynamic_array_copy_within_holes`
 - Dynamic array holes now remap correctly through `shift` and `unshift`. Test: `dynamic_array_hole_shift_unshift`
-- Dynamic array `sort` and `toSorted` now sort present values while moving sparse holes to the end. Test: `dynamic_array_hole_sort`
+- Dynamic array `sort` moves sparse holes to the end, while `toSorted` creates a dense result with holes materialized as trailing own `undefined` elements. Test: `dynamic_array_hole_sort`
+- Dynamic array `toSorted` includes inherited numeric properties in sorting and materializes true holes as own `undefined` elements. Test: `dynamic_array_inherited_to_sorted`
 - Dynamic array splice now reuses hole-preserving mutation logic for dynamic receivers. Test: `dynamic_array_hole_dynamic_splice`
 - Dynamic array `map` now skips sparse source holes and preserves corresponding holes in the result. Test: `dynamic_array_hole_map`
 - Dynamic array `filter` now skips sparse source holes before invoking callbacks. Test: `dynamic_array_hole_filter`
