@@ -42501,7 +42501,26 @@ class Emitter {
                     ([array, prop]) => `${fn}(${array}, ${prop})`,
                 );
             }
-            case "toLocaleString":
+            case "toLocaleString": {
+                if (et.kind === "value") {
+                    const specs: SequencedCallArg[] = [{ value: recv }];
+                    for (const arg of args) {
+                        specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
+                    }
+                    return this.emitSequencedExpr(T_STRING, specs, ([arr, ...values]) => {
+                        const localeArgs = this.freshTemp("_locale_args");
+                        const pieces = [`tsc_array_t* ${localeArgs} = tsc_array_new(sizeof(tsc_value_t), ${values.length || 1})`];
+                        for (const value of values) pieces.push(`tsc_array_push_value(${localeArgs}, ${value})`);
+                        pieces.push(`tsc_value_method_to_locale_string_args(tsc_value_array(${arr}), ${localeArgs})`);
+                        return `({ ${pieces.join("; ")}; })`;
+                    });
+                }
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([arr]) => emitJoinStringExpr(arr!, `tsc_str_from_lit(",", 1)`),
+                );
+            }
             case "toString":
                 return this.emitSequencedExpr(
                     T_STRING,
