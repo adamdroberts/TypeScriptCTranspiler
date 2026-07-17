@@ -513,7 +513,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Static `Object.getOwnPropertyNames` now omits deleted array indexes while retaining `length`. Test: `array_delete_hole_join`
 - Static `Object.values` and `Object.entries` now compact away deleted array indexes. Test: `array_delete_hole_join`
 - Static array property descriptors now omit deleted indexes in single and bulk descriptor paths. Test: `array_delete_hole_join`
-- Static sparse `any[]` reads and searches preserve holes for `at`, `indexOf`, `lastIndexOf`, and `includes`. Test: `array_delete_hole_join`
+- Static sparse `any[]` reads and searches preserve holes for `at`, `indexOf`, `lastIndexOf`, and `includes`. Dynamic array `indexOf` and `lastIndexOf` also skip deleted holes while observing inherited numeric properties. Tests: `array_delete_hole_join`, `dynamic_array_hole_search`
 - Static sparse `any[]` `pop()` and `shift()` return `undefined` for deleted tail and head slots. Test: `array_delete_hole_join`
 - Static sparse `any[]` higher-order array methods skip holes where required, preserve holes in `map`, and expose `undefined` to `find*`. Test: `array_delete_hole_join`
 - Static `Array.from` materializes sparse `any[]` holes as `undefined` for both no-mapper and mapper forms. Test: `array_delete_hole_join`

@@ -11,7 +11,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 This is the next item that most directly expands what programs can be written against `tsc2c`.
 
 - **NaN-boxed dynamic value runtime — Phase 3 remainder**
-  - Remaining work: complete built-in array prototype behavior beyond the inherited dynamic array method/string subset and the existing typed/dynamic array method subset; remaining descriptor/prototype edge cases not covered by the completed array/function prototype cycle rejection, boxed function `prototype` metadata descriptors, ordinary function own string-key properties, function own accessor descriptors, dynamic array own accessor descriptors, and matching function/array-target Proxy invariant slices. Shape diagnostics and hidden classes / shape trees with shape-shared inline caches are implemented.
+  - Remaining work: complete built-in array prototype behavior beyond the inherited dynamic array method/string subset and the existing typed/dynamic array method subset; remaining descriptor/prototype edge cases not covered by the completed sparse dynamic `indexOf`/`lastIndexOf` hole and inherited-index semantics, array/function prototype cycle rejection, boxed function `prototype` metadata descriptors, ordinary function own string-key properties, function own accessor descriptors, dynamic array own accessor descriptors, and matching function/array-target Proxy invariant slices. Shape diagnostics and hidden classes / shape trees with shape-shared inline caches are implemented.
 
 ---
 
