@@ -24665,7 +24665,7 @@ class Emitter {
         };
         const visitStatement = (stmt: ts.Statement): boolean => {
             if (ts.isVariableStatement(stmt)) {
-                if (!(stmt.declarationList.flags & ts.NodeFlags.Const)) return false;
+                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
                     visit(decl.initializer);
