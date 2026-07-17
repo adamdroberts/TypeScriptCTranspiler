@@ -50623,10 +50623,12 @@ class Emitter {
                 const obj = this.emitExpr(arg);
                 if (ts.isObjectLiteralExpression(args[2]!) && key.ty.kind !== "symbol") {
                     const desc = this.descriptorData(args[2]!);
-                    const arrayObj = obj.ty.kind === "array"
-                        ? obj
-                        : { c: this.coerce(obj, mapped, arg), ty: mapped };
-                    return this.emitTypedArrayDefineProperty(arg, arrayObj, args[1]!, desc, true, ignored);
+                    if (desc.kind !== "accessor") {
+                        const arrayObj = obj.ty.kind === "array"
+                            ? obj
+                            : { c: this.coerce(obj, mapped, arg), ty: mapped };
+                        return this.emitTypedArrayDefineProperty(arg, arrayObj, args[1]!, desc, true, ignored);
+                    }
                 }
             }
             if (mapped.kind !== "value" && mapped.kind !== "function" && mapped.kind !== "array" && mapped.kind !== "void" && !primitiveObjectArg) {
@@ -50675,7 +50677,7 @@ class Emitter {
                         const k = vals[1]!;
                         const getterEnv = getterEnvPos >= 0 ? vals[getterEnvPos]! : "NULL";
                         const setterEnv = setterEnvPos >= 0 ? vals[setterEnvPos]! : "NULL";
-                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${o}; })`;
+                        return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(o)}, ${k}, ${desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${desc.hasGetter}, ${desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${desc.hasSetter}, ${desc.enumerable}, ${desc.hasEnumerable}, ${desc.configurable}, ${desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(o)}; })`;
                     },
                 );
             }
@@ -52566,7 +52568,9 @@ class Emitter {
                 const target = this.emitExpr(args[0]!);
                 if (target.ty.kind === "array" && ts.isObjectLiteralExpression(args[2]!)) {
                     const desc = this.descriptorData(args[2]!);
-                    return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false, ignored);
+                    if (desc.kind !== "accessor") {
+                        return this.emitTypedArrayDefineProperty(args[0]!, target, args[1]!, desc, false, ignored);
+                    }
                 }
                 const key = this.emitExpr(args[1]!);
                 if (!ts.isObjectLiteralExpression(args[2]!)) {
@@ -55067,6 +55071,12 @@ class Emitter {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
             const et = recv.ty.elem!;
+            if (et.kind === "value") {
+                return {
+                    c: `tsc_value_get_index(tsc_value_array(${recv.c}), ${idx.c})`,
+                    ty: T_VALUE,
+                };
+            }
             return {
                 c: `TSC_ARR(${et.c}, ${recv.c}, (size_t)(${idx.c}))`,
                 ty: et,

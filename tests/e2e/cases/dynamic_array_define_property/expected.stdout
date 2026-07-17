@@ -14,3 +14,6 @@ length overflow RangeError: Invalid array length
 length object nan RangeError: Invalid array length
 length negative zero: 0
 length string: true 2
+accessor sparse: true 3 undefined tail 2 false true
+accessor closed length: false 0 false
+object accessor sparse: true 2 undefined object-tail 1 false true
