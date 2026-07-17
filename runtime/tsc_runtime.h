@@ -865,6 +865,7 @@ tsc_value_t tsc_value_method_pop(tsc_value_t recv);
 tsc_value_t tsc_value_method_push_empty(tsc_value_t recv);
 tsc_value_t tsc_value_method_push(tsc_value_t recv, tsc_value_t value);
 tsc_value_t tsc_value_method_shift(tsc_value_t recv);
+tsc_value_t tsc_value_method_unshift_empty(tsc_value_t recv);
 tsc_value_t tsc_value_method_unshift(tsc_value_t recv, tsc_value_t value);
 tsc_value_t tsc_value_method_concat(tsc_value_t recv, tsc_value_t value);
 tsc_value_t tsc_value_method_flat(tsc_value_t recv, tsc_value_t depth);

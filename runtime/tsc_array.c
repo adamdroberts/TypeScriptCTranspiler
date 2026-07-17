@@ -429,6 +429,7 @@ static tsc_value_t array_prototype_unshift(void* env, tsc_value_t this_arg, tsc_
     array_proto_reject_string_mutation(this_arg, "unshift");
     size_t count = args ? args->len : 0;
     if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_num((double)count);
+    if (count == 0) return tsc_value_method_unshift_empty(this_arg);
     for (size_t i = count; i > 0; i--) {
         tsc_value_method_unshift(this_arg, TSC_ARR(tsc_value_t, args, i - 1));
     }

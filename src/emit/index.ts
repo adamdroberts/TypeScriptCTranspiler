@@ -35503,6 +35503,7 @@ class Emitter {
                         .slice()
                         .reverse()
                         .map((value) => `tsc_value_method_unshift(${targetArg}, ${value})`);
+                    if (calls.length === 0) calls.push(`tsc_value_method_unshift_empty(${targetArg})`);
                     const prefix = calls.length > 0 ? `${calls.join("; ")}; ` : "";
                     return `({ ${prefix}tsc_value_num(tsc_value_length(${targetArg})); })`;
                 });
@@ -42143,6 +42144,7 @@ class Emitter {
                         for (let i = values.length - 1; i >= 0; i--) {
                             pieces.push(`tsc_value_method_unshift(tsc_value_array(${arr}), ${values[i]})`);
                         }
+                        if (values.length === 0) pieces.push(`tsc_value_method_unshift_empty(tsc_value_array(${arr}))`);
                         pieces.push(`(double)${arr}->len`);
                         return `({ ${pieces.join("; ")}; })`;
                     });
@@ -42158,7 +42160,11 @@ class Emitter {
                     unshifts.push(`tsc_array_unshift_raw(${av}, &${vv})`);
                 }
                 if (unshifts.length > 0) {
-                    pieces.push(`if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift cannot mutate a sealed or frozen array")); else if (${av}->extensible && ${av}->length_writable) { ${unshifts.join("; ")}; }`);
+                    pieces.push(`if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift cannot mutate a sealed or frozen array")); ` +
+                        `else if (!${av}->extensible || !${av}->length_writable) tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift could not move array-like element")); ` +
+                        `else { ${unshifts.join("; ")}; }`);
+                } else {
+                    pieces.push(`if (!${av}->length_writable) tsc_throw_str(tsc_str_from_cstr("Array.prototype.unshift could not update array-like length"))`);
                 }
                 pieces.push(`tsc_array_length(${av})`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };
