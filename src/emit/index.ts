@@ -121,9 +121,15 @@ interface AsyncAwaitContinuationParam {
 interface AsyncAwaitReturnContinuation {
     variable: ts.Identifier;
     awaitExpr: ts.AwaitExpression;
+    postAwaitStatements: readonly ts.VariableStatement[];
     returnExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
+}
+
+interface AsyncAwaitContinuationReferences {
+    params: AsyncAwaitContinuationParam[];
+    usesThis: boolean;
 }
 
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
@@ -24559,9 +24565,9 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): AsyncAwaitReturnContinuation | null {
-        if (body.statements.length !== 2) return null;
+        if (body.statements.length < 2) return null;
         const declaration = body.statements[0];
-        const result = body.statements[1];
+        const result = body.statements[body.statements.length - 1]!;
         if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result) || !result.expression) return null;
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
@@ -24569,11 +24575,20 @@ class Emitter {
             return null;
         }
         const params = this.asyncAwaitContinuationParameters(parameters);
-        const referenced = this.returnExpressionAsyncAwaitReferences(result.expression, variable.name, params, thisValue);
+        const postAwaitStatements = body.statements.slice(1, -1);
+        if (!postAwaitStatements.every(ts.isVariableStatement)) return null;
+        const referenced = this.asyncAwaitContinuationReferences(
+            variable.name,
+            postAwaitStatements,
+            result.expression,
+            params,
+            thisValue,
+        );
         if (!referenced) return null;
         return {
             variable: variable.name,
             awaitExpr: variable.initializer,
+            postAwaitStatements,
             returnExpr: result.expression,
             params: referenced.params,
             thisValue: referenced.usesThis ? thisValue : null,
@@ -24601,22 +24616,24 @@ class Emitter {
         return params;
     }
 
-    private returnExpressionAsyncAwaitReferences(
-        expr: ts.Expression,
+    private asyncAwaitContinuationReferences(
         awaitedName: ts.Identifier,
+        postAwaitStatements: readonly ts.Statement[],
+        returnExpr: ts.Expression,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
-    ): { params: AsyncAwaitContinuationParam[]; usesThis: boolean } | null {
+    ): AsyncAwaitContinuationReferences | null {
         const awaitedSymbol = this.symbolForIdentifier(awaitedName);
         if (!awaitedSymbol) return null;
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const locals = new Set<ts.Symbol>([awaitedSymbol]);
         let usesThis = false;
         let ok = true;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
-            if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 ok = false;
                 return;
             }
@@ -24630,7 +24647,7 @@ class Emitter {
             }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
-                if (sym === awaitedSymbol) {
+                if (sym && locals.has(sym)) {
                     // allowed
                 } else {
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
@@ -24647,7 +24664,18 @@ class Emitter {
             }
             ts.forEachChild(node, visit);
         };
-        visit(expr);
+        for (const stmt of postAwaitStatements) {
+            if (!ts.isVariableStatement(stmt) || !(stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
+            for (const decl of stmt.declarationList.declarations) {
+                if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                visit(decl.initializer);
+                if (!ok) return null;
+                const sym = this.symbolForIdentifier(decl.name);
+                if (!sym) return null;
+                locals.add(sym);
+            }
+        }
+        visit(returnExpr);
         return ok ? { params: [...referenced.values()], usesThis } : null;
     }
 
@@ -24675,6 +24703,7 @@ class Emitter {
             promise,
             awaitedType,
             continuation.variable,
+            continuation.postAwaitStatements,
             continuation.returnExpr,
             continuation.params,
             continuation.thisValue,
@@ -24706,6 +24735,7 @@ class Emitter {
         promiseType: CType,
         awaitedType: CType,
         variable: ts.Identifier,
+        postAwaitStatements: readonly ts.VariableStatement[],
         returnExpr: ts.Expression,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
@@ -24759,6 +24789,7 @@ class Emitter {
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let returned: EmitResult;
         try {
+            for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
             returned = this.emitExpr(returnExpr);
         } finally {
             if (thisValue) this.functionThisStack.pop();
