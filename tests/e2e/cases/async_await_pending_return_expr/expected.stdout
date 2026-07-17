@@ -14,6 +14,7 @@ method-branch-let: branch-let
 method-loop: loop-looploop
 method-for: for-forfor
 method-for-of: forof-of!
+method-for-in: forin-0in
 method-loop-control: control-ctrl0ctrl2
 method-try-catch: try-caught-try!-finally
 method-throw: reject-throw

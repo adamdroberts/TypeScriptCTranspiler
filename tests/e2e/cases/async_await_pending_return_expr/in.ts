@@ -108,8 +108,19 @@ class Worker {
         return result;
     }
 
+    async forInAfterAwait(): Promise<string> {
+        const value = await delay(29, "in");
+        let result = this.prefix;
+        for (const key in [this.prefix, value, "!"]) {
+            if (key === "1") continue;
+            if (key === "2") break;
+            result = result + key + value;
+        }
+        return result;
+    }
+
     async loopControlAfterAwait(): Promise<string> {
-        const value = await delay(29, "ctrl");
+        const value = await delay(30, "ctrl");
         let result = this.prefix;
         let index = 0;
         while (index < 5) {
@@ -125,7 +136,7 @@ class Worker {
     }
 
     async tryCatchAfterAwait(): Promise<string> {
-        const value = await delay(30, "try");
+        const value = await delay(31, "try");
         let result = this.prefix;
         try {
             throw value + "!";
@@ -138,7 +149,7 @@ class Worker {
     }
 
     async throwAfterAwait(): Promise<string> {
-        const value = await delay(31, "throw");
+        const value = await delay(32, "throw");
         throw this.prefix + value;
         return "never";
     }
@@ -208,6 +219,10 @@ new Worker("for-").forAfterAwait(2).then((value: string): void => {
 
 new Worker("forof-").forOfAfterAwait().then((value: string): void => {
     console.log("method-for-of:", value);
+});
+
+new Worker("forin-").forInAfterAwait().then((value: string): void => {
+    console.log("method-for-in:", value);
 });
 
 new Worker("control-").loopControlAfterAwait().then((value: string): void => {
