@@ -122,7 +122,7 @@ interface AsyncAwaitReturnContinuation {
     variable: ts.Identifier;
     awaitExpr: ts.AwaitExpression;
     postAwaitStatements: readonly ts.Statement[];
-    returnExpr: ts.Expression;
+    returnExpr: ts.Expression | null;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
     usesAwaited: boolean;
@@ -24578,7 +24578,7 @@ class Emitter {
         if (body.statements.length < 2) return null;
         const declaration = body.statements[0];
         const result = body.statements[body.statements.length - 1]!;
-        if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result) || !result.expression) return null;
+        if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
         if (!ts.isIdentifier(variable.name) || !variable.initializer || !ts.isAwaitExpression(variable.initializer)) {
@@ -24589,7 +24589,7 @@ class Emitter {
         const referenced = this.asyncAwaitContinuationReferences(
             variable.name,
             postAwaitStatements,
-            result.expression,
+            result.expression ?? null,
             params,
             thisValue,
         );
@@ -24598,7 +24598,7 @@ class Emitter {
             variable: variable.name,
             awaitExpr: variable.initializer,
             postAwaitStatements,
-            returnExpr: result.expression,
+            returnExpr: result.expression ?? null,
             params: referenced.params,
             thisValue: referenced.usesThis ? thisValue : null,
             usesAwaited: referenced.usesAwaited,
@@ -24629,7 +24629,7 @@ class Emitter {
     private asyncAwaitContinuationReferences(
         awaitedName: ts.Identifier,
         postAwaitStatements: readonly ts.Statement[],
-        returnExpr: ts.Expression,
+        returnExpr: ts.Expression | null,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
     ): AsyncAwaitContinuationReferences | null {
@@ -24832,7 +24832,7 @@ class Emitter {
         for (const stmt of postAwaitStatements) {
             if (!visitStatement(stmt)) return null;
         }
-        visit(returnExpr);
+        if (returnExpr) visit(returnExpr);
         return ok ? { params: [...referenced.values()], usesThis, usesAwaited } : null;
     }
 
@@ -24893,7 +24893,7 @@ class Emitter {
         awaitedType: CType,
         variable: ts.Identifier,
         postAwaitStatements: readonly ts.Statement[],
-        returnExpr: ts.Expression,
+        returnExpr: ts.Expression | null,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
     ): string {
@@ -24917,9 +24917,10 @@ class Emitter {
         const returnVar = this.freshTemp("_await_return");
         const resolvedVar = this.freshTemp("_await_resolved");
         const eh = this.freshTemp("_await_eh");
+        const contextNode = returnExpr ?? variable;
         const awaitedValue = awaitedType.kind === "void"
             ? null
-            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, returnExpr);
+            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, contextNode);
         const scope = new Map<ts.Symbol, string>();
         const variableSymbol = this.symbolForIdentifier(variable);
         if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
@@ -24948,27 +24949,29 @@ class Emitter {
         }
         this.argumentValueScopes.push(scope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
-        let returned: EmitResult;
+        let returned: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         this.asyncAwaitContinuationReturnTargets.push({ resultPromise: "_ret" });
         try {
             for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
-            returned = this.emitExpr(returnExpr);
+            if (returnExpr) returned = this.emitExpr(returnExpr);
         } finally {
             this.asyncAwaitContinuationReturnTargets.pop();
             this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
         }
-        const returnedType = this.prepareType(returned.ty);
-        if (returnedType.kind === "void" || returnedType.kind === "never") {
-            buf.line(`${returned.c};`);
+        const returnedType = returned ? this.prepareType(returned.ty) : T_VOID;
+        if (!returned || returnedType.kind === "void" || returnedType.kind === "never") {
+            if (returned) {
+                buf.line(`${returned.c};`);
+            }
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
         } else {
             buf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
             buf.line("tsc_try_pop();");
-            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr)};`);
+            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr!)};`);
         }
         buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
         buf.close();
