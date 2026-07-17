@@ -1429,6 +1429,26 @@ bool tsc_value_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     return false;
 }
 
+bool tsc_value_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_SET_PROP);
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
+            return tsc_array_prototype_define_symbol_desc(
+                key,
+                value,
+                true,
+                true,
+                false,
+                false,
+                false,
+                false,
+                false
+            );
+        }
+    }
+    return false;
+}
+
 bool tsc_value_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache) {
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
         return tsc_value_set_prop(v, key, value);
@@ -1523,6 +1543,11 @@ bool tsc_value_set_prop_receiver_cached(tsc_value_t v, tsc_str_t* key, tsc_value
 bool tsc_reflect_set_prop(tsc_value_t v, tsc_str_t* key, tsc_value_t value) {
     require_reflect_object_target(v, "Reflect.set target must be an object");
     return tsc_value_set_prop(v, key, value);
+}
+
+bool tsc_reflect_set_symbol_prop(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value) {
+    require_reflect_object_target(v, "Reflect.set target must be an object");
+    return tsc_value_set_symbol_prop(v, key, value);
 }
 
 bool tsc_reflect_set_prop_cached(tsc_value_t v, tsc_str_t* key, tsc_value_t value, tsc_prop_cache_t* cache) {

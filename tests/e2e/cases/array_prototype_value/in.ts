@@ -72,3 +72,9 @@ const definedUnscopables: boolean = Object.defineProperty(proto, Symbol.unscopab
 const unscopablesAfterDefine: any = Reflect.getOwnPropertyDescriptor(proto, Symbol.unscopables);
 const symbolsAfterDefine: symbol[] = Object.getOwnPropertySymbols(proto);
 console.log("define unscopables symbol:", definedUnscopables, Object.hasOwn(proto, Symbol.unscopables), Reflect.has([], Symbol.unscopables), proto[Symbol.unscopables] === definedUnscopablesTarget, ([] as any)[Symbol.unscopables] === definedUnscopablesTarget, unscopablesAfterDefine.writable, unscopablesAfterDefine.enumerable, unscopablesAfterDefine.configurable, symbolsAfterDefine.length);
+const assignedUnscopablesTarget: any = { assigned: true };
+const assignedUnscopablesResult: any = proto[Symbol.unscopables] = assignedUnscopablesTarget;
+const reflectedUnscopablesTarget: any = { reflected: true };
+const reflectedUnscopables: boolean = Reflect.set(proto, Symbol.unscopables as any, reflectedUnscopablesTarget);
+const reflectedIterator: boolean = Reflect.set(proto, Symbol.iterator as any, proto.values);
+console.log("set symbol slots:", assignedUnscopablesResult === assignedUnscopablesTarget, reflectedUnscopables, proto[Symbol.unscopables] === reflectedUnscopablesTarget, ([] as any)[Symbol.unscopables] === reflectedUnscopablesTarget, reflectedIterator, proto[Symbol.iterator] === replacementIterator);
