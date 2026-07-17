@@ -1948,6 +1948,7 @@ tsc_value_t value_descriptor_from_array_length(const tsc_array_t* src) {
 tsc_value_t value_descriptor_from_array_key(const tsc_array_t* src, const tsc_str_t* key) {
     if (!src) return tsc_value_undefined();
     if (tsc_str_is_length_key(key)) return value_descriptor_from_array_length(src);
+    if (src == tsc_array_prototype() && str_lit_eq(key, "valueOf")) return tsc_value_undefined();
     if (src->props && tsc_object_has_own(src->props, key)) {
         return tsc_value_get_own_property_descriptor(tsc_value_object(src->props), (tsc_str_t*)key);
     }
@@ -2039,6 +2040,7 @@ tsc_value_t value_descriptors_from_array(const tsc_array_t* src) {
         tsc_array_t* keys = tsc_object_own_keys_dyn(src->props);
         for (size_t i = 0; i < keys->len; i++) {
             tsc_str_t* key = TSC_ARR(tsc_str_t*, keys, i);
+            if (src == tsc_array_prototype() && str_lit_eq(key, "valueOf")) continue;
             tsc_object_set(out, key, tsc_value_get_own_property_descriptor(tsc_value_object(src->props), key));
         }
     }

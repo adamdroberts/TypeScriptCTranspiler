@@ -13,6 +13,9 @@ console.log("reflect own names:", reflectOwnKeys.length, reflectOwnKeys[0], refl
 const aliasOwnNames: string[] = Object.getOwnPropertyNames(proto);
 const aliasReflectOwnKeys: string[] = Reflect.ownKeys(proto);
 console.log("alias own names:", aliasOwnNames.length, aliasOwnNames.includes("constructor"), aliasOwnNames.includes("map"), aliasOwnNames.includes("valueOf"), aliasReflectOwnKeys.length, aliasReflectOwnKeys.includes("valueOf"));
+const aliasAllDescriptors: any = Object.getOwnPropertyDescriptors(proto);
+const aliasValueOfDescriptor: any = Object.getOwnPropertyDescriptor(proto, "valueOf");
+console.log("alias descriptors:", Object.keys(aliasAllDescriptors).length, Object.hasOwn(aliasAllDescriptors, "valueOf"), aliasValueOfDescriptor === undefined);
 console.log("all descriptors:", Object.keys(allDescriptors).length, allDescriptors["length"].value, allDescriptors.constructor.value === Array, allDescriptors.map.value === proto.map, Object.hasOwn(allDescriptors, "valueOf"));
 const staticMapDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, "map");
 const staticConstructorDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, "constructor");
