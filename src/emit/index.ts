@@ -24664,12 +24664,17 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         const visitStatement = (stmt: ts.Statement): boolean => {
-            const visitVariableDeclarationList = (declarationList: ts.VariableDeclarationList): boolean => {
+            const visitVariableDeclarationList = (
+                declarationList: ts.VariableDeclarationList,
+                requireInitializer: boolean,
+            ): boolean => {
                 if (!(declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
                 for (const decl of declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
-                    visit(decl.initializer);
-                    if (!ok) return false;
+                    if (!ts.isIdentifier(decl.name) || (requireInitializer && !decl.initializer)) return false;
+                    if (decl.initializer) {
+                        visit(decl.initializer);
+                        if (!ok) return false;
+                    }
                     const sym = this.symbolForIdentifier(decl.name);
                     if (!sym) return false;
                     locals.add(sym);
@@ -24677,7 +24682,7 @@ class Emitter {
                 return true;
             };
             if (ts.isVariableStatement(stmt)) {
-                return visitVariableDeclarationList(stmt.declarationList);
+                return visitVariableDeclarationList(stmt.declarationList, true);
             }
             if (ts.isExpressionStatement(stmt)) {
                 visit(stmt.expression);
@@ -24705,7 +24710,7 @@ class Emitter {
             if (ts.isForStatement(stmt)) {
                 if (stmt.initializer) {
                     if (ts.isVariableDeclarationList(stmt.initializer)) {
-                        if (!visitVariableDeclarationList(stmt.initializer)) return false;
+                        if (!visitVariableDeclarationList(stmt.initializer, true)) return false;
                     } else {
                         visit(stmt.initializer);
                         if (!ok) return false;
@@ -24719,6 +24724,18 @@ class Emitter {
                     visit(stmt.incrementor);
                     if (!ok) return false;
                 }
+                return visitStatement(stmt.statement);
+            }
+            if (ts.isForOfStatement(stmt)) {
+                if (stmt.awaitModifier) return false;
+                if (ts.isVariableDeclarationList(stmt.initializer)) {
+                    if (!visitVariableDeclarationList(stmt.initializer, false)) return false;
+                } else {
+                    visit(stmt.initializer);
+                    if (!ok) return false;
+                }
+                visit(stmt.expression);
+                if (!ok) return false;
                 return visitStatement(stmt.statement);
             }
             return false;

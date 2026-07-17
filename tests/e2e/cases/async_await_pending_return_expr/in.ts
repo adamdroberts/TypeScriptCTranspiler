@@ -97,6 +97,16 @@ class Worker {
         }
         return result;
     }
+
+    async forOfAfterAwait(): Promise<string> {
+        const value = await delay(28, "of");
+        const parts = [this.prefix, value, "!"];
+        let result = "";
+        for (const part of parts) {
+            result = result + part;
+        }
+        return result;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -159,6 +169,10 @@ new Worker("loop-").loopAfterAwait(2).then((value: string): void => {
 
 new Worker("for-").forAfterAwait(2).then((value: string): void => {
     console.log("method-for:", value);
+});
+
+new Worker("forof-").forOfAfterAwait().then((value: string): void => {
+    console.log("method-for-of:", value);
 });
 
 arrow().then((value: string): void => {
