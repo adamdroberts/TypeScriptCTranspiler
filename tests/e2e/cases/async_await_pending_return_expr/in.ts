@@ -123,6 +123,25 @@ class Worker {
         }
         return result;
     }
+
+    async tryCatchAfterAwait(): Promise<string> {
+        const value = await delay(30, "try");
+        let result = this.prefix;
+        try {
+            throw value + "!";
+        } catch (e) {
+            result = result + "caught-" + e;
+        } finally {
+            result = result + "-finally";
+        }
+        return result;
+    }
+
+    async throwAfterAwait(): Promise<string> {
+        const value = await delay(31, "throw");
+        throw this.prefix + value;
+        return "never";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -193,6 +212,15 @@ new Worker("forof-").forOfAfterAwait().then((value: string): void => {
 
 new Worker("control-").loopControlAfterAwait().then((value: string): void => {
     console.log("method-loop-control:", value);
+});
+
+new Worker("try-").tryCatchAfterAwait().then((value: string): void => {
+    console.log("method-try-catch:", value);
+});
+
+new Worker("reject-").throwAfterAwait().catch((reason: string): string => {
+    console.log("method-throw:", reason);
+    return "handled";
 });
 
 arrow().then((value: string): void => {
