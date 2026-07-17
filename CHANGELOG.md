@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Array `push` now throws when adding to a non-extensible array or writing a non-writable `length`; zero-argument `push()` also performs the required `length` write. Tests: `array_length_writable_descriptor`, `array_extensibility`.
 - Statically typed `any[]` `toLocaleString` now uses inherited-aware indexed reads, invokes each non-nullish element's locale method, and forwards locale/options arguments. Test: `dynamic_array_inherited_to_locale_string`.
 - Statically typed `any[]` `indexOf`/`lastIndexOf` now search inherited numeric properties while skipping true holes, and `includes` observes inherited values while continuing to treat holes as `undefined`. Test: `dynamic_array_inherited_search`.
 - Statically typed `any[]` `values()` and `entries()` now perform inherited-aware indexed reads while continuing to yield `undefined` for true holes. Test: `dynamic_array_inherited_iterators`.

@@ -1,10 +1,12 @@
 dyn define: true false 2
-dyn push: 2 2 a|b
+dyn push: Array.prototype.push could not add array-like element
+dyn empty push: Array.prototype.push could not update array-like length
 dyn set index: false 2 undefined
 dyn shrink: false 2
 dyn same: true 2 false
 typed define: true false 2
-typed push: 2 2 1|2
+typed push: Array.prototype.push could not update array-like length
+typed empty push: Array.prototype.push could not update array-like length
 typed set index: false 2 0
 typed shrink: false 2
 typed same: true 2 false

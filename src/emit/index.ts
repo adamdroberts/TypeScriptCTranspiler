@@ -35476,7 +35476,9 @@ class Emitter {
                 for (const arg of args) specs.push({ value: this.emitExpr(arg), target: T_VALUE, node: arg });
                 return this.emitSequencedExpr(T_VALUE, specs, ([target, ...values]) => {
                     const targetArg = target!;
-                    const calls = values.map((value) => `tsc_value_method_push(${targetArg}, ${value})`);
+                    const calls = values.length > 0
+                        ? values.map((value) => `tsc_value_method_push(${targetArg}, ${value})`)
+                        : [`tsc_value_method_push_empty(${targetArg})`];
                     const prefix = calls.length > 0 ? `${calls.join("; ")}; ` : "";
                     return `({ ${prefix}tsc_value_num(tsc_value_length(${targetArg})); })`;
                 });
@@ -42076,7 +42078,14 @@ class Emitter {
                 if (pushes.length > 0) {
                     pieces.push(et.kind === "value"
                         ? values.map((value) => `tsc_value_method_push(tsc_value_array(${av}), ${value})`).join("; ")
-                        : `if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push cannot mutate a sealed or frozen array")); else if (${av}->extensible && ${av}->length_writable) { ${pushes.join("; ")}; }`);
+                        : `if (${av}->sealed || ${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push cannot mutate a sealed or frozen array")); ` +
+                            `else if (!${av}->extensible) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push could not add array-like element")); ` +
+                            `else if (!${av}->length_writable) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push could not update array-like length")); ` +
+                            `else { ${pushes.join("; ")}; }`);
+                } else {
+                    pieces.push(et.kind === "value"
+                        ? `tsc_value_method_push_empty(tsc_value_array(${av}))`
+                        : `if (!${av}->length_writable) tsc_throw_str(tsc_str_from_cstr("Array.prototype.push could not update array-like length"))`);
                 }
                 pieces.push(`(double)${av}->len`);
                 return { c: `({ ${pieces.join("; ")}; })`, ty: T_NUMBER };

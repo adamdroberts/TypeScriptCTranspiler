@@ -23,7 +23,7 @@ console.log("prevent identity:", Object.preventExtensions(extensible) === extens
 console.log("after:", Object.isExtensible(extensible), Reflect.isExtensible(extensible));
 console.log("set existing:", Reflect.set(extensible, "1", "BB"), extensible.join("|"));
 console.log("set new:", Reflect.set(extensible, "2", "C"), extensible.length, extensible.join("|"));
-console.log("prevent push:", extensible.push("C"), extensible.join("|"));
+report("prevent push", (): any => extensible.push("C"));
 console.log(
     "define new:",
     Reflect.defineProperty(extensible, "2", {
