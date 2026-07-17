@@ -513,7 +513,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Dynamic array index deletion now preserves hole presence separately from dense storage, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate them and `Array.prototype` HOFs skip the hole. Test: `dynamic_array_accessor_properties`
 - Dynamic array `slice()` preserves deleted index holes, while `toReversed()` creates a dense result with holes materialized as own `undefined` properties. Test: `dynamic_array_hole_copies`
 - Dynamic and statically typed `any[]` `toReversed()` copies inherited numeric properties and materializes true holes as own `undefined` elements. Test: `dynamic_array_inherited_to_reversed`
-- Dynamic array `slice()` uses inherited-aware sparse copy semantics, materializing inherited numeric properties as own result elements while preserving true holes. Test: `dynamic_array_inherited_slice`
+- Dynamic and statically typed `any[]` `slice()` use inherited-aware sparse copy semantics, materializing inherited numeric properties as own result elements while preserving true holes. Test: `dynamic_array_inherited_slice`
 - Dynamic array holes survive `concat` and mutating `splice`; `with` and `toSpliced` create dense results, and `fill` materializes filled indexes. Test: `dynamic_array_hole_mutations`
 - Dynamic and statically typed `any[]` `toSpliced` materializes retained holes as own `undefined` elements and copies retained inherited numeric properties. Test: `dynamic_array_inherited_to_spliced`
 - Dynamic and statically typed `any[]` `with` materializes untouched holes as own `undefined` elements and copies inherited numeric properties before replacing the selected index. Test: `dynamic_array_inherited_with`

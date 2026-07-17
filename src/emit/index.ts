@@ -42307,7 +42307,9 @@ class Emitter {
                     let next = 1;
                     const start = hasStart ? vals[next++]! : "0";
                     const end = hasEnd ? vals[next++]! : `(double)${arr}->len`;
-                    return `tsc_array_slice(${arr}, ${start}, ${end})`;
+                    return et.kind === "value"
+                        ? `tsc_value_as_array(tsc_value_method_slice(tsc_value_array(${arr}), tsc_value_num(${start}), tsc_value_num(${end})))`
+                        : `tsc_array_slice(${arr}, ${start}, ${end})`;
                 });
             }
             case "concat": {
