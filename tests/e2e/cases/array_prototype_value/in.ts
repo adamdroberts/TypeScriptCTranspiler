@@ -78,3 +78,4 @@ const reflectedUnscopablesTarget: any = { reflected: true };
 const reflectedUnscopables: boolean = Reflect.set(proto, Symbol.unscopables as any, reflectedUnscopablesTarget);
 const reflectedIterator: boolean = Reflect.set(proto, Symbol.iterator as any, proto.values);
 console.log("set symbol slots:", assignedUnscopablesResult === assignedUnscopablesTarget, reflectedUnscopables, proto[Symbol.unscopables] === reflectedUnscopablesTarget, ([] as any)[Symbol.unscopables] === reflectedUnscopablesTarget, reflectedIterator, proto[Symbol.iterator] === replacementIterator);
+console.log("symbol enumerability after define:", proto.propertyIsEnumerable(Symbol.iterator), proto.propertyIsEnumerable(Symbol.unscopables), ([] as any).propertyIsEnumerable(Symbol.unscopables));
