@@ -408,6 +408,7 @@ static tsc_value_t array_prototype_push(void* env, tsc_value_t this_arg, tsc_arr
     array_proto_reject_string_mutation(this_arg, "push");
     size_t count = args ? args->len : 0;
     if (array_proto_is_empty_primitive_receiver(this_arg)) return tsc_value_num((double)count);
+    if (count == 0) return tsc_value_method_push_empty(this_arg);
     for (size_t i = 0; i < count; i++) {
         tsc_value_method_push(this_arg, TSC_ARR(tsc_value_t, args, i));
     }

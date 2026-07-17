@@ -862,6 +862,7 @@ tsc_value_t tsc_value_method_at(tsc_value_t recv, tsc_value_t index);
 tsc_value_t tsc_value_method_locale_compare(tsc_value_t recv, tsc_value_t other);
 tsc_value_t tsc_value_method_join(tsc_value_t recv, tsc_value_t separator);
 tsc_value_t tsc_value_method_pop(tsc_value_t recv);
+tsc_value_t tsc_value_method_push_empty(tsc_value_t recv);
 tsc_value_t tsc_value_method_push(tsc_value_t recv, tsc_value_t value);
 tsc_value_t tsc_value_method_shift(tsc_value_t recv);
 tsc_value_t tsc_value_method_unshift(tsc_value_t recv, tsc_value_t value);

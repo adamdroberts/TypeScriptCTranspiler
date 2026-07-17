@@ -4,7 +4,7 @@ prevent identity: true
 after: false false
 set existing: true a|BB
 set new: false 2 a|BB
-prevent push: 2 a|BB
+prevent push: Array.prototype.push could not add array-like element
 define new: false
 object define: true 3 7
 define props: true 3 11|2|33
