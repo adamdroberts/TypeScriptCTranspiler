@@ -1,2 +1,4 @@
 inherited: inherited|tail true 0|1
 hole: |tail false 1
+typed inherited: inherited|tail true 0|1
+typed hole: |tail false 1
