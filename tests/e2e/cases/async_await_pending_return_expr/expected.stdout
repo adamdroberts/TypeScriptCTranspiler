@@ -18,3 +18,5 @@ method-for-in: forin-0in
 method-loop-control: control-ctrl0ctrl2
 method-try-catch: try-caught-try!-finally
 method-throw: reject-throw
+method-early-return: return-return
+method-late-return: return-late-return

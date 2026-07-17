@@ -153,6 +153,12 @@ class Worker {
         throw this.prefix + value;
         return "never";
     }
+
+    async earlyReturnAfterAwait(flag: boolean): Promise<string> {
+        const value = await delay(flag ? 33 : 34, "return");
+        if (flag) return this.prefix + value;
+        return this.prefix + "late-" + value;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -236,6 +242,14 @@ new Worker("try-").tryCatchAfterAwait().then((value: string): void => {
 new Worker("reject-").throwAfterAwait().catch((reason: string): string => {
     console.log("method-throw:", reason);
     return "handled";
+});
+
+new Worker("return-").earlyReturnAfterAwait(true).then((value: string): void => {
+    console.log("method-early-return:", value);
+});
+
+new Worker("return-").earlyReturnAfterAwait(false).then((value: string): void => {
+    console.log("method-late-return:", value);
 });
 
 arrow().then((value: string): void => {
