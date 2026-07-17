@@ -755,6 +755,7 @@ tsc_value_t tsc_reflect_get_own_property_symbol_descriptor(tsc_value_t v, tsc_sy
 tsc_value_t tsc_value_get_own_property_descriptors(tsc_value_t v);
 tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
 double tsc_value_length(tsc_value_t v);
+tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length);
 tsc_array_t* tsc_value_iter_values(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v);
