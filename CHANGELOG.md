@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Concrete typed sparse array `sort` now compacts only present elements, sorts them, writes the prefix, and deletes the tail while enforcing non-extensible and sealed failures in operation order. Test: `array_sparse_sort_extensibility`.
 - Typed sparse array `fill` and `copyWithin` now enforce non-extensible property creation and sealed deletion failures in indexed operation order. Test: `array_sparse_write_extensibility`.
 - Typed sparse array `reverse` now rejects property creation on non-extensible receivers in specification order, including the lower-index deletion that precedes an upper-index creation failure. Test: `array_sparse_reverse_extensibility`.
 - Typed array `splice` now throws on its mandatory non-writable `length` update while preserving prior indexed moves, replacements, deletions, and trailing holes; growth failures occur before mutation. Test: `array_length_writable_descriptor`.
