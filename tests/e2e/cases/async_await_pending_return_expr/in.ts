@@ -24,7 +24,7 @@ async function staged(prefix: string): Promise<string> {
 
 async function twoAwait(prefix: string): Promise<string> {
     const first = await delay(45, "one");
-    const second = await Promise.resolve(prefix + first + "-two");
+    const second = await delay(46, prefix + first + "-two");
     return second + "!";
 }
 
@@ -241,7 +241,7 @@ class Worker {
 
     async twoAwaitMethod(prefix: string): Promise<string> {
         const first = await delay(47, "method-one");
-        const second = await Promise.resolve(prefix + this.prefix + first);
+        const second = await delay(48, prefix + this.prefix + first);
         return second + "!";
     }
 }
@@ -258,7 +258,7 @@ const arrowParam = async (prefix: string): Promise<string> => {
 
 const arrowTwoAwait = async (prefix: string): Promise<string> => {
     const first = await delay(49, "arrow-one");
-    const second = await Promise.resolve(prefix + first);
+    const second = await delay(50, prefix + first);
     return second + "!";
 };
 
