@@ -91,3 +91,5 @@ const definedCustomStringKey: boolean = Object.defineProperty(proto, "customArra
 const namesAfterCustomStringKey: string[] = Object.getOwnPropertyNames(Array.prototype);
 const customStringDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, "customArrayProtoEdge");
 console.log("string key mutation:", deletedMapMethod, !namesAfterMapDelete.includes("map"), !aliasNamesAfterMapDelete.includes("map"), !Reflect.has([], "map"), definedCustomStringKey, namesAfterCustomStringKey.includes("customArrayProtoEdge"), customStringDescriptor.value, customStringDescriptor.enumerable);
+const reflectFreshIntegrityTarget: any[] = [];
+console.log("fresh reflect integrity:", Reflect.isExtensible([]), Reflect.preventExtensions(reflectFreshIntegrityTarget), Reflect.isExtensible(reflectFreshIntegrityTarget));
