@@ -1,0 +1,3 @@
+dynamic inherited: first last
+typed inherited: first last
+typed holes: true true
