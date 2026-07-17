@@ -93,3 +93,8 @@ const customStringDescriptor: any = Object.getOwnPropertyDescriptor(Array.protot
 console.log("string key mutation:", deletedMapMethod, !namesAfterMapDelete.includes("map"), !aliasNamesAfterMapDelete.includes("map"), !Reflect.has([], "map"), definedCustomStringKey, namesAfterCustomStringKey.includes("customArrayProtoEdge"), customStringDescriptor.value, customStringDescriptor.enumerable);
 const reflectFreshIntegrityTarget: any[] = [];
 console.log("fresh reflect integrity:", Reflect.isExtensible([]), Reflect.preventExtensions(reflectFreshIntegrityTarget), Reflect.isExtensible(reflectFreshIntegrityTarget));
+const objectPreventExtensionsTarget: any[] = [];
+const objectSealTarget: any[] = [];
+const objectFreezeTarget: any[] = [];
+const objectSetPrototypeTarget: any[] = [];
+console.log("fresh object integrity:", Object.getPrototypeOf([]) === Array.prototype, Object.isExtensible([]), Object.isSealed([]), Object.isFrozen([]), Object.preventExtensions(objectPreventExtensionsTarget) === objectPreventExtensionsTarget, Object.isExtensible(objectPreventExtensionsTarget), Object.seal(objectSealTarget) === objectSealTarget, Object.isSealed(objectSealTarget), Object.freeze(objectFreezeTarget) === objectFreezeTarget, Object.isFrozen(objectFreezeTarget), Object.setPrototypeOf(objectSetPrototypeTarget, null) === objectSetPrototypeTarget, Object.getPrototypeOf(objectSetPrototypeTarget));
