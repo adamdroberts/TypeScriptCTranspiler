@@ -1,0 +1,7 @@
+typed sparse: 1|3| 0|1
+typed closed: Array.prototype.sort could not write array-like element
+typed closed state: 1||1 0|2
+typed sealed: Array.prototype.sort could not write array-like element
+typed sealed state: 1||1 0|2
+dynamic closed: Array.prototype.sort could not write array-like element
+dynamic closed state: 1||1 0|2

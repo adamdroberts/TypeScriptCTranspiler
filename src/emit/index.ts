@@ -36205,14 +36205,18 @@ class Emitter {
                 `tsc_array_push_raw(${compact}, &${item}); } } ` +
                 `${sortLoop(compact)} ` +
                 `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
+                `if (!tsc_array_index_present(${av}, ${sourceIndex}) && !${av}->extensible) ` +
+                `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element")); ` +
                 `TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}) = TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex}); ` +
                 `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
-                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) ` +
-                `tsc_array_mark_hole(${av}, ${sourceIndex}); ` +
+                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
+                `if (tsc_array_index_present(${av}, ${sourceIndex}) && (${av}->sealed || ${av}->frozen)) ` +
+                `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element")); ` +
+                `tsc_array_mark_hole(${av}, ${sourceIndex}); } ` +
                 `} else { ${sortLoop(av)} }`;
             return `({ ${init} ` +
-                `if (!${av}->frozen) { ` +
-                `${sortBody} } ${result}; })`;
+                `if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array")); ` +
+                `else { ${sortBody} } ${result}; })`;
         });
     }
 
@@ -43287,11 +43291,30 @@ class Emitter {
                 `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
                 `if (!tsc_value_delete_prop(${boxed}, tsc_str_from_int((int64_t)${sourceIndex}))) ` +
                 `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element")); }`;
+        } else {
+            const compact = this.freshTemp("_sort_compact");
+            const sourceIndex = this.freshTemp("_sort_src_i");
+            const item = this.freshTemp("_sort_item");
+            sortBody =
+                `tsc_array_t* ${compact} = tsc_array_new(sizeof(${et.c}), ${av}->len ? ${av}->len : 1); ` +
+                `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
+                `if (tsc_array_index_present(${av}, ${sourceIndex})) { ${et.c} ${item} = TSC_ARR(${et.c}, ${av}, ${sourceIndex}); ` +
+                `tsc_array_push_raw(${compact}, &${item}); } } ` +
+                `${sortLoop(compact)} ` +
+                `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
+                `if (!tsc_array_index_present(${av}, ${sourceIndex}) && !${av}->extensible) ` +
+                `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element")); ` +
+                `TSC_ARR(${et.c}, ${av}, ${sourceIndex}) = TSC_ARR(${et.c}, ${compact}, ${sourceIndex}); ` +
+                `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
+                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
+                `if (tsc_array_index_present(${av}, ${sourceIndex}) && (${av}->sealed || ${av}->frozen)) ` +
+                `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element")); ` +
+                `tsc_array_mark_hole(${av}, ${sourceIndex}); }`;
         }
         return this.emitSequencedExpr(recv.ty, specs, ([arr]) =>
             `({ tsc_array_t* const ${av} = ${arr}; ` +
                 comparatorSetup +
-                `if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array")); else if (${av}->sealed && ${av}->holes) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot reorder a sealed sparse array")); else { ` +
+                `if (${av}->frozen) tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array")); else { ` +
                 `${sortBody} } ${av}; })`,
         );
     }
