@@ -14274,6 +14274,9 @@ class Emitter {
         ) {
             return true;
         }
+        if (this.isSymbolIteratorExpression(unwrapped) || this.isSymbolUnscopablesExpression(unwrapped)) {
+            return true;
+        }
         if (
             ts.isPrefixUnaryExpression(unwrapped) &&
             (
@@ -32748,10 +32751,10 @@ class Emitter {
                     ? "tsc_value_has_own_symbol_prop"
                     : "tsc_value_symbol_property_is_enumerable";
                 return this.emitSequencedExpr(T_BOOLEAN, [
-                    { value: target, target: mapped, node: targetNode },
+                    { value: target, target: T_VALUE, node: targetNode },
                     { value: key, target: T_SYMBOL, node: keyNode },
                     ...ignored,
-                ], ([value, keyC]) => `${fn}(tsc_value_array(${value}), ${keyC})`);
+                ], ([value, keyC]) => `${fn}(${value}, ${keyC})`);
             }
             const key = this.emitExpr(keyNode);
             const fn = method === "hasOwnProperty"

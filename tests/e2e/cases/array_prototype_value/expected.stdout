@@ -30,3 +30,4 @@ define iterator symbol: true false true true true true false true false false
 define unscopables symbol: true true true true true true true true 2
 set symbol slots: true true true true false true
 symbol enumerability after define: true true false
+detached symbol enumerability: true false
