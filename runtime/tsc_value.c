@@ -3262,11 +3262,7 @@ tsc_value_t tsc_value_method_with(tsc_value_t recv, tsc_value_t index, tsc_value
 
 tsc_value_t tsc_value_method_to_spliced(tsc_value_t recv, tsc_value_t start, tsc_value_t delete_count, int argc, tsc_array_t* items) {
     if (!value_is_box(recv)) return tsc_value_undefined();
-    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        tsc_array_t* a = (tsc_array_t*)value_ptr(recv);
-        return tsc_value_array(tsc_array_to_spliced(a, tsc_value_as_num(start), tsc_value_as_num(delete_count), argc, items));
-    }
-    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
+    if (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_STRING) {
         size_t len = (size_t)tsc_value_length(recv);
         size_t at = argc <= 0 ? 0 : value_array_forward_start(len, value_slice_arg(start, 0.0));
         size_t del = 0;
