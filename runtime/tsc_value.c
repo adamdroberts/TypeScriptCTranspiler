@@ -2192,9 +2192,28 @@ tsc_value_t tsc_value_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key)
     return tsc_value_undefined();
 }
 
+tsc_value_t tsc_value_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symbol_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_GET_OWN_PROPERTY_DESCRIPTOR);
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.getOwnPropertyDescriptor target must not be null or undefined"));
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
+            if (key == tsc_symbol_iterator()) return tsc_array_symbol_iterator_descriptor();
+            if (key == tsc_symbol_unscopables()) return tsc_array_symbol_unscopables_descriptor();
+        }
+    }
+    return tsc_value_undefined();
+}
+
 tsc_value_t tsc_reflect_get_own_property_descriptor(tsc_value_t v, tsc_str_t* key) {
     require_reflect_object_target(v, "Reflect.getOwnPropertyDescriptor target must be an object");
     return tsc_value_get_own_property_descriptor(v, key);
+}
+
+tsc_value_t tsc_reflect_get_own_property_symbol_descriptor(tsc_value_t v, tsc_symbol_t* key) {
+    require_reflect_object_target(v, "Reflect.getOwnPropertyDescriptor target must be an object");
+    return tsc_value_get_own_property_symbol_descriptor(v, key);
 }
 
 

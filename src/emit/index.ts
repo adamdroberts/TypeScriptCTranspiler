@@ -49972,6 +49972,15 @@ class Emitter {
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
             }
+            if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+                const obj = this.emitExpr(arg);
+                const key = this.emitExpr(args[1]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: obj, target: T_VALUE, node: arg },
+                    { value: key, target: T_SYMBOL, node: args[1]! },
+                    ...ignored,
+                ], ([o, k]) => `tsc_value_get_own_property_symbol_descriptor(${o}, ${k})`);
+            }
             if (this.isStaticArrayPrototypeExpression(arg)) {
                 const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
                 if (keyType.kind !== "symbol") {
@@ -52563,6 +52572,14 @@ class Emitter {
                         { value: key, node: args[1]! },
                         ...ignored,
                     ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
+                }
+                if (this.isSymbolIteratorExpression(args[1]!) || this.isSymbolUnscopablesExpression(args[1]!)) {
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_SYMBOL, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `tsc_reflect_get_own_property_symbol_descriptor(${t}, ${k})`);
                 }
                 if (this.isStaticArrayPrototypeExpression(args[0]!)) {
                     const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
