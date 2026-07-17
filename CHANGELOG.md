@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Static `Object.getOwnPropertyDescriptors(Array.prototype)` now exposes the same standard string-named descriptor map as the focused `Array.prototype` own-name helper. Test: `array_prototype_value`.
 - Static `Object.getOwnPropertyNames(Array.prototype)` and the string-name portion of static `Reflect.ownKeys(Array.prototype)` now expose the standard Array prototype own-name surface. Test: `array_prototype_value`.
 - Static `Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator | Symbol.unscopables)` now returns the same focused symbol-keyed descriptors as `Object.getOwnPropertyDescriptor(...)`. Test: `array_prototype_value`.
 - Static `Object.getOwnPropertySymbols(Array.prototype)` and symbol-keyed descriptor reads now expose `Symbol.iterator` and `Symbol.unscopables` metadata for the shared Array prototype. Test: `array_prototype_value`.

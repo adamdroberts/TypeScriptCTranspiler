@@ -906,6 +906,17 @@ tsc_array_t* tsc_array_prototype_own_property_names(void) {
     return out;
 }
 
+tsc_value_t tsc_array_prototype_own_property_descriptors(void) {
+    tsc_value_t prototype = tsc_value_array(tsc_array_prototype());
+    tsc_array_t* names = tsc_array_prototype_own_property_names();
+    tsc_object_t* out = tsc_object_new();
+    for (size_t i = 0; i < names->len; i++) {
+        tsc_str_t* key = TSC_ARR(tsc_str_t*, names, i);
+        tsc_object_set(out, key, tsc_value_get_own_property_descriptor(prototype, key));
+    }
+    return tsc_value_object(out);
+}
+
 static tsc_value_t array_symbol_descriptor(tsc_value_t value, bool writable) {
     tsc_object_t* desc = tsc_object_new();
     tsc_object_set(desc, tsc_str_from_lit("value", 5), value);

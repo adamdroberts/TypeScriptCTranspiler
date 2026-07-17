@@ -50066,6 +50066,12 @@ class Emitter {
         if (name === "getOwnPropertyDescriptors") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertyDescriptors expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (this.isStaticArrayPrototypeExpression(arg)) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: arg }, ...ignored], ([o]) =>
+                    `({ (void)${o}; tsc_array_prototype_own_property_descriptors(); })`,
+                );
+            }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(T_VALUE, [
