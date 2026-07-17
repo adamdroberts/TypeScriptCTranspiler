@@ -88,6 +88,15 @@ class Worker {
         }
         return result;
     }
+
+    async forAfterAwait(count: number): Promise<string> {
+        const value = await delay(27, "for");
+        let result = this.prefix;
+        for (let index = 0; index < count; index = index + 1) {
+            result = result + value;
+        }
+        return result;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -146,6 +155,10 @@ new Worker("branch-").branchLet(true).then((value: string): void => {
 
 new Worker("loop-").loopAfterAwait(2).then((value: string): void => {
     console.log("method-loop:", value);
+});
+
+new Worker("for-").forAfterAwait(2).then((value: string): void => {
+    console.log("method-for:", value);
 });
 
 arrow().then((value: string): void => {

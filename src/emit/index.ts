@@ -24664,9 +24664,9 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         const visitStatement = (stmt: ts.Statement): boolean => {
-            if (ts.isVariableStatement(stmt)) {
-                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
-                for (const decl of stmt.declarationList.declarations) {
+            const visitVariableDeclarationList = (declarationList: ts.VariableDeclarationList): boolean => {
+                if (!(declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
+                for (const decl of declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name) || !decl.initializer) return false;
                     visit(decl.initializer);
                     if (!ok) return false;
@@ -24675,6 +24675,9 @@ class Emitter {
                     locals.add(sym);
                 }
                 return true;
+            };
+            if (ts.isVariableStatement(stmt)) {
+                return visitVariableDeclarationList(stmt.declarationList);
             }
             if (ts.isExpressionStatement(stmt)) {
                 visit(stmt.expression);
@@ -24697,6 +24700,25 @@ class Emitter {
             if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
+                return visitStatement(stmt.statement);
+            }
+            if (ts.isForStatement(stmt)) {
+                if (stmt.initializer) {
+                    if (ts.isVariableDeclarationList(stmt.initializer)) {
+                        if (!visitVariableDeclarationList(stmt.initializer)) return false;
+                    } else {
+                        visit(stmt.initializer);
+                        if (!ok) return false;
+                    }
+                }
+                if (stmt.condition) {
+                    visit(stmt.condition);
+                    if (!ok) return false;
+                }
+                if (stmt.incrementor) {
+                    visit(stmt.incrementor);
+                    if (!ok) return false;
+                }
                 return visitStatement(stmt.statement);
             }
             return false;
