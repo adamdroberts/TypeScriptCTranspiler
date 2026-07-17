@@ -1,0 +1,3 @@
+dynamic: inherited|middle|undefined 0:inherited|1:middle|2:undefined
+typed: inherited|middle|undefined 0:inherited|1:middle|2:undefined
+holes: undefined|middle|undefined 0:undefined|1:middle|2:undefined

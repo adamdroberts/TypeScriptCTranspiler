@@ -42375,9 +42375,10 @@ class Emitter {
                         const out = this.freshTemp("_values");
                         const iv = this.freshTemp("_i");
                         const value = this.freshTemp("_value");
-                        return `({ tsc_array_t* const ${av} = ${arr}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
+                        const boxed = this.freshTemp("_values_boxed");
+                        return `({ tsc_array_t* const ${av} = ${arr}; tsc_value_t ${boxed} = tsc_value_array(${av}); tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                             `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
-                            `tsc_value_t ${value} = tsc_array_index_present(${av}, ${iv}) ? TSC_ARR(tsc_value_t, ${av}, ${iv}) : tsc_value_undefined(); ` +
+                            `tsc_value_t ${value} = tsc_value_get_index(${boxed}, (double)${iv}); ` +
                             `tsc_array_push_raw(${out}, &${value}); } ${out}; })`;
                     },
                 );
@@ -42388,16 +42389,17 @@ class Emitter {
                 const out = this.freshTemp("_entries");
                 const iv = this.freshTemp("_i");
                 const entry = this.freshTemp("_entry");
+                const boxed = this.freshTemp("_entries_boxed");
                 return this.emitSequencedExpr(
                     arrayType(elemType),
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
                     ([arr]) =>
-                        `({ tsc_array_t* const ${av} = ${arr}; ` +
+                        `({ tsc_array_t* const ${av} = ${arr}; ${et.kind === "value" ? `tsc_value_t ${boxed} = tsc_value_array(${av}); ` : ""}` +
                         `tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), ${av}->len ? ${av}->len : 1); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) { ` +
                         `${elemType.c} ${entry}; ${entry}.key = tsc_str_from_int((int64_t)${iv}); ` +
                         `${this.objectEntrySet(entry, et, et.kind === "value"
-                            ? `(tsc_array_index_present(${av}, ${iv}) ? TSC_ARR(${et.c}, ${av}, ${iv}) : tsc_value_undefined())`
+                            ? `tsc_value_get_index(${boxed}, (double)${iv})`
                             : `TSC_ARR(${et.c}, ${av}, ${iv})`)}; ` +
                         `tsc_array_push_raw(${out}, &${entry}); } ${out}; })`,
                 );
