@@ -3411,7 +3411,7 @@ tsc_value_t tsc_value_method_reverse(tsc_value_t recv) {
 
 tsc_value_t tsc_value_method_to_reversed(tsc_value_t recv) {
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        return tsc_value_array(tsc_array_to_reversed((const tsc_array_t*)value_ptr(recv)));
+        return tsc_value_array(value_array_like_to_reversed(recv));
     }
     if (value_is_box(recv) && value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
         return tsc_value_array(value_array_like_to_reversed(recv));

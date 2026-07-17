@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic and statically typed `any[]` `toReversed` now create dense results, materializing holes as own `undefined` elements and copying inherited numeric properties. Test: `dynamic_array_inherited_to_reversed`.
 - Dynamic array `slice` now copies inherited numeric properties into own result elements while preserving only genuinely absent indexes as holes. Test: `dynamic_array_inherited_slice`.
 - Dynamic array callback methods now observe inherited numeric properties through `HasProperty` while still skipping true sparse holes. Test: `dynamic_array_inherited_hof`.
 - Dynamic array `indexOf` and `lastIndexOf` now skip deleted holes while still matching inherited numeric properties. Test: `dynamic_array_hole_search`.
@@ -47,7 +48,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `fs.promises.mkdtemp` now rejects before directory creation when passed an already-aborted signal. Test: `fs_promises_signal_options`.
 - `fs.promises.mkdir` now rejects before directory creation when passed an already-aborted signal. Test: `fs_promises_signal_options`.
 - `fs.promises.rm` and `rmdir` now reject before filesystem mutation when passed an already-aborted signal. Test: `fs_promises_signal_options`.
-- Dynamic array `slice()` and `toReversed()` now preserve deleted index holes instead of materializing own `undefined` properties, including hole position reversal. Test: `dynamic_array_hole_copies`.
+- Dynamic array `slice()` preserves deleted index holes, while `toReversed()` creates the standard dense result with holes materialized as own `undefined` properties. Test: `dynamic_array_hole_copies`.
 - Dynamic array index deletion now records dense-array holes, so deleted indexes disappear from own keys/descriptors and `Reflect.has`, while later writes recreate the index. Test: `dynamic_array_accessor_properties`.
 - Dynamic and detached `Array.prototype.toLocaleString(...)` now evaluate trailing arguments without forwarding them to element `toLocaleString` calls. Tests: `dynamic_array_to_string`, `array_prototype_array_like_locale`.
 - `Array.prototype` builtin methods now expose standard `name` and `length` metadata and no synthetic constructable `prototype` property, while preserving their callable descriptors. Test: `array_prototype_value`.

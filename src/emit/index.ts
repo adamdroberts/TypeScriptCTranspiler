@@ -42240,7 +42240,9 @@ class Emitter {
                 return this.emitSequencedExpr(
                     recv.ty,
                     [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
-                    ([arr]) => `tsc_array_to_reversed(${arr})`,
+                    ([arr]) => et.kind === "value"
+                        ? `tsc_value_as_array(tsc_value_method_to_reversed(tsc_value_array(${arr})))`
+                        : `tsc_array_to_reversed(${arr})`,
                 );
             }
             case "slice": {
