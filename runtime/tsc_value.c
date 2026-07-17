@@ -624,8 +624,12 @@ bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value)
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_ARRAY) return false;
     tsc_array_t* a = (tsc_array_t*)value_ptr(v);
     if (a->es != sizeof(tsc_value_t)) return false;
-    if (a->frozen || !a->length_writable) return false;
-    if (idx >= a->len && !a->extensible) return false;
+    if (a->frozen) return false;
+    tsc_str_t* key = tsc_str_from_int((int64_t)idx);
+    bool exists = idx < a->len && tsc_array_index_present(a, idx);
+    if (!exists && a->props && tsc_object_has_own(a->props, key)) exists = true;
+    if (!exists && !a->extensible) return false;
+    if (idx >= a->len && !a->length_writable) return false;
     while (a->len < idx) {
         tsc_value_t undef = tsc_value_undefined();
         tsc_array_push_raw(a, &undef);
@@ -634,7 +638,6 @@ bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value)
     if (idx == a->len) {
         tsc_array_push_raw(a, &value);
     } else {
-        tsc_str_t* key = tsc_str_from_int((int64_t)idx);
         if (a->props && tsc_object_has_own(a->props, key)) {
             bool ok = tsc_object_set_receiver(a->props, key, value, v);
             if (ok) tsc_array_clear_hole(a, idx);
@@ -2924,7 +2927,6 @@ tsc_value_t tsc_value_method_shift(tsc_value_t recv) {
         if (a->sealed || a->frozen) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array"));
         }
-        if (!a->length_writable) return tsc_value_undefined();
     }
     if (value_is_box(recv) && (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT)) {
         size_t len = (size_t)tsc_value_length(recv);

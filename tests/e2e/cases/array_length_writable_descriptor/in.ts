@@ -16,6 +16,11 @@ console.log(
     Object.getOwnPropertyDescriptor(dyn, "length")!.writable,
 );
 
+const dynShift: any = ["a", "b"];
+Reflect.defineProperty(dynShift, "length", { writable: false });
+try { dynShift.shift(); } catch (error: any) { console.log("dyn shift:", error); }
+console.log("dyn after shift:", dynShift.length, dynShift.join("|"), Object.keys(dynShift).join("|"));
+
 const typed = [1, 2];
 
 const typedDefined = Reflect.defineProperty(typed, "length", { writable: false });
@@ -33,3 +38,8 @@ console.log(
     typed.length,
     Object.getOwnPropertyDescriptor(typed, "length")!.writable,
 );
+
+const typedShift = [1, 2];
+Reflect.defineProperty(typedShift, "length", { writable: false });
+try { typedShift.shift(); } catch (error: any) { console.log("typed shift:", error); }
+console.log("typed after shift:", typedShift.length, typedShift.join("|"), Object.keys(typedShift).join("|"));

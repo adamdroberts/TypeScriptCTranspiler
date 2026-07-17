@@ -6,6 +6,8 @@ dyn after pop: 2 a| false
 dyn set index: false 2 undefined
 dyn shrink: false 2
 dyn same: true 2 false
+dyn shift: Array.prototype.shift could not update array-like length
+dyn after shift: 2 b| 0
 typed define: true false 2
 typed push: Array.prototype.push could not update array-like length
 typed empty push: Array.prototype.push could not update array-like length
@@ -14,3 +16,5 @@ typed after pop: 2 1| false
 typed set index: false 2 0
 typed shrink: false 2
 typed same: true 2 false
+typed shift: Array.prototype.shift could not update array-like length
+typed after shift: 2 2| 0

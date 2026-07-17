@@ -42121,7 +42121,15 @@ class Emitter {
                         : `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
                             `if (${av}->len > 0 && tsc_array_index_present(${av}, 0)) ` +
                             `${rv} = TSC_ARR(${et.c}, ${av}, 0); ` +
-                            `if (${av}->frozen || (${av}->sealed && ${av}->len > 0)) tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array")); else if (${av}->length_writable) tsc_array_shift_raw(${av}); ${rv}; })`,
+                            `if (${av}->frozen || (${av}->sealed && ${av}->len > 0)) ` +
+                            `tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift cannot mutate a sealed or frozen array")); ` +
+                            `else if (!${av}->length_writable) { ` +
+                            `for (size_t _shift_i = 1; _shift_i < ${av}->len; _shift_i++) { ` +
+                            `if (tsc_array_index_present(${av}, _shift_i)) { TSC_ARR(${et.c}, ${av}, _shift_i - 1) = TSC_ARR(${et.c}, ${av}, _shift_i); tsc_array_clear_hole(${av}, _shift_i - 1); } ` +
+                            `else tsc_array_mark_hole(${av}, _shift_i - 1); } ` +
+                            `if (${av}->len > 0) tsc_array_mark_hole(${av}, ${av}->len - 1); ` +
+                            `tsc_throw_str(tsc_str_from_cstr("Array.prototype.shift could not update array-like length")); } ` +
+                            `else tsc_array_shift_raw(${av}); ${rv}; })`,
                 );
             }
             case "unshift": {
