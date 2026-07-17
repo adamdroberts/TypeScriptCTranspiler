@@ -16,6 +16,12 @@ async function tagged(prefix: string): Promise<string> {
 }
 
 class Worker {
+    prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
     async label(): Promise<string> {
         const value = await delay(15, "method");
         return value + "!";
@@ -24,6 +30,11 @@ class Worker {
     async prefixed(prefix: string): Promise<string> {
         const value = await delay(18, "method-param");
         return prefix + value;
+    }
+
+    async thisPrefixed(): Promise<string> {
+        const value = await delay(19, "this-param");
+        return this.prefix + value;
     }
 }
 
@@ -49,12 +60,16 @@ tagged("fn-").then((value: string): void => {
     console.log("tagged:", value);
 });
 
-new Worker().label().then((value: string): void => {
+new Worker("job-").label().then((value: string): void => {
     console.log("method:", value);
 });
 
-new Worker().prefixed("class-").then((value: string): void => {
+new Worker("job-").prefixed("class-").then((value: string): void => {
     console.log("method-param:", value);
+});
+
+new Worker("this-").thisPrefixed().then((value: string): void => {
+    console.log("method-this:", value);
 });
 
 arrow().then((value: string): void => {
