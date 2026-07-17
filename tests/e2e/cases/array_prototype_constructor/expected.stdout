@@ -1,5 +1,9 @@
 identity: true true true false true function Array 1
 species: true function true false true 1 true
+static names: true true true false
+static desc: true isArray 1 true false true
+from/of desc: true from 1 true of 0
+detached static: true false p|q m0p|m1q u|v
 call: true 2 a b
 size: 3 true true
 new: true 2 x y
