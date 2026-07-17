@@ -12,3 +12,4 @@ method-side-effect: effect-side
 method-if-side-effect: if-branch
 method-branch-let: branch-let
 method-loop: loop-looploop
+method-for: for-forfor
