@@ -1024,6 +1024,10 @@ bool value_set_receiver_own_data(tsc_value_t receiver, tsc_str_t* key, tsc_value
         return object_set_own_data(ro, key, value);
     }
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_ARRAY) {
+        size_t idx = 0;
+        if (tsc_str_array_index(key, &idx)) {
+            return tsc_value_set_array_own_index(receiver, idx, value);
+        }
         return tsc_value_set_prop(receiver, key, value);
     }
     if (value_is_box(receiver) && value_tag(receiver) == TSC_VALUE_TAG_FUNCTION) {
