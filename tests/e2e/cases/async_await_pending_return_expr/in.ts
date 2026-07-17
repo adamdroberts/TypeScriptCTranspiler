@@ -100,6 +100,17 @@ class Worker {
         return result;
     }
 
+    async doWhileAfterAwait(count: number): Promise<string> {
+        const value = await delay(44, "do");
+        let result = this.prefix;
+        let index = 0;
+        do {
+            result = result + value + index;
+            index = index + 1;
+        } while (index < count);
+        return result;
+    }
+
     async forAfterAwait(count: number): Promise<string> {
         const value = await delay(29, "for");
         let result = this.prefix;
@@ -283,6 +294,10 @@ new Worker("uninit-").branchUninitializedLet(true).then((value: string): void =>
 
 new Worker("loop-").loopAfterAwait(2).then((value: string): void => {
     console.log("method-loop:", value);
+});
+
+new Worker("do-").doWhileAfterAwait(2).then((value: string): void => {
+    console.log("method-do-while:", value);
 });
 
 new Worker("for-").forAfterAwait(2).then((value: string): void => {

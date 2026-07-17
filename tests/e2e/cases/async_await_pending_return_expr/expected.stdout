@@ -27,3 +27,4 @@ method-switch-default: switch-other-z
 method-switch-break: switch-break-beta
 method-void-await: void-void
 method-expressionless-return: exprless-done
+method-do-while: do-do0do1
