@@ -113,13 +113,9 @@ static tsc_value_t tsc_value_function_named_kind(
     id->sealed = false;
     id->frozen = false;
     id->func_prototype_writable = true;
-    id->length = length;
-    id->name = name;
     id->prototype = tsc_function_default_prototype();
     id->func_prototype = tsc_value_undefined();
-    id->props = tsc_object_new();
-    tsc_object_define(id->props, tsc_str_from_lit("length", 6), tsc_value_num(length), false, false, true);
-    tsc_object_define(id->props, tsc_str_from_lit("name", 4), tsc_value_string(name), false, false, true);
+    tsc_function_init_metadata(id, length, name);
     id->code.generic = fn;
     id->env = env;
     id->next = g_function_identities;

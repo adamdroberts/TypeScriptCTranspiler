@@ -5,6 +5,16 @@ tsc_function_identity_t* g_function_identities = NULL;
 tsc_value_t tsc_value_array(tsc_array_t* a) { return value_box(TSC_VALUE_TAG_ARRAY, (uintptr_t)a); }
 tsc_value_t tsc_value_object(tsc_object_t* o) { return value_box(TSC_VALUE_TAG_OBJECT, (uintptr_t)o); }
 
+void tsc_function_init_metadata(tsc_function_identity_t* entry, double length, tsc_str_t* name) {
+    if (!entry) return;
+    if (!name) name = tsc_str_from_lit("", 0);
+    entry->length = length;
+    entry->name = name;
+    entry->props = tsc_object_new();
+    tsc_object_define(entry->props, tsc_str_from_lit("length", 6), tsc_value_num(length), false, false, true);
+    tsc_object_define(entry->props, tsc_str_from_lit("name", 4), tsc_value_string(name), false, false, true);
+}
+
 tsc_value_t tsc_function_default_prototype(void) {
     static bool initialized = false;
     static tsc_value_t prototype;
@@ -33,11 +43,9 @@ tsc_value_t value_event_listener_identity(tsc_event_listener_fn_t fn, void* env,
     entry->sealed = false;
     entry->frozen = false;
     entry->func_prototype_writable = true;
-    entry->length = 0.0;
-    entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
-    entry->props = tsc_object_new();
+    tsc_function_init_metadata(entry, 0.0, tsc_str_from_lit("", 0));
     entry->code.event_listener.fn = fn;
     entry->code.event_listener.identity = identity;
     entry->env = env;
@@ -66,11 +74,9 @@ tsc_value_t value_event_raw_listener_identity(tsc_event_listener_fn_t fn, void* 
     entry->sealed = false;
     entry->frozen = false;
     entry->func_prototype_writable = true;
-    entry->length = 0.0;
-    entry->name = tsc_str_from_lit("", 0);
     entry->prototype = tsc_function_default_prototype();
     entry->func_prototype = tsc_value_undefined();
-    entry->props = tsc_object_new();
+    tsc_function_init_metadata(entry, 0.0, tsc_str_from_lit("", 0));
     entry->code.event_raw_identity.fn = fn;
     entry->code.event_raw_identity.identity = identity;
     entry->code.event_raw_identity.order = order;
