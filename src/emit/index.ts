@@ -49820,6 +49820,12 @@ class Emitter {
         if (name === "getOwnPropertyNames") {
             if (args.length < 1) unsupported(call, "Object.getOwnPropertyNames expects object");
             const ignored = this.ignoredArgumentSpecs(args, 1);
+            if (this.isStaticArrayPrototypeExpression(arg)) {
+                const obj = this.emitExpr(arg);
+                return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: arg }, ...ignored], ([o]) =>
+                    `({ (void)${o}; tsc_array_prototype_own_property_names(); })`,
+                );
+            }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
                 return this.emitSequencedExpr(arrayType(T_STRING), [
@@ -52674,6 +52680,12 @@ class Emitter {
                 const ignored = this.ignoredArgumentSpecs(args, 1);
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
+                if (this.isStaticArrayPrototypeExpression(args[0]!)) {
+                    const target = this.emitExpr(args[0]!);
+                    return this.emitSequencedExpr(arrayType(T_STRING), [{ value: target, node: args[0]! }, ...ignored], ([t]) =>
+                        `({ (void)${t}; tsc_array_prototype_own_property_names(); })`,
+                    );
+                }
                 if (
                     mapped.kind === "map" ||
                     mapped.kind === "set" ||
