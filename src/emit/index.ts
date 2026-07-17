@@ -49972,6 +49972,18 @@ class Emitter {
                     ...ignored,
                 ], ([o, k]) => `({ (void)${o}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
             }
+            if (this.isStaticArrayPrototypeExpression(arg)) {
+                const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
+                if (keyType.kind !== "symbol") {
+                    const obj = this.emitExpr(arg);
+                    const key = this.emitExpr(args[1]!);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: obj, node: arg },
+                        { value: key, target: T_STRING, node: args[1]! },
+                        ...ignored,
+                    ], ([o, k]) => `({ (void)${o}; tsc_array_prototype_own_property_descriptor(${k}); })`);
+                }
+            }
             if (mapped.kind === "void") {
                 const obj = this.emitExpr(arg);
                 const key = this.emitExpr(args[1]!);
@@ -52551,6 +52563,17 @@ class Emitter {
                         { value: key, node: args[1]! },
                         ...ignored,
                     ], ([t, k]) => `({ (void)${t}; (void)${k}; tsc_array_symbol_unscopables_descriptor(); })`);
+                }
+                if (this.isStaticArrayPrototypeExpression(args[0]!)) {
+                    const keyType = this.prepareType(mapTsType(args[1]!, this.checker.getTypeAtLocation(args[1]!), this.checker));
+                    if (keyType.kind !== "symbol") {
+                        const key = this.emitExpr(args[1]!);
+                        return this.emitSequencedExpr(T_VALUE, [
+                            { value: target, node: args[0]! },
+                            { value: key, target: T_STRING, node: args[1]! },
+                            ...ignored,
+                        ], ([t, k]) => `({ (void)${t}; tsc_array_prototype_own_property_descriptor(${k}); })`);
+                    }
                 }
                 if (
                     mapped.kind === "map" ||

@@ -906,13 +906,24 @@ tsc_array_t* tsc_array_prototype_own_property_names(void) {
     return out;
 }
 
-tsc_value_t tsc_array_prototype_own_property_descriptors(void) {
+tsc_value_t tsc_array_prototype_own_property_descriptor(tsc_str_t* key) {
     tsc_value_t prototype = tsc_value_array(tsc_array_prototype());
+    tsc_array_t* names = tsc_array_prototype_own_property_names();
+    for (size_t i = 0; i < names->len; i++) {
+        tsc_str_t* current = TSC_ARR(tsc_str_t*, names, i);
+        if (tsc_str_eq(current, key)) {
+            return tsc_value_get_own_property_descriptor(prototype, key);
+        }
+    }
+    return tsc_value_undefined();
+}
+
+tsc_value_t tsc_array_prototype_own_property_descriptors(void) {
     tsc_array_t* names = tsc_array_prototype_own_property_names();
     tsc_object_t* out = tsc_object_new();
     for (size_t i = 0; i < names->len; i++) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, names, i);
-        tsc_object_set(out, key, tsc_value_get_own_property_descriptor(prototype, key));
+        tsc_object_set(out, key, tsc_array_prototype_own_property_descriptor(key));
     }
     return tsc_value_object(out);
 }
