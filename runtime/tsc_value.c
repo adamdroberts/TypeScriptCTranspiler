@@ -3158,55 +3158,36 @@ tsc_value_t tsc_value_method_sort(tsc_value_t recv, tsc_value_t compare_fn) {
     value_sort_validate_compare_fn(compare_fn);
     if (!value_is_box(recv)) return recv;
     tsc_array_t* a = NULL;
+    size_t len = 0;
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY) {
-        a = (tsc_array_t*)value_ptr(recv);
-        if (a->frozen) {
+        tsc_array_t* recv_array = (tsc_array_t*)value_ptr(recv);
+        if (recv_array->frozen) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot mutate a frozen array"));
         }
-        if (a->sealed && a->holes) {
+        if (recv_array->sealed && recv_array->holes) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort cannot reorder a sealed sparse array"));
         }
-        if (a->holes) {
-            tsc_array_t* compact = tsc_array_new(sizeof(tsc_value_t), a->len ? a->len : 1);
-            for (size_t i = 0; i < a->len; i++) {
-                if (tsc_array_index_present(a, i)) {
-                    tsc_value_t value = TSC_ARR(tsc_value_t, a, i);
-                    tsc_array_push_raw(compact, &value);
-                }
-            }
-            value_sort_array_values(compact, compare_fn);
-            for (size_t i = 0; i < compact->len; i++) {
-                TSC_ARR(tsc_value_t, a, i) = TSC_ARR(tsc_value_t, compact, i);
-                tsc_array_clear_hole(a, i);
-            }
-            for (size_t i = compact->len; i < a->len; i++) {
-                tsc_array_mark_hole(a, i);
-            }
-            return recv;
-        }
+        len = recv_array->len;
     } else if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
-        size_t len = (size_t)tsc_value_length(recv);
-        a = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
-        for (size_t i = 0; i < len; i++) {
-            if (!value_array_like_has_index(recv, i)) continue;
-            tsc_value_t value = tsc_value_get_index(recv, (double)i);
-            tsc_array_push_raw(a, &value);
-        }
+        len = (size_t)tsc_value_length(recv);
     } else {
         return recv;
     }
+    a = tsc_array_new(sizeof(tsc_value_t), len ? len : 1);
+    for (size_t i = 0; i < len; i++) {
+        if (!value_array_like_has_index(recv, i)) continue;
+        tsc_value_t value = tsc_value_get_index(recv, (double)i);
+        tsc_array_push_raw(a, &value);
+    }
     value_sort_array_values(a, compare_fn);
-    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
-        size_t len = (size_t)tsc_value_length(recv);
-        for (size_t i = 0; i < a->len; i++) {
-            if (!tsc_value_set_index(recv, (double)i, TSC_ARR(tsc_value_t, a, i))) {
-                tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element"));
-            }
+    for (size_t i = 0; i < a->len; i++) {
+        if (!tsc_value_set_index(recv, (double)i, TSC_ARR(tsc_value_t, a, i))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element"));
         }
-        for (size_t i = a->len; i < len; i++) {
-            if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i))) {
-                tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element"));
-            }
+    }
+    for (size_t i = a->len; i < len; i++) {
+        if (!tsc_value_delete_prop(recv, tsc_str_from_int((int64_t)i))) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element"));
         }
     }
     return recv;

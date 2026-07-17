@@ -43163,22 +43163,23 @@ class Emitter {
         let sortBody = sortLoop(av);
         if (et.c === T_VALUE.c) {
             const compact = this.freshTemp("_sort_compact");
+            const boxed = this.freshTemp("_sort_boxed");
             const sourceIndex = this.freshTemp("_sort_src_i");
             const item = this.freshTemp("_sort_item");
             sortBody =
-                `if (${av}->holes) { ` +
+                `tsc_value_t ${boxed} = tsc_value_array(${av}); ` +
                 `tsc_array_t* ${compact} = tsc_array_new(sizeof(tsc_value_t), ${av}->len ? ${av}->len : 1); ` +
                 `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
-                `if (tsc_array_index_present(${av}, ${sourceIndex})) { ` +
-                `tsc_value_t ${item} = TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}); ` +
+                `if (tsc_value_has_prop(${boxed}, tsc_str_from_int((int64_t)${sourceIndex}))) { ` +
+                `tsc_value_t ${item} = tsc_value_get_index(${boxed}, (double)${sourceIndex}); ` +
                 `tsc_array_push_raw(${compact}, &${item}); } } ` +
                 `${sortLoop(compact)} ` +
                 `for (size_t ${sourceIndex} = 0; ${sourceIndex} < ${compact}->len; ${sourceIndex}++) { ` +
-                `TSC_ARR(tsc_value_t, ${av}, ${sourceIndex}) = TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex}); ` +
-                `tsc_array_clear_hole(${av}, ${sourceIndex}); } ` +
-                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) ` +
-                `tsc_array_mark_hole(${av}, ${sourceIndex}); ` +
-                `} else { ${sortLoop(av)} }`;
+                `if (!tsc_value_set_index(${boxed}, (double)${sourceIndex}, TSC_ARR(tsc_value_t, ${compact}, ${sourceIndex}))) ` +
+                `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not write array-like element")); } ` +
+                `for (size_t ${sourceIndex} = ${compact}->len; ${sourceIndex} < ${av}->len; ${sourceIndex}++) { ` +
+                `if (!tsc_value_delete_prop(${boxed}, tsc_str_from_int((int64_t)${sourceIndex}))) ` +
+                `tsc_throw_str(tsc_str_from_cstr("Array.prototype.sort could not delete array-like element")); }`;
         }
         return this.emitSequencedExpr(recv.ty, specs, ([arr]) =>
             `({ tsc_array_t* const ${av} = ${arr}; ` +
