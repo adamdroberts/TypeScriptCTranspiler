@@ -30308,6 +30308,12 @@ class Emitter {
             const mapped = this.prepareType(mapTsType(expr.expression, recvType, this.checker));
             const recv = this.emitExpr(expr.expression);
             const key = this.emitExpr(expr.argumentExpression);
+            if (key.ty.kind === "symbol") {
+                return this.emitSequencedCall("tsc_value_delete_symbol_prop", T_BOOLEAN, [
+                    { value: recv, target: T_VALUE, node: expr.expression },
+                    { value: key, target: T_SYMBOL, node: expr.argumentExpression },
+                ]);
+            }
             if (mapped.kind === "array") {
                 return this.emitTypedArrayDeleteProperty(expr.expression, recv, key, expr.argumentExpression);
             }
@@ -52581,10 +52587,17 @@ class Emitter {
                 const targetType = this.checker.getTypeAtLocation(args[0]!);
                 const mapped = this.prepareType(mapTsType(args[0]!, targetType, this.checker));
                 const target = this.emitExpr(args[0]!);
+                const key = this.emitExpr(args[1]!);
+                if (key.ty.kind === "symbol") {
+                    return this.emitSequencedExpr(T_BOOLEAN, [
+                        { value: target, target: T_VALUE, node: args[0]! },
+                        { value: key, target: T_SYMBOL, node: args[1]! },
+                        ...ignored,
+                    ], ([t, k]) => `tsc_reflect_delete_symbol_prop(${t}, ${k})`);
+                }
                 if (mapped.kind === "array") {
                     return this.emitTypedArrayReflectDelete(args[0]!, target, args[1]!, ignored);
                 }
-                const key = this.emitExpr(args[1]!);
                 return this.emitSequencedExpr(T_BOOLEAN, [
                     { value: target, target: T_VALUE, node: args[0]! },
                     { value: key, target: T_STRING, node: args[1]! },
@@ -54960,8 +54973,8 @@ class Emitter {
         if (isArrayPrototypeReceiver && this.isSymbolIteratorExpression(ea.argumentExpression)) {
             return this.emitSequencedExpr(
                 T_VALUE,
-                [{ value: recv }],
-                () => "tsc_value_symbol_iterator_method_value()",
+                [{ value: recv, target: T_VALUE, node: ea.expression }],
+                ([value]) => `tsc_value_symbol_iterator_method(${value})`,
             );
         }
         if (this.isSymbolIteratorExpression(ea.argumentExpression) && recv.ty.kind === "array") {
@@ -54981,8 +54994,8 @@ class Emitter {
         if (isArrayPrototypeReceiver && this.isSymbolUnscopablesExpression(ea.argumentExpression)) {
             return this.emitSequencedExpr(
                 T_VALUE,
-                [{ value: recv }],
-                () => "tsc_array_unscopables_value()",
+                [{ value: recv, target: T_VALUE, node: ea.expression }],
+                ([value]) => `tsc_value_symbol_unscopables(${value})`,
             );
         }
         if (this.isSymbolUnscopablesExpression(ea.argumentExpression) && (recv.ty.kind === "value" || recv.ty.kind === "array")) {

@@ -6,6 +6,8 @@ static bool array_prototype_initializing = false;
 static bool array_prototype_initialized = false;
 static bool array_constructor_initialized = false;
 static tsc_value_t array_constructor_value;
+static bool array_prototype_symbol_iterator_deleted = false;
+static bool array_prototype_symbol_unscopables_deleted = false;
 static bool array_unscopables_initialized = false;
 static tsc_value_t array_unscopables_value;
 
@@ -851,9 +853,27 @@ tsc_array_t* tsc_array_prototype_symbols(void) {
     tsc_array_t* out = tsc_array_new(sizeof(tsc_symbol_t*), 2);
     tsc_symbol_t* iterator = tsc_symbol_iterator();
     tsc_symbol_t* unscopables = tsc_symbol_unscopables();
-    tsc_array_push_raw(out, &iterator);
-    tsc_array_push_raw(out, &unscopables);
+    if (!array_prototype_symbol_iterator_deleted) tsc_array_push_raw(out, &iterator);
+    if (!array_prototype_symbol_unscopables_deleted) tsc_array_push_raw(out, &unscopables);
     return out;
+}
+
+bool tsc_array_prototype_has_symbol(tsc_symbol_t* key) {
+    if (key == tsc_symbol_iterator()) return !array_prototype_symbol_iterator_deleted;
+    if (key == tsc_symbol_unscopables()) return !array_prototype_symbol_unscopables_deleted;
+    return false;
+}
+
+bool tsc_array_prototype_delete_symbol(tsc_symbol_t* key) {
+    if (key == tsc_symbol_iterator()) {
+        array_prototype_symbol_iterator_deleted = true;
+        return true;
+    }
+    if (key == tsc_symbol_unscopables()) {
+        array_prototype_symbol_unscopables_deleted = true;
+        return true;
+    }
+    return true;
 }
 
 static void array_prototype_push_name(tsc_array_t* out, const char* name, size_t len) {
@@ -938,10 +958,12 @@ static tsc_value_t array_symbol_descriptor(tsc_value_t value, bool writable) {
 }
 
 tsc_value_t tsc_array_symbol_iterator_descriptor(void) {
+    if (!tsc_array_prototype_has_symbol(tsc_symbol_iterator())) return tsc_value_undefined();
     return array_symbol_descriptor(tsc_value_symbol_iterator_method_value(), true);
 }
 
 tsc_value_t tsc_array_symbol_unscopables_descriptor(void) {
+    if (!tsc_array_prototype_has_symbol(tsc_symbol_unscopables())) return tsc_value_undefined();
     return array_symbol_descriptor(tsc_array_unscopables_value(), false);
 }
 

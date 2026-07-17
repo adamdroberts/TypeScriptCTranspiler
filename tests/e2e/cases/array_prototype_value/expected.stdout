@@ -24,3 +24,5 @@ reflect symbol descriptors: true true false true true false false true
 delete name: true false
 redefine: true true all 3
 method: a-b
+delete iterator symbol: true false false true true true 1 true
+delete unscopables symbol: true false false true true true 0

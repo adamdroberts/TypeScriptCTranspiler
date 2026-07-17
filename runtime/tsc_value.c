@@ -1552,7 +1552,7 @@ bool tsc_value_has_own_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
     }
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
-            return key == tsc_symbol_iterator() || key == tsc_symbol_unscopables();
+            return tsc_array_prototype_has_symbol(key);
         }
     }
     return false;
@@ -1693,9 +1693,25 @@ bool tsc_value_delete_prop(tsc_value_t v, tsc_str_t* key) {
     return true;
 }
 
+bool tsc_value_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_DELETE_PROP);
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
+            return tsc_array_prototype_delete_symbol(key);
+        }
+        return true;
+    }
+    return true;
+}
+
 bool tsc_reflect_delete_prop(tsc_value_t v, tsc_str_t* key) {
     require_reflect_object_target(v, "Reflect.deleteProperty target must be an object");
     return tsc_value_delete_prop(v, key);
+}
+
+bool tsc_reflect_delete_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    require_reflect_object_target(v, "Reflect.deleteProperty target must be an object");
+    return tsc_value_delete_symbol_prop(v, key);
 }
 
 bool tsc_value_is_extensible(tsc_value_t v) {
@@ -2395,6 +2411,12 @@ tsc_value_t tsc_value_symbol_iterator_method_value(void) {
 
 tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
+        if (a == tsc_array_prototype()) {
+            if (!tsc_array_prototype_has_symbol(tsc_symbol_iterator())) return tsc_value_undefined();
+        } else if (!tsc_value_has_symbol_prop(a->prototype, tsc_symbol_iterator())) {
+            return tsc_value_undefined();
+        }
         return tsc_value_symbol_iterator_method_value();
     }
     return tsc_value_undefined();
@@ -2402,6 +2424,12 @@ tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v) {
 
 tsc_value_t tsc_value_symbol_unscopables(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
+        if (a == tsc_array_prototype()) {
+            if (!tsc_array_prototype_has_symbol(tsc_symbol_unscopables())) return tsc_value_undefined();
+        } else if (!tsc_value_has_symbol_prop(a->prototype, tsc_symbol_unscopables())) {
+            return tsc_value_undefined();
+        }
         return tsc_array_unscopables_value();
     }
     return tsc_value_undefined();
