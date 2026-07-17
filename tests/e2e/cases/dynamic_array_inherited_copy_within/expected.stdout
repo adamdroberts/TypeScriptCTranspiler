@@ -1,0 +1,3 @@
+inherited: true inherited|inherited|a|c 1|2|3 false
+dynamic hole: ||a|c 2|3 false
+typed hole: ||a|c 2|3 false
