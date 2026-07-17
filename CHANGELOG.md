@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Dynamic and statically typed `any[]` `reverse` now use inherited-aware indexed mutation semantics, moving inherited numeric values into own destination properties while preserving true holes. Test: `dynamic_array_inherited_reverse`.
 - Dynamic and statically typed `any[]` `toSpliced` now create dense results, materializing retained holes as own `undefined` elements and copying retained inherited numeric properties. Test: `dynamic_array_inherited_to_spliced`.
 - Dynamic and statically typed `any[]` `with` now create dense results, materializing untouched holes as own `undefined` elements and copying inherited numeric properties. Test: `dynamic_array_inherited_with`.
 - Dynamic array `toSorted` now creates a dense result, materializing holes as own `undefined` elements and sorting inherited numeric properties with the other values. Test: `dynamic_array_inherited_to_sorted`.

@@ -1,0 +1,3 @@
+inherited: true tail middle inherited 0|1|2
+dynamic hole: tail|middle| 0|1 false
+typed hole: tail|middle| 0|1 false
