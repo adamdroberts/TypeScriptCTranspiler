@@ -2,3 +2,5 @@ map: 4|6 2 true
 filter: 2
 reduce: 5
 hole visits: 1
+typed: 4|6 2 5 2|3 2 true true
+typed holes: 1 true 0 0

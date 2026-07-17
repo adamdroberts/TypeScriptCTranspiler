@@ -42783,8 +42783,14 @@ class Emitter {
         const callbackThisArg = thisArgTemp ?? "tsc_value_undefined()";
         const av = this.freshTemp("_a");
         const iv = this.freshTemp("_i");
+        const hasElement = (index: string): string => et.kind === "value"
+            ? `tsc_value_has_prop(tsc_value_array(${av}), tsc_str_from_int((int64_t)${index}))`
+            : `tsc_array_index_present(${av}, ${index})`;
+        const elementAt = (index: string): string => et.kind === "value"
+            ? `tsc_value_get_index(tsc_value_array(${av}), (double)${index})`
+            : `TSC_ARR(${et.c}, ${av}, ${index})`;
         const elementExpr = et.kind === "value"
-            ? `(tsc_array_index_present(${av}, ${iv}) ? TSC_ARR(${et.c}, ${av}, ${iv}) : tsc_value_undefined())`
+            ? elementAt(iv)
             : `TSC_ARR(${et.c}, ${av}, ${iv})`;
 
         // Build a body-expression factory: given elem/idx/acc C expressions,
@@ -42939,7 +42945,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} (void)(${bodyC}); } } (void)0; })`,
+                        `{ if (${hasElement(iv)}) { ${bindings} (void)(${bodyC}); } } (void)0; })`,
                     ty: T_VOID,
                 };
             case "map":
@@ -42950,7 +42956,7 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${bodyType.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${bodyType.c} _r = ${bodyC}; ` +
+                        `{ if (${hasElement(iv)}) { ${bindings} ${bodyType.c} _r = ${bodyC}; ` +
                         `tsc_array_push_raw(_dst, &_r); } else { ${bodyType.c} _hole = {0}; ` +
                         `tsc_array_push_raw(_dst, &_hole); tsc_array_mark_hole(_dst, _dst->len - 1); } } _dst; })`,
                     ty: arrayType(bodyType),
@@ -42968,7 +42974,7 @@ class Emitter {
                             `${ignoredSetup}` +
                             `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${inner.c} _r = ${bodyC}; ` +
+                        `{ if (${hasElement(iv)}) { ${bindings} ${inner.c} _r = ${bodyC}; ` +
                         `${push}; } } _dst; })`,
                         ty: arrayType(inner),
                     };
@@ -42980,12 +42986,14 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${inner.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} tsc_array_t* _r = ${bodyC}; ` +
+                        `{ if (${hasElement(iv)}) { ${bindings} tsc_array_t* _r = ${bodyC}; ` +
                         `tsc_array_append(_dst, _r); } } _dst; })`,
                     ty: arrayType(inner),
                 };
             }
             case "filter":
+                {
+                const filterBindings = bindings.replaceAll(elementExpr, "_el");
                 return {
                     c:
                         `({ tsc_array_t* const ${av} = ${recv.c}; ` +
@@ -42993,10 +43001,11 @@ class Emitter {
                         `${ignoredSetup}` +
                         `tsc_array_t* _dst = tsc_array_new(sizeof(${et.c}), ${av}->len); ` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${et.c} _el = TSC_ARR(${et.c}, ${av}, ${iv}); ${bindings} ` +
+                        `{ if (${hasElement(iv)}) { ${et.c} _el = ${elementExpr}; ${filterBindings} ` +
                         `if (${bodyC}) tsc_array_push_raw(_dst, &_el); } } _dst; })`,
                     ty: recv.ty,
                 };
+                }
             case "reduce": {
                 const hasInit = args.length >= 2;
                 const initR = hasInit ? this.emitExpr(args[1]!) : null;
@@ -43012,7 +43021,7 @@ class Emitter {
                     ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = 0;`
                     : `${accType.c} ${accName}; size_t ${iv}_start = 0; bool ${iv}_found = false; ` +
                         `for (; ${iv}_start < ${av}->len; ${iv}_start++) { ` +
-                        `if (tsc_array_index_present(${av}, ${iv}_start)) { ${accName} = TSC_ARR(${accType.c}, ${av}, ${iv}_start); ` +
+                        `if (${hasElement(`${iv}_start`)}) { ${accName} = ${elementAt(`${iv}_start`)}; ` +
                         `${iv}_start++; ${iv}_found = true; break; } } ` +
                         `if (!${iv}_found) tsc_throw_str(tsc_str_from_cstr("Array.reduce: empty array with no initial value"));`;
                 return {
@@ -43021,7 +43030,7 @@ class Emitter {
                         `${initC} ` +
                         `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
+                        `{ if (${hasElement(iv)}) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
                     ty: accType,
                 };
             }
@@ -43038,7 +43047,7 @@ class Emitter {
                     ? `${accType.c} ${accName} = ${initR.c}; size_t ${iv}_start = ${av}->len;`
                     : `${accType.c} ${accName}; size_t ${iv}_start = ${av}->len; bool ${iv}_found = false; ` +
                         `while (${iv}_start > 0) { ${iv}_start--; ` +
-                        `if (tsc_array_index_present(${av}, ${iv}_start)) { ${accName} = TSC_ARR(${accType.c}, ${av}, ${iv}_start); ` +
+                        `if (${hasElement(`${iv}_start`)}) { ${accName} = ${elementAt(`${iv}_start`)}; ` +
                         `${iv}_found = true; break; } } ` +
                         `if (!${iv}_found) tsc_throw_str(tsc_str_from_cstr("Array.reduceRight: empty array with no initial value"));`;
                 return {
@@ -43047,7 +43056,7 @@ class Emitter {
                         `${initC} ` +
                         `${reduceIgnoredSetup}` +
                         `for (size_t ${iv} = ${iv}_start; ${iv}-- > 0;) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
+                        `{ if (${hasElement(iv)}) { ${bindings} ${accName} = ${bodyC.replaceAll("_acc_rd", accName)}; } } ${accName}; })`,
                     ty: accType,
                 };
             }
@@ -43079,7 +43088,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv}) || ${et.kind === "value" ? "true" : "false"}) { ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } } _r; })`,
+                        `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
                 };
             case "findLastIndex":
@@ -43089,7 +43098,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = ${av}->len; ${iv}-- > 0;) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv}) || ${et.kind === "value" ? "true" : "false"}) { ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } } _r; })`,
+                        `{ ${bindings} if (${bodyC}) { _r = (double)${iv}; break; } } _r; })`,
                     ty: T_NUMBER,
                 };
             case "some":
@@ -43099,7 +43108,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && !_r; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} if (${bodyC}) _r = true; } } _r; })`,
+                        `{ if (${hasElement(iv)}) { ${bindings} if (${bodyC}) _r = true; } } _r; })`,
                     ty: T_BOOLEAN,
                 };
             case "every":
@@ -43109,7 +43118,7 @@ class Emitter {
                         `${thisArgSetup}` +
                         `${ignoredSetup}` +
                         `for (size_t ${iv} = 0; ${iv} < ${av}->len && _r; ${iv}++) ` +
-                        `{ if (tsc_array_index_present(${av}, ${iv})) { ${bindings} if (!(${bodyC})) _r = false; } } _r; })`,
+                        `{ if (${hasElement(iv)}) { ${bindings} if (!(${bodyC})) _r = false; } } _r; })`,
                     ty: T_BOOLEAN,
                 };
         }
