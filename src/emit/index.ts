@@ -42251,10 +42251,13 @@ class Emitter {
                     { value: index, target: T_NUMBER, node: args[0] ?? call.expression },
                     ...this.ignoredArgumentSpecs(args, 1),
                 ], ([arr, idx]) => {
+                    if (et.kind === "value") {
+                        return `tsc_value_method_at(tsc_value_array(${arr}), tsc_value_num(${idx}))`;
+                    }
                     const av = this.freshTemp("_arr");
                     const nv = this.freshTemp("_at");
                     const rv = this.freshTemp("_atv");
-                    const missing = et.kind === "value" ? "tsc_value_undefined()" : `(${et.c})0`;
+                    const missing = `(${et.c})0`;
                     return `({ tsc_array_t* const ${av} = ${arr}; double ${nv} = ${idx}; if (isnan(${nv})) ${nv} = 0.0; if (${nv} < 0) ${nv} = (double)${av}->len + ${nv}; ${et.c} ${rv} = ${missing}; if (!isinf(${nv}) && ${nv} >= 0 && ${nv} < (double)${av}->len && tsc_array_index_present(${av}, (size_t)${nv})) ${rv} = TSC_ARR(${et.c}, ${av}, (size_t)${nv}); ${rv}; })`;
                 });
             }
