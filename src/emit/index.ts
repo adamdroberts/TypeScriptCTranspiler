@@ -281,6 +281,7 @@ class Emitter {
     private promiseThenAdapters = new Map<string, string>();
     private promiseFinallyAdapters = new Map<string, string>();
     private asyncAwaitReturnContinuationAdapters = 0;
+    private asyncAwaitContinuationAdapterDepth = 0;
     private promiseExecutorEnvDeclared = false;
     private commonJsExportGlobals = new Set<string>();
     private requireDestructureTypes = new Map<ts.Symbol, CType>();
@@ -24744,6 +24745,28 @@ class Emitter {
             if (ts.isContinueStatement(stmt)) {
                 return !stmt.label && allowContinue;
             }
+            if (ts.isThrowStatement(stmt)) {
+                visit(stmt.expression);
+                return ok;
+            }
+            if (ts.isTryStatement(stmt)) {
+                if (!visitStatement(stmt.tryBlock, loopDepth, allowContinue)) return false;
+                if (stmt.catchClause) {
+                    const catchDecl = stmt.catchClause.variableDeclaration;
+                    let catchSymbol: ts.Symbol | null = null;
+                    if (catchDecl) {
+                        if (!ts.isIdentifier(catchDecl.name)) return false;
+                        catchSymbol = this.symbolForIdentifier(catchDecl.name) ?? null;
+                        if (!catchSymbol) return false;
+                        locals.add(catchSymbol);
+                    }
+                    const catchOk = visitStatement(stmt.catchClause.block, loopDepth, allowContinue);
+                    if (catchSymbol) locals.delete(catchSymbol);
+                    if (!catchOk) return false;
+                }
+                if (stmt.finallyBlock && !visitStatement(stmt.finallyBlock, loopDepth, allowContinue)) return false;
+                return true;
+            }
             return false;
         };
         for (const stmt of postAwaitStatements) {
@@ -24862,10 +24885,12 @@ class Emitter {
         this.argumentValueScopes.push(scope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let returned: EmitResult;
+        this.asyncAwaitContinuationAdapterDepth++;
         try {
             for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
             returned = this.emitExpr(returnExpr);
         } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
         }
@@ -29881,7 +29906,11 @@ class Emitter {
     private emitThrow(buf: CBuf, t: ts.ThrowStatement): void {
         const e = this.emitExpr(t.expression);
         const asStr = this.coerceToString(e, t.expression);
-        if (this.asyncFunctionStack.length > 0 && this.tryDepth === 0) {
+        if (
+            this.asyncFunctionStack.length > 0 &&
+            this.tryDepth === 0 &&
+            this.asyncAwaitContinuationAdapterDepth === 0
+        ) {
             buf.line(`return tsc_promise_reject(tsc_value_string(${asStr}));`);
             return;
         }
