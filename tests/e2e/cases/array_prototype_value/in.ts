@@ -7,8 +7,10 @@ console.log("own keys:", Object.keys(proto).length, Object.values(proto).length,
 console.log("reflect:", Reflect.ownKeys(proto).includes("length"), Reflect.getOwnPropertyDescriptor(proto, "length") !== undefined);
 const ownNames: string[] = Object.getOwnPropertyNames(Array.prototype);
 const reflectOwnKeys: string[] = Reflect.ownKeys(Array.prototype);
+const allDescriptors: any = Object.getOwnPropertyDescriptors(Array.prototype);
 console.log("own names:", ownNames.length, ownNames[0], ownNames.includes("constructor"), ownNames.includes("map"), ownNames.includes("valueOf"));
 console.log("reflect own names:", reflectOwnKeys.length, reflectOwnKeys[0], reflectOwnKeys.includes("constructor"), reflectOwnKeys.includes("map"), reflectOwnKeys.includes("valueOf"));
+console.log("all descriptors:", Object.keys(allDescriptors).length, allDescriptors["length"].value, allDescriptors.constructor.value === Array, allDescriptors.map.value === proto.map, Object.hasOwn(allDescriptors, "valueOf"));
 const lengthDescriptor: any = Reflect.getOwnPropertyDescriptor(proto, "length");
 console.log("length descriptor:", lengthDescriptor.value, lengthDescriptor.writable, lengthDescriptor.enumerable, lengthDescriptor.configurable, Reflect.set(proto, "length", 1), proto.length);
 const map: any = proto.map;
