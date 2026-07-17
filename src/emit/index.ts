@@ -25009,17 +25009,32 @@ class Emitter {
             thisValue,
         );
         if (!firstLink) return null;
+        const firstSymbol = this.symbolForIdentifier(first.variable);
+        if (!firstSymbol) return null;
+        const firstCapture = {
+            symbol: firstSymbol,
+            name: mangleIdent(first.variable.text),
+            type: this.prepareType(mapTsType(
+                first.awaitExpr,
+                this.checker.getTypeAtLocation(first.awaitExpr),
+                this.checker,
+            )),
+            field: `capture_${mangleIdent(first.variable.text)}`,
+        };
         const secondLink = this.asyncAwaitTwoStepContinuationReferences(
             second.variable,
             third.variable,
             third.awaitExpr.expression,
             result.expression ?? null,
-            params,
+            [...params, firstCapture],
             thisValue,
         );
         if (!secondLink) return null;
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
-        for (const param of [...firstLink.params, ...secondLink.params]) paramsBySymbol.set(param.symbol, param);
+        for (const param of [...firstLink.params, ...secondLink.params]) {
+            if (param.symbol !== firstSymbol) paramsBySymbol.set(param.symbol, param);
+        }
+        const secondLinkUsesFirst = secondLink.params.some((param) => param.symbol === firstSymbol);
         return {
             firstVariable: first.variable,
             firstAwaitExpr: first.awaitExpr,
@@ -25030,7 +25045,7 @@ class Emitter {
             returnExpr: result.expression ?? null,
             params: [...paramsBySymbol.values()],
             thisValue: firstLink.usesThis || secondLink.usesThis ? thisValue : null,
-            usesFirstAwaited: firstLink.usesFirstAwaited,
+            usesFirstAwaited: firstLink.usesFirstAwaited || secondLinkUsesFirst,
             usesSecondAwaited: secondLink.usesFirstAwaited,
             usesThirdAwaited: secondLink.usesSecondAwaited,
         };

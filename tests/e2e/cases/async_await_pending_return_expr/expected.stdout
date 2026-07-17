@@ -31,6 +31,6 @@ method-do-while: do-do0do1
 two-await: one:fn-one-two!
 method-two-await: method-one:class-method-two-method-one!
 arrow-two-await: arrow-one:value-arrow-one!
-three-await: one:fn-one-two:fn-one-two-three!
-method-three-await: method-one:class-method-three-method-one:class-method-three-method-one-three!
-arrow-three-await: arrow-one:value-arrow-one:value-arrow-one-three!
+three-await: one:fn-one-two:one:fn-one-two-three!
+method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
+arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
