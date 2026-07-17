@@ -6,3 +6,6 @@
 red -> #ff0000
 green -> #00ff00
 purple -> #000000
+status 200 -> ok
+status 404 -> missing
+status 500 -> other
