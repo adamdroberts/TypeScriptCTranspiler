@@ -16,6 +16,11 @@ function classify(n: number, i: number): string {
 const tagged = Array.from(nums, classify);
 console.log("tagged:", tagged.join(";"));
 
+const sparseNums: number[] = [1, 2, 3];
+delete sparseNums[1];
+const sparseMapped = Array.from(sparseNums, (n: any, i) => i + ":" + String(n));
+console.log("sparse mapped:", sparseMapped.join("|"));
+
 const letters = Array.from("abc", (c, i) => c + i);
 console.log("letters:", letters.join(","));
 
