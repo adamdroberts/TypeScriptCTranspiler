@@ -1293,6 +1293,9 @@ tsc_array_t* tsc_array_fill(tsc_array_t* a, const void* elem, double start, doub
     int64_t i1 = array_range_index(end, len, (double)len);
     if (i1 < i0) i1 = i0;
     for (int64_t i = i0; i < i1; i++) {
+        if (!tsc_array_index_present(a, (size_t)i) && !a->extensible) {
+            tsc_throw_str(tsc_str_from_cstr("Array.prototype.fill could not create array element"));
+        }
         memcpy((char*)a->data + (size_t)i * a->es, elem, a->es);
         tsc_array_clear_hole(a, (size_t)i);
     }
@@ -1308,26 +1311,26 @@ tsc_array_t* tsc_array_copy_within(tsc_array_t* a, double target, double start, 
     int64_t room = len - to;
     if (count > room) count = room;
     if (count > 0) {
-        bool* source_present = NULL;
-        if (a->holes && a->es == sizeof(tsc_value_t)) {
-            source_present = (bool*)TSC_GC_MALLOC((size_t)count * sizeof(bool));
-            for (int64_t i = 0; i < count; i++) {
-                source_present[i] = tsc_array_index_present(a, (size_t)from + (size_t)i);
-            }
+        int64_t direction = 1;
+        if (from < to && to < from + count) {
+            direction = -1;
+            from += count - 1;
+            to += count - 1;
         }
-        memmove(
-            (char*)a->data + (size_t)to * a->es,
-            (char*)a->data + (size_t)from * a->es,
-            (size_t)count * a->es
-        );
-        if (source_present) {
-            for (int64_t i = 0; i < count; i++) {
-                size_t target = (size_t)to + (size_t)i;
-                if (source_present[i]) {
-                    tsc_array_clear_hole(a, target);
-                } else {
-                    tsc_array_mark_hole(a, target);
+        for (int64_t i = 0; i < count; i++, from += direction, to += direction) {
+            size_t source = (size_t)from;
+            size_t target = (size_t)to;
+            if (tsc_array_index_present(a, source)) {
+                if (!tsc_array_index_present(a, target) && !a->extensible) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not create array element"));
                 }
+                memmove((char*)a->data + target * a->es, (char*)a->data + source * a->es, a->es);
+                tsc_array_clear_hole(a, target);
+            } else {
+                if (tsc_array_index_present(a, target) && (a->sealed || a->frozen)) {
+                    tsc_throw_str(tsc_str_from_cstr("Array.prototype.copyWithin could not delete array element"));
+                }
+                tsc_array_mark_hole(a, target);
             }
         }
     }

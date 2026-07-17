@@ -1,0 +1,10 @@
+typed fill: Array.prototype.fill could not create array element
+typed fill state: 9||3 0|2
+typed copy create: Array.prototype.copyWithin could not create array element
+typed copy create state: 1||3 0|2
+typed copy delete: Array.prototype.copyWithin could not delete array element
+typed copy delete state: |2|3 1|2
+dynamic fill: Array.prototype.fill could not write array-like element
+dynamic fill state: 9||3 0|2
+dynamic copy create: Array.prototype.copyWithin could not write array-like element
+dynamic copy create state: 1||3 0|2
