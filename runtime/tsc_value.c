@@ -41,8 +41,36 @@ static bool value_proxy_chain_is_array(tsc_value_t v) {
     return o && o->is_proxy && value_proxy_chain_is_array(o->proxy_target);
 }
 
+static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key);
+
+static tsc_str_t* value_object_to_string_tag_override(tsc_value_t v) {
+    if (!value_is_box(v)) return NULL;
+    tsc_value_tag_t tag = value_tag(v);
+    if (
+        tag != TSC_VALUE_TAG_OBJECT &&
+        tag != TSC_VALUE_TAG_ARRAY &&
+        tag != TSC_VALUE_TAG_FUNCTION
+    ) {
+        return NULL;
+    }
+    tsc_value_t custom_tag = tsc_value_get_prop(
+        v,
+        value_known_symbol_internal_key(tsc_symbol_to_string_tag())
+    );
+    if (value_is_box(custom_tag) && value_tag(custom_tag) == TSC_VALUE_TAG_STRING) {
+        tsc_str_t* text = (tsc_str_t*)value_ptr(custom_tag);
+        return tsc_str_concat(
+            tsc_str_concat(tsc_str_from_lit("[object ", 8), text),
+            tsc_str_from_lit("]", 1)
+        );
+    }
+    return NULL;
+}
+
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
     if (!value_is_box(v)) return tsc_str_from_lit("[object Number]", 15);
+    tsc_str_t* custom_tag = value_object_to_string_tag_override(v);
+    if (custom_tag) return custom_tag;
     switch (value_tag(v)) {
         case TSC_VALUE_TAG_FUNCTION: return tsc_str_from_lit("[object Function]", 17);
         case TSC_VALUE_TAG_UNDEFINED: return tsc_str_from_lit("[object Undefined]", 18);
@@ -844,6 +872,9 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
 static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key) {
     if (key == tsc_symbol_is_concat_spreadable()) {
         return tsc_str_from_cstr("__tsc_symbol_isConcatSpreadable");
+    }
+    if (key == tsc_symbol_to_string_tag()) {
+        return tsc_str_from_cstr("__tsc_symbol_toStringTag");
     }
     return NULL;
 }
