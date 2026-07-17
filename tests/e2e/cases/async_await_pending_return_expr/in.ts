@@ -78,8 +78,19 @@ class Worker {
         return result;
     }
 
+    async branchUninitializedLet(flag: boolean): Promise<string> {
+        const value = await delay(flag ? 26 : 27, "uninit");
+        let result: string;
+        if (flag) {
+            result = this.prefix + value;
+        } else {
+            result = this.prefix + "miss";
+        }
+        return result;
+    }
+
     async loopAfterAwait(count: number): Promise<string> {
-        const value = await delay(26, "loop");
+        const value = await delay(28, "loop");
         let result = this.prefix;
         let index = 0;
         while (index < count) {
@@ -90,7 +101,7 @@ class Worker {
     }
 
     async forAfterAwait(count: number): Promise<string> {
-        const value = await delay(27, "for");
+        const value = await delay(29, "for");
         let result = this.prefix;
         for (let index = 0; index < count; index = index + 1) {
             result = result + value;
@@ -99,7 +110,7 @@ class Worker {
     }
 
     async forOfAfterAwait(): Promise<string> {
-        const value = await delay(28, "of");
+        const value = await delay(30, "of");
         const parts = [this.prefix, value, "!"];
         let result = "";
         for (const part of parts) {
@@ -109,7 +120,7 @@ class Worker {
     }
 
     async forInAfterAwait(): Promise<string> {
-        const value = await delay(29, "in");
+        const value = await delay(31, "in");
         let result = this.prefix;
         for (const key in [this.prefix, value, "!"]) {
             if (key === "1") continue;
@@ -120,7 +131,7 @@ class Worker {
     }
 
     async loopControlAfterAwait(): Promise<string> {
-        const value = await delay(30, "ctrl");
+        const value = await delay(32, "ctrl");
         let result = this.prefix;
         let index = 0;
         while (index < 5) {
@@ -136,7 +147,7 @@ class Worker {
     }
 
     async tryCatchAfterAwait(): Promise<string> {
-        const value = await delay(31, "try");
+        const value = await delay(33, "try");
         let result = this.prefix;
         try {
             throw value + "!";
@@ -149,19 +160,19 @@ class Worker {
     }
 
     async throwAfterAwait(): Promise<string> {
-        const value = await delay(32, "throw");
+        const value = await delay(34, "throw");
         throw this.prefix + value;
         return "never";
     }
 
     async earlyReturnAfterAwait(flag: boolean): Promise<string> {
-        const value = await delay(flag ? 33 : 34, "return");
+        const value = await delay(flag ? 35 : 36, "return");
         if (flag) return this.prefix + value;
         return this.prefix + "late-" + value;
     }
 
     async switchReturnAfterAwait(kind: string): Promise<string> {
-        const value = await delay(kind === "a" ? 35 : 36, kind);
+        const value = await delay(kind === "a" ? 37 : 38, kind);
         switch (value) {
             case "a":
                 return this.prefix + "alpha";
@@ -226,6 +237,10 @@ new Worker("if-").conditionalSideEffect(true).then((value: string): void => {
 
 new Worker("branch-").branchLet(true).then((value: string): void => {
     console.log("method-branch-let:", value);
+});
+
+new Worker("uninit-").branchUninitializedLet(true).then((value: string): void => {
+    console.log("method-branch-uninit-let:", value);
 });
 
 new Worker("loop-").loopAfterAwait(2).then((value: string): void => {

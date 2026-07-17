@@ -11,6 +11,7 @@ arrow-param: value-arrow-param
 method-side-effect: effect-side
 method-if-side-effect: if-branch
 method-branch-let: branch-let
+method-branch-uninit-let: uninit-uninit
 method-loop: loop-looploop
 method-for: for-forfor
 method-for-of: forof-of!
