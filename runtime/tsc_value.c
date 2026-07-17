@@ -1793,6 +1793,7 @@ tsc_array_t* value_array_keys(const tsc_array_t* src, bool include_length) {
         tsc_str_t* key = TSC_ARR(tsc_str_t*, side_keys, i);
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx) && idx < src->len) continue;
+        if (src == tsc_array_prototype() && str_lit_eq(key, "valueOf")) continue;
         tsc_array_push_raw(out, &key);
     }
     return out;
