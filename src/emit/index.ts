@@ -49354,10 +49354,18 @@ class Emitter {
             expr.name.text === "isConcatSpreadable";
     }
 
+    private isSymbolToStringTagExpression(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "Symbol" &&
+            expr.name.text === "toStringTag";
+    }
+
     private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
         return this.isSymbolIteratorExpression(expr) ||
             this.isSymbolUnscopablesExpression(expr) ||
-            this.isSymbolIsConcatSpreadableExpression(expr);
+            this.isSymbolIsConcatSpreadableExpression(expr) ||
+            this.isSymbolToStringTagExpression(expr);
     }
 
     private isStaticArrayPrototypeExpression(expr: ts.Expression): boolean {
@@ -54647,6 +54655,9 @@ class Emitter {
             }
             if (pa.expression.text === "Symbol" && pa.name.text === "isConcatSpreadable") {
                 return { c: `tsc_symbol_is_concat_spreadable()`, ty: T_SYMBOL };
+            }
+            if (pa.expression.text === "Symbol" && pa.name.text === "toStringTag") {
+                return { c: `tsc_symbol_to_string_tag()`, ty: T_SYMBOL };
             }
         }
         // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")

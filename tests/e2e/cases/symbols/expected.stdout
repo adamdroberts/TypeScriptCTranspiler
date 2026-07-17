@@ -9,5 +9,6 @@ typeof: symbol
 iterator: true Symbol.iterator
 async: true Symbol.asyncIterator
 spreadable: true Symbol.isConcatSpreadable
+tag: true Symbol.toStringTag
 ignored desc: d true f
 ignored methods: Symbol(d) Symbol(d) true dxufgktlv

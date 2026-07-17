@@ -35,3 +35,15 @@ console.log(
     Object.prototype.toString.call(5),
     Object.prototype.toString.call(true),
 );
+
+Object.defineProperty(dynamicArray, Symbol.toStringTag, { value: "CustomArray" });
+console.log("own tag:", Object.prototype.toString.call(dynamicArray));
+
+const taggedProto: any = {};
+Object.defineProperty(taggedProto, Symbol.toStringTag, { value: "ProtoTag" });
+const protoTagged: any = [];
+Object.setPrototypeOf(protoTagged, taggedProto);
+console.log("proto tag:", Object.prototype.toString.call(protoTagged));
+
+Object.defineProperty(dynamicObject, Symbol.toStringTag, { value: 123 });
+console.log("non-string tag:", Object.prototype.toString.call(dynamicObject));
