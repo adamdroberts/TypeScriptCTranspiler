@@ -24739,6 +24739,17 @@ class Emitter {
                 if (!ok) return false;
                 return visitStatement(stmt.statement, loopDepth + 1, true);
             }
+            if (ts.isForInStatement(stmt)) {
+                if (ts.isVariableDeclarationList(stmt.initializer)) {
+                    if (!visitVariableDeclarationList(stmt.initializer, false)) return false;
+                } else {
+                    visit(stmt.initializer);
+                    if (!ok) return false;
+                }
+                visit(stmt.expression);
+                if (!ok) return false;
+                return visitStatement(stmt.statement, loopDepth + 1, true);
+            }
             if (ts.isBreakStatement(stmt)) {
                 return !stmt.label && loopDepth > 0;
             }
