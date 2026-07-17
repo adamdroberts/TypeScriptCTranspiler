@@ -2867,7 +2867,6 @@ tsc_value_t tsc_value_method_pop(tsc_value_t recv) {
         if (a->sealed || a->frozen) {
             tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop cannot mutate a sealed or frozen array"));
         }
-        if (!a->length_writable) return tsc_value_undefined();
     }
     if (value_is_box(recv) && (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT)) {
         size_t len = (size_t)tsc_value_length(recv);

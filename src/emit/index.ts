@@ -42102,7 +42102,11 @@ class Emitter {
                         : `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${rv} = ${missing}; ` +
                             `if (${av}->len > 0 && tsc_array_index_present(${av}, ${av}->len - 1)) ` +
                             `${rv} = TSC_ARR(${et.c}, ${av}, ${av}->len - 1); ` +
-                            `if (${av}->frozen || (${av}->sealed && ${av}->len > 0 && tsc_array_index_present(${av}, ${av}->len - 1))) tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop cannot mutate a sealed or frozen array")); else if (${av}->length_writable) tsc_array_pop_raw(${av}); ${rv}; })`,
+                            `if (${av}->frozen || (${av}->sealed && ${av}->len > 0 && tsc_array_index_present(${av}, ${av}->len - 1))) ` +
+                            `tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop cannot mutate a sealed or frozen array")); ` +
+                            `else if (!${av}->length_writable) { if (${av}->len > 0) tsc_array_mark_hole(${av}, ${av}->len - 1); ` +
+                            `tsc_throw_str(tsc_str_from_cstr("Array.prototype.pop could not update array-like length")); } ` +
+                            `else tsc_array_pop_raw(${av}); ${rv}; })`,
                 );
             }
             case "shift": {
