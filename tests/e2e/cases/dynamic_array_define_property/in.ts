@@ -67,6 +67,18 @@ console.log("default index:", Reflect.defineProperty(defaultIndex, "2", { value:
 const defaultDesc: any = Object.getOwnPropertyDescriptor(defaultIndex, "2");
 console.log("default flags:", defaultDesc.value, defaultDesc.writable, defaultDesc.enumerable, defaultDesc.configurable);
 
+const closedExisting: any = ["open"];
+Object.preventExtensions(closedExisting);
+console.log(
+    "closed existing:",
+    Reflect.defineProperty(closedExisting, "0", { value: "closed", writable: false, enumerable: false, configurable: false }),
+    Object.isExtensible(closedExisting),
+    closedExisting[0],
+    Reflect.set(closedExisting, "0", "changed"),
+    Reflect.deleteProperty(closedExisting, "0"),
+    "[" + Object.keys(closedExisting).join("|") + "]",
+);
+
 const lengthTarget: any = [1, 2, 3];
 report("length nan", (): any => Reflect.defineProperty(lengthTarget, "length", { value: NaN }));
 report("length float", (): any => Reflect.defineProperty(lengthTarget, "length", { value: 1.5 }));

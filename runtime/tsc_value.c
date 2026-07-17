@@ -803,13 +803,17 @@ bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t v
             bool next_enumerable = has_enumerable ? enumerable : (exists ? current_enumerable : false);
             bool next_configurable = has_configurable ? configurable : (exists ? current_configurable : false);
             if (exists) {
-                if (a->sealed || a->frozen || !a->props->extensible) {
+                if (a->sealed || a->frozen) {
                     if (next_writable != current_writable || next_enumerable != current_enumerable || next_configurable != current_configurable) return false;
                     if (has_value && !tsc_value_object_is(value, TSC_ARR(tsc_value_t, a, idx))) return false;
                     return true;
                 }
                 tsc_value_t current = TSC_ARR(tsc_value_t, a, idx);
-                if (!tsc_object_define(a->props, key, current, current_writable, current_enumerable, current_configurable)) return false;
+                bool props_extensible = a->props->extensible;
+                a->props->extensible = true;
+                bool migrated = tsc_object_define(a->props, key, current, current_writable, current_enumerable, current_configurable);
+                a->props->extensible = props_extensible;
+                if (!migrated) return false;
                 if (tsc_object_define_desc(a->props, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable)) {
                     return true;
                 }
@@ -1021,14 +1025,18 @@ bool tsc_value_define_accessor_desc(tsc_value_t v, tsc_str_t* key, tsc_accessor_
         if (tsc_str_is_length_key(key)) return false;
         size_t idx = 0;
         if (tsc_str_array_index(key, &idx)) {
-            bool exists = tsc_array_index_present(a, idx) || (a->props && tsc_object_has_own(a->props, key));
+            bool side_exists = a->props && tsc_object_has_own(a->props, key);
+            bool exists = tsc_array_index_present(a, idx) || side_exists;
             if (exists) {
                 bool current_configurable = !a->sealed && !a->frozen;
                 bool next_configurable = has_configurable ? configurable : current_configurable;
                 bool next_enumerable = has_enumerable ? enumerable : true;
                 if (!current_configurable) return false;
                 if (a->frozen) return false;
+                bool props_extensible = a->props->extensible;
+                if (!side_exists) a->props->extensible = true;
                 bool ok = tsc_object_define_accessor(a->props, key, getter, getter_env, has_getter, setter, setter_env, has_setter, next_enumerable, true, next_configurable, true);
+                a->props->extensible = props_extensible;
                 if (ok) tsc_array_clear_hole(a, idx);
                 return ok;
             }

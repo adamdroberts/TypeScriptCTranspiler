@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Existing numeric elements on non-extensible dynamic arrays can now be legally redefined with stricter data descriptor flags without making the receiver externally extensible. Test: `dynamic_array_define_property`.
+- Existing configurable numeric elements on non-extensible dynamic arrays can now be converted into accessor descriptors through internal side storage. Test: `dynamic_array_accessor_properties`.
 - Dynamic array numeric data properties now support independent writable, enumerable, and configurable descriptor flags, including default-false descriptors on new indexes with array length and hole bookkeeping. Test: `dynamic_array_define_property`.
 - Concrete typed sparse array `sort` now compacts only present elements, sorts them, writes the prefix, and deletes the tail while enforcing non-extensible and sealed failures in operation order. Test: `array_sparse_sort_extensibility`.
 - Typed sparse array `fill` and `copyWithin` now enforce non-extensible property creation and sealed deletion failures in indexed operation order. Test: `array_sparse_write_extensibility`.
