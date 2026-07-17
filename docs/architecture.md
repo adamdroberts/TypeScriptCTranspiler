@@ -130,7 +130,7 @@ Cross-type arithmetic / equality is rejected by the emitter with a `Cannot coerc
 
 ## Dynamic value path
 
-Phase 3 now has its foundation: `any` / `unknown` and heterogeneous unions use NaN-boxed `tsc_value_t`. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` still covers the remaining high-performance object work; summary:
+Phase 3 dynamic values use NaN-boxed `tsc_value_t` for `any` / `unknown` and heterogeneous unions, with descriptor-aware dynamic objects and arrays, shared Object/Array prototype values, hidden-class shape metadata, and focused inline caches on hot dynamic property sites. The plan in `~/.claude/plans/make-a-typescript-to-floating-comet.md` still covers broader performance and polish work; summary:
 
 ```mermaid
 flowchart TD
@@ -142,7 +142,7 @@ flowchart TD
     D <--> B
 ```
 
-The current bridge boxes specialized primitives/arrays into `tsc_value_t` and supports dynamic JSON/object/array access, dynamic arithmetic/equality/relational/logical/nullish operators, common string/array method dispatch, per-site shape-validated caches for selected object property and Reflect get/set operations, and unboxing into typed destinations. Remaining Phase 3 work includes hidden classes / shape trees, broader polymorphic inline caches, broader prototype method coverage, and descriptor-aware property semantics. See [`todo.md`](todo.md#1-next-up-unblockers) for impact and effort.
+The current bridge boxes specialized primitives/arrays into `tsc_value_t` and supports dynamic JSON/object/array access, dynamic arithmetic/equality/relational/logical/nullish operators, shared Object/Array prototype method dispatch, descriptor-aware Object/Reflect helpers, per-site shape-validated caches for selected object property and Reflect get/set operations, and unboxing into typed destinations. Remaining roadmap work is tracked in [`todo.md`](todo.md#1-next-up-unblockers), starting with `async` / `await` lowering and libuv-backed async I/O.
 
 ## Runtime layer
 

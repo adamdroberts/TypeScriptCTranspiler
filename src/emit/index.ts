@@ -55560,6 +55560,18 @@ class Emitter {
                 const tmpIn = this.freshTemp("_arrIn");
                 const tmpOut = this.freshTemp("_arrOut");
                 const idx = this.freshTemp("_idx");
+                if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
+                    if (target.elem.kind === "value") return r.c;
+                    const converted = this.freshTemp("_converted");
+                    const convertedExpr = this.coerce({ c: "NULL", ty: T_VOID }, target.elem, node);
+                    return (
+                        `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); ` +
+                        `tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(${target.elem.c}), ${tmpIn}->len ? ${tmpIn}->len : 1); ` +
+                        `for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { ` +
+                        `${target.elem.c} ${converted} = ${convertedExpr}; tsc_array_push_raw(${tmpOut}, &${converted}); ` +
+                        `if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}; })`
+                    );
+                }
                 const elem = this.freshTemp("_elem");
                 const converted = this.freshTemp("_converted");
                 const convertedExpr = this.coerce({ c: elem, ty: r.ty.elem }, target.elem, node);
@@ -55641,6 +55653,12 @@ class Emitter {
                     return `tsc_value_string(${r.c})`;
                 case "array": {
                     if (r.ty.elem && r.ty.elem.kind !== "value") {
+                        if (r.ty.elem.kind === "void" || r.ty.elem.kind === "never") {
+                            const tmpIn = this.freshTemp("_arrIn");
+                            const tmpOut = this.freshTemp("_arrOut");
+                            const idx = this.freshTemp("_idx");
+                            return `({ tsc_array_t* ${tmpIn} = ${r.c}; tsc_array_materialize_all(${tmpIn}); tsc_array_t* ${tmpOut} = tsc_array_new(sizeof(tsc_value_t), ${tmpIn}->len ? ${tmpIn}->len : 1); for (size_t ${idx} = 0; ${idx} < ${tmpIn}->len; ${idx}++) { tsc_value_t _boxed = tsc_value_undefined(); tsc_array_push_raw(${tmpOut}, &_boxed); if (!tsc_array_index_present(${tmpIn}, ${idx})) tsc_array_mark_hole(${tmpOut}, ${tmpOut}->len - 1); } ${tmpOut}->iter_pos = ${tmpIn}->iter_pos; ${tmpOut}->iter_has_return = ${tmpIn}->iter_has_return; ${tmpOut}->iter_return_consumed = ${tmpIn}->iter_return_consumed; ${tmpOut}->iter_return = ${tmpIn}->iter_return; tsc_value_array(${tmpOut}); })`;
+                        }
                         const tmpIn = this.freshTemp("_arrIn");
                         const tmpOut = this.freshTemp("_arrOut");
                         const idx = this.freshTemp("_idx");
@@ -55698,6 +55716,7 @@ class Emitter {
                 case "promise":
                     return `tsc_value_promise(${r.c})`;
                 case "void":
+                case "never":
                     if (ts.isExpression(node) && this.isNullExpression(node)) return `tsc_value_null()`;
                     if (ts.isExpression(node) && this.isUndefinedLikeExpression(node)) return `tsc_value_undefined()`;
                     if (r.c !== "NULL" && r.c !== "(void)0") {

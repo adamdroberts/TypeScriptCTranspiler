@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- `docs/todo.md` no longer lists the stale Phase 3 Array prototype blocker after the completed dynamic Array prototype, descriptor, symbol, and shape-cache work; Phase 6 async lowering is now the next-up blocker.
 - `Object.getOwnPropertyDescriptors(Array.prototype)` now includes `Symbol.iterator` and `Symbol.unscopables` descriptor entries as symbol properties, while hiding their internal backing keys from string-key enumeration. Test: `array_prototype_value`.
 - The runtime Array constructor now exposes callable `isArray`, `from`, and `of` static methods with standard writable, non-enumerable, configurable descriptors, and detached static method calls work through the boxed function dispatcher. Test: `array_prototype_constructor`.
 - `Array[Symbol.species]` now exposes the standard non-enumerable configurable getter on the Array constructor, and `Symbol.species` is available as a supported well-known symbol. Tests: `array_prototype_constructor`, `symbols`.
