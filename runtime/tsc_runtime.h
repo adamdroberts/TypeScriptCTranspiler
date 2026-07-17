@@ -746,6 +746,7 @@ tsc_value_t tsc_value_object_assign(tsc_value_t target, tsc_value_t source);
 double tsc_value_length(tsc_value_t v);
 tsc_array_t* tsc_value_iter_values(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator(tsc_value_t v);
+tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v);
 tsc_value_t tsc_value_symbol_iterator_method_value(void);
 tsc_value_t tsc_value_symbol_unscopables(tsc_value_t v);
 tsc_array_t* tsc_value_array_from_values(tsc_value_t v);

@@ -2393,6 +2393,13 @@ tsc_value_t tsc_value_symbol_iterator_method_value(void) {
     );
 }
 
+tsc_value_t tsc_value_symbol_iterator_method(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        return tsc_value_symbol_iterator_method_value();
+    }
+    return tsc_value_undefined();
+}
+
 tsc_value_t tsc_value_symbol_unscopables(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
         return tsc_array_unscopables_value();
