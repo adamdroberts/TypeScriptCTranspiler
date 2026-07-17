@@ -123,6 +123,7 @@ interface AsyncAwaitReturnContinuation {
     awaitExpr: ts.AwaitExpression;
     returnExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
+    thisValue: EmitResult | null;
 }
 
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
@@ -23108,7 +23109,12 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
-                                this.emitAsyncAwaitReturnContinuation(this.defs, m.body, m.parameters));
+                                this.emitAsyncAwaitReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ));
                         if (!handledAsyncAwait) {
                             this.emitStmtList(this.defs, m.body.statements);
                             if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
@@ -24505,7 +24511,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
-                !this.emitAsyncAwaitReturnContinuation(this.defs, fd.body, fd.parameters)) {
+                !this.emitAsyncAwaitReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null)) {
                 this.emitStmtList(this.defs, fd.body.statements);
                 this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
             }
@@ -24551,6 +24557,7 @@ class Emitter {
     private asyncAwaitReturnContinuation(
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
     ): AsyncAwaitReturnContinuation | null {
         if (body.statements.length !== 2) return null;
         const declaration = body.statements[0];
@@ -24562,9 +24569,15 @@ class Emitter {
             return null;
         }
         const params = this.asyncAwaitContinuationParameters(parameters);
-        const referenced = this.returnExpressionAsyncAwaitReferences(result.expression, variable.name, params);
+        const referenced = this.returnExpressionAsyncAwaitReferences(result.expression, variable.name, params, thisValue);
         if (!referenced) return null;
-        return { variable: variable.name, awaitExpr: variable.initializer, returnExpr: result.expression, params: referenced };
+        return {
+            variable: variable.name,
+            awaitExpr: variable.initializer,
+            returnExpr: result.expression,
+            params: referenced.params,
+            thisValue: referenced.usesThis ? thisValue : null,
+        };
     }
 
     private asyncAwaitContinuationParameters(
@@ -24592,16 +24605,26 @@ class Emitter {
         expr: ts.Expression,
         awaitedName: ts.Identifier,
         params: readonly AsyncAwaitContinuationParam[],
-    ): AsyncAwaitContinuationParam[] | null {
+        thisValue: EmitResult | null,
+    ): { params: AsyncAwaitContinuationParam[]; usesThis: boolean } | null {
         const awaitedSymbol = this.symbolForIdentifier(awaitedName);
         if (!awaitedSymbol) return null;
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        let usesThis = false;
         let ok = true;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            if (node.kind === ts.SyntaxKind.ThisKeyword) {
+                if (thisValue) {
+                    usesThis = true;
+                    return;
+                }
                 ok = false;
                 return;
             }
@@ -24625,15 +24648,16 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         visit(expr);
-        return ok ? [...referenced.values()] : null;
+        return ok ? { params: [...referenced.values()], usesThis } : null;
     }
 
     private emitAsyncAwaitReturnContinuation(
         buf: CBuf,
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
     ): boolean {
-        const continuation = this.asyncAwaitReturnContinuation(body, parameters);
+        const continuation = this.asyncAwaitReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
@@ -24653,6 +24677,7 @@ class Emitter {
             continuation.variable,
             continuation.returnExpr,
             continuation.params,
+            continuation.thisValue,
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
@@ -24663,6 +24688,9 @@ class Emitter {
         buf.line(`${env}->result_promise = ${resultPromise};`);
         for (const param of continuation.params) {
             buf.line(`${env}->${param.field} = ${param.name};`);
+        }
+        if (continuation.thisValue) {
+            buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
         }
         buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
         buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
@@ -24680,6 +24708,7 @@ class Emitter {
         variable: ts.Identifier,
         returnExpr: ts.Expression,
         params: readonly AsyncAwaitContinuationParam[],
+        thisValue: EmitResult | null,
     ): string {
         const name = `tsc_async_await_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -24689,6 +24718,9 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* result_promise;");
         for (const param of params) {
             this.structDecls.line(`${param.type.c} ${param.field};`);
+        }
+        if (thisValue) {
+            this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         }
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
@@ -24724,10 +24756,12 @@ class Emitter {
         buf.open(`if (setjmp(${eh}.jb) == 0)`);
         buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
         this.argumentValueScopes.push(scope);
+        if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let returned: EmitResult;
         try {
             returned = this.emitExpr(returnExpr);
         } finally {
+            if (thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
         }
         const returnedType = this.prepareType(returned.ty);
@@ -33759,7 +33793,12 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
-                                this.emitAsyncAwaitReturnContinuation(body, fnBody, runtimeParams));
+                                this.emitAsyncAwaitReturnContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ));
                         if (!handledAsyncAwait) {
                             for (const s of fnBody.statements) this.emitStmt(body, s);
                             if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
@@ -43778,7 +43817,12 @@ class Emitter {
                 const handledAsyncAwait =
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
-                        this.emitAsyncAwaitReturnContinuation(this.defs, info.fn.body, info.fn.parameters));
+                        this.emitAsyncAwaitReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ));
                 if (!handledAsyncAwait) {
                     for (const s of info.fn.body.statements) this.emitStmt(this.defs, s);
                     if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");

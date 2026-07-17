@@ -3,5 +3,6 @@ double: 42
 tagged: fn-tag
 method: method!
 method-param: class-method-param
+method-this: this-this-param
 arrow: arrow!
 arrow-param: value-arrow-param
