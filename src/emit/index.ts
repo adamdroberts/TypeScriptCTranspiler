@@ -42105,6 +42105,20 @@ class Emitter {
                 );
             }
             case "unshift": {
+                if (et.kind === "value") {
+                    const specs: SequencedCallArg[] = [{ value: recv }];
+                    for (const arg of args) {
+                        specs.push({ value: this.emitExpr(arg), target: et, node: arg });
+                    }
+                    return this.emitSequencedExpr(T_NUMBER, specs, ([arr, ...values]) => {
+                        const pieces: string[] = [];
+                        for (let i = values.length - 1; i >= 0; i--) {
+                            pieces.push(`tsc_value_method_unshift(tsc_value_array(${arr}), ${values[i]})`);
+                        }
+                        pieces.push(`(double)${arr}->len`);
+                        return `({ ${pieces.join("; ")}; })`;
+                    });
+                }
                 const av = this.freshTemp("_arr");
                 const pieces: string[] = [`tsc_array_t* const ${av} = ${recv.c}`];
                 const unshifts: string[] = [];
