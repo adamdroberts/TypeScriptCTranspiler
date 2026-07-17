@@ -193,7 +193,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - `.splice(start?, deleteCount?, ...items)` — in-place via `tsc_array_splice`, returning removed elements and preserving argument-count semantics for omitted versus explicit `undefined` delete counts. Test: `array_splice`
 - `.toSpliced(start?, deleteCount?, ...items)` — copy via `tsc_array_to_spliced`; original array remains unchanged, and explicit `undefined` start/delete-count values use JavaScript defaults while preserving argument-count semantics. Test: `array_to_spliced`
 - `.slice(start?, end?, ...ignored)` — `tsc_array_slice`, including explicit `undefined` defaults after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
-- `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments. Test: `array_concat_values`
+- `.concat(...items)` — copy plus `tsc_array_append`/`tsc_array_push_raw`; accepts array arguments, single element arguments, and spread elements inside array-literal arguments, with element-type-agnostic hole preservation through sparse `slice` and append operations. Test: `array_concat_values`
 - `.join(sep?, ...ignored)` — with type-driven element stringification, including explicit `undefined` default separators after evaluating ignored extra arguments. Test: `array_read_ignored_arguments`
 - `.toString(...ignored)` / `.toLocaleString(...ignored)` — typed arrays reuse comma-join stringification after evaluating ignored extra arguments. Test: `array_to_string`
 - `.valueOf(...ignored)` — returns the typed array receiver unchanged after evaluating ignored extra arguments. Test: `array_value_of`

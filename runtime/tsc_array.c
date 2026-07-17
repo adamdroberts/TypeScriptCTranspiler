@@ -1350,7 +1350,7 @@ tsc_array_t* tsc_array_slice(const tsc_array_t* a, double start, double end) {
     tsc_array_t* r = tsc_array_new(a->es, n > 0 ? n : 1);
     if (n > 0) memcpy(r->data, (char*)a->data + (size_t)i0 * a->es, n * a->es);
     r->len = n;
-    if (a->holes && a->es == sizeof(tsc_value_t)) {
+    if (a->holes) {
         for (size_t i = 0; i < n; i++) {
             if (!tsc_array_index_present(a, (size_t)i0 + i)) tsc_array_mark_hole(r, i);
         }
