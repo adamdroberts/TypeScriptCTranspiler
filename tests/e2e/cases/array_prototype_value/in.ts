@@ -33,11 +33,13 @@ console.log("function descriptors:", nameDescriptor.writable, nameDescriptor.enu
 const unscopables: any = (Array.prototype as any)[Symbol.unscopables];
 console.log("unscopables:", typeof unscopables, Object.getPrototypeOf(unscopables), Object.keys(unscopables).sort().join("|"), unscopables.at, unscopables.values, unscopables.reverse);
 const symbolKeys: symbol[] = Object.getOwnPropertySymbols(Array.prototype);
+const aliasSymbolKeys: symbol[] = Object.getOwnPropertySymbols(proto);
 const iteratorSymbolDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
 const unscopablesDescriptor: any = Object.getOwnPropertyDescriptor(Array.prototype, Symbol.unscopables);
 const reflectIteratorDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.iterator);
 const reflectUnscopablesDescriptor: any = Reflect.getOwnPropertyDescriptor(Array.prototype, Symbol.unscopables);
 console.log("symbols:", symbolKeys.length, symbolKeys[0] === Symbol.iterator, symbolKeys[1] === Symbol.unscopables, symbolKeys[0].description + "|" + symbolKeys[1].description);
+console.log("alias symbols:", aliasSymbolKeys.length, aliasSymbolKeys[0] === Symbol.iterator, aliasSymbolKeys[1] === Symbol.unscopables, aliasSymbolKeys[0].description + "|" + aliasSymbolKeys[1].description);
 console.log("symbol descriptors:", iteratorSymbolDescriptor.value === proto.values, iteratorSymbolDescriptor.writable, iteratorSymbolDescriptor.enumerable, iteratorSymbolDescriptor.configurable, unscopablesDescriptor.value === unscopables, unscopablesDescriptor.writable, unscopablesDescriptor.enumerable, unscopablesDescriptor.configurable);
 console.log("reflect symbol descriptors:", reflectIteratorDescriptor.value === iteratorSymbolDescriptor.value, reflectIteratorDescriptor.writable, reflectIteratorDescriptor.enumerable, reflectIteratorDescriptor.configurable, reflectUnscopablesDescriptor.value === unscopablesDescriptor.value, reflectUnscopablesDescriptor.writable, reflectUnscopablesDescriptor.enumerable, reflectUnscopablesDescriptor.configurable);
 const every: any = proto.every;
