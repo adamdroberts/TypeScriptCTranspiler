@@ -1546,6 +1546,18 @@ bool tsc_value_has_own_prop(tsc_value_t v, const tsc_str_t* key) {
     return false;
 }
 
+bool tsc_value_has_own_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    if (tsc_value_is_nullish(v)) {
+        tsc_throw_str(tsc_str_from_cstr("Object.hasOwn target must not be null or undefined"));
+    }
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        if ((const tsc_array_t*)value_ptr(v) == tsc_array_prototype()) {
+            return key == tsc_symbol_iterator() || key == tsc_symbol_unscopables();
+        }
+    }
+    return false;
+}
+
 bool tsc_value_property_is_enumerable(tsc_value_t v, const tsc_str_t* key) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_property_is_enumerable((tsc_object_t*)value_ptr(v), key);
@@ -1585,6 +1597,15 @@ bool tsc_value_has_prop(tsc_value_t v, const tsc_str_t* key) {
     return false;
 }
 
+bool tsc_value_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    tsc_dynamic_stat_hit(TSC_DYNAMIC_STAT_HAS_PROP);
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_ARRAY) {
+        const tsc_array_t* a = (const tsc_array_t*)value_ptr(v);
+        return tsc_value_has_own_symbol_prop(v, key) || tsc_value_has_symbol_prop(a->prototype, key);
+    }
+    return false;
+}
+
 bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache) {
     if (!value_is_box(v) || value_tag(v) != TSC_VALUE_TAG_OBJECT) {
         return tsc_value_has_prop(v, key);
@@ -1612,6 +1633,11 @@ bool tsc_value_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cac
 bool tsc_reflect_has_prop(tsc_value_t v, const tsc_str_t* key) {
     require_reflect_object_target(v, "Reflect.has target must be an object");
     return tsc_value_has_prop(v, key);
+}
+
+bool tsc_reflect_has_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
+    require_reflect_object_target(v, "Reflect.has target must be an object");
+    return tsc_value_has_symbol_prop(v, key);
 }
 
 bool tsc_reflect_has_prop_cached(tsc_value_t v, const tsc_str_t* key, tsc_prop_cache_t* cache) {

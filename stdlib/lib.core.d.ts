@@ -300,7 +300,7 @@ interface ObjectConstructor {
     getOwnPropertyDescriptors(o: any, ...ignored: any[]): any;
     getOwnPropertyNames(o: any, ...ignored: any[]): string[];
     getOwnPropertySymbols(o: any, ...ignored: any[]): symbol[];
-    hasOwn(o: any, p: string, ...ignored: any[]): boolean;
+    hasOwn(o: any, p: PropertyKey, ...ignored: any[]): boolean;
     is(value1: any, value2: any, ...ignored: any[]): boolean;
     freeze<T>(o: T, ...ignored: any[]): T;
     isFrozen(o: any, ...ignored: any[]): boolean;
@@ -325,7 +325,7 @@ interface ReflectConstructor {
     get(target: any, propertyKey: string, receiver?: any, ...ignored: any[]): any;
     getPrototypeOf(target: any, ...ignored: any[]): any;
     getOwnPropertyDescriptor(target: any, propertyKey: PropertyKey, ...ignored: any[]): any;
-    has(target: any, propertyKey: string, ...ignored: any[]): boolean;
+    has(target: any, propertyKey: PropertyKey, ...ignored: any[]): boolean;
     isExtensible(target: any, ...ignored: any[]): boolean;
     ownKeys(target: any, ...ignored: any[]): string[];
     preventExtensions(target: any, ...ignored: any[]): boolean;
