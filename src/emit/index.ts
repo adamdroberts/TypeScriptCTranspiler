@@ -24663,7 +24663,7 @@ class Emitter {
             }
             ts.forEachChild(node, visit);
         };
-        const visitStatement = (stmt: ts.Statement): boolean => {
+        const visitStatement = (stmt: ts.Statement, loopDepth = 0, allowContinue = false): boolean => {
             const visitVariableDeclarationList = (
                 declarationList: ts.VariableDeclarationList,
                 requireInitializer: boolean,
@@ -24691,21 +24691,21 @@ class Emitter {
             }
             if (ts.isBlock(stmt)) {
                 for (const child of stmt.statements) {
-                    if (!visitStatement(child)) return false;
+                    if (!visitStatement(child, loopDepth, allowContinue)) return false;
                 }
                 return true;
             }
             if (ts.isIfStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
-                if (!visitStatement(stmt.thenStatement)) return false;
-                if (stmt.elseStatement && !visitStatement(stmt.elseStatement)) return false;
+                if (!visitStatement(stmt.thenStatement, loopDepth, allowContinue)) return false;
+                if (stmt.elseStatement && !visitStatement(stmt.elseStatement, loopDepth, allowContinue)) return false;
                 return true;
             }
             if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt)) {
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement);
+                return visitStatement(stmt.statement, loopDepth + 1, true);
             }
             if (ts.isForStatement(stmt)) {
                 if (stmt.initializer) {
@@ -24724,7 +24724,7 @@ class Emitter {
                     visit(stmt.incrementor);
                     if (!ok) return false;
                 }
-                return visitStatement(stmt.statement);
+                return visitStatement(stmt.statement, loopDepth + 1, false);
             }
             if (ts.isForOfStatement(stmt)) {
                 if (stmt.awaitModifier) return false;
@@ -24736,7 +24736,13 @@ class Emitter {
                 }
                 visit(stmt.expression);
                 if (!ok) return false;
-                return visitStatement(stmt.statement);
+                return visitStatement(stmt.statement, loopDepth + 1, true);
+            }
+            if (ts.isBreakStatement(stmt)) {
+                return !stmt.label && loopDepth > 0;
+            }
+            if (ts.isContinueStatement(stmt)) {
+                return !stmt.label && allowContinue;
             }
             return false;
         };

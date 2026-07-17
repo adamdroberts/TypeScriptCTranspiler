@@ -14,3 +14,4 @@ method-branch-let: branch-let
 method-loop: loop-looploop
 method-for: for-forfor
 method-for-of: forof-of!
+method-loop-control: control-ctrl0ctrl2

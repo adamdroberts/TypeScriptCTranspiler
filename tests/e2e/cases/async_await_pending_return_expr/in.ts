@@ -107,6 +107,22 @@ class Worker {
         }
         return result;
     }
+
+    async loopControlAfterAwait(): Promise<string> {
+        const value = await delay(29, "ctrl");
+        let result = this.prefix;
+        let index = 0;
+        while (index < 5) {
+            if (index === 1) {
+                index = index + 1;
+                continue;
+            }
+            if (index === 3) break;
+            result = result + value + index;
+            index = index + 1;
+        }
+        return result;
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -173,6 +189,10 @@ new Worker("for-").forAfterAwait(2).then((value: string): void => {
 
 new Worker("forof-").forOfAfterAwait().then((value: string): void => {
     console.log("method-for-of:", value);
+});
+
+new Worker("control-").loopControlAfterAwait().then((value: string): void => {
+    console.log("method-loop-control:", value);
 });
 
 arrow().then((value: string): void => {
