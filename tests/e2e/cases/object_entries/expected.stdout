@@ -2,5 +2,6 @@ entry-len: 3 2
 first: alice 4
 pairs: alice:4|bob:7|carol:2
 total: 13
+any-indexed: alice:4|bob:7|carol:2
 rebuilt: 4 7 2
 direct: 1 2 3
