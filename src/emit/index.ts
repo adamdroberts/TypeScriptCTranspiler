@@ -42158,6 +42158,9 @@ class Emitter {
                     { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
                     ...this.ignoredArgumentSpecs(args, 2),
                 ], ([arr, target, from]) => {
+                    if (et.kind === "value") {
+                        return `tsc_value_as_num(tsc_value_method_index_of(tsc_value_array(${arr}), ${target}, tsc_value_num(${from})))`;
+                    }
                     const av = this.freshTemp("_arr");
                     const iv = this.freshTemp("_i");
                     const tv = this.freshTemp("_t");
@@ -42190,6 +42193,9 @@ class Emitter {
                     { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
                     ...this.ignoredArgumentSpecs(args, 2),
                 ], ([arr, target, from]) => {
+                    if (et.kind === "value") {
+                        return `tsc_value_as_num(tsc_value_method_last_index_of(tsc_value_array(${arr}), ${target}, tsc_value_num(${from})))`;
+                    }
                     const av = this.freshTemp("_arr");
                     const iv = this.freshTemp("_i");
                     const tv = this.freshTemp("_t");
@@ -42221,6 +42227,9 @@ class Emitter {
                     { value: fromIndex, target: T_NUMBER, node: args[1] ?? call.expression },
                     ...this.ignoredArgumentSpecs(args, 2),
                 ], ([arr, target, from]) => {
+                    if (et.kind === "value") {
+                        return `tsc_value_as_bool(tsc_value_method_includes(tsc_value_array(${arr}), ${target}, tsc_value_num(${from})))`;
+                    }
                     const av = this.freshTemp("_arr");
                     const iv = this.freshTemp("_i");
                     const tv = this.freshTemp("_t");
@@ -42235,9 +42244,7 @@ class Emitter {
                         `({ tsc_array_t* const ${av} = ${arr}; ${et.c} ${tv} = ${target}; double ${fv} = ${from}; ` +
                         `${emitForwardStartDecls(`${av}->len`, fv, sv)}; ` +
                         `bool _f = false; for (size_t ${iv} = ${sv}; ${iv} < ${av}->len; ${iv}++) ` +
-                        `{ if (!tsc_array_index_present(${av}, ${iv})) { ` +
-                        `${et.kind === "value" ? `if (tsc_value_is_undefined(${tv})) _f = true;` : ``} ` +
-                        `} else if (${eqExpr}) { _f = true; } if (_f) break; } _f; })`
+                        `{ if (tsc_array_index_present(${av}, ${iv}) && ${eqExpr}) { _f = true; } if (_f) break; } _f; })`
                     );
                 });
             }
