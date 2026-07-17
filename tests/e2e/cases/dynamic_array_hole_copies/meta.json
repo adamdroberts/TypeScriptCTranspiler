@@ -1,3 +1,3 @@
 {
-  "description": "dynamic array slice and toReversed preserve deleted index holes"
+  "description": "dynamic array slice preserves holes while toReversed materializes them as undefined"
 }

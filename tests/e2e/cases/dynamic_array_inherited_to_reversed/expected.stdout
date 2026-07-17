@@ -1,0 +1,3 @@
+inherited: tail|inherited true 0|1
+dynamic hole: tail| true 0|1
+typed hole: tail| true 0|1
