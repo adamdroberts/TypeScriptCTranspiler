@@ -49230,6 +49230,13 @@ class Emitter {
             expr.name.text === "iterator";
     }
 
+    private isSymbolUnscopablesExpression(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "Symbol" &&
+            expr.name.text === "unscopables";
+    }
+
     private objectFieldType(
         objectNode: ts.Node,
         objectType: ts.Type,
@@ -54326,6 +54333,9 @@ class Emitter {
             if (pa.expression.text === "Symbol" && pa.name.text === "asyncIterator") {
                 return { c: `tsc_symbol_async_iterator()`, ty: T_SYMBOL };
             }
+            if (pa.expression.text === "Symbol" && pa.name.text === "unscopables") {
+                return { c: `tsc_symbol_unscopables()`, ty: T_SYMBOL };
+            }
         }
         // process.env.VAR and imported env.VAR → tsc_process_env_get("VAR")
         if (this.isProcessEnvObject(pa.expression)) {
@@ -54728,11 +54738,21 @@ class Emitter {
             return { c: moduleNsMember, ty };
         }
         const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        let arrayPrototypeCandidate: ts.Expression = ea.expression;
+        while (
+            ts.isParenthesizedExpression(arrayPrototypeCandidate) ||
+            ts.isAsExpression(arrayPrototypeCandidate) ||
+            ts.isTypeAssertionExpression(arrayPrototypeCandidate) ||
+            ts.isSatisfiesExpression(arrayPrototypeCandidate) ||
+            ts.isNonNullExpression(arrayPrototypeCandidate)
+        ) {
+            arrayPrototypeCandidate = arrayPrototypeCandidate.expression;
+        }
         const isArrayPrototypeReceiver =
-            ts.isPropertyAccessExpression(ea.expression) &&
-            ts.isIdentifier(ea.expression.expression) &&
-            ea.expression.name.text === "prototype" &&
-            this.isUnshadowedGlobalIdentifier(ea.expression.expression, "Array");
+            ts.isPropertyAccessExpression(arrayPrototypeCandidate) &&
+            ts.isIdentifier(arrayPrototypeCandidate.expression) &&
+            arrayPrototypeCandidate.name.text === "prototype" &&
+            this.isUnshadowedGlobalIdentifier(arrayPrototypeCandidate.expression, "Array");
         if (
             this.isSymbolIteratorExpression(ea.argumentExpression) &&
             (recv.ty.kind === "value" || isArrayPrototypeReceiver)
@@ -54741,6 +54761,13 @@ class Emitter {
                 T_VALUE,
                 [{ value: recv }],
                 () => "tsc_value_symbol_iterator_method_value()",
+            );
+        }
+        if (isArrayPrototypeReceiver && this.isSymbolUnscopablesExpression(ea.argumentExpression)) {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: recv }],
+                () => "tsc_array_unscopables_value()",
             );
         }
         if (recv.ty.kind === "array") {

@@ -12,6 +12,7 @@ static uint64_t tsc_next_symbol_id = 1;
 static tsc_symbol_registry_entry_t* tsc_symbol_registry = NULL;
 static tsc_symbol_t* tsc_symbol_iterator_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_async_iterator_singleton = NULL;
+static tsc_symbol_t* tsc_symbol_unscopables_singleton = NULL;
 
 tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description) {
     tsc_symbol_t* sym = (tsc_symbol_t*)TSC_GC_MALLOC(sizeof(tsc_symbol_t));
@@ -54,6 +55,14 @@ tsc_symbol_t* tsc_symbol_async_iterator(void) {
             tsc_symbol_new(tsc_str_from_lit("Symbol.asyncIterator", 20));
     }
     return tsc_symbol_async_iterator_singleton;
+}
+
+tsc_symbol_t* tsc_symbol_unscopables(void) {
+    if (!tsc_symbol_unscopables_singleton) {
+        tsc_symbol_unscopables_singleton =
+            tsc_symbol_new(tsc_str_from_lit("Symbol.unscopables", 18));
+    }
+    return tsc_symbol_unscopables_singleton;
 }
 
 tsc_str_t* tsc_symbol_description(const tsc_symbol_t* sym) {

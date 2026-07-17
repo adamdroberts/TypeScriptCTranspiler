@@ -13,6 +13,8 @@ console.log("method metadata:", map.name, map.length, Reflect.has(map, "prototyp
 const nameDescriptor: any = Reflect.getOwnPropertyDescriptor(map, "name");
 const arityDescriptor: any = Reflect.getOwnPropertyDescriptor(map, "length");
 console.log("function descriptors:", nameDescriptor.writable, nameDescriptor.enumerable, nameDescriptor.configurable, arityDescriptor.writable, arityDescriptor.enumerable, arityDescriptor.configurable);
+const unscopables: any = (Array.prototype as any)[Symbol.unscopables];
+console.log("unscopables:", typeof unscopables, Object.getPrototypeOf(unscopables), Object.keys(unscopables).sort().join("|"), unscopables.at, unscopables.values, unscopables.reverse);
 const every: any = proto.every;
 console.log("delete name:", Reflect.deleteProperty(every, "name"), Object.hasOwn(every, "name"));
 console.log("redefine:", Reflect.defineProperty(every, "name", { value: "all" }), Reflect.defineProperty(every, "length", { value: 3 }), every.name, every.length);

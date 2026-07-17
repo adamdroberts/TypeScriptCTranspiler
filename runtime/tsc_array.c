@@ -6,6 +6,8 @@ static bool array_prototype_initializing = false;
 static bool array_prototype_initialized = false;
 static bool array_constructor_initialized = false;
 static tsc_value_t array_constructor_value;
+static bool array_unscopables_initialized = false;
+static tsc_value_t array_unscopables_value;
 
 static tsc_value_t array_constructor_generic(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
@@ -806,6 +808,43 @@ static void array_prototype_define_method(tsc_object_t* prototype, const char* n
         false,
         true
     );
+}
+
+static void array_unscopables_define(tsc_object_t* object, const char* name, size_t len) {
+    tsc_object_define(
+        object,
+        tsc_str_from_lit(name, len),
+        tsc_value_bool(true),
+        true,
+        true,
+        true
+    );
+}
+
+tsc_value_t tsc_array_unscopables_value(void) {
+    if (!array_unscopables_initialized) {
+        tsc_object_t* object = tsc_object_new();
+        object->prototype = tsc_value_null();
+        array_unscopables_define(object, "at", 2);
+        array_unscopables_define(object, "copyWithin", 10);
+        array_unscopables_define(object, "entries", 7);
+        array_unscopables_define(object, "fill", 4);
+        array_unscopables_define(object, "find", 4);
+        array_unscopables_define(object, "findIndex", 9);
+        array_unscopables_define(object, "findLast", 8);
+        array_unscopables_define(object, "findLastIndex", 13);
+        array_unscopables_define(object, "flat", 4);
+        array_unscopables_define(object, "flatMap", 7);
+        array_unscopables_define(object, "includes", 8);
+        array_unscopables_define(object, "keys", 4);
+        array_unscopables_define(object, "toReversed", 10);
+        array_unscopables_define(object, "toSorted", 8);
+        array_unscopables_define(object, "toSpliced", 9);
+        array_unscopables_define(object, "values", 6);
+        array_unscopables_value = tsc_value_object(object);
+        array_unscopables_initialized = true;
+    }
+    return array_unscopables_value;
 }
 
 static tsc_value_t tsc_array_default_prototype(void) {
