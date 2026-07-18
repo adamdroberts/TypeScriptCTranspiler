@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Lazy `yield*` materializes generator-backed array sources before delegated suspension, forwarding each value one `.next()` at a time after source materialization. Test: `generator_lazy_yield_star_generator_backed`
 - `yield*` materializes generator-backed array sources before delegation, allowing `yield* innerGenerator()` to forward yielded values in the existing AOT generator subset. Test: `generator_yield_star_generator_backed`
 - Dynamic promise combinators consume typed string iterable inputs as one-character dynamic values across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`
 - Dynamic promise combinators assimilate delayed nested thenables from generator-backed iterable inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_generator_recursive`
@@ -1911,6 +1912,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_yield_star` | lazy generators delegate bounded yield* over arrays, strings, typed Sets, and custom iterables |
 | `generator_lazy_yield_star_dynamic` | lazy generators delegate bounded yield* over dynamic array and string values |
 | `generator_lazy_yield_star_map` | lazy generators delegate bounded yield* over typed Map entry sources |
+| `generator_lazy_yield_star_generator_backed` | lazy generators delegate bounded yield* over generator-backed iterable sources |
 | `generator_yield_undefined` | materialized generator bare yield produces undefined values |
 | `generator_yield_star_dynamic` | materialized generator yield* supports dynamic array and string iterable values |
 | `generator_yield_star_set` | materialized generator yield* supports typed Set sources |

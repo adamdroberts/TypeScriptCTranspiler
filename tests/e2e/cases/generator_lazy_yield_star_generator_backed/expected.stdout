@@ -1,0 +1,6 @@
+created
+lazy before
+first: false 3
+second: false 4
+lazy after
+third: true outer done
