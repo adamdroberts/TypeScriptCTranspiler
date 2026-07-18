@@ -303,6 +303,7 @@ interface ObjectConstructor {
     entries(o: unknown, ...ignored: any[]): ObjectEntry<any>[];
     fromEntries<T>(entries: ObjectEntry<any>[], ...ignored: any[]): T;
     fromEntries<T>(entries: Map<string, any>, ...ignored: any[]): T;
+    fromEntries<T>(entries: URLSearchParams, ...ignored: any[]): T;
     create(o: any, properties?: any, ...ignored: any[]): any;
     defineProperty<T>(o: T, p: PropertyKey, attributes: any, ...ignored: any[]): T;
     defineProperties<T>(o: T, properties: any, ...ignored: any[]): T;
@@ -355,15 +356,18 @@ interface ArrayConstructor {
     from<T>(arr: T[]): T[];
     from<T>(set: Set<T>): T[];
     from<K, T>(map: Map<K, T>): ObjectEntry<T, K>[];
+    from(params: URLSearchParams): ObjectEntry<string, string>[];
     from<T>(arr: T[], mapfn: undefined, thisArg?: any, ...ignored: any[]): T[];
     from<T>(set: Set<T>, mapfn: undefined, thisArg?: any, ...ignored: any[]): T[];
     from<K, T>(map: Map<K, T>, mapfn: undefined, thisArg?: any, ...ignored: any[]): ObjectEntry<T, K>[];
+    from(params: URLSearchParams, mapfn: undefined, thisArg?: any, ...ignored: any[]): ObjectEntry<string, string>[];
     from(s: string, mapfn: undefined, thisArg?: any, ...ignored: any[]): string[];
     from(items: any, mapfn: undefined, thisArg?: any, ...ignored: any[]): any[];
     from<U>(s: string, mapfn: (v: string, k: number) => U, thisArg?: any, ...ignored: any[]): U[];
     from<T, U>(arr: T[], mapfn: (v: T, k: number) => U, thisArg?: any, ...ignored: any[]): U[];
     from<T, U>(set: Set<T>, mapfn: (v: T, k: number) => U, thisArg?: any, ...ignored: any[]): U[];
     from<K, T, U>(map: Map<K, T>, mapfn: (v: ObjectEntry<T, K>, k: number) => U, thisArg?: any, ...ignored: any[]): U[];
+    from<U>(params: URLSearchParams, mapfn: (v: ObjectEntry<string, string>, k: number) => U, thisArg?: any, ...ignored: any[]): U[];
     fromAsync(s: string): Promise<string[]>;
     fromAsync<T>(arr: Promise<T>[]): Promise<T[]>;
     fromAsync<T>(arr: T[]): Promise<T[]>;
