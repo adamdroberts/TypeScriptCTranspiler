@@ -26,13 +26,16 @@ double: 42
 tagged: fn-tag
 staged: fn-stage!
 method: method!
+initializer-expression-await-return: fn-initializer!
 method-param: class-method-param
 method-this: this-this-param
 arrow: arrow!
 method-staged-this: this-method-stage!
+method-initializer-expression-await-return: this-method-initializer!
 arrow-param: value-arrow-param
 method-side-effect: effect-side
 method-if-side-effect: if-branch
+arrow-initializer-expression-await-return: value-arrow-initializer!
 method-branch-let: branch-let
 method-branch-uninit-let: uninit-uninit
 method-loop: loop-looploop
