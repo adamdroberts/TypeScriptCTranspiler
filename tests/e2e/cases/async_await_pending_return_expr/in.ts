@@ -1,5 +1,22 @@
 import { setTimeout as delay } from "node:timers/promises";
 
+class PreludeCaptureBox {
+    label: string;
+
+    constructor(label: string) {
+        this.label = label;
+    }
+
+    suffix(value: string): string {
+        return this.label + value;
+    }
+}
+
+interface PreludeCaptureRecord {
+    label: string;
+    suffix: string;
+}
+
 async function suffix(): Promise<string> {
     const value = await delay(5, "ready");
     return value + "!";
@@ -255,6 +272,33 @@ async function preludeArrayFiveAwait(prefix: string): Promise<string> {
     const fourth = await delay(265, first + ":" + second + ":" + third + "-four");
     const fifth = await delay(266, first + ":" + second + ":" + third + ":" + fourth + "-five");
     return parts[0] + parts[1] + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
+}
+
+async function preludeClassAwaitedLocalReturn(prefix: string): Promise<string> {
+    const box = new PreludeCaptureBox(prefix + "class-local-");
+    const value = await delay(267, "value");
+    return box.suffix(value);
+}
+
+async function preludeClassInlineAwaitReturn(prefix: string): Promise<string> {
+    const box = new PreludeCaptureBox(prefix + "class-inline-");
+    return box.suffix(await delay(268, "value"));
+}
+
+async function preludeClassFiveAwait(prefix: string): Promise<string> {
+    const box = new PreludeCaptureBox(prefix + "class-five-");
+    const first = await delay(269, box.suffix("one"));
+    const second = await delay(270, box.suffix(first + "-two"));
+    const third = await delay(271, first + ":" + second + "-three");
+    const fourth = await delay(272, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(273, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return box.suffix(first + ":" + second + ":" + third + ":" + fourth + ":" + fifth);
+}
+
+async function preludeObjectLiteralAwaitedLocalReturn(prefix: string): Promise<string> {
+    const record: PreludeCaptureRecord = { label: prefix + "object-local-", suffix: "tail" };
+    const value = await delay(274, "value");
+    return record.label + value + "-" + record.suffix;
 }
 
 class Worker {
@@ -1562,4 +1606,20 @@ preludeArrayInlineAwaitReturn("fn-").then((value: string): void => {
 
 preludeArrayFiveAwait("fn-").then((value: string): void => {
     console.log("prelude-array-five-await:", value);
+});
+
+preludeClassAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-class-awaited-local-return:", value);
+});
+
+preludeClassInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-class-inline-await-return:", value);
+});
+
+preludeClassFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-class-five-await:", value);
+});
+
+preludeObjectLiteralAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-object-literal-awaited-local-return:", value);
 });
