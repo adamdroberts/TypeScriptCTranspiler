@@ -133,6 +133,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
             if (ownPredicateText.length > 0) return ownPredicateText;
+            const ownPrototypePredicateText = resolveStaticObjectOwnPrototypePredicateCall(node);
+            if (ownPrototypePredicateText.length > 0) return ownPrototypePredicateText;
             const reflectGetText = resolveStaticReflectGetCall(node);
             if (reflectGetText.length > 0) return reflectGetText;
             const reflectHasText = resolveStaticReflectHasCall(node);
@@ -1007,6 +1009,40 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return index >= 0 && index < object.text.length;
         }
         return null;
+    };
+
+    const resolveStaticObjectOwnPrototypePredicateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "call") return [];
+        const methodAccess = unwrapStaticExpression(callee.expression);
+        if (!ts.isPropertyAccessExpression(methodAccess)) return [];
+        const prototypeAccess = unwrapStaticExpression(methodAccess.expression);
+        if (!ts.isPropertyAccessExpression(prototypeAccess) || prototypeAccess.name.text !== "prototype") return [];
+        const target = unwrapStaticExpression(prototypeAccess.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+
+        const method = methodAccess.name.text;
+        if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable") return [];
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object) return [];
+        const keys = resolveKeyTexts(call.arguments[1]!);
+        if (keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const key of keys) {
+            const own = staticObjectHasOwn(object, key);
+            if (own === null) return [];
+            if (method === "hasOwnProperty" || !own) {
+                out.push(String(method === "hasOwnProperty" ? own : false));
+            } else {
+                const descriptor = staticDescriptorFor(object, key);
+                if (!descriptor) return [];
+                out.push(String(descriptor.enumerable));
+            }
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
     };
 
     const resolveStaticObjectIntegrityPredicateCall = (call: ts.CallExpression): string[] => {
