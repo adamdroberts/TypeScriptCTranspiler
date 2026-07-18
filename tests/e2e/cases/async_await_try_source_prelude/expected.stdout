@@ -1,0 +1,6 @@
+decl-catch-source-prelude: decl-caught:decl-bad!
+decl-finally-source-prelude: decl-final|decl-final-ok decl-final|
+value-catch-source-prelude: value-catch:value-ok
+value-finally-source-prelude: value-final-bad decl-final|value-final|
+method-catch-source-prelude: class-method-caught:method-bad
+method-finally-source-prelude: class-method-final|method-final-ok decl-final|value-final|class-method-final|
