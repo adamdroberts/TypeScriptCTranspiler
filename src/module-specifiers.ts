@@ -2781,8 +2781,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object") return null;
 
-        const entries = resolveCollectionExpression(call.arguments[0]!);
-        if (!entries || !ts.isArrayLiteralExpression(entries)) return null;
+        const entries = resolveStaticEntryCollectionExpression(call.arguments[0]!);
+        if (!entries) return null;
         const properties: ts.PropertyAssignment[] = [];
         for (const element of entries.elements) {
             if (ts.isSpreadElement(element)) return null;
@@ -2797,6 +2797,21 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (properties.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         }
         return ts.factory.createObjectLiteralExpression(properties);
+    };
+
+    const resolveStaticEntryCollectionExpression = (expr: ts.Expression): ts.ArrayLiteralExpression | null => {
+        const collection = resolveCollectionExpression(expr);
+        if (collection && ts.isArrayLiteralExpression(collection)) return collection;
+
+        const source = unwrapStaticExpression(expr);
+        if (!ts.isNewExpression(source)) return null;
+        const ctor = unwrapStaticExpression(source.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "Map") return null;
+        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return null;
+        const arg = source.arguments?.[0];
+        if (!arg || isStaticUndefinedExpression(arg)) return ts.factory.createArrayLiteralExpression([]);
+        const entries = resolveCollectionExpression(arg);
+        return entries && ts.isArrayLiteralExpression(entries) ? entries : null;
     };
 
     const resolveStaticObjectEntriesCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
