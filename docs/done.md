@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs materialize static `new URLSearchParams(...).keys()` / `.values()` / `.entries()` collection fragments for indexed key/value/entry reads. Test: `dynamic_require_static_url_search_params`
 - Finite dynamic `require(...)` proofs materialize static `new URLSearchParams(...)` iterable entry sources through `Array.from(...)` and `Object.fromEntries(...)`, with matching stdlib overloads and duplicate-key overwrite composition. Test: `dynamic_require_static_url_search_params`
 - Finite dynamic `require(...)` proofs resolve static `new URLSearchParams(...).size` fragments over finite constructor sources, including duplicate query keys and empty params. Test: `dynamic_require_static_url_search_params`
 - Finite dynamic `require(...)` proofs resolve static `new Set(...).has(...)` / `.size` plus `new Map(...).has(...)` / `.get(...)` / `.size` fragments over finite constructor sources, including duplicate Map key overwrite and `Object.entries(...)` sources. Test: `dynamic_require_static_map_set_fragments`
