@@ -1,0 +1,4 @@
+{
+  "description": "new Promise executor resolve callbacks assimilate delayed dynamic thenables",
+  "features": ["promise", "promise-executor", "thenable", "queueMicrotask", "setImmediate"]
+}
