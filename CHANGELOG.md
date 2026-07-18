@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static URI encode/decode helper specifier fragments. Test: `dynamic_require_static_uri`.
 - Finite dynamic `require(...)` proofs now resolve static ASCII `RegExp.escape(...)` specifier fragments. Test: `dynamic_require_static_regexp_escape`.
 - Finite dynamic `require(...)` proofs now resolve static string `.toString()` and `.valueOf()` identity specifier fragments. Test: `dynamic_require_static_string_identity`.
 - Finite dynamic `require(...)` proofs now resolve static `String.fromCharCode(...)` and `String.fromCodePoint(...)` specifier fragments for finite integer arguments. Test: `dynamic_require_static_string_from_code`.
