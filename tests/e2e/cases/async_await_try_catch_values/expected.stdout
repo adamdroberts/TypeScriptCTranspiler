@@ -6,3 +6,5 @@ lifted-try-finally-rejected: lifted-final-bad FR
 nested-try-catch-rejected: nested-caught:nested-bad
 nested-try-finally-rejected: nested-final-bad FRr
 nested-try-finally-fulfilled: nested-final:nested-final-ok FRrf
+lifted-try-catch-prelude: lifted-prelude-caught:lifted-prelude-bad:done
+nested-try-catch-prelude: nested-prelude-caught:nested-prelude-bad:done
