@@ -384,6 +384,30 @@ async function preludeDateErrorFiveAwait(prefix: string): Promise<string> {
     return stamp.toISOString() + ":" + problem.toString() + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
 }
 
+async function preludeUrlParamsAwaitedLocalReturn(prefix: string): Promise<string> {
+    const url = new URL("https://example.com/root/path?label=" + prefix + "url-local");
+    const params = new URLSearchParams("a=" + prefix + "params-local&b=two");
+    const value = await delay(296, "value");
+    return url.pathname + ":" + url.searchParams.get("label") + ":" + params.get("a") + ":" + value;
+}
+
+async function preludeBufferInlineAwaitReturn(prefix: string): Promise<string> {
+    const data = Buffer.from(prefix + "buffer-inline-");
+    return data.toString() + await delay(297, "value") + ":" + data.length;
+}
+
+async function preludeBinaryFiveAwait(prefix: string): Promise<string> {
+    const storage = new ArrayBuffer(8);
+    const view = new DataView(storage, 2, 4);
+    const data = Buffer.from(prefix + "buffer-five-");
+    const first = await delay(298, prefix + "one");
+    const second = await delay(299, first + "-two");
+    const third = await delay(300, first + ":" + second + "-three");
+    const fourth = await delay(301, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(302, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return storage.byteLength + ":" + view.byteOffset + ":" + view.byteLength + ":" + data.toString() + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
+}
+
 class Worker {
     prefix: string;
 
@@ -1741,4 +1765,16 @@ preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {
 
 preludeDateErrorFiveAwait("fn-").then((value: string): void => {
     console.log("prelude-date-error-five-await:", value);
+});
+
+preludeUrlParamsAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-url-params-awaited-local-return:", value);
+});
+
+preludeBufferInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-buffer-inline-await-return:", value);
+});
+
+preludeBinaryFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-binary-five-await:", value);
 });

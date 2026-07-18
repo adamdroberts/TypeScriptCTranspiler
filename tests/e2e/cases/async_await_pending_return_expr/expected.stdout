@@ -166,6 +166,8 @@ prelude-weak-map-set-awaited-local-return: fn-weak-map-local-value-true
 prelude-weak-map-inline-await-return: fn-weak-map-inline-value
 prelude-builtins-awaited-local-return: true:2020-02-03T04:05:06.007Z:Error: fn-error
 prelude-regexp-inline-await-return: /^fn-inline-value$/:fn-inline-value
+prelude-url-params-awaited-local-return: /root/path:fn-url-local:fn-params-local:value
+prelude-buffer-inline-await-return: fn-buffer-inline-value:17
 five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
 method-five-await: method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four-five!
 arrow-five-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four-five!
@@ -180,3 +182,4 @@ prelude-class-five-await: fn-class-five-fn-class-five-one:fn-class-five-fn-class
 prelude-set-five-await: true:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four-five
 prelude-weak-set-five-await: true:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four-five
 prelude-date-error-five-await: 2021-03-04T05:06:07.008Z:TypeError: fn-five-error:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four-five
+prelude-binary-five-await: 8:2:4:fn-buffer-five-:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four-five

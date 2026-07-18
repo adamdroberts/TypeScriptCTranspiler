@@ -21395,6 +21395,11 @@ class Emitter {
             type.kind === "regexp" ||
             type.kind === "date" ||
             type.kind === "error" ||
+            type.kind === "url" ||
+            type.kind === "urlsearchparams" ||
+            type.kind === "buffer" ||
+            type.kind === "arraybuffer" ||
+            type.kind === "dataview" ||
             type.kind === "class";
     }
 
