@@ -9,3 +9,7 @@ parenthesized-logical-and-await: logical-and-await
 prelude-parenthesized-conditional-await: fn-prelude-conditional-await
 method-parenthesized-conditional-await: method-method-conditional-await
 value-parenthesized-return: value-value-await
+parenthesized-branch-return-await-true: fn-branch-true
+parenthesized-branch-return-await-false: fn-branch-false
+method-parenthesized-branch-return-await: method-method-branch-true
+value-parenthesized-branch-return-await: value-value-branch-true

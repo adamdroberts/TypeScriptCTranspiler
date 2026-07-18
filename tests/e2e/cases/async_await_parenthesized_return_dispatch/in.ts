@@ -29,6 +29,11 @@ async function preludeParenthesizedConditional(flag: boolean, prefix: string): P
         : label + "conditional-sync");
 }
 
+async function parenthesizedBranchReturnAwait(flag: boolean, prefix: string): Promise<string> {
+    if (flag) return (await delay(9, prefix + "branch-true"));
+    return (await delay(10, prefix + "branch-false"));
+}
+
 class Worker {
     prefix: string;
 
@@ -41,10 +46,20 @@ class Worker {
             ? this.prefix + await delay(7, "method-conditional-await")
             : this.prefix + "method-conditional-sync");
     }
+
+    async parenthesizedBranchReturnAwait(flag: boolean): Promise<string> {
+        if (flag) return (await delay(11, this.prefix + "method-branch-true"));
+        return (await delay(12, this.prefix + "method-branch-false"));
+    }
 }
 
 const parenthesizedValue = async (prefix: string): Promise<string> => {
     return (prefix + await delay(8, "value-await"));
+};
+
+const parenthesizedBranchValue = async (flag: boolean, prefix: string): Promise<string> => {
+    if (flag) return (await delay(13, prefix + "value-branch-true"));
+    return (await delay(14, prefix + "value-branch-false"));
 };
 
 parenthesizedConditional(true, "fn-").then((value: string): void => {
@@ -83,10 +98,26 @@ preludeParenthesizedConditional(true, "fn-").then((value: string): void => {
     console.log("prelude-parenthesized-conditional-await:", value);
 });
 
+parenthesizedBranchReturnAwait(true, "fn-").then((value: string): void => {
+    console.log("parenthesized-branch-return-await-true:", value);
+});
+
+parenthesizedBranchReturnAwait(false, "fn-").then((value: string): void => {
+    console.log("parenthesized-branch-return-await-false:", value);
+});
+
 new Worker("method-").parenthesizedConditional(true).then((value: string): void => {
     console.log("method-parenthesized-conditional-await:", value);
 });
 
+new Worker("method-").parenthesizedBranchReturnAwait(true).then((value: string): void => {
+    console.log("method-parenthesized-branch-return-await:", value);
+});
+
 parenthesizedValue("value-").then((value: string): void => {
     console.log("value-parenthesized-return:", value);
+});
+
+parenthesizedBranchValue(true, "value-").then((value: string): void => {
+    console.log("value-parenthesized-branch-return-await:", value);
 });
