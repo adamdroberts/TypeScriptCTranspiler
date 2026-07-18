@@ -2714,6 +2714,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isCallExpression(cur)) {
             const objectWrapperReceiver = resolveStaticObjectWrapperReceiver(cur);
             if (objectWrapperReceiver) return resolveCollectionExpression(objectWrapperReceiver);
+            const objectAssign = resolveStaticObjectAssignCollectionExpression(cur);
+            if (objectAssign) return resolveCollectionExpression(objectAssign);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
             if (objectEntries) return resolveCollectionExpression(objectEntries);
             const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
@@ -2790,6 +2792,44 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return call.arguments.length === 2 ? call.arguments[0]! : null;
         }
         return null;
+    };
+
+    const resolveStaticObjectAssignCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "assign") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+
+        const slots = new Map<string, ts.Expression>();
+        const order: string[] = [];
+        for (const arg of call.arguments) {
+            if (isStaticNullishCollectionSource(arg)) {
+                if (arg === call.arguments[0]) return null;
+                continue;
+            }
+            const object = resolveCollectionExpression(arg);
+            if (!object || !ts.isObjectLiteralExpression(object)) return null;
+            for (const prop of object.properties) {
+                if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+                const key = staticPropertyName(prop.name);
+                if (key === null) return null;
+                if (!slots.has(key)) order.push(key);
+                slots.set(key, ts.isPropertyAssignment(prop) ? prop.initializer : prop.name);
+                if (order.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+            }
+        }
+        return ts.factory.createObjectLiteralExpression(
+            order.map((key) => ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                slots.get(key)!,
+            )),
+        );
+    };
+
+    const isStaticNullishCollectionSource = (expr: ts.Expression): boolean => {
+        const cur = unwrapStaticExpression(expr);
+        return cur.kind === ts.SyntaxKind.NullKeyword || isStaticUndefinedExpression(cur);
     };
 
     const resolveStaticObjectFromEntriesCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
