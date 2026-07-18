@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 
 class PreludeCaptureBox {
     label: string;
@@ -388,6 +389,17 @@ async function preludeAggregateErrorAwaitedLocalReturn(prefix: string): Promise<
     const problem = new AggregateError([prefix + "first", prefix + "second"], prefix + "aggregate", { cause: prefix + "cause" });
     const value = await delay(289, prefix + "aggregate-value");
     return problem.name + ":" + problem.message + ":" + problem.errors.length + ":" + problem.errors[0] + ":" + problem.cause + ":" + problem.toString() + ":" + value;
+}
+
+async function preludeFsObjectsAwaitedLocalReturn(prefix: string): Promise<string> {
+    const root = fs.mkdtempSync("/tmp/tsc2c-async-prelude-fs-");
+    const file = root + "/" + prefix + "fs.txt";
+    fs.writeFileSync(file, prefix + "fs-data");
+    const stat = fs.statSync(file);
+    const entry = fs.readdirSync(root, { withFileTypes: true })[0];
+    fs.rmSync(root, { recursive: true, force: true });
+    const value = await delay(289, prefix + "fs-value");
+    return stat.isFile() + ":" + stat.size + ":" + entry.name + ":" + entry.isFile() + ":" + stat.toString() + ":" + entry.toString() + ":" + value;
 }
 
 async function preludeSymbolBigIntAwaitedLocalReturn(prefix: string): Promise<string> {
@@ -1833,6 +1845,10 @@ preludeBuiltinsAwaitedLocalReturn("fn-").then((value: string): void => {
 
 preludeAggregateErrorAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-aggregate-error-awaited-local-return:", value);
+});
+
+preludeFsObjectsAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-fs-objects-awaited-local-return:", value);
 });
 
 preludeSymbolBigIntAwaitedLocalReturn("fn-").then((value: string): void => {
