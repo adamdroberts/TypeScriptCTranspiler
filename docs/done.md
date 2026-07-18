@@ -8,6 +8,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 - Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `while` break/continue, break-terminated `switch`, and `try`/`catch`/`finally` after a pending awaited local, matching the existing async-method subset. Test: `async_await_pending_return_expr`
 - Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `do while`, plain `for`, `for...of`, `for...in`, early return, and post-await throw after a pending awaited local. Test: `async_await_pending_return_expr`
+- Source `try`/`catch` and `try`/`finally` pending-`await` continuations capture await-free local preludes declared before the source `try` statement for async declarations, function values, and class methods. Test: `async_await_try_source_prelude`
 - Source `try`/`catch` pending-`await` catch paths support transparent catch throws and catch prelude locals feeding transparent return expressions. Test: `async_await_try_catch`
 - Source `try`/`catch` pending-`await` catch-prelude locals are preserved for lifted async function values and nested async closures. Test: `async_await_try_catch_values`
 - Source `try`/`finally` pending-`await` finally-prelude locals are preserved for lifted async function values and nested async closures. Test: `async_await_try_catch_values`
@@ -2702,6 +2703,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_try_catch_throw` | async try/catch pending continuations support synchronous catch rethrows |
 | `async_await_try_return_await` | async try/catch and try/finally support direct and parenthesized return-await continuations |
 | `async_await_try_catch_values` | async function values resume pending try/catch and try/finally continuations |
+| `async_await_try_source_prelude` | async source try/catch and try/finally continuations capture await-free locals declared before the try statement |
 | `async_await_try_catch_prelude` | async try/catch pending continuations support synchronous catch preludes and initialized or later-assigned catch-local declarations before return or throw |
 | `async_await_try_finally_prelude` | async try/finally pending continuations support synchronous initialized and later-assigned finally-local declarations |
 | `async_await_parenthesized_bare_await` | async continuations unwrap parenthesized awaited locals, bare awaits, direct return-awaits, try/catch, try/finally, and try/finally fallthrough |
