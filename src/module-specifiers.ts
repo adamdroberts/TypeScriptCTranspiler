@@ -140,6 +140,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferConcatToStringText.length > 0) return bufferConcatToStringText;
             const bufferAllocToStringText = resolveStaticBufferAllocToStringCall(node);
             if (bufferAllocToStringText.length > 0) return bufferAllocToStringText;
+            const bufferToStringText = resolveStaticBufferToStringCall(node);
+            if (bufferToStringText.length > 0) return bufferToStringText;
             const bufferCompareText = resolveStaticBufferCompareCall(node);
             if (bufferCompareText.length > 0) return bufferCompareText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
@@ -833,6 +835,51 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupeBuffers(out);
     };
 
+    const resolveStaticBufferRangeArgs = (startExpr: ts.Expression | undefined, endExpr: ts.Expression | undefined): Array<[number | undefined, number | undefined]> => {
+        const starts = !startExpr || isStaticUndefinedExpression(startExpr)
+            ? [undefined]
+            : resolveStaticIntegerKeys(startExpr);
+        if (starts.length === 0) return [];
+        const ends = !endExpr || isStaticUndefinedExpression(endExpr)
+            ? [undefined]
+            : resolveStaticIntegerKeys(endExpr);
+        if (ends.length === 0) return [];
+
+        const out: Array<[number | undefined, number | undefined]> = [];
+        for (const start of starts) {
+            for (const end of ends) {
+                out.push([start, end]);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return out;
+    };
+
+    const resolveStaticBufferSliceExpression = (call: ts.CallExpression): Buffer[] => {
+        if (call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "slice" && method !== "subarray") return [];
+
+        const receivers = resolveStaticBufferExpression(callee.expression);
+        if (receivers.length === 0) return [];
+        const ranges = resolveStaticBufferRangeArgs(call.arguments[0], call.arguments[1]);
+        if (ranges.length === 0) return [];
+
+        const out: Buffer[] = [];
+        for (const receiver of receivers) {
+            for (const [start, end] of ranges) {
+                const view = method === "slice"
+                    ? receiver.slice(start, end)
+                    : receiver.subarray(start, end);
+                out.push(Buffer.from(view));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupeBuffers(out);
+    };
+
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
@@ -840,6 +887,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (fromBuffers.length > 0) return fromBuffers;
         const allocBuffers = resolveStaticBufferAllocExpression(unwrapped);
         if (allocBuffers.length > 0) return allocBuffers;
+        const sliceBuffers = resolveStaticBufferSliceExpression(unwrapped);
+        if (sliceBuffers.length > 0) return sliceBuffers;
         const callee = unwrapStaticExpression(unwrapped.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "concat") return [];
         const target = unwrapStaticExpression(callee.expression);
@@ -973,6 +1022,30 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     out.push(buffer.toString(toNodeEncoding));
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferToStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toString") return [];
+        const buffers = resolveStaticBufferExpression(callee.expression);
+        if (buffers.length === 0) return [];
+        const encodingArg = call.arguments[0];
+        const encodings = !encodingArg || isStaticUndefinedExpression(encodingArg)
+            ? [undefined]
+            : resolve(encodingArg);
+        if (encodings.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const encoding of encodings) {
+                const nodeEncoding = nodeBufferEncoding(encoding);
+                if (!nodeEncoding) return [];
+                out.push(buffer.toString(nodeEncoding));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
         return dedupe(out);

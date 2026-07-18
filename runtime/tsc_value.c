@@ -3997,6 +3997,15 @@ tsc_str_t* tsc_value_method_to_string(tsc_value_t recv, tsc_value_t radix) {
         if (tsc_value_is_undefined(radix)) return tsc_str_from_num(value_as_num(recv));
         return tsc_str_from_num_radix(value_as_num(recv), tsc_value_as_num(radix));
     }
+    if (value_tag(recv) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(recv);
+        if (o->is_typed_array && o->class_ptr) {
+            const tsc_str_t* encoding = tsc_value_is_undefined(radix)
+                ? tsc_str_from_lit("utf8", 4)
+                : tsc_value_to_string(radix);
+            return tsc_buffer_to_string((const tsc_buffer_t*)o->class_ptr, encoding);
+        }
+    }
     if (value_tag(recv) == TSC_VALUE_TAG_ARRAY || value_tag(recv) == TSC_VALUE_TAG_OBJECT || value_tag(recv) == TSC_VALUE_TAG_FUNCTION) {
         tsc_value_t fn = tsc_value_get_prop(recv, tsc_str_from_lit("toString", 8));
         if (tsc_value_is_callable(fn)) {
