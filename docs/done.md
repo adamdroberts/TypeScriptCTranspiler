@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs resolve static `String.prototype.split(...)[index]` specifier expressions, including const separator/index aliases and finite numeric index unions. Test: `dynamic_require_static_string_split`
 - Lazy `yield*` materializes generator-backed array sources before delegated suspension, forwarding each value one `.next()` at a time after source materialization. Test: `generator_lazy_yield_star_generator_backed`
 - `yield*` materializes generator-backed array sources before delegation, allowing `yield* innerGenerator()` to forward yielded values in the existing AOT generator subset. Test: `generator_yield_star_generator_backed`
 - Dynamic promise combinators consume typed string iterable inputs as one-character dynamic values across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`
@@ -2515,6 +2516,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_string_case` | zero-argument static string `.toLowerCase()` and `.toUpperCase()` calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_trim` | zero-argument static string trim calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_range` | static string `.slice(...)` and `.substring(...)` calls with finite integer bounds provide AOT dynamic require alternatives |
+| `dynamic_require_static_string_split` | static string `.split(...)[index]` calls provide finite AOT dynamic require alternatives |
 | `array_literal_stack_alloc_uncaptured_nested_function` / `array_literal_stack_alloc_closure_capture` | typed array literal escape analysis ignores unrelated nested functions but keeps closure-captured arrays on heap storage |
 | `dynamic_require_static_object_keys_values` | indexed Object.keys/Object.values calls over static object literals provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_entries` | indexed Object.entries calls over static object literals provide finite AOT dynamic require alternatives from entry keys and static string values |

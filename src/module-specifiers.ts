@@ -149,6 +149,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return out;
         }
         if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+            const stringSplit = resolveStaticStringSplitAccess(node);
+            if (stringSplit.length > 0) return stringSplit;
             const enumValues = resolveStaticEnumAccess(node.expression, node.argumentExpression);
             if (enumValues.length > 0) return enumValues;
             const objectKeysValues = resolveObjectKeysValuesAccess(node);
@@ -796,6 +798,48 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                         ? value.replace(search, replacement)
                         : value.replaceAll(search, replacement));
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringSplitAccess = (expr: ts.ElementAccessExpression): string[] => {
+        if (!expr.argumentExpression) return [];
+        const keys = resolveStaticNumericKeys(expr.argumentExpression);
+        if (keys.length === 0) return [];
+
+        const call = unwrapStaticExpression(expr.expression);
+        if (!ts.isCallExpression(call) || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "split") return [];
+
+        const values = resolve(callee.expression);
+        if (values.length === 0) return [];
+        const separators = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0]!)
+            ? [undefined]
+            : resolve(call.arguments[0]!);
+        if (separators.length === 0) return [];
+        const limits = !call.arguments[1] || isStaticUndefinedExpression(call.arguments[1]!)
+            ? [undefined]
+            : resolveStaticIntegerKeys(call.arguments[1]!);
+        if (limits.length === 0) return [];
+        if (limits.some((limit) => limit !== undefined && (limit < 0 || !Number.isSafeInteger(limit)))) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const separator of separators) {
+                for (const limit of limits) {
+                    const parts = separator === undefined
+                        ? [value]
+                        : value.split(separator, limit);
+                    if (parts.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                    for (const key of keys) {
+                        const part = parts[key];
+                        if (part === undefined) return [];
+                        out.push(part);
+                        if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                    }
                 }
             }
         }
