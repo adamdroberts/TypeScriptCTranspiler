@@ -71,7 +71,9 @@ closure-expression-body-direct-await: value-closure-direct
 method-for-continue: for-continue-for-continue0for-continue2
 closure-expression-body-inline-await-return: value-closure-inline!
 method-for-of: forof-of!
+closure-expression-body-param-direct-await: value-closure-param-direct-done
 method-for-in: forin-0in
+closure-expression-body-param-inline-await-return: value-closure-param-mid-inline!
 method-loop-control: control-ctrl0ctrl2
 method-try-catch: try-caught-try!-finally
 method-throw: reject-throw
