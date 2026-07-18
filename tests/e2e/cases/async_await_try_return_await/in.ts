@@ -40,6 +40,38 @@ async function tryFinallyReturnAwaitRejected(): Promise<string> {
     }
 }
 
+async function parenthesizedTryCatchReturnAwaitFulfilled(): Promise<string> {
+    try {
+        return (await delay(9, "tc-paren-ok"));
+    } catch (e) {
+        return "tc-paren-caught:" + e;
+    }
+}
+
+async function parenthesizedTryCatchReturnAwaitRejected(): Promise<string> {
+    try {
+        return (await delayedRejectAfter(10, "tc-paren-bad"));
+    } catch (e) {
+        return "tc-paren-caught:" + e;
+    }
+}
+
+async function parenthesizedTryFinallyReturnAwaitFulfilled(): Promise<string> {
+    try {
+        return (await delay(11, "tf-paren-ok"));
+    } finally {
+        trace += "P";
+    }
+}
+
+async function parenthesizedTryFinallyReturnAwaitRejected(): Promise<string> {
+    try {
+        return (await delayedRejectAfter(12, "tf-paren-bad"));
+    } finally {
+        trace += "p";
+    }
+}
+
 const arrowTryCatchReturnAwait = async (flag: boolean): Promise<string> => {
     try {
         return await (flag ? delay(5, "arrow-ok") : delayedRejectAfter(6, "arrow-bad"));
@@ -74,6 +106,22 @@ tryFinallyReturnAwaitFulfilled().then((value: string): void => {
 
 tryFinallyReturnAwaitRejected().catch((reason: string): void => {
     console.log("try-finally-return-await-rejected:", reason, trace);
+});
+
+parenthesizedTryCatchReturnAwaitFulfilled().then((value: string): void => {
+    console.log("parenthesized-try-catch-return-await-fulfilled:", value);
+});
+
+parenthesizedTryCatchReturnAwaitRejected().then((value: string): void => {
+    console.log("parenthesized-try-catch-return-await-rejected:", value);
+});
+
+parenthesizedTryFinallyReturnAwaitFulfilled().then((value: string): void => {
+    console.log("parenthesized-try-finally-return-await-fulfilled:", value, trace);
+});
+
+parenthesizedTryFinallyReturnAwaitRejected().catch((reason: string): void => {
+    console.log("parenthesized-try-finally-return-await-rejected:", reason, trace);
 });
 
 arrowTryCatchReturnAwait(true).then((value: string): void => {

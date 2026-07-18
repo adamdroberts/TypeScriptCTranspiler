@@ -6,3 +6,7 @@ arrow-try-catch-return-await-fulfilled: arrow-ok
 arrow-try-catch-return-await-rejected: arrow-caught:arrow-bad
 closure-try-finally-return-await-fulfilled: closure-ok FRf
 closure-try-finally-return-await-rejected: closure-bad FRfr
+parenthesized-try-catch-return-await-fulfilled: tc-paren-ok
+parenthesized-try-catch-return-await-rejected: tc-paren-caught:tc-paren-bad
+parenthesized-try-finally-return-await-fulfilled: tf-paren-ok FRfrP
+parenthesized-try-finally-return-await-rejected: tf-paren-bad FRfrPp
