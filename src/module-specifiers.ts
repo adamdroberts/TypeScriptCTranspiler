@@ -115,6 +115,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return resolveStringRawTemplate(node.template);
         }
         if (ts.isCallExpression(node)) {
+            const booleanText = resolveStaticBooleanCall(node);
+            if (booleanText.length > 0) return booleanText;
             const stringStaticText = resolveStaticStringConstructorCall(node);
             if (stringStaticText.length > 0) return stringStaticText;
             const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
@@ -328,6 +330,59 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return parts.length === 1 ? path.normalize(parts[0]!) : "";
             }
         }).filter((value) => value !== ""));
+    };
+
+    const resolveStaticBooleanCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isIdentifier(callee) || callee.text !== "Boolean") return [];
+        if (call.arguments.length === 0) return ["false"];
+        const values = resolveStaticBooleanValues(call.arguments[0]!);
+        return values.length === 0 ? [] : dedupe(values.map(String));
+    };
+
+    const resolveStaticBooleanValues = (expr: ts.Expression): boolean[] => {
+        const value = resolveCollectionExpression(expr);
+        if (!value) return [];
+        if (value.kind === ts.SyntaxKind.TrueKeyword) return [true];
+        if (value.kind === ts.SyntaxKind.FalseKeyword) return [false];
+        if (
+            value.kind === ts.SyntaxKind.NullKeyword ||
+            value.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(value) && value.text === "undefined") ||
+            ts.isVoidExpression(value)
+        ) {
+            return [false];
+        }
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+            return [value.text.length > 0];
+        }
+        if (ts.isNumericLiteral(value)) {
+            const num = Number(value.text);
+            return Number.isFinite(num) ? [num !== 0] : [];
+        }
+        if (ts.isBigIntLiteral(value)) {
+            return [BigInt(value.text.replace(/n$/i, "")) !== 0n];
+        }
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            value.operator === ts.SyntaxKind.MinusToken &&
+            ts.isNumericLiteral(value.operand)
+        ) {
+            const num = -Number(value.operand.text);
+            return Number.isFinite(num) ? [num !== 0] : [];
+        }
+        if (ts.isArrayLiteralExpression(value) || ts.isObjectLiteralExpression(value)) {
+            return [true];
+        }
+        if (
+            ts.isTemplateExpression(value) ||
+            (ts.isTaggedTemplateExpression(value) && isStringRawTag(value.tag))
+        ) {
+            const texts = resolve(value);
+            return texts.length === 0 ? [] : [...new Set(texts.map((text) => text.length > 0))];
+        }
+        return [];
     };
 
     const resolveStaticStringConstructorCall = (call: ts.CallExpression): string[] => {
