@@ -239,6 +239,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isPropertyAccessExpression(node)) {
             const numericConstant = resolveStaticNumericConstantAccess(node);
             if (numericConstant.length > 0) return numericConstant;
+            const bufferLength = resolveStaticBufferLengthAccess(node);
+            if (bufferLength.length > 0) return bufferLength;
             const descriptorProperty = resolveStaticDescriptorPropertyAccess(node);
             if (descriptorProperty.length > 0) return descriptorProperty;
             const enumValues = resolveStaticEnumAccess(node.expression, node.name);
@@ -1440,6 +1442,12 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
         const result = isStaticBufferExpression(call.arguments[0]!);
         return result === null ? [] : [String(result)];
+    };
+
+    const resolveStaticBufferLengthAccess = (access: ts.PropertyAccessExpression): string[] => {
+        if (access.name.text !== "length") return [];
+        const buffers = resolveStaticBufferExpression(access.expression);
+        return buffers.length > 0 ? dedupe(buffers.map((buffer) => String(buffer.length))) : [];
     };
 
     const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
