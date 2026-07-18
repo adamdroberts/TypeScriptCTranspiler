@@ -135,6 +135,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (ownPredicateText.length > 0) return ownPredicateText;
             const ownPrototypePredicateText = resolveStaticObjectOwnPrototypePredicateCall(node);
             if (ownPrototypePredicateText.length > 0) return ownPrototypePredicateText;
+            const objectPrototypeToStringText = resolveStaticObjectPrototypeToStringCall(node);
+            if (objectPrototypeToStringText.length > 0) return objectPrototypeToStringText;
             const reflectGetText = resolveStaticReflectGetCall(node);
             if (reflectGetText.length > 0) return reflectGetText;
             const reflectHasText = resolveStaticReflectHasCall(node);
@@ -1043,6 +1045,53 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticObjectPrototypeToStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "call") return [];
+        const methodAccess = unwrapStaticExpression(callee.expression);
+        if (!ts.isPropertyAccessExpression(methodAccess) || methodAccess.name.text !== "toString") return [];
+        const prototypeAccess = unwrapStaticExpression(methodAccess.expression);
+        if (!ts.isPropertyAccessExpression(prototypeAccess) || prototypeAccess.name.text !== "prototype") return [];
+        const target = unwrapStaticExpression(prototypeAccess.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+
+        const tag = staticObjectPrototypeToStringTag(unwrapStaticExpression(call.arguments[0]!));
+        return tag ? [`[object ${tag}]`] : [];
+    };
+
+    const staticObjectPrototypeToStringTag = (expr: ts.Expression): string | null => {
+        if (ts.isObjectLiteralExpression(expr)) return "Object";
+        if (ts.isArrayLiteralExpression(expr)) return "Array";
+        if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return "String";
+        if (ts.isNumericLiteral(expr)) return "Number";
+        if (ts.isBigIntLiteral(expr)) return "BigInt";
+        if (expr.kind === ts.SyntaxKind.TrueKeyword || expr.kind === ts.SyntaxKind.FalseKeyword) return "Boolean";
+        if (expr.kind === ts.SyntaxKind.NullKeyword) return "Null";
+        if (
+            expr.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(expr) && expr.text === "undefined") ||
+            ts.isVoidExpression(expr)
+        ) {
+            return "Undefined";
+        }
+        if (
+            ts.isPrefixUnaryExpression(expr) &&
+            (expr.operator === ts.SyntaxKind.PlusToken || expr.operator === ts.SyntaxKind.MinusToken) &&
+            ts.isNumericLiteral(expr.operand)
+        ) {
+            return "Number";
+        }
+        if (
+            ts.isPrefixUnaryExpression(expr) &&
+            expr.operator === ts.SyntaxKind.MinusToken &&
+            ts.isBigIntLiteral(expr.operand)
+        ) {
+            return "BigInt";
+        }
+        return null;
     };
 
     const resolveStaticObjectIntegrityPredicateCall = (call: ts.CallExpression): string[] => {
