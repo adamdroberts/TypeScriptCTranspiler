@@ -1483,6 +1483,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const urlSearchParamsValues = resolveStaticUrlSearchParamsGetAllCollectionExpression(cur);
+            if (urlSearchParamsValues) return resolveCollectionExpression(urlSearchParamsValues);
             const jsonParsed = resolveStaticJsonParseCollectionExpression(cur);
             if (jsonParsed) return resolveCollectionExpression(jsonParsed);
             const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
@@ -1535,6 +1537,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticUrlSearchParamsGetAllCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "getAll") return null;
+        const source = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(source)) return null;
+        const ctor = unwrapStaticExpression(source.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return null;
+        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return null;
+        const arg = source.arguments?.[0];
+        const values = !arg || isStaticUndefinedExpression(arg)
+            ? [""]
+            : resolve(arg);
+        const names = resolve(call.arguments[0]!);
+        if (values.length !== 1 || names.length !== 1) return null;
+        const params = new URLSearchParams(values[0]!);
+        return ts.factory.createArrayLiteralExpression(
+            params.getAll(names[0]!).map((value) => ts.factory.createStringLiteral(value)),
+        );
     };
 
     const resolveStaticJsonParseCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
