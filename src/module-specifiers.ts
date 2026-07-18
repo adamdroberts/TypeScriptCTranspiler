@@ -1481,6 +1481,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const jsonParsed = resolveStaticJsonParseCollectionExpression(cur);
+            if (jsonParsed) return resolveCollectionExpression(jsonParsed);
             const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
             if (valueOfReceiver) return resolveCollectionExpression(valueOfReceiver);
         }
@@ -1531,6 +1533,21 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticJsonParseCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "parse") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "JSON") return null;
+        const texts = resolve(call.arguments[0]!);
+        if (texts.length !== 1) return null;
+        try {
+            return jsonValueToStaticExpression(JSON.parse(texts[0]!));
+        } catch {
+            return null;
+        }
     };
 
     const resolveStaticObjectPrototypeValueOfReceiver = (call: ts.CallExpression): ts.Expression | null => {
@@ -2923,6 +2940,46 @@ function isPathModuleSpecifier(node: ts.Node | undefined): boolean {
     return !!node &&
         ts.isStringLiteralLike(node) &&
         (node.text === "path" || node.text === "node:path");
+}
+
+function jsonValueToStaticExpression(value: unknown): ts.Expression | null {
+    if (value === null) return ts.factory.createNull();
+    switch (typeof value) {
+        case "string":
+            return ts.factory.createStringLiteral(value);
+        case "number":
+            return Number.isFinite(value)
+                ? value < 0
+                    ? ts.factory.createPrefixUnaryExpression(
+                        ts.SyntaxKind.MinusToken,
+                        ts.factory.createNumericLiteral(String(-value)),
+                    )
+                    : ts.factory.createNumericLiteral(String(value))
+                : null;
+        case "boolean":
+            return value ? ts.factory.createTrue() : ts.factory.createFalse();
+        case "object": {
+            if (Array.isArray(value)) {
+                const elements: ts.Expression[] = [];
+                for (const item of value) {
+                    const expr = jsonValueToStaticExpression(item);
+                    if (!expr) return null;
+                    elements.push(expr);
+                }
+                return ts.factory.createArrayLiteralExpression(elements);
+            }
+            const entries = Object.entries(value as Record<string, unknown>);
+            const props: ts.PropertyAssignment[] = [];
+            for (const [key, item] of entries) {
+                const expr = jsonValueToStaticExpression(item);
+                if (!expr) return null;
+                props.push(ts.factory.createPropertyAssignment(ts.factory.createStringLiteral(key), expr));
+            }
+            return ts.factory.createObjectLiteralExpression(props);
+        }
+        default:
+            return null;
+    }
 }
 
 function isIdentifierShadowedInLocalScope(id: ts.Identifier): boolean {
