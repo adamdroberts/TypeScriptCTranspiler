@@ -10,7 +10,11 @@ pending-bare-rejected: bare pending caught bare bad
 pending-bare-fallthrough-rejected: bare fallthrough caught bare fall bad
 pending-finally-rejected: final bad R
 pending-finally-fallthrough-rejected: fall final bad Rr
+pending-bare-finally-rejected: bare final bad Rrb
+pending-bare-finally-fallthrough-rejected: bare fall final bad Rrbg
 pending-bare-fulfilled: bare pending done
 pending-bare-fallthrough-fulfilled: bare fallthrough done
-pending-finally-fulfilled: pending finally ok RrF
-pending-finally-fallthrough-fulfilled: finally fallthrough done RrFf
+pending-finally-fulfilled: pending finally ok RrbgF
+pending-finally-fallthrough-fulfilled: finally fallthrough done RrbgFf
+pending-bare-finally-fulfilled: bare finally done RrbgFf RrbgFfB
+pending-bare-finally-fallthrough-fulfilled: bare finally fallthrough done RrbgFfBG
