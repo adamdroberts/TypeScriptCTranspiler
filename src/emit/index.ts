@@ -24861,9 +24861,10 @@ class Emitter {
         }
         const initializer = this.unwrapTransparentExpression(variable.initializer);
         if (!ts.isAwaitExpression(initializer)) return null;
-        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
+        if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
-        const resultSymbol = this.symbolForIdentifier(result.expression);
+        const resultSymbol = this.symbolForIdentifier(resultExpression);
         return variableSymbol && variableSymbol === resultSymbol ? initializer : null;
     }
 
@@ -24889,14 +24890,15 @@ class Emitter {
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
         if (!ts.isIdentifier(variable.name)) return null;
-        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
+        if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
         if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
         const rhs = this.unwrapTransparentExpression(assignment.right);
         if (!ts.isAwaitExpression(rhs)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
         const assignedSymbol = this.symbolForIdentifier(assignment.left);
-        const resultSymbol = this.symbolForIdentifier(result.expression);
+        const resultSymbol = this.symbolForIdentifier(resultExpression);
         if (!variableSymbol || variableSymbol !== assignedSymbol || variableSymbol !== resultSymbol) return null;
         const preludeStatements: ts.Statement[] = [];
         if (variable.initializer) {
@@ -24945,9 +24947,10 @@ class Emitter {
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
         if (!ts.isIdentifier(variable.name) || !variable.initializer) return null;
-        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
+        if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
-        const resultSymbol = this.symbolForIdentifier(result.expression);
+        const resultSymbol = this.symbolForIdentifier(resultExpression);
         if (!variableSymbol || variableSymbol !== resultSymbol) return null;
         const initializer = this.unwrapTransparentExpression(variable.initializer);
         if (ts.isAwaitExpression(initializer)) return null;
@@ -24980,12 +24983,13 @@ class Emitter {
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
         if (!ts.isIdentifier(variable.name)) return null;
-        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
+        if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
         if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
         const assignedSymbol = this.symbolForIdentifier(assignment.left);
-        const resultSymbol = this.symbolForIdentifier(result.expression);
+        const resultSymbol = this.symbolForIdentifier(resultExpression);
         if (!variableSymbol || variableSymbol !== assignedSymbol || variableSymbol !== resultSymbol) return null;
         const rhs = this.unwrapTransparentExpression(assignment.right);
         if (ts.isAwaitExpression(rhs)) return null;

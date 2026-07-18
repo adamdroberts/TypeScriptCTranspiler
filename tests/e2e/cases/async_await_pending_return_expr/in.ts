@@ -49,6 +49,11 @@ async function letAwaitAlias(prefix: string): Promise<string> {
     return prefix + value;
 }
 
+async function parenthesizedLetAwaitAlias(prefix: string): Promise<string> {
+    let value = await delay(12, prefix + "parenthesized-let-alias");
+    return (value);
+}
+
 async function tagged(prefix: string): Promise<string> {
     const value = await delay(12, "tag");
     return prefix + value;
@@ -552,6 +557,11 @@ class Worker {
         return this.prefix + value + suffix;
     }
 
+    async parenthesizedLetAwaitAliasMethod(suffix: string): Promise<string> {
+        let value = await delay(17, this.prefix + "method-parenthesized-let-alias" + suffix);
+        return (value);
+    }
+
     async prefixed(prefix: string): Promise<string> {
         const value = await delay(18, "method-param");
         return prefix + value;
@@ -999,6 +1009,11 @@ const arrowLetAwaitAlias = async (prefix: string): Promise<string> => {
     return prefix + value;
 };
 
+const arrowParenthesizedLetAwaitAlias = async (prefix: string): Promise<string> => {
+    let value = await delay(21, prefix + "arrow-parenthesized-let-alias");
+    return (value);
+};
+
 const arrowParam = async (prefix: string): Promise<string> => {
     const value = await delay(22, "arrow-param");
     return prefix + value;
@@ -1254,6 +1269,10 @@ letAwaitAlias("fn-").then((value: string): void => {
     console.log("let-await-alias:", value);
 });
 
+parenthesizedLetAwaitAlias("fn-").then((value: string): void => {
+    console.log("parenthesized-let-await-alias:", value);
+});
+
 tagged("fn-").then((value: string): void => {
     console.log("tagged:", value);
 });
@@ -1456,6 +1475,10 @@ new Worker("job-").label().then((value: string): void => {
 
 new Worker("this-").letAwaitAliasMethod("!").then((value: string): void => {
     console.log("method-let-await-alias:", value);
+});
+
+new Worker("this-").parenthesizedLetAwaitAliasMethod("!").then((value: string): void => {
+    console.log("method-parenthesized-let-await-alias:", value);
 });
 
 new Worker("job-").prefixed("class-").then((value: string): void => {
@@ -1746,6 +1769,10 @@ arrow().then((value: string): void => {
 
 arrowLetAwaitAlias("value-").then((value: string): void => {
     console.log("arrow-let-await-alias:", value);
+});
+
+arrowParenthesizedLetAwaitAlias("value-").then((value: string): void => {
+    console.log("arrow-parenthesized-let-await-alias:", value);
 });
 
 arrowParam("value-").then((value: string): void => {
