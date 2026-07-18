@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static one-argument `buffer.equals(other)` specifier fragments over statically constructed Buffers. Test: `dynamic_require_static_buffer_equals`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.compare(left, right)` and one-argument `buffer.compare(right)` specifier fragments over statically constructed Buffers. Test: `dynamic_require_static_buffer_compare`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.allocUnsafe(size).toString(encoding?)` and `Buffer.allocUnsafeSlow(size).toString(encoding?)` specifier fragments using the deterministic runtime allocation behavior. Test: `dynamic_require_static_buffer_alloc_unsafe_to_string`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.alloc(size, fill?).toString(encoding?)` specifier fragments for finite integer sizes/fills and supported output encodings. Test: `dynamic_require_static_buffer_alloc_to_string`.

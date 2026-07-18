@@ -142,6 +142,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferAllocToStringText.length > 0) return bufferAllocToStringText;
             const bufferCompareText = resolveStaticBufferCompareCall(node);
             if (bufferCompareText.length > 0) return bufferCompareText;
+            const bufferEqualsText = resolveStaticBufferEqualsCall(node);
+            if (bufferEqualsText.length > 0) return bufferEqualsText;
             const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
             if (bufferIsBufferText.length > 0) return bufferIsBufferText;
             const numericParserText = resolveStaticNumericParserCall(node);
@@ -1068,6 +1070,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const left of leftBuffers) {
             for (const right of rightBuffers) {
                 out.push(compareStaticBuffers(left, right));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferEqualsCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "equals") return [];
+        const leftBuffers = resolveStaticBufferExpression(callee.expression);
+        if (leftBuffers.length === 0) return [];
+        const rightBuffers = resolveStaticBufferExpression(call.arguments[0]!);
+        if (rightBuffers.length === 0) return [];
+
+        const out: string[] = [];
+        for (const left of leftBuffers) {
+            for (const right of rightBuffers) {
+                out.push(String(left.equals(right)));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
