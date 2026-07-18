@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now captures typed `Event` and `EventTarget` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed Node `EventEmitter` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed Node `CryptoHash` and `CryptoHmac` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `TextEncoder` and `TextDecoder` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.

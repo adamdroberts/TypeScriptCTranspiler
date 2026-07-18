@@ -409,6 +409,13 @@ async function preludeEventEmitterAwaitedLocalReturn(prefix: string): Promise<st
     return (emitted ? "true" : "false") + ":" + total + ":" + emitter.listenerCount("tick");
 }
 
+async function preludeEventTargetAwaitedLocalReturn(prefix: string): Promise<string> {
+    const target = new EventTarget();
+    const event = new Event(prefix + "ready", { cancelable: true });
+    const value = await delay(291, prefix + "target");
+    return (target.dispatchEvent(event) ? "true" : "false") + ":" + event.type + ":" + event.cancelable + ":" + value;
+}
+
 async function preludeRegExpInlineAwaitReturn(prefix: string): Promise<string> {
     const pattern = new RegExp("^" + prefix + "inline-value$");
     return pattern.toString() + ":" + await delay(290, prefix + "inline-value");
@@ -1818,6 +1825,10 @@ preludeCryptoDigestAwaitedLocalReturn("fn-").then((value: string): void => {
 
 preludeEventEmitterAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-event-emitter-awaited-local-return:", value);
+});
+
+preludeEventTargetAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-event-target-awaited-local-return:", value);
 });
 
 preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {
