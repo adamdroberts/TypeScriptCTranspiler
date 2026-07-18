@@ -1,5 +1,8 @@
+branch-mixed-inline-await-return-sync: fn-branch-mixed-sync!
 conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
+method-branch-mixed-inline-await-return-sync: method-branch-mixed-class-method-branch-mixed-sync!
 method-conditional-mixed-inline-await-return-sync: method-conditional-class-method-conditional-mixed-sync!
+arrow-branch-mixed-inline-await-return-sync: value-arrow-branch-mixed-sync!
 arrow-conditional-mixed-inline-await-return-sync: value-arrow-conditional-mixed-sync!
 suffix: ready!
 double: 42
@@ -67,6 +70,9 @@ arrow-conditional-inline-await-return-false: value-arrow-conditional-false!
 conditional-mixed-inline-await-return-await: fn-conditional-mixed-await!
 method-conditional-mixed-inline-await-return-await: method-conditional-class-method-conditional-mixed-await!
 arrow-conditional-mixed-inline-await-return-await: value-arrow-conditional-mixed-await!
+branch-mixed-inline-await-return-await: fn-branch-mixed-await!
+method-branch-mixed-inline-await-return-await: method-branch-mixed-class-method-branch-mixed-await!
+arrow-branch-mixed-inline-await-return-await: value-arrow-branch-mixed-await!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
