@@ -2134,10 +2134,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             method === "getOwnPropertyDescriptor";
         if (!isObjectDescriptor && !isReflectDescriptor) return null;
 
-        const object = resolveCollectionExpression(call.arguments[0]!);
-        if (!object) return null;
         const keys = resolveKeyTexts(call.arguments[1]!);
         if (keys.length !== 1) return null;
+
+        const bufferDescriptor = resolveStaticBufferDescriptorFor(call.arguments[0]!, keys[0]!);
+        if (bufferDescriptor) return bufferDescriptor;
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object) return null;
         return staticDescriptorFor(object, keys[0]!);
     };
 
@@ -2165,8 +2169,44 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object") return null;
 
+        const bufferDescriptor = resolveStaticBufferDescriptorFor(call.arguments[0]!, keys[0]!);
+        if (bufferDescriptor) return bufferDescriptor;
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         return object ? staticDescriptorFor(object, keys[0]!) : null;
+    };
+
+    const resolveStaticBufferDescriptorFor = (
+        objectExpr: ts.Expression,
+        key: string,
+    ): { value: string[]; writable: boolean; enumerable: boolean; configurable: boolean } | null => {
+        const buffers = resolveStaticBufferExpression(objectExpr);
+        if (buffers.length === 0) return null;
+
+        const values: string[] = [];
+        for (const buffer of buffers) {
+            const descriptor = staticBufferDescriptorFor(buffer, key);
+            if (!descriptor) return null;
+            values.push(...descriptor.value);
+            if (values.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        const value = dedupe(values);
+        return value.length === 0
+            ? null
+            : { value, writable: true, enumerable: true, configurable: true };
+    };
+
+    const staticBufferDescriptorFor = (
+        buffer: Buffer,
+        key: string,
+    ): { value: string[]; writable: boolean; enumerable: boolean; configurable: boolean } | null => {
+        if (!staticBufferHasOwnKey(buffer, key)) return null;
+        return {
+            value: [String(buffer[Number(key)])],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+        };
     };
 
     const staticDescriptorFor = (
