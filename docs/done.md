@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Dynamic promise combinators consume typed string iterable inputs as one-character dynamic values across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`
 - Dynamic promise combinators assimilate delayed nested thenables from generator-backed iterable inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_generator_recursive`
 - `Promise.try` assimilates delayed dynamic thenables that resolve to nested native Promise records, covering nested fulfillment and rejection. Test: `promise_try_thenable_nested_promise_async`
 - Dynamic promise combinators assimilate delayed nested thenables from direct self-iterable custom iterator object inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_custom_iterator_self_recursive`
@@ -1763,6 +1764,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_ignored_arguments` | Promise static and instance helpers evaluate ignored trailing arguments |
 | `promise_object_methods` | Promise instances expose empty own-property and integrity Object and Reflect helper results |
 | `promise_pending_combinators` | pending records propagate through immediate Promise combinators without synchronous callback invocation |
+| `promise_combinators_dynamic` | dynamic Promise combinators consume dynamic array, Set, sparse array, and typed string iterable inputs |
 | `promise_combinators_dynamic_map_inputs` | dynamic Promise combinators consume Map inputs through entry iteration |
 | `queue_microtask` | bounded queueMicrotask callbacks drain after process.nextTick before exit |
 | `scheduler_callback_this` | bounded scheduler callbacks with explicit this parameters receive runtime undefined |

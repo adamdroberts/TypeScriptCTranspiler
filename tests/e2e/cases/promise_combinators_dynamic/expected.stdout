@@ -3,6 +3,10 @@ settled dynamic: fulfilled done rejected bad fulfilled plain
 settled set dynamic: fulfilled set-done rejected set-bad fulfilled set-plain
 all sparse: ["a",null,"c"]
 settled sparse: [{"status":"fulfilled","value":"a"},{"status":"fulfilled"},{"status":"fulfilled","value":"c"}]
+all string: a|z
+race string: b
+any empty string: AggregateError All promises were rejected 0
+settled string: fulfilled d fulfilled e
 all dynamic: promise,thenable,plain,nested
 all set dynamic: set-promise,thenable,set-plain
 any dynamic: thenable

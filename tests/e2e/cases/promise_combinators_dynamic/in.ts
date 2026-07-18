@@ -66,3 +66,21 @@ Promise.all(sparse).then((values: any[]) => {
 Promise.allSettled(sparse).then((items: any[]) => {
     console.log("settled sparse:", JSON.stringify(items));
 });
+
+Promise.all("az").then((values: any[]) => {
+    console.log("all string:", values.join("|"));
+});
+
+Promise.race("bc").then((value: any) => {
+    console.log("race string:", value);
+});
+
+Promise.any("").catch((err: any) => {
+    console.log("any empty string:", err.name, err.message, err.errors.length);
+});
+
+Promise.allSettled("de").then((items: any[]) => {
+    const first: any = items[0];
+    const second: any = items[1];
+    console.log("settled string:", first.status, first.value, second.status, second.value);
+});
