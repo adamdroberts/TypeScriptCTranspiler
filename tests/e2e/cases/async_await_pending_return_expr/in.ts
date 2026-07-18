@@ -44,6 +44,11 @@ async function doubled(): Promise<number> {
     return value * 2;
 }
 
+async function letAwaitAlias(prefix: string): Promise<string> {
+    let value = await delay(11, "let-alias");
+    return prefix + value;
+}
+
 async function tagged(prefix: string): Promise<string> {
     const value = await delay(12, "tag");
     return prefix + value;
@@ -542,6 +547,11 @@ class Worker {
         return value + "!";
     }
 
+    async letAwaitAliasMethod(suffix: string): Promise<string> {
+        let value = await delay(16, "method-let-alias");
+        return this.prefix + value + suffix;
+    }
+
     async prefixed(prefix: string): Promise<string> {
         const value = await delay(18, "method-param");
         return prefix + value;
@@ -984,6 +994,11 @@ const arrow = async (): Promise<string> => {
     return value + "!";
 };
 
+const arrowLetAwaitAlias = async (prefix: string): Promise<string> => {
+    let value = await delay(21, "arrow-let-alias");
+    return prefix + value;
+};
+
 const arrowParam = async (prefix: string): Promise<string> => {
     const value = await delay(22, "arrow-param");
     return prefix + value;
@@ -1235,6 +1250,10 @@ doubled().then((value: number): void => {
     console.log("double:", value);
 });
 
+letAwaitAlias("fn-").then((value: string): void => {
+    console.log("let-await-alias:", value);
+});
+
 tagged("fn-").then((value: string): void => {
     console.log("tagged:", value);
 });
@@ -1433,6 +1452,10 @@ initializedAssignmentExpressionAwaitReturn("fn-").then((value: string): void => 
 
 new Worker("job-").label().then((value: string): void => {
     console.log("method:", value);
+});
+
+new Worker("this-").letAwaitAliasMethod("!").then((value: string): void => {
+    console.log("method-let-await-alias:", value);
 });
 
 new Worker("job-").prefixed("class-").then((value: string): void => {
@@ -1719,6 +1742,10 @@ new Worker("method-prelude-").preludeExpressionStatementAwaitedLocalReturnMethod
 
 arrow().then((value: string): void => {
     console.log("arrow:", value);
+});
+
+arrowLetAwaitAlias("value-").then((value: string): void => {
+    console.log("arrow-let-await-alias:", value);
 });
 
 arrowParam("value-").then((value: string): void => {

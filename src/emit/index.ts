@@ -24853,7 +24853,7 @@ class Emitter {
         const declaration = body.statements[0];
         const result = body.statements[1];
         if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
-        if (!(declaration.declarationList.flags & ts.NodeFlags.Const)) return null;
+        if (!(declaration.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
         if (!ts.isIdentifier(variable.name) || !variable.initializer) {
