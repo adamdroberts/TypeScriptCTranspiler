@@ -193,6 +193,11 @@ interface AsyncAwaitExpressionReturnContinuation {
     thisValue: EmitResult | null;
 }
 
+interface AsyncAwaitPreludeExpressionReturnContinuation {
+    preludeStatements: readonly ts.VariableStatement[];
+    continuation: AsyncAwaitExpressionReturnContinuation;
+}
+
 interface AsyncAwaitIfExpressionReturnLeaf {
     kind: "return";
     continuation: AsyncAwaitExpressionReturnContinuation;
@@ -23233,6 +23238,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitPreludeExpressionReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24668,6 +24679,7 @@ class Emitter {
                 !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLogicalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitConditionalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitPreludeExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLeadingReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitFourStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25368,6 +25380,7 @@ class Emitter {
         returnExpr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitExpressionReturnContinuation | null {
         if (ts.isAwaitExpression(returnExpr)) return null;
         let awaitExpr: ts.AwaitExpression | null = null;
@@ -25406,7 +25419,7 @@ class Emitter {
         visitSource(foundAwaitExpr.expression);
         if (!ok) return null;
 
-        const params = this.asyncAwaitContinuationParameters(parameters);
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...captures];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -25446,6 +25459,80 @@ class Emitter {
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,
         };
+    }
+
+    private asyncAwaitPreludeExpressionReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitPreludeExpressionReturnContinuation | null {
+        if (body.statements.length < 2) return null;
+        const result = body.statements[body.statements.length - 1]!;
+        if (!ts.isReturnStatement(result) || !result.expression || ts.isAwaitExpression(result.expression)) {
+            return null;
+        }
+        const preludeStatements = body.statements.slice(0, -1);
+        const preludeVariableStatements: ts.VariableStatement[] = [];
+        const captures: AsyncAwaitContinuationParam[] = [];
+        const captureSymbols = new Set<ts.Symbol>();
+        let ok = true;
+        const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visitNoAwaitOrNestedScope);
+        };
+        for (const stmt of preludeStatements) {
+            if (!ts.isVariableStatement(stmt)) return null;
+            preludeVariableStatements.push(stmt);
+            if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+            for (const decl of stmt.declarationList.declarations) {
+                if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                visitNoAwaitOrNestedScope(decl.initializer);
+                if (!ok) return null;
+                const symbol = this.symbolForIdentifier(decl.name);
+                if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                if (
+                    type.kind !== "number" &&
+                    type.kind !== "boolean" &&
+                    type.kind !== "string" &&
+                    type.kind !== "bigint" &&
+                    type.kind !== "value"
+                ) return null;
+                const name = mangleIdent(decl.name.text);
+                captureSymbols.add(symbol);
+                captures.push({
+                    symbol,
+                    name,
+                    type,
+                    field: `capture_${name}`,
+                });
+            }
+        }
+        const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+            result.expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        return continuation ? { preludeStatements: preludeVariableStatements, continuation } : null;
+    }
+
+    private emitAsyncAwaitPreludeExpressionReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const match = this.asyncAwaitPreludeExpressionReturnContinuation(body, parameters, thisValue);
+        if (!match) return false;
+        for (const stmt of match.preludeStatements) {
+            this.emitVarStmt(buf, stmt);
+        }
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.continuation);
     }
 
     private emitAsyncAwaitExpressionReturnContinuation(
@@ -46086,6 +46173,12 @@ class Emitter {
                             thisType ? { c: "__tsc_this", ty: thisType } : null,
                         ) ||
                         this.emitAsyncAwaitConditionalExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
+                        this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,
