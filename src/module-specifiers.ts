@@ -149,6 +149,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return out;
         }
         if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+            const enumValues = resolveStaticEnumAccess(node.expression, node.argumentExpression);
+            if (enumValues.length > 0) return enumValues;
             const objectKeysValues = resolveObjectKeysValuesAccess(node);
             if (objectKeysValues.length > 0) return objectKeysValues;
             const objectEntries = resolveObjectEntriesAccess(node);
@@ -156,6 +158,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return resolveStaticCollectionAccess(node.expression, node.argumentExpression);
         }
         if (ts.isPropertyAccessExpression(node)) {
+            const enumValues = resolveStaticEnumAccess(node.expression, node.name);
+            if (enumValues.length > 0) return enumValues;
             return resolveStaticCollectionAccess(node.expression, node.name);
         }
         if (!ts.isIdentifier(node)) return [];
@@ -399,6 +403,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             values = resolveStaticObjectAccess(init, keyExpr);
         }
         return dedupe(values);
+    };
+
+    const resolveStaticEnumAccess = (
+        enumExpr: ts.Expression,
+        keyExpr: ts.Expression | ts.Identifier,
+    ): string[] => {
+        const target = unwrapStaticExpression(enumExpr);
+        if (!ts.isIdentifier(target)) return [];
+        const decl = visibleEnumDeclaration(target, enumExpr);
+        if (!decl) return [];
+        const keys = resolveKeyTexts(keyExpr);
+        if (keys.length === 0) return [];
+        const members = enumMemberStringValues(decl);
+        if (!members) return [];
+        const out: string[] = [];
+        for (const key of keys) {
+            const value = members.get(key);
+            if (value === undefined) return [];
+            out.push(value);
+        }
+        return dedupe(out);
     };
 
     const resolveObjectKeysValuesAccess = (expr: ts.ElementAccessExpression): string[] => {
@@ -1190,7 +1215,11 @@ function stringLiteralUnionTypeTexts(
         const aliasName = typeNode.typeName.text;
         if (seenAliases.has(aliasName)) return [];
         const alias = visibleTypeAliasDeclaration(typeNode.typeName, typeNode);
-        if (!alias) return [];
+        if (!alias) {
+            const enumDecl = visibleEnumDeclaration(typeNode.typeName, typeNode);
+            const enumValues = enumDecl ? enumStringValues(enumDecl) : [];
+            return enumValues.length > 0 ? enumValues : [];
+        }
         seenAliases.add(aliasName);
         const values = stringLiteralUnionTypeTexts(alias.type, seenAliases);
         seenAliases.delete(aliasName);
@@ -1285,7 +1314,11 @@ function templateLiteralSpanTypeTexts(
         const aliasName = typeNode.typeName.text;
         if (seenAliases.has(aliasName)) return [];
         const alias = visibleTypeAliasDeclaration(typeNode.typeName, typeNode);
-        if (!alias) return [];
+        if (!alias) {
+            const enumDecl = visibleEnumDeclaration(typeNode.typeName, typeNode);
+            const enumValues = enumDecl ? enumStringValues(enumDecl) : [];
+            return enumValues.length > 0 ? enumValues : [];
+        }
         seenAliases.add(aliasName);
         const values = templateLiteralSpanTypeTexts(alias.type, seenAliases);
         seenAliases.delete(aliasName);
@@ -1362,6 +1395,39 @@ function visibleTypeAliasDeclaration(id: ts.Identifier, context: ts.Node): ts.Ty
         cur = cur.parent;
     }
     return null;
+}
+
+function visibleEnumDeclaration(id: ts.Identifier, context: ts.Node): ts.EnumDeclaration | null {
+    let cur: ts.Node | undefined = context;
+    while (cur) {
+        if (ts.isBlock(cur) || ts.isSourceFile(cur) || ts.isModuleBlock(cur)) {
+            for (const stmt of cur.statements) {
+                if (ts.isEnumDeclaration(stmt) && stmt.name.text === id.text) {
+                    return stmt;
+                }
+            }
+        }
+        cur = cur.parent;
+    }
+    return null;
+}
+
+function enumStringValues(decl: ts.EnumDeclaration): string[] {
+    const members = enumMemberStringValues(decl);
+    return members ? dedupeStringAlternatives([...members.values()]) : [];
+}
+
+function enumMemberStringValues(decl: ts.EnumDeclaration): Map<string, string> | null {
+    const values = new Map<string, string>();
+    for (const member of decl.members) {
+        const key = staticPropertyName(member.name);
+        if (key === null || !member.initializer) return null;
+        const memberValues = staticStringExpressionTexts(member.initializer);
+        if (memberValues.length !== 1) return null;
+        values.set(key, memberValues[0]!);
+        if (values.size > MAX_STATIC_STRING_ALTERNATIVES) return null;
+    }
+    return values;
 }
 
 function staticPropertyName(name: ts.PropertyName): string | null {

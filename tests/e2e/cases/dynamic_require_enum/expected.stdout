@@ -1,0 +1,5 @@
+enum first: enum-b
+enum second: enum-a
+enum direct: enum-a
+enum bracket: enum-b
+enum local: enum-local-b
