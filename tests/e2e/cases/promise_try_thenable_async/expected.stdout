@@ -1,0 +1,3 @@
+sync:
+fulfilled: call try-resolve|call try-reject|external|settle try-resolve|settle try-reject|fulfilled:try value
+rejected: call try-resolve|call try-reject|external|settle try-resolve|settle try-reject|fulfilled:try value|rejected:try bad
