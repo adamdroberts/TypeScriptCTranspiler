@@ -24761,13 +24761,15 @@ class Emitter {
         if (!(declaration.declarationList.flags & ts.NodeFlags.Const)) return null;
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name) || !variable.initializer || !ts.isAwaitExpression(variable.initializer)) {
+        if (!ts.isIdentifier(variable.name) || !variable.initializer) {
             return null;
         }
+        const initializer = this.unwrapTransparentExpression(variable.initializer);
+        if (!ts.isAwaitExpression(initializer)) return null;
         if (!result.expression || !ts.isIdentifier(result.expression)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
         const resultSymbol = this.symbolForIdentifier(result.expression);
-        return variableSymbol && variableSymbol === resultSymbol ? variable.initializer : null;
+        return variableSymbol && variableSymbol === resultSymbol ? initializer : null;
     }
 
     private emitDirectAsyncAwaitReturnAlias(buf: CBuf, body: ts.Block): boolean {
