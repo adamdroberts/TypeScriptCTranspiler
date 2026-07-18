@@ -194,7 +194,7 @@ interface AsyncAwaitExpressionReturnContinuation {
 }
 
 interface AsyncAwaitPreludeExpressionReturnContinuation {
-    preludeStatements: readonly ts.VariableStatement[];
+    preludeStatements: readonly ts.Statement[];
     result: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation;
 }
 
@@ -25467,7 +25467,7 @@ class Emitter {
         thisValue: EmitResult | null,
     ): AsyncAwaitPreludeExpressionReturnContinuation | null {
         if (body.statements.length < 2) return null;
-        const preludeVariableStatements: ts.VariableStatement[] = [];
+        const preludeStatements: ts.Statement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
         let ok = true;
@@ -25482,35 +25482,45 @@ class Emitter {
         let tailStart = 0;
         while (tailStart < body.statements.length) {
             const stmt = body.statements[tailStart]!;
-            if (!ts.isVariableStatement(stmt)) break;
-            preludeVariableStatements.push(stmt);
-            if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
-            for (const decl of stmt.declarationList.declarations) {
-                if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                visitNoAwaitOrNestedScope(decl.initializer);
+            if (ts.isExpressionStatement(stmt)) {
+                visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
-                const symbol = this.symbolForIdentifier(decl.name);
-                if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
-                const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                if (
-                    type.kind !== "number" &&
-                    type.kind !== "boolean" &&
-                    type.kind !== "string" &&
-                    type.kind !== "bigint" &&
-                    type.kind !== "value"
-                ) return null;
-                const name = mangleIdent(decl.name.text);
-                captureSymbols.add(symbol);
-                captures.push({
-                    symbol,
-                    name,
-                    type,
-                    field: `capture_${name}`,
-                });
+                preludeStatements.push(stmt);
+                tailStart++;
+                continue;
             }
-            tailStart++;
+            if (ts.isVariableStatement(stmt)) {
+                preludeStatements.push(stmt);
+                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                    visitNoAwaitOrNestedScope(decl.initializer);
+                    if (!ok) return null;
+                    const symbol = this.symbolForIdentifier(decl.name);
+                    if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                    const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (
+                        type.kind !== "number" &&
+                        type.kind !== "boolean" &&
+                        type.kind !== "string" &&
+                        type.kind !== "bigint" &&
+                        type.kind !== "value"
+                    ) return null;
+                    const name = mangleIdent(decl.name.text);
+                    captureSymbols.add(symbol);
+                    captures.push({
+                        symbol,
+                        name,
+                        type,
+                        field: `capture_${name}`,
+                    });
+                }
+                tailStart++;
+                continue;
+            }
+            break;
         }
-        if (preludeVariableStatements.length === 0) return null;
+        if (preludeStatements.length === 0) return null;
         const tailStatements = body.statements.slice(tailStart);
         if (tailStatements.length === 0) return null;
         let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
@@ -25553,7 +25563,7 @@ class Emitter {
                 ? branch
                 : null;
         }
-        return continuation ? { preludeStatements: preludeVariableStatements, result: continuation } : null;
+        return continuation ? { preludeStatements, result: continuation } : null;
     }
 
     private emitAsyncAwaitPreludeExpressionReturnContinuation(
@@ -25565,7 +25575,7 @@ class Emitter {
         const match = this.asyncAwaitPreludeExpressionReturnContinuation(body, parameters, thisValue);
         if (!match) return false;
         for (const stmt of match.preludeStatements) {
-            this.emitVarStmt(buf, stmt);
+            this.emitStmt(buf, stmt);
         }
         if ("awaitExpr" in match.result) {
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
