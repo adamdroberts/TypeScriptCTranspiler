@@ -93,6 +93,24 @@ async function pendingTryFinallyRejected(): Promise<string> {
     }
 }
 
+async function pendingTryFinallyFallthroughFulfilled(): Promise<string> {
+    try {
+        const value = await delay(7, "ok");
+    } finally {
+        finallyTrace += "f";
+    }
+    return "finally fallthrough done " + finallyTrace;
+}
+
+async function pendingTryFinallyFallthroughRejected(): Promise<string> {
+    try {
+        const value = await delayedReject("fall final bad");
+    } finally {
+        finallyTrace += "r";
+    }
+    return "finally fallthrough never";
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -130,4 +148,12 @@ pendingTryFinallyFulfilled().then((value: string): void => {
 
 pendingTryFinallyRejected().catch((reason: string): void => {
     console.log("pending-finally-rejected:", reason, finallyTrace);
+});
+
+pendingTryFinallyFallthroughFulfilled().then((value: string): void => {
+    console.log("pending-finally-fallthrough-fulfilled:", value);
+});
+
+pendingTryFinallyFallthroughRejected().catch((reason: string): void => {
+    console.log("pending-finally-fallthrough-rejected:", reason, finallyTrace);
 });
