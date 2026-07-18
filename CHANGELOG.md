@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `Buffer.byteLength(buffer)` specifier fragments over statically constructed Buffers, including existing static Buffer composition paths. Test: `dynamic_require_static_buffer_byte_length_buffer`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.from(number[]).toString(encoding?)` specifier fragments, including byte wrapping and composition with existing static Buffer operations. Test: `dynamic_require_static_buffer_from_array_to_string`.
 - Finite dynamic `require(...)` proofs now resolve static numeric Buffer `.fill(value, start?, end?)` calls followed by `.toString(encoding?)` over statically constructed Buffers. Test: `dynamic_require_static_buffer_fill_to_string`.
 - Dynamic Buffer objects returned through boxed APIs such as `child_process.spawnSync(...).stdout` now route `.toString(encoding?)` through Buffer decoding instead of generic object stringification. Test: `child_process_spawn_sync_buffer_encoding`.

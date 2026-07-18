@@ -993,6 +993,11 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
 
+        const buffers = resolveStaticBufferExpression(call.arguments[0]!);
+        if (buffers.length > 0) {
+            return dedupe(buffers.map((buffer) => String(buffer.length)));
+        }
+
         const values = resolve(call.arguments[0]!);
         if (values.length === 0) return [];
         const encodingArg = call.arguments[1];
