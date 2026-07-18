@@ -39,6 +39,28 @@ async function finallyPreludeLocalFallthrough(): Promise<string> {
     return "fallthrough:" + finallyTrace;
 }
 
+async function finallyPreludeUninitializedLocalFulfilled(): Promise<string> {
+    try {
+        const value = await delay(4, "uninit-ok");
+        return "try:" + value;
+    } finally {
+        let label: string;
+        label = "U";
+        finallyTrace = finallyTrace + label;
+    }
+}
+
+async function finallyPreludeUninitializedLocalRejected(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(5, "uninit-bad");
+        return "try:" + value;
+    } finally {
+        let label: string;
+        label = "u";
+        finallyTrace = finallyTrace + label;
+    }
+}
+
 finallyPreludeLocalFulfilled().then((value: string): void => {
     console.log("finally-prelude-local-fulfilled:", value, finallyTrace);
 });
@@ -49,4 +71,12 @@ finallyPreludeLocalRejected().catch((reason: string): void => {
 
 finallyPreludeLocalFallthrough().then((value: string): void => {
     console.log("finally-prelude-local-fallthrough:", value);
+});
+
+finallyPreludeUninitializedLocalFulfilled().then((value: string): void => {
+    console.log("finally-prelude-uninitialized-local-fulfilled:", value, finallyTrace);
+});
+
+finallyPreludeUninitializedLocalRejected().catch((reason: string): void => {
+    console.log("finally-prelude-uninitialized-local-rejected:", reason, finallyTrace);
 });

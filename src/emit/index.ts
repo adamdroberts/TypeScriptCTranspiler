@@ -25164,7 +25164,8 @@ class Emitter {
         if (awaited.variable && !awaitedSymbol) return null;
         let usesThis = false;
         let usesAwaited = false;
-        const finallyLocals = new Set<ts.Symbol>();
+        const finallyDeclaredLocals = new Set<ts.Symbol>();
+        const finallyInitializedLocals = new Set<ts.Symbol>();
         let ok = true;
 
         const visitExpr = (node: ts.Node, allowAwaited: boolean): void => {
@@ -25190,7 +25191,11 @@ class Emitter {
                     }
                     usesAwaited = true;
                 } else {
-                    if (sym && finallyLocals.has(sym)) return;
+                    if (sym && finallyInitializedLocals.has(sym)) return;
+                    if (sym && finallyDeclaredLocals.has(sym)) {
+                        ok = false;
+                        return;
+                    }
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
                     if (param) referenced.set(param.symbol, param);
                 }
@@ -25210,20 +25215,37 @@ class Emitter {
                     return;
                 }
                 for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name) || !decl.initializer) {
+                    if (!ts.isIdentifier(decl.name)) {
                         ok = false;
                         return;
                     }
-                    visitExpr(decl.initializer, false);
-                    if (!ok) return;
                     const sym = this.symbolForIdentifier(decl.name);
                     if (!sym) {
                         ok = false;
                         return;
                     }
-                    finallyLocals.add(sym);
+                    if (!decl.initializer) {
+                        if (stmt.declarationList.flags & ts.NodeFlags.Const) {
+                            ok = false;
+                            return;
+                        }
+                        finallyDeclaredLocals.add(sym);
+                        continue;
+                    }
+                    visitExpr(decl.initializer, false);
+                    if (!ok) return;
+                    finallyDeclaredLocals.add(sym);
+                    finallyInitializedLocals.add(sym);
                 }
                 return;
+            }
+            if (ts.isExpressionStatement(stmt) && ts.isBinaryExpression(stmt.expression) && stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(stmt.expression.left)) {
+                const sym = this.symbolForIdentifier(stmt.expression.left);
+                if (sym && finallyDeclaredLocals.has(sym)) {
+                    visitExpr(stmt.expression.right, false);
+                    if (ok) finallyInitializedLocals.add(sym);
+                    return;
+                }
             }
             ts.forEachChild(stmt, (child) => visitExpr(child, false));
         };
