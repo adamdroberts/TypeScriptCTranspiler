@@ -133,6 +133,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
             if (ownPredicateText.length > 0) return ownPredicateText;
+            const integrityPredicateText = resolveStaticObjectIntegrityPredicateCall(node);
+            if (integrityPredicateText.length > 0) return integrityPredicateText;
             const dateText = resolveStaticDateCall(node);
             if (dateText.length > 0) return dateText;
             const mathText = resolveStaticMathCall(node);
@@ -759,6 +761,52 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
             const index = Number(key);
             return index >= 0 && index < object.text.length;
+        }
+        return null;
+    };
+
+    const resolveStaticObjectIntegrityPredicateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+        const method = callee.name.text;
+        if (method !== "isExtensible" && method !== "isSealed" && method !== "isFrozen") return [];
+        const rawKind = staticIntegrityObjectKind(unwrapStaticExpression(call.arguments[0]!));
+        const objectKind = rawKind ?? staticIntegrityResolvedObjectKind(call.arguments[0]!);
+        if (objectKind === null) return [];
+        if (method === "isExtensible") return [String(objectKind === "object")];
+        return [String(objectKind === "primitive")];
+    };
+
+    const staticIntegrityResolvedObjectKind = (expr: ts.Expression): "object" | "primitive" | null => {
+        const object = resolveCollectionExpression(expr);
+        return object ? staticIntegrityObjectKind(object) : null;
+    };
+
+    const staticIntegrityObjectKind = (object: ts.Expression): "object" | "primitive" | null => {
+        if (ts.isObjectLiteralExpression(object) || ts.isArrayLiteralExpression(object)) return "object";
+        if (
+            object.kind === ts.SyntaxKind.NullKeyword ||
+            object.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(object) && (object.text === "undefined" || object.text === "NaN")) ||
+            ts.isVoidExpression(object) ||
+            object.kind === ts.SyntaxKind.TrueKeyword ||
+            object.kind === ts.SyntaxKind.FalseKeyword ||
+            ts.isStringLiteral(object) ||
+            ts.isNoSubstitutionTemplateLiteral(object) ||
+            ts.isNumericLiteral(object) ||
+            ts.isBigIntLiteral(object)
+        ) {
+            return "primitive";
+        }
+        if (
+            ts.isPrefixUnaryExpression(object) &&
+            object.operator === ts.SyntaxKind.MinusToken &&
+            (ts.isNumericLiteral(object.operand) || ts.isBigIntLiteral(object.operand))
+        ) {
+            return "primitive";
         }
         return null;
     };
