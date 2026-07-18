@@ -108,6 +108,14 @@ async function nestedConditionalInlineAwaitReturn(outer: boolean, inner: boolean
         : prefix + await delay(124, "nested-conditional-fallthrough") + "!";
 }
 
+async function logicalOrInlineAwaitReturn(prefix: string): Promise<string> {
+    return prefix || await delay(135, "logical-or-await");
+}
+
+async function logicalAndInlineAwaitReturn(flag: boolean): Promise<any> {
+    return flag && await delay(136, "logical-and-await");
+}
+
 class Worker {
     prefix: string;
 
@@ -404,6 +412,14 @@ class Worker {
                 : this.prefix + prefix + "method-nested-conditional-sync!"
             : this.prefix + prefix + await delay(126, "method-nested-conditional-fallthrough") + "!";
     }
+
+    async logicalOrInlineAwaitReturnMethod(): Promise<string> {
+        return this.prefix || await delay(137, "method-logical-or-await");
+    }
+
+    async logicalAndInlineAwaitReturnMethod(flag: boolean): Promise<any> {
+        return flag && await delay(138, "method-logical-and-await");
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -500,6 +516,14 @@ const arrowNestedConditionalInlineAwaitReturn = async (outer: boolean, inner: bo
             ? prefix + await delay(127, "arrow-nested-conditional-inner") + "!"
             : prefix + "arrow-nested-conditional-sync!"
         : prefix + await delay(128, "arrow-nested-conditional-fallthrough") + "!";
+};
+
+const arrowLogicalOrInlineAwaitReturn = async (prefix: string): Promise<string> => {
+    return prefix || await delay(139, "arrow-logical-or-await");
+};
+
+const arrowLogicalAndInlineAwaitReturn = async (flag: boolean): Promise<any> => {
+    return flag && await delay(140, "arrow-logical-and-await");
 };
 
 suffix().then((value: string): void => {
@@ -608,6 +632,22 @@ nestedConditionalInlineAwaitReturn(true, false, "fn-").then((value: string): voi
 
 nestedConditionalInlineAwaitReturn(false, false, "fn-").then((value: string): void => {
     console.log("nested-conditional-inline-await-return-fallthrough:", value);
+});
+
+logicalOrInlineAwaitReturn("logical-or-sync").then((value: string): void => {
+    console.log("logical-or-inline-await-return-sync:", value);
+});
+
+logicalOrInlineAwaitReturn("").then((value: string): void => {
+    console.log("logical-or-inline-await-return-await:", value);
+});
+
+logicalAndInlineAwaitReturn(false).then((value: any): void => {
+    console.log("logical-and-inline-await-return-sync:", value);
+});
+
+logicalAndInlineAwaitReturn(true).then((value: any): void => {
+    console.log("logical-and-inline-await-return-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -808,6 +848,22 @@ new Worker("method-nested-conditional-").nestedConditionalInlineAwaitReturnMetho
     console.log("method-nested-conditional-inline-await-return-fallthrough:", value);
 });
 
+new Worker("method-logical-or-sync").logicalOrInlineAwaitReturnMethod().then((value: string): void => {
+    console.log("method-logical-or-inline-await-return-sync:", value);
+});
+
+new Worker("").logicalOrInlineAwaitReturnMethod().then((value: string): void => {
+    console.log("method-logical-or-inline-await-return-await:", value);
+});
+
+new Worker("method-logical-and-sync").logicalAndInlineAwaitReturnMethod(false).then((value: any): void => {
+    console.log("method-logical-and-inline-await-return-sync:", value);
+});
+
+new Worker("method-logical-and-source").logicalAndInlineAwaitReturnMethod(true).then((value: any): void => {
+    console.log("method-logical-and-inline-await-return-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -910,4 +966,20 @@ arrowNestedConditionalInlineAwaitReturn(true, false, "value-").then((value: stri
 
 arrowNestedConditionalInlineAwaitReturn(false, false, "value-").then((value: string): void => {
     console.log("arrow-nested-conditional-inline-await-return-fallthrough:", value);
+});
+
+arrowLogicalOrInlineAwaitReturn("arrow-logical-or-sync").then((value: string): void => {
+    console.log("arrow-logical-or-inline-await-return-sync:", value);
+});
+
+arrowLogicalOrInlineAwaitReturn("").then((value: string): void => {
+    console.log("arrow-logical-or-inline-await-return-await:", value);
+});
+
+arrowLogicalAndInlineAwaitReturn(false).then((value: any): void => {
+    console.log("arrow-logical-and-inline-await-return-sync:", value);
+});
+
+arrowLogicalAndInlineAwaitReturn(true).then((value: any): void => {
+    console.log("arrow-logical-and-inline-await-return-await:", value);
 });
