@@ -55,6 +55,12 @@ method-nested-branch-inline-await-return-fallthrough: method-nested-class-method
 arrow-nested-branch-inline-await-return-inner: value-arrow-nested-inner!
 arrow-nested-branch-inline-await-return-outer: value-arrow-nested-outer!
 arrow-nested-branch-inline-await-return-fallthrough: value-arrow-nested-fallthrough!
+conditional-inline-await-return-true: fn-conditional-true!
+conditional-inline-await-return-false: fn-conditional-false!
+method-conditional-inline-await-return-true: method-conditional-class-method-conditional-true!
+method-conditional-inline-await-return-false: method-conditional-class-method-conditional-false!
+arrow-conditional-inline-await-return-true: value-arrow-conditional-true!
+arrow-conditional-inline-await-return-false: value-arrow-conditional-false!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
