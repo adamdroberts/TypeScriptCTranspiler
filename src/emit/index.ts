@@ -21389,6 +21389,7 @@ class Emitter {
             type.kind === "symbol" ||
             type.kind === "value" ||
             type.kind === "promise" ||
+            type.kind === "eventemitter" ||
             type.kind === "array" ||
             type.kind === "map" ||
             type.kind === "set" ||

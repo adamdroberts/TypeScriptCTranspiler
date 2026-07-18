@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import crypto from "node:crypto";
+import { EventEmitter } from "node:events";
 
 class PreludeCaptureBox {
     label: string;
@@ -395,6 +396,17 @@ async function preludeCryptoDigestAwaitedLocalReturn(prefix: string): Promise<st
     const hmac = crypto.createHmac("sha256", "secret");
     const value = await delay(289, prefix + "crypto");
     return hash.update(value).digest("hex").slice(0, 8) + ":" + hmac.update(value).digest("hex").slice(0, 8);
+}
+
+async function preludeEventEmitterAwaitedLocalReturn(prefix: string): Promise<string> {
+    const emitter = new EventEmitter();
+    let total = 0;
+    emitter.on("tick", (amount: number): void => {
+        total += amount;
+    });
+    const value = await delay(289, prefix + "event");
+    const emitted = emitter.emit("tick", value.length);
+    return (emitted ? "true" : "false") + ":" + total + ":" + emitter.listenerCount("tick");
 }
 
 async function preludeRegExpInlineAwaitReturn(prefix: string): Promise<string> {
@@ -1802,6 +1814,10 @@ preludeTextCodecAwaitedLocalReturn("fn-").then((value: string): void => {
 
 preludeCryptoDigestAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-crypto-digest-awaited-local-return:", value);
+});
+
+preludeEventEmitterAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-event-emitter-awaited-local-return:", value);
 });
 
 preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {
