@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Dynamic promise combinators assimilate delayed nested thenables from direct self-iterable custom iterator object inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_custom_iterator_self_recursive`
 - Dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs whose `[Symbol.iterator]()` returns a class iterator object with `next()`, including inherited iterator and inherited `next()` owner routing. Test: `promise_thenable_async_combinator_custom_iterator_recursive`
 - Dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, including inherited iterator methods. Test: `promise_thenable_async_combinator_custom_iterable_recursive`
 - Dynamic promise combinators consume `Map<any, any>` inputs through entry iteration across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, resolving with `[key, value]` entry arrays. Test: `promise_combinators_dynamic_map_inputs`
@@ -172,6 +173,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept `Map<any, any>` inputs and consume their `[key, value]` entries through the existing dynamic array combinator path. Test: `promise_combinators_dynamic_map_inputs`
 - Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept typed custom iterable class inputs whose `[Symbol.iterator]()` lowers to an array-backed `IterableIterator<T>` and feed the resulting array through the existing Promise combinator paths. Test: `promise_thenable_async_combinator_custom_iterable_recursive`
 - Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept typed custom iterable class inputs whose `[Symbol.iterator]()` returns a class iterator object with `next()` and feed the materialized values through the existing Promise combinator paths. Test: `promise_thenable_async_combinator_custom_iterator_recursive`
+- Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept direct self-iterable custom iterator object inputs and feed the materialized values through the existing Promise combinator paths. Test: `promise_thenable_async_combinator_custom_iterator_self_recursive`
 - `new Promise<T>(executor, ...ignored)` evaluates and ignores trailing constructor arguments before invoking the synchronous executor. Test: `promise_constructor_ignored_arguments`
 - Async functions in a no-`try` tail position now adopt `return await pendingPromise` directly, preserving delayed Promise settlement without entering the general suspend/resume state-machine path. Test: `async_await_tail_pending`
 - Dynamic `any` values containing already-settled native Promise records can be awaited through the same adoption path as statically typed Promise values. Test: `async_await_values_immediate`
@@ -1779,6 +1781,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and array/Set combinators |
 | `promise_thenable_assimilation` | immediate dynamic thenable assimilation through Promise.resolve and callbacks |
 | `promise_thenable_async_combinator_custom_iterator_recursive` | dynamic promise combinators assimilate delayed nested thenables from custom iterator object inputs |
+| `promise_thenable_async_combinator_custom_iterator_self_recursive` | dynamic promise combinators assimilate delayed nested thenables from direct self-iterable custom iterator inputs |
 | `promise_thenable_async_combinator_custom_iterable_recursive` | dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs |
 | `promise_thenable_async_combinator_set_recursive` | dynamic promise combinators assimilate delayed nested thenables from Set inputs |
 | `promise_thenable_async_combinator_recursive` | dynamic promise combinators assimilate delayed nested thenables |
