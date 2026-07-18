@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs materialize static `Map.groupBy(...)` entry collections over finite array/string/Set/Map/URLSearchParams-style sources with conservative inline callback keys. Test: `dynamic_require_static_map_group_by_collections`
 - Finite dynamic `require(...)` proofs materialize static `Object.groupBy(...)` collection fragments over finite array/string/Set/Map/URLSearchParams-style sources with conservative inline callback keys. Test: `dynamic_require_static_object_group_by_collections`
 - Finite dynamic `require(...)` proofs materialize static `new URLSearchParams(...).keys()` / `.values()` / `.entries()` collection fragments for indexed key/value/entry reads. Test: `dynamic_require_static_url_search_params`
 - Finite dynamic `require(...)` proofs materialize static `new URLSearchParams(...)` iterable entry sources through `Array.from(...)` and `Object.fromEntries(...)`, with matching stdlib overloads and duplicate-key overwrite composition. Test: `dynamic_require_static_url_search_params`

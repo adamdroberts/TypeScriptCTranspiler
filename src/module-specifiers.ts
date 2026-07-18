@@ -2739,7 +2739,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             ts.isParenthesizedExpression(cur) ||
             ts.isAsExpression(cur) ||
             ts.isTypeAssertionExpression(cur) ||
-            ts.isSatisfiesExpression(cur)
+            ts.isSatisfiesExpression(cur) ||
+            ts.isNonNullExpression(cur)
         ) {
             cur = cur.expression;
         }
@@ -2768,6 +2769,10 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (objectAssign) return resolveCollectionExpression(objectAssign);
             const objectGroupBy = resolveStaticObjectGroupByCollectionExpression(cur);
             if (objectGroupBy) return resolveCollectionExpression(objectGroupBy);
+            const mapGroupBy = resolveStaticMapGroupByCollectionExpression(cur);
+            if (mapGroupBy) return resolveCollectionExpression(mapGroupBy);
+            const mapGet = resolveStaticMapGetCollectionExpression(cur);
+            if (mapGet) return resolveCollectionExpression(mapGet);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
             if (objectEntries) return resolveCollectionExpression(objectEntries);
             const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
@@ -3737,6 +3742,70 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 ts.factory.createArrayLiteralExpression(groups.get(key)!),
             );
         }));
+    };
+
+    const resolveStaticMapGroupByCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "groupBy") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Map") return null;
+
+        const values = resolveStaticArrayFromSource(call.arguments[0]!);
+        if (!values) return null;
+        const elements = denseStaticArrayElements(values);
+        if (!elements) return null;
+
+        const order: string[] = [];
+        const groups = new Map<string, ts.Expression[]>();
+        for (let index = 0; index < elements.length; index++) {
+            const keyExpr = substituteStaticArrayCallback(call.arguments[1]!, elements[index]!, index);
+            if (!keyExpr) return null;
+            const keys = resolve(keyExpr);
+            if (keys.length !== 1) return null;
+            const key = keys[0]!;
+            if (!groups.has(key)) {
+                order.push(key);
+                groups.set(key, []);
+            }
+            groups.get(key)!.push(elements[index]!);
+            if (order.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+
+        return ts.factory.createArrayLiteralExpression(order.map((key) => {
+            return ts.factory.createArrayLiteralExpression([
+                ts.factory.createStringLiteral(key),
+                ts.factory.createArrayLiteralExpression(groups.get(key)!),
+            ]);
+        }));
+    };
+
+    const resolveStaticMapGetCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "get") return null;
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(receiver)) return null;
+        const ctor = unwrapStaticExpression(receiver.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "Map") return null;
+        if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return null;
+
+        const keys = resolve(call.arguments[0]!);
+        if (keys.length !== 1) return null;
+        const entries = resolveStaticArrayFromMapSource(receiver.arguments?.[0]);
+        if (!entries) return null;
+        for (const element of entries.elements) {
+            if (ts.isSpreadElement(element)) return null;
+            const entry = resolveCollectionExpression(element);
+            if (!entry || !ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
+            const keyExpr = entry.elements[0];
+            const valueExpr = entry.elements[1];
+            if (!keyExpr || !valueExpr || ts.isSpreadElement(keyExpr) || ts.isSpreadElement(valueExpr)) return null;
+            const entryKeys = resolve(keyExpr);
+            if (entryKeys.length !== 1) return null;
+            if (entryKeys[0] === keys[0]) return valueExpr;
+        }
+        return ts.factory.createIdentifier("undefined");
     };
 
     const resolveStaticEntryCollectionExpression = (expr: ts.Expression): ts.ArrayLiteralExpression | null => {
