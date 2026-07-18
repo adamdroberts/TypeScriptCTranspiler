@@ -21395,6 +21395,8 @@ class Emitter {
             type.kind === "weakmap" ||
             type.kind === "weakset" ||
             type.kind === "regexp" ||
+            type.kind === "hash" ||
+            type.kind === "hmac" ||
             type.kind === "date" ||
             type.kind === "error" ||
             type.kind === "url" ||

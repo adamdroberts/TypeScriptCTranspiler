@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import crypto from "node:crypto";
 
 class PreludeCaptureBox {
     label: string;
@@ -387,6 +388,13 @@ async function preludeTextCodecAwaitedLocalReturn(prefix: string): Promise<strin
     const value = await delay(289, prefix + "codec");
     const encoded = encoder.encode(value);
     return decoder.decode(encoded) + ":" + encoded.length;
+}
+
+async function preludeCryptoDigestAwaitedLocalReturn(prefix: string): Promise<string> {
+    const hash = crypto.createHash("sha1");
+    const hmac = crypto.createHmac("sha256", "secret");
+    const value = await delay(289, prefix + "crypto");
+    return hash.update(value).digest("hex").slice(0, 8) + ":" + hmac.update(value).digest("hex").slice(0, 8);
 }
 
 async function preludeRegExpInlineAwaitReturn(prefix: string): Promise<string> {
@@ -1790,6 +1798,10 @@ preludePromiseRaceReturn("fn-").then((value: string): void => {
 
 preludeTextCodecAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-text-codec-awaited-local-return:", value);
+});
+
+preludeCryptoDigestAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-crypto-digest-awaited-local-return:", value);
 });
 
 preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {
