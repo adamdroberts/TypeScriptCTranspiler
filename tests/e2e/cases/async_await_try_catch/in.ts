@@ -6,6 +6,8 @@ function delayedReject(reason: string): Promise<string> {
     });
 }
 
+let finallyTrace = "";
+
 async function recover(): Promise<string> {
     try {
         await Promise.reject("bad");
@@ -55,6 +57,24 @@ async function pendingTryRejected(): Promise<string> {
     }
 }
 
+async function pendingTryFinallyFulfilled(): Promise<string> {
+    try {
+        const value = await delay(6, "ok");
+        return "pending finally " + value;
+    } finally {
+        finallyTrace += "F";
+    }
+}
+
+async function pendingTryFinallyRejected(): Promise<string> {
+    try {
+        const value = await delayedReject("final bad");
+        return "never " + value;
+    } finally {
+        finallyTrace += "R";
+    }
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -76,4 +96,12 @@ pendingTryFulfilled().then((value: string): void => {
 
 pendingTryRejected().then((value: string): void => {
     console.log("pending-rejected:", value);
+});
+
+pendingTryFinallyFulfilled().then((value: string): void => {
+    console.log("pending-finally-fulfilled:", value, finallyTrace);
+});
+
+pendingTryFinallyRejected().catch((reason: string): void => {
+    console.log("pending-finally-rejected:", reason, finallyTrace);
 });

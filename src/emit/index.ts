@@ -211,6 +211,16 @@ interface AsyncAwaitTryCatchReturnContinuation {
     usesAwaited: boolean;
 }
 
+interface AsyncAwaitTryFinallyReturnContinuation {
+    variable: ts.Identifier;
+    awaitExpr: ts.AwaitExpression;
+    tryReturnExpr: ts.Expression;
+    finallyStatements: readonly ts.Statement[];
+    params: AsyncAwaitContinuationParam[];
+    thisValue: EmitResult | null;
+    usesAwaited: boolean;
+}
+
 interface AsyncAwaitIfExpressionReturnLeaf {
     kind: "return";
     continuation: AsyncAwaitExpressionReturnContinuation;
@@ -23252,6 +23262,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitTryFinallyReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitIfExpressionReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24709,6 +24725,7 @@ class Emitter {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
                 !this.emitAsyncAwaitTryCatchReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitTryFinallyReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLogicalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitConditionalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25016,6 +25033,242 @@ class Emitter {
         buf.line("tsc_try_pop();");
         buf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
         buf.close();
+        buf.close();
+        buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private asyncAwaitTryFinallyReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitTryFinallyReturnContinuation | null {
+        if (body.statements.length !== 1) return null;
+        const tryStmt = body.statements[0]!;
+        if (!ts.isTryStatement(tryStmt) || tryStmt.catchClause || !tryStmt.finallyBlock) return null;
+        if (tryStmt.tryBlock.statements.length !== 2) return null;
+
+        const awaited = this.awaitedLocalDeclaration(tryStmt.tryBlock.statements[0]!);
+        const tryReturn = tryStmt.tryBlock.statements[1]!;
+        if (!awaited || !ts.isReturnStatement(tryReturn) || !tryReturn.expression) return null;
+
+        const params = this.asyncAwaitContinuationParameters(parameters);
+        const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        for (const param of params) paramsBySymbol.set(param.symbol, param);
+        const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const awaitedSymbol = this.symbolForIdentifier(awaited.variable);
+        if (!awaitedSymbol) return null;
+        let usesThis = false;
+        let usesAwaited = false;
+        let ok = true;
+
+        const visitExpr = (node: ts.Node, allowAwaited: boolean): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            if (node.kind === ts.SyntaxKind.ThisKeyword) {
+                if (thisValue) {
+                    usesThis = true;
+                    return;
+                }
+                ok = false;
+                return;
+            }
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
+                const sym = this.symbolForIdentifier(node);
+                if (sym && sym === awaitedSymbol) {
+                    if (!allowAwaited) {
+                        ok = false;
+                        return;
+                    }
+                    usesAwaited = true;
+                } else {
+                    const param = sym ? paramsBySymbol.get(sym) : undefined;
+                    if (param) referenced.set(param.symbol, param);
+                }
+            }
+            ts.forEachChild(node, (child) => visitExpr(child, allowAwaited));
+        };
+
+        const visitFinallyStatement = (stmt: ts.Statement): void => {
+            if (!ok) return;
+            if (ts.isReturnStatement(stmt) || ts.isAwaitExpression(stmt) || ts.isFunctionLike(stmt) || ts.isClassLike(stmt)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(stmt, (child) => visitExpr(child, false));
+        };
+
+        visitExpr(awaited.awaitExpr.expression, false);
+        visitExpr(tryReturn.expression, true);
+        for (const stmt of tryStmt.finallyBlock.statements) visitFinallyStatement(stmt);
+        if (!ok) return null;
+
+        return {
+            variable: awaited.variable,
+            awaitExpr: awaited.awaitExpr,
+            tryReturnExpr: tryReturn.expression,
+            finallyStatements: tryStmt.finallyBlock.statements,
+            params: [...referenced.values()],
+            thisValue: usesThis ? thisValue : null,
+            usesAwaited,
+        };
+    }
+
+    private emitAsyncAwaitTryFinallyReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const continuation = this.asyncAwaitTryFinallyReturnContinuation(body, parameters, thisValue);
+        if (!continuation) return false;
+        const source = this.emitExpr(continuation.awaitExpr.expression);
+        const promise = this.prepareType(source.ty);
+        if (promise.kind !== "promise") return false;
+        const awaitedType = this.prepareType(mapTsType(
+            continuation.awaitExpr,
+            this.checker.getTypeAtLocation(continuation.awaitExpr),
+            this.checker,
+        ));
+        if (awaitedType.kind === "never" || (awaitedType.kind === "void" && continuation.usesAwaited)) return false;
+
+        const sourcePromise = this.freshTemp("_await_source");
+        const resultPromise = this.freshTemp("_await_result");
+        const adapter = this.ensureAsyncAwaitTryFinallyReturnContinuationAdapter(
+            promise,
+            awaitedType,
+            continuation,
+        );
+        const envType = `${adapter}_env_t`;
+        const env = this.freshTemp("_await_env");
+        buf.line(`tsc_promise_t* const ${sourcePromise} = ${this.coerce(source, promise, continuation.awaitExpr.expression)};`);
+        buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
+        buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
+        buf.line(`${env}->receiver = ${sourcePromise};`);
+        buf.line(`${env}->result_promise = ${resultPromise};`);
+        for (const param of continuation.params) {
+            buf.line(`${env}->${param.field} = ${param.name};`);
+        }
+        if (continuation.thisValue) {
+            buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
+        }
+        buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
+        buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
+        buf.close();
+        buf.open("else");
+        buf.line(`${adapter}(${env});`);
+        buf.close();
+        buf.line(`return ${resultPromise};`);
+        return true;
+    }
+
+    private ensureAsyncAwaitTryFinallyReturnContinuationAdapter(
+        promiseType: CType,
+        awaitedType: CType,
+        continuation: AsyncAwaitTryFinallyReturnContinuation,
+    ): string {
+        const name = `tsc_async_await_try_finally_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const envType = `${name}_env_t`;
+
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of continuation.params) {
+            this.structDecls.line(`${param.type.c} ${param.field};`);
+        }
+        if (continuation.thisValue) {
+            this.structDecls.line(`${continuation.thisValue.ty.c} this_arg;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${name}(void* env);`);
+
+        const valueVar = this.freshTemp("_await_value");
+        const returnVar = this.freshTemp("_await_return");
+        const resolvedVar = this.freshTemp("_await_resolved");
+        const rejectedReason = this.freshTemp("_await_rejected_reason");
+        const eh = this.freshTemp("_await_eh");
+        const awaitedValue = awaitedType.kind === "void"
+            ? null
+            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, continuation.tryReturnExpr);
+        const fulfilledScope = new Map<ts.Symbol, string>();
+        const rejectedScope = new Map<ts.Symbol, string>();
+        const variableSymbol = this.symbolForIdentifier(continuation.variable);
+        if (variableSymbol && awaitedType.kind !== "void") fulfilledScope.set(variableSymbol, valueVar);
+        for (const param of continuation.params) {
+            fulfilledScope.set(param.symbol, `state->${param.field}`);
+            rejectedScope.set(param.symbol, `state->${param.field}`);
+        }
+
+        const emitFinallyStatements = (target: CBuf, scope: Map<ts.Symbol, string>): void => {
+            this.argumentValueScopes.push(scope);
+            if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                for (const stmt of continuation.finallyStatements) this.emitStmt(target, stmt);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (continuation.thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
+        };
+
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+        buf.open("if (!tsc_promise_is_fulfilled(_p) && !tsc_promise_is_rejected(_p))");
+        buf.line("return;");
+        buf.close();
+        buf.line(`tsc_promise_t* ${resolvedVar};`);
+        buf.line(`tsc_try_frame_t ${eh};`);
+        buf.line(`tsc_try_push(&${eh});`);
+        buf.open(`if (setjmp(${eh}.jb) == 0)`);
+        buf.open("if (tsc_promise_is_rejected(_p))");
+        buf.line(`tsc_str_t* ${rejectedReason} = tsc_value_to_string(tsc_promise_reason(_p));`);
+        emitFinallyStatements(buf, rejectedScope);
+        buf.line("tsc_try_pop();");
+        buf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${rejectedReason}));`);
+        buf.close();
+        buf.open("else");
+        if (awaitedValue) {
+            buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
+        }
+        this.argumentValueScopes.push(fulfilledScope);
+        if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
+        let returned: EmitResult;
+        this.asyncAwaitContinuationAdapterDepth++;
+        try {
+            returned = this.emitExpr(continuation.tryReturnExpr);
+        } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
+            if (continuation.thisValue) this.functionThisStack.pop();
+            this.argumentValueScopes.pop();
+        }
+        const returnType = this.prepareType(returned!.ty);
+        if (returnType.kind === "void" || returnType.kind === "never") {
+            buf.line(`${returned!.c};`);
+            emitFinallyStatements(buf, fulfilledScope);
+            buf.line("tsc_try_pop();");
+            buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+        } else {
+            buf.line(`${returnType.c} ${returnVar} = ${returned!.c};`);
+            emitFinallyStatements(buf, fulfilledScope);
+            buf.line("tsc_try_pop();");
+            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnType }, continuation.tryReturnExpr)};`);
+        }
+        buf.close();
+        buf.close();
+        buf.open("else");
+        buf.line("tsc_try_pop();");
+        buf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
         buf.close();
         buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
         buf.close();
