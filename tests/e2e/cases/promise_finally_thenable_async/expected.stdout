@@ -1,0 +1,4 @@
+sync:
+fulfilled: external|call fulfilled-finally|settle fulfilled-finally|fulfilled:base
+rejected: external|call fulfilled-finally|settle fulfilled-finally|fulfilled:base|call rejected-finally|settle rejected-finally|rejected:base-bad
+override: external|call fulfilled-finally|settle fulfilled-finally|fulfilled:base|call rejected-finally|settle rejected-finally|rejected:base-bad|call override-finally|settle override-finally|override:finalizer-bad
