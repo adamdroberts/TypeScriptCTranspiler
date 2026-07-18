@@ -25831,6 +25831,20 @@ class Emitter {
         return params;
     }
 
+    private asyncAwaitClosureCaptureParameter(
+        symbol: ts.Symbol,
+    ): AsyncAwaitContinuationParam | null {
+        const env = this.closureEnvBindingForSymbol(symbol);
+        if (!env) return null;
+        const name = mangleIdent(symbol.getName());
+        return {
+            symbol,
+            name: `(*${env.ptr})`,
+            type: env.type,
+            field: `capture_${name}`,
+        };
+    }
+
     private asyncAwaitContinuationReferences(
         awaitedName: ts.Identifier | null,
         postAwaitStatements: readonly ts.Statement[],
@@ -26576,6 +26590,11 @@ class Emitter {
                 const param = sym ? paramsBySymbol.get(sym) : undefined;
                 if (param) {
                     referenced.set(param.symbol, param);
+                } else if (sym) {
+                    const capture = this.asyncAwaitClosureCaptureParameter(sym);
+                    if (capture) {
+                        referenced.set(capture.symbol, capture);
+                    }
                 } else {
                     // Top-level, imported, and global-like symbols remain directly addressable
                     // from generated adapters; normal expression emission will validate them.
