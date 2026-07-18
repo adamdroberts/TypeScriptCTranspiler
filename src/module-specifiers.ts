@@ -129,6 +129,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (numericPredicateText.length > 0) return numericPredicateText;
             const arrayPredicateText = resolveStaticArrayPredicateCall(node);
             if (arrayPredicateText.length > 0) return arrayPredicateText;
+            const sameValueText = resolveStaticObjectIsCall(node);
+            if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
             if (ownPredicateText.length > 0) return ownPredicateText;
             const dateText = resolveStaticDateCall(node);
@@ -654,6 +656,62 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return ["false"];
         }
         return [];
+    };
+
+    const resolveStaticObjectIsCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "is") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+        const left = resolveStaticSameValueKey(call.arguments[0]!);
+        const right = resolveStaticSameValueKey(call.arguments[1]!);
+        return left !== null && right !== null ? [String(left === right)] : [];
+    };
+
+    const resolveStaticSameValueKey = (expr: ts.Expression): string | null => {
+        const raw = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(raw) && raw.text === "NaN") return "number:NaN";
+        const value = resolveCollectionExpression(expr);
+        if (!value) return null;
+        if (value.kind === ts.SyntaxKind.TrueKeyword) return "boolean:true";
+        if (value.kind === ts.SyntaxKind.FalseKeyword) return "boolean:false";
+        if (value.kind === ts.SyntaxKind.NullKeyword) return "null";
+        if (
+            value.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(value) && value.text === "undefined") ||
+            ts.isVoidExpression(value)
+        ) {
+            return "undefined";
+        }
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+            return `string:${value.text}`;
+        }
+        if (ts.isNumericLiteral(value)) {
+            const num = Number(value.text);
+            if (Number.isNaN(num)) return "number:NaN";
+            return Number.isFinite(num) ? `number:${Object.is(num, -0) ? "-0" : num}` : null;
+        }
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            value.operator === ts.SyntaxKind.MinusToken &&
+            ts.isNumericLiteral(value.operand)
+        ) {
+            const num = -Number(value.operand.text);
+            if (Number.isNaN(num)) return "number:NaN";
+            return Number.isFinite(num) ? `number:${Object.is(num, -0) ? "-0" : num}` : null;
+        }
+        if (ts.isBigIntLiteral(value)) {
+            return `bigint:${BigInt(value.text.replace(/n$/i, "")).toString()}`;
+        }
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            value.operator === ts.SyntaxKind.MinusToken &&
+            ts.isBigIntLiteral(value.operand)
+        ) {
+            return `bigint:${(-BigInt(value.operand.text.replace(/n$/i, ""))).toString()}`;
+        }
+        return null;
     };
 
     const resolveStaticObjectHasOwnCall = (call: ts.CallExpression): string[] => {
