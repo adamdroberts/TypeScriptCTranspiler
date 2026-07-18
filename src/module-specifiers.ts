@@ -2714,6 +2714,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isCallExpression(cur)) {
             const objectWrapperReceiver = resolveStaticObjectWrapperReceiver(cur);
             if (objectWrapperReceiver) return resolveCollectionExpression(objectWrapperReceiver);
+            const objectDescriptorBuilt = resolveStaticObjectDescriptorBuiltCollectionExpression(cur);
+            if (objectDescriptorBuilt) return resolveCollectionExpression(objectDescriptorBuilt);
             const objectAssign = resolveStaticObjectAssignCollectionExpression(cur);
             if (objectAssign) return resolveCollectionExpression(objectAssign);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
@@ -2792,6 +2794,141 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return call.arguments.length === 2 ? call.arguments[0]! : null;
         }
         return null;
+    };
+
+    const resolveStaticObjectDescriptorBuiltCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+
+        switch (callee.name.text) {
+            case "create": {
+                if (call.arguments.length !== 2) return null;
+                const proto = unwrapStaticExpression(call.arguments[0]!);
+                if (proto.kind !== ts.SyntaxKind.NullKeyword) return null;
+                return resolveStaticDataDescriptorMapCollection(call.arguments[1]!);
+            }
+            case "defineProperty": {
+                if (call.arguments.length !== 3) return null;
+                const object = resolveCollectionExpression(call.arguments[0]!);
+                if (!object || !ts.isObjectLiteralExpression(object)) return null;
+                const keys = resolveKeyTexts(call.arguments[1]!);
+                if (keys.length !== 1) return null;
+                const value = resolveStaticOrdinaryDataDescriptorValue(call.arguments[2]!);
+                if (!value) return null;
+                return withStaticObjectProperty(object, keys[0]!, value);
+            }
+            case "defineProperties": {
+                if (call.arguments.length !== 2) return null;
+                const object = resolveCollectionExpression(call.arguments[0]!);
+                if (!object || !ts.isObjectLiteralExpression(object)) return null;
+                const descriptorValues = resolveStaticDataDescriptorMapProperties(call.arguments[1]!);
+                if (!descriptorValues) return null;
+                let out = object;
+                for (const [key, value] of descriptorValues) {
+                    const next = withStaticObjectProperty(out, key, value);
+                    if (!next) return null;
+                    out = next;
+                }
+                return out;
+            }
+            default:
+                return null;
+        }
+    };
+
+    const resolveStaticDataDescriptorMapCollection = (expr: ts.Expression): ts.ObjectLiteralExpression | null => {
+        const descriptorValues = resolveStaticDataDescriptorMapProperties(expr);
+        if (!descriptorValues) return null;
+        return ts.factory.createObjectLiteralExpression(
+            descriptorValues.map(([key, value]) => ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                value,
+            )),
+        );
+    };
+
+    const resolveStaticDataDescriptorMapProperties = (expr: ts.Expression): [string, ts.Expression][] | null => {
+        const descriptors = resolveCollectionExpression(expr);
+        if (!descriptors || !ts.isObjectLiteralExpression(descriptors)) return null;
+        const out: [string, ts.Expression][] = [];
+        for (const prop of descriptors.properties) {
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+            const key = staticPropertyName(prop.name);
+            if (key === null) return null;
+            const descriptorExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            const value = resolveStaticOrdinaryDataDescriptorValue(descriptorExpr);
+            if (!value) return null;
+            out.push([key, value]);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return out;
+    };
+
+    const resolveStaticOrdinaryDataDescriptorValue = (expr: ts.Expression): ts.Expression | null => {
+        const descriptor = resolveCollectionExpression(expr);
+        if (!descriptor || !ts.isObjectLiteralExpression(descriptor)) return null;
+        let value: ts.Expression | null = null;
+        let writable = false;
+        let enumerable = false;
+        let configurable = false;
+        for (const prop of descriptor.properties) {
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+            const key = staticPropertyName(prop.name);
+            if (key === null) return null;
+            const propValue = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            switch (key) {
+                case "value":
+                    value = propValue;
+                    break;
+                case "writable":
+                    writable = isStaticTrueExpression(propValue);
+                    break;
+                case "enumerable":
+                    enumerable = isStaticTrueExpression(propValue);
+                    break;
+                case "configurable":
+                    configurable = isStaticTrueExpression(propValue);
+                    break;
+                default:
+                    return null;
+            }
+        }
+        return value && writable && enumerable && configurable ? value : null;
+    };
+
+    const withStaticObjectProperty = (
+        object: ts.ObjectLiteralExpression,
+        key: string,
+        value: ts.Expression,
+    ): ts.ObjectLiteralExpression | null => {
+        const properties: ts.PropertyAssignment[] = [];
+        let replaced = false;
+        for (const prop of object.properties) {
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+            const propName = staticPropertyName(prop.name);
+            if (propName === null) return null;
+            if (propName === key) {
+                properties.push(ts.factory.createPropertyAssignment(ts.factory.createStringLiteral(key), value));
+                replaced = true;
+            } else {
+                properties.push(ts.factory.createPropertyAssignment(
+                    ts.factory.createStringLiteral(propName),
+                    ts.isPropertyAssignment(prop) ? prop.initializer : prop.name,
+                ));
+            }
+        }
+        if (!replaced) {
+            properties.push(ts.factory.createPropertyAssignment(ts.factory.createStringLiteral(key), value));
+        }
+        return ts.factory.createObjectLiteralExpression(properties);
+    };
+
+    const isStaticTrueExpression = (expr: ts.Expression): boolean => {
+        const values = resolveStaticBooleanValues(expr);
+        return values.length === 1 && values[0] === true;
     };
 
     const resolveStaticObjectAssignCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
