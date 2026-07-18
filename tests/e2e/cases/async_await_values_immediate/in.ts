@@ -25,6 +25,17 @@ async function dynamicPromise(): Promise<string> {
     return value + "!";
 }
 
+async function dynamicLeadingChain(): Promise<string> {
+    const prefix = "dynamic leading";
+    const source: any = Promise.resolve("first");
+    const first = await source;
+    const second = await Promise.resolve(first + ":second");
+    const third = await Promise.resolve(second + ":third");
+    const fourth = await Promise.resolve(third + ":fourth");
+    const fifth = await Promise.resolve(fourth + ":fifth");
+    return prefix + ": " + fifth;
+}
+
 numberValue().then((value: number): void => {
     console.log("number:", value);
 });
@@ -39,4 +50,8 @@ evaluatedOnce().then((value: number): void => {
 
 dynamicPromise().then((value: string): void => {
     console.log("dynamic promise:", value);
+});
+
+dynamicLeadingChain().then((value: string): void => {
+    console.log(value);
 });

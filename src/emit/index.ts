@@ -25398,6 +25398,12 @@ class Emitter {
             if (!step) return null;
             steps.push(step);
         }
+        const firstSourceType = this.prepareType(mapTsType(
+            steps[0]!.awaitExpr.expression,
+            this.checker.getTypeAtLocation(steps[0]!.awaitExpr.expression),
+            this.checker,
+        ));
+        if (firstSourceType.kind !== "promise") return null;
         const params = [...this.asyncAwaitContinuationParameters(parameters), ...captures];
         const referenced = this.asyncAwaitLeadingContinuationReferences(
             steps,
