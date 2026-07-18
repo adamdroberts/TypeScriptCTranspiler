@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `Buffer.isEncoding(...)` boolean specifier fragments for the supported Buffer encoding allow-list. Test: `dynamic_require_static_buffer_is_encoding`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.byteLength(...)` specifier fragments for static string inputs and supported static encodings. Test: `dynamic_require_static_buffer_byte_length`.
 - Finite dynamic `require(...)` proofs now resolve static global `URL.canParse(...)` boolean specifier fragments for the supported absolute and base-resolved URL subset. Test: `dynamic_require_static_url_can_parse`.
 - Finite dynamic `require(...)` proofs now resolve static global `btoa(...)` and `atob(...)` specifier fragments using the supported runtime base64 codec semantics. Test: `dynamic_require_static_base64_globals`.
