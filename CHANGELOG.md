@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now supports bounded `if` / fallthrough branch return trees that mix one pending-`await` return branch with one synchronous return branch, covering async functions, async methods, and async arrow/function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now supports bounded conditional return expressions with one pending-`await` branch and one synchronous branch, covering async functions, async methods, and async arrow/function values while preserving branch choice before await subscription. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now supports bounded conditional return expressions whose true and false expressions each contain one embedded pending `await`, covering async functions, async methods, and async arrow/function values without evaluating the unchosen await source. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now supports bounded nested `if` / fallthrough branch return trees when each return expression contains one embedded pending `await`, covering async functions, async methods, and async arrow/function values. Test: `async_await_pending_return_expr`.

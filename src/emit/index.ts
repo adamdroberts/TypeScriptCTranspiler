@@ -25617,7 +25617,7 @@ class Emitter {
         thisValue: EmitResult | null,
     ): AsyncAwaitIfExpressionReturnNode | null {
         const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(body.statements, parameters, thisValue);
-        return branch?.kind === "if" ? branch : null;
+        return branch?.kind === "if" && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch) ? branch : null;
     }
 
     private asyncAwaitIfExpressionReturnBranchFromStatements(
@@ -25657,7 +25657,11 @@ class Emitter {
                 parameters,
                 thisValue,
             );
-            return continuation ? { kind: "return", continuation } : null;
+            if (continuation) return { kind: "return", continuation };
+            if (this.asyncAwaitSyncReturnExpressionSupported(stmt.expression)) {
+                return { kind: "syncReturn", returnExpr: stmt.expression };
+            }
+            return null;
         }
         if (ts.isBlock(stmt)) {
             return this.asyncAwaitIfExpressionReturnBranchFromStatements(stmt.statements, parameters, thisValue);
@@ -25698,6 +25702,16 @@ class Emitter {
             elseBranch,
             fallthroughBranch,
         };
+    }
+
+    private asyncAwaitIfExpressionReturnBranchHasAwait(
+        branch: AsyncAwaitIfExpressionReturnNode,
+    ): boolean {
+        if (branch.kind === "return") return true;
+        if (branch.kind === "syncReturn") return false;
+        return this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.thenBranch) ||
+            !!(branch.elseBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.elseBranch)) ||
+            !!(branch.fallthroughBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.fallthroughBranch));
     }
 
     private asyncAwaitIfExpressionReturnBranchSupported(
