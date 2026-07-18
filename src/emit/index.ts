@@ -25467,11 +25467,6 @@ class Emitter {
         thisValue: EmitResult | null,
     ): AsyncAwaitPreludeExpressionReturnContinuation | null {
         if (body.statements.length < 2) return null;
-        const result = body.statements[body.statements.length - 1]!;
-        if (!ts.isReturnStatement(result) || !result.expression || ts.isAwaitExpression(result.expression)) {
-            return null;
-        }
-        const preludeStatements = body.statements.slice(0, -1);
         const preludeVariableStatements: ts.VariableStatement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
@@ -25484,8 +25479,10 @@ class Emitter {
             }
             ts.forEachChild(node, visitNoAwaitOrNestedScope);
         };
-        for (const stmt of preludeStatements) {
-            if (!ts.isVariableStatement(stmt)) return null;
+        let tailStart = 0;
+        while (tailStart < body.statements.length) {
+            const stmt = body.statements[tailStart]!;
+            if (!ts.isVariableStatement(stmt)) break;
             preludeVariableStatements.push(stmt);
             if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
             for (const decl of stmt.declarationList.declarations) {
@@ -25511,32 +25508,50 @@ class Emitter {
                     field: `capture_${name}`,
                 });
             }
+            tailStart++;
         }
+        if (preludeVariableStatements.length === 0) return null;
+        const tailStatements = body.statements.slice(tailStart);
+        if (tailStatements.length === 0) return null;
         let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
-        if (this.isAsyncAwaitShortCircuitBinary(result.expression)) {
-            continuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
-                result.expression,
-                parameters,
-                thisValue,
-                captures,
-            );
-        } else if (ts.isConditionalExpression(result.expression)) {
-            continuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
-                result.expression,
-                parameters,
-                thisValue,
-                captures,
-            );
-            if (continuation && !this.asyncAwaitIfExpressionReturnBranchHasAwait(continuation)) {
-                continuation = null;
+        if (tailStatements.length === 1 && ts.isReturnStatement(tailStatements[0]!)) {
+            const result = tailStatements[0]!;
+            if (!result.expression || ts.isAwaitExpression(result.expression)) return null;
+            if (this.isAsyncAwaitShortCircuitBinary(result.expression)) {
+                continuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
+                    result.expression,
+                    parameters,
+                    thisValue,
+                    captures,
+                );
+            } else if (ts.isConditionalExpression(result.expression)) {
+                continuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+                    result.expression,
+                    parameters,
+                    thisValue,
+                    captures,
+                );
+                if (continuation && !this.asyncAwaitIfExpressionReturnBranchHasAwait(continuation)) {
+                    continuation = null;
+                }
+            } else {
+                continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                    result.expression,
+                    parameters,
+                    thisValue,
+                    captures,
+                );
             }
         } else {
-            continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                result.expression,
+            const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(
+                tailStatements,
                 parameters,
                 thisValue,
                 captures,
             );
+            continuation = branch?.kind === "if" && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch)
+                ? branch
+                : null;
         }
         return continuation ? { preludeStatements: preludeVariableStatements, result: continuation } : null;
     }
@@ -25856,15 +25871,17 @@ class Emitter {
         statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (statements.length === 1) {
-            return this.asyncAwaitIfExpressionReturnBranchFromStatement(statements[0]!, parameters, thisValue);
+            return this.asyncAwaitIfExpressionReturnBranchFromStatement(statements[0]!, parameters, thisValue, captures);
         }
         if (statements.length === 2 && ts.isIfStatement(statements[0]!)) {
             const fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatement(
                 statements[1]!,
                 parameters,
                 thisValue,
+                captures,
             );
             if (!fallthrough) return null;
             return this.asyncAwaitIfExpressionReturnBranchFromIf(
@@ -25872,6 +25889,7 @@ class Emitter {
                 fallthrough,
                 parameters,
                 thisValue,
+                captures,
             );
         }
         return null;
@@ -25881,6 +25899,7 @@ class Emitter {
         stmt: ts.Statement,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (ts.isReturnStatement(stmt)) {
             if (!stmt.expression) return null;
@@ -25889,12 +25908,14 @@ class Emitter {
                     stmt.expression,
                     parameters,
                     thisValue,
+                    captures,
                 );
             }
             const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
                 stmt.expression,
                 parameters,
                 thisValue,
+                captures,
             );
             if (continuation) return { kind: "return", continuation };
             if (this.asyncAwaitSyncReturnExpressionSupported(stmt.expression)) {
@@ -25903,10 +25924,10 @@ class Emitter {
             return null;
         }
         if (ts.isBlock(stmt)) {
-            return this.asyncAwaitIfExpressionReturnBranchFromStatements(stmt.statements, parameters, thisValue);
+            return this.asyncAwaitIfExpressionReturnBranchFromStatements(stmt.statements, parameters, thisValue, captures);
         }
         if (ts.isIfStatement(stmt)) {
-            return this.asyncAwaitIfExpressionReturnBranchFromIf(stmt, null, parameters, thisValue);
+            return this.asyncAwaitIfExpressionReturnBranchFromIf(stmt, null, parameters, thisValue, captures);
         }
         return null;
     }
@@ -25916,6 +25937,7 @@ class Emitter {
         fallthroughBranch: AsyncAwaitIfExpressionReturnNode | null,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (!ifStatement.elseStatement && !fallthroughBranch) return null;
         if (ifStatement.elseStatement && fallthroughBranch) return null;
@@ -25926,11 +25948,12 @@ class Emitter {
             ifStatement.thenStatement,
             parameters,
             thisValue,
+            captures,
         );
         if (!thenBranch) return null;
 
         const elseBranch = ifStatement.elseStatement
-            ? this.asyncAwaitIfExpressionReturnBranchFromStatement(ifStatement.elseStatement, parameters, thisValue)
+            ? this.asyncAwaitIfExpressionReturnBranchFromStatement(ifStatement.elseStatement, parameters, thisValue, captures)
             : null;
         if (ifStatement.elseStatement && !elseBranch) return null;
 
