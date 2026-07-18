@@ -115,6 +115,9 @@ arrow-prelude-local-inline-await-return: value-arrow-prelude-local-await!
 prelude-conditional-local-inline-await-return: fn-prelude-conditional-await!
 method-prelude-logical-local-inline-await-return: method-prelude-class-method-prelude-logical-await!
 arrow-prelude-nullish-local-inline-await-return: arrow-prelude-nullish-await!
+prelude-direct-return-await: fn-prelude-direct-await
+method-prelude-direct-return-await: method-prelude-class-method-prelude-direct-await
+arrow-prelude-direct-return-await: value-arrow-prelude-direct-await
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!

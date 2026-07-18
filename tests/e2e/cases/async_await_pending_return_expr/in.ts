@@ -130,6 +130,11 @@ async function preludeConditionalLocalInlineAwaitReturn(flag: boolean, prefix: s
     return flag ? label + await delay(147, "await") + "!" : label + "sync!";
 }
 
+async function preludeDirectReturnAwait(prefix: string): Promise<string> {
+    const label = prefix + "prelude-direct-";
+    return await delay(150, label + "await");
+}
+
 class Worker {
     prefix: string;
 
@@ -448,6 +453,11 @@ class Worker {
         const label = this.prefix + prefix + "method-prelude-logical-";
         return flag && label + await delay(148, "await") + "!";
     }
+
+    async preludeDirectReturnAwaitMethod(prefix: string): Promise<string> {
+        const label = this.prefix + prefix + "method-prelude-direct-";
+        return await delay(151, label + "await");
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -567,6 +577,11 @@ const arrowPreludeLocalInlineAwaitReturn = async (prefix: string): Promise<strin
 const arrowPreludeNullishLocalInlineAwaitReturn = async (prefix: string | undefined): Promise<string> => {
     const fallback = "arrow-prelude-nullish-";
     return prefix ?? fallback + await delay(149, "await") + "!";
+};
+
+const arrowPreludeDirectReturnAwait = async (prefix: string): Promise<string> => {
+    const label = prefix + "arrow-prelude-direct-";
+    return await delay(152, label + "await");
 };
 
 suffix().then((value: string): void => {
@@ -707,6 +722,10 @@ preludeLocalInlineAwaitReturn("fn-").then((value: string): void => {
 
 preludeConditionalLocalInlineAwaitReturn(true, "fn-").then((value: string): void => {
     console.log("prelude-conditional-local-inline-await-return:", value);
+});
+
+preludeDirectReturnAwait("fn-").then((value: string): void => {
+    console.log("prelude-direct-return-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -939,6 +958,10 @@ new Worker("method-prelude-").preludeLogicalLocalInlineAwaitReturnMethod(true, "
     console.log("method-prelude-logical-local-inline-await-return:", value);
 });
 
+new Worker("method-prelude-").preludeDirectReturnAwaitMethod("class-").then((value: string): void => {
+    console.log("method-prelude-direct-return-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1073,4 +1096,8 @@ arrowPreludeLocalInlineAwaitReturn("value-").then((value: string): void => {
 
 arrowPreludeNullishLocalInlineAwaitReturn(undefined).then((value: string): void => {
     console.log("arrow-prelude-nullish-local-inline-await-return:", value);
+});
+
+arrowPreludeDirectReturnAwait("value-").then((value: string): void => {
+    console.log("arrow-prelude-direct-return-await:", value);
 });
