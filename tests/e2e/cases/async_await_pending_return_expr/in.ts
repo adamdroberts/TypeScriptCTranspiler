@@ -91,6 +91,14 @@ async function conditionalMixedInlineAwaitReturn(flag: boolean, prefix: string):
         : prefix + "conditional-mixed-sync!";
 }
 
+async function nestedConditionalInlineAwaitReturn(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+    return outer
+        ? inner
+            ? prefix + await delay(123, "nested-conditional-inner") + "!"
+            : prefix + "nested-conditional-sync!"
+        : prefix + await delay(124, "nested-conditional-fallthrough") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -370,6 +378,14 @@ class Worker {
             ? this.prefix + prefix + "method-conditional-mixed-sync!"
             : this.prefix + prefix + await delay(118, "method-conditional-mixed-await") + "!";
     }
+
+    async nestedConditionalInlineAwaitReturnMethod(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+        return outer
+            ? inner
+                ? this.prefix + prefix + await delay(125, "method-nested-conditional-inner") + "!"
+                : this.prefix + prefix + "method-nested-conditional-sync!"
+            : this.prefix + prefix + await delay(126, "method-nested-conditional-fallthrough") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -449,6 +465,14 @@ const arrowConditionalMixedInlineAwaitReturn = async (flag: boolean, prefix: str
     return flag
         ? prefix + await delay(119, "arrow-conditional-mixed-await") + "!"
         : prefix + "arrow-conditional-mixed-sync!";
+};
+
+const arrowNestedConditionalInlineAwaitReturn = async (outer: boolean, inner: boolean, prefix: string): Promise<string> => {
+    return outer
+        ? inner
+            ? prefix + await delay(127, "arrow-nested-conditional-inner") + "!"
+            : prefix + "arrow-nested-conditional-sync!"
+        : prefix + await delay(128, "arrow-nested-conditional-fallthrough") + "!";
 };
 
 suffix().then((value: string): void => {
@@ -533,6 +557,18 @@ conditionalMixedInlineAwaitReturn(true, "fn-").then((value: string): void => {
 
 conditionalMixedInlineAwaitReturn(false, "fn-").then((value: string): void => {
     console.log("conditional-mixed-inline-await-return-sync:", value);
+});
+
+nestedConditionalInlineAwaitReturn(true, true, "fn-").then((value: string): void => {
+    console.log("nested-conditional-inline-await-return-inner:", value);
+});
+
+nestedConditionalInlineAwaitReturn(true, false, "fn-").then((value: string): void => {
+    console.log("nested-conditional-inline-await-return-sync:", value);
+});
+
+nestedConditionalInlineAwaitReturn(false, false, "fn-").then((value: string): void => {
+    console.log("nested-conditional-inline-await-return-fallthrough:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -709,6 +745,18 @@ new Worker("method-conditional-").conditionalMixedInlineAwaitReturnMethod(false,
     console.log("method-conditional-mixed-inline-await-return-await:", value);
 });
 
+new Worker("method-nested-conditional-").nestedConditionalInlineAwaitReturnMethod(true, true, "class-").then((value: string): void => {
+    console.log("method-nested-conditional-inline-await-return-inner:", value);
+});
+
+new Worker("method-nested-conditional-").nestedConditionalInlineAwaitReturnMethod(true, false, "class-").then((value: string): void => {
+    console.log("method-nested-conditional-inline-await-return-sync:", value);
+});
+
+new Worker("method-nested-conditional-").nestedConditionalInlineAwaitReturnMethod(false, false, "class-").then((value: string): void => {
+    console.log("method-nested-conditional-inline-await-return-fallthrough:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -787,4 +835,16 @@ arrowConditionalMixedInlineAwaitReturn(true, "value-").then((value: string): voi
 
 arrowConditionalMixedInlineAwaitReturn(false, "value-").then((value: string): void => {
     console.log("arrow-conditional-mixed-inline-await-return-sync:", value);
+});
+
+arrowNestedConditionalInlineAwaitReturn(true, true, "value-").then((value: string): void => {
+    console.log("arrow-nested-conditional-inline-await-return-inner:", value);
+});
+
+arrowNestedConditionalInlineAwaitReturn(true, false, "value-").then((value: string): void => {
+    console.log("arrow-nested-conditional-inline-await-return-sync:", value);
+});
+
+arrowNestedConditionalInlineAwaitReturn(false, false, "value-").then((value: string): void => {
+    console.log("arrow-nested-conditional-inline-await-return-fallthrough:", value);
 });

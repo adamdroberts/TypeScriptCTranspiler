@@ -1,9 +1,12 @@
 branch-mixed-inline-await-return-sync: fn-branch-mixed-sync!
 conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
+nested-conditional-inline-await-return-sync: fn-nested-conditional-sync!
 method-branch-mixed-inline-await-return-sync: method-branch-mixed-class-method-branch-mixed-sync!
 method-conditional-mixed-inline-await-return-sync: method-conditional-class-method-conditional-mixed-sync!
+method-nested-conditional-inline-await-return-sync: method-nested-conditional-class-method-nested-conditional-sync!
 arrow-branch-mixed-inline-await-return-sync: value-arrow-branch-mixed-sync!
 arrow-conditional-mixed-inline-await-return-sync: value-arrow-conditional-mixed-sync!
+arrow-nested-conditional-inline-await-return-sync: value-arrow-nested-conditional-sync!
 suffix: ready!
 double: 42
 tagged: fn-tag
@@ -73,6 +76,12 @@ arrow-conditional-mixed-inline-await-return-await: value-arrow-conditional-mixed
 branch-mixed-inline-await-return-await: fn-branch-mixed-await!
 method-branch-mixed-inline-await-return-await: method-branch-mixed-class-method-branch-mixed-await!
 arrow-branch-mixed-inline-await-return-await: value-arrow-branch-mixed-await!
+nested-conditional-inline-await-return-inner: fn-nested-conditional-inner!
+nested-conditional-inline-await-return-fallthrough: fn-nested-conditional-fallthrough!
+method-nested-conditional-inline-await-return-inner: method-nested-conditional-class-method-nested-conditional-inner!
+method-nested-conditional-inline-await-return-fallthrough: method-nested-conditional-class-method-nested-conditional-fallthrough!
+arrow-nested-conditional-inline-await-return-inner: value-arrow-nested-conditional-inner!
+arrow-nested-conditional-inline-await-return-fallthrough: value-arrow-nested-conditional-fallthrough!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!

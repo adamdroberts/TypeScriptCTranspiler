@@ -25562,33 +25562,31 @@ class Emitter {
         if (!ts.isReturnStatement(result) || !result.expression || !ts.isConditionalExpression(result.expression)) {
             return null;
         }
-        const expr = result.expression;
+        const branch = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+            result.expression,
+            parameters,
+            thisValue,
+        );
+        return branch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch) ? branch : null;
+    }
+
+    private asyncAwaitConditionalExpressionReturnBranchFromExpression(
+        expr: ts.ConditionalExpression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnNode | null {
         if (!this.asyncAwaitConditionExpressionSupported(expr.condition)) return null;
-        const whenTrue = this.asyncAwaitExpressionReturnContinuationForExpression(
+        const thenBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(
             expr.whenTrue,
             parameters,
             thisValue,
         );
-        const whenFalse = this.asyncAwaitExpressionReturnContinuationForExpression(
+        const elseBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(
             expr.whenFalse,
             parameters,
             thisValue,
         );
-        let thenBranch: AsyncAwaitIfExpressionReturnNode | null = whenTrue
-            ? { kind: "return", continuation: whenTrue }
-            : null;
-        let elseBranch: AsyncAwaitIfExpressionReturnNode | null = whenFalse
-            ? { kind: "return", continuation: whenFalse }
-            : null;
-
-        if (!thenBranch && this.asyncAwaitSyncReturnExpressionSupported(expr.whenTrue)) {
-            thenBranch = { kind: "syncReturn", returnExpr: expr.whenTrue };
-        }
-        if (!elseBranch && this.asyncAwaitSyncReturnExpressionSupported(expr.whenFalse)) {
-            elseBranch = { kind: "syncReturn", returnExpr: expr.whenFalse };
-        }
         if (!thenBranch || !elseBranch) return null;
-        if (thenBranch.kind === "syncReturn" && elseBranch.kind === "syncReturn") return null;
 
         return {
             kind: "if",
@@ -25597,6 +25595,26 @@ class Emitter {
             elseBranch,
             fallthroughBranch: null,
         };
+    }
+
+    private asyncAwaitConditionalExpressionReturnBranchFromArm(
+        expr: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnNode | null {
+        if (ts.isConditionalExpression(expr)) {
+            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(expr, parameters, thisValue);
+        }
+        const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+            expr,
+            parameters,
+            thisValue,
+        );
+        if (continuation) return { kind: "return", continuation };
+        if (this.asyncAwaitSyncReturnExpressionSupported(expr)) {
+            return { kind: "syncReturn", returnExpr: expr };
+        }
+        return null;
     }
 
     private emitAsyncAwaitConditionalExpressionReturnContinuation(
