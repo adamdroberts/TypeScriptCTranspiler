@@ -2543,6 +2543,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_object_own_property_names` | indexed Object.getOwnPropertyNames calls over static object literals provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_reflect_own_keys` | indexed Reflect.ownKeys calls over static string-keyed object literals provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_entries` | indexed Object.entries calls over static object literals provide finite AOT dynamic require alternatives from entry keys and static string values |
+| `dynamic_require_static_object_prototype_to_string` | static Object.prototype.toString.call tags over finite object, array, primitive, and nullish operands provide AOT dynamic require alternatives |
 | `dynamic_require_static_object_prototype_own_predicates` | static Object.prototype.hasOwnProperty.call and propertyIsEnumerable.call predicates over finite object, array, and string own data properties provide AOT dynamic require alternatives |
 | `dynamic_require_static_descriptor_properties` | static Object/Reflect getOwnPropertyDescriptor descriptor value and flag property reads over finite object, array, and string own data descriptors provide AOT dynamic require alternatives |
 | `dynamic_require_static_descriptor_map_properties` | static Object.getOwnPropertyDescriptors descriptor-map entry value and flag property reads over finite object, array, and string own data descriptors provide AOT dynamic require alternatives |

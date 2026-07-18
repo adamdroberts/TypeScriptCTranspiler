@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `Object.prototype.toString.call(...)` tag fragments for finite object, array, primitive, and nullish operands. Test: `dynamic_require_static_object_prototype_to_string`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.prototype.hasOwnProperty.call(...)` and `Object.prototype.propertyIsEnumerable.call(...)` predicate fragments for finite object, array, and string own data properties. Test: `dynamic_require_static_object_prototype_own_predicates`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.getOwnPropertyDescriptors(...).key` and `Object.getOwnPropertyDescriptors(...)[key]` descriptor `.value`, `.writable`, `.enumerable`, and `.configurable` specifier fragments for finite object, array, and string own data descriptors. Test: `dynamic_require_static_descriptor_map_properties`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.getOwnPropertyDescriptor(...)` and `Reflect.getOwnPropertyDescriptor(...)` descriptor `.value`, `.writable`, `.enumerable`, and `.configurable` specifier fragments for finite object, array, and string own data descriptors. Test: `dynamic_require_static_descriptor_properties`.
