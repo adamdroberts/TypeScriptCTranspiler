@@ -926,6 +926,30 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupeBuffers(out);
     };
 
+    const resolveStaticBufferSwapExpression = (call: ts.CallExpression): Buffer[] => {
+        if (call.arguments.length > 0 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "swap16" && method !== "swap32" && method !== "swap64") return [];
+
+        const receivers = resolveStaticBufferExpression(callee.expression);
+        if (receivers.length === 0) return [];
+
+        const out: Buffer[] = [];
+        for (const receiver of receivers) {
+            try {
+                const buffer = Buffer.from(receiver);
+                buffer[method]();
+                out.push(buffer);
+            } catch {
+                return [];
+            }
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupeBuffers(out);
+    };
+
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
@@ -937,6 +961,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (sliceBuffers.length > 0) return sliceBuffers;
         const fillBuffers = resolveStaticBufferFillExpression(unwrapped);
         if (fillBuffers.length > 0) return fillBuffers;
+        const swapBuffers = resolveStaticBufferSwapExpression(unwrapped);
+        if (swapBuffers.length > 0) return swapBuffers;
         const callee = unwrapStaticExpression(unwrapped.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "concat") return [];
         const target = unwrapStaticExpression(callee.expression);
