@@ -147,6 +147,42 @@ async function pendingTryFinallyFallthroughRejected(): Promise<string> {
     return "finally fallthrough never";
 }
 
+async function pendingBareTryFinallyFulfilled(): Promise<string> {
+    try {
+        await delay(8, "ok");
+        return "bare finally done " + finallyTrace;
+    } finally {
+        finallyTrace += "B";
+    }
+}
+
+async function pendingBareTryFinallyRejected(): Promise<string> {
+    try {
+        await delayedReject("bare final bad");
+        return "bare finally never";
+    } finally {
+        finallyTrace += "b";
+    }
+}
+
+async function pendingBareTryFinallyFallthroughFulfilled(): Promise<string> {
+    try {
+        await delay(8, "ok");
+    } finally {
+        finallyTrace += "G";
+    }
+    return "bare finally fallthrough done " + finallyTrace;
+}
+
+async function pendingBareTryFinallyFallthroughRejected(): Promise<string> {
+    try {
+        await delayedReject("bare fall final bad");
+    } finally {
+        finallyTrace += "g";
+    }
+    return "bare finally fallthrough never";
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -208,4 +244,20 @@ pendingTryFinallyFallthroughFulfilled().then((value: string): void => {
 
 pendingTryFinallyFallthroughRejected().catch((reason: string): void => {
     console.log("pending-finally-fallthrough-rejected:", reason, finallyTrace);
+});
+
+pendingBareTryFinallyFulfilled().then((value: string): void => {
+    console.log("pending-bare-finally-fulfilled:", value, finallyTrace);
+});
+
+pendingBareTryFinallyRejected().catch((reason: string): void => {
+    console.log("pending-bare-finally-rejected:", reason, finallyTrace);
+});
+
+pendingBareTryFinallyFallthroughFulfilled().then((value: string): void => {
+    console.log("pending-bare-finally-fallthrough-fulfilled:", value);
+});
+
+pendingBareTryFinallyFallthroughRejected().catch((reason: string): void => {
+    console.log("pending-bare-finally-fallthrough-rejected:", reason, finallyTrace);
 });
