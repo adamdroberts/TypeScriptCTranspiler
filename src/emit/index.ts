@@ -25164,6 +25164,7 @@ class Emitter {
         if (awaited.variable && !awaitedSymbol) return null;
         let usesThis = false;
         let usesAwaited = false;
+        const finallyLocals = new Set<ts.Symbol>();
         let ok = true;
 
         const visitExpr = (node: ts.Node, allowAwaited: boolean): void => {
@@ -25189,6 +25190,7 @@ class Emitter {
                     }
                     usesAwaited = true;
                 } else {
+                    if (sym && finallyLocals.has(sym)) return;
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
                     if (param) referenced.set(param.symbol, param);
                 }
@@ -25200,6 +25202,27 @@ class Emitter {
             if (!ok) return;
             if (ts.isReturnStatement(stmt) || ts.isAwaitExpression(stmt) || ts.isFunctionLike(stmt) || ts.isClassLike(stmt)) {
                 ok = false;
+                return;
+            }
+            if (ts.isVariableStatement(stmt)) {
+                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) {
+                    ok = false;
+                    return;
+                }
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name) || !decl.initializer) {
+                        ok = false;
+                        return;
+                    }
+                    visitExpr(decl.initializer, false);
+                    if (!ok) return;
+                    const sym = this.symbolForIdentifier(decl.name);
+                    if (!sym) {
+                        ok = false;
+                        return;
+                    }
+                    finallyLocals.add(sym);
+                }
                 return;
             }
             ts.forEachChild(stmt, (child) => visitExpr(child, false));

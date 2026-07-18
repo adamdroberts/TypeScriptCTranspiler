@@ -1,0 +1,3 @@
+finally-prelude-local-fulfilled: try:ok F!
+finally-prelude-local-rejected: bad F!R
+finally-prelude-local-fallthrough: fallthrough:F!RG
