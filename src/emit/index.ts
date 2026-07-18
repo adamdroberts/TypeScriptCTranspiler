@@ -25649,8 +25649,15 @@ class Emitter {
         let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
         if (tailStatements.length === 1 && ts.isReturnStatement(tailStatements[0]!)) {
             const result = tailStatements[0]!;
-            if (!result.expression || ts.isAwaitExpression(result.expression)) return null;
-            if (this.isAsyncAwaitShortCircuitBinary(result.expression)) {
+            if (!result.expression) return null;
+            if (ts.isAwaitExpression(result.expression)) {
+                continuation = {
+                    awaitExpr: result.expression,
+                    returnExpr: result.expression,
+                    params: [],
+                    thisValue: null,
+                };
+            } else if (this.isAsyncAwaitShortCircuitBinary(result.expression)) {
                 continuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
                     result.expression,
                     parameters,
