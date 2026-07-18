@@ -1309,7 +1309,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `greet` | function declaration + template literals |
 | `arrays` | array literal + push/pop + for-of + length |
 | `async_await_immediate` | immediate await over fulfilled/rejected/pending native Promise records |
-| `async_await_alias_tail_pending` | direct const-await-return alias preserves pending Promise settlement |
+| `async_await_alias_tail_pending` | direct const-await-return alias, including parenthesized awaited initializers, preserves pending Promise settlement |
 | `async_await_try_catch` | local async try/catch handles rejected immediate await records |
 | `async_await_values_immediate` | immediate await of non-Promise values inside async functions |
 | `async_function_immediate` | async function declarations without await returning immediate Promise records |

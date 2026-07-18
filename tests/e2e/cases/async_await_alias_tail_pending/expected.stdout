@@ -1,3 +1,6 @@
 result: alias
+parenthesized-result: alias-paren
 method: method
+parenthesized-method: method-paren
 value: value
+parenthesized-value: value-paren
