@@ -193,12 +193,22 @@ interface AsyncAwaitExpressionReturnContinuation {
     thisValue: EmitResult | null;
 }
 
-interface AsyncAwaitIfExpressionReturnContinuation {
-    condition: ts.Expression;
-    thenContinuation: AsyncAwaitExpressionReturnContinuation;
-    elseContinuation: AsyncAwaitExpressionReturnContinuation | null;
-    fallthroughContinuation: AsyncAwaitExpressionReturnContinuation | null;
+interface AsyncAwaitIfExpressionReturnLeaf {
+    kind: "return";
+    continuation: AsyncAwaitExpressionReturnContinuation;
 }
+
+interface AsyncAwaitIfExpressionReturnBranch {
+    kind: "if";
+    condition: ts.Expression;
+    thenBranch: AsyncAwaitIfExpressionReturnNode;
+    elseBranch: AsyncAwaitIfExpressionReturnNode | null;
+    fallthroughBranch: AsyncAwaitIfExpressionReturnNode | null;
+}
+
+type AsyncAwaitIfExpressionReturnNode =
+    | AsyncAwaitIfExpressionReturnLeaf
+    | AsyncAwaitIfExpressionReturnBranch;
 
 interface AsyncAwaitContinuationReferences {
     params: AsyncAwaitContinuationParam[];
@@ -25490,10 +25500,67 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
-    ): AsyncAwaitIfExpressionReturnContinuation | null {
-        if (body.statements.length !== 1 && body.statements.length !== 2) return null;
-        const ifStatement = body.statements[0]!;
-        if (!ts.isIfStatement(ifStatement)) return null;
+    ): AsyncAwaitIfExpressionReturnNode | null {
+        const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(body.statements, parameters, thisValue);
+        return branch?.kind === "if" ? branch : null;
+    }
+
+    private asyncAwaitIfExpressionReturnBranchFromStatements(
+        statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnNode | null {
+        if (statements.length === 1) {
+            return this.asyncAwaitIfExpressionReturnBranchFromStatement(statements[0]!, parameters, thisValue);
+        }
+        if (statements.length === 2 && ts.isIfStatement(statements[0]!)) {
+            const fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatement(
+                statements[1]!,
+                parameters,
+                thisValue,
+            );
+            if (!fallthrough) return null;
+            return this.asyncAwaitIfExpressionReturnBranchFromIf(
+                statements[0]!,
+                fallthrough,
+                parameters,
+                thisValue,
+            );
+        }
+        return null;
+    }
+
+    private asyncAwaitIfExpressionReturnBranchFromStatement(
+        stmt: ts.Statement,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnNode | null {
+        if (ts.isReturnStatement(stmt)) {
+            if (!stmt.expression) return null;
+            const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                stmt.expression,
+                parameters,
+                thisValue,
+            );
+            return continuation ? { kind: "return", continuation } : null;
+        }
+        if (ts.isBlock(stmt)) {
+            return this.asyncAwaitIfExpressionReturnBranchFromStatements(stmt.statements, parameters, thisValue);
+        }
+        if (ts.isIfStatement(stmt)) {
+            return this.asyncAwaitIfExpressionReturnBranchFromIf(stmt, null, parameters, thisValue);
+        }
+        return null;
+    }
+
+    private asyncAwaitIfExpressionReturnBranchFromIf(
+        ifStatement: ts.IfStatement,
+        fallthroughBranch: AsyncAwaitIfExpressionReturnNode | null,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnNode | null {
+        if (!ifStatement.elseStatement && !fallthroughBranch) return null;
+        if (ifStatement.elseStatement && fallthroughBranch) return null;
 
         let conditionOk = true;
         const visitCondition = (node: ts.Node): void => {
@@ -25507,54 +25574,57 @@ class Emitter {
         visitCondition(ifStatement.expression);
         if (!conditionOk) return null;
 
-        const returnFromStatement = (stmt: ts.Statement): ts.ReturnStatement | null => {
-            if (ts.isReturnStatement(stmt)) return stmt;
-            if (ts.isBlock(stmt) && stmt.statements.length === 1 && ts.isReturnStatement(stmt.statements[0]!)) {
-                return stmt.statements[0]!;
-            }
-            return null;
-        };
-
-        const thenReturn = returnFromStatement(ifStatement.thenStatement);
-        if (!thenReturn?.expression) return null;
-        const thenContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-            thenReturn.expression,
+        const thenBranch = this.asyncAwaitIfExpressionReturnBranchFromStatement(
+            ifStatement.thenStatement,
             parameters,
             thisValue,
         );
-        if (!thenContinuation) return null;
+        if (!thenBranch) return null;
 
-        let elseContinuation: AsyncAwaitExpressionReturnContinuation | null = null;
-        let fallthroughContinuation: AsyncAwaitExpressionReturnContinuation | null = null;
-
-        if (ifStatement.elseStatement) {
-            if (body.statements.length !== 1) return null;
-            const elseReturn = returnFromStatement(ifStatement.elseStatement);
-            if (!elseReturn?.expression) return null;
-            elseContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                elseReturn.expression,
-                parameters,
-                thisValue,
-            );
-            if (!elseContinuation) return null;
-        } else {
-            if (body.statements.length !== 2) return null;
-            const fallthrough = body.statements[1]!;
-            if (!ts.isReturnStatement(fallthrough) || !fallthrough.expression) return null;
-            fallthroughContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                fallthrough.expression,
-                parameters,
-                thisValue,
-            );
-            if (!fallthroughContinuation) return null;
-        }
+        const elseBranch = ifStatement.elseStatement
+            ? this.asyncAwaitIfExpressionReturnBranchFromStatement(ifStatement.elseStatement, parameters, thisValue)
+            : null;
+        if (ifStatement.elseStatement && !elseBranch) return null;
 
         return {
+            kind: "if",
             condition: ifStatement.expression,
-            thenContinuation,
-            elseContinuation,
-            fallthroughContinuation,
+            thenBranch,
+            elseBranch,
+            fallthroughBranch,
         };
+    }
+
+    private asyncAwaitIfExpressionReturnBranchSupported(
+        branch: AsyncAwaitIfExpressionReturnNode,
+    ): boolean {
+        if (branch.kind === "return") {
+            return this.asyncAwaitExpressionReturnContinuationSupported(branch.continuation);
+        }
+        return this.asyncAwaitIfExpressionReturnBranchSupported(branch.thenBranch) &&
+            (!branch.elseBranch || this.asyncAwaitIfExpressionReturnBranchSupported(branch.elseBranch)) &&
+            (!branch.fallthroughBranch || this.asyncAwaitIfExpressionReturnBranchSupported(branch.fallthroughBranch));
+    }
+
+    private emitAsyncAwaitIfExpressionReturnBranch(
+        buf: CBuf,
+        branch: AsyncAwaitIfExpressionReturnNode,
+    ): boolean {
+        if (branch.kind === "return") {
+            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, branch.continuation);
+        }
+        const cond = this.emitBoolExpr(branch.condition);
+        buf.open(`if (${cond})`);
+        if (!this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch.thenBranch)) return false;
+        buf.close();
+        if (branch.elseBranch) {
+            buf.open("else");
+            if (!this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch.elseBranch)) return false;
+            buf.close();
+            return true;
+        }
+        if (!branch.fallthroughBranch) return false;
+        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch.fallthroughBranch);
     }
 
     private emitAsyncAwaitIfExpressionReturnContinuation(
@@ -25565,32 +25635,8 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitIfExpressionReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
-        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation.thenContinuation)) return false;
-        if (
-            continuation.elseContinuation &&
-            !this.asyncAwaitExpressionReturnContinuationSupported(continuation.elseContinuation)
-        ) {
-            return false;
-        }
-        if (
-            continuation.fallthroughContinuation &&
-            !this.asyncAwaitExpressionReturnContinuationSupported(continuation.fallthroughContinuation)
-        ) {
-            return false;
-        }
-
-        const cond = this.emitBoolExpr(continuation.condition);
-        buf.open(`if (${cond})`);
-        if (!this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.thenContinuation)) return false;
-        buf.close();
-        if (continuation.elseContinuation) {
-            buf.open("else");
-            if (!this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.elseContinuation)) return false;
-            buf.close();
-            return true;
-        }
-        if (!continuation.fallthroughContinuation) return false;
-        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.fallthroughContinuation);
+        if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
+        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation);
     }
 
     private ensureAsyncAwaitExpressionReturnContinuationAdapter(
