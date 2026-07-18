@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now supports bounded `if` / fallthrough branch return expressions containing one embedded pending `await`, covering async functions, async methods, and async arrow/function values. Test: `async_await_pending_return_expr`.
 - Direct `return await pendingPromise` inside bounded `if` / fallthrough async control flow now has focused coverage for async functions, async methods, and async arrow/function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now supports a bounded final return expression containing one embedded pending `await`, covering async functions, async methods, and async arrow/function values outside the leading awaited-local declaration pattern. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now supports arbitrary-length leading awaited-local chains followed by a final return for async functions, async methods, and async arrow/function values. Test: `async_await_pending_return_expr`.
