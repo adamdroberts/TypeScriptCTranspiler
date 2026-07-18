@@ -24799,7 +24799,8 @@ class Emitter {
         const catchStatements = tryStmt.catchClause.block.statements;
         const catchStmt = catchStatements[catchStatements.length - 1]!;
         const catchPreludeStatements = catchStatements.slice(0, -1);
-        const catchPreludeLocals = new Set<ts.Symbol>();
+        const catchPreludeDeclaredLocals = new Set<ts.Symbol>();
+        const catchPreludeInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[0]!);
@@ -24872,7 +24873,10 @@ class Emitter {
                         ok = false;
                         return;
                     }
-                } else if (sym && catchPreludeLocals.has(sym)) {
+                } else if (sym && catchPreludeInitializedLocals.has(sym)) {
+                    return;
+                } else if (sym && catchPreludeDeclaredLocals.has(sym)) {
+                    ok = false;
                     return;
                 } else {
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
@@ -24885,6 +24889,14 @@ class Emitter {
         const visitCatchPreludeStatement = (stmt: ts.Statement): void => {
             if (!ok) return;
             if (ts.isExpressionStatement(stmt)) {
+                if (ts.isBinaryExpression(stmt.expression) && stmt.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(stmt.expression.left)) {
+                    const sym = this.symbolForIdentifier(stmt.expression.left);
+                    if (sym && catchPreludeDeclaredLocals.has(sym)) {
+                        visit(stmt.expression.right, { allowAwaited: false, allowCatch: !!catchSymbol });
+                        if (ok) catchPreludeInitializedLocals.add(sym);
+                        return;
+                    }
+                }
                 visit(stmt.expression, { allowAwaited: false, allowCatch: !!catchSymbol });
                 return;
             }
@@ -24897,18 +24909,27 @@ class Emitter {
                 return;
             }
             for (const decl of stmt.declarationList.declarations) {
-                if (!ts.isIdentifier(decl.name) || !decl.initializer) {
+                if (!ts.isIdentifier(decl.name)) {
                     ok = false;
                     return;
                 }
-                visit(decl.initializer, { allowAwaited: false, allowCatch: !!catchSymbol });
-                if (!ok) return;
                 const sym = this.symbolForIdentifier(decl.name);
                 if (!sym) {
                     ok = false;
                     return;
                 }
-                catchPreludeLocals.add(sym);
+                if (!decl.initializer) {
+                    if (stmt.declarationList.flags & ts.NodeFlags.Const) {
+                        ok = false;
+                        return;
+                    }
+                    catchPreludeDeclaredLocals.add(sym);
+                    continue;
+                }
+                visit(decl.initializer, { allowAwaited: false, allowCatch: !!catchSymbol });
+                if (!ok) return;
+                catchPreludeDeclaredLocals.add(sym);
+                catchPreludeInitializedLocals.add(sym);
             }
         };
 

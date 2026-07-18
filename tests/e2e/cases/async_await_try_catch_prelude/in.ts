@@ -50,6 +50,30 @@ async function catchPreludeLocalThrow(): Promise<string> {
     }
 }
 
+async function catchPreludeUninitializedLocalReturn(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(6, "uninit-local");
+        return "try:" + value;
+    } catch (e) {
+        let label: string;
+        label = "uninit:" + e;
+        let decorated: string;
+        decorated = label + ":" + catchTrace;
+        return decorated;
+    }
+}
+
+async function catchPreludeUninitializedLocalThrow(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(7, "uninit-throw");
+        return "try:" + value;
+    } catch (e) {
+        let label: string;
+        label = "uninit-throw:" + e;
+        throw label + ":" + catchTrace;
+    }
+}
+
 catchPreludeReturn(true).then((value: string): void => {
     console.log("catch-prelude-return-fulfilled:", value, catchTrace);
 });
@@ -68,4 +92,12 @@ catchPreludeLocalReturn().then((value: string): void => {
 
 catchPreludeLocalThrow().catch((reason: string): void => {
     console.log("catch-prelude-local-throw:", reason);
+});
+
+catchPreludeUninitializedLocalReturn().then((value: string): void => {
+    console.log("catch-prelude-uninitialized-local-return:", value);
+});
+
+catchPreludeUninitializedLocalThrow().catch((reason: string): void => {
+    console.log("catch-prelude-uninitialized-local-throw:", reason);
 });
