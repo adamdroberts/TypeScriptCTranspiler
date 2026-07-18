@@ -2770,7 +2770,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (objectEntries) return resolveCollectionExpression(objectEntries);
             const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
             if (objectFromEntries) return resolveCollectionExpression(objectFromEntries);
-            const urlSearchParamsValues = resolveStaticUrlSearchParamsGetAllCollectionExpression(cur);
+            const urlSearchParamsValues = resolveStaticUrlSearchParamsCollectionExpression(cur);
             if (urlSearchParamsValues) return resolveCollectionExpression(urlSearchParamsValues);
             const bufferJson = resolveStaticBufferToJsonCollectionExpression(cur);
             if (bufferJson) return resolveCollectionExpression(bufferJson);
@@ -3766,10 +3766,18 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return jsonValueToStaticExpression(buffers[0]!.toJSON());
     };
 
-    const resolveStaticUrlSearchParamsGetAllCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
-        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+    const resolveStaticUrlSearchParamsCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
         const callee = unwrapStaticExpression(call.expression);
-        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "getAll") return null;
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const method = callee.name.text;
+        if (method !== "getAll" && method !== "keys" && method !== "values" && method !== "entries") return null;
+        if (
+            (method === "getAll" && call.arguments.length !== 1) ||
+            (method !== "getAll" && call.arguments.length !== 0) ||
+            call.arguments.some(ts.isSpreadElement)
+        ) {
+            return null;
+        }
         const source = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(source)) return null;
         const ctor = unwrapStaticExpression(source.expression);
@@ -3779,12 +3787,26 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const values = !arg || isStaticUndefinedExpression(arg)
             ? [""]
             : resolve(arg);
-        const names = resolve(call.arguments[0]!);
-        if (values.length !== 1 || names.length !== 1) return null;
+        if (values.length !== 1) return null;
         const params = new URLSearchParams(values[0]!);
-        return ts.factory.createArrayLiteralExpression(
-            params.getAll(names[0]!).map((value) => ts.factory.createStringLiteral(value)),
-        );
+        if (method === "getAll") {
+            const names = resolve(call.arguments[0]!);
+            if (names.length !== 1) return null;
+            return ts.factory.createArrayLiteralExpression(
+                params.getAll(names[0]!).map((value) => ts.factory.createStringLiteral(value)),
+            );
+        }
+        if (method === "keys") {
+            return ts.factory.createArrayLiteralExpression(
+                Array.from(params.keys()).map((key) => ts.factory.createStringLiteral(key)),
+            );
+        }
+        if (method === "values") {
+            return ts.factory.createArrayLiteralExpression(
+                Array.from(params.values()).map((value) => ts.factory.createStringLiteral(value)),
+            );
+        }
+        return resolveStaticArrayFromUrlSearchParamsSource(arg);
     };
 
     const resolveStaticJsonParseCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
