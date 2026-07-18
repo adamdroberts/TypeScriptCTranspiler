@@ -130,6 +130,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (base64Text.length > 0) return base64Text;
             const urlCanParseText = resolveStaticUrlCanParseCall(node);
             if (urlCanParseText.length > 0) return urlCanParseText;
+            const urlStringText = resolveStaticUrlStringCall(node);
+            if (urlStringText.length > 0) return urlStringText;
             const bufferByteLengthText = resolveStaticBufferByteLengthCall(node);
             if (bufferByteLengthText.length > 0) return bufferByteLengthText;
             const bufferIsEncodingText = resolveStaticBufferIsEncodingCall(node);
@@ -844,6 +846,17 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const urls = resolveStaticUrlRecords(access.expression);
         if (urls.length === 0) return [];
         return dedupe(urls.map((url) => url[property as keyof URL] as string));
+    };
+
+    const resolveStaticUrlStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "toString" && method !== "toJSON" && method !== "toLocaleString") return [];
+        const urls = resolveStaticUrlRecords(callee.expression);
+        if (urls.length === 0) return [];
+        return dedupe(urls.map((url) => url.href));
     };
 
     const staticBufferByteLength = (value: string, encoding: string | undefined): number | null => {

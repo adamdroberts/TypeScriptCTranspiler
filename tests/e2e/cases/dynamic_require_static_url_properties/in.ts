@@ -14,6 +14,9 @@ const relative = new URL("next?q=2#part", "https://example.com/base/page.html");
 const fromBasePath = require("./url_" + relative.pathname.slice(1).replace("/", "_"));
 const fromBaseSearch = require("./url_" + relative.search.slice(1).replace("=", "_"));
 const fromBaseHash = require("./url_" + relative.hash.slice(1));
+const fromToString = require("./url_" + direct.toString().replace("https://example.com:8443/dir/page?q=1#frag", "href"));
+const fromToJson = require("./url_" + direct.toJSON().replace("https://example.com:8443/dir/page?q=1#frag", "href"));
+const fromToLocaleString = require("./url_" + direct.toLocaleString().replace("https://example.com:8443/dir/page?q=1#frag", "href"));
 
 console.log(
     fromHref.label,
@@ -28,4 +31,7 @@ console.log(
     fromBasePath.label,
     fromBaseSearch.label,
     fromBaseHash.label,
+    fromToString.label,
+    fromToJson.label,
+    fromToLocaleString.label,
 );

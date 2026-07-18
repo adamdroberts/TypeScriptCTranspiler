@@ -6,7 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
-- Finite dynamic `require(...)` proofs resolve static `new URL(input, base?).href` / `.protocol` / `.host` / `.hostname` / `.port` / `.pathname` / `.search` / `.hash` / `.origin` metadata fragments, including earlier `const` URL aliases. Test: `dynamic_require_static_url_properties`
+- Finite dynamic `require(...)` proofs resolve static `new URL(input, base?).href` / `.protocol` / `.host` / `.hostname` / `.port` / `.pathname` / `.search` / `.hash` / `.origin` metadata fragments and zero-argument `.toString()` / `.toJSON()` / `.toLocaleString()` results, including earlier `const` URL aliases. Test: `dynamic_require_static_url_properties`
 - Finite dynamic `require(...)` proofs resolve static `ArrayBuffer.byteLength`, `DataView.byteLength` / `.byteOffset`, and `DataView.buffer.byteLength` constructor metadata fragments, including earlier `const` ArrayBuffer/DataView aliases. Test: `dynamic_require_static_array_buffer_data_view`
 - Finite dynamic `require(...)` proofs resolve static `TextEncoder.encode(...)` Buffer fragments and `TextDecoder.decode(...)` UTF-8 string fragments over finite inputs. Test: `dynamic_require_static_text_encoder_decoder`
 - Finite dynamic `require(...)` proofs resolve static `Set.prototype.isSubsetOf(...)`, `.isSupersetOf(...)`, and `.isDisjointFrom(...)` relation fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`
