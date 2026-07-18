@@ -1,0 +1,11 @@
+parenthesized-conditional-sync: fn-conditional-sync
+parenthesized-logical-or-sync: logical-sync
+parenthesized-logical-and-sync: false
+parenthesized-conditional-await: fn-conditional-await
+parenthesized-nested-conditional-inner: fn-nested-inner
+parenthesized-nested-conditional-fallthrough: fn-nested-fallthrough
+parenthesized-logical-or-await: logical-or-await
+parenthesized-logical-and-await: logical-and-await
+prelude-parenthesized-conditional-await: fn-prelude-conditional-await
+method-parenthesized-conditional-await: method-method-conditional-await
+value-parenthesized-return: value-value-await
