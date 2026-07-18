@@ -206,6 +206,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
     successReturnExpr: ts.Expression | null;
     successReturnsAwaited: boolean;
     catchClause: ts.CatchClause;
+    catchPreludeStatements: readonly ts.Statement[];
     catchReturnExpr: ts.Expression | null;
     catchThrowExpr: ts.Expression | null;
     params: AsyncAwaitContinuationParam[];
@@ -24792,10 +24793,13 @@ class Emitter {
         if (body.statements.length !== 1 && body.statements.length !== 2) return null;
         const tryStmt = body.statements[0]!;
         if (!ts.isTryStatement(tryStmt) || !tryStmt.catchClause || tryStmt.finallyBlock) return null;
-        if (tryStmt.catchClause.block.statements.length !== 1) return null;
+        if (tryStmt.catchClause.block.statements.length < 1) return null;
 
         let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[0]!);
-        const catchStmt = tryStmt.catchClause.block.statements[0]!;
+        const catchStatements = tryStmt.catchClause.block.statements;
+        const catchStmt = catchStatements[catchStatements.length - 1]!;
+        const catchPreludeStatements = catchStatements.slice(0, -1);
+        if (!catchPreludeStatements.every((stmt) => ts.isExpressionStatement(stmt))) return null;
         let successReturnsAwaited = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[0]!);
@@ -24878,6 +24882,7 @@ class Emitter {
 
         visit(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
         if (successReturnExpr) visit(successReturnExpr, { allowAwaited: true, allowCatch: false });
+        for (const stmt of catchPreludeStatements) visit(stmt, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (catchReturnExpr) visit(catchReturnExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (catchThrowExpr) visit(catchThrowExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (!ok) return null;
@@ -24888,6 +24893,7 @@ class Emitter {
             successReturnExpr,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
+            catchPreludeStatements,
             catchReturnExpr,
             catchThrowExpr,
             params: [...referenced.values()],
@@ -25048,6 +25054,7 @@ class Emitter {
         let catchThrown: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
+            for (const stmt of continuation.catchPreludeStatements) this.emitStmt(buf, stmt);
             if (continuation.catchThrowExpr) {
                 catchThrown = this.emitExpr(continuation.catchThrowExpr);
             } else if (continuation.catchReturnExpr) {
