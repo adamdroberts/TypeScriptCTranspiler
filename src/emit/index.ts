@@ -21390,6 +21390,8 @@ class Emitter {
             type.kind === "array" ||
             type.kind === "map" ||
             type.kind === "set" ||
+            type.kind === "weakmap" ||
+            type.kind === "weakset" ||
             type.kind === "class";
     }
 
