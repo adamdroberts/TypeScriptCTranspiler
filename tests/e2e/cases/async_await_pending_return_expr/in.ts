@@ -106,6 +106,24 @@ async function initializedAssignmentExpressionAwaitReturn(prefix: string): Promi
     return decorated;
 }
 
+async function sourceTryCatchParenthesizedReturn(prefix: string): Promise<string> {
+    try {
+        const value = await delay(303, "try-catch-success");
+        return (prefix + value);
+    } catch (e) {
+        return (prefix + "bad-" + e);
+    }
+}
+
+async function sourceTryFinallyAssertedReturn(prefix: string): Promise<string> {
+    try {
+        const value = await delay(305, "try-finally");
+        return (prefix + value) as string;
+    } finally {
+        console.log("source-try-finally-finally:", prefix + "finally");
+    }
+}
+
 async function twoAwait(prefix: string): Promise<string> {
     const first = await delay(45, "one");
     const second = await delay(46, prefix + first + "-two");
@@ -1370,6 +1388,14 @@ directAssignmentAwaitReturn("fn-").then((value: string): void => {
 
 initializedDirectAssignmentAwaitReturn("fn-").then((value: string): void => {
     console.log("initialized-direct-assignment-await-return:", value);
+});
+
+sourceTryCatchParenthesizedReturn("fn-source-").then((value: string): void => {
+    console.log("source-try-catch-parenthesized-return:", value);
+});
+
+sourceTryFinallyAssertedReturn("fn-source-").then((value: string): void => {
+    console.log("source-try-finally-asserted-return:", value);
 });
 
 twoAwait("fn-").then((value: string): void => {
