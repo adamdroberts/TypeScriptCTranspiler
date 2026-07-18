@@ -1,0 +1,4 @@
+{
+  "description": "delayed thenable resolve and reject callbacks work through call/apply",
+  "features": ["promise", "thenable", "queueMicrotask", "function-call-apply"]
+}

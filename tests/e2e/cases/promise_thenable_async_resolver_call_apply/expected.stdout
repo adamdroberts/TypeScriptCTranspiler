@@ -1,0 +1,3 @@
+sync:
+fulfilled: then call resolve|then apply reject|external|settle call resolve|settle apply reject|fulfilled:call value
+rejected: then call resolve|then apply reject|external|settle call resolve|settle apply reject|fulfilled:call value|rejected:apply reason
