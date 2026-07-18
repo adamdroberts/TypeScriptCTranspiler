@@ -53,6 +53,35 @@ async function parenthesizedReturnAwait(): Promise<string> {
     return (await delay(6, "return-ok"));
 }
 
+async function parenthesizedAwaitedLocal(prefix: string): Promise<string> {
+    const value = (await delay(7, "local"));
+    return prefix + value;
+}
+
+async function parenthesizedAwaitedLocalTryCatch(flag: boolean): Promise<string> {
+    try {
+        const value = (await (flag ? delay(8, "try-local-ok") : delayedRejectAfter(9, "try-local-bad")));
+        return "try-local:" + value;
+    } catch (e) {
+        return "try-local-caught:" + e;
+    }
+}
+
+async function parenthesizedAwaitedLocalTryFinally(): Promise<string> {
+    try {
+        const value = (await delay(10, "finally-local-ok"));
+        return "finally-local:" + value;
+    } finally {
+        finallyTrace += "L";
+    }
+}
+
+async function parenthesizedAwaitedLocalChain(prefix: string): Promise<string> {
+    const first = (await delay(11, "one"));
+    const second = (await delay(12, first + "-two"));
+    return prefix + first + ":" + second;
+}
+
 parenthesizedExpressionStatement("parenthesized-").then((value: string): void => {
     console.log("parenthesized-expression-statement:", value);
 });
@@ -75,4 +104,24 @@ parenthesizedTryFinallyRejected().catch((reason: string): void => {
 
 parenthesizedReturnAwait().then((value: string): void => {
     console.log("parenthesized-return-await:", value);
+});
+
+parenthesizedAwaitedLocal("parenthesized-").then((value: string): void => {
+    console.log("parenthesized-awaited-local:", value);
+});
+
+parenthesizedAwaitedLocalTryCatch(true).then((value: string): void => {
+    console.log("parenthesized-awaited-local-try-catch-fulfilled:", value);
+});
+
+parenthesizedAwaitedLocalTryCatch(false).then((value: string): void => {
+    console.log("parenthesized-awaited-local-try-catch-rejected:", value);
+});
+
+parenthesizedAwaitedLocalTryFinally().then((value: string): void => {
+    console.log("parenthesized-awaited-local-try-finally:", value, finallyTrace);
+});
+
+parenthesizedAwaitedLocalChain("chain-").then((value: string): void => {
+    console.log("parenthesized-awaited-local-chain:", value);
 });
