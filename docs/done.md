@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, including inherited iterator methods. Test: `promise_thenable_async_combinator_custom_iterable_recursive`
 - Dynamic promise combinators consume `Map<any, any>` inputs through entry iteration across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, resolving with `[key, value]` entry arrays. Test: `promise_combinators_dynamic_map_inputs`
 - `new Promise<T>(executor)` resolve callbacks assimilate delayed dynamic thenables that resolve to nested native Promise records, including nested fulfillment and rejection. Test: `promise_executor_thenable_nested_promise_async`
 - Dynamic promise combinators assimilate delayed nested thenables from `Set<any>` inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_set_recursive`
@@ -168,6 +169,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Dynamic Promise thenable assimilation keeps `then` property lookup synchronous but queues callable `then` invocation as a Promise microtask, preserving FIFO ordering with already-queued microtasks and later Promise reactions. Test: `promise_thenable_microtask_order`
 - Dynamic `Promise.all(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` over `any[]` / `Set<any>` subscribe to pending normalized thenables created by microtask-scheduled callable `then` jobs and settle their outer Promise records when those jobs finish; `Promise.race(...)` follows FIFO reaction ordering when a later already-fulfilled input beats an earlier pending thenable. Test: `promise_combinators_dynamic`
 - Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept `Map<any, any>` inputs and consume their `[key, value]` entries through the existing dynamic array combinator path. Test: `promise_combinators_dynamic_map_inputs`
+- Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept typed custom iterable class inputs whose `[Symbol.iterator]()` lowers to an array-backed `IterableIterator<T>` and feed the resulting array through the existing Promise combinator paths. Test: `promise_thenable_async_combinator_custom_iterable_recursive`
 - `new Promise<T>(executor, ...ignored)` evaluates and ignores trailing constructor arguments before invoking the synchronous executor. Test: `promise_constructor_ignored_arguments`
 - Async functions in a no-`try` tail position now adopt `return await pendingPromise` directly, preserving delayed Promise settlement without entering the general suspend/resume state-machine path. Test: `async_await_tail_pending`
 - Dynamic `any` values containing already-settled native Promise records can be awaited through the same adoption path as statically typed Promise values. Test: `async_await_values_immediate`
@@ -1774,6 +1776,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_returned_thenable_throw_after_settle` | returned dynamic thenables that throw after settlement preserve the first settlement |
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and array/Set combinators |
 | `promise_thenable_assimilation` | immediate dynamic thenable assimilation through Promise.resolve and callbacks |
+| `promise_thenable_async_combinator_custom_iterable_recursive` | dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs |
 | `promise_thenable_async_combinator_set_recursive` | dynamic promise combinators assimilate delayed nested thenables from Set inputs |
 | `promise_thenable_async_combinator_recursive` | dynamic promise combinators assimilate delayed nested thenables |
 | `promise_thenable_async_recursive` | delayed dynamic thenables recursively assimilate nested delayed thenables |
