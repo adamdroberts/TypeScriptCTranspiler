@@ -42996,9 +42996,10 @@ class Emitter {
         const arg = call.arguments[0];
         if (!arg) unsupported(call, `${label} expects an array or Set`);
         const source = this.emitExpr(arg);
+        const unsupportedMessage = `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, string, or a typed custom iterable`;
         if (source.ty.kind === "map") {
             if (!source.ty.key || !source.ty.elem || source.ty.key.kind !== "value" || source.ty.elem.kind !== "value") {
-                unsupported(arg, `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, or a typed custom iterable`);
+                unsupported(arg, unsupportedMessage);
             }
             const entries = this.mapEntriesArrayExpr(arg, source.c, source.ty, label);
             return {
@@ -43006,11 +43007,27 @@ class Emitter {
                 ty: arrayType(T_VALUE),
             };
         }
+        if (source.ty.kind === "string") {
+            const tmp = this.freshTemp("_promiseString");
+            const out = this.freshTemp("_promiseItems");
+            const idx = this.freshTemp("_promiseStringIndex");
+            const item = this.freshTemp("_promiseStringItem");
+            return {
+                c: (
+                    `({ tsc_str_t* const ${tmp} = ${source.c}; ` +
+                    `tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), ${tmp}->len ? ${tmp}->len : 1); ` +
+                    `for (size_t ${idx} = 0; ${idx} < ${tmp}->len; ${idx}++) { ` +
+                    `tsc_value_t ${item} = tsc_value_string(tsc_str_char_at(${tmp}, (double)${idx})); ` +
+                    `tsc_array_push_raw(${out}, &${item}); } ${out}; })`
+                ),
+                ty: arrayType(T_VALUE),
+            };
+        }
         if (source.ty.kind === "class") {
             const custom = this.emitCustomIteratorArray(arg, source) ??
                 this.emitCustomIterableArray(arg, source);
             if (!custom || !custom.ty.elem || (custom.ty.elem.kind !== "promise" && custom.ty.elem.kind !== "value")) {
-                unsupported(arg, `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, or a typed custom iterable`);
+                unsupported(arg, unsupportedMessage);
             }
             return custom;
         }
@@ -43019,7 +43036,7 @@ class Emitter {
             !source.ty.elem ||
             (source.ty.elem.kind !== "promise" && source.ty.elem.kind !== "value")
         ) {
-            unsupported(arg, `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, or a typed custom iterable`);
+            unsupported(arg, unsupportedMessage);
         }
         if (source.ty.kind === "set") {
             return {
