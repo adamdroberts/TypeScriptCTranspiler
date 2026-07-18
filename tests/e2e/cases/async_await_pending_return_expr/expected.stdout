@@ -24,6 +24,7 @@ arrow-prelude-nested-conditional-inline-await-return-sync: value-arrow-prelude-n
 suffix: ready!
 double: 42
 tagged: fn-tag
+direct-assignment-await-return: fn-direct-assignment
 staged: fn-stage!
 method: method!
 initializer-expression-await-return: fn-initializer!
@@ -31,8 +32,10 @@ assignment-expression-await-return: fn-assignment!
 initialized-assignment-expression-await-return: fn-init-assignment!
 method-param: class-method-param
 method-this: this-this-param
+method-direct-assignment-await-return: this-method-direct-assignment!
 arrow: arrow!
 method-staged-this: this-method-stage!
+arrow-direct-assignment-await-return: value-arrow-direct-assignment
 method-initializer-expression-await-return: this-method-initializer!
 arrow-param: value-arrow-param
 method-assignment-expression-await-return: this-method-assignment!
