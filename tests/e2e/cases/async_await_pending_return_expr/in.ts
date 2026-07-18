@@ -368,6 +368,47 @@ async function loopControlDeclarationAfterAwait(prefix: string): Promise<string>
     return result;
 }
 
+async function doWhileDeclarationAfterAwait(prefix: string): Promise<string> {
+    const value = await delay(348, "decl-do");
+    let result = prefix;
+    let index = 0;
+    do {
+        result = result + value + index;
+        index = index + 1;
+    } while (index < 2);
+    return result;
+}
+
+async function forDeclarationAfterAwait(prefix: string): Promise<string> {
+    const value = await delay(349, "decl-for");
+    let result = prefix;
+    for (let index = 0; index < 2; index = index + 1) {
+        result = result + value;
+    }
+    return result;
+}
+
+async function forOfDeclarationAfterAwait(prefix: string): Promise<string> {
+    const value = await delay(350, "decl-of");
+    const parts = [prefix, value, "!"];
+    let result = "";
+    for (const part of parts) {
+        result = result + part;
+    }
+    return result;
+}
+
+async function forInDeclarationAfterAwait(prefix: string): Promise<string> {
+    const value = await delay(351, "decl-in");
+    let result = prefix;
+    for (const key in [prefix, value, "!"]) {
+        if (key === "1") continue;
+        if (key === "2") break;
+        result = result + key + value;
+    }
+    return result;
+}
+
 async function switchBreakDeclarationAfterAwait(kind: string, prefix: string): Promise<string> {
     const value = await delay(343, kind);
     let result = prefix;
@@ -383,6 +424,18 @@ async function switchBreakDeclarationAfterAwait(kind: string, prefix: string): P
             break;
     }
     return result;
+}
+
+async function earlyReturnDeclarationAfterAwait(flag: boolean, prefix: string): Promise<string> {
+    const value = await delay(352, "decl-return");
+    if (flag) return prefix + value;
+    return prefix + "late-" + value;
+}
+
+async function throwDeclarationAfterAwait(prefix: string): Promise<string> {
+    const value = await delay(353, "decl-throw");
+    throw prefix + value;
+    return "never";
 }
 
 async function tryCatchDeclarationAfterAwait(prefix: string): Promise<string> {
@@ -1484,6 +1537,47 @@ const arrowLoopControlAfterAwait = async (prefix: string): Promise<string> => {
     return result;
 };
 
+const arrowDoWhileAfterAwait = async (prefix: string): Promise<string> => {
+    const value = await delay(354, "arrow-do");
+    let result = prefix;
+    let index = 0;
+    do {
+        result = result + value + index;
+        index = index + 1;
+    } while (index < 2);
+    return result;
+};
+
+const arrowForAfterAwait = async (prefix: string): Promise<string> => {
+    const value = await delay(355, "arrow-for");
+    let result = prefix;
+    for (let index = 0; index < 2; index = index + 1) {
+        result = result + value;
+    }
+    return result;
+};
+
+const arrowForOfAfterAwait = async (prefix: string): Promise<string> => {
+    const value = await delay(356, "arrow-of");
+    const parts = [prefix, value, "!"];
+    let result = "";
+    for (const part of parts) {
+        result = result + part;
+    }
+    return result;
+};
+
+const arrowForInAfterAwait = async (prefix: string): Promise<string> => {
+    const value = await delay(357, "arrow-in");
+    let result = prefix;
+    for (const key in [prefix, value, "!"]) {
+        if (key === "1") continue;
+        if (key === "2") break;
+        result = result + key + value;
+    }
+    return result;
+};
+
 const arrowSwitchBreakAfterAwait = async (kind: string, prefix: string): Promise<string> => {
     const value = await delay(346, kind);
     let result = prefix;
@@ -1499,6 +1593,18 @@ const arrowSwitchBreakAfterAwait = async (kind: string, prefix: string): Promise
             break;
     }
     return result;
+};
+
+const arrowEarlyReturnAfterAwait = async (flag: boolean, prefix: string): Promise<string> => {
+    const value = await delay(358, "arrow-return");
+    if (flag) return prefix + value;
+    return prefix + "late-" + value;
+};
+
+const arrowThrowAfterAwait = async (prefix: string): Promise<string> => {
+    const value = await delay(359, "arrow-throw");
+    throw prefix + value;
+    return "never";
 };
 
 const arrowTryCatchAfterAwait = async (prefix: string): Promise<string> => {
@@ -1578,8 +1684,33 @@ loopControlDeclarationAfterAwait("fn-").then((value: string): void => {
     console.log("declaration-loop-control-after-await:", value);
 });
 
+doWhileDeclarationAfterAwait("fn-").then((value: string): void => {
+    console.log("declaration-do-while-after-await:", value);
+});
+
+forDeclarationAfterAwait("fn-").then((value: string): void => {
+    console.log("declaration-for-after-await:", value);
+});
+
+forOfDeclarationAfterAwait("fn-").then((value: string): void => {
+    console.log("declaration-for-of-after-await:", value);
+});
+
+forInDeclarationAfterAwait("fn-").then((value: string): void => {
+    console.log("declaration-for-in-after-await:", value);
+});
+
 switchBreakDeclarationAfterAwait("b", "fn-switch-").then((value: string): void => {
     console.log("declaration-switch-break-after-await:", value);
+});
+
+earlyReturnDeclarationAfterAwait(true, "fn-return-").then((value: string): void => {
+    console.log("declaration-early-return-after-await:", value);
+});
+
+throwDeclarationAfterAwait("fn-throw-").catch((reason: string): string => {
+    console.log("declaration-throw-after-await:", reason);
+    return "handled";
 });
 
 tryCatchDeclarationAfterAwait("fn-try-").then((value: string): void => {
@@ -2195,8 +2326,33 @@ arrowLoopControlAfterAwait("value-").then((value: string): void => {
     console.log("arrow-loop-control-after-await:", value);
 });
 
+arrowDoWhileAfterAwait("value-").then((value: string): void => {
+    console.log("arrow-do-while-after-await:", value);
+});
+
+arrowForAfterAwait("value-").then((value: string): void => {
+    console.log("arrow-for-after-await:", value);
+});
+
+arrowForOfAfterAwait("value-").then((value: string): void => {
+    console.log("arrow-for-of-after-await:", value);
+});
+
+arrowForInAfterAwait("value-").then((value: string): void => {
+    console.log("arrow-for-in-after-await:", value);
+});
+
 arrowSwitchBreakAfterAwait("z", "value-switch-").then((value: string): void => {
     console.log("arrow-switch-break-after-await:", value);
+});
+
+arrowEarlyReturnAfterAwait(false, "value-return-").then((value: string): void => {
+    console.log("arrow-late-return-after-await:", value);
+});
+
+arrowThrowAfterAwait("value-throw-").catch((reason: string): string => {
+    console.log("arrow-throw-after-await:", reason);
+    return "handled";
 });
 
 arrowTryCatchAfterAwait("value-try-").then((value: string): void => {
