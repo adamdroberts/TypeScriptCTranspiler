@@ -2712,6 +2712,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
+            if (objectEntries) return resolveCollectionExpression(objectEntries);
             const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
             if (objectFromEntries) return resolveCollectionExpression(objectFromEntries);
             const urlSearchParamsValues = resolveStaticUrlSearchParamsGetAllCollectionExpression(cur);
@@ -2795,6 +2797,30 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (properties.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         }
         return ts.factory.createObjectLiteralExpression(properties);
+    };
+
+    const resolveStaticObjectEntriesCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "entries") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object || !ts.isObjectLiteralExpression(object)) return null;
+        const entries: ts.ArrayLiteralExpression[] = [];
+        for (const prop of object.properties) {
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+            const key = staticPropertyName(prop.name);
+            if (key === null) return null;
+            const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            entries.push(ts.factory.createArrayLiteralExpression([
+                ts.factory.createStringLiteral(key),
+                valueExpr,
+            ]));
+            if (entries.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createArrayLiteralExpression(entries);
     };
 
     const resolveStaticBufferToJsonCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
