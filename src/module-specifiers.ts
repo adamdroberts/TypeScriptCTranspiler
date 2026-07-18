@@ -176,6 +176,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (arrayMutationText.length > 0) return arrayMutationText;
             const arraySearchText = resolveStaticArraySearchCall(node);
             if (arraySearchText.length > 0) return arraySearchText;
+            const arrayReduceText = resolveStaticArrayReduceCall(node);
+            if (arrayReduceText.length > 0) return arrayReduceText;
             const sameValueText = resolveStaticObjectIsCall(node);
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
@@ -3087,6 +3089,51 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return [];
     };
 
+    const resolveStaticArrayReduceCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "reduce" && method !== "reduceRight") return [];
+        const receiver = resolveCollectionExpression(callee.expression);
+        if (!receiver || !ts.isArrayLiteralExpression(receiver)) return [];
+        const receiverElements = denseStaticArrayElements(receiver);
+        if (!receiverElements) return [];
+
+        let accumulator = call.arguments[1]!;
+        const indexes = method === "reduceRight"
+            ? receiverElements.map((_, index) => index).reverse()
+            : receiverElements.map((_, index) => index);
+        for (const index of indexes) {
+            const next = substituteStaticArrayReduceCallback(call.arguments[0]!, accumulator, receiverElements[index]!, index);
+            if (!next || resolve(next).length !== 1) return [];
+            accumulator = next;
+        }
+        return resolve(accumulator);
+    };
+
+    const substituteStaticArrayReduceCallback = (
+        callback: ts.Expression,
+        accumulator: ts.Expression,
+        element: ts.Expression,
+        index: number,
+    ): ts.Expression | null => {
+        const unwrapped = unwrapStaticExpression(callback);
+        if (!ts.isArrowFunction(unwrapped) && !ts.isFunctionExpression(unwrapped)) return null;
+        const body = ts.isBlock(unwrapped.body)
+            ? singleReturnExpression(unwrapped.body)
+            : unwrapped.body;
+        if (!body) return null;
+        const accumulatorParam = unwrapped.parameters[0]?.name;
+        const elementParam = unwrapped.parameters[1]?.name;
+        const indexParam = unwrapped.parameters[2]?.name;
+        const bindings = new Map<string, ts.Expression>();
+        if (accumulatorParam && ts.isIdentifier(accumulatorParam)) bindings.set(accumulatorParam.text, accumulator);
+        if (elementParam && ts.isIdentifier(elementParam)) bindings.set(elementParam.text, element);
+        if (indexParam && ts.isIdentifier(indexParam)) bindings.set(indexParam.text, ts.factory.createNumericLiteral(index));
+        return substituteStaticCallbackExpressionWithBindings(body, bindings);
+    };
+
     const mapStaticArrayCallback = (elements: ts.Expression[], callback: ts.Expression): ts.Expression[] | null => {
         const out: ts.Expression[] = [];
         for (let i = 0; i < elements.length; i++) {
@@ -3117,48 +3164,58 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return substituteStaticCallbackExpression(body, elementName, element, indexName, index);
     };
 
+    const substituteStaticCallbackExpressionWithBindings = (
+        expr: ts.Expression,
+        bindings: Map<string, ts.Expression>,
+    ): ts.Expression | null => {
+        if (ts.isIdentifier(expr) && bindings.has(expr.text)) return bindings.get(expr.text)!;
+        return substituteStaticCallbackExpression(expr, null, expr, null, 0, bindings);
+    };
+
     const substituteStaticCallbackExpression = (
         expr: ts.Expression,
         elementName: string | null,
         element: ts.Expression,
         indexName: string | null,
         index: number,
+        extraBindings?: Map<string, ts.Expression>,
     ): ts.Expression | null => {
         if (ts.isIdentifier(expr)) {
+            if (extraBindings?.has(expr.text)) return extraBindings.get(expr.text)!;
             if (elementName && expr.text === elementName) return element;
             if (indexName && expr.text === indexName) return ts.factory.createNumericLiteral(index);
             return expr;
         }
         if (ts.isParenthesizedExpression(expr)) {
-            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index);
+            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index, extraBindings);
             return inner ? ts.factory.createParenthesizedExpression(inner) : null;
         }
         if (ts.isAsExpression(expr)) {
-            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index);
+            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index, extraBindings);
             return inner ? ts.factory.createAsExpression(inner, expr.type) : null;
         }
         if (ts.isTypeAssertionExpression(expr)) {
-            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index);
+            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index, extraBindings);
             return inner ? ts.factory.createTypeAssertion(expr.type, inner) : null;
         }
         if (ts.isSatisfiesExpression(expr)) {
-            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index);
+            const inner = substituteStaticCallbackExpression(expr.expression, elementName, element, indexName, index, extraBindings);
             return inner ? ts.factory.createSatisfiesExpression(inner, expr.type) : null;
         }
         if (ts.isBinaryExpression(expr)) {
-            const left = substituteStaticCallbackExpression(expr.left, elementName, element, indexName, index);
-            const right = substituteStaticCallbackExpression(expr.right, elementName, element, indexName, index);
+            const left = substituteStaticCallbackExpression(expr.left, elementName, element, indexName, index, extraBindings);
+            const right = substituteStaticCallbackExpression(expr.right, elementName, element, indexName, index, extraBindings);
             return left && right ? ts.factory.createBinaryExpression(left, expr.operatorToken, right) : null;
         }
         if (ts.isPrefixUnaryExpression(expr)) {
-            const operand = substituteStaticCallbackExpression(expr.operand, elementName, element, indexName, index);
+            const operand = substituteStaticCallbackExpression(expr.operand, elementName, element, indexName, index, extraBindings);
             return operand ? ts.factory.createPrefixUnaryExpression(expr.operator, operand) : null;
         }
         if (ts.isArrayLiteralExpression(expr)) {
             const elements: ts.Expression[] = [];
             for (const item of expr.elements) {
                 if (ts.isSpreadElement(item) || item.kind === ts.SyntaxKind.OmittedExpression) return null;
-                const next = substituteStaticCallbackExpression(item, elementName, element, indexName, index);
+                const next = substituteStaticCallbackExpression(item, elementName, element, indexName, index, extraBindings);
                 if (!next) return null;
                 elements.push(next);
             }
