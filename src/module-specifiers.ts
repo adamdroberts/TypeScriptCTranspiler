@@ -136,6 +136,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferIsEncodingText.length > 0) return bufferIsEncodingText;
             const bufferFromToStringText = resolveStaticBufferFromToStringCall(node);
             if (bufferFromToStringText.length > 0) return bufferFromToStringText;
+            const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
+            if (bufferIsBufferText.length > 0) return bufferIsBufferText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -848,6 +850,49 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const isStaticBufferExpression = (expr: ts.Expression): boolean | null => {
+        const unwrapped = unwrapStaticExpression(expr);
+        if (ts.isCallExpression(unwrapped)) {
+            const callee = unwrapStaticExpression(unwrapped.expression);
+            if (ts.isPropertyAccessExpression(callee)) {
+                const target = unwrapStaticExpression(callee.expression);
+                if (ts.isIdentifier(target) && target.text === "Buffer") {
+                    const name = callee.name.text;
+                    return name === "from" ||
+                        name === "alloc" ||
+                        name === "allocUnsafe" ||
+                        name === "allocUnsafeSlow" ||
+                        name === "concat";
+                }
+            }
+            return null;
+        }
+        if (
+            ts.isStringLiteralLike(unwrapped) ||
+            ts.isNoSubstitutionTemplateLiteral(unwrapped) ||
+            ts.isNumericLiteral(unwrapped) ||
+            ts.isBigIntLiteral(unwrapped) ||
+            unwrapped.kind === ts.SyntaxKind.TrueKeyword ||
+            unwrapped.kind === ts.SyntaxKind.FalseKeyword ||
+            unwrapped.kind === ts.SyntaxKind.NullKeyword ||
+            ts.isArrayLiteralExpression(unwrapped) ||
+            ts.isObjectLiteralExpression(unwrapped)
+        ) {
+            return false;
+        }
+        return null;
+    };
+
+    const resolveStaticBufferIsBufferCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "isBuffer") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        const result = isStaticBufferExpression(call.arguments[0]!);
+        return result === null ? [] : [String(result)];
     };
 
     const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
