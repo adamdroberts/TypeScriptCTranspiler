@@ -2693,7 +2693,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_try_catch_prelude` | async try/catch pending continuations support synchronous catch preludes and initialized or later-assigned catch-local declarations before return or throw |
 | `async_await_try_finally_prelude` | async try/finally pending continuations support synchronous initialized and later-assigned finally-local declarations |
 | `async_await_parenthesized_bare_await` | async continuations unwrap parenthesized awaited locals, bare awaits, direct return-awaits, and try/finally fallthrough |
-| `async_await_parenthesized_return_dispatch` | parenthesized branch return-await, conditional, and logical async return expressions dispatch to bounded continuation lowering |
+| `async_await_parenthesized_return_dispatch` | parenthesized branch return-await, conditional, nested conditional, and logical async return expressions dispatch to bounded continuation lowering |
 | `for_in` | for-in over typed classes/interfaces, typed arrays, and dynamic objects with continue/break |
 | `map_entries` | typed Map<K, V>.entries() returning ObjectEntry<V, K>[] |
 | `node_modules_commonjs_computed_object_entry_values_exports` | CommonJS computed named-export metadata accepts finite Object.entries object value keys |
