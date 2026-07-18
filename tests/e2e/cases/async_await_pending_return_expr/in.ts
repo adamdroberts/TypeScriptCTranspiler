@@ -169,6 +169,12 @@ async function preludeNestedConditionalInlineAwaitReturn(outer: boolean, inner: 
         : label + await delay(191, "fallthrough") + "!";
 }
 
+async function preludeLogicalOrLocalInlineAwaitReturn(prefix: string): Promise<string> {
+    const left = "";
+    const label = prefix + "prelude-logical-or-";
+    return left || label + await delay(200, "await") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -526,6 +532,12 @@ class Worker {
                 : label + "sync!"
             : label + await delay(193, "fallthrough") + "!";
     }
+
+    async preludeNullishLocalInlineAwaitReturnMethod(prefix: string): Promise<string> {
+        const left: string | undefined = undefined;
+        const label = this.prefix + prefix + "method-prelude-nullish-";
+        return left ?? label + await delay(201, "await") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -686,6 +698,12 @@ const arrowPreludeNestedConditionalInlineAwaitReturn = async (outer: boolean, in
         : label + await delay(195, "fallthrough") + "!";
 };
 
+const arrowPreludeLogicalAndLocalInlineAwaitReturn = async (prefix: string): Promise<any> => {
+    const left = true;
+    const label = prefix + "arrow-prelude-logical-and-";
+    return left && label + await delay(202, "await") + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -844,6 +862,10 @@ preludeBranchConditionalInlineAwaitReturn(true, true, "fn-").then((value: string
 
 preludeNestedConditionalInlineAwaitReturn(false, false, "fn-").then((value: string): void => {
     console.log("prelude-nested-conditional-inline-await-return-fallthrough:", value);
+});
+
+preludeLogicalOrLocalInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-logical-or-local-inline-await-return:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -1096,6 +1118,10 @@ new Worker("method-prelude-").preludeNestedConditionalInlineAwaitReturnMethod(tr
     console.log("method-prelude-nested-conditional-inline-await-return-inner:", value);
 });
 
+new Worker("method-prelude-").preludeNullishLocalInlineAwaitReturnMethod("class-").then((value: string): void => {
+    console.log("method-prelude-nullish-local-inline-await-return:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1250,4 +1276,8 @@ arrowPreludeBranchConditionalInlineAwaitReturn(true, false, "value-").then((valu
 
 arrowPreludeNestedConditionalInlineAwaitReturn(true, false, "value-").then((value: string): void => {
     console.log("arrow-prelude-nested-conditional-inline-await-return-sync:", value);
+});
+
+arrowPreludeLogicalAndLocalInlineAwaitReturn("value-").then((value: any): void => {
+    console.log("arrow-prelude-logical-and-local-inline-await-return:", value);
 });
