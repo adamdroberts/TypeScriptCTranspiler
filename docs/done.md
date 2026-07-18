@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs materialize static dense array `.reverse()` and comparator-free `.sort()` mutating wrappers, including alias receivers, default string sort order, stable duplicates, `.join(...)`, `Object.entries(...)`, and earlier finite array wrapper composition. Test: `dynamic_require_static_array_mutating_collections`
 - Finite dynamic `require(...)` proofs materialize static dense array `.flat(depth?)` wrappers for static integer depths, including default and explicit `undefined` depth semantics plus composition through `.join(...)`, `Object.entries(...)`, and earlier finite array wrappers. Test: `dynamic_require_static_array_flat_collections`
 - Finite dynamic `require(...)` proofs materialize comparator-free static dense array `.toSorted()` copy wrappers for elements with single static string coercions, including composition through `.join(...)`, `Object.entries(...)`, and earlier finite array wrappers. Test: `dynamic_require_static_array_to_sorted_collections`
 - Finite dynamic `require(...)` proofs materialize static dense array `.toSpliced(...)` copy wrappers, including omitted versus explicit `undefined` delete-count semantics and inserted specifier fragments. Test: `dynamic_require_static_array_to_spliced_collections`
