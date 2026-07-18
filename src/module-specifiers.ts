@@ -138,6 +138,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferFromToStringText.length > 0) return bufferFromToStringText;
             const bufferConcatToStringText = resolveStaticBufferConcatToStringCall(node);
             if (bufferConcatToStringText.length > 0) return bufferConcatToStringText;
+            const bufferAllocToStringText = resolveStaticBufferAllocToStringCall(node);
+            if (bufferAllocToStringText.length > 0) return bufferAllocToStringText;
             const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
             if (bufferIsBufferText.length > 0) return bufferIsBufferText;
             const numericParserText = resolveStaticNumericParserCall(node);
@@ -796,11 +798,39 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return out;
     };
 
+    const resolveStaticBufferAllocExpression = (call: ts.CallExpression): Buffer[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "alloc") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+
+        const sizes = resolveStaticIntegerKeys(call.arguments[0]!);
+        if (sizes.length === 0) return [];
+        const fillArg = call.arguments[1];
+        const fills = !fillArg || isStaticUndefinedExpression(fillArg)
+            ? [0]
+            : resolveStaticIntegerKeys(fillArg);
+        if (fills.length === 0) return [];
+
+        const out: Buffer[] = [];
+        for (const size of sizes) {
+            if (size < 0) return [];
+            for (const fill of fills) {
+                out.push(Buffer.alloc(size, fill & 0xff));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupeBuffers(out);
+    };
+
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
         const fromBuffers = resolveStaticBufferFromExpression(unwrapped);
         if (fromBuffers.length > 0) return fromBuffers;
+        const allocBuffers = resolveStaticBufferAllocExpression(unwrapped);
+        if (allocBuffers.length > 0) return allocBuffers;
         const callee = unwrapStaticExpression(unwrapped.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "concat") return [];
         const target = unwrapStaticExpression(callee.expression);
@@ -947,6 +977,35 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (!ts.isCallExpression(receiver)) return [];
         const receiverCallee = unwrapStaticExpression(receiver.expression);
         if (!ts.isPropertyAccessExpression(receiverCallee) || receiverCallee.name.text !== "concat") return [];
+
+        const buffers = resolveStaticBufferExpression(receiver);
+        if (buffers.length === 0) return [];
+        const encodingArg = call.arguments[0];
+        const encodings = !encodingArg || isStaticUndefinedExpression(encodingArg)
+            ? [undefined]
+            : resolve(encodingArg);
+        if (encodings.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const encoding of encodings) {
+                const nodeEncoding = nodeBufferEncoding(encoding);
+                if (!nodeEncoding) return [];
+                out.push(buffer.toString(nodeEncoding));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferAllocToStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toString") return [];
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isCallExpression(receiver)) return [];
+        const receiverCallee = unwrapStaticExpression(receiver.expression);
+        if (!ts.isPropertyAccessExpression(receiverCallee) || receiverCallee.name.text !== "alloc") return [];
 
         const buffers = resolveStaticBufferExpression(receiver);
         if (buffers.length === 0) return [];
