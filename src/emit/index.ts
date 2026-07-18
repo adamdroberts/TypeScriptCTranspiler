@@ -198,6 +198,11 @@ interface AsyncAwaitIfExpressionReturnLeaf {
     continuation: AsyncAwaitExpressionReturnContinuation;
 }
 
+interface AsyncAwaitIfExpressionSyncReturnLeaf {
+    kind: "syncReturn";
+    returnExpr: ts.Expression;
+}
+
 interface AsyncAwaitIfExpressionReturnBranch {
     kind: "if";
     condition: ts.Expression;
@@ -208,6 +213,7 @@ interface AsyncAwaitIfExpressionReturnBranch {
 
 type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
+    | AsyncAwaitIfExpressionSyncReturnLeaf
     | AsyncAwaitIfExpressionReturnBranch;
 
 interface AsyncAwaitContinuationReferences {
@@ -25458,6 +25464,20 @@ class Emitter {
         return ok;
     }
 
+    private asyncAwaitSyncReturnExpressionSupported(returnExpr: ts.Expression): boolean {
+        let ok = true;
+        const visit = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(returnExpr);
+        return ok;
+    }
+
     private asyncAwaitExpressionReturnContinuationSupported(
         continuation: AsyncAwaitExpressionReturnContinuation,
     ): boolean {
@@ -25522,6 +25542,16 @@ class Emitter {
         return true;
     }
 
+    private emitAsyncAwaitSyncReturnResult(buf: CBuf, returnExpr: ts.Expression): boolean {
+        const expr = this.emitExpr(returnExpr);
+        if (expr.ty.kind === "promise") {
+            buf.line(`return tsc_promise_adopt(${expr.c});`);
+            return true;
+        }
+        buf.line(`return ${this.promiseResolveResult(expr, returnExpr)};`);
+        return true;
+    }
+
     private asyncAwaitConditionalExpressionReturnContinuation(
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
@@ -25544,12 +25574,27 @@ class Emitter {
             parameters,
             thisValue,
         );
-        if (!whenTrue || !whenFalse) return null;
+        let thenBranch: AsyncAwaitIfExpressionReturnNode | null = whenTrue
+            ? { kind: "return", continuation: whenTrue }
+            : null;
+        let elseBranch: AsyncAwaitIfExpressionReturnNode | null = whenFalse
+            ? { kind: "return", continuation: whenFalse }
+            : null;
+
+        if (!thenBranch && this.asyncAwaitSyncReturnExpressionSupported(expr.whenTrue)) {
+            thenBranch = { kind: "syncReturn", returnExpr: expr.whenTrue };
+        }
+        if (!elseBranch && this.asyncAwaitSyncReturnExpressionSupported(expr.whenFalse)) {
+            elseBranch = { kind: "syncReturn", returnExpr: expr.whenFalse };
+        }
+        if (!thenBranch || !elseBranch) return null;
+        if (thenBranch.kind === "syncReturn" && elseBranch.kind === "syncReturn") return null;
+
         return {
             kind: "if",
             condition: expr.condition,
-            thenBranch: { kind: "return", continuation: whenTrue },
-            elseBranch: { kind: "return", continuation: whenFalse },
+            thenBranch,
+            elseBranch,
             fallthroughBranch: null,
         };
     }
@@ -25661,6 +25706,9 @@ class Emitter {
         if (branch.kind === "return") {
             return this.asyncAwaitExpressionReturnContinuationSupported(branch.continuation);
         }
+        if (branch.kind === "syncReturn") {
+            return this.asyncAwaitSyncReturnExpressionSupported(branch.returnExpr);
+        }
         return this.asyncAwaitIfExpressionReturnBranchSupported(branch.thenBranch) &&
             (!branch.elseBranch || this.asyncAwaitIfExpressionReturnBranchSupported(branch.elseBranch)) &&
             (!branch.fallthroughBranch || this.asyncAwaitIfExpressionReturnBranchSupported(branch.fallthroughBranch));
@@ -25672,6 +25720,9 @@ class Emitter {
     ): boolean {
         if (branch.kind === "return") {
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "syncReturn") {
+            return this.emitAsyncAwaitSyncReturnResult(buf, branch.returnExpr);
         }
         const cond = this.emitBoolExpr(branch.condition);
         buf.open(`if (${cond})`);

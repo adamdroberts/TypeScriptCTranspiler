@@ -80,6 +80,12 @@ async function conditionalInlineAwaitReturn(flag: boolean, prefix: string): Prom
         : prefix + await delay(112, "conditional-false") + "!";
 }
 
+async function conditionalMixedInlineAwaitReturn(flag: boolean, prefix: string): Promise<string> {
+    return flag
+        ? prefix + await delay(117, "conditional-mixed-await") + "!"
+        : prefix + "conditional-mixed-sync!";
+}
+
 class Worker {
     prefix: string;
 
@@ -348,6 +354,12 @@ class Worker {
             ? this.prefix + prefix + await delay(113, "method-conditional-true") + "!"
             : this.prefix + prefix + await delay(114, "method-conditional-false") + "!";
     }
+
+    async conditionalMixedInlineAwaitReturnMethod(flag: boolean, prefix: string): Promise<string> {
+        return flag
+            ? this.prefix + prefix + "method-conditional-mixed-sync!"
+            : this.prefix + prefix + await delay(118, "method-conditional-mixed-await") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -418,6 +430,12 @@ const arrowConditionalInlineAwaitReturn = async (flag: boolean, prefix: string):
         : prefix + await delay(116, "arrow-conditional-false") + "!";
 };
 
+const arrowConditionalMixedInlineAwaitReturn = async (flag: boolean, prefix: string): Promise<string> => {
+    return flag
+        ? prefix + await delay(119, "arrow-conditional-mixed-await") + "!"
+        : prefix + "arrow-conditional-mixed-sync!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -484,6 +502,14 @@ conditionalInlineAwaitReturn(true, "fn-").then((value: string): void => {
 
 conditionalInlineAwaitReturn(false, "fn-").then((value: string): void => {
     console.log("conditional-inline-await-return-false:", value);
+});
+
+conditionalMixedInlineAwaitReturn(true, "fn-").then((value: string): void => {
+    console.log("conditional-mixed-inline-await-return-await:", value);
+});
+
+conditionalMixedInlineAwaitReturn(false, "fn-").then((value: string): void => {
+    console.log("conditional-mixed-inline-await-return-sync:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -644,6 +670,14 @@ new Worker("method-conditional-").conditionalInlineAwaitReturnMethod(false, "cla
     console.log("method-conditional-inline-await-return-false:", value);
 });
 
+new Worker("method-conditional-").conditionalMixedInlineAwaitReturnMethod(true, "class-").then((value: string): void => {
+    console.log("method-conditional-mixed-inline-await-return-sync:", value);
+});
+
+new Worker("method-conditional-").conditionalMixedInlineAwaitReturnMethod(false, "class-").then((value: string): void => {
+    console.log("method-conditional-mixed-inline-await-return-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -706,4 +740,12 @@ arrowConditionalInlineAwaitReturn(true, "value-").then((value: string): void => 
 
 arrowConditionalInlineAwaitReturn(false, "value-").then((value: string): void => {
     console.log("arrow-conditional-inline-await-return-false:", value);
+});
+
+arrowConditionalMixedInlineAwaitReturn(true, "value-").then((value: string): void => {
+    console.log("arrow-conditional-mixed-inline-await-return-await:", value);
+});
+
+arrowConditionalMixedInlineAwaitReturn(false, "value-").then((value: string): void => {
+    console.log("arrow-conditional-mixed-inline-await-return-sync:", value);
 });
