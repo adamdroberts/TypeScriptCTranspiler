@@ -123,6 +123,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (uriText.length > 0) return uriText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
+            const dateText = resolveStaticDateCall(node);
+            if (dateText.length > 0) return dateText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
@@ -526,6 +528,61 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 out.push(String(Number.parseInt(value, radix)));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticDateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 7 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "UTC") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Date") return [];
+
+        const argumentValues = call.arguments.map((argument) => resolveStaticIntegerKeys(argument));
+        if (argumentValues.some((values) => values.length === 0)) return [];
+
+        let tuples: number[][] = [[]];
+        for (const values of argumentValues) {
+            const next: number[][] = [];
+            for (const tuple of tuples) {
+                for (const value of values) {
+                    next.push([...tuple, value]);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            tuples = next;
+        }
+
+        const out: string[] = [];
+        for (const tuple of tuples) {
+            let stamp: number;
+            switch (tuple.length) {
+                case 1:
+                    stamp = Date.UTC(tuple[0]!);
+                    break;
+                case 2:
+                    stamp = Date.UTC(tuple[0]!, tuple[1]!);
+                    break;
+                case 3:
+                    stamp = Date.UTC(tuple[0]!, tuple[1]!, tuple[2]!);
+                    break;
+                case 4:
+                    stamp = Date.UTC(tuple[0]!, tuple[1]!, tuple[2]!, tuple[3]!);
+                    break;
+                case 5:
+                    stamp = Date.UTC(tuple[0]!, tuple[1]!, tuple[2]!, tuple[3]!, tuple[4]!);
+                    break;
+                case 6:
+                    stamp = Date.UTC(tuple[0]!, tuple[1]!, tuple[2]!, tuple[3]!, tuple[4]!, tuple[5]!);
+                    break;
+                default:
+                    stamp = Date.UTC(tuple[0]!, tuple[1]!, tuple[2]!, tuple[3]!, tuple[4]!, tuple[5]!, tuple[6]!);
+                    break;
+            }
+            if (!Number.isFinite(stamp)) return [];
+            out.push(String(stamp));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
     };
