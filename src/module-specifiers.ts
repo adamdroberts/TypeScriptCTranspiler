@@ -2825,7 +2825,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return null;
         const method = callee.name.text;
-        if (method !== "slice" && method !== "concat" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
+        if (method !== "slice" && method !== "concat" && method !== "flat" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
         const receiver = resolveCollectionExpression(callee.expression);
         if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
         const receiverElements = denseStaticArrayElements(receiver);
@@ -2846,6 +2846,17 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             const elements = sortable
                 .sort((left, right) => left!.text < right!.text ? -1 : left!.text > right!.text ? 1 : left!.index - right!.index)
                 .map((entry) => entry!.element);
+            return ts.factory.createArrayLiteralExpression(elements);
+        }
+
+        if (method === "flat") {
+            if (call.arguments.length > 1) return null;
+            const depths = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0]!)
+                ? [1]
+                : resolveStaticIntegerKeys(call.arguments[0]!);
+            if (depths.length !== 1) return null;
+            const elements = flattenStaticArrayDepth(receiverElements, depths[0]!);
+            if (!elements || elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
             return ts.factory.createArrayLiteralExpression(elements);
         }
 
@@ -2912,6 +2923,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         }
         return ts.factory.createArrayLiteralExpression(elements);
+    };
+
+    const flattenStaticArrayDepth = (elements: ts.Expression[], depth: number): ts.Expression[] | null => {
+        if (depth <= 0) return elements;
+        const out: ts.Expression[] = [];
+        for (const element of elements) {
+            const value = resolveCollectionExpression(element);
+            if (value && ts.isArrayLiteralExpression(value)) {
+                const nested = denseStaticArrayElements(value);
+                if (!nested) return null;
+                const flattened = flattenStaticArrayDepth(nested, depth - 1);
+                if (!flattened) return null;
+                out.push(...flattened);
+            } else {
+                out.push(element);
+            }
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return out;
     };
 
     const denseStaticArrayElements = (array: ts.ArrayLiteralExpression): ts.Expression[] | null => {
