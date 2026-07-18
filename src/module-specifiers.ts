@@ -271,6 +271,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (descriptorProperty.length > 0) return descriptorProperty;
             const enumValues = resolveStaticEnumAccess(node.expression, node.name);
             if (enumValues.length > 0) return enumValues;
+            const mapSetSize = resolveStaticMapSetSizeAccess(node);
+            if (mapSetSize.length > 0) return mapSetSize;
             return resolveStaticCollectionAccess(node.expression, node.name);
         }
         if (!ts.isIdentifier(node)) return [];
@@ -3460,6 +3462,26 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticMapSetSizeAccess = (expr: ts.PropertyAccessExpression): string[] => {
+        if (expr.name.text !== "size") return [];
+        const receiver = unwrapStaticExpression(expr.expression);
+        if (!ts.isNewExpression(receiver)) return [];
+        const ctor = unwrapStaticExpression(receiver.expression);
+        if (!ts.isIdentifier(ctor)) return [];
+        if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return [];
+
+        const source = receiver.arguments?.[0];
+        if (ctor.text === "Set") {
+            const elements = resolveStaticArrayFromSetSource(source);
+            return elements ? [String(elements.elements.length)] : [];
+        }
+        if (ctor.text === "Map") {
+            const entries = resolveStaticArrayFromMapSource(source);
+            return entries ? [String(entries.elements.length)] : [];
+        }
+        return [];
     };
 
     const resolveStaticObjectWrapperReceiver = (call: ts.CallExpression): ts.Expression | null => {
