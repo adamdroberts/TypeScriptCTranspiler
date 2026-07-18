@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static one-argument `JSON.stringify(...)` specifier fragments for JSON-safe primitive, array, and object literal operands. Test: `dynamic_require_static_json_stringify`.
 - AOT whole-value CommonJS `module.exports = 1n` require bindings now keep their native BigInt type instead of forcing unsupported dynamic boxing. Test: `node_modules_commonjs_module_exports_bigint_default`.
 - Finite dynamic `require(...)` proofs now resolve static callable `BigInt(...)` constructor fragments for valid primitive coercions. Test: `dynamic_require_static_bigint_constructor`.
 - Finite dynamic `require(...)` proofs now resolve static callable `String(...)` and `Number(...)` constructor fragments for primitive coercions. Test: `dynamic_require_static_primitive_constructors`.
