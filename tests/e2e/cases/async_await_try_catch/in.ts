@@ -6,6 +6,12 @@ function delayedReject(reason: string): Promise<string> {
     });
 }
 
+function delayedRejectAfter(ms: number, reason: string): Promise<string> {
+    return delay(ms, reason).then((value: string): string => {
+        throw value;
+    });
+}
+
 let finallyTrace = "";
 
 async function recover(): Promise<string> {
@@ -183,6 +189,42 @@ async function pendingBareTryFinallyFallthroughRejected(): Promise<string> {
     return "bare finally fallthrough never";
 }
 
+async function pendingTryCatchExpressionlessFulfilled(): Promise<void> {
+    try {
+        const value = await delay(9, "ok");
+        return;
+    } catch (e) {
+        return;
+    }
+}
+
+async function pendingTryCatchExpressionlessRejected(): Promise<void> {
+    try {
+        const value = await delayedRejectAfter(9, "void bad");
+        return;
+    } catch (e) {
+        return;
+    }
+}
+
+async function pendingTryCatchExpressionlessFallthroughFulfilled(): Promise<void> {
+    try {
+        await delay(9, "ok");
+    } catch (e) {
+        return;
+    }
+    return;
+}
+
+async function pendingTryCatchExpressionlessFallthroughRejected(): Promise<void> {
+    try {
+        await delayedRejectAfter(9, "void fall bad");
+    } catch (e) {
+        return;
+    }
+    return;
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -260,4 +302,20 @@ pendingBareTryFinallyFallthroughFulfilled().then((value: string): void => {
 
 pendingBareTryFinallyFallthroughRejected().catch((reason: string): void => {
     console.log("pending-bare-finally-fallthrough-rejected:", reason, finallyTrace);
+});
+
+pendingTryCatchExpressionlessFulfilled().then((_value: any): void => {
+    console.log("pending-expressionless-fulfilled:", "done");
+});
+
+pendingTryCatchExpressionlessRejected().then((_value: any): void => {
+    console.log("pending-expressionless-rejected:", "done");
+});
+
+pendingTryCatchExpressionlessFallthroughFulfilled().then((_value: any): void => {
+    console.log("pending-expressionless-fallthrough-fulfilled:", "done");
+});
+
+pendingTryCatchExpressionlessFallthroughRejected().then((_value: any): void => {
+    console.log("pending-expressionless-fallthrough-rejected:", "done");
 });
