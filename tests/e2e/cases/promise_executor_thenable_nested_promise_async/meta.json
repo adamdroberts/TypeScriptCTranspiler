@@ -1,0 +1,4 @@
+{
+  "description": "new Promise executor resolve callbacks assimilate delayed thenables that resolve to nested Promise records",
+  "features": ["promise", "promise-executor", "thenable", "queueMicrotask", "setImmediate"]
+}
