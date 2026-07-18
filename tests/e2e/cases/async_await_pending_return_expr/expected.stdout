@@ -153,6 +153,8 @@ method-await-expression-statement-return: method-await-expression-class-method-a
 arrow-await-expression-statement-return: value-arrow-await-expression-done
 prelude-await-expression-statement-return: fn-prelude-await-expression-done
 four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
+prelude-array-awaited-local-return: fn-array-local-2-value
+prelude-array-inline-await-return: fn-array-inline-value-2
 method-four-await: method-one:class-method-four-method-one:method-one:class-method-four-method-one-three:method-one:class-method-four-method-one:method-one:class-method-four-method-one-three-four!
 arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four!
 five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
@@ -164,3 +166,4 @@ arrow-prelude-local-five-await: value-arrow-local-five-value-arrow-local-five-on
 prelude-expression-statement-five-await: one:fn-expr-five-one-two:one:fn-expr-five-one-two-three:one:fn-expr-five-one-two:one:fn-expr-five-one-two-three-four:one:fn-expr-five-one-two:one:fn-expr-five-one-two-three:one:fn-expr-five-one-two:one:fn-expr-five-one-two-three-four-five!
 method-prelude-expression-statement-five-await: method-one:class-expr-five-method-prelude-five-method-one:method-one:class-expr-five-method-prelude-five-method-one-three:method-one:class-expr-five-method-prelude-five-method-one:method-one:class-expr-five-method-prelude-five-method-one-three-four:method-one:class-expr-five-method-prelude-five-method-one:method-one:class-expr-five-method-prelude-five-method-one-three:method-one:class-expr-five-method-prelude-five-method-one:method-one:class-expr-five-method-prelude-five-method-one-three-four-five!
 arrow-prelude-expression-statement-five-await: arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three:arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three-four:arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three:arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three-four-five!
+prelude-array-five-await: fn-array-five-fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three:fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three-four:fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three:fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three-four-five
