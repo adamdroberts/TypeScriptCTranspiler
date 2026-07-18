@@ -62,8 +62,10 @@ arrow-assignment-expression-await-return: value-arrow-assignment!
 method-branch-uninit-let: uninit-uninit
 arrow-parenthesized-assignment-expression-await-return: value-arrow-parenthesized-assignment!
 arrow-initialized-assignment-expression-await-return: value-init-arrow-assignment!
+arrow-expression-body-direct-await: value-arrow-expression-body-direct
 arrow-initialized-direct-assignment-await-return: value-arrow-initialized-direct-assignment
 method-loop: loop-looploop
+arrow-expression-body-inline-await-return: value-arrow-expression-body-inline!
 method-for: for-forfor
 method-for-continue: for-continue-for-continue0for-continue2
 method-for-of: forof-of!
