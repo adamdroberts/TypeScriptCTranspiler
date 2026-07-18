@@ -21386,6 +21386,7 @@ class Emitter {
             type.kind === "boolean" ||
             type.kind === "string" ||
             type.kind === "bigint" ||
+            type.kind === "symbol" ||
             type.kind === "value" ||
             type.kind === "array" ||
             type.kind === "map" ||

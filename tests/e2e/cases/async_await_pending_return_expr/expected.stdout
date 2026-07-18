@@ -165,6 +165,7 @@ arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arro
 prelude-weak-map-set-awaited-local-return: fn-weak-map-local-value-true
 prelude-weak-map-inline-await-return: fn-weak-map-inline-value
 prelude-builtins-awaited-local-return: true:2020-02-03T04:05:06.007Z:Error: fn-error
+prelude-symbol-bigint-awaited-local-return: fn-symbol-local:42:value
 prelude-regexp-inline-await-return: /^fn-inline-value$/:fn-inline-value
 prelude-url-params-awaited-local-return: /root/path:fn-url-local:fn-params-local:value
 prelude-buffer-inline-await-return: fn-buffer-inline-value:17
