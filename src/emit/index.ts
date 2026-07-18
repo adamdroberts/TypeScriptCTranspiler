@@ -20612,6 +20612,19 @@ class Emitter {
         return info ? this.commonJsModuleExportsValueDeclaration(info.sf) : null;
     }
 
+    private commonJsWholeModuleRequireInitializerType(expr: ts.Expression): CType | null {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (ts.isCallExpression(cur)) {
+            const decl = this.requireCallModuleExportsDeclaration(cur);
+            return decl ? this.commonJsExportedCType(decl) : null;
+        }
+        if (ts.isIdentifier(cur)) {
+            const decl = this.requireBindingModuleExportsDeclaration(cur);
+            return decl ? this.commonJsExportedCType(decl) : null;
+        }
+        return null;
+    }
+
     private commonJsRequireSpreadMemberDeclarations(expr: ts.Expression): Array<{ name: string; decl: ts.Node }> | null {
         const spec = this.requireCallSpecifier(expr);
         if (!spec) return null;
@@ -20753,6 +20766,13 @@ class Emitter {
         });
     }
 
+    private emitCommonJsModuleExportsScalarDefaultValue(expr: ts.Expression): EmitResult {
+        const value = this.emitExpr(expr);
+        return value.ty.kind === "bigint"
+            ? value
+            : { c: this.coerce(value, T_VALUE, expr), ty: T_VALUE };
+    }
+
     private emitCommonJsModuleExportsDefaultValue(expr: ts.Expression): EmitResult {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isTopLevelCommonJsThisExpression(cur)) {
@@ -20765,7 +20785,7 @@ class Emitter {
             if (wrapper) return wrapper;
         }
         if (this.isCommonJsObjectLiteralExportValue(cur)) {
-            return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+            return this.emitCommonJsModuleExportsScalarDefaultValue(cur);
         }
         if (ts.isObjectLiteralExpression(cur) && this.isCommonJsObjectLiteralDefaultValue(cur)) {
             return this.emitCommonJsObjectLiteralDefaultValue(cur);
@@ -20797,13 +20817,13 @@ class Emitter {
             ts.isPrefixUnaryExpression(cur) &&
             this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator)
         ) {
-            return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+            return this.emitCommonJsModuleExportsScalarDefaultValue(cur);
         }
         if (
             ts.isBinaryExpression(cur) &&
             this.isCommonJsModuleExportsDefaultBinaryOperator(cur.operatorToken.kind)
         ) {
-            return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+            return this.emitCommonJsModuleExportsScalarDefaultValue(cur);
         }
         if (
             ts.isTypeOfExpression(cur) ||
@@ -20821,7 +20841,7 @@ class Emitter {
             this.isCommonJsRuntimeComputedModuleExportsValue(cur)
         ) {
             if (this.isCommonJsModuleExportsDefaultInitializerValue(cur)) {
-                return { c: this.coerce(this.emitExpr(cur), T_VALUE, cur), ty: T_VALUE };
+                return this.emitCommonJsModuleExportsScalarDefaultValue(cur);
             }
         }
         unsupported(expr, "CommonJS module.exports default only supports static literal values");
@@ -21368,6 +21388,10 @@ class Emitter {
         if (requireDestructureType) return requireDestructureType;
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (!decl) return null;
+        if (ts.isVariableDeclaration(decl) && !decl.type && decl.initializer) {
+            const requireType = this.commonJsWholeModuleRequireInitializerType(decl.initializer);
+            if (requireType) return this.variableStorageType(requireType);
+        }
         if (this.isUntypedJsLiteralVariableDeclaration(decl)) {
             return T_VALUE;
         }
@@ -31171,7 +31195,12 @@ class Emitter {
                 continue;
             }
             const name = this.declaredName(d.name);
-            const baseCt = d.initializer && this.requireCallSpecifier(d.initializer)
+            const requireType = d.initializer
+                ? this.commonJsWholeModuleRequireInitializerType(d.initializer)
+                : null;
+            const baseCt = requireType
+                ? this.variableStorageType(requireType)
+                : d.initializer && this.requireCallSpecifier(d.initializer)
                 ? T_VALUE
                 : this.decoratedClassConstructorAliasTarget(d)
                 ? T_VALUE
@@ -31901,8 +31930,9 @@ class Emitter {
                 } else if (d.type) {
                     ct = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
                 } else {
+                    const requireType = this.commonJsWholeModuleRequireInitializerType(d.initializer);
                     const inferred = this.prepareType(mapType(d, this.checker));
-                    ct = this.variableStorageType(inferred.kind === "value" ? inferred : r.ty);
+                    ct = this.variableStorageType(requireType ?? (inferred.kind === "value" ? inferred : r.ty));
                 }
             } else {
                 ct = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
@@ -36589,6 +36619,7 @@ class Emitter {
             if (exportDecl) {
                 const cName = this.ensureCommonJsModuleExportsGlobal(exportDecl, spec);
                 const ty = this.commonJsExportedCType(exportDecl);
+                if (ty.kind === "bigint") return { c: cName, ty };
                 return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
             }
             return this.emitCommonJsRequireModuleValue(call, spec);
