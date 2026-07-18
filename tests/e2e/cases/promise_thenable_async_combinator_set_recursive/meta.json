@@ -1,0 +1,4 @@
+{
+  "description": "dynamic promise combinators assimilate delayed nested thenables from Set inputs",
+  "features": ["promise", "promise-combinators", "thenable", "set", "queueMicrotask"]
+}
