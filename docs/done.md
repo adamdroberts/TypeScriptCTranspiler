@@ -6,6 +6,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ---
 
+- Dynamic promise combinators assimilate thenables that settle from later microtasks after the `then` call returns for `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinators`
 - Dynamic thenable assimilation supports thenables that settle from a later microtask after the `then` call returns, including `Promise.resolve`, returned `.then(...)` callback values, and dynamic `Promise.all` inputs. Test: `promise_thenable_async_settle`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations preserve initialized and later-assigned pre-`try` body preludes plus in-`try` local preludes across async declarations, lifted async function values, and class async methods that read `this`. Tests: `async_await_try_source_prelude`, `async_await_try_block_prelude`
 - Source `try`/`catch`/`finally` direct `return await` continuations preserve source, try, catch, and finally preludes across async declarations, lifted async function values, nested async closures, and class async methods that read `this`. Test: `async_await_try_return_await`

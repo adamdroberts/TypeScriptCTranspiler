@@ -1,0 +1,4 @@
+sync:
+race: race-win then:race|settle:race
+any: any-win then:race|settle:race|then:any-reject|then:any-fulfill|settle:any-reject|settle:any-fulfill
+allSettled: fulfilled:settled-ok,rejected:settled-bad then:race|settle:race|then:any-reject|then:any-fulfill|settle:any-reject|settle:any-fulfill|then:settled-fulfill|then:settled-reject|settle:settled-fulfill|settle:settled-reject
