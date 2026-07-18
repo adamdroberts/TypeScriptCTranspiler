@@ -1594,8 +1594,22 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return offsets.length > 0 ? offsets : [];
     };
 
+    const resolveStaticBufferSearchEncodings = (expr: ts.Expression | undefined): Array<BufferEncoding | undefined> => {
+        if (!expr || isStaticUndefinedExpression(expr)) return [undefined];
+        const encodings = resolve(expr);
+        if (encodings.length === 0) return [];
+        const out: Array<BufferEncoding | undefined> = [];
+        for (const encoding of encodings) {
+            const nodeEncoding = nodeBufferEncoding(encoding);
+            if (!nodeEncoding) return [];
+            out.push(nodeEncoding);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return out;
+    };
+
     const resolveStaticBufferSearchCall = (call: ts.CallExpression): string[] => {
-        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        if (call.arguments.length < 1 || call.arguments.length > 3 || call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
@@ -1607,19 +1621,23 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (needles.length === 0) return [];
         const offsets = resolveStaticBufferSearchOffsets(call.arguments[1]);
         if (offsets.length === 0) return [];
+        const encodings = resolveStaticBufferSearchEncodings(call.arguments[2]);
+        if (encodings.length === 0) return [];
 
         const out: string[] = [];
         for (const haystack of haystacks) {
             for (const needle of needles) {
                 for (const offset of offsets) {
-                    if (method === "includes") {
-                        out.push(String(haystack.includes(needle, offset)));
-                    } else if (method === "indexOf") {
-                        out.push(String(haystack.indexOf(needle, offset)));
-                    } else {
-                        out.push(String(haystack.lastIndexOf(needle, offset)));
+                    for (const encoding of encodings) {
+                        if (method === "includes") {
+                            out.push(String(haystack.includes(needle, offset, encoding)));
+                        } else if (method === "indexOf") {
+                            out.push(String(haystack.indexOf(needle, offset, encoding)));
+                        } else {
+                            out.push(String(haystack.lastIndexOf(needle, offset, encoding)));
+                        }
+                        if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                     }
-                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
             }
         }
