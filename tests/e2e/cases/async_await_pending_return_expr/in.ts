@@ -116,6 +116,10 @@ async function logicalAndInlineAwaitReturn(flag: boolean): Promise<any> {
     return flag && await delay(136, "logical-and-await");
 }
 
+async function nullishInlineAwaitReturn(prefix: string | undefined): Promise<string> {
+    return prefix ?? await delay(141, "nullish-await");
+}
+
 class Worker {
     prefix: string;
 
@@ -420,6 +424,10 @@ class Worker {
     async logicalAndInlineAwaitReturnMethod(flag: boolean): Promise<any> {
         return flag && await delay(138, "method-logical-and-await");
     }
+
+    async nullishInlineAwaitReturnMethod(prefix: string | undefined): Promise<string> {
+        return prefix ?? await delay(142, "method-nullish-await");
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -524,6 +532,10 @@ const arrowLogicalOrInlineAwaitReturn = async (prefix: string): Promise<string> 
 
 const arrowLogicalAndInlineAwaitReturn = async (flag: boolean): Promise<any> => {
     return flag && await delay(140, "arrow-logical-and-await");
+};
+
+const arrowNullishInlineAwaitReturn = async (prefix: string | undefined): Promise<string> => {
+    return prefix ?? await delay(143, "arrow-nullish-await");
 };
 
 suffix().then((value: string): void => {
@@ -648,6 +660,14 @@ logicalAndInlineAwaitReturn(false).then((value: any): void => {
 
 logicalAndInlineAwaitReturn(true).then((value: any): void => {
     console.log("logical-and-inline-await-return-await:", value);
+});
+
+nullishInlineAwaitReturn("nullish-sync").then((value: string): void => {
+    console.log("nullish-inline-await-return-sync:", value);
+});
+
+nullishInlineAwaitReturn(undefined).then((value: string): void => {
+    console.log("nullish-inline-await-return-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -864,6 +884,14 @@ new Worker("method-logical-and-source").logicalAndInlineAwaitReturnMethod(true).
     console.log("method-logical-and-inline-await-return-await:", value);
 });
 
+new Worker("method-nullish-source").nullishInlineAwaitReturnMethod("method-nullish-sync").then((value: string): void => {
+    console.log("method-nullish-inline-await-return-sync:", value);
+});
+
+new Worker("method-nullish-source").nullishInlineAwaitReturnMethod(undefined).then((value: string): void => {
+    console.log("method-nullish-inline-await-return-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -982,4 +1010,12 @@ arrowLogicalAndInlineAwaitReturn(false).then((value: any): void => {
 
 arrowLogicalAndInlineAwaitReturn(true).then((value: any): void => {
     console.log("arrow-logical-and-inline-await-return-await:", value);
+});
+
+arrowNullishInlineAwaitReturn("arrow-nullish-sync").then((value: string): void => {
+    console.log("arrow-nullish-inline-await-return-sync:", value);
+});
+
+arrowNullishInlineAwaitReturn(undefined).then((value: string): void => {
+    console.log("arrow-nullish-inline-await-return-await:", value);
 });
