@@ -408,10 +408,20 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     const resolveStaticPrimitiveConstructorCall = (call: ts.CallExpression): string[] => {
         if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
-        if (!ts.isIdentifier(callee) || (callee.text !== "String" && callee.text !== "Number")) return [];
+        if (
+            !ts.isIdentifier(callee) ||
+            (callee.text !== "String" && callee.text !== "Number" && callee.text !== "BigInt")
+        ) {
+            return [];
+        }
         if (callee.text === "String") {
             if (call.arguments.length === 0) return [""];
             const values = resolveStaticStringCoercionValues(call.arguments[0]!);
+            return values.length === 0 ? [] : dedupe(values);
+        }
+        if (callee.text === "BigInt") {
+            if (call.arguments.length === 0) return [];
+            const values = resolveStaticBigIntCoercionValues(call.arguments[0]!);
             return values.length === 0 ? [] : dedupe(values);
         }
         if (call.arguments.length === 0) return ["0"];
@@ -442,6 +452,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             (ts.isNumericLiteral(value.operand) || ts.isBigIntLiteral(value.operand))
         ) {
             const coerced = resolveStaticStringCoercionValues(value.operand);
+            return coerced.length === 1 ? [`-${coerced[0]}`] : [];
+        }
+        return [];
+    };
+
+    const resolveStaticBigIntCoercionValues = (expr: ts.Expression): string[] => {
+        const value = unwrapStaticExpression(expr);
+        if (ts.isBigIntLiteral(value)) return [BigInt(value.text.replace(/n$/i, "")).toString()];
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+            try {
+                return [BigInt(value.text).toString()];
+            } catch {
+                return [];
+            }
+        }
+        if (ts.isNumericLiteral(value)) {
+            const num = Number(value.text);
+            return Number.isSafeInteger(num) ? [BigInt(num).toString()] : [];
+        }
+        if (value.kind === ts.SyntaxKind.TrueKeyword) return ["1"];
+        if (value.kind === ts.SyntaxKind.FalseKeyword) return ["0"];
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            value.operator === ts.SyntaxKind.MinusToken &&
+            (ts.isNumericLiteral(value.operand) || ts.isBigIntLiteral(value.operand))
+        ) {
+            const coerced = resolveStaticBigIntCoercionValues(value.operand);
             return coerced.length === 1 ? [`-${coerced[0]}`] : [];
         }
         return [];

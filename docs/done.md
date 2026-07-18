@@ -2539,6 +2539,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_string_range` | static string `.slice(...)`, `.substring(...)`, and `.substr(...)` calls with finite integer bounds provide AOT dynamic require alternatives |
 | `dynamic_require_static_string_split` | static string `.split(...)[index]` calls provide finite AOT dynamic require alternatives |
 | `array_literal_stack_alloc_uncaptured_nested_function` / `array_literal_stack_alloc_closure_capture` | typed array literal escape analysis ignores unrelated nested functions but keeps closure-captured arrays on heap storage |
+| `dynamic_require_static_bigint_constructor` | static callable BigInt constructor coercions over valid primitive inputs provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_primitive_constructors` | static callable String and Number constructor coercions over primitive inputs provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_global_numeric_predicates` | static global isFinite and isNaN calls over primitive coercions provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_object_keys_values` | indexed Object.keys/Object.values calls over static object literals provide finite AOT dynamic require alternatives |
