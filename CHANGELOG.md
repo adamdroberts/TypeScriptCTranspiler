@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `Set.prototype.isSubsetOf(...)`, `.isSupersetOf(...)`, and `.isDisjointFrom(...)` relation fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`.
 - Finite dynamic `require(...)` proofs now materialize static `Set.prototype.union(...)`, `.intersection(...)`, `.difference(...)`, and `.symmetricDifference(...)` collection fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`.
 - Finite dynamic `require(...)` proofs now materialize static `new Set(...).keys()` / `.values()` / `.entries()` and `new Map(...).keys()` / `.values()` / `.entries()` collection fragments over finite constructor sources, with a matching `Set.entries()` stdlib declaration. Test: `dynamic_require_static_map_set_fragments`.
 - Finite dynamic `require(...)` proofs now materialize static `Map.groupBy(...)` entry collections over finite array/string/Set/Map/URLSearchParams-style sources with conservative inline callback keys. Test: `dynamic_require_static_map_group_by_collections`.
