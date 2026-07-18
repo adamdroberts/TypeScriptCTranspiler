@@ -2771,6 +2771,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (objectGroupBy) return resolveCollectionExpression(objectGroupBy);
             const mapGroupBy = resolveStaticMapGroupByCollectionExpression(cur);
             if (mapGroupBy) return resolveCollectionExpression(mapGroupBy);
+            const setComposition = resolveStaticSetCompositionCollectionExpression(cur);
+            if (setComposition) return resolveCollectionExpression(setComposition);
             const mapSetCollections = resolveStaticMapSetCollectionExpression(cur);
             if (mapSetCollections) return resolveCollectionExpression(mapSetCollections);
             const mapGet = resolveStaticMapGetCollectionExpression(cur);
@@ -3518,6 +3520,65 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (!keyExpr || !valueExpr || ts.isSpreadElement(keyExpr) || ts.isSpreadElement(valueExpr)) return null;
             out.push(method === "keys" ? keyExpr : valueExpr);
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createArrayLiteralExpression(out);
+    };
+
+    const resolveStaticSetCompositionCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const method = callee.name.text;
+        if (
+            method !== "union" &&
+            method !== "intersection" &&
+            method !== "difference" &&
+            method !== "symmetricDifference"
+        ) {
+            return null;
+        }
+
+        const left = resolveStaticArrayFromSource(callee.expression);
+        const right = resolveStaticArrayFromSource(call.arguments[0]!);
+        if (!left || !right) return null;
+
+        const leftElements = denseStaticArrayElements(left);
+        const rightElements = denseStaticArrayElements(right);
+        if (!leftElements || !rightElements) return null;
+
+        const leftKeys = new Map<string, ts.Expression>();
+        for (const element of leftElements) {
+            const values = resolve(element);
+            if (values.length !== 1) return null;
+            leftKeys.set(values[0]!, element);
+        }
+
+        const rightKeys = new Map<string, ts.Expression>();
+        for (const element of rightElements) {
+            const values = resolve(element);
+            if (values.length !== 1) return null;
+            rightKeys.set(values[0]!, element);
+        }
+
+        const out: ts.Expression[] = [];
+        const pushIf = (value: ts.Expression, condition: boolean): boolean => {
+            if (!condition) return true;
+            out.push(value);
+            return out.length <= MAX_STATIC_STRING_ALTERNATIVES;
+        };
+
+        for (const [key, value] of leftKeys) {
+            const keep = method === "union"
+                ? true
+                : method === "intersection"
+                    ? rightKeys.has(key)
+                    : !rightKeys.has(key);
+            if (!pushIf(value, keep)) return null;
+        }
+        if (method === "union" || method === "symmetricDifference") {
+            for (const [key, value] of rightKeys) {
+                if (!pushIf(value, !leftKeys.has(key))) return null;
+            }
         }
         return ts.factory.createArrayLiteralExpression(out);
     };
