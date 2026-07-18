@@ -52,6 +52,10 @@ async function fiveAwait(prefix: string): Promise<string> {
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
 }
 
+async function inlineAwaitReturn(prefix: string): Promise<string> {
+    return prefix + await delay(87, "inline") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -292,6 +296,10 @@ class Worker {
         const fifth = await delay(81, first + ":" + second + ":" + third + ":" + fourth + "-five");
         return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
     }
+
+    async inlineAwaitReturnMethod(prefix: string): Promise<string> {
+        return this.prefix + prefix + await delay(88, "method-inline") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -334,6 +342,10 @@ const arrowFiveAwait = async (prefix: string): Promise<string> => {
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
 };
 
+const arrowInlineAwaitReturn = async (prefix: string): Promise<string> => {
+    return prefix + await delay(89, "arrow-inline") + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -360,6 +372,10 @@ fourAwait("fn-").then((value: string): void => {
 
 fiveAwait("fn-").then((value: string): void => {
     console.log("five-await:", value);
+});
+
+inlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("inline-await-return:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -480,6 +496,10 @@ new Worker("method-five-").fiveAwaitMethod("class-").then((value: string): void 
     console.log("method-five-await:", value);
 });
 
+new Worker("method-inline-").inlineAwaitReturnMethod("class-").then((value: string): void => {
+    console.log("method-inline-await-return:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -502,4 +522,8 @@ arrowFourAwait("value-").then((value: string): void => {
 
 arrowFiveAwait("value-").then((value: string): void => {
     console.log("arrow-five-await:", value);
+});
+
+arrowInlineAwaitReturn("value-").then((value: string): void => {
+    console.log("arrow-inline-await-return:", value);
 });

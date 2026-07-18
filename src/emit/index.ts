@@ -186,6 +186,13 @@ interface AsyncAwaitLeadingReturnContinuation {
     usesAwaitedLocals: boolean[];
 }
 
+interface AsyncAwaitExpressionReturnContinuation {
+    awaitExpr: ts.AwaitExpression;
+    returnExpr: ts.Expression;
+    params: AsyncAwaitContinuationParam[];
+    thisValue: EmitResult | null;
+}
+
 interface AsyncAwaitContinuationReferences {
     params: AsyncAwaitContinuationParam[];
     usesThis: boolean;
@@ -373,6 +380,7 @@ class Emitter {
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
+    private awaitExpressionValueScopes: Map<ts.AwaitExpression, EmitResult>[] = [];
     private catchStringSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
@@ -23183,6 +23191,12 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
+                                this.emitAsyncAwaitExpressionReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitLeadingReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24609,6 +24623,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
+                !this.emitAsyncAwaitExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLeadingReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitFourStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitThreeStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25291,6 +25306,231 @@ class Emitter {
         }
         if (returnExpr) visit(returnExpr, steps.length);
         return ok ? { params: [...referenced.values()], usesThis, usesAwaitedLocals } : null;
+    }
+
+    private asyncAwaitExpressionReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitExpressionReturnContinuation | null {
+        if (body.statements.length !== 1) return null;
+        const result = body.statements[0]!;
+        if (!ts.isReturnStatement(result) || !result.expression || ts.isAwaitExpression(result.expression)) return null;
+        let awaitExpr: ts.AwaitExpression | null = null;
+        let ok = true;
+        const visitFindAwait = (node: ts.Node): void => {
+            if (!ok) return;
+            if (node !== result.expression && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (ts.isAwaitExpression(node)) {
+                if (awaitExpr) {
+                    ok = false;
+                    return;
+                }
+                awaitExpr = node;
+                return;
+            }
+            ts.forEachChild(node, visitFindAwait);
+        };
+        visitFindAwait(result.expression);
+        if (!ok || !awaitExpr) return null;
+        const foundAwaitExpr = awaitExpr as ts.AwaitExpression;
+        const visitSource = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node)) {
+                ok = false;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            ts.forEachChild(node, visitSource);
+        };
+        visitSource(foundAwaitExpr.expression);
+        if (!ok) return null;
+
+        const params = this.asyncAwaitContinuationParameters(parameters);
+        const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        for (const param of params) paramsBySymbol.set(param.symbol, param);
+        const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        let usesThis = false;
+        const visitReferences = (node: ts.Node): void => {
+            if (!ok) return;
+            if (node === awaitExpr) return;
+            if (node !== result.expression && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+                ok = false;
+                return;
+            }
+            if (node.kind === ts.SyntaxKind.ThisKeyword) {
+                if (thisValue) {
+                    usesThis = true;
+                    return;
+                }
+                ok = false;
+                return;
+            }
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
+                const sym = this.symbolForIdentifier(node);
+                const param = sym ? paramsBySymbol.get(sym) : undefined;
+                if (param) {
+                    referenced.set(param.symbol, param);
+                } else {
+                    // Top-level, imported, and global-like symbols remain directly addressable
+                    // from generated adapters; normal expression emission will validate them.
+                }
+            }
+            ts.forEachChild(node, visitReferences);
+        };
+        visitReferences(result.expression);
+        if (!ok) return null;
+        return {
+            awaitExpr: foundAwaitExpr,
+            returnExpr: result.expression,
+            params: [...referenced.values()],
+            thisValue: usesThis ? thisValue : null,
+        };
+    }
+
+    private emitAsyncAwaitExpressionReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const continuation = this.asyncAwaitExpressionReturnContinuation(body, parameters, thisValue);
+        if (!continuation) return false;
+        const source = this.emitExpr(continuation.awaitExpr.expression);
+        const promise = this.prepareType(source.ty);
+        if (promise.kind !== "promise") return false;
+        const awaitedType = this.prepareType(mapTsType(
+            continuation.awaitExpr,
+            this.checker.getTypeAtLocation(continuation.awaitExpr),
+            this.checker,
+        ));
+        if (awaitedType.kind === "never") return false;
+
+        const sourcePromise = this.freshTemp("_await_source");
+        const resultPromise = this.freshTemp("_await_result");
+        const adapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+            promise,
+            awaitedType,
+            continuation.awaitExpr,
+            continuation.returnExpr,
+            continuation.params,
+            continuation.thisValue,
+        );
+        const envType = `${adapter}_env_t`;
+        const env = this.freshTemp("_await_env");
+        buf.line(`tsc_promise_t* const ${sourcePromise} = ${this.coerce(source, promise, continuation.awaitExpr.expression)};`);
+        buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
+        buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
+        buf.line(`${env}->receiver = ${sourcePromise};`);
+        buf.line(`${env}->result_promise = ${resultPromise};`);
+        for (const param of continuation.params) {
+            buf.line(`${env}->${param.field} = ${param.name};`);
+        }
+        if (continuation.thisValue) {
+            buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
+        }
+        buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
+        buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
+        buf.close();
+        buf.open("else");
+        buf.line(`${adapter}(${env});`);
+        buf.close();
+        buf.line(`return ${resultPromise};`);
+        return true;
+    }
+
+    private ensureAsyncAwaitExpressionReturnContinuationAdapter(
+        promiseType: CType,
+        awaitedType: CType,
+        awaitExpr: ts.AwaitExpression,
+        returnExpr: ts.Expression,
+        params: readonly AsyncAwaitContinuationParam[],
+        thisValue: EmitResult | null,
+    ): string {
+        const name = `tsc_async_await_expression_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const envType = `${name}_env_t`;
+
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) {
+            this.structDecls.line(`${param.type.c} ${param.field};`);
+        }
+        if (thisValue) {
+            this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        }
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${name}(void* env);`);
+
+        const valueVar = this.freshTemp("_await_value");
+        const returnVar = this.freshTemp("_await_return");
+        const resolvedVar = this.freshTemp("_await_resolved");
+        const eh = this.freshTemp("_await_eh");
+        const awaitedValue = awaitedType.kind === "void"
+            ? null
+            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, awaitExpr);
+        const scope = new Map<ts.Symbol, string>();
+        for (const param of params) {
+            scope.set(param.symbol, `state->${param.field}`);
+        }
+        const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        awaitScope.set(awaitExpr, awaitedValue
+            ? { c: valueVar, ty: awaitedType }
+            : { c: "tsc_value_undefined()", ty: T_VALUE });
+
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+        buf.open("if (tsc_promise_is_rejected(_p))");
+        buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+        buf.line("return;");
+        buf.close();
+        buf.open("if (!tsc_promise_is_fulfilled(_p))");
+        buf.line("return;");
+        buf.close();
+        buf.line(`tsc_try_frame_t ${eh};`);
+        buf.line(`tsc_promise_t* ${resolvedVar};`);
+        buf.line(`tsc_try_push(&${eh});`);
+        buf.open(`if (setjmp(${eh}.jb) == 0)`);
+        if (awaitedValue) {
+            buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
+        }
+        this.argumentValueScopes.push(scope);
+        this.awaitExpressionValueScopes.push(awaitScope);
+        if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+        let returned: EmitResult;
+        this.asyncAwaitContinuationAdapterDepth++;
+        try {
+            returned = this.emitExpr(returnExpr);
+        } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
+            if (thisValue) this.functionThisStack.pop();
+            this.awaitExpressionValueScopes.pop();
+            this.argumentValueScopes.pop();
+        }
+        const returnedType = this.prepareType(returned!.ty);
+        if (returnedType.kind === "void" || returnedType.kind === "never") {
+            buf.line(`${returned!.c};`);
+            buf.line("tsc_try_pop();");
+            buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+        } else {
+            buf.line(`${returnedType.c} ${returnVar} = ${returned!.c};`);
+            buf.line("tsc_try_pop();");
+            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr)};`);
+        }
+        buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+        buf.close();
+        buf.open("else");
+        buf.line("tsc_try_pop();");
+        buf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+        buf.close();
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
     }
 
     private emitAsyncAwaitLeadingReturnContinuation(
@@ -31649,6 +31889,10 @@ class Emitter {
     }
 
     private emitAwaitExpression(expr: ts.AwaitExpression): EmitResult {
+        for (let i = this.awaitExpressionValueScopes.length - 1; i >= 0; i--) {
+            const value = this.awaitExpressionValueScopes[i]!.get(expr);
+            if (value) return value;
+        }
         if (this.asyncFunctionStack.length === 0) {
             unsupported(expr, "await outside of async functions");
         }
@@ -45387,6 +45631,12 @@ class Emitter {
                 const handledAsyncAwait =
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
+                        this.emitAsyncAwaitExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
                         this.emitAsyncAwaitLeadingReturnContinuation(
                             this.defs,
                             info.fn.body,
