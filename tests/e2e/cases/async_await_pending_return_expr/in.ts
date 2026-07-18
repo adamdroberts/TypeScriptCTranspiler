@@ -384,6 +384,12 @@ async function preludeBuiltinsAwaitedLocalReturn(prefix: string): Promise<string
     return (pattern.test(prefix + value) ? "true" : "false") + ":" + stamp.toISOString() + ":" + problem.toString();
 }
 
+async function preludeAggregateErrorAwaitedLocalReturn(prefix: string): Promise<string> {
+    const problem = new AggregateError([prefix + "first", prefix + "second"], prefix + "aggregate", { cause: prefix + "cause" });
+    const value = await delay(289, prefix + "aggregate-value");
+    return problem.name + ":" + problem.message + ":" + problem.errors.length + ":" + problem.errors[0] + ":" + problem.cause + ":" + problem.toString() + ":" + value;
+}
+
 async function preludeSymbolBigIntAwaitedLocalReturn(prefix: string): Promise<string> {
     const marker: symbol = Symbol(prefix + "symbol-local");
     const count: bigint = BigInt(40) + 2n;
@@ -1823,6 +1829,10 @@ preludeWeakSetFiveAwait("fn-").then((value: string): void => {
 
 preludeBuiltinsAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-builtins-awaited-local-return:", value);
+});
+
+preludeAggregateErrorAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-aggregate-error-awaited-local-return:", value);
 });
 
 preludeSymbolBigIntAwaitedLocalReturn("fn-").then((value: string): void => {
