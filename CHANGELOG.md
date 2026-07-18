@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `Reflect.ownKeys(...)[index]` specifier expressions over static string-keyed object literals. Test: `dynamic_require_static_reflect_own_keys`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.getOwnPropertyNames(...)[index]` specifier expressions over static object literals. Test: `dynamic_require_static_object_own_property_names`.
 - Finite dynamic `require(...)` proofs now resolve static `String.prototype.split(...)[index]` specifier expressions, including const separator/index aliases and finite numeric index unions. Test: `dynamic_require_static_string_split`.
 - Lazy `yield*` now has focused coverage for generator-backed array sources, confirming delegated values suspend one at a time after source materialization. Test: `generator_lazy_yield_star_generator_backed`.
