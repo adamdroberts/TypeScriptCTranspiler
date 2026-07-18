@@ -201,7 +201,7 @@ interface AsyncAwaitPreludeExpressionReturnContinuation {
 }
 
 interface AsyncAwaitTryCatchReturnContinuation {
-    variable: ts.Identifier;
+    variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression;
     catchClause: ts.CatchClause;
@@ -24789,7 +24789,7 @@ class Emitter {
         if (!ts.isTryStatement(tryStmt) || !tryStmt.catchClause || tryStmt.finallyBlock) return null;
         if (tryStmt.catchClause.block.statements.length !== 1) return null;
 
-        const awaited = this.awaitedLocalDeclaration(tryStmt.tryBlock.statements[0]!);
+        const awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[0]!);
         const catchReturn = tryStmt.catchClause.block.statements[0]!;
         if (!awaited) return null;
         if (!ts.isReturnStatement(catchReturn) || !catchReturn.expression) return null;
@@ -24818,8 +24818,8 @@ class Emitter {
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
-        const awaitedSymbol = this.symbolForIdentifier(awaited.variable);
-        if (!awaitedSymbol) return null;
+        const awaitedSymbol = awaited.variable ? this.symbolForIdentifier(awaited.variable) : null;
+        if (awaited.variable && !awaitedSymbol) return null;
         let usesThis = false;
         let usesAwaited = false;
         let ok = true;
@@ -24843,7 +24843,7 @@ class Emitter {
             }
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
-                if (sym && sym === awaitedSymbol) {
+                if (awaitedSymbol && sym && sym === awaitedSymbol) {
                     if (!options.allowAwaited) {
                         ok = false;
                         return;
@@ -24955,11 +24955,11 @@ class Emitter {
         const eh = this.freshTemp("_await_eh");
         const catchEh = this.freshTemp("_await_catch_eh");
         const catchReason = this.freshTemp("_await_catch_reason");
-        const awaitedValue = awaitedType.kind === "void"
+        const variableSymbol = continuation.variable ? this.symbolForIdentifier(continuation.variable) : null;
+        const awaitedValue = awaitedType.kind === "void" || !variableSymbol
             ? null
             : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, continuation.successReturnExpr);
         const scope = new Map<ts.Symbol, string>();
-        const variableSymbol = this.symbolForIdentifier(continuation.variable);
         if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
         for (const param of continuation.params) {
             scope.set(param.symbol, `state->${param.field}`);
