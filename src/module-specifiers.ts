@@ -153,6 +153,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (mathText.length > 0) return mathText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
+            const jsonStringifyText = resolveStaticJsonStringifyCall(node);
+            if (jsonStringifyText.length > 0) return jsonStringifyText;
             const atText = resolveStaticArrayAtCall(node);
             if (atText.length > 0) return atText;
             const stringIndexText = resolveStaticStringIndexCall(node);
@@ -1750,6 +1752,91 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticJsonStringifyCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "stringify") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "JSON") return [];
+        const values = resolveStaticJsonStringifyValues(call.arguments[0]!);
+        return values.length === 0 ? [] : dedupe(values);
+    };
+
+    const resolveStaticJsonStringifyValues = (expr: ts.Expression): string[] => {
+        const value = resolveCollectionExpression(expr);
+        if (!value) return [];
+        if (value.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+        if (value.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
+        if (value.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) {
+            return [JSON.stringify(value.text)];
+        }
+        if (ts.isNumericLiteral(value)) {
+            const num = Number(value.text);
+            return Number.isFinite(num) ? [JSON.stringify(num)] : [];
+        }
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            value.operator === ts.SyntaxKind.MinusToken &&
+            ts.isNumericLiteral(value.operand)
+        ) {
+            const num = -Number(value.operand.text);
+            return Number.isFinite(num) ? [JSON.stringify(num)] : [];
+        }
+        if (
+            value.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(value) && value.text === "undefined") ||
+            ts.isVoidExpression(value) ||
+            ts.isBigIntLiteral(value)
+        ) {
+            return [];
+        }
+        if (ts.isArrayLiteralExpression(value)) {
+            let arrays = [""];
+            for (const element of value.elements) {
+                if (ts.isSpreadElement(element)) return [];
+                const elementValues = element.kind === ts.SyntaxKind.OmittedExpression ||
+                    isStaticUndefinedExpression(element)
+                    ? ["null"]
+                    : resolveStaticJsonStringifyValues(element);
+                if (elementValues.length === 0) return [];
+                const next: string[] = [];
+                for (const prefix of arrays) {
+                    for (const elementValue of elementValues) {
+                        next.push(prefix === "" ? elementValue : `${prefix},${elementValue}`);
+                        if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                    }
+                }
+                arrays = dedupe(next);
+            }
+            return dedupe(arrays.map((body) => `[${body}]`));
+        }
+        if (ts.isObjectLiteralExpression(value)) {
+            let objects = [""];
+            for (const prop of value.properties) {
+                if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return [];
+                const key = staticPropertyName(prop.name);
+                if (key === null) return [];
+                const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+                if (isStaticUndefinedExpression(valueExpr)) continue;
+                const propValues = resolveStaticJsonStringifyValues(valueExpr);
+                if (propValues.length === 0) return [];
+                const keyText = JSON.stringify(key);
+                const next: string[] = [];
+                for (const prefix of objects) {
+                    for (const propValue of propValues) {
+                        const entry = `${keyText}:${propValue}`;
+                        next.push(prefix === "" ? entry : `${prefix},${entry}`);
+                        if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                    }
+                }
+                objects = dedupe(next);
+            }
+            return dedupe(objects.map((body) => `{${body}}`));
+        }
+        return [];
     };
 
     const resolveStaticStringCaseCall = (call: ts.CallExpression): string[] => {
