@@ -2734,6 +2734,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const returnsValues = isObjectCall && method === "values";
         if (!returnsKeys && !returnsValues) return [];
 
+        const buffers = resolveStaticBufferExpression(call.arguments[0]!);
+        if (buffers.length > 0) {
+            const slots: string[][] = [];
+            for (const buffer of buffers) {
+                for (const key of keys) {
+                    if (key < 0 || key >= buffer.length) return [];
+                    slots.push([returnsValues ? String(buffer[key]) : String(key)]);
+                    if (slots.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            return dedupe(slots.flat());
+        }
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object || !ts.isObjectLiteralExpression(object)) return [];
 
