@@ -2792,6 +2792,20 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object" || callee.name.text !== "entries") return [];
 
+        const buffers = resolveStaticBufferExpression(call.arguments[0]!);
+        if (buffers.length > 0) {
+            const out: string[] = [];
+            const slotIndex = tupleIndices[0]!;
+            for (const buffer of buffers) {
+                for (const index of entryIndices) {
+                    if (index < 0 || index >= buffer.length) return [];
+                    out.push(slotIndex === 0 ? String(index) : String(buffer[index]));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            return dedupe(out);
+        }
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object || !ts.isObjectLiteralExpression(object)) return [];
 
