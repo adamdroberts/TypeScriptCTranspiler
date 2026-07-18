@@ -119,6 +119,7 @@ interface AsyncAwaitContinuationParam {
 }
 
 interface AsyncAwaitReturnContinuation {
+    preludeStatements: readonly ts.Statement[];
     variable: ts.Identifier;
     awaitExpr: ts.AwaitExpression;
     postAwaitStatements: readonly ts.Statement[];
@@ -24734,18 +24735,35 @@ class Emitter {
         thisValue: EmitResult | null,
     ): AsyncAwaitReturnContinuation | null {
         if (body.statements.length < 2) return null;
-        const declaration = body.statements[0];
         const result = body.statements[body.statements.length - 1]!;
-        if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
-        if (declaration.declarationList.declarations.length !== 1) return null;
-        const variable = declaration.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name) || !variable.initializer || !ts.isAwaitExpression(variable.initializer)) {
-            return null;
+        if (!ts.isReturnStatement(result)) return null;
+        const preludeStatements: ts.Statement[] = [];
+        let declarationIndex = 0;
+        let ok = true;
+        const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visitNoAwaitOrNestedScope);
+        };
+        while (declarationIndex < body.statements.length - 1) {
+            const stmt = body.statements[declarationIndex]!;
+            if (!ts.isExpressionStatement(stmt)) break;
+            visitNoAwaitOrNestedScope(stmt.expression);
+            if (!ok) return null;
+            preludeStatements.push(stmt);
+            declarationIndex++;
         }
+        const declaration = body.statements[declarationIndex];
+        if (!declaration) return null;
+        const awaited = this.awaitedLocalDeclaration(declaration);
+        if (!awaited) return null;
         const params = this.asyncAwaitContinuationParameters(parameters);
-        const postAwaitStatements = body.statements.slice(1, -1);
+        const postAwaitStatements = body.statements.slice(declarationIndex + 1, -1);
         const referenced = this.asyncAwaitContinuationReferences(
-            variable.name,
+            awaited.variable,
             postAwaitStatements,
             result.expression ?? null,
             params,
@@ -24753,8 +24771,9 @@ class Emitter {
         );
         if (!referenced) return null;
         return {
-            variable: variable.name,
-            awaitExpr: variable.initializer,
+            preludeStatements,
+            variable: awaited.variable,
+            awaitExpr: awaited.awaitExpr,
             postAwaitStatements,
             returnExpr: result.expression ?? null,
             params: referenced.params,
@@ -26998,6 +27017,9 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
+        for (const stmt of continuation.preludeStatements) {
+            this.emitStmt(buf, stmt);
+        }
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
