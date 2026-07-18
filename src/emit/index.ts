@@ -195,6 +195,11 @@ interface AsyncAwaitExpressionReturnContinuation {
     thisValue: EmitResult | null;
 }
 
+interface AsyncAwaitAssignmentReturnContinuation {
+    preludeStatements: readonly ts.Statement[];
+    continuation: AsyncAwaitExpressionReturnContinuation;
+}
+
 interface AsyncAwaitPreludeExpressionReturnContinuation {
     preludeStatements: readonly ts.Statement[];
     result: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation;
@@ -24905,7 +24910,7 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
-    ): AsyncAwaitExpressionReturnContinuation | null {
+    ): AsyncAwaitAssignmentReturnContinuation | null {
         if (body.statements.length !== 3) return null;
         const declaration = body.statements[0];
         const assignmentStmt = body.statements[1];
@@ -24914,7 +24919,7 @@ class Emitter {
         if (!(declaration.declarationList.flags & ts.NodeFlags.Let)) return null;
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name) || variable.initializer) return null;
+        if (!ts.isIdentifier(variable.name)) return null;
         if (!result.expression || !ts.isIdentifier(result.expression)) return null;
         const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
         if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
@@ -24924,7 +24929,38 @@ class Emitter {
         if (!variableSymbol || variableSymbol !== assignedSymbol || variableSymbol !== resultSymbol) return null;
         const rhs = this.unwrapTransparentExpression(assignment.right);
         if (ts.isAwaitExpression(rhs)) return null;
-        return this.asyncAwaitExpressionReturnContinuationForExpression(rhs, parameters, thisValue);
+        const preludeStatements: ts.Statement[] = [];
+        const captures: AsyncAwaitContinuationParam[] = [];
+        if (variable.initializer) {
+            if (this.currentFunctionCellForSymbol(variableSymbol)) return null;
+            const variableType = this.variableStorageType(this.prepareType(mapType(variable, this.checker)));
+            let initializerOk = true;
+            const visitInitializer = (node: ts.Node): void => {
+                if (!initializerOk) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    initializerOk = false;
+                    return;
+                }
+                ts.forEachChild(node, visitInitializer);
+            };
+            if (!this.isAsyncAwaitFunctionPreludeInitializer(variable.initializer)) {
+                visitInitializer(variable.initializer);
+                if (!initializerOk) return null;
+            } else if (variableType.kind !== "function") {
+                return null;
+            }
+            if (!this.isAsyncAwaitPreludeCaptureType(variableType)) return null;
+            const name = mangleIdent(variable.name.text);
+            preludeStatements.push(declaration);
+            captures.push({
+                symbol: variableSymbol,
+                name,
+                type: variableType,
+                field: `capture_${name}`,
+            });
+        }
+        const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(rhs, parameters, thisValue, captures);
+        return continuation ? { preludeStatements, continuation } : null;
     }
 
     private emitAsyncAwaitAssignmentReturnContinuation(
@@ -24935,8 +24971,11 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitAssignmentReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
-        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
-        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation.continuation)) return false;
+        if (continuation.preludeStatements.length > 0) {
+            this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.continuation.params);
+        }
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.continuation);
     }
 
     private asyncAwaitTryCatchReturnContinuation(
