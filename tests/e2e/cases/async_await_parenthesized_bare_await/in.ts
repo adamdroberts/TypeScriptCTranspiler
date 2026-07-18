@@ -82,6 +82,24 @@ async function parenthesizedAwaitedLocalChain(prefix: string): Promise<string> {
     return prefix + first + ":" + second;
 }
 
+async function parenthesizedTryFinallyFallthroughFulfilled(): Promise<string> {
+    try {
+        (await delay(13, "ignored"));
+    } finally {
+        finallyTrace += "G";
+    }
+    return "finally-fallthrough:" + finallyTrace;
+}
+
+async function parenthesizedTryFinallyFallthroughRejected(): Promise<string> {
+    try {
+        (await delayedRejectAfter(14, "final-fall-bad"));
+    } finally {
+        finallyTrace += "g";
+    }
+    return "never";
+}
+
 parenthesizedExpressionStatement("parenthesized-").then((value: string): void => {
     console.log("parenthesized-expression-statement:", value);
 });
@@ -124,4 +142,12 @@ parenthesizedAwaitedLocalTryFinally().then((value: string): void => {
 
 parenthesizedAwaitedLocalChain("chain-").then((value: string): void => {
     console.log("parenthesized-awaited-local-chain:", value);
+});
+
+parenthesizedTryFinallyFallthroughFulfilled().then((value: string): void => {
+    console.log("parenthesized-try-finally-fallthrough-fulfilled:", value, finallyTrace);
+});
+
+parenthesizedTryFinallyFallthroughRejected().catch((reason: string): void => {
+    console.log("parenthesized-try-finally-fallthrough-rejected:", reason, finallyTrace);
 });

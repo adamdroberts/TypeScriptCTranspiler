@@ -32799,8 +32799,9 @@ class Emitter {
                 buf.line("return tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
-            if (ts.isAwaitExpression(r.expression) && this.tryDepth === 0) {
-                const awaitedSource = this.emitExpr(r.expression.expression);
+            const asyncReturnExpr = this.unwrapTransparentExpression(r.expression);
+            if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0) {
+                const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
                 if (this.prepareType(awaitedSource.ty).kind === "promise") {
                     buf.line(`return tsc_promise_adopt(${awaitedSource.c});`);
                     return;

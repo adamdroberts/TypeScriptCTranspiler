@@ -8,4 +8,6 @@ parenthesized-awaited-local: parenthesized-local
 parenthesized-awaited-local-try-catch-fulfilled: try-local:try-local-ok
 parenthesized-awaited-local-try-catch-rejected: try-local-caught:try-local-bad
 parenthesized-awaited-local-try-finally: finally-local:finally-local-ok FRL
+parenthesized-try-finally-fallthrough-fulfilled: finally-fallthrough:FRLG FRLG
+parenthesized-try-finally-fallthrough-rejected: final-fall-bad FRLGg
 parenthesized-awaited-local-chain: chain-one:one-two
