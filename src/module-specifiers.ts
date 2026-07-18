@@ -127,6 +127,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringCodeText.length > 0) return stringCodeText;
             const stringSearchText = resolveStaticStringSearchCall(node);
             if (stringSearchText.length > 0) return stringSearchText;
+            const stringIdentityText = resolveStaticStringIdentityCall(node);
+            if (stringIdentityText.length > 0) return stringIdentityText;
             const stringConcatText = resolveStaticStringConcatCall(node);
             if (stringConcatText.length > 0) return stringConcatText;
             const joinText = resolveStaticArrayJoinCall(node);
@@ -746,6 +748,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const resolveStaticStringIdentityCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "toString" && method !== "valueOf") return [];
+        return resolve(callee.expression);
     };
 
     const resolveStaticStringElementAccess = (expr: ts.ElementAccessExpression): string[] => {
