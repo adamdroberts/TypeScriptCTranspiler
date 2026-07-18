@@ -1069,6 +1069,12 @@ const arrowExpressionBodyDirectAwait = async (prefix: string): Promise<string> =
 const arrowExpressionBodyInlineAwaitReturn = async (prefix: string): Promise<string> =>
     prefix + await delay(28, "arrow-expression-body-inline") + "!";
 
+const arrowExpressionBodyParenthesizedDirectAwait = async (prefix: string): Promise<string> =>
+    (await delay(33, prefix + "arrow-expression-body-parenthesized-direct"));
+
+const arrowExpressionBodyAssertedInlineAwaitReturn = async (prefix: string): Promise<string> =>
+    (prefix + await delay(34, "arrow-expression-body-asserted-inline") + "!") as string;
+
 function expressionBodyClosureDirectAwait(prefix: string): Promise<string> {
     const captured = prefix + "closure-";
     const run = async (suffix: string): Promise<string> =>
@@ -1095,6 +1101,20 @@ function expressionBodyClosureParamInlineAwaitReturn(prefix: string): Promise<st
     const run = async (middle: string, suffix: string): Promise<string> =>
         captured + middle + await delay(32, "inline") + suffix;
     return run("mid-", "!");
+}
+
+function expressionBodyClosureParenthesizedDirectAwait(prefix: string): Promise<string> {
+    const captured = prefix + "closure-transparent-";
+    const run = async (suffix: string): Promise<string> =>
+        (await delay(35, captured + suffix));
+    return run("direct");
+}
+
+function expressionBodyClosureAssertedInlineAwaitReturn(prefix: string): Promise<string> {
+    const captured = prefix + "closure-transparent-";
+    const run = async (suffix: string): Promise<string> =>
+        (captured + await delay(36, "inline") + suffix) as string;
+    return run("!");
 }
 
 const arrowDirectAssignmentAwaitReturn = async (prefix: string): Promise<string> => {
@@ -1886,6 +1906,14 @@ arrowExpressionBodyInlineAwaitReturn("value-").then((value: string): void => {
     console.log("arrow-expression-body-inline-await-return:", value);
 });
 
+arrowExpressionBodyParenthesizedDirectAwait("value-").then((value: string): void => {
+    console.log("arrow-expression-body-parenthesized-direct-await:", value);
+});
+
+arrowExpressionBodyAssertedInlineAwaitReturn("value-").then((value: string): void => {
+    console.log("arrow-expression-body-asserted-inline-await-return:", value);
+});
+
 expressionBodyClosureDirectAwait("value-").then((value: string): void => {
     console.log("closure-expression-body-direct-await:", value);
 });
@@ -1900,6 +1928,14 @@ expressionBodyClosureParamDirectAwait("value-").then((value: string): void => {
 
 expressionBodyClosureParamInlineAwaitReturn("value-").then((value: string): void => {
     console.log("closure-expression-body-param-inline-await-return:", value);
+});
+
+expressionBodyClosureParenthesizedDirectAwait("value-").then((value: string): void => {
+    console.log("closure-expression-body-parenthesized-direct-await:", value);
+});
+
+expressionBodyClosureAssertedInlineAwaitReturn("value-").then((value: string): void => {
+    console.log("closure-expression-body-asserted-inline-await-return:", value);
 });
 
 arrowDirectAssignmentAwaitReturn("value-").then((value: string): void => {

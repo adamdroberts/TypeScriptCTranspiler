@@ -75,9 +75,13 @@ closure-expression-body-param-direct-await: value-closure-param-direct-done
 method-for-in: forin-0in
 closure-expression-body-param-inline-await-return: value-closure-param-mid-inline!
 method-loop-control: control-ctrl0ctrl2
+arrow-expression-body-parenthesized-direct-await: value-arrow-expression-body-parenthesized-direct
 method-try-catch: try-caught-try!-finally
+arrow-expression-body-asserted-inline-await-return: value-arrow-expression-body-asserted-inline!
 method-throw: reject-throw
+closure-expression-body-parenthesized-direct-await: value-closure-transparent-direct
 method-early-return: return-return
+closure-expression-body-asserted-inline-await-return: value-closure-transparent-inline!
 method-late-return: return-late-return
 method-switch-a: switch-alpha
 method-switch-default: switch-other-z

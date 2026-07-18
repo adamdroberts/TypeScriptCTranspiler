@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Pending `await` continuation coverage now proves transparent wrappers around expression-bodied async direct and embedded awaits for lifted arrows and captured closures. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation coverage now proves non-lifted expression-bodied async closures can read both outer captures and direct parameters after direct and embedded pending awaits. Test: `async_await_pending_return_expr`.
 - Non-lifted expression-bodied async closure values now capture outer locals into the pending-`await` continuation environment when a returned expression reads those locals after suspension. Test: `async_await_pending_return_expr`.
 - Expression-bodied async arrow/function values now directly adopt pending `await` sources and resume one embedded pending `await` in the returned expression through the async continuation adapter. Test: `async_await_pending_return_expr`.
