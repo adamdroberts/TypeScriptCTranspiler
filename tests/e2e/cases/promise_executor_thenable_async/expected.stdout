@@ -1,0 +1,1 @@
+resolve executor|reject executor|resolve immediate|call executor-resolve|settle executor-resolve|fulfilled:executor value|reject immediate|call executor-reject|settle executor-reject|rejected:executor bad|first immediate
