@@ -301,6 +301,32 @@ async function preludeObjectLiteralAwaitedLocalReturn(prefix: string): Promise<s
     return record.label + value + "-" + record.suffix;
 }
 
+async function preludeMapSetAwaitedLocalReturn(prefix: string): Promise<string> {
+    const labels = new Map<string, string>();
+    labels.set("label", prefix + "map-local-");
+    const seen = new Set<string>();
+    seen.add("set");
+    const value = await delay(275, "value");
+    return labels.get("label") + value + "-" + (seen.has("set") ? "true" : "false");
+}
+
+async function preludeMapInlineAwaitReturn(prefix: string): Promise<string> {
+    const labels = new Map<string, string>();
+    labels.set("label", prefix + "map-inline-");
+    return labels.get("label") + await delay(276, "value");
+}
+
+async function preludeSetFiveAwait(prefix: string): Promise<string> {
+    const seen = new Set<string>();
+    seen.add(prefix + "set-five-");
+    const first = await delay(277, prefix + "one");
+    const second = await delay(278, first + "-two");
+    const third = await delay(279, first + ":" + second + "-three");
+    const fourth = await delay(280, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(281, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return (seen.has(prefix + "set-five-") ? "true" : "false") + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
+}
+
 class Worker {
     prefix: string;
 
@@ -1622,4 +1648,16 @@ preludeClassFiveAwait("fn-").then((value: string): void => {
 
 preludeObjectLiteralAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-object-literal-awaited-local-return:", value);
+});
+
+preludeMapSetAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-map-set-awaited-local-return:", value);
+});
+
+preludeMapInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-map-inline-await-return:", value);
+});
+
+preludeSetFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-set-five-await:", value);
 });

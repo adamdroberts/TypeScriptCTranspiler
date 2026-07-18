@@ -159,6 +159,8 @@ method-four-await: method-one:class-method-four-method-one:method-one:class-meth
 prelude-class-awaited-local-return: fn-class-local-value
 prelude-class-inline-await-return: fn-class-inline-value
 prelude-object-literal-awaited-local-return: fn-object-local-value-tail
+prelude-map-set-awaited-local-return: fn-map-local-value-true
+prelude-map-inline-await-return: fn-map-inline-value
 arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four!
 five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
 method-five-await: method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four-five!
@@ -171,3 +173,4 @@ method-prelude-expression-statement-five-await: method-one:class-expr-five-metho
 arrow-prelude-expression-statement-five-await: arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three:arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three-four:arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three:arrow-one:value-expr-five-arrow-one:arrow-one:value-expr-five-arrow-one-three-four-five!
 prelude-array-five-await: fn-array-five-fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three:fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three-four:fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three:fn-one:array-five-fn-one-two:fn-one:array-five-fn-one-two-three-four-five
 prelude-class-five-await: fn-class-five-fn-class-five-one:fn-class-five-fn-class-five-one-two:fn-class-five-one:fn-class-five-fn-class-five-one-two-three:fn-class-five-one:fn-class-five-fn-class-five-one-two:fn-class-five-one:fn-class-five-fn-class-five-one-two-three-four:fn-class-five-one:fn-class-five-fn-class-five-one-two:fn-class-five-one:fn-class-five-fn-class-five-one-two-three:fn-class-five-one:fn-class-five-fn-class-five-one-two:fn-class-five-one:fn-class-five-fn-class-five-one-two-three-four-five
+prelude-set-five-await: true:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four:fn-one:fn-one-two:fn-one:fn-one-two-three:fn-one:fn-one-two:fn-one:fn-one-two-three-four-five
