@@ -214,7 +214,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
 interface AsyncAwaitTryFinallyReturnContinuation {
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
-    successReturnExpr: ts.Expression;
+    successReturnExpr: ts.Expression | null;
     successReturnAfterFinally: boolean;
     finallyStatements: readonly ts.Statement[];
     params: AsyncAwaitContinuationParam[];
@@ -25071,13 +25071,13 @@ class Emitter {
         if (body.statements.length === 1) {
             if (tryStmt.tryBlock.statements.length !== 2) return null;
             const tryReturn = tryStmt.tryBlock.statements[1]!;
-            if (!ts.isReturnStatement(tryReturn) || !tryReturn.expression) return null;
-            successReturnExpr = tryReturn.expression;
+            if (!ts.isReturnStatement(tryReturn)) return null;
+            successReturnExpr = tryReturn.expression ?? null;
         } else {
             if (tryStmt.tryBlock.statements.length !== 1) return null;
             const finalReturn = body.statements[1]!;
-            if (!ts.isReturnStatement(finalReturn) || !finalReturn.expression) return null;
-            successReturnExpr = finalReturn.expression;
+            if (!ts.isReturnStatement(finalReturn)) return null;
+            successReturnExpr = finalReturn.expression ?? null;
         }
 
         const params = this.asyncAwaitContinuationParameters(parameters);
@@ -25130,7 +25130,7 @@ class Emitter {
         };
 
         visitExpr(awaited.awaitExpr.expression, false);
-        visitExpr(successReturnExpr, body.statements.length === 1);
+        if (successReturnExpr) visitExpr(successReturnExpr, body.statements.length === 1);
         for (const stmt of tryStmt.finallyBlock.statements) visitFinallyStatement(stmt);
         if (!ok) return null;
 
@@ -25223,7 +25223,11 @@ class Emitter {
         const variableSymbol = continuation.variable ? this.symbolForIdentifier(continuation.variable) : null;
         const awaitedValue = awaitedType.kind === "void" || !variableSymbol
             ? null
-            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, continuation.successReturnExpr);
+            : this.coerce(
+                this.promiseFulfilledValue(promiseType.elem, "_p"),
+                awaitedType,
+                continuation.successReturnExpr ?? continuation.variable!,
+            );
         const fulfilledScope = new Map<ts.Symbol, string>();
         const rejectedScope = new Map<ts.Symbol, string>();
         if (variableSymbol && awaitedType.kind !== "void") fulfilledScope.set(variableSymbol, valueVar);
@@ -25272,30 +25276,30 @@ class Emitter {
         }
         this.argumentValueScopes.push(fulfilledScope);
         if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
-        let returned: EmitResult;
+        let returned: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            returned = this.emitExpr(continuation.successReturnExpr);
+            if (continuation.successReturnExpr) returned = this.emitExpr(continuation.successReturnExpr);
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
         }
-        const returnType = this.prepareType(returned!.ty);
-        if (returnType.kind === "void" || returnType.kind === "never") {
-            buf.line(`${returned!.c};`);
+        const returnType = returned ? this.prepareType(returned.ty) : T_VOID;
+        if (!returned || returnType.kind === "void" || returnType.kind === "never") {
+            if (returned) buf.line(`${returned.c};`);
             if (!continuation.successReturnAfterFinally) {
                 emitFinallyStatements(buf, fulfilledScope);
             }
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
         } else {
-            buf.line(`${returnType.c} ${returnVar} = ${returned!.c};`);
+            buf.line(`${returnType.c} ${returnVar} = ${returned.c};`);
             if (!continuation.successReturnAfterFinally) {
                 emitFinallyStatements(buf, fulfilledScope);
             }
             buf.line("tsc_try_pop();");
-            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnType }, continuation.successReturnExpr)};`);
+            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnType }, continuation.successReturnExpr!)};`);
         }
         buf.close();
         buf.close();
