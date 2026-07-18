@@ -273,6 +273,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (dataViewProperty.length > 0) return dataViewProperty;
             const dataViewBufferLength = resolveStaticDataViewBufferLengthAccess(node);
             if (dataViewBufferLength.length > 0) return dataViewBufferLength;
+            const urlProperty = resolveStaticUrlPropertyAccess(node);
+            if (urlProperty.length > 0) return urlProperty;
             const bufferJsonProperty = resolveStaticBufferToJsonPropertyAccess(node);
             if (bufferJsonProperty.length > 0) return bufferJsonProperty;
             const descriptorProperty = resolveStaticDescriptorPropertyAccess(node);
@@ -781,6 +783,67 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const resolveStaticUrlRecords = (expr: ts.Expression): URL[] => {
+        const current = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(current)) {
+            const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveStaticUrlRecords(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
+        if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
+        const target = unwrapStaticExpression(current.expression);
+        if (!ts.isIdentifier(target) || target.text !== "URL") return [];
+        const args = current.arguments ?? [];
+        if (args.length < 1 || args.length > 2) return [];
+        if (args.length === 2 && isStaticUndefinedExpression(args[1]!)) return [];
+
+        const inputs = resolve(args[0]!);
+        if (inputs.length === 0) return [];
+        const bases = args.length === 1 ? [undefined] : resolve(args[1]!);
+        if (bases.length === 0) return [];
+
+        const out: URL[] = [];
+        for (const input of inputs) {
+            for (const base of bases) {
+                if (base === undefined) {
+                    if (!canParseRuntimeUrl(input)) return [];
+                } else if (!canParseRuntimeUrl(input) && !canParseRuntimeUrl(base)) {
+                    return [];
+                }
+                try {
+                    out.push(base === undefined ? new URL(input) : new URL(input, base));
+                } catch {
+                    return [];
+                }
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return out;
+    };
+
+    const resolveStaticUrlPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
+        const property = access.name.text;
+        if (
+            property !== "href" &&
+            property !== "protocol" &&
+            property !== "host" &&
+            property !== "hostname" &&
+            property !== "port" &&
+            property !== "pathname" &&
+            property !== "search" &&
+            property !== "hash" &&
+            property !== "origin"
+        ) {
+            return [];
+        }
+        const urls = resolveStaticUrlRecords(access.expression);
+        if (urls.length === 0) return [];
+        return dedupe(urls.map((url) => url[property as keyof URL] as string));
     };
 
     const staticBufferByteLength = (value: string, encoding: string | undefined): number | null => {
