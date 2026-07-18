@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally pending continuations run catch and finally for fulfilled and rejected awaited sources"
+}
