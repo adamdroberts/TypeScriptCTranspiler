@@ -120,7 +120,7 @@ interface AsyncAwaitContinuationParam {
 
 interface AsyncAwaitReturnContinuation {
     preludeStatements: readonly ts.Statement[];
-    variable: ts.Identifier;
+    variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
     postAwaitStatements: readonly ts.Statement[];
     returnExpr: ts.Expression | null;
@@ -25329,6 +25329,7 @@ class Emitter {
         };
         while (declarationIndex < body.statements.length - 1) {
             const stmt = body.statements[declarationIndex]!;
+            if (this.awaitedContinuationStep(stmt)) break;
             if (ts.isExpressionStatement(stmt)) {
                 visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
@@ -25337,7 +25338,6 @@ class Emitter {
                 continue;
             }
             if (ts.isVariableStatement(stmt)) {
-                if (this.awaitedLocalDeclaration(stmt)) break;
                 preludeStatements.push(stmt);
                 if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
                 for (const decl of stmt.declarationList.declarations) {
@@ -25370,7 +25370,7 @@ class Emitter {
         }
         const declaration = body.statements[declarationIndex];
         if (!declaration) return null;
-        const awaited = this.awaitedLocalDeclaration(declaration);
+        const awaited = this.awaitedContinuationStep(declaration);
         if (!awaited) return null;
         const sourceType = this.prepareType(mapTsType(
             awaited.awaitExpr.expression,
@@ -25422,18 +25422,19 @@ class Emitter {
     }
 
     private asyncAwaitContinuationReferences(
-        awaitedName: ts.Identifier,
+        awaitedName: ts.Identifier | null,
         postAwaitStatements: readonly ts.Statement[],
         returnExpr: ts.Expression | null,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
     ): AsyncAwaitContinuationReferences | null {
-        const awaitedSymbol = this.symbolForIdentifier(awaitedName);
-        if (!awaitedSymbol) return null;
+        const awaitedSymbol = awaitedName ? this.symbolForIdentifier(awaitedName) : null;
+        if (awaitedName && !awaitedSymbol) return null;
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
-        const locals = new Set<ts.Symbol>([awaitedSymbol]);
+        const locals = new Set<ts.Symbol>();
+        if (awaitedSymbol) locals.add(awaitedSymbol);
         let usesThis = false;
         let usesAwaited = false;
         let ok = true;
@@ -25454,7 +25455,7 @@ class Emitter {
             if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 if (sym && locals.has(sym)) {
-                    if (sym === awaitedSymbol) usesAwaited = true;
+                    if (awaitedSymbol && sym === awaitedSymbol) usesAwaited = true;
                 } else {
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
                     if (param) {
@@ -25641,6 +25642,15 @@ class Emitter {
             return null;
         }
         return { variable: variable.name, awaitExpr: variable.initializer };
+    }
+
+    private awaitedContinuationStep(
+        stmt: ts.Statement,
+    ): { variable: ts.Identifier | null; awaitExpr: ts.AwaitExpression } | null {
+        const local = this.awaitedLocalDeclaration(stmt);
+        if (local) return local;
+        if (!ts.isExpressionStatement(stmt) || !ts.isAwaitExpression(stmt.expression)) return null;
+        return { variable: null, awaitExpr: stmt.expression };
     }
 
     private asyncAwaitTwoStepContinuationReferences(
@@ -27761,7 +27771,7 @@ class Emitter {
     private ensureAsyncAwaitReturnContinuationAdapter(
         promiseType: CType,
         awaitedType: CType,
-        variable: ts.Identifier,
+        variable: ts.Identifier | null,
         postAwaitStatements: readonly ts.Statement[],
         returnExpr: ts.Expression | null,
         params: readonly AsyncAwaitContinuationParam[],
@@ -27787,12 +27797,11 @@ class Emitter {
         const returnVar = this.freshTemp("_await_return");
         const resolvedVar = this.freshTemp("_await_resolved");
         const eh = this.freshTemp("_await_eh");
-        const contextNode = returnExpr ?? variable;
-        const awaitedValue = awaitedType.kind === "void"
+        const variableSymbol = variable ? this.symbolForIdentifier(variable) : null;
+        const awaitedValue = awaitedType.kind === "void" || !variableSymbol
             ? null
-            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, contextNode);
+            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, returnExpr ?? variable!);
         const scope = new Map<ts.Symbol, string>();
-        const variableSymbol = this.symbolForIdentifier(variable);
         if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
