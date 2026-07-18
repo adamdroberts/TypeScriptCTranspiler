@@ -2825,7 +2825,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return null;
         const method = callee.name.text;
-        if (method !== "slice" && method !== "concat" && method !== "toReversed" && method !== "with" && method !== "toSpliced") return null;
+        if (method !== "slice" && method !== "concat" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
         const receiver = resolveCollectionExpression(callee.expression);
         if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
         const receiverElements = denseStaticArrayElements(receiver);
@@ -2834,6 +2834,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (method === "toReversed") {
             if (call.arguments.length !== 0) return null;
             return ts.factory.createArrayLiteralExpression([...receiverElements].reverse());
+        }
+
+        if (method === "toSorted") {
+            if (call.arguments.length !== 0) return null;
+            const sortable = receiverElements.map((element, index) => {
+                const texts = resolve(element);
+                return texts.length === 1 ? { element, text: texts[0]!, index } : null;
+            });
+            if (sortable.some((entry) => entry === null)) return null;
+            const elements = sortable
+                .sort((left, right) => left!.text < right!.text ? -1 : left!.text > right!.text ? 1 : left!.index - right!.index)
+                .map((entry) => entry!.element);
+            return ts.factory.createArrayLiteralExpression(elements);
         }
 
         if (method === "with") {
