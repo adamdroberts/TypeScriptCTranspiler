@@ -170,6 +170,7 @@ prelude-promise-race-return: same:value
 prelude-text-codec-awaited-local-return: fn-codec:8
 prelude-crypto-digest-awaited-local-return: 42134c1a:93774c7c
 prelude-regexp-inline-await-return: /^fn-inline-value$/:fn-inline-value
+prelude-event-target-awaited-local-return: true:fn-ready:true:fn-target
 prelude-url-params-awaited-local-return: /root/path:fn-url-local:fn-params-local:value
 prelude-buffer-inline-await-return: fn-buffer-inline-value:17
 five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
