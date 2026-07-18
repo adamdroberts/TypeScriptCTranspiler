@@ -441,6 +441,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - CommonJS computed named-export metadata accepts checker-proven finite literal-union keys, including JavaScript JSDoc union keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_union_computed_exports`
 - CommonJS computed named-export metadata accepts checker-proven single literal keys, including JavaScript JSDoc single-literal keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_single_computed_exports`
 - CommonJS computed named-export metadata accepts static string-array `.join(...)` export keys through the finite AOT computed-property resolver. Test: `node_modules_commonjs_computed_string_exports`
+- Finite dynamic `require(...)` proofs resolve static `String.fromCharCode(...)` and `String.fromCodePoint(...)` specifier fragments for finite integer arguments into the AOT module graph. Test: `dynamic_require_static_string_from_code`
 - Finite dynamic `require(...)` proofs resolve static string `.replace(...)` and `.replaceAll(...)` specifiers with finite string search/replacement alternatives into the AOT module graph. Test: `dynamic_require_static_string_replace`
 - Finite dynamic `require(...)` proofs resolve static string `.normalize(...)` specifiers for NFC, NFD, NFKC, NFKD, and omitted/undefined default forms into the AOT module graph. Test: `dynamic_require_static_string_normalize`
 - Finite dynamic `require(...)` proofs resolve static string `.repeat(...)` specifiers for bounded finite integer counts into the AOT module graph. Test: `dynamic_require_static_string_repeat`
@@ -2515,6 +2516,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_array_at` | static string array `.at(...)` calls provide finite AOT dynamic require alternatives, including proven negative indexes |
 | `dynamic_require_static_array_join` | static string array `.join(...)` calls provide finite AOT dynamic require alternatives, including static separator aliases and `undefined` separator defaults |
 | `dynamic_require_static_array_spread` | static string array spread elements are flattened before array index, `.at(...)`, and `.join(...)` dynamic require proofs |
+| `dynamic_require_static_string_from_code` | static `String.fromCharCode(...)` and `String.fromCodePoint(...)` calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_case` | zero-argument static string `.toLowerCase()` and `.toUpperCase()` calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_trim` | zero-argument static string trim calls provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_string_index` | static string bracket access plus `.charAt(...)`, `.at(...)`, `.charCodeAt(...)`, and `.codePointAt(...)` calls provide finite AOT dynamic require alternatives |
