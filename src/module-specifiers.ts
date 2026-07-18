@@ -117,6 +117,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isCallExpression(node)) {
             const stringStaticText = resolveStaticStringConstructorCall(node);
             if (stringStaticText.length > 0) return stringStaticText;
+            const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
+            if (regexpEscapeText.length > 0) return regexpEscapeText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
@@ -347,6 +349,101 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length === 0) return [];
         }
         if (out.some((value) => value.length > 4096)) return [];
+        return dedupe(out);
+    };
+
+    const escapeRegExpAscii = (input: string): string | null => {
+        const hex = "0123456789abcdef";
+        let out = "";
+        for (let i = 0; i < input.length; i++) {
+            const code = input.charCodeAt(i);
+            if (code >= 128) return null;
+            const leadingAlnum = i === 0 && (
+                (code >= 48 && code <= 57) ||
+                (code >= 65 && code <= 90) ||
+                (code >= 97 && code <= 122)
+            );
+            if (leadingAlnum) {
+                out += "\\x" + hex[code >> 4] + hex[code & 0x0f];
+                continue;
+            }
+            switch (code) {
+                case 94:
+                case 36:
+                case 92:
+                case 46:
+                case 42:
+                case 43:
+                case 63:
+                case 40:
+                case 41:
+                case 91:
+                case 93:
+                case 123:
+                case 125:
+                case 124:
+                case 47:
+                    out += "\\" + String.fromCharCode(code);
+                    break;
+                case 10:
+                    out += "\\n";
+                    break;
+                case 13:
+                    out += "\\r";
+                    break;
+                case 9:
+                    out += "\\t";
+                    break;
+                case 12:
+                    out += "\\f";
+                    break;
+                case 11:
+                    out += "\\v";
+                    break;
+                case 45:
+                case 32:
+                case 44:
+                case 61:
+                case 60:
+                case 62:
+                case 35:
+                case 38:
+                case 33:
+                case 37:
+                case 58:
+                case 59:
+                case 64:
+                case 126:
+                case 39:
+                case 96:
+                case 34:
+                    out += "\\x" + hex[code >> 4] + hex[code & 0x0f];
+                    break;
+                default:
+                    out += code < 0x20 || code === 0x7f
+                        ? "\\x" + hex[code >> 4] + hex[code & 0x0f]
+                        : String.fromCharCode(code);
+                    break;
+            }
+        }
+        return out;
+    };
+
+    const resolveStaticRegExpEscapeCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "escape") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "RegExp") return [];
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            const escaped = escapeRegExpAscii(value);
+            if (escaped === null) return [];
+            out.push(escaped);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
         return dedupe(out);
     };
 
