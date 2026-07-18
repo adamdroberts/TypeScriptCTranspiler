@@ -2825,11 +2825,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return null;
         const method = callee.name.text;
-        if (method !== "slice" && method !== "concat") return null;
+        if (method !== "slice" && method !== "concat" && method !== "toReversed" && method !== "with") return null;
         const receiver = resolveCollectionExpression(callee.expression);
         if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
         const receiverElements = denseStaticArrayElements(receiver);
         if (!receiverElements) return null;
+
+        if (method === "toReversed") {
+            if (call.arguments.length !== 0) return null;
+            return ts.factory.createArrayLiteralExpression([...receiverElements].reverse());
+        }
+
+        if (method === "with") {
+            if (call.arguments.length !== 2) return null;
+            const indexes = resolveStaticIntegerKeys(call.arguments[0]!);
+            if (indexes.length !== 1) return null;
+            const index = indexes[0]! < 0 ? receiverElements.length + indexes[0]! : indexes[0]!;
+            if (index < 0 || index >= receiverElements.length) return null;
+            const elements = [...receiverElements];
+            elements[index] = call.arguments[1]!;
+            return ts.factory.createArrayLiteralExpression(elements);
+        }
 
         if (method === "slice") {
             if (call.arguments.length > 2) return null;

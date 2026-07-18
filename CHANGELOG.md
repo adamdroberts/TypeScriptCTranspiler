@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now materialize static dense array `.toReversed()` and in-range `.with(index, value)` copy wrappers, including negative `.with(...)` indexes. Test: `dynamic_require_static_array_copy_more_collections`.
 - Finite dynamic `require(...)` proofs now materialize static dense array `.slice(...)` and `.concat(...)` copy wrappers, including negative slice bounds and array-operand concat spreading. Test: `dynamic_require_static_array_copy_collections`.
 - Finite dynamic `require(...)` proofs now materialize static `Array.of(...)` collection wrappers for existing index, `.at(...)`, `.join(...)`, `Object.values(...)`, and `Object.entries(...)` specifier paths. Test: `dynamic_require_static_array_of_collections`.
 - Finite dynamic `require(...)` proofs now materialize one-argument static `Array.from(...)` collection wrappers over finite array/string sources plus finite `new Set(...)` and `new Map(...)` sources. Test: `dynamic_require_static_array_from_collections`.
