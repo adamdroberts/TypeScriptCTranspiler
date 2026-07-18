@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs treat static `Object.setPrototypeOf(collection, proto)` wrappers as transparent over finite collection operands. Test: `dynamic_require_static_object_set_prototype_wrapped_collections`
 - Finite dynamic `require(...)` proofs treat static `Object.freeze(...)`, `Object.seal(...)`, and `Object.preventExtensions(...)` wrappers as transparent over finite collection operands. Test: `dynamic_require_static_object_integrity_wrapped_collections`
 - Finite dynamic `require(...)` proofs materialize static `Object.fromEntries(new Map(...))` collection wrappers, including `new Map(Object.entries(objectLiteral))`, for property lookup, key/value enumeration, and `Reflect.get(...)` fragments. Test: `dynamic_require_static_object_from_entries_map`
 - Finite dynamic `require(...)` proofs materialize static `Object.entries(objectLiteral)` collection wrappers so `Object.fromEntries(Object.entries(...))` composes through property lookup, key/value/entry enumeration, and Reflect predicate fragments. Test: `dynamic_require_static_object_from_entries_object_entries`

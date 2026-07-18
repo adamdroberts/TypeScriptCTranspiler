@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now treat static `Object.setPrototypeOf(collection, proto)` wrappers as transparent over finite collection operands. Test: `dynamic_require_static_object_set_prototype_wrapped_collections`.
 - Finite dynamic `require(...)` proofs now treat static `Object.freeze(...)`, `Object.seal(...)`, and `Object.preventExtensions(...)` wrappers as transparent over finite collection operands. Test: `dynamic_require_static_object_integrity_wrapped_collections`.
 - Finite dynamic `require(...)` proofs now materialize static `Object.fromEntries(new Map(...))` collection wrappers, including `new Map(Object.entries(objectLiteral))`, for property lookup, key/value enumeration, and `Reflect.get(...)` fragments. Test: `dynamic_require_static_object_from_entries_map`.
 - Finite dynamic `require(...)` proofs now materialize static `Object.entries(objectLiteral)` collection wrappers so `Object.fromEntries(Object.entries(...))` composes through property lookup, key/value/entry enumeration, and Reflect predicate fragments. Test: `dynamic_require_static_object_from_entries_object_entries`.
