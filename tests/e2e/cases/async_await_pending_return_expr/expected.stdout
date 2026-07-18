@@ -145,6 +145,9 @@ arrow-prelude-expression-statement-direct-return-await: value-direct-expr-arrow-
 prelude-expression-statement-awaited-local-return: fn-awaited-expr-local!
 method-prelude-expression-statement-awaited-local-return: method-prelude-class-awaited-expr-local!
 arrow-prelude-expression-statement-awaited-local-return: value-awaited-expr-local!
+prelude-local-awaited-local-return: fn-local-awaited-local!
+method-prelude-local-awaited-local-return: method-prelude-class-method-local-awaited-local!
+arrow-prelude-local-awaited-local-return: value-arrow-local-awaited-local!
 four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
 method-four-await: method-one:class-method-four-method-one:method-one:class-method-four-method-one-three:method-one:class-method-four-method-one:method-one:class-method-four-method-one-three-four!
 arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four!

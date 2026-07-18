@@ -219,6 +219,12 @@ async function preludeExpressionStatementAwaitedLocalReturn(prefix: string): Pro
     return prefix + value + "!";
 }
 
+async function preludeLocalAwaitedLocalReturn(prefix: string): Promise<string> {
+    const label = prefix + "local-awaited-";
+    const value = await delay(1, "local");
+    return label + value + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -626,6 +632,12 @@ class Worker {
         const value = await delay(231, "local");
         return this.prefix + prefix + value + "!";
     }
+
+    async preludeLocalAwaitedLocalReturnMethod(prefix: string): Promise<string> {
+        const label = this.prefix + prefix + "method-local-awaited-";
+        const value = await delay(1, "local");
+        return label + value + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -834,6 +846,12 @@ const arrowPreludeExpressionStatementAwaitedLocalReturn = async (prefix: string)
     prefix = prefix + "expr-";
     const value = await delay(232, "local");
     return prefix + value + "!";
+};
+
+const arrowPreludeLocalAwaitedLocalReturn = async (prefix: string): Promise<string> => {
+    const label = prefix + "arrow-local-awaited-";
+    const value = await delay(1, "local");
+    return label + value + "!";
 };
 
 suffix().then((value: string): void => {
@@ -1469,4 +1487,13 @@ arrowPreludeExpressionStatementDirectReturnAwait("value-").then((value: string):
 
 arrowPreludeExpressionStatementAwaitedLocalReturn("value-").then((value: string): void => {
     console.log("arrow-prelude-expression-statement-awaited-local-return:", value);
+    preludeLocalAwaitedLocalReturn("fn-").then((fnValue: string): void => {
+        console.log("prelude-local-awaited-local-return:", fnValue);
+        new Worker("method-prelude-").preludeLocalAwaitedLocalReturnMethod("class-").then((methodValue: string): void => {
+            console.log("method-prelude-local-awaited-local-return:", methodValue);
+            arrowPreludeLocalAwaitedLocalReturn("value-").then((arrowValue: string): void => {
+                console.log("arrow-prelude-local-awaited-local-return:", arrowValue);
+            });
+        });
+    });
 });
