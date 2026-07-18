@@ -150,6 +150,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferCopyText.length > 0) return bufferCopyText;
             const bufferWriteText = resolveStaticBufferWriteCall(node);
             if (bufferWriteText.length > 0) return bufferWriteText;
+            const bufferIntegerReadText = resolveStaticBufferIntegerReadCall(node);
+            if (bufferIntegerReadText.length > 0) return bufferIntegerReadText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
             if (bufferEqualsText.length > 0) return bufferEqualsText;
             const bufferSearchText = resolveStaticBufferSearchCall(node);
@@ -1371,6 +1373,50 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                         }
                     }
                 }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferIntegerReadCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (
+            method !== "readUInt8" &&
+            method !== "readUint8" &&
+            method !== "readUInt16LE" &&
+            method !== "readUInt16BE" &&
+            method !== "readUint16LE" &&
+            method !== "readUint16BE" &&
+            method !== "readUInt32LE" &&
+            method !== "readUInt32BE" &&
+            method !== "readUint32LE" &&
+            method !== "readUint32BE" &&
+            method !== "readInt8" &&
+            method !== "readInt16LE" &&
+            method !== "readInt16BE" &&
+            method !== "readInt32LE" &&
+            method !== "readInt32BE"
+        ) {
+            return [];
+        }
+
+        const buffers = resolveStaticBufferExpression(callee.expression);
+        if (buffers.length === 0) return [];
+        const offsets = resolveStaticOptionalBufferIntegerArg(call.arguments[0], undefined);
+        if (offsets.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const offset of offsets) {
+                try {
+                    out.push(String((buffer[method as keyof Buffer] as (...args: unknown[]) => number)(offset)));
+                } catch {
+                    return [];
+                }
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
         return dedupe(out);
