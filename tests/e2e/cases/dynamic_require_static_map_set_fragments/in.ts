@@ -5,6 +5,8 @@ const mapMissing = require("./map_set_frag_map_has_" + new Map([["name", "old"]]
 const mapGet = require("./map_set_frag_map_get_" + new Map([["name", "old"], ["name", "overwrite"]]).get("name"));
 const mapGetMissing = require("./map_set_frag_map_get_" + new Map([["name", "old"]]).get("missing"));
 const mapEntriesGet = require("./map_set_frag_map_get_" + new Map(Object.entries({ slot: "entry" })).get("slot"));
+const setSize = require("./map_set_frag_set_size_" + new Set(["old", "value", "value"]).size);
+const mapSize = require("./map_set_frag_map_size_" + new Map([["name", "old"], ["name", "overwrite"], ["slot", "entry"]]).size);
 
 console.log(
     setHas.label,
@@ -14,4 +16,6 @@ console.log(
     mapGet.label,
     mapGetMissing.label,
     mapEntriesGet.label,
+    setSize.label,
+    mapSize.label,
 );
