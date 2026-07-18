@@ -132,6 +132,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (urlCanParseText.length > 0) return urlCanParseText;
             const bufferByteLengthText = resolveStaticBufferByteLengthCall(node);
             if (bufferByteLengthText.length > 0) return bufferByteLengthText;
+            const bufferIsEncodingText = resolveStaticBufferIsEncodingCall(node);
+            if (bufferIsEncodingText.length > 0) return bufferIsEncodingText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -723,7 +725,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
     const staticBufferByteLength = (value: string, encoding: string | undefined): number | null => {
         const normalized = encoding?.toLowerCase();
-        if (!normalized || normalized === "utf8" || normalized === "utf-8") {
+        if (!normalized || isStaticBufferEncoding(normalized, true)) {
             return Buffer.byteLength(value, "utf8");
         }
         if (normalized === "hex") return Math.floor(value.length / 2);
@@ -735,6 +737,17 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return value.length;
         }
         return null;
+    };
+
+    const isStaticBufferEncoding = (encoding: string, utf8Only = false): boolean => {
+        const normalized = encoding.toLowerCase();
+        if (normalized === "utf8" || normalized === "utf-8") return true;
+        if (utf8Only) return false;
+        return normalized === "hex" ||
+            normalized === "base64" ||
+            normalized === "latin1" ||
+            normalized === "binary" ||
+            normalized === "ascii";
     };
 
     const resolveStaticBufferByteLengthCall = (call: ts.CallExpression): string[] => {
@@ -764,6 +777,18 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const resolveStaticBufferIsEncodingCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "isEncoding") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => String(isStaticBufferEncoding(value))));
     };
 
     const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
