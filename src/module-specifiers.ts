@@ -134,6 +134,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferByteLengthText.length > 0) return bufferByteLengthText;
             const bufferIsEncodingText = resolveStaticBufferIsEncodingCall(node);
             if (bufferIsEncodingText.length > 0) return bufferIsEncodingText;
+            const bufferFromToStringText = resolveStaticBufferFromToStringCall(node);
+            if (bufferFromToStringText.length > 0) return bufferFromToStringText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -750,6 +752,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             normalized === "ascii";
     };
 
+    const nodeBufferEncoding = (encoding: string | undefined): BufferEncoding | null => {
+        const normalized = encoding?.toLowerCase();
+        if (!normalized || normalized === "utf8" || normalized === "utf-8") return "utf8";
+        if (!isStaticBufferEncoding(normalized)) return null;
+        return normalized as BufferEncoding;
+    };
+
+    const isRuntimeValidBufferInput = (value: string, encoding: BufferEncoding): boolean => {
+        if (encoding === "hex") return value.length % 2 === 0 && /^[0-9A-Fa-f]*$/.test(value);
+        if (encoding === "base64") return /^[A-Za-z0-9+/=\s]*$/.test(value);
+        return true;
+    };
+
     const resolveStaticBufferByteLengthCall = (call: ts.CallExpression): string[] => {
         if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) {
             return [];
@@ -789,6 +804,50 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const values = resolve(call.arguments[0]!);
         if (values.length === 0) return [];
         return dedupe(values.map((value) => String(isStaticBufferEncoding(value))));
+    };
+
+    const resolveStaticBufferFromToStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toString") return [];
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isCallExpression(receiver) || receiver.arguments.length < 1 || receiver.arguments.length > 2) {
+            return [];
+        }
+        if (receiver.arguments.some(ts.isSpreadElement)) return [];
+        const fromCallee = unwrapStaticExpression(receiver.expression);
+        if (!ts.isPropertyAccessExpression(fromCallee) || fromCallee.name.text !== "from") return [];
+        const fromTarget = unwrapStaticExpression(fromCallee.expression);
+        if (!ts.isIdentifier(fromTarget) || fromTarget.text !== "Buffer") return [];
+
+        const values = resolve(receiver.arguments[0]!);
+        if (values.length === 0) return [];
+        const fromEncodingArg = receiver.arguments[1];
+        const fromEncodings = !fromEncodingArg || isStaticUndefinedExpression(fromEncodingArg)
+            ? [undefined]
+            : resolve(fromEncodingArg);
+        if (fromEncodings.length === 0) return [];
+        const toEncodingArg = call.arguments[0];
+        const toEncodings = !toEncodingArg || isStaticUndefinedExpression(toEncodingArg)
+            ? [undefined]
+            : resolve(toEncodingArg);
+        if (toEncodings.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const fromEncoding of fromEncodings) {
+                const fromNodeEncoding = nodeBufferEncoding(fromEncoding);
+                if (!fromNodeEncoding || !isRuntimeValidBufferInput(value, fromNodeEncoding)) return [];
+                const buffer = Buffer.from(value, fromNodeEncoding);
+                for (const toEncoding of toEncodings) {
+                    const toNodeEncoding = nodeBufferEncoding(toEncoding);
+                    if (!toNodeEncoding) return [];
+                    out.push(buffer.toString(toNodeEncoding));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
