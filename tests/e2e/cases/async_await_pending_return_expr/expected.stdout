@@ -1,3 +1,4 @@
+direct-assignment-init-trace: fn-init|this-method-init|value-arrow-init|
 branch-mixed-inline-await-return-sync: fn-branch-mixed-sync!
 branch-conditional-inline-await-return-sync: fn-branch-conditional-sync!
 conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
@@ -26,6 +27,7 @@ double: 42
 tagged: fn-tag
 direct-assignment-await-return: fn-direct-assignment
 staged: fn-stage!
+initialized-direct-assignment-await-return: fn-initialized-direct-assignment
 method: method!
 initializer-expression-await-return: fn-initializer!
 assignment-expression-await-return: fn-assignment!
@@ -39,6 +41,7 @@ arrow-direct-assignment-await-return: value-arrow-direct-assignment
 method-initializer-expression-await-return: this-method-initializer!
 arrow-param: value-arrow-param
 method-assignment-expression-await-return: this-method-assignment!
+method-initialized-direct-assignment-await-return: this-method-initialized-direct-assignment!
 method-side-effect: effect-side
 method-initialized-assignment-expression-await-return: this-init-method-assignment!
 method-if-side-effect: if-branch
@@ -47,6 +50,7 @@ method-branch-let: branch-let
 arrow-assignment-expression-await-return: value-arrow-assignment!
 method-branch-uninit-let: uninit-uninit
 arrow-initialized-assignment-expression-await-return: value-init-arrow-assignment!
+arrow-initialized-direct-assignment-await-return: value-arrow-initialized-direct-assignment
 method-loop: loop-looploop
 method-for: for-forfor
 method-for-continue: for-continue-for-continue0for-continue2
