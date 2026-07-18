@@ -2766,6 +2766,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (objectDescriptorBuilt) return resolveCollectionExpression(objectDescriptorBuilt);
             const objectAssign = resolveStaticObjectAssignCollectionExpression(cur);
             if (objectAssign) return resolveCollectionExpression(objectAssign);
+            const objectGroupBy = resolveStaticObjectGroupByCollectionExpression(cur);
+            if (objectGroupBy) return resolveCollectionExpression(objectGroupBy);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
             if (objectEntries) return resolveCollectionExpression(objectEntries);
             const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
@@ -3699,6 +3701,42 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (properties.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         }
         return ts.factory.createObjectLiteralExpression(properties);
+    };
+
+    const resolveStaticObjectGroupByCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "groupBy") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+
+        const values = resolveStaticArrayFromSource(call.arguments[0]!);
+        if (!values) return null;
+        const elements = denseStaticArrayElements(values);
+        if (!elements) return null;
+
+        const order: string[] = [];
+        const groups = new Map<string, ts.Expression[]>();
+        for (let index = 0; index < elements.length; index++) {
+            const keyExpr = substituteStaticArrayCallback(call.arguments[1]!, elements[index]!, index);
+            if (!keyExpr) return null;
+            const keys = resolve(keyExpr);
+            if (keys.length !== 1) return null;
+            const key = keys[0]!;
+            if (!groups.has(key)) {
+                order.push(key);
+                groups.set(key, []);
+            }
+            groups.get(key)!.push(elements[index]!);
+            if (order.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+
+        return ts.factory.createObjectLiteralExpression(order.map((key) => {
+            return ts.factory.createPropertyAssignment(
+                ts.factory.createStringLiteral(key),
+                ts.factory.createArrayLiteralExpression(groups.get(key)!),
+            );
+        }));
     };
 
     const resolveStaticEntryCollectionExpression = (expr: ts.Expression): ts.ArrayLiteralExpression | null => {
