@@ -43007,7 +43007,8 @@ class Emitter {
             };
         }
         if (source.ty.kind === "class") {
-            const custom = this.emitCustomIterableArray(arg, source);
+            const custom = this.emitCustomIteratorArray(arg, source) ??
+                this.emitCustomIterableArray(arg, source);
             if (!custom || !custom.ty.elem || (custom.ty.elem.kind !== "promise" && custom.ty.elem.kind !== "value")) {
                 unsupported(arg, `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, Map<any, any>, or a typed custom iterable`);
             }

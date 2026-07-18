@@ -1,0 +1,5 @@
+sync:
+all iterator: A,B then outer all-a|then outer all-b|settle outer all-a|settle outer all-b|then inner all-a|then inner all-b|settle inner all-a|settle inner all-b
+race iterator: race A then outer race-a|then outer race-b|settle outer race-a|settle outer race-b|then inner race-a|then inner race-b|settle inner race-a|settle inner race-b
+any iterator: any B then outer any-a|then outer any-b|settle outer any-a|settle outer any-b|then inner any-a|then inner any-b|settle inner any-a|settle inner any-b
+settled iterator: fulfilled:settled A,rejected:settled B then outer settled-a|then outer settled-b|settle outer settled-a|settle outer settled-b|then inner settled-a|then inner settled-b|settle inner settled-a|settle inner settled-b
