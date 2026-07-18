@@ -36,6 +36,12 @@ async function dynamicLeadingChain(): Promise<string> {
     return prefix + ": " + fifth;
 }
 
+async function dynamicPreludeReturnExpression(): Promise<string> {
+    const prefix = "dynamic prelude";
+    const source: any = Promise.resolve("return");
+    return prefix + ": " + await source;
+}
+
 numberValue().then((value: number): void => {
     console.log("number:", value);
 });
@@ -53,5 +59,9 @@ dynamicPromise().then((value: string): void => {
 });
 
 dynamicLeadingChain().then((value: string): void => {
+    console.log(value);
+});
+
+dynamicPreludeReturnExpression().then((value: string): void => {
     console.log(value);
 });

@@ -25697,13 +25697,17 @@ class Emitter {
     ): boolean {
         const match = this.asyncAwaitPreludeExpressionReturnContinuation(body, parameters, thisValue);
         if (!match) return false;
-        for (const stmt of match.preludeStatements) {
-            this.emitStmt(buf, stmt);
-        }
         if ("awaitExpr" in match.result) {
+            if (!this.asyncAwaitExpressionReturnContinuationSupported(match.result)) return false;
+            for (const stmt of match.preludeStatements) {
+                this.emitStmt(buf, stmt);
+            }
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
         }
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(match.result)) return false;
+        for (const stmt of match.preludeStatements) {
+            this.emitStmt(buf, stmt);
+        }
         return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
     }
 
