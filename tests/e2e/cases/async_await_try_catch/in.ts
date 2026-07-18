@@ -75,6 +75,42 @@ async function pendingTryCatchFallthroughRejected(): Promise<string> {
     return "fallthrough never";
 }
 
+async function pendingBareTryFulfilled(): Promise<string> {
+    try {
+        await delay(5, "ok");
+        return "bare pending done";
+    } catch (e) {
+        return "bare pending caught " + e;
+    }
+}
+
+async function pendingBareTryRejected(): Promise<string> {
+    try {
+        await delayedReject("bare bad");
+        return "bare never";
+    } catch (e) {
+        return "bare pending caught " + e;
+    }
+}
+
+async function pendingBareTryCatchFallthroughFulfilled(): Promise<string> {
+    try {
+        await delay(5, "ok");
+    } catch (e) {
+        return "bare fallthrough caught " + e;
+    }
+    return "bare fallthrough done";
+}
+
+async function pendingBareTryCatchFallthroughRejected(): Promise<string> {
+    try {
+        await delayedReject("bare fall bad");
+    } catch (e) {
+        return "bare fallthrough caught " + e;
+    }
+    return "bare fallthrough never";
+}
+
 async function pendingTryFinallyFulfilled(): Promise<string> {
     try {
         const value = await delay(6, "ok");
@@ -140,6 +176,22 @@ pendingTryCatchFallthroughFulfilled().then((value: string): void => {
 
 pendingTryCatchFallthroughRejected().then((value: string): void => {
     console.log("pending-fallthrough-rejected:", value);
+});
+
+pendingBareTryFulfilled().then((value: string): void => {
+    console.log("pending-bare-fulfilled:", value);
+});
+
+pendingBareTryRejected().then((value: string): void => {
+    console.log("pending-bare-rejected:", value);
+});
+
+pendingBareTryCatchFallthroughFulfilled().then((value: string): void => {
+    console.log("pending-bare-fallthrough-fulfilled:", value);
+});
+
+pendingBareTryCatchFallthroughRejected().then((value: string): void => {
+    console.log("pending-bare-fallthrough-rejected:", value);
 });
 
 pendingTryFinallyFulfilled().then((value: string): void => {
