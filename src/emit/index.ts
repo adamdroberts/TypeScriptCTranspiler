@@ -203,9 +203,9 @@ interface AsyncAwaitPreludeExpressionReturnContinuation {
 interface AsyncAwaitTryCatchReturnContinuation {
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
-    successReturnExpr: ts.Expression;
+    successReturnExpr: ts.Expression | null;
     catchClause: ts.CatchClause;
-    catchReturnExpr: ts.Expression;
+    catchReturnExpr: ts.Expression | null;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
     usesAwaited: boolean;
@@ -24792,18 +24792,18 @@ class Emitter {
         const awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[0]!);
         const catchReturn = tryStmt.catchClause.block.statements[0]!;
         if (!awaited) return null;
-        if (!ts.isReturnStatement(catchReturn) || !catchReturn.expression) return null;
+        if (!ts.isReturnStatement(catchReturn)) return null;
         let successReturnExpr: ts.Expression | null = null;
         if (body.statements.length === 1) {
             if (tryStmt.tryBlock.statements.length !== 2) return null;
             const tryReturn = tryStmt.tryBlock.statements[1]!;
-            if (!ts.isReturnStatement(tryReturn) || !tryReturn.expression) return null;
-            successReturnExpr = tryReturn.expression;
+            if (!ts.isReturnStatement(tryReturn)) return null;
+            successReturnExpr = tryReturn.expression ?? null;
         } else {
             if (tryStmt.tryBlock.statements.length !== 1) return null;
             const finalReturn = body.statements[1]!;
-            if (!ts.isReturnStatement(finalReturn) || !finalReturn.expression) return null;
-            successReturnExpr = finalReturn.expression;
+            if (!ts.isReturnStatement(finalReturn)) return null;
+            successReturnExpr = finalReturn.expression ?? null;
         }
 
         const catchDecl = tryStmt.catchClause.variableDeclaration;
@@ -24863,8 +24863,8 @@ class Emitter {
         };
 
         visit(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
-        visit(successReturnExpr, { allowAwaited: true, allowCatch: false });
-        visit(catchReturn.expression, { allowAwaited: false, allowCatch: !!catchSymbol });
+        if (successReturnExpr) visit(successReturnExpr, { allowAwaited: true, allowCatch: false });
+        if (catchReturn.expression) visit(catchReturn.expression, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (!ok) return null;
 
         return {
@@ -24872,7 +24872,7 @@ class Emitter {
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
             catchClause: tryStmt.catchClause,
-            catchReturnExpr: catchReturn.expression,
+            catchReturnExpr: catchReturn.expression ?? null,
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,
             usesAwaited,
@@ -24958,7 +24958,11 @@ class Emitter {
         const variableSymbol = continuation.variable ? this.symbolForIdentifier(continuation.variable) : null;
         const awaitedValue = awaitedType.kind === "void" || !variableSymbol
             ? null
-            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, continuation.successReturnExpr);
+            : this.coerce(
+                this.promiseFulfilledValue(promiseType.elem, "_p"),
+                awaitedType,
+                continuation.successReturnExpr ?? continuation.variable!,
+            );
         const scope = new Map<ts.Symbol, string>();
         if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
         for (const param of continuation.params) {
@@ -24983,24 +24987,24 @@ class Emitter {
         }
         this.argumentValueScopes.push(scope);
         if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
-        let tryReturned: EmitResult;
+        let tryReturned: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            tryReturned = this.emitExpr(continuation.successReturnExpr);
+            if (continuation.successReturnExpr) tryReturned = this.emitExpr(continuation.successReturnExpr);
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
         }
-        const tryReturnType = this.prepareType(tryReturned!.ty);
-        if (tryReturnType.kind === "void" || tryReturnType.kind === "never") {
-            buf.line(`${tryReturned!.c};`);
+        const tryReturnType = tryReturned ? this.prepareType(tryReturned.ty) : T_VOID;
+        if (!tryReturned || tryReturnType.kind === "void" || tryReturnType.kind === "never") {
+            if (tryReturned) buf.line(`${tryReturned.c};`);
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
         } else {
-            buf.line(`${tryReturnType.c} ${tryReturnVar} = ${tryReturned!.c};`);
+            buf.line(`${tryReturnType.c} ${tryReturnVar} = ${tryReturned.c};`);
             buf.line("tsc_try_pop();");
-            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: tryReturnVar, ty: tryReturnType }, continuation.successReturnExpr)};`);
+            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: tryReturnVar, ty: tryReturnType }, continuation.successReturnExpr!)};`);
         }
         buf.close();
         buf.open("else");
@@ -25019,25 +25023,25 @@ class Emitter {
         }
         this.argumentValueScopes.push(scope);
         if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
-        let catchReturned: EmitResult;
+        let catchReturned: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            catchReturned = this.emitExpr(continuation.catchReturnExpr);
+            if (continuation.catchReturnExpr) catchReturned = this.emitExpr(continuation.catchReturnExpr);
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
             if (catchSym) this.catchStringSymbols.delete(catchSym);
         }
-        const catchReturnType = this.prepareType(catchReturned!.ty);
-        if (catchReturnType.kind === "void" || catchReturnType.kind === "never") {
-            buf.line(`${catchReturned!.c};`);
+        const catchReturnType = catchReturned ? this.prepareType(catchReturned.ty) : T_VOID;
+        if (!catchReturned || catchReturnType.kind === "void" || catchReturnType.kind === "never") {
+            if (catchReturned) buf.line(`${catchReturned.c};`);
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
         } else {
-            buf.line(`${catchReturnType.c} ${catchReturnVar} = ${catchReturned!.c};`);
+            buf.line(`${catchReturnType.c} ${catchReturnVar} = ${catchReturned.c};`);
             buf.line("tsc_try_pop();");
-            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: catchReturnVar, ty: catchReturnType }, continuation.catchReturnExpr)};`);
+            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: catchReturnVar, ty: catchReturnType }, continuation.catchReturnExpr!)};`);
         }
         buf.close();
         buf.open("else");
