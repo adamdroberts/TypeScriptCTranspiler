@@ -1,0 +1,3 @@
+catch-prelude-return-fulfilled: try:ok 
+catch-prelude-return-rejected: caught:bad:Rbad Rbad
+catch-prelude-throw: throw-bad:RbadTthrow-bad RbadTthrow-bad

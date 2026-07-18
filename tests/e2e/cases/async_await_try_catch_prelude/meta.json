@@ -1,0 +1,3 @@
+{
+  "description": "async try/catch pending continuations support synchronous catch preludes before return or throw"
+}
