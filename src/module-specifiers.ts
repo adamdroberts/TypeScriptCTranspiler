@@ -1761,6 +1761,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
     const resolveStaticArrayBufferByteLengths = (expr: ts.Expression): number[] => {
         const current = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(current)) {
+            const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveStaticArrayBufferByteLengths(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
         if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
         const target = unwrapStaticExpression(current.expression);
         if (!ts.isIdentifier(target) || target.text !== "ArrayBuffer") return [];
@@ -1787,9 +1795,16 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return lengths.length > 0 ? lengths.map((length) => String(length)) : [];
     };
 
-    const resolveStaticDataViewPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
-        if (access.name.text !== "byteLength" && access.name.text !== "byteOffset") return [];
-        const current = unwrapStaticExpression(access.expression);
+    const resolveStaticDataViewMetadata = (expr: ts.Expression): Array<{ bufferLength: number; byteOffset: number; byteLength: number }> => {
+        const current = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(current)) {
+            const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveStaticDataViewMetadata(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
         if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
         const target = unwrapStaticExpression(current.expression);
         if (!ts.isIdentifier(target) || target.text !== "DataView") return [];
@@ -1803,7 +1818,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             : resolveStaticIntegerKeys(args[1]!);
         if (offsets.length === 0) return [];
 
-        const out: string[] = [];
+        const out: Array<{ bufferLength: number; byteOffset: number; byteLength: number }> = [];
         for (const bufferLength of bufferLengths) {
             for (const offset of offsets) {
                 if (!Number.isSafeInteger(offset) || offset < 0 || offset > bufferLength) return [];
@@ -1813,11 +1828,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 if (explicitLengths.length === 0) return [];
                 for (const byteLength of explicitLengths) {
                     if (!Number.isSafeInteger(byteLength) || byteLength < 0 || offset + byteLength > bufferLength) return [];
-                    out.push(String(access.name.text === "byteOffset" ? offset : byteLength));
+                    out.push({ bufferLength, byteOffset: offset, byteLength });
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
             }
         }
+        return out;
+    };
+
+    const resolveStaticDataViewPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
+        if (access.name.text !== "byteLength" && access.name.text !== "byteOffset") return [];
+        const metadata = resolveStaticDataViewMetadata(access.expression);
+        if (metadata.length === 0) return [];
+        const out = metadata.map((entry) => String(access.name.text === "byteOffset" ? entry.byteOffset : entry.byteLength));
         return dedupe(out);
     };
 
@@ -1825,36 +1848,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (access.name.text !== "byteLength") return [];
         const bufferAccess = unwrapStaticExpression(access.expression);
         if (!ts.isPropertyAccessExpression(bufferAccess) || bufferAccess.name.text !== "buffer") return [];
-        const current = unwrapStaticExpression(bufferAccess.expression);
-        if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
-        const target = unwrapStaticExpression(current.expression);
-        if (!ts.isIdentifier(target) || target.text !== "DataView") return [];
-        const args = current.arguments ?? [];
-        if (args.length < 1 || args.length > 3) return [];
-
-        const bufferLengths = resolveStaticArrayBufferByteLengths(args[0]!);
-        if (bufferLengths.length === 0) return [];
-        const offsets = args.length < 2 || isStaticUndefinedExpression(args[1]!)
-            ? [0]
-            : resolveStaticIntegerKeys(args[1]!);
-        if (offsets.length === 0) return [];
-
-        const out: string[] = [];
-        for (const bufferLength of bufferLengths) {
-            for (const offset of offsets) {
-                if (!Number.isSafeInteger(offset) || offset < 0 || offset > bufferLength) return [];
-                const lengths = args.length < 3 || isStaticUndefinedExpression(args[2]!)
-                    ? [bufferLength - offset]
-                    : resolveStaticIntegerKeys(args[2]!);
-                if (lengths.length === 0) return [];
-                for (const length of lengths) {
-                    if (!Number.isSafeInteger(length) || length < 0 || offset + length > bufferLength) return [];
-                    out.push(String(bufferLength));
-                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
-                }
-            }
-        }
-        return dedupe(out);
+        const metadata = resolveStaticDataViewMetadata(bufferAccess.expression);
+        return metadata.length > 0 ? dedupe(metadata.map((entry) => String(entry.bufferLength))) : [];
     };
 
     const resolveStaticBufferElementAccess = (access: ts.ElementAccessExpression): string[] => {
