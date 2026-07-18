@@ -30,6 +30,19 @@ const liftedCombinedTryCatchFinally = async (flag: boolean): Promise<string> => 
     }
 };
 
+function makeNestedCombinedTryCatchFinally(prefix: string): (flag: boolean) => Promise<string> {
+    return async (flag: boolean): Promise<string> => {
+        try {
+            const value = await (flag ? delay(5, "nested-ok") : delayedRejectAfter(6, "nested-bad"));
+            return prefix + "nested:" + value;
+        } catch (e) {
+            return prefix + "nested-catch:" + e;
+        } finally {
+            trace += flag ? "N" : "n";
+        }
+    };
+}
+
 class CombinedTryWorker {
     prefix: string;
 
@@ -39,7 +52,7 @@ class CombinedTryWorker {
 
     async combinedTryCatchFinally(flag: boolean): Promise<string> {
         try {
-            const value = await (flag ? delay(5, "method-ok") : delayedRejectAfter(6, "method-bad"));
+            const value = await (flag ? delay(7, "method-ok") : delayedRejectAfter(8, "method-bad"));
             return this.prefix + "method:" + value;
         } catch (e) {
             return this.prefix + "method-catch:" + e;
@@ -49,6 +62,7 @@ class CombinedTryWorker {
     }
 }
 
+const nestedCombinedTryCatchFinally = makeNestedCombinedTryCatchFinally("closure-");
 const worker = new CombinedTryWorker("class-");
 
 combinedTryCatchFinally(true).then((value: string): void => {
@@ -65,6 +79,14 @@ liftedCombinedTryCatchFinally(true).then((value: string): void => {
 
 liftedCombinedTryCatchFinally(false).then((value: string): void => {
     console.log("lifted-combined-try-catch-finally-rejected:", value, trace);
+});
+
+nestedCombinedTryCatchFinally(true).then((value: string): void => {
+    console.log("nested-combined-try-catch-finally-fulfilled:", value, trace);
+});
+
+nestedCombinedTryCatchFinally(false).then((value: string): void => {
+    console.log("nested-combined-try-catch-finally-rejected:", value, trace);
 });
 
 worker.combinedTryCatchFinally(true).then((value: string): void => {

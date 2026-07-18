@@ -25954,6 +25954,16 @@ class Emitter {
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const referenceParamOrClosureCapture = (sym: ts.Symbol | undefined): void => {
+            if (!sym) return;
+            const param = paramsBySymbol.get(sym);
+            if (param) {
+                referenced.set(param.symbol, param);
+                return;
+            }
+            const capture = this.asyncAwaitClosureCaptureParameter(sym);
+            if (capture) referenced.set(capture.symbol, capture);
+        };
         const awaitedSymbol = awaited.variable ? this.symbolForIdentifier(awaited.variable) : null;
         if (awaited.variable && !awaitedSymbol) return null;
         let usesThis = false;
@@ -25996,8 +26006,7 @@ class Emitter {
                     ok = false;
                     return;
                 } else {
-                    const param = sym ? paramsBySymbol.get(sym) : undefined;
-                    if (param) referenced.set(param.symbol, param);
+                    referenceParamOrClosureCapture(sym);
                 }
             }
             ts.forEachChild(node, (child) => visitCatchExpr(child, options));
@@ -26078,8 +26087,7 @@ class Emitter {
                         ok = false;
                         return;
                     }
-                    const param = sym ? paramsBySymbol.get(sym) : undefined;
-                    if (param) referenced.set(param.symbol, param);
+                    referenceParamOrClosureCapture(sym);
                 }
             }
             ts.forEachChild(node, (child) => visitFinallyExpr(child, allowAwaited));

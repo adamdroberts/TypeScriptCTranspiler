@@ -2,5 +2,7 @@ combined-try-catch-finally-fulfilled: try:ok F
 combined-try-catch-finally-rejected: catch:bad FF
 lifted-combined-try-catch-finally-fulfilled: lifted:lifted-ok FFL
 lifted-combined-try-catch-finally-rejected: lifted-catch:lifted-bad FFLl
-method-combined-try-catch-finally-fulfilled: class-method:method-ok FFLlM
-method-combined-try-catch-finally-rejected: class-method-catch:method-bad FFLlMm
+nested-combined-try-catch-finally-fulfilled: closure-nested:nested-ok FFLlN
+nested-combined-try-catch-finally-rejected: closure-nested-catch:nested-bad FFLlNn
+method-combined-try-catch-finally-fulfilled: class-method:method-ok FFLlNnM
+method-combined-try-catch-finally-rejected: class-method-catch:method-bad FFLlNnMm
