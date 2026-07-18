@@ -154,6 +154,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferIntegerWriteText.length > 0) return bufferIntegerWriteText;
             const bufferIntegerReadText = resolveStaticBufferIntegerReadCall(node);
             if (bufferIntegerReadText.length > 0) return bufferIntegerReadText;
+            const bufferFloatReadText = resolveStaticBufferFloatReadCall(node);
+            if (bufferFloatReadText.length > 0) return bufferFloatReadText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
             if (bufferEqualsText.length > 0) return bufferEqualsText;
             const bufferSearchText = resolveStaticBufferSearchCall(node);
@@ -1468,6 +1470,39 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     }
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferFloatReadCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (
+            method !== "readFloatLE" &&
+            method !== "readFloatBE" &&
+            method !== "readDoubleLE" &&
+            method !== "readDoubleBE"
+        ) {
+            return [];
+        }
+
+        const buffers = resolveStaticBufferExpression(callee.expression);
+        if (buffers.length === 0) return [];
+        const offsets = resolveStaticOptionalBufferIntegerArg(call.arguments[0], undefined);
+        if (offsets.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const offset of offsets) {
+                try {
+                    out.push(String((buffer[method as keyof Buffer] as (...args: unknown[]) => number)(offset)));
+                } catch {
+                    return [];
+                }
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
         return dedupe(out);
