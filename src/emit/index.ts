@@ -200,6 +200,11 @@ interface AsyncAwaitAssignmentReturnContinuation {
     continuation: AsyncAwaitExpressionReturnContinuation;
 }
 
+interface DirectAsyncAwaitAssignmentReturnAlias {
+    preludeStatements: readonly ts.Statement[];
+    awaitExpr: ts.AwaitExpression;
+}
+
 interface AsyncAwaitPreludeExpressionReturnContinuation {
     preludeStatements: readonly ts.Statement[];
     result: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation;
@@ -24874,7 +24879,7 @@ class Emitter {
         return true;
     }
 
-    private directAsyncAwaitAssignmentReturnAlias(body: ts.Block): ts.AwaitExpression | null {
+    private directAsyncAwaitAssignmentReturnAlias(body: ts.Block): DirectAsyncAwaitAssignmentReturnAlias | null {
         if (body.statements.length !== 3) return null;
         const declaration = body.statements[0];
         const assignmentStmt = body.statements[1];
@@ -24883,7 +24888,7 @@ class Emitter {
         if (!(declaration.declarationList.flags & ts.NodeFlags.Let)) return null;
         if (declaration.declarationList.declarations.length !== 1) return null;
         const variable = declaration.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name) || variable.initializer) return null;
+        if (!ts.isIdentifier(variable.name)) return null;
         if (!result.expression || !ts.isIdentifier(result.expression)) return null;
         const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
         if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
@@ -24892,17 +24897,37 @@ class Emitter {
         const variableSymbol = this.symbolForIdentifier(variable.name);
         const assignedSymbol = this.symbolForIdentifier(assignment.left);
         const resultSymbol = this.symbolForIdentifier(result.expression);
-        return variableSymbol && variableSymbol === assignedSymbol && variableSymbol === resultSymbol ? rhs : null;
+        if (!variableSymbol || variableSymbol !== assignedSymbol || variableSymbol !== resultSymbol) return null;
+        const preludeStatements: ts.Statement[] = [];
+        if (variable.initializer) {
+            if (this.currentFunctionCellForSymbol(variableSymbol)) return null;
+            let initializerOk = true;
+            const visitInitializer = (node: ts.Node): void => {
+                if (!initializerOk) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    initializerOk = false;
+                    return;
+                }
+                ts.forEachChild(node, visitInitializer);
+            };
+            visitInitializer(variable.initializer);
+            if (!initializerOk) return null;
+            preludeStatements.push(declaration);
+        }
+        return { preludeStatements, awaitExpr: rhs };
     }
 
     private emitDirectAsyncAwaitAssignmentReturnAlias(buf: CBuf, body: ts.Block): boolean {
         const directAwaitAlias = this.directAsyncAwaitAssignmentReturnAlias(body);
         if (!directAwaitAlias) return false;
-        const source = this.emitExpr(directAwaitAlias.expression);
+        if (directAwaitAlias.preludeStatements.length > 0) {
+            this.emitAsyncAwaitPreludeStatements(buf, directAwaitAlias.preludeStatements, []);
+        }
+        const source = this.emitExpr(directAwaitAlias.awaitExpr.expression);
         if (this.prepareType(source.ty).kind === "promise") {
             buf.line(`return tsc_promise_adopt(${source.c});`);
         } else {
-            buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.expression)};`);
+            buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.awaitExpr.expression)};`);
         }
         return true;
     }
