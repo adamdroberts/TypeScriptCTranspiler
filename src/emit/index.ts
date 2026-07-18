@@ -21387,7 +21387,8 @@ class Emitter {
             type.kind === "string" ||
             type.kind === "bigint" ||
             type.kind === "value" ||
-            type.kind === "array";
+            type.kind === "array" ||
+            type.kind === "class";
     }
 
     private emitAsyncAwaitPreludeStatements(
@@ -21932,6 +21933,7 @@ class Emitter {
         }
         const sym = this.symbolForIdentifier(d.name);
         if (!sym) return null;
+        if (this.asyncAwaitEscapingSymbols.has(sym)) return null;
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
         if (!scope || !ts.isBlock(scope)) return null;
@@ -22001,6 +22003,7 @@ class Emitter {
         if (!this.objectLiteralInitializesAllFields(init, targetType)) return null;
         const sym = this.symbolForIdentifier(d.name);
         if (!sym) return null;
+        if (this.asyncAwaitEscapingSymbols.has(sym)) return null;
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
         if (!scope || !ts.isBlock(scope)) return null;
