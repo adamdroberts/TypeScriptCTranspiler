@@ -40,6 +40,19 @@ async function declaredCatchAssignedTryPrelude(): Promise<string> {
     }
 }
 
+async function declaredCombinedAssignedTryPrelude(): Promise<string> {
+    try {
+        let head: string;
+        head = "decl-combined-assigned-";
+        const value = await delayedRejectAfter(10, "decl-combined-bad");
+        return head + value;
+    } catch (e) {
+        return "decl-combined-caught:" + e;
+    } finally {
+        trace += "C";
+    }
+}
+
 const valueCatchTryPrelude = async (): Promise<string> => {
     try {
         const head = "value-";
@@ -68,6 +81,18 @@ const valueFinallyAssignedTryPrelude = async (): Promise<string> => {
         return head + value;
     } finally {
         trace += "A";
+    }
+};
+
+const valueCombinedTryPrelude = async (): Promise<string> => {
+    try {
+        const head = "value-combined|";
+        const value = await delay(11, "value-combined-ok");
+        return head + value;
+    } catch (e) {
+        return "value-combined-caught:" + e;
+    } finally {
+        trace += "B";
     }
 };
 
@@ -108,6 +133,19 @@ class TryPreludeWorker {
             return this.prefix + "method-assigned-caught:" + e;
         }
     }
+
+    async combinedAssignedTryPrelude(): Promise<string> {
+        try {
+            let label: string;
+            label = "method-combined-assigned-";
+            const value = await delayedRejectAfter(12, "method-combined-bad");
+            return this.prefix + label + value;
+        } catch (e) {
+            return this.prefix + "method-combined-caught:" + e;
+        } finally {
+            trace += this.prefix + "C";
+        }
+    }
 }
 
 const worker = new TryPreludeWorker("class-");
@@ -146,4 +184,16 @@ valueFinallyAssignedTryPrelude().then((value: string): void => {
 
 worker.catchAssignedTryPrelude().then((value: string): void => {
     console.log("method-catch-assigned-try-prelude:", value);
+});
+
+declaredCombinedAssignedTryPrelude().then((value: string): void => {
+    console.log("decl-combined-assigned-try-prelude:", value, trace);
+});
+
+valueCombinedTryPrelude().then((value: string): void => {
+    console.log("value-combined-try-prelude:", value, trace);
+});
+
+worker.combinedAssignedTryPrelude().then((value: string): void => {
+    console.log("method-combined-assigned-try-prelude:", value, trace);
 });

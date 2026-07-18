@@ -41,6 +41,19 @@ async function declaredCatchAssignedSourcePrelude(): Promise<string> {
     }
 }
 
+async function declaredCombinedAssignedSourcePrelude(): Promise<string> {
+    let head: string;
+    head = "decl-combined-assigned-";
+    try {
+        const value = await delayedRejectAfter(10, "decl-combined-bad");
+        return head + value;
+    } catch (e) {
+        return head + "caught:" + e;
+    } finally {
+        trace += "C";
+    }
+}
+
 const valueCatchSourcePrelude = async (): Promise<string> => {
     const head = "value-";
     try {
@@ -67,6 +80,18 @@ const valueFinallyAssignedSourcePrelude = async (): Promise<string> => {
     try {
         const value = await delay(8, "value-assigned-ok");
         return head + value;
+    } finally {
+        trace += head;
+    }
+};
+
+const valueCombinedSourcePrelude = async (): Promise<string> => {
+    const head = "value-combined|";
+    try {
+        const value = await delay(11, "value-combined-ok");
+        return head + value;
+    } catch (e) {
+        return head + "caught:" + e;
     } finally {
         trace += head;
     }
@@ -109,6 +134,19 @@ class SourcePreludeWorker {
             return this.prefix + "method-assigned-caught:" + e;
         }
     }
+
+    async combinedAssignedSourcePrelude(): Promise<string> {
+        let head: string;
+        head = this.prefix + "method-combined-assigned-";
+        try {
+            const value = await delayedRejectAfter(12, "method-combined-bad");
+            return head + value;
+        } catch (e) {
+            return head + "caught:" + e;
+        } finally {
+            trace += this.prefix + "C";
+        }
+    }
 }
 
 const worker = new SourcePreludeWorker("class-");
@@ -147,4 +185,16 @@ valueFinallyAssignedSourcePrelude().then((value: string): void => {
 
 worker.catchAssignedSourcePrelude().then((value: string): void => {
     console.log("method-catch-assigned-source-prelude:", value);
+});
+
+declaredCombinedAssignedSourcePrelude().then((value: string): void => {
+    console.log("decl-combined-assigned-source-prelude:", value, trace);
+});
+
+valueCombinedSourcePrelude().then((value: string): void => {
+    console.log("value-combined-source-prelude:", value, trace);
+});
+
+worker.combinedAssignedSourcePrelude().then((value: string): void => {
+    console.log("method-combined-assigned-source-prelude:", value, trace);
 });
