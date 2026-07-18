@@ -2,3 +2,5 @@ recover: caught bad
 rethrow: again!
 finally: catch inside finally
 after: done
+pending-fulfilled: pending ok
+pending-rejected: pending caught bad

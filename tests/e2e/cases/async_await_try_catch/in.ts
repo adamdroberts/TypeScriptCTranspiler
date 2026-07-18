@@ -1,3 +1,11 @@
+import { setTimeout as delay } from "node:timers/promises";
+
+function delayedReject(reason: string): Promise<string> {
+    return delay(4, reason).then((value: string): string => {
+        throw value;
+    });
+}
+
 async function recover(): Promise<string> {
     try {
         await Promise.reject("bad");
@@ -29,6 +37,24 @@ async function finallyAfterCatch(): Promise<string> {
     return seen;
 }
 
+async function pendingTryFulfilled(): Promise<string> {
+    try {
+        const value = await delay(2, "ok");
+        return "pending " + value;
+    } catch (e) {
+        return "pending caught " + e;
+    }
+}
+
+async function pendingTryRejected(): Promise<string> {
+    try {
+        const value = await delayedReject("bad");
+        return "never " + value;
+    } catch (e) {
+        return "pending caught " + e;
+    }
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -42,4 +68,12 @@ rethrow().catch((reason: string): string => {
 
 finallyAfterCatch().then((value: string): void => {
     console.log("finally:", value);
+});
+
+pendingTryFulfilled().then((value: string): void => {
+    console.log("pending-fulfilled:", value);
+});
+
+pendingTryRejected().then((value: string): void => {
+    console.log("pending-rejected:", value);
 });
