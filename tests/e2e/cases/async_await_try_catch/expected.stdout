@@ -3,6 +3,8 @@ rethrow: again!
 finally: catch inside finally
 after: done
 pending-fulfilled: pending ok
+pending-fallthrough-fulfilled: fallthrough done
 pending-rejected: pending caught bad
+pending-fallthrough-rejected: fallthrough caught fall bad
 pending-finally-rejected: final bad R
 pending-finally-fulfilled: pending finally ok RF

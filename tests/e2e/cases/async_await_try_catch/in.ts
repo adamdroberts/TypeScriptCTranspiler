@@ -57,6 +57,24 @@ async function pendingTryRejected(): Promise<string> {
     }
 }
 
+async function pendingTryCatchFallthroughFulfilled(): Promise<string> {
+    try {
+        const value = await delay(3, "ok");
+    } catch (e) {
+        return "fallthrough caught " + e;
+    }
+    return "fallthrough done";
+}
+
+async function pendingTryCatchFallthroughRejected(): Promise<string> {
+    try {
+        const value = await delayedReject("fall bad");
+    } catch (e) {
+        return "fallthrough caught " + e;
+    }
+    return "fallthrough never";
+}
+
 async function pendingTryFinallyFulfilled(): Promise<string> {
     try {
         const value = await delay(6, "ok");
@@ -96,6 +114,14 @@ pendingTryFulfilled().then((value: string): void => {
 
 pendingTryRejected().then((value: string): void => {
     console.log("pending-rejected:", value);
+});
+
+pendingTryCatchFallthroughFulfilled().then((value: string): void => {
+    console.log("pending-fallthrough-fulfilled:", value);
+});
+
+pendingTryCatchFallthroughRejected().then((value: string): void => {
+    console.log("pending-fallthrough-rejected:", value);
 });
 
 pendingTryFinallyFulfilled().then((value: string): void => {
