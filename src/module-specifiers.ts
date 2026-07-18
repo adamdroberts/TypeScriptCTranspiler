@@ -438,9 +438,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+        if (!ts.isIdentifier(target)) return [];
+        const isObjectCall = target.text === "Object";
+        const isReflectCall = target.text === "Reflect";
         const method = callee.name.text;
-        if (method !== "keys" && method !== "values" && method !== "getOwnPropertyNames") return [];
+        const returnsKeys =
+            (isObjectCall && (method === "keys" || method === "getOwnPropertyNames")) ||
+            (isReflectCall && method === "ownKeys");
+        const returnsValues = isObjectCall && method === "values";
+        if (!returnsKeys && !returnsValues) return [];
 
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object || !ts.isObjectLiteralExpression(object)) return [];
@@ -450,7 +456,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (ts.isSpreadAssignment(prop)) return [];
             const propName = prop.name ? staticPropertyName(prop.name) : null;
             if (propName === null) return [];
-            if (method === "keys" || method === "getOwnPropertyNames") {
+            if (returnsKeys) {
                 slots.push([propName]);
                 continue;
             }

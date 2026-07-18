@@ -1,0 +1,2 @@
+reflect ownKeys require: reflect-a reflect-b
+reflect ownKeys direct: reflect-c reflect-d
