@@ -6,6 +6,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ---
 
+- Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations reject with `finally` throws when `finally` overrides fulfilled try returns or rejected catch returns. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered for nested async closures with captured locals. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered across async declarations, lifted async function values, and class async methods that read `this`. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` continuations support the combined catch-plus-finally form for fulfilled and rejected awaited sources. Test: `async_await_try_catch_finally`

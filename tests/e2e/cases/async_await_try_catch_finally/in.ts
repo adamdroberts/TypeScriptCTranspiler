@@ -62,6 +62,30 @@ class CombinedTryWorker {
     }
 }
 
+async function combinedTryCatchFinallyThrowFulfilled(): Promise<string> {
+    try {
+        const value = await delay(9, "throw-ok");
+        return "never " + value;
+    } catch (e) {
+        return "catch-never:" + e;
+    } finally {
+        trace += "X";
+        throw "combined-finally-throw-fulfilled:" + trace;
+    }
+}
+
+async function combinedTryCatchFinallyThrowRejected(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(10, "throw-bad");
+        return "never " + value;
+    } catch (e) {
+        return "catch-before-finally:" + e;
+    } finally {
+        trace += "x";
+        throw "combined-finally-throw-rejected:" + trace;
+    }
+}
+
 const nestedCombinedTryCatchFinally = makeNestedCombinedTryCatchFinally("closure-");
 const worker = new CombinedTryWorker("class-");
 
@@ -95,4 +119,12 @@ worker.combinedTryCatchFinally(true).then((value: string): void => {
 
 worker.combinedTryCatchFinally(false).then((value: string): void => {
     console.log("method-combined-try-catch-finally-rejected:", value, trace);
+});
+
+combinedTryCatchFinallyThrowFulfilled().catch((reason: string): void => {
+    console.log("combined-try-catch-finally-throw-fulfilled:", reason, trace);
+});
+
+combinedTryCatchFinallyThrowRejected().catch((reason: string): void => {
+    console.log("combined-try-catch-finally-throw-rejected:", reason, trace);
 });
