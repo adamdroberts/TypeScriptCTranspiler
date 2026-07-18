@@ -115,6 +115,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return resolveStringRawTemplate(node.template);
         }
         if (ts.isCallExpression(node)) {
+            const stringStaticText = resolveStaticStringConstructorCall(node);
+            if (stringStaticText.length > 0) return stringStaticText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
@@ -308,6 +310,42 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return parts.length === 1 ? path.normalize(parts[0]!) : "";
             }
         }).filter((value) => value !== ""));
+    };
+
+    const resolveStaticStringConstructorCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "String") return [];
+        const method = callee.name.text;
+        if (method !== "fromCharCode" && method !== "fromCodePoint") return [];
+
+        let out = [""];
+        for (const argument of call.arguments) {
+            const codes = resolveStaticIntegerKeys(argument);
+            if (codes.length === 0) return [];
+            const next: string[] = [];
+            for (const prefix of out) {
+                for (const code of codes) {
+                    if (method === "fromCodePoint" && (code < 0 || code > 0x10ffff)) return [];
+                    let char: string;
+                    try {
+                        char = method === "fromCharCode"
+                            ? String.fromCharCode(code)
+                            : String.fromCodePoint(code);
+                    } catch {
+                        return [];
+                    }
+                    next.push(prefix + char);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            out = dedupe(next);
+            if (out.length === 0) return [];
+        }
+        if (out.some((value) => value.length > 4096)) return [];
+        return dedupe(out);
     };
 
     const flattenArrayLiteral = (array: ts.ArrayLiteralExpression): ts.ArrayLiteralExpression | null => {
