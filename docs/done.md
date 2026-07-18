@@ -2686,6 +2686,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_set` | Array.from over typed Set sources with and without mapper callbacks |
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `async_await_closure_return_expr` | returned async closures resume pending expression-return continuations |
+| `async_await_try_catch` | async try/catch and try/finally pending continuations support catch/finally return, fallthrough return, and expressionless return subsets |
 | `async_await_try_catch_throw` | async try/catch pending continuations support synchronous catch rethrows |
 | `async_await_try_return_await` | async try/catch and try/finally support direct return-await continuations |
 | `async_await_try_catch_values` | async function values resume pending try/catch and try/finally continuations |
