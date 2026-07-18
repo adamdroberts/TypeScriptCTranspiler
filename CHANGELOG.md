@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async functions now directly adopt `let value = await pendingPromise; return value` aliases like the existing `const` awaited-alias path, covering declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Async functions now evaluate initialized `let` assignment aliases before directly adopting a later `local = await pendingPromise; return local` assignment, covering declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Async functions now directly adopt `let` assignment return aliases when an uninitialized local is assigned `await pendingPromise` and immediately returned, covering declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures initialized `let` assignment return aliases when the assignment RHS reads the initialized local across one embedded pending `await`, for async declarations, methods, and function values. Test: `async_await_pending_return_expr`.

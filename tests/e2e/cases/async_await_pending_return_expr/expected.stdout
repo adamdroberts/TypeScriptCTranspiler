@@ -24,12 +24,14 @@ arrow-prelude-branch-conditional-inline-await-return-sync: value-arrow-prelude-b
 arrow-prelude-nested-conditional-inline-await-return-sync: value-arrow-prelude-nested-conditional-sync!
 suffix: ready!
 double: 42
+let-await-alias: fn-let-alias
 tagged: fn-tag
 direct-assignment-await-return: fn-direct-assignment
 staged: fn-stage!
 initialized-direct-assignment-await-return: fn-initialized-direct-assignment
 method: method!
 initializer-expression-await-return: fn-initializer!
+method-let-await-alias: this-method-let-alias!
 assignment-expression-await-return: fn-assignment!
 initialized-assignment-expression-await-return: fn-init-assignment!
 method-param: class-method-param
@@ -37,6 +39,7 @@ method-this: this-this-param
 method-direct-assignment-await-return: this-method-direct-assignment!
 arrow: arrow!
 method-staged-this: this-method-stage!
+arrow-let-await-alias: value-arrow-let-alias
 arrow-direct-assignment-await-return: value-arrow-direct-assignment
 method-initializer-expression-await-return: this-method-initializer!
 arrow-param: value-arrow-param
