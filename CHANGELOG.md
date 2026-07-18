@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Source `try`/`catch`/`finally` direct `return await` coverage now proves source, try, catch, and finally prelude routing across async declarations, lifted async function values, nested async closures, and class async methods that read `this`. Test: `async_await_try_return_await`.
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally coverage now proves catch-prelude and finally-prelude locals route together across lifted async function values, nested async closures, and class async methods that read `this`. Test: `async_await_try_catch_finally`.
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally coverage now proves `finally` throws override both fulfilled try returns and rejected catch returns. Test: `async_await_try_catch_finally`.
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally coverage now includes nested async closures with captured locals. Test: `async_await_try_catch_finally`.

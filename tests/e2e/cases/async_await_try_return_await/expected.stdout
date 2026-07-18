@@ -13,3 +13,7 @@ parenthesized-try-finally-return-await-rejected: tf-paren-bad FRfrPp
 try-catch-return-await-source-prelude: source-prelude-ok
 arrow-try-finally-return-await-try-prelude: try-prelude-ok FRfrPpA
 method-try-catch-return-await-source-prelude: class-method-source-prelude-ok
+try-catch-finally-return-await-source-prelude: combined-source-caught:combined-decl-bad:done FRfrPpAC
+arrow-try-catch-finally-return-await-try-prelude: arrow-combined-try-ok FRfrPpACB
+closure-try-catch-finally-return-await-source-prelude: closure-combined-source-caught:closure-combined-bad:done FRfrPpACBc
+method-try-catch-finally-return-await-source-prelude: class-method-combined-source-ok FRfrPpACBcD
