@@ -178,6 +178,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (ownPredicateText.length > 0) return ownPredicateText;
             const ownPrototypePredicateText = resolveStaticObjectOwnPrototypePredicateCall(node);
             if (ownPrototypePredicateText.length > 0) return ownPrototypePredicateText;
+            const bufferOwnPrototypePredicateText = resolveStaticBufferOwnPrototypePredicateCall(node);
+            if (bufferOwnPrototypePredicateText.length > 0) return bufferOwnPrototypePredicateText;
             const objectPrototypeToStringText = resolveStaticObjectPrototypeToStringCall(node);
             if (objectPrototypeToStringText.length > 0) return objectPrototypeToStringText;
             const reflectGetText = resolveStaticReflectGetCall(node);
@@ -1936,6 +1938,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object") return [];
 
+        const bufferOwn = resolveStaticBufferOwnPredicate(call.arguments[0]!, call.arguments[1]!);
+        if (bufferOwn.length > 0) return bufferOwn;
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object) return [];
         const keys = resolveKeyTexts(call.arguments[1]!);
@@ -1976,6 +1981,29 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return index >= 0 && index < object.text.length;
         }
         return null;
+    };
+
+    const staticBufferHasOwnKey = (buffer: Buffer, key: string): boolean => {
+        if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
+        const index = Number(key);
+        return index >= 0 && index < buffer.length;
+    };
+
+    const resolveStaticBufferOwnPredicate = (objectExpr: ts.Expression, keyExpr: ts.Expression): string[] => {
+        const buffers = resolveStaticBufferExpression(objectExpr);
+        if (buffers.length === 0) return [];
+        const keys = resolveKeyTexts(keyExpr);
+        if (keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const key of keys) {
+                const own = staticBufferHasOwnKey(buffer, key);
+                out.push(String(own));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticReflectGetCall = (call: ts.CallExpression): string[] => {
@@ -2229,6 +2257,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
         const method = methodAccess.name.text;
         if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable") return [];
+        const bufferOwn = resolveStaticBufferOwnPredicate(call.arguments[0]!, call.arguments[1]!);
+        if (bufferOwn.length > 0) return bufferOwn;
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object) return [];
         const keys = resolveKeyTexts(call.arguments[1]!);
@@ -2248,6 +2279,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticBufferOwnPrototypePredicateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "hasOwnProperty" && method !== "propertyIsEnumerable") return [];
+        return resolveStaticBufferOwnPredicate(callee.expression, call.arguments[0]!);
     };
 
     const resolveStaticObjectPrototypeToStringCall = (call: ts.CallExpression): string[] => {
