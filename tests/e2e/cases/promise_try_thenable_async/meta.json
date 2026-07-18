@@ -1,0 +1,4 @@
+{
+  "description": "Promise.try assimilates dynamic thenables that settle from later microtasks",
+  "features": ["promise", "promise-try", "thenable", "queueMicrotask"]
+}
