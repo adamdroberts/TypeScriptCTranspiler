@@ -225,6 +225,51 @@ async function pendingTryCatchExpressionlessFallthroughRejected(): Promise<void>
     return;
 }
 
+async function pendingTryFinallyExpressionlessFulfilled(): Promise<void> {
+    try {
+        const value = await delay(10, "ok");
+        return;
+    } finally {
+        finallyTrace += "E";
+    }
+}
+
+async function pendingTryFinallyExpressionlessRejected(): Promise<void> {
+    try {
+        const value = await delayedRejectAfter(10, "void final bad");
+        return;
+    } finally {
+        finallyTrace += "e";
+    }
+}
+
+async function pendingBareTryFinallyExpressionlessFulfilled(): Promise<void> {
+    try {
+        await delay(10, "ok");
+        return;
+    } finally {
+        finallyTrace += "H";
+    }
+}
+
+async function pendingTryFinallyExpressionlessFallthroughFulfilled(): Promise<void> {
+    try {
+        await delay(10, "ok");
+    } finally {
+        finallyTrace += "I";
+    }
+    return;
+}
+
+async function pendingTryFinallyExpressionlessFallthroughRejected(): Promise<void> {
+    try {
+        await delayedRejectAfter(10, "void final fall bad");
+    } finally {
+        finallyTrace += "i";
+    }
+    return;
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -318,4 +363,24 @@ pendingTryCatchExpressionlessFallthroughFulfilled().then((_value: any): void => 
 
 pendingTryCatchExpressionlessFallthroughRejected().then((_value: any): void => {
     console.log("pending-expressionless-fallthrough-rejected:", "done");
+});
+
+pendingTryFinallyExpressionlessFulfilled().then((_value: any): void => {
+    console.log("pending-finally-expressionless-fulfilled:", finallyTrace);
+});
+
+pendingTryFinallyExpressionlessRejected().catch((reason: string): void => {
+    console.log("pending-finally-expressionless-rejected:", reason, finallyTrace);
+});
+
+pendingBareTryFinallyExpressionlessFulfilled().then((_value: any): void => {
+    console.log("pending-bare-finally-expressionless-fulfilled:", finallyTrace);
+});
+
+pendingTryFinallyExpressionlessFallthroughFulfilled().then((_value: any): void => {
+    console.log("pending-finally-expressionless-fallthrough-fulfilled:", finallyTrace);
+});
+
+pendingTryFinallyExpressionlessFallthroughRejected().catch((reason: string): void => {
+    console.log("pending-finally-expressionless-fallthrough-rejected:", reason, finallyTrace);
 });

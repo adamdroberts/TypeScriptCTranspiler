@@ -22,3 +22,8 @@ pending-expressionless-fulfilled: done
 pending-expressionless-rejected: done
 pending-expressionless-fallthrough-fulfilled: done
 pending-expressionless-fallthrough-rejected: done
+pending-finally-expressionless-fulfilled: RrbgFfBGE
+pending-finally-expressionless-rejected: void final bad RrbgFfBGEe
+pending-bare-finally-expressionless-fulfilled: RrbgFfBGEeH
+pending-finally-expressionless-fallthrough-fulfilled: RrbgFfBGEeHI
+pending-finally-expressionless-fallthrough-rejected: void final fall bad RrbgFfBGEeHIi
