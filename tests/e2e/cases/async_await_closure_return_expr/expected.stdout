@@ -1,0 +1,9 @@
+closure-conditional-sync: closure-conditional-sync!
+closure-logical-sync: logical-sync
+closure-inline: closure-inline!
+closure-branch-true: closure-branch-true!
+closure-branch-false: closure-branch-false!
+closure-conditional-await: closure-conditional-true!
+closure-logical-await: logical-await
+closure-prelude: closure-prelude-await!
+closure-two-await: one:closure-one-two!

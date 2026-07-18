@@ -1,0 +1,3 @@
+{
+  "description": "returned async closures resume pending expression-return continuations"
+}
