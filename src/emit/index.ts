@@ -25065,7 +25065,9 @@ class Emitter {
         }
         if (!awaited) return null;
         if (!ts.isReturnStatement(catchStmt) && !ts.isThrowStatement(catchStmt)) return null;
-        const catchReturnExpr = ts.isReturnStatement(catchStmt) ? catchStmt.expression ?? null : null;
+        const catchReturnExpr = ts.isReturnStatement(catchStmt) && catchStmt.expression
+            ? this.unwrapTransparentExpression(catchStmt.expression)
+            : null;
         const catchThrowExpr = ts.isThrowStatement(catchStmt) ? catchStmt.expression : null;
         let successReturnExpr: ts.Expression | null = null;
         if (successReturnsAwaited) {
@@ -25074,12 +25076,12 @@ class Emitter {
             if (tryStmt.tryBlock.statements.length !== 2) return null;
             const tryReturn = tryStmt.tryBlock.statements[1]!;
             if (!ts.isReturnStatement(tryReturn)) return null;
-            successReturnExpr = tryReturn.expression ?? null;
+            successReturnExpr = tryReturn.expression ? this.unwrapTransparentExpression(tryReturn.expression) : null;
         } else {
             if (tryStmt.tryBlock.statements.length !== 1) return null;
             const finalReturn = body.statements[1]!;
             if (!ts.isReturnStatement(finalReturn)) return null;
-            successReturnExpr = finalReturn.expression ?? null;
+            successReturnExpr = finalReturn.expression ? this.unwrapTransparentExpression(finalReturn.expression) : null;
         }
 
         const catchDecl = tryStmt.catchClause.variableDeclaration;
@@ -25426,12 +25428,12 @@ class Emitter {
             if (tryStmt.tryBlock.statements.length !== 2) return null;
             const tryReturn = tryStmt.tryBlock.statements[1]!;
             if (!ts.isReturnStatement(tryReturn)) return null;
-            successReturnExpr = tryReturn.expression ?? null;
+            successReturnExpr = tryReturn.expression ? this.unwrapTransparentExpression(tryReturn.expression) : null;
         } else {
             if (tryStmt.tryBlock.statements.length !== 1) return null;
             const finalReturn = body.statements[1]!;
             if (!ts.isReturnStatement(finalReturn)) return null;
-            successReturnExpr = finalReturn.expression ?? null;
+            successReturnExpr = finalReturn.expression ? this.unwrapTransparentExpression(finalReturn.expression) : null;
         }
 
         const params = this.asyncAwaitContinuationParameters(parameters);

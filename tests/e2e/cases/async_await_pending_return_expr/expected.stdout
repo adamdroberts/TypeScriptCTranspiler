@@ -215,6 +215,9 @@ prelude-regexp-inline-await-return: /^fn-inline-value$/:fn-inline-value
 prelude-event-target-awaited-local-return: true:fn-ready:true:fn-target
 prelude-url-params-awaited-local-return: /root/path:fn-url-local:fn-params-local:value
 prelude-buffer-inline-await-return: fn-buffer-inline-value:17
+source-try-catch-parenthesized-return: fn-source-try-catch-success
+source-try-finally-finally: fn-source-finally
+source-try-finally-asserted-return: fn-source-try-finally
 five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
 method-five-await: method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four-five!
 arrow-five-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four-five!
