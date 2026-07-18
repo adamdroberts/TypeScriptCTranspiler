@@ -153,6 +153,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (mathText.length > 0) return mathText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
+            const urlSearchParamsText = resolveStaticUrlSearchParamsCall(node);
+            if (urlSearchParamsText.length > 0) return urlSearchParamsText;
             const jsonStringifyText = resolveStaticJsonStringifyCall(node);
             if (jsonStringifyText.length > 0) return jsonStringifyText;
             const atText = resolveStaticArrayAtCall(node);
@@ -1766,6 +1768,28 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 if (joined.length === 0) return [];
             }
             out.push(...joined);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticUrlSearchParamsCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toString") return [];
+        const source = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(source)) return [];
+        const ctor = unwrapStaticExpression(source.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return [];
+        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
+        const arg = source.arguments?.[0];
+        const values = !arg || isStaticUndefinedExpression(arg)
+            ? [""]
+            : resolve(arg);
+        if (values.length === 0) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            out.push(new URLSearchParams(value).toString());
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
