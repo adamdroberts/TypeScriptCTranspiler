@@ -180,6 +180,7 @@ interface AsyncAwaitLeadingStep {
 }
 
 interface AsyncAwaitLeadingReturnContinuation {
+    preludeStatements: readonly ts.Statement[];
     steps: AsyncAwaitLeadingStep[];
     returnExpr: ts.Expression | null;
     params: AsyncAwaitContinuationParam[];
@@ -25295,8 +25296,28 @@ class Emitter {
         if (body.statements.length < 6) return null;
         const result = body.statements[body.statements.length - 1]!;
         if (!ts.isReturnStatement(result)) return null;
+        const preludeStatements: ts.Statement[] = [];
+        let firstAwaitIndex = 0;
+        let ok = true;
+        const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visitNoAwaitOrNestedScope);
+        };
+        while (firstAwaitIndex < body.statements.length - 1) {
+            const stmt = body.statements[firstAwaitIndex]!;
+            if (!ts.isExpressionStatement(stmt)) break;
+            visitNoAwaitOrNestedScope(stmt.expression);
+            if (!ok) return null;
+            preludeStatements.push(stmt);
+            firstAwaitIndex++;
+        }
+        if (body.statements.length - firstAwaitIndex < 6) return null;
         const steps: AsyncAwaitLeadingStep[] = [];
-        for (const stmt of body.statements.slice(0, -1)) {
+        for (const stmt of body.statements.slice(firstAwaitIndex, -1)) {
             const step = this.awaitedLocalDeclaration(stmt);
             if (!step) return null;
             steps.push(step);
@@ -25310,6 +25331,7 @@ class Emitter {
         );
         if (!referenced) return null;
         return {
+            preludeStatements,
             steps,
             returnExpr: result.expression ?? null,
             params: referenced.params,
@@ -26159,6 +26181,9 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitLeadingReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
+        for (const stmt of continuation.preludeStatements) {
+            this.emitStmt(buf, stmt);
+        }
         const firstStep = continuation.steps[0]!;
         const firstSource = this.emitExpr(firstStep.awaitExpr.expression);
         const promiseTypes: CType[] = [this.prepareType(firstSource.ty)];

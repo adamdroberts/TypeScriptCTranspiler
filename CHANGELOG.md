@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now accepts await-free expression-statement preludes before arbitrary-length leading awaited-local chains followed by a final return. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now accepts await-free expression-statement preludes before the bounded single awaited-local plus final return continuation. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation coverage now proves await-free expression-statement preludes before direct `return await` adoption for async functions, methods, and function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now accepts bounded await-free expression-statement preludes before final pending-await return continuations, while still capturing later leading locals across suspension. Test: `async_await_pending_return_expr`.

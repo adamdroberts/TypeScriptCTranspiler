@@ -52,6 +52,17 @@ async function fiveAwait(prefix: string): Promise<string> {
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
 }
 
+async function preludeExpressionStatementFiveAwait(prefix: string): Promise<string> {
+    prefix = prefix + "expr-";
+    prefix = prefix + "five-";
+    const first = await delay(240, "one");
+    const second = await delay(241, prefix + first + "-two");
+    const third = await delay(242, first + ":" + second + "-three");
+    const fourth = await delay(243, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(244, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+}
+
 async function inlineAwaitReturn(prefix: string): Promise<string> {
     return prefix + await delay(87, "inline") + "!";
 }
@@ -439,6 +450,17 @@ class Worker {
         return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
     }
 
+    async preludeExpressionStatementFiveAwaitMethod(prefix: string): Promise<string> {
+        prefix = prefix + "expr-";
+        prefix = prefix + "five-";
+        const first = await delay(250, "method-one");
+        const second = await delay(251, prefix + this.prefix + first);
+        const third = await delay(252, first + ":" + second + "-three");
+        const fourth = await delay(253, first + ":" + second + ":" + third + "-four");
+        const fifth = await delay(254, first + ":" + second + ":" + third + ":" + fourth + "-five");
+        return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+    }
+
     async inlineAwaitReturnMethod(prefix: string): Promise<string> {
         return this.prefix + prefix + await delay(88, "method-inline") + "!";
     }
@@ -626,6 +648,17 @@ const arrowFiveAwait = async (prefix: string): Promise<string> => {
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
 };
 
+const arrowPreludeExpressionStatementFiveAwait = async (prefix: string): Promise<string> => {
+    prefix = prefix + "expr-";
+    prefix = prefix + "five-";
+    const first = await delay(260, "arrow-one");
+    const second = await delay(261, prefix + first);
+    const third = await delay(262, first + ":" + second + "-three");
+    const fourth = await delay(263, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(264, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+};
+
 const arrowInlineAwaitReturn = async (prefix: string): Promise<string> => {
     return prefix + await delay(89, "arrow-inline") + "!";
 };
@@ -799,6 +832,10 @@ fourAwait("fn-").then((value: string): void => {
 
 fiveAwait("fn-").then((value: string): void => {
     console.log("five-await:", value);
+});
+
+preludeExpressionStatementFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-expression-statement-five-await:", value);
 });
 
 inlineAwaitReturn("fn-").then((value: string): void => {
@@ -1067,6 +1104,10 @@ new Worker("method-five-").fiveAwaitMethod("class-").then((value: string): void 
     console.log("method-five-await:", value);
 });
 
+new Worker("method-prelude-five-").preludeExpressionStatementFiveAwaitMethod("class-").then((value: string): void => {
+    console.log("method-prelude-expression-statement-five-await:", value);
+});
+
 new Worker("method-inline-").inlineAwaitReturnMethod("class-").then((value: string): void => {
     console.log("method-inline-await-return:", value);
 });
@@ -1237,6 +1278,10 @@ arrowFourAwait("value-").then((value: string): void => {
 
 arrowFiveAwait("value-").then((value: string): void => {
     console.log("arrow-five-await:", value);
+});
+
+arrowPreludeExpressionStatementFiveAwait("value-").then((value: string): void => {
+    console.log("arrow-prelude-expression-statement-five-await:", value);
 });
 
 arrowInlineAwaitReturn("value-").then((value: string): void => {
