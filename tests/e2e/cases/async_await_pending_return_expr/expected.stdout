@@ -218,6 +218,12 @@ prelude-buffer-inline-await-return: fn-buffer-inline-value:17
 source-try-catch-parenthesized-return: fn-source-try-catch-success
 source-try-finally-finally: fn-source-finally
 source-try-finally-asserted-return: fn-source-try-finally
+declaration-loop-control-after-await: fn-decl-loop0decl-loop2
+declaration-switch-break-after-await: fn-switch-beta
+declaration-try-catch-after-await: fn-try-caught-decl-try!-finally
+arrow-loop-control-after-await: value-arrow-loop0arrow-loop2
+arrow-switch-break-after-await: value-switch-other-z
+arrow-try-catch-after-await: value-try-caught-arrow-try!-finally
 five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
 method-five-await: method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four-five!
 arrow-five-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four-five!
