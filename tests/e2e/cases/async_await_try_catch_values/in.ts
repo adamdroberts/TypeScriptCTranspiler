@@ -1,0 +1,84 @@
+import { setTimeout as delay } from "node:timers/promises";
+
+function delayedReject(reason: string): Promise<string> {
+    return delay(4, reason).then((value: string): string => {
+        throw value;
+    });
+}
+
+let trace = "";
+
+const liftedTryCatch = async (flag: boolean): Promise<string> => {
+    try {
+        const value = await (flag ? delay(1, "lifted-ok") : delayedReject("lifted-bad"));
+        return "lifted:" + value;
+    } catch (e) {
+        return "lifted-caught:" + e;
+    }
+};
+
+const liftedTryFinally = async (flag: boolean): Promise<string> => {
+    try {
+        const value = await (flag ? delay(2, "lifted-final-ok") : delayedReject("lifted-final-bad"));
+        return "lifted-final:" + value;
+    } finally {
+        trace += flag ? "F" : "R";
+    }
+};
+
+function makeNestedTryCatch(): (flag: boolean) => Promise<string> {
+    return async function (flag: boolean): Promise<string> {
+        try {
+            const value = await (flag ? delay(3, "nested-ok") : delayedReject("nested-bad"));
+            return "nested:" + value;
+        } catch (e) {
+            return "nested-caught:" + e;
+        }
+    };
+}
+
+function makeNestedTryFinally(): (flag: boolean) => Promise<string> {
+    return async (flag: boolean): Promise<string> => {
+        try {
+            const value = await (flag ? delay(5, "nested-final-ok") : delayedReject("nested-final-bad"));
+            return "nested-final:" + value;
+        } finally {
+            trace += flag ? "f" : "r";
+        }
+    };
+}
+
+const nestedTryCatch = makeNestedTryCatch();
+const nestedTryFinally = makeNestedTryFinally();
+
+liftedTryCatch(true).then((value: string): void => {
+    console.log("lifted-try-catch-fulfilled:", value);
+});
+
+liftedTryCatch(false).then((value: string): void => {
+    console.log("lifted-try-catch-rejected:", value);
+});
+
+liftedTryFinally(true).then((value: string): void => {
+    console.log("lifted-try-finally-fulfilled:", value, trace);
+});
+
+liftedTryFinally(false).catch((reason: string): void => {
+    console.log("lifted-try-finally-rejected:", reason, trace);
+});
+
+nestedTryCatch(true).then((value: string): void => {
+    console.log("nested-try-catch-fulfilled:", value);
+});
+
+nestedTryCatch(false).then((value: string): void => {
+    console.log("nested-try-catch-rejected:", value);
+});
+
+nestedTryFinally(true).then((value: string): void => {
+    console.log("nested-try-finally-fulfilled:", value, trace);
+});
+
+nestedTryFinally(false).catch((reason: string): void => {
+    console.log("nested-try-finally-rejected:", reason, trace);
+});

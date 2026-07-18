@@ -1,0 +1,8 @@
+lifted-try-catch-fulfilled: lifted:lifted-ok
+lifted-try-finally-fulfilled: lifted-final:lifted-final-ok F
+nested-try-catch-fulfilled: nested:nested-ok
+lifted-try-catch-rejected: lifted-caught:lifted-bad
+lifted-try-finally-rejected: lifted-final-bad FR
+nested-try-catch-rejected: nested-caught:nested-bad
+nested-try-finally-rejected: nested-final-bad FRr
+nested-try-finally-fulfilled: nested-final:nested-final-ok FRrf
