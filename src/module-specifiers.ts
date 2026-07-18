@@ -2712,6 +2712,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
+            if (objectFromEntries) return resolveCollectionExpression(objectFromEntries);
             const urlSearchParamsValues = resolveStaticUrlSearchParamsGetAllCollectionExpression(cur);
             if (urlSearchParamsValues) return resolveCollectionExpression(urlSearchParamsValues);
             const bufferJson = resolveStaticBufferToJsonCollectionExpression(cur);
@@ -2768,6 +2770,31 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticObjectFromEntriesCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "fromEntries") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+
+        const entries = resolveCollectionExpression(call.arguments[0]!);
+        if (!entries || !ts.isArrayLiteralExpression(entries)) return null;
+        const properties: ts.PropertyAssignment[] = [];
+        for (const element of entries.elements) {
+            if (ts.isSpreadElement(element)) return null;
+            const entry = resolveCollectionExpression(element);
+            if (!entry || !ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
+            const keyExpr = entry.elements[0];
+            const valueExpr = entry.elements[1];
+            if (!keyExpr || !valueExpr || ts.isSpreadElement(keyExpr) || ts.isSpreadElement(valueExpr)) return null;
+            const keys = resolveKeyTexts(keyExpr);
+            if (keys.length !== 1) return null;
+            properties.push(ts.factory.createPropertyAssignment(ts.factory.createStringLiteral(keys[0]!), valueExpr));
+            if (properties.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createObjectLiteralExpression(properties);
     };
 
     const resolveStaticBufferToJsonCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
