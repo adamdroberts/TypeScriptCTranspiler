@@ -1,0 +1,4 @@
+all map: all-a:A,all-b:B
+race map: race-a:A
+any map: any-a:A
+settled map: fulfilled:settled-a:A,fulfilled:settled-b:B
