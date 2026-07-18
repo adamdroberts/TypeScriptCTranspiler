@@ -1,0 +1,4 @@
+{
+  "description": "Promise.finally waits for delayed dynamic thenables and preserves or overrides settlement",
+  "features": ["promise", "promise-finally", "thenable", "queueMicrotask"]
+}

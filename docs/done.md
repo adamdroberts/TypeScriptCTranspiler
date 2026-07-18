@@ -2,10 +2,11 @@
 
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
-Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
+Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`. Normal change rounds should prefer focused `--filter` slices.
 
 ---
 
+- `Promise.finally` waits for finalizer callback results resolved through dynamic thenable assimilation, including delayed microtask settlement that preserves the original fulfilled/rejected state and finalizer rejection that overrides it. Test: `promise_finally_thenable_async`
 - Dynamic promise combinators assimilate thenables that settle from later microtasks after the `then` call returns for `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinators`
 - Dynamic thenable assimilation supports thenables that settle from a later microtask after the `then` call returns, including `Promise.resolve`, returned `.then(...)` callback values, and dynamic `Promise.all` inputs. Test: `promise_thenable_async_settle`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations preserve initialized and later-assigned pre-`try` body preludes plus in-`try` local preludes across async declarations, lifted async function values, and class async methods that read `this`. Tests: `async_await_try_source_prelude`, `async_await_try_block_prelude`

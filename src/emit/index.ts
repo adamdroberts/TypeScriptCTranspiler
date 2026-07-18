@@ -43192,6 +43192,8 @@ class Emitter {
         this.promiseFinallyAdapters.set(key, name);
 
         const envType = `${name}_env_t`;
+        const settleEnvType = `${name}_settle_env_t`;
+        const settleName = `${name}_settle`;
         const preparedCb = cbType ? this.prepareType(cbType) : null;
 
         // Struct
@@ -43203,9 +43205,35 @@ class Emitter {
         }
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
+        this.structDecls.open(`typedef struct ${settleEnvType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* finalizer;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        this.structDecls.close(` ${settleEnvType};`);
+        this.structDecls.line();
 
         // Proto
+        this.protos.line(`void ${settleName}(void* env);`);
         this.protos.line(`void ${name}(void* env);`);
+
+        const settleBuf = new CBuf();
+        settleBuf.open(`void ${settleName}(void* env)`);
+        settleBuf.line(`${settleEnvType}* state = (${settleEnvType}*)env;`);
+        settleBuf.line("tsc_promise_t* _p = state->receiver;");
+        settleBuf.line("tsc_promise_t* _fin = state->finalizer;");
+        settleBuf.line("tsc_promise_t* _ret = state->result_promise;");
+        settleBuf.open("if (tsc_promise_is_rejected(_fin))");
+        settleBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_reject(tsc_promise_reason(_fin)));");
+        settleBuf.close();
+        settleBuf.open("else if (tsc_promise_is_rejected(_p))");
+        settleBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_reject(tsc_promise_reason(_p)));");
+        settleBuf.close();
+        settleBuf.open("else");
+        settleBuf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(recvType.elem, "_p")});`);
+        settleBuf.close();
+        settleBuf.close();
+        settleBuf.line();
+        this.closureDefs.write(settleBuf.toString());
 
         // Function
         const buf = new CBuf();
@@ -43216,6 +43244,21 @@ class Emitter {
 
         const resPromise = this.freshTemp("_res_p");
         buf.line(`tsc_promise_t* ${resPromise};`);
+        const adoptFinallyResult = (promiseExpr: string): void => {
+            const settleEnv = this.freshTemp("_finally_settle_env");
+            const finalPromise = this.freshTemp("_finally_result");
+            buf.line(`tsc_promise_t* const ${finalPromise} = ${promiseExpr};`);
+            buf.line(`${settleEnvType}* const ${settleEnv} = (${settleEnvType}*)TSC_GC_MALLOC(sizeof(${settleEnvType}));`);
+            buf.line(`${settleEnv}->receiver = _p;`);
+            buf.line(`${settleEnv}->finalizer = ${finalPromise};`);
+            buf.line(`${settleEnv}->result_promise = _ret;`);
+            buf.open(`if (tsc_promise_is_pending(${finalPromise}))`);
+            buf.line(`tsc_promise_add_callback(${finalPromise}, ${settleName}, ${settleEnv});`);
+            buf.close();
+            buf.open("else");
+            buf.line(`tsc_queue_microtask(${settleName}, ${settleEnv});`);
+            buf.close();
+        };
 
         if (preparedCb && cbType) {
             const callStmt = this.promiseCallbackCall(call, cbType, "state->cb", [], node);
@@ -43224,23 +43267,16 @@ class Emitter {
             buf.line(`tsc_try_frame_t ${eh};`);
             buf.line(`tsc_try_push(&${eh});`);
             buf.open(`if (setjmp(${eh}.jb) == 0)`);
-            if (cbRet?.kind === "promise") {
-                const finalPromise = this.freshTemp("_promise_finally_return");
-                buf.line(`tsc_promise_t* const ${finalPromise} = ${callStmt};`);
-                buf.line("tsc_try_pop();");
-                buf.open(`if (tsc_promise_is_rejected(${finalPromise}))`);
-                buf.line(`${resPromise} = tsc_promise_reject(tsc_promise_reason(${finalPromise}));`);
-                buf.close();
-                buf.open(`else if (tsc_promise_is_pending(${finalPromise}))`);
-                buf.line(`${resPromise} = tsc_promise_pending();`);
-                buf.close();
-                buf.open("else");
-                buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
-                buf.close();
-            } else {
+            if (cbRet?.kind === "void" || cbRet?.kind === "never" || !cbRet) {
                 buf.line(`${callStmt};`);
                 buf.line("tsc_try_pop();");
                 buf.line(`${resPromise} = tsc_promise_is_rejected(_p) ? tsc_promise_reject(tsc_promise_reason(_p)) : ${this.promiseResolveStoredValue(recvType.elem, "_p")};`);
+            } else {
+                const valueTmp = this.freshTemp("_promise_finally_value");
+                buf.line(`${cbRet.c} ${valueTmp} = ${callStmt};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resPromise} = tsc_promise_pending();`);
+                adoptFinallyResult(this.promiseResolveResult({ c: valueTmp, ty: cbRet }, node));
             }
             buf.close();
             buf.open("else");
