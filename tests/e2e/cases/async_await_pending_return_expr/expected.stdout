@@ -133,6 +133,9 @@ prelude-branch-conditional-inline-await-return-inner: fn-prelude-branch-conditio
 method-prelude-branch-conditional-inline-await-return-fallthrough: method-prelude-class-method-prelude-branch-conditional-fallthrough!
 prelude-nested-conditional-inline-await-return-fallthrough: fn-prelude-nested-conditional-fallthrough!
 method-prelude-nested-conditional-inline-await-return-inner: method-prelude-class-method-prelude-nested-conditional-inner!
+prelude-logical-or-local-inline-await-return: fn-prelude-logical-or-await!
+method-prelude-nullish-local-inline-await-return: method-prelude-class-method-prelude-nullish-await!
+arrow-prelude-logical-and-local-inline-await-return: value-arrow-prelude-logical-and-await!
 four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
 method-four-await: method-one:class-method-four-method-one:method-one:class-method-four-method-one-three:method-one:class-method-four-method-one:method-one:class-method-four-method-one-three-four!
 arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four!
