@@ -2825,7 +2825,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return null;
         const method = callee.name.text;
-        if (method !== "slice" && method !== "concat" && method !== "flat" && method !== "reverse" && method !== "sort" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
+        if (method !== "slice" && method !== "concat" && method !== "copyWithin" && method !== "fill" && method !== "flat" && method !== "reverse" && method !== "sort" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
         const receiver = resolveCollectionExpression(callee.expression);
         if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
         const receiverElements = denseStaticArrayElements(receiver);
@@ -2857,6 +2857,44 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (depths.length !== 1) return null;
             const elements = flattenStaticArrayDepth(receiverElements, depths[0]!);
             if (!elements || elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+            return ts.factory.createArrayLiteralExpression(elements);
+        }
+
+        if (method === "fill") {
+            if (call.arguments.length < 1 || call.arguments.length > 3) return null;
+            const starts = !call.arguments[1] || isStaticUndefinedExpression(call.arguments[1]!)
+                ? [0]
+                : resolveStaticIntegerKeys(call.arguments[1]!);
+            const ends = !call.arguments[2] || isStaticUndefinedExpression(call.arguments[2]!)
+                ? [receiverElements.length]
+                : resolveStaticIntegerKeys(call.arguments[2]!);
+            if (starts.length !== 1 || ends.length !== 1) return null;
+            const start = normalizeStaticArraySliceIndex(starts[0]!, receiverElements.length);
+            const end = normalizeStaticArraySliceIndex(ends[0]!, receiverElements.length);
+            const elements = [...receiverElements];
+            for (let i = start; i < Math.max(start, end); i++) {
+                elements[i] = call.arguments[0]!;
+            }
+            return ts.factory.createArrayLiteralExpression(elements);
+        }
+
+        if (method === "copyWithin") {
+            if (call.arguments.length < 2 || call.arguments.length > 3) return null;
+            const targets = resolveStaticIntegerKeys(call.arguments[0]!);
+            const starts = resolveStaticIntegerKeys(call.arguments[1]!);
+            const ends = !call.arguments[2] || isStaticUndefinedExpression(call.arguments[2]!)
+                ? [receiverElements.length]
+                : resolveStaticIntegerKeys(call.arguments[2]!);
+            if (targets.length !== 1 || starts.length !== 1 || ends.length !== 1) return null;
+            const target = normalizeStaticArraySliceIndex(targets[0]!, receiverElements.length);
+            const start = normalizeStaticArraySliceIndex(starts[0]!, receiverElements.length);
+            const end = normalizeStaticArraySliceIndex(ends[0]!, receiverElements.length);
+            const count = Math.min(Math.max(end - start, 0), receiverElements.length - target);
+            const copied = receiverElements.slice(start, start + count);
+            const elements = [...receiverElements];
+            for (let i = 0; i < copied.length; i++) {
+                elements[target + i] = copied[i]!;
+            }
             return ts.factory.createArrayLiteralExpression(elements);
         }
 
