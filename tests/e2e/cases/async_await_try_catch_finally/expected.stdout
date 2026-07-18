@@ -1,0 +1,2 @@
+combined-try-catch-finally-fulfilled: try:ok F
+combined-try-catch-finally-rejected: catch:bad FF
