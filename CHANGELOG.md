@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static Buffer own-property predicate fragments for `Object.hasOwn(...)`, direct `buffer.hasOwnProperty(...)` / `buffer.propertyIsEnumerable(...)`, and `Object.prototype` predicate calls over numeric byte keys. Test: `dynamic_require_static_buffer_own_predicates`.
 - Finite dynamic `require(...)` proofs now resolve static instance `buffer.compare(target, targetStart?, targetEnd?, sourceStart?, sourceEnd?)` range specifier fragments over statically constructed Buffers. Test: `dynamic_require_static_buffer_compare_ranges`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.byteLength(buffer)` specifier fragments over statically constructed Buffers, including existing static Buffer composition paths. Test: `dynamic_require_static_buffer_byte_length_buffer`.
 - Finite dynamic `require(...)` proofs now resolve static `Buffer.from(number[]).toString(encoding?)` specifier fragments, including byte wrapping and composition with existing static Buffer operations. Test: `dynamic_require_static_buffer_from_array_to_string`.

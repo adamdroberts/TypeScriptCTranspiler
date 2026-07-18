@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs resolve static Buffer own-property predicate fragments for `Object.hasOwn(...)`, direct `buffer.hasOwnProperty(...)` / `buffer.propertyIsEnumerable(...)`, and `Object.prototype` predicate calls over numeric byte keys. Test: `dynamic_require_static_buffer_own_predicates`
 - Finite dynamic `require(...)` proofs resolve static `String.prototype.split(...)[index]` specifier expressions, including const separator/index aliases and finite numeric index unions. Test: `dynamic_require_static_string_split`
 - Lazy `yield*` materializes generator-backed array sources before delegated suspension, forwarding each value one `.next()` at a time after source materialization. Test: `generator_lazy_yield_star_generator_backed`
 - `yield*` materializes generator-backed array sources before delegation, allowing `yield* innerGenerator()` to forward yielded values in the existing AOT generator subset. Test: `generator_yield_star_generator_backed`
