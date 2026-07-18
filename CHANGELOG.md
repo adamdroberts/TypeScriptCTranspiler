@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Arbitrary-length leading awaited-local continuation coverage now proves six awaited-local chains for async declarations, methods, and arrow function values, exercising the recursive adapter beyond the previous five-await boundary. Test: `async_await_pending_return_expr`.
 - Source `try`/`catch` pending-`await` catch-path returns now have focused coverage for transparent wrappers such as parentheses and `as` assertions. Test: `async_await_try_catch`.
 - Source `try`/`catch` and `try`/`finally` pending-`await` recognizers now accept transparent wrappers such as parentheses and `as` assertions around fulfilled-path return expressions. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation coverage now proves transparent wrappers around expression-bodied async direct and embedded awaits for lifted arrows and captured closures. Test: `async_await_pending_return_expr`.
