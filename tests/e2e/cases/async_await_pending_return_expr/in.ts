@@ -43,6 +43,15 @@ async function fourAwait(prefix: string): Promise<string> {
     return first + ":" + second + ":" + third + ":" + fourth + "!";
 }
 
+async function fiveAwait(prefix: string): Promise<string> {
+    const first = await delay(72, "one");
+    const second = await delay(73, prefix + first + "-two");
+    const third = await delay(74, first + ":" + second + "-three");
+    const fourth = await delay(75, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(76, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -274,6 +283,15 @@ class Worker {
         const fourth = await delay(67, first + ":" + second + ":" + third + "-four");
         return first + ":" + second + ":" + third + ":" + fourth + "!";
     }
+
+    async fiveAwaitMethod(prefix: string): Promise<string> {
+        const first = await delay(77, "method-one");
+        const second = await delay(78, prefix + this.prefix + first);
+        const third = await delay(79, first + ":" + second + "-three");
+        const fourth = await delay(80, first + ":" + second + ":" + third + "-four");
+        const fifth = await delay(81, first + ":" + second + ":" + third + ":" + fourth + "-five");
+        return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -307,6 +325,15 @@ const arrowFourAwait = async (prefix: string): Promise<string> => {
     return first + ":" + second + ":" + third + ":" + fourth + "!";
 };
 
+const arrowFiveAwait = async (prefix: string): Promise<string> => {
+    const first = await delay(82, "arrow-one");
+    const second = await delay(83, prefix + first);
+    const third = await delay(84, first + ":" + second + "-three");
+    const fourth = await delay(85, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(86, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -329,6 +356,10 @@ threeAwait("fn-").then((value: string): void => {
 
 fourAwait("fn-").then((value: string): void => {
     console.log("four-await:", value);
+});
+
+fiveAwait("fn-").then((value: string): void => {
+    console.log("five-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -445,6 +476,10 @@ new Worker("method-four-").fourAwaitMethod("class-").then((value: string): void 
     console.log("method-four-await:", value);
 });
 
+new Worker("method-five-").fiveAwaitMethod("class-").then((value: string): void => {
+    console.log("method-five-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -463,4 +498,8 @@ arrowThreeAwait("value-").then((value: string): void => {
 
 arrowFourAwait("value-").then((value: string): void => {
     console.log("arrow-four-await:", value);
+});
+
+arrowFiveAwait("value-").then((value: string): void => {
+    console.log("arrow-five-await:", value);
 });
