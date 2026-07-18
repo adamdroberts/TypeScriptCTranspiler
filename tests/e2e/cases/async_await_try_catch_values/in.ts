@@ -6,6 +6,12 @@ function delayedReject(reason: string): Promise<string> {
     });
 }
 
+function delayedRejectAfter(ms: number, reason: string): Promise<string> {
+    return delay(ms, reason).then((value: string): string => {
+        throw value;
+    });
+}
+
 let trace = "";
 
 const liftedTryCatch = async (flag: boolean): Promise<string> => {
@@ -14,6 +20,18 @@ const liftedTryCatch = async (flag: boolean): Promise<string> => {
         return "lifted:" + value;
     } catch (e) {
         return "lifted-caught:" + e;
+    }
+};
+
+const liftedTryCatchPrelude = async (): Promise<string> => {
+    try {
+        const value = await delayedRejectAfter(7, "lifted-prelude-bad");
+        return "lifted-prelude:" + value;
+    } catch (e) {
+        const label = "lifted-prelude-caught:";
+        let suffix: string;
+        suffix = ":done";
+        return label + e + suffix;
     }
 };
 
@@ -37,6 +55,20 @@ function makeNestedTryCatch(): (flag: boolean) => Promise<string> {
     };
 }
 
+function makeNestedTryCatchPrelude(): () => Promise<string> {
+    return async function (): Promise<string> {
+        try {
+            const value = await delayedRejectAfter(8, "nested-prelude-bad");
+            return "nested-prelude:" + value;
+        } catch (e) {
+            const label = "nested-prelude-caught:";
+            let suffix: string;
+            suffix = ":done";
+            return label + e + suffix;
+        }
+    };
+}
+
 function makeNestedTryFinally(): (flag: boolean) => Promise<string> {
     return async (flag: boolean): Promise<string> => {
         try {
@@ -49,6 +81,7 @@ function makeNestedTryFinally(): (flag: boolean) => Promise<string> {
 }
 
 const nestedTryCatch = makeNestedTryCatch();
+const nestedTryCatchPrelude = makeNestedTryCatchPrelude();
 const nestedTryFinally = makeNestedTryFinally();
 
 liftedTryCatch(true).then((value: string): void => {
@@ -57,6 +90,10 @@ liftedTryCatch(true).then((value: string): void => {
 
 liftedTryCatch(false).then((value: string): void => {
     console.log("lifted-try-catch-rejected:", value);
+});
+
+liftedTryCatchPrelude().then((value: string): void => {
+    console.log("lifted-try-catch-prelude:", value);
 });
 
 liftedTryFinally(true).then((value: string): void => {
@@ -73,6 +110,10 @@ nestedTryCatch(true).then((value: string): void => {
 
 nestedTryCatch(false).then((value: string): void => {
     console.log("nested-try-catch-rejected:", value);
+});
+
+nestedTryCatchPrelude().then((value: string): void => {
+    console.log("nested-try-catch-prelude:", value);
 });
 
 nestedTryFinally(true).then((value: string): void => {
