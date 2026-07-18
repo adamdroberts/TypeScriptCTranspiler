@@ -786,6 +786,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
 
+        const arrayValue = unwrapStaticExpression(call.arguments[0]!);
+        if (ts.isArrayLiteralExpression(arrayValue)) {
+            if (call.arguments.length > 1) return [];
+            const bytes: number[] = [];
+            for (const element of arrayValue.elements) {
+                if (ts.isSpreadElement(element)) return [];
+                const elementValues = resolveStaticIntegerKeys(element);
+                if (elementValues.length !== 1) return [];
+                bytes.push(elementValues[0]! & 0xff);
+            }
+            return [Buffer.from(bytes)];
+        }
+
         const values = resolve(call.arguments[0]!);
         if (values.length === 0) return [];
         const encodingArg = call.arguments[1];
