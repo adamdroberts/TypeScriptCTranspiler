@@ -72,6 +72,27 @@ async function pendingTryRejectedTransparentCatchReturn(): Promise<string> {
     }
 }
 
+async function pendingTryRejectedTransparentCatchThrow(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(4, "transparent throw bad");
+        return "never " + value;
+    } catch (e) {
+        throw ("transparent throw " + e) as string;
+    }
+}
+
+async function pendingTryRejectedCatchPreludeTransparentReturn(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(4, "prelude bad");
+        return "never " + value;
+    } catch (e) {
+        const label = "prelude caught ";
+        let suffix: string;
+        suffix = "!";
+        return (label + e + suffix) as string;
+    }
+}
+
 async function pendingTryCatchFallthroughFulfilled(): Promise<string> {
     try {
         const value = await delay(3, "ok");
@@ -304,6 +325,15 @@ pendingTryRejected().then((value: string): void => {
 
 pendingTryRejectedTransparentCatchReturn().then((value: string): void => {
     console.log("pending-transparent-catch-return:", value);
+});
+
+pendingTryRejectedTransparentCatchThrow().catch((reason: string): string => {
+    console.log("pending-transparent-catch-throw:", reason);
+    return "handled";
+});
+
+pendingTryRejectedCatchPreludeTransparentReturn().then((value: string): void => {
+    console.log("pending-catch-prelude-transparent-return:", value);
 });
 
 pendingTryCatchFallthroughFulfilled().then((value: string): void => {
