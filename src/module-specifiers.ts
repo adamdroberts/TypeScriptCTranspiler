@@ -121,6 +121,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (regexpEscapeText.length > 0) return regexpEscapeText;
             const uriText = resolveStaticUriCall(node);
             if (uriText.length > 0) return uriText;
+            const numericParserText = resolveStaticNumericParserCall(node);
+            if (numericParserText.length > 0) return numericParserText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
@@ -480,6 +482,50 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 return [];
             }
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        let method: "parseInt" | "parseFloat" | null = null;
+        if (ts.isIdentifier(callee)) {
+            if (callee.text === "parseInt" || callee.text === "parseFloat") {
+                method = callee.text;
+            }
+        } else if (ts.isPropertyAccessExpression(callee)) {
+            const target = unwrapStaticExpression(callee.expression);
+            if (
+                ts.isIdentifier(target) &&
+                target.text === "Number" &&
+                (callee.name.text === "parseInt" || callee.name.text === "parseFloat")
+            ) {
+                method = callee.name.text;
+            }
+        }
+        if (!method) return [];
+        if (method === "parseFloat" && call.arguments.length !== 1) return [];
+        if (method === "parseInt" && call.arguments.length > 2) return [];
+
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+
+        if (method === "parseFloat") {
+            return dedupe(values.map((value) => String(Number.parseFloat(value))));
+        }
+
+        const radixArg = call.arguments[1];
+        const radices = !radixArg || isStaticUndefinedExpression(radixArg)
+            ? [undefined]
+            : resolveStaticIntegerKeys(radixArg);
+        if (radices.length === 0) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            for (const radix of radices) {
+                out.push(String(Number.parseInt(value, radix)));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
         }
         return dedupe(out);
     };
