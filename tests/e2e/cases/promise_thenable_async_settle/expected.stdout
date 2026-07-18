@@ -1,0 +1,5 @@
+sync: get resolve|get resolve
+resolved: get resolve|get resolve|call resolve|call reject|call resolve|external|settle resolve|settle reject|call returned|settle resolve|fulfilled:async value
+rejected: get resolve|get resolve|call resolve|call reject|call resolve|external|settle resolve|settle reject|call returned|settle resolve|fulfilled:async value|rejected:async bad
+all: get resolve|get resolve|call resolve|call reject|call resolve|external|settle resolve|settle reject|call returned|settle resolve|fulfilled:async value|rejected:async bad|settle returned|all:async value,native
+returned: get resolve|get resolve|call resolve|call reject|call resolve|external|settle resolve|settle reject|call returned|settle resolve|fulfilled:async value|rejected:async bad|settle returned|all:async value,native|returned:start:returned
