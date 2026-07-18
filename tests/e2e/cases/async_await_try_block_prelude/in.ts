@@ -29,6 +29,17 @@ async function declaredFinallyTryPrelude(): Promise<string> {
     }
 }
 
+async function declaredCatchAssignedTryPrelude(): Promise<string> {
+    try {
+        let head: string;
+        head = "decl-assigned-";
+        const value = await delay(7, "decl-assigned-ok");
+        return head + value;
+    } catch (e) {
+        return "decl-assigned-caught:" + e;
+    }
+}
+
 const valueCatchTryPrelude = async (): Promise<string> => {
     try {
         const head = "value-";
@@ -46,6 +57,17 @@ const valueFinallyTryPrelude = async (): Promise<string> => {
         return head + value;
     } finally {
         trace += "V";
+    }
+};
+
+const valueFinallyAssignedTryPrelude = async (): Promise<string> => {
+    try {
+        let head: string;
+        head = "value-assigned-final|";
+        const value = await delay(8, "value-assigned-ok");
+        return head + value;
+    } finally {
+        trace += "A";
     }
 };
 
@@ -75,6 +97,17 @@ class TryPreludeWorker {
             trace += this.prefix + "M";
         }
     }
+
+    async catchAssignedTryPrelude(): Promise<string> {
+        try {
+            let label: string;
+            label = "method-assigned-";
+            const value = await delay(9, "method-assigned-ok");
+            return this.prefix + label + value;
+        } catch (e) {
+            return this.prefix + "method-assigned-caught:" + e;
+        }
+    }
 }
 
 const worker = new TryPreludeWorker("class-");
@@ -101,4 +134,16 @@ worker.catchTryPrelude().then((value: string): void => {
 
 worker.finallyTryPrelude().then((value: string): void => {
     console.log("method-finally-try-prelude:", value, trace);
+});
+
+declaredCatchAssignedTryPrelude().then((value: string): void => {
+    console.log("decl-catch-assigned-try-prelude:", value);
+});
+
+valueFinallyAssignedTryPrelude().then((value: string): void => {
+    console.log("value-finally-assigned-try-prelude:", value, trace);
+});
+
+worker.catchAssignedTryPrelude().then((value: string): void => {
+    console.log("method-catch-assigned-try-prelude:", value);
 });
