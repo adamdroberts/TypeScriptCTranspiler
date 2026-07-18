@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import * as path from "node:path";
 import ts from "typescript";
 
@@ -125,6 +126,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (regexpEscapeText.length > 0) return regexpEscapeText;
             const uriText = resolveStaticUriCall(node);
             if (uriText.length > 0) return uriText;
+            const base64Text = resolveStaticBase64Call(node);
+            if (base64Text.length > 0) return base64Text;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -645,6 +648,29 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     out.push(decodeURI(value));
                 } else {
                     out.push(decodeURIComponent(value));
+                }
+            } catch {
+                return [];
+            }
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBase64Call = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isIdentifier(callee) || (callee.text !== "btoa" && callee.text !== "atob")) return [];
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            try {
+                if (callee.text === "btoa") {
+                    out.push(Buffer.from(value, "utf8").toString("base64"));
+                } else {
+                    if (!/^[A-Za-z0-9+/=\s]*$/.test(value)) return [];
+                    out.push(Buffer.from(value, "base64").toString("utf8"));
                 }
             } catch {
                 return [];
