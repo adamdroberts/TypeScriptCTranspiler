@@ -1163,11 +1163,42 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return String(result < 0 ? -1 : result > 0 ? 1 : 0);
     };
 
+    const resolveStaticBufferCompareRanges = (
+        args: ts.NodeArray<ts.Expression>,
+        receiver: Buffer,
+        target: Buffer,
+    ): Array<[Buffer, Buffer]> => {
+        if (args.length === 1) return [[receiver, target]];
+        if (args.length > 5) return [];
+        const targetRanges = resolveStaticBufferRangeArgs(args[1], args[2]);
+        if (targetRanges.length === 0) return [];
+        const sourceRanges = resolveStaticBufferRangeArgs(args[3], args[4]);
+        if (sourceRanges.length === 0) return [];
+
+        const out: Array<[Buffer, Buffer]> = [];
+        for (const [targetStart, targetEnd] of targetRanges) {
+            for (const [sourceStart, sourceEnd] of sourceRanges) {
+                if (
+                    (targetStart !== undefined && (targetStart < 0 || targetStart > target.length)) ||
+                    (targetEnd !== undefined && (targetEnd < 0 || targetEnd > target.length)) ||
+                    (sourceStart !== undefined && (sourceStart < 0 || sourceStart > receiver.length)) ||
+                    (sourceEnd !== undefined && (sourceEnd < 0 || sourceEnd > receiver.length))
+                ) {
+                    return [];
+                }
+                out.push([receiver.slice(sourceStart, sourceEnd), target.slice(targetStart, targetEnd)]);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return out;
+    };
+
     const resolveStaticBufferCompareCall = (call: ts.CallExpression): string[] => {
         if (call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
         let leftExpr: ts.Expression | null = null;
         let rightExpr: ts.Expression | null = null;
+        let isInstanceCompare = false;
 
         if (ts.isPropertyAccessExpression(callee) && callee.name.text === "compare") {
             const target = unwrapStaticExpression(callee.expression);
@@ -1176,7 +1207,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 leftExpr = call.arguments[0]!;
                 rightExpr = call.arguments[1]!;
             } else {
-                if (call.arguments.length !== 1) return [];
+                if (call.arguments.length < 1 || call.arguments.length > 5) return [];
+                isInstanceCompare = true;
                 leftExpr = target;
                 rightExpr = call.arguments[0]!;
             }
@@ -1191,8 +1223,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const out: string[] = [];
         for (const left of leftBuffers) {
             for (const right of rightBuffers) {
-                out.push(compareStaticBuffers(left, right));
-                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                const pairs = isInstanceCompare
+                    ? resolveStaticBufferCompareRanges(call.arguments, left, right)
+                    : [[left, right] as [Buffer, Buffer]];
+                if (pairs.length === 0) return [];
+                for (const [leftRange, rightRange] of pairs) {
+                    out.push(compareStaticBuffers(leftRange, rightRange));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
             }
         }
         return dedupe(out);
