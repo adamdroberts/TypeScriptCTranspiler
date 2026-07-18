@@ -130,6 +130,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (base64Text.length > 0) return base64Text;
             const urlCanParseText = resolveStaticUrlCanParseCall(node);
             if (urlCanParseText.length > 0) return urlCanParseText;
+            const bufferByteLengthText = resolveStaticBufferByteLengthCall(node);
+            if (bufferByteLengthText.length > 0) return bufferByteLengthText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -713,6 +715,51 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 out.push(String(base === undefined
                     ? canParseRuntimeUrl(input)
                     : canParseRuntimeUrl(input) || canParseRuntimeUrl(base)));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const staticBufferByteLength = (value: string, encoding: string | undefined): number | null => {
+        const normalized = encoding?.toLowerCase();
+        if (!normalized || normalized === "utf8" || normalized === "utf-8") {
+            return Buffer.byteLength(value, "utf8");
+        }
+        if (normalized === "hex") return Math.floor(value.length / 2);
+        if (normalized === "base64") {
+            if (!/^[A-Za-z0-9+/=\s]*$/.test(value)) return null;
+            return Buffer.from(value, "base64").length;
+        }
+        if (normalized === "latin1" || normalized === "binary" || normalized === "ascii") {
+            return value.length;
+        }
+        return null;
+    };
+
+    const resolveStaticBufferByteLengthCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) {
+            return [];
+        }
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "byteLength") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+        const encodingArg = call.arguments[1];
+        const encodings = !encodingArg || isStaticUndefinedExpression(encodingArg)
+            ? [undefined]
+            : resolve(encodingArg);
+        if (encodings.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const encoding of encodings) {
+                const length = staticBufferByteLength(value, encoding);
+                if (length === null) return [];
+                out.push(String(length));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
