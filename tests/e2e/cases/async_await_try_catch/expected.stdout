@@ -4,3 +4,5 @@ finally: catch inside finally
 after: done
 pending-fulfilled: pending ok
 pending-rejected: pending caught bad
+pending-finally-rejected: final bad R
+pending-finally-fulfilled: pending finally ok RF
