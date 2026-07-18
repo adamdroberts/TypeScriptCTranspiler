@@ -773,7 +773,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
-        if (method !== "slice" && method !== "substring") return [];
+        if (method !== "slice" && method !== "substring" && method !== "substr") return [];
         const values = resolve(callee.expression);
         if (values.length === 0) return [];
 
@@ -792,9 +792,13 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const value of values) {
             for (const start of starts) {
                 for (const end of ends) {
-                    out.push(method === "slice"
-                        ? value.slice(start, end)
-                        : value.substring(start ?? 0, end));
+                    if (method === "slice") {
+                        out.push(value.slice(start, end));
+                    } else if (method === "substring") {
+                        out.push(value.substring(start ?? 0, end));
+                    } else {
+                        out.push(value.substr(start ?? 0, end));
+                    }
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
             }

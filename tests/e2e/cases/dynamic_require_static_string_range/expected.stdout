@@ -1,1 +1,1 @@
-slice-tail substring swap slice-undef
+slice-tail substring swap slice-undef substr-tail
