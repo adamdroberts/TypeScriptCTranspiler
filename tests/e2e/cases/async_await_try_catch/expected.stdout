@@ -7,4 +7,6 @@ pending-fallthrough-fulfilled: fallthrough done
 pending-rejected: pending caught bad
 pending-fallthrough-rejected: fallthrough caught fall bad
 pending-finally-rejected: final bad R
-pending-finally-fulfilled: pending finally ok RF
+pending-finally-fallthrough-rejected: fall final bad Rr
+pending-finally-fulfilled: pending finally ok RrF
+pending-finally-fallthrough-fulfilled: finally fallthrough done RrFf
