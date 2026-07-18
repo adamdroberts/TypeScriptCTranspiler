@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `new URLSearchParams(...).size` fragments over finite constructor sources, including duplicate query keys and empty params. Test: `dynamic_require_static_url_search_params`.
 - Finite dynamic `require(...)` proofs now resolve static `new Set(...).has(...)` / `.size` plus `new Map(...).has(...)` / `.get(...)` / `.size` fragments over finite constructor sources, including duplicate Map key overwrite and `Object.entries(...)` sources. Test: `dynamic_require_static_map_set_fragments`.
 - Finite dynamic `require(...)` proofs now resolve static dense array `.reduce(...)` and `.reduceRight(...)` fragments for explicit initial values and a conservative inline callback subset with static accumulator/element/index substitution. Test: `dynamic_require_static_array_reduce_hof`.
 - Finite dynamic `require(...)` proofs now resolve static dense array `.some(...)`, `.every(...)`, `.find(...)`, `.findIndex(...)`, `.findLast(...)`, and `.findLastIndex(...)` predicate/search fragments for a conservative inline callback subset with static element/index substitution. Test: `dynamic_require_static_array_predicate_hof`.

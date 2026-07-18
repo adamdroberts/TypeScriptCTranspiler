@@ -273,6 +273,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (enumValues.length > 0) return enumValues;
             const mapSetSize = resolveStaticMapSetSizeAccess(node);
             if (mapSetSize.length > 0) return mapSetSize;
+            const urlSearchParamsSize = resolveStaticUrlSearchParamsSizeAccess(node);
+            if (urlSearchParamsSize.length > 0) return urlSearchParamsSize;
             return resolveStaticCollectionAccess(node.expression, node.name);
         }
         if (!ts.isIdentifier(node)) return [];
@@ -4131,6 +4133,21 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticUrlSearchParamsSizeAccess = (expr: ts.PropertyAccessExpression): string[] => {
+        if (expr.name.text !== "size") return [];
+        const source = unwrapStaticExpression(expr.expression);
+        if (!ts.isNewExpression(source)) return [];
+        const ctor = unwrapStaticExpression(source.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return [];
+        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
+        const arg = source.arguments?.[0];
+        const values = !arg || isStaticUndefinedExpression(arg)
+            ? [""]
+            : resolve(arg);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => String(new URLSearchParams(value).size)));
     };
 
     const resolveStaticJsonStringifyCall = (call: ts.CallExpression): string[] => {
