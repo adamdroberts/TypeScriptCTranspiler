@@ -402,6 +402,12 @@ async function preludeFsObjectsAwaitedLocalReturn(prefix: string): Promise<strin
     return stat.isFile() + ":" + stat.size + ":" + entry.name + ":" + entry.isFile() + ":" + stat.toString() + ":" + entry.toString() + ":" + value;
 }
 
+async function preludeFunctionAwaitedLocalReturn(prefix: string): Promise<string> {
+    const decorate = (text: string): string => prefix + text.toUpperCase() + "!";
+    const value = await delay(289, "function-value");
+    return decorate(value) + ":" + typeof decorate;
+}
+
 async function preludeSymbolBigIntAwaitedLocalReturn(prefix: string): Promise<string> {
     const marker: symbol = Symbol(prefix + "symbol-local");
     const count: bigint = BigInt(40) + 2n;
@@ -1849,6 +1855,10 @@ preludeAggregateErrorAwaitedLocalReturn("fn-").then((value: string): void => {
 
 preludeFsObjectsAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-fs-objects-awaited-local-return:", value);
+});
+
+preludeFunctionAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-function-awaited-local-return:", value);
 });
 
 preludeSymbolBigIntAwaitedLocalReturn("fn-").then((value: string): void => {

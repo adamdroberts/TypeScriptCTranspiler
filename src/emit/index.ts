@@ -21413,7 +21413,13 @@ class Emitter {
             type.kind === "textdecoder" ||
             type.kind === "fsstats" ||
             type.kind === "fsdirent" ||
+            type.kind === "function" ||
             type.kind === "class";
+    }
+
+    private isAsyncAwaitFunctionPreludeInitializer(expr: ts.Expression): boolean {
+        const initializer = this.unwrapTransparentExpression(expr);
+        return ts.isFunctionExpression(initializer) || ts.isArrowFunction(initializer);
     }
 
     private emitAsyncAwaitPreludeStatements(
@@ -25559,11 +25565,15 @@ class Emitter {
                 if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                    visitNoAwaitOrNestedScope(decl.initializer);
-                    if (!ok) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
+                        visitNoAwaitOrNestedScope(decl.initializer);
+                        if (!ok) return null;
+                    } else if (type.kind !== "function") {
+                        return null;
+                    }
                     if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
@@ -26175,11 +26185,15 @@ class Emitter {
                 if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                    visitNoAwaitOrNestedScope(decl.initializer);
-                    if (!ok) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
+                        visitNoAwaitOrNestedScope(decl.initializer);
+                        if (!ok) return null;
+                    } else if (type.kind !== "function") {
+                        return null;
+                    }
                     if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
@@ -26423,11 +26437,15 @@ class Emitter {
                 if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                    visitNoAwaitOrNestedScope(decl.initializer);
-                    if (!ok) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
+                        visitNoAwaitOrNestedScope(decl.initializer);
+                        if (!ok) return null;
+                    } else if (type.kind !== "function") {
+                        return null;
+                    }
                     if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
