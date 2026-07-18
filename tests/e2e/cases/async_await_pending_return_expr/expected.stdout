@@ -28,6 +28,7 @@ staged: fn-stage!
 method: method!
 initializer-expression-await-return: fn-initializer!
 assignment-expression-await-return: fn-assignment!
+initialized-assignment-expression-await-return: fn-init-assignment!
 method-param: class-method-param
 method-this: this-this-param
 arrow: arrow!
@@ -36,11 +37,13 @@ method-initializer-expression-await-return: this-method-initializer!
 arrow-param: value-arrow-param
 method-assignment-expression-await-return: this-method-assignment!
 method-side-effect: effect-side
+method-initialized-assignment-expression-await-return: this-init-method-assignment!
 method-if-side-effect: if-branch
 arrow-initializer-expression-await-return: value-arrow-initializer!
 method-branch-let: branch-let
 arrow-assignment-expression-await-return: value-arrow-assignment!
 method-branch-uninit-let: uninit-uninit
+arrow-initialized-assignment-expression-await-return: value-init-arrow-assignment!
 method-loop: loop-looploop
 method-for: for-forfor
 method-for-continue: for-continue-for-continue0for-continue2

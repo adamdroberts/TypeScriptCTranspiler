@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Pending `await` continuation lowering now captures initialized `let` assignment return aliases when the assignment RHS reads the initialized local across one embedded pending `await`, for async declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now resumes uninitialized `let` assignment return aliases when the assignment RHS contains one embedded pending `await`, for async declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now resumes two-statement local initializer return aliases when the initializer expression contains one embedded pending `await`, for async declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed function prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
