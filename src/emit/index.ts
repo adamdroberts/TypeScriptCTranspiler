@@ -26144,8 +26144,10 @@ class Emitter {
     ): AsyncAwaitExpressionReturnContinuation | null {
         if (body.statements.length !== 1) return null;
         const result = body.statements[0]!;
-        if (!ts.isReturnStatement(result) || !result.expression || ts.isAwaitExpression(result.expression)) return null;
-        return this.asyncAwaitExpressionReturnContinuationForExpression(result.expression, parameters, thisValue);
+        if (!ts.isReturnStatement(result) || !result.expression) return null;
+        const expression = this.unwrapTransparentExpression(result.expression);
+        if (ts.isAwaitExpression(expression)) return null;
+        return this.asyncAwaitExpressionReturnContinuationForExpression(expression, parameters, thisValue);
     }
 
     private asyncAwaitExpressionReturnContinuationForExpression(
@@ -26299,23 +26301,24 @@ class Emitter {
         if (tailStatements.length === 1 && ts.isReturnStatement(tailStatements[0]!)) {
             const result = tailStatements[0]!;
             if (!result.expression) return null;
-            if (ts.isAwaitExpression(result.expression)) {
+            const expression = this.unwrapTransparentExpression(result.expression);
+            if (ts.isAwaitExpression(expression)) {
                 continuation = {
-                    awaitExpr: result.expression,
-                    returnExpr: result.expression,
+                    awaitExpr: expression,
+                    returnExpr: expression,
                     params: [],
                     thisValue: null,
                 };
-            } else if (this.isAsyncAwaitShortCircuitBinary(result.expression)) {
+            } else if (this.isAsyncAwaitShortCircuitBinary(expression)) {
                 continuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
-                    result.expression,
+                    expression,
                     parameters,
                     thisValue,
                     captures,
                 );
-            } else if (ts.isConditionalExpression(result.expression)) {
+            } else if (ts.isConditionalExpression(expression)) {
                 continuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
-                    result.expression,
+                    expression,
                     parameters,
                     thisValue,
                     captures,
@@ -26325,7 +26328,7 @@ class Emitter {
                 }
             } else {
                 continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                    result.expression,
+                    expression,
                     parameters,
                     thisValue,
                     captures,
@@ -26505,10 +26508,12 @@ class Emitter {
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (body.statements.length !== 1) return null;
         const result = body.statements[0]!;
-        if (!ts.isReturnStatement(result) || !result.expression || !this.isAsyncAwaitShortCircuitBinary(result.expression)) {
+        if (!ts.isReturnStatement(result) || !result.expression) {
             return null;
         }
-        return this.asyncAwaitLogicalExpressionReturnContinuationForExpression(result.expression, parameters, thisValue);
+        const expression = this.unwrapTransparentExpression(result.expression);
+        if (!this.isAsyncAwaitShortCircuitBinary(expression)) return null;
+        return this.asyncAwaitLogicalExpressionReturnContinuationForExpression(expression, parameters, thisValue);
     }
 
     private asyncAwaitLogicalExpressionReturnContinuationForExpression(
@@ -26565,11 +26570,13 @@ class Emitter {
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (body.statements.length !== 1) return null;
         const result = body.statements[0]!;
-        if (!ts.isReturnStatement(result) || !result.expression || !ts.isConditionalExpression(result.expression)) {
+        if (!ts.isReturnStatement(result) || !result.expression) {
             return null;
         }
+        const expression = this.unwrapTransparentExpression(result.expression);
+        if (!ts.isConditionalExpression(expression)) return null;
         const branch = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
-            result.expression,
+            expression,
             parameters,
             thisValue,
         );
@@ -26612,29 +26619,30 @@ class Emitter {
         thisValue: EmitResult | null,
         captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
-        if (ts.isConditionalExpression(expr)) {
-            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(expr, parameters, thisValue, captures);
+        const expression = this.unwrapTransparentExpression(expr);
+        if (ts.isConditionalExpression(expression)) {
+            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(expression, parameters, thisValue, captures);
         }
-        if (ts.isAwaitExpression(expr)) {
+        if (ts.isAwaitExpression(expression)) {
             return {
                 kind: "return",
                 continuation: {
-                    awaitExpr: expr,
-                    returnExpr: expr,
+                    awaitExpr: expression,
+                    returnExpr: expression,
                     params: [],
                     thisValue: null,
                 },
             };
         }
         const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-            expr,
+            expression,
             parameters,
             thisValue,
             captures,
         );
         if (continuation) return { kind: "return", continuation };
-        if (this.asyncAwaitSyncReturnExpressionSupported(expr)) {
-            return { kind: "syncReturn", returnExpr: expr };
+        if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
+            return { kind: "syncReturn", returnExpr: expression };
         }
         return null;
     }
@@ -26696,23 +26704,24 @@ class Emitter {
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (ts.isReturnStatement(stmt)) {
             if (!stmt.expression) return null;
-            if (ts.isConditionalExpression(stmt.expression)) {
+            const expression = this.unwrapTransparentExpression(stmt.expression);
+            if (ts.isConditionalExpression(expression)) {
                 return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
-                    stmt.expression,
+                    expression,
                     parameters,
                     thisValue,
                     captures,
                 );
             }
             const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                stmt.expression,
+                expression,
                 parameters,
                 thisValue,
                 captures,
             );
             if (continuation) return { kind: "return", continuation };
-            if (this.asyncAwaitSyncReturnExpressionSupported(stmt.expression)) {
-                return { kind: "syncReturn", returnExpr: stmt.expression };
+            if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
+                return { kind: "syncReturn", returnExpr: expression };
             }
             return null;
         }
