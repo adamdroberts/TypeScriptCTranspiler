@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `Object.isExtensible(...)`, `Object.isSealed(...)`, and `Object.isFrozen(...)` predicate specifier fragments for finite object-literal, array-literal, primitive, and nullish operands. Test: `dynamic_require_static_object_integrity_predicates`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.is(...)` SameValue predicate specifier fragments for finite primitive operands, including `NaN` and signed-zero cases. Test: `dynamic_require_static_object_is`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.hasOwn(...)` predicate specifier fragments for finite object, array, and string operands with static keys. Test: `dynamic_require_static_object_has_own`.
 - Finite dynamic `require(...)` proofs now resolve static `Boolean(...)` constructor specifier fragments for statically known primitive and object/array literal operands. Test: `dynamic_require_static_boolean`.
