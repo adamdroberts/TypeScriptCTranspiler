@@ -90,7 +90,46 @@ function makeClosureTryFinally(): (flag: boolean) => Promise<string> {
     };
 }
 
+async function tryCatchReturnAwaitSourcePrelude(): Promise<string> {
+    let label: string;
+    label = "source-prelude-";
+    try {
+        return await delay(13, label + "ok");
+    } catch (e) {
+        return label + "caught:" + e;
+    }
+}
+
+const arrowTryFinallyReturnAwaitTryPrelude = async (): Promise<string> => {
+    try {
+        let label: string;
+        label = "try-prelude-";
+        return await delay(14, label + "ok");
+    } finally {
+        trace += "A";
+    }
+};
+
+class ReturnAwaitWorker {
+    prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async tryCatchReturnAwaitSourcePrelude(): Promise<string> {
+        let label: string;
+        label = this.prefix + "method-source-prelude-";
+        try {
+            return await delay(15, label + "ok");
+        } catch (e) {
+            return label + "caught:" + e;
+        }
+    }
+}
+
 const closureTryFinally = makeClosureTryFinally();
+const returnAwaitWorker = new ReturnAwaitWorker("class-");
 
 tryCatchReturnAwaitFulfilled().then((value: string): void => {
     console.log("try-catch-return-await-fulfilled:", value);
@@ -138,4 +177,16 @@ closureTryFinally(true).then((value: string): void => {
 
 closureTryFinally(false).catch((reason: string): void => {
     console.log("closure-try-finally-return-await-rejected:", reason, trace);
+});
+
+tryCatchReturnAwaitSourcePrelude().then((value: string): void => {
+    console.log("try-catch-return-await-source-prelude:", value);
+});
+
+arrowTryFinallyReturnAwaitTryPrelude().then((value: string): void => {
+    console.log("arrow-try-finally-return-await-try-prelude:", value, trace);
+});
+
+returnAwaitWorker.tryCatchReturnAwaitSourcePrelude().then((value: string): void => {
+    console.log("method-try-catch-return-await-source-prelude:", value);
 });

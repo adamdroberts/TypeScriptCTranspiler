@@ -10,3 +10,6 @@ parenthesized-try-catch-return-await-fulfilled: tc-paren-ok
 parenthesized-try-catch-return-await-rejected: tc-paren-caught:tc-paren-bad
 parenthesized-try-finally-return-await-fulfilled: tf-paren-ok FRfrP
 parenthesized-try-finally-return-await-rejected: tf-paren-bad FRfrPp
+try-catch-return-await-source-prelude: source-prelude-ok
+arrow-try-finally-return-await-try-prelude: try-prelude-ok FRfrPpA
+method-try-catch-return-await-source-prelude: class-method-source-prelude-ok
