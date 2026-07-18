@@ -166,6 +166,7 @@ prelude-weak-map-set-awaited-local-return: fn-weak-map-local-value-true
 prelude-weak-map-inline-await-return: fn-weak-map-inline-value
 prelude-weak-ref-finalization-awaited-local-return: fn-weak-ref-local!:true:[object WeakRef]:[object FinalizationRegistry]:fn-weak-ref-value
 prelude-builtins-awaited-local-return: true:2020-02-03T04:05:06.007Z:Error: fn-error
+prelude-aggregate-error-awaited-local-return: AggregateError:fn-aggregate:2:fn-first:fn-cause:AggregateError: fn-aggregate:fn-aggregate-value
 prelude-symbol-bigint-awaited-local-return: fn-symbol-local:42:value
 prelude-promise-race-return: same:value
 prelude-text-codec-awaited-local-return: fn-codec:8
