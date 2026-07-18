@@ -24799,7 +24799,7 @@ class Emitter {
         const catchStatements = tryStmt.catchClause.block.statements;
         const catchStmt = catchStatements[catchStatements.length - 1]!;
         const catchPreludeStatements = catchStatements.slice(0, -1);
-        if (!catchPreludeStatements.every((stmt) => ts.isExpressionStatement(stmt))) return null;
+        const catchPreludeLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[0]!);
@@ -24872,6 +24872,8 @@ class Emitter {
                         ok = false;
                         return;
                     }
+                } else if (sym && catchPreludeLocals.has(sym)) {
+                    return;
                 } else {
                     const param = sym ? paramsBySymbol.get(sym) : undefined;
                     if (param) referenced.set(param.symbol, param);
@@ -24880,9 +24882,39 @@ class Emitter {
             ts.forEachChild(node, (child) => visit(child, options));
         };
 
+        const visitCatchPreludeStatement = (stmt: ts.Statement): void => {
+            if (!ok) return;
+            if (ts.isExpressionStatement(stmt)) {
+                visit(stmt.expression, { allowAwaited: false, allowCatch: !!catchSymbol });
+                return;
+            }
+            if (!ts.isVariableStatement(stmt)) {
+                ok = false;
+                return;
+            }
+            if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) {
+                ok = false;
+                return;
+            }
+            for (const decl of stmt.declarationList.declarations) {
+                if (!ts.isIdentifier(decl.name) || !decl.initializer) {
+                    ok = false;
+                    return;
+                }
+                visit(decl.initializer, { allowAwaited: false, allowCatch: !!catchSymbol });
+                if (!ok) return;
+                const sym = this.symbolForIdentifier(decl.name);
+                if (!sym) {
+                    ok = false;
+                    return;
+                }
+                catchPreludeLocals.add(sym);
+            }
+        };
+
         visit(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
         if (successReturnExpr) visit(successReturnExpr, { allowAwaited: true, allowCatch: false });
-        for (const stmt of catchPreludeStatements) visit(stmt, { allowAwaited: false, allowCatch: !!catchSymbol });
+        for (const stmt of catchPreludeStatements) visitCatchPreludeStatement(stmt);
         if (catchReturnExpr) visit(catchReturnExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (catchThrowExpr) visit(catchThrowExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (!ok) return null;

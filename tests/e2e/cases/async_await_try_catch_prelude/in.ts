@@ -28,6 +28,28 @@ async function catchPreludeThrow(): Promise<string> {
     }
 }
 
+async function catchPreludeLocalReturn(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(4, "local-bad");
+        return "try:" + value;
+    } catch (e) {
+        const label = "local:" + e;
+        let decorated = label + ":" + catchTrace;
+        decorated = decorated + ":done";
+        return decorated;
+    }
+}
+
+async function catchPreludeLocalThrow(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(5, "local-throw");
+        return "try:" + value;
+    } catch (e) {
+        const label = "throw-local:" + e;
+        throw label;
+    }
+}
+
 catchPreludeReturn(true).then((value: string): void => {
     console.log("catch-prelude-return-fulfilled:", value, catchTrace);
 });
@@ -38,4 +60,12 @@ catchPreludeReturn(false).then((value: string): void => {
 
 catchPreludeThrow().catch((reason: string): void => {
     console.log("catch-prelude-throw:", reason, catchTrace);
+});
+
+catchPreludeLocalReturn().then((value: string): void => {
+    console.log("catch-prelude-local-return:", value);
+});
+
+catchPreludeLocalThrow().catch((reason: string): void => {
+    console.log("catch-prelude-local-throw:", reason);
 });
