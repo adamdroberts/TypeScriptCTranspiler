@@ -125,6 +125,11 @@ async function preludeLocalInlineAwaitReturn(prefix: string): Promise<string> {
     return label + await delay(144, "await") + "!";
 }
 
+async function preludeConditionalLocalInlineAwaitReturn(flag: boolean, prefix: string): Promise<string> {
+    const label = prefix + "prelude-conditional-";
+    return flag ? label + await delay(147, "await") + "!" : label + "sync!";
+}
+
 class Worker {
     prefix: string;
 
@@ -438,6 +443,11 @@ class Worker {
         const label = this.prefix + prefix + "method-prelude-local-";
         return label + await delay(145, "await") + "!";
     }
+
+    async preludeLogicalLocalInlineAwaitReturnMethod(flag: boolean, prefix: string): Promise<any> {
+        const label = this.prefix + prefix + "method-prelude-logical-";
+        return flag && label + await delay(148, "await") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -552,6 +562,11 @@ const arrowPreludeLocalInlineAwaitReturn = async (prefix: string): Promise<strin
     const label = prefix + "arrow-prelude-";
     const decorated = label + "local-";
     return decorated + await delay(146, "await") + "!";
+};
+
+const arrowPreludeNullishLocalInlineAwaitReturn = async (prefix: string | undefined): Promise<string> => {
+    const fallback = "arrow-prelude-nullish-";
+    return prefix ?? fallback + await delay(149, "await") + "!";
 };
 
 suffix().then((value: string): void => {
@@ -688,6 +703,10 @@ nullishInlineAwaitReturn(undefined).then((value: string): void => {
 
 preludeLocalInlineAwaitReturn("fn-").then((value: string): void => {
     console.log("prelude-local-inline-await-return:", value);
+});
+
+preludeConditionalLocalInlineAwaitReturn(true, "fn-").then((value: string): void => {
+    console.log("prelude-conditional-local-inline-await-return:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -916,6 +935,10 @@ new Worker("method-prelude-").preludeLocalInlineAwaitReturnMethod("class-").then
     console.log("method-prelude-local-inline-await-return:", value);
 });
 
+new Worker("method-prelude-").preludeLogicalLocalInlineAwaitReturnMethod(true, "class-").then((value: any): void => {
+    console.log("method-prelude-logical-local-inline-await-return:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1046,4 +1069,8 @@ arrowNullishInlineAwaitReturn(undefined).then((value: string): void => {
 
 arrowPreludeLocalInlineAwaitReturn("value-").then((value: string): void => {
     console.log("arrow-prelude-local-inline-await-return:", value);
+});
+
+arrowPreludeNullishLocalInlineAwaitReturn(undefined).then((value: string): void => {
+    console.log("arrow-prelude-nullish-local-inline-await-return:", value);
 });

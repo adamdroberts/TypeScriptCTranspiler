@@ -195,7 +195,7 @@ interface AsyncAwaitExpressionReturnContinuation {
 
 interface AsyncAwaitPreludeExpressionReturnContinuation {
     preludeStatements: readonly ts.VariableStatement[];
-    continuation: AsyncAwaitExpressionReturnContinuation;
+    result: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation;
 }
 
 interface AsyncAwaitIfExpressionReturnLeaf {
@@ -25512,13 +25512,33 @@ class Emitter {
                 });
             }
         }
-        const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-            result.expression,
-            parameters,
-            thisValue,
-            captures,
-        );
-        return continuation ? { preludeStatements: preludeVariableStatements, continuation } : null;
+        let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
+        if (this.isAsyncAwaitShortCircuitBinary(result.expression)) {
+            continuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
+                result.expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+        } else if (ts.isConditionalExpression(result.expression)) {
+            continuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+                result.expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+            if (continuation && !this.asyncAwaitIfExpressionReturnBranchHasAwait(continuation)) {
+                continuation = null;
+            }
+        } else {
+            continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                result.expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+        }
+        return continuation ? { preludeStatements: preludeVariableStatements, result: continuation } : null;
     }
 
     private emitAsyncAwaitPreludeExpressionReturnContinuation(
@@ -25532,7 +25552,11 @@ class Emitter {
         for (const stmt of match.preludeStatements) {
             this.emitVarStmt(buf, stmt);
         }
-        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.continuation);
+        if ("awaitExpr" in match.result) {
+            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
+        }
+        if (!this.asyncAwaitIfExpressionReturnBranchSupported(match.result)) return false;
+        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
     }
 
     private emitAsyncAwaitExpressionReturnContinuation(
@@ -25676,7 +25700,15 @@ class Emitter {
         if (!ts.isReturnStatement(result) || !result.expression || !this.isAsyncAwaitShortCircuitBinary(result.expression)) {
             return null;
         }
-        const expr = result.expression;
+        return this.asyncAwaitLogicalExpressionReturnContinuationForExpression(result.expression, parameters, thisValue);
+    }
+
+    private asyncAwaitLogicalExpressionReturnContinuationForExpression(
+        expr: ts.BinaryExpression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
+    ): AsyncAwaitIfExpressionReturnNode | null {
         const op = expr.operatorToken.kind;
         if (
             op !== ts.SyntaxKind.AmpersandAmpersandToken &&
@@ -25684,7 +25716,7 @@ class Emitter {
             op !== ts.SyntaxKind.QuestionQuestionToken
         ) return null;
         if (!this.asyncAwaitShortCircuitLeftExpressionSupported(expr.left)) return null;
-        const rightBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(expr.right, parameters, thisValue);
+        const rightBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(expr.right, parameters, thisValue, captures);
         if (!rightBranch || !this.asyncAwaitIfExpressionReturnBranchHasAwait(rightBranch)) return null;
         const leftBranch: AsyncAwaitIfExpressionReturnNode = { kind: "syncReturn", returnExpr: expr.left };
         if (op === ts.SyntaxKind.QuestionQuestionToken) {
@@ -25740,17 +25772,20 @@ class Emitter {
         expr: ts.ConditionalExpression,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (!this.asyncAwaitConditionExpressionSupported(expr.condition)) return null;
         const thenBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(
             expr.whenTrue,
             parameters,
             thisValue,
+            captures,
         );
         const elseBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(
             expr.whenFalse,
             parameters,
             thisValue,
+            captures,
         );
         if (!thenBranch || !elseBranch) return null;
 
@@ -25767,9 +25802,10 @@ class Emitter {
         expr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (ts.isConditionalExpression(expr)) {
-            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(expr, parameters, thisValue);
+            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(expr, parameters, thisValue, captures);
         }
         if (ts.isAwaitExpression(expr)) {
             return {
@@ -25786,6 +25822,7 @@ class Emitter {
             expr,
             parameters,
             thisValue,
+            captures,
         );
         if (continuation) return { kind: "return", continuation };
         if (this.asyncAwaitSyncReturnExpressionSupported(expr)) {
