@@ -42996,12 +42996,22 @@ class Emitter {
         const arg = call.arguments[0];
         if (!arg) unsupported(call, `${label} expects an array or Set`);
         const source = this.emitExpr(arg);
+        if (source.ty.kind === "map") {
+            if (!source.ty.key || !source.ty.elem || source.ty.key.kind !== "value" || source.ty.elem.kind !== "value") {
+                unsupported(arg, `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, or Map<any, any>`);
+            }
+            const entries = this.mapEntriesArrayExpr(arg, source.c, source.ty, label);
+            return {
+                c: `tsc_value_as_array(${this.coerce(entries, T_VALUE, arg)})`,
+                ty: arrayType(T_VALUE),
+            };
+        }
         if (
             (source.ty.kind !== "array" && source.ty.kind !== "set") ||
             !source.ty.elem ||
             (source.ty.elem.kind !== "promise" && source.ty.elem.kind !== "value")
         ) {
-            unsupported(arg, `${label} expects Promise<T>[]/any[] or Set<Promise<T>>/Set<any>`);
+            unsupported(arg, `${label} expects Promise<T>[]/any[], Set<Promise<T>>/Set<any>, or Map<any, any>`);
         }
         if (source.ty.kind === "set") {
             return {

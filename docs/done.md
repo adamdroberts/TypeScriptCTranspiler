@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Dynamic promise combinators consume `Map<any, any>` inputs through entry iteration across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, resolving with `[key, value]` entry arrays. Test: `promise_combinators_dynamic_map_inputs`
 - `new Promise<T>(executor)` resolve callbacks assimilate delayed dynamic thenables that resolve to nested native Promise records, including nested fulfillment and rejection. Test: `promise_executor_thenable_nested_promise_async`
 - Dynamic promise combinators assimilate delayed nested thenables from `Set<any>` inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_set_recursive`
 - Dynamic promise combinators assimilate delayed thenables that recursively resolve to delayed inner thenables across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, including nested fulfillment and rejection. Test: `promise_thenable_async_combinator_recursive`
@@ -166,6 +167,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Bounded pending-`await` continuation lowering captures leading `const` / `let` locals used by final `if` / fallthrough branch return trees containing a pending `await` for async function declarations, class async methods, and async function values. Test: `async_await_pending_return_expr`
 - Dynamic Promise thenable assimilation keeps `then` property lookup synchronous but queues callable `then` invocation as a Promise microtask, preserving FIFO ordering with already-queued microtasks and later Promise reactions. Test: `promise_thenable_microtask_order`
 - Dynamic `Promise.all(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` over `any[]` / `Set<any>` subscribe to pending normalized thenables created by microtask-scheduled callable `then` jobs and settle their outer Promise records when those jobs finish; `Promise.race(...)` follows FIFO reaction ordering when a later already-fulfilled input beats an earlier pending thenable. Test: `promise_combinators_dynamic`
+- Dynamic `Promise.all(...)`, `Promise.race(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` accept `Map<any, any>` inputs and consume their `[key, value]` entries through the existing dynamic array combinator path. Test: `promise_combinators_dynamic_map_inputs`
 - `new Promise<T>(executor, ...ignored)` evaluates and ignores trailing constructor arguments before invoking the synchronous executor. Test: `promise_constructor_ignored_arguments`
 - Async functions in a no-`try` tail position now adopt `return await pendingPromise` directly, preserving delayed Promise settlement without entering the general suspend/resume state-machine path. Test: `async_await_tail_pending`
 - Dynamic `any` values containing already-settled native Promise records can be awaited through the same adoption path as statically typed Promise values. Test: `async_await_values_immediate`
@@ -1751,6 +1753,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_ignored_arguments` | Promise static and instance helpers evaluate ignored trailing arguments |
 | `promise_object_methods` | Promise instances expose empty own-property and integrity Object and Reflect helper results |
 | `promise_pending_combinators` | pending records propagate through immediate Promise combinators without synchronous callback invocation |
+| `promise_combinators_dynamic_map_inputs` | dynamic Promise combinators consume Map inputs through entry iteration |
 | `queue_microtask` | bounded queueMicrotask callbacks drain after process.nextTick before exit |
 | `scheduler_callback_this` | bounded scheduler callbacks with explicit this parameters receive runtime undefined |
 | `scheduler_many_args` | bounded scheduler callbacks accept more than five typed queued arguments |

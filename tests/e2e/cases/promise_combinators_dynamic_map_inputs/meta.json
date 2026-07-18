@@ -1,0 +1,4 @@
+{
+  "description": "dynamic Promise combinators consume Map inputs through entry iteration",
+  "features": ["promise", "promise-combinators", "map", "iterable"]
+}
