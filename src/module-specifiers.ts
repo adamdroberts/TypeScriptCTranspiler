@@ -852,6 +852,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     const resolveStaticDescriptor = (
         expr: ts.Expression,
     ): { value: string[]; writable: boolean; enumerable: boolean; configurable: boolean } | null => {
+        const mapEntry = resolveStaticDescriptorMapEntry(expr);
+        if (mapEntry) return mapEntry;
+
         const call = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(call) || call.arguments.length < 2 || call.arguments.some(ts.isSpreadElement)) return null;
         const callee = unwrapStaticExpression(call.expression);
@@ -873,6 +876,34 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const keys = resolveKeyTexts(call.arguments[1]!);
         if (keys.length !== 1) return null;
         return staticDescriptorFor(object, keys[0]!);
+    };
+
+    const resolveStaticDescriptorMapEntry = (
+        expr: ts.Expression,
+    ): { value: string[]; writable: boolean; enumerable: boolean; configurable: boolean } | null => {
+        const access = unwrapStaticExpression(expr);
+        let mapExpr: ts.Expression;
+        let keys: string[];
+        if (ts.isPropertyAccessExpression(access)) {
+            mapExpr = access.expression;
+            keys = [access.name.text];
+        } else if (ts.isElementAccessExpression(access) && access.argumentExpression) {
+            mapExpr = access.expression;
+            keys = resolveKeyTexts(access.argumentExpression);
+        } else {
+            return null;
+        }
+        if (keys.length !== 1) return null;
+
+        const call = unwrapStaticExpression(mapExpr);
+        if (!ts.isCallExpression(call) || call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "getOwnPropertyDescriptors") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        return object ? staticDescriptorFor(object, keys[0]!) : null;
     };
 
     const staticDescriptorFor = (
