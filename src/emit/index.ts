@@ -206,6 +206,7 @@ interface AsyncAwaitIfExpressionSyncReturnLeaf {
 interface AsyncAwaitIfExpressionReturnBranch {
     kind: "if";
     condition: ts.Expression;
+    conditionMode?: "truthy" | "nullish";
     thenBranch: AsyncAwaitIfExpressionReturnNode;
     elseBranch: AsyncAwaitIfExpressionReturnNode | null;
     fallthroughBranch: AsyncAwaitIfExpressionReturnNode | null;
@@ -25590,11 +25591,25 @@ class Emitter {
         }
         const expr = result.expression;
         const op = expr.operatorToken.kind;
-        if (op !== ts.SyntaxKind.AmpersandAmpersandToken && op !== ts.SyntaxKind.BarBarToken) return null;
+        if (
+            op !== ts.SyntaxKind.AmpersandAmpersandToken &&
+            op !== ts.SyntaxKind.BarBarToken &&
+            op !== ts.SyntaxKind.QuestionQuestionToken
+        ) return null;
         if (!this.asyncAwaitShortCircuitLeftExpressionSupported(expr.left)) return null;
         const rightBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(expr.right, parameters, thisValue);
         if (!rightBranch || !this.asyncAwaitIfExpressionReturnBranchHasAwait(rightBranch)) return null;
         const leftBranch: AsyncAwaitIfExpressionReturnNode = { kind: "syncReturn", returnExpr: expr.left };
+        if (op === ts.SyntaxKind.QuestionQuestionToken) {
+            return {
+                kind: "if",
+                condition: expr.left,
+                conditionMode: "nullish",
+                thenBranch: rightBranch,
+                elseBranch: leftBranch,
+                fallthroughBranch: null,
+            };
+        }
         return {
             kind: "if",
             condition: expr.left,
@@ -25838,7 +25853,9 @@ class Emitter {
         if (branch.kind === "syncReturn") {
             return this.emitAsyncAwaitSyncReturnResult(buf, branch.returnExpr);
         }
-        const cond = this.emitBoolExpr(branch.condition);
+        const cond = branch.conditionMode === "nullish"
+            ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
+            : this.emitBoolExpr(branch.condition);
         buf.open(`if (${cond})`);
         if (!this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch.thenBranch)) return false;
         buf.close();
