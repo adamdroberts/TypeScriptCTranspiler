@@ -31,7 +31,13 @@ method-do-while: do-do0do1
 inline-await-return: fn-inline!
 method-inline-await-return: method-inline-class-method-inline!
 arrow-inline-await-return: value-arrow-inline!
+branch-return-await-true: branch-true
+branch-return-await-false: branch-false
 two-await: one:fn-one-two!
+method-branch-return-await-true: method-branch-true
+method-branch-return-await-false: method-branch-false
+arrow-branch-return-await-true: arrow-true
+arrow-branch-return-await-false: arrow-false
 method-two-await: method-one:class-method-two-method-one!
 arrow-two-await: arrow-one:value-arrow-one!
 three-await: one:fn-one-two:one:fn-one-two-three!
