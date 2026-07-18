@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 thenable-assimilation remaining-work entry against completed delayed resolver `.call(...)` / `.apply(...)` coverage.
 - `docs/todo.md` now rebaselines the Phase 6 thenable-assimilation remaining-work entry against completed scheduled executor resolution and delayed `Promise.finally` callback-thenable coverage.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
