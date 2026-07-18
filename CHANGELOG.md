@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Dynamic promise combinator coverage now proves `Promise.all`, `race`, `any`, and `allSettled` assimilate delayed thenables that recursively resolve to delayed inner thenables. Test: `promise_thenable_async_combinator_recursive`.
 - Dynamic thenable resolver coverage now proves delayed resolve/reject callbacks invoked through `.call(...)` and `.apply(...)` preserve first-settlement behavior. Test: `promise_thenable_async_resolver_call_apply`.
 - Dynamic thenable assimilation now has focused coverage for delayed outer thenables that resolve to delayed inner thenables, including nested fulfillment and rejection. Test: `promise_thenable_async_recursive`.
 - `new Promise(...)` executor resolve callbacks now have focused coverage for scheduled resolution with delayed dynamic thenables that settle from later microtasks. Test: `promise_executor_thenable_async`.
