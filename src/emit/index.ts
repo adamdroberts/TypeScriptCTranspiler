@@ -32314,6 +32314,7 @@ class Emitter {
         if (ts.isPropertyAccessExpression(expr)) {
             const enumValue = this.enumConstantValue(expr);
             if (typeof enumValue === "number") return `n:${enumValue}`;
+            if (typeof enumValue === "string") return `s:${enumValue}`;
         }
         return null;
     }
@@ -57256,6 +57257,9 @@ class Emitter {
         if (typeof enumValue === "number") {
             return { c: enumValue.toString(), ty: T_NUMBER };
         }
+        if (typeof enumValue === "string") {
+            return { c: this.stringLit(enumValue), ty: T_STRING };
+        }
         const fsConst = this.fsNumericConstantValue(pa.name.text);
         if (
             fsConst &&
@@ -57896,27 +57900,35 @@ class Emitter {
         return null;
     }
 
-    private enumConstantValue(pa: ts.PropertyAccessExpression): number | undefined {
+    private enumConstantValue(pa: ts.PropertyAccessExpression): number | string | undefined {
         if (!ts.isIdentifier(pa.expression)) return undefined;
         const sym = this.checker.getSymbolAtLocation(pa.expression);
         const decl = sym?.getDeclarations()?.find(ts.isEnumDeclaration);
         if (!decl) return undefined;
 
-        let nextValue = 0;
+        let nextValue: number | undefined = 0;
         for (const member of decl.members) {
-            const value = member.initializer
-                ? this.numericEnumInitializer(member.initializer)
-                : nextValue;
-            if (ts.isIdentifier(member.name) && member.name.text === pa.name.text) {
+            let value: number | string | undefined;
+            if (member.initializer) {
+                value = ts.isStringLiteralLike(member.initializer)
+                    ? this.stringEnumInitializer(member.initializer)
+                    : this.numericEnumInitializer(member.initializer);
+            } else {
+                value = nextValue;
+            }
+            if (value === undefined) unsupported(member, "enum members after string initializers require explicit values");
+            const name = this.staticPropertyName(member.name);
+            if (name === pa.name.text) {
                 return value;
             }
-            nextValue = value + 1;
+            nextValue = typeof value === "number" ? value + 1 : undefined;
         }
         unsupported(pa, `enum member ${pa.name.text} not found`);
     }
 
     private numericEnumInitializer(expr: ts.Expression): number {
         if (ts.isNumericLiteral(expr)) return Number(expr.text);
+        if (ts.isStringLiteralLike(expr)) unsupported(expr, "string enum initializer cannot be used as a number");
         if (
             ts.isPrefixUnaryExpression(expr) &&
             ts.isNumericLiteral(expr.operand) &&
@@ -57927,6 +57939,11 @@ class Emitter {
             return expr.operator === ts.SyntaxKind.MinusToken ? -n : n;
         }
         unsupported(expr, "only numeric enum initializers are supported");
+    }
+
+    private stringEnumInitializer(expr: ts.Expression): string {
+        if (ts.isStringLiteralLike(expr)) return expr.text;
+        unsupported(expr, "only string literal enum initializers are supported for string enums");
     }
 
     private emitElementAccess(

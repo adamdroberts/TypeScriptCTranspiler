@@ -258,7 +258,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     if (t.flags & ts.TypeFlags.Number) return T_NUMBER;
     if (t.flags & ts.TypeFlags.String) return T_STRING;
     if (t.flags & ts.TypeFlags.Boolean) return T_BOOLEAN;
-    if (t.flags & ts.TypeFlags.EnumLike) return T_NUMBER;
+    if (t.flags & ts.TypeFlags.EnumLike) return enumLikeTypeIsString(t) ? T_STRING : T_NUMBER;
     if (t.flags & ts.TypeFlags.Void) return T_VOID;
     if (t.flags & ts.TypeFlags.Undefined) return T_VOID;
     if (t.flags & ts.TypeFlags.Null) return T_VOID;
@@ -495,6 +495,14 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
     }
 
     unsupported(node, `type not supported yet: ${checker.typeToString(t)}`);
+}
+
+function enumLikeTypeIsString(t: ts.Type): boolean {
+    const declarations = t.symbol?.getDeclarations() ?? t.aliasSymbol?.getDeclarations() ?? [];
+    const enumDecl = declarations.find(ts.isEnumDeclaration);
+    if (!enumDecl) return false;
+    if (enumDecl.members.length === 0) return false;
+    return enumDecl.members.every((member) => member.initializer && ts.isStringLiteralLike(member.initializer));
 }
 
 function typeNamePart(t: CType): string {
