@@ -2685,6 +2685,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_dynamic_edges` | Array.from dynamic nullish, string, and non-iterable edge behavior |
 | `array_from_set` | Array.from over typed Set sources with and without mapper callbacks |
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
+| `async_await_closure_return_expr` | returned async closures resume pending expression-return continuations |
 | `async_await_try_catch_values` | async function values resume pending try/catch and try/finally continuations |
 | `for_in` | for-in over typed classes/interfaces, typed arrays, and dynamic objects with continue/break |
 | `map_entries` | typed Map<K, V>.entries() returning ObjectEntry<V, K>[] |
