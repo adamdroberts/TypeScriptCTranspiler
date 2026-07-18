@@ -178,6 +178,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (arraySearchText.length > 0) return arraySearchText;
             const arrayReduceText = resolveStaticArrayReduceCall(node);
             if (arrayReduceText.length > 0) return arrayReduceText;
+            const mapSetText = resolveStaticMapSetCall(node);
+            if (mapSetText.length > 0) return mapSetText;
             const sameValueText = resolveStaticObjectIsCall(node);
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
@@ -3393,6 +3395,71 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (order.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         }
         return ts.factory.createArrayLiteralExpression(order.map((key) => slots.get(key)!));
+    };
+
+    const resolveStaticMapSetCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "has" && method !== "get") return [];
+
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(receiver)) return [];
+        const ctor = unwrapStaticExpression(receiver.expression);
+        if (!ts.isIdentifier(ctor)) return [];
+        if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return [];
+
+        const source = receiver.arguments?.[0];
+        const keyValues = call.arguments.length === 1 ? resolve(call.arguments[0]!) : [];
+        if (keyValues.length === 0) return [];
+
+        if (ctor.text === "Set" && method === "has") {
+            const elements = resolveStaticArrayFromSetSource(source);
+            if (!elements) return [];
+            const values = new Set<string>();
+            for (const element of elements.elements) {
+                if (ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return [];
+                const elementValues = resolve(element);
+                if (elementValues.length !== 1) return [];
+                values.add(elementValues[0]!);
+            }
+            return dedupe(keyValues.map((key) => String(values.has(key))));
+        }
+
+        if (ctor.text !== "Map") return [];
+        const entries = resolveStaticArrayFromMapSource(source);
+        if (!entries) return [];
+        const slots = new Map<string, ts.Expression>();
+        for (const element of entries.elements) {
+            if (ts.isSpreadElement(element)) return [];
+            const entry = resolveCollectionExpression(element);
+            if (!entry || !ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return [];
+            const keyExpr = entry.elements[0];
+            const valueExpr = entry.elements[1];
+            if (!keyExpr || !valueExpr || ts.isSpreadElement(keyExpr) || ts.isSpreadElement(valueExpr)) return [];
+            const entryKeyValues = resolve(keyExpr);
+            if (entryKeyValues.length !== 1) return [];
+            slots.set(entryKeyValues[0]!, valueExpr);
+            if (slots.size > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+
+        if (method === "has") {
+            return dedupe(keyValues.map((key) => String(slots.has(key))));
+        }
+        const out: string[] = [];
+        for (const key of keyValues) {
+            const valueExpr = slots.get(key);
+            if (!valueExpr) {
+                out.push("undefined");
+                continue;
+            }
+            const values = resolve(valueExpr);
+            if (values.length === 0) return [];
+            out.push(...values);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
     };
 
     const resolveStaticObjectWrapperReceiver = (call: ts.CallExpression): ts.Expression | null => {
