@@ -2729,11 +2729,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     const resolveStaticDateCall = (call: ts.CallExpression): string[] => {
-        if (call.arguments.length < 1 || call.arguments.length > 7 || call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
-        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "UTC") return [];
+        if (!ts.isPropertyAccessExpression(callee)) return [];
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Date") return [];
+        if (callee.name.text === "parse") {
+            if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+            const values = resolve(call.arguments[0]!);
+            if (values.length === 0) return [];
+            const out: string[] = [];
+            for (const value of values) {
+                const stamp = Date.parse(value);
+                if (!Number.isFinite(stamp)) return [];
+                out.push(String(stamp));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+            return dedupe(out);
+        }
+        if (callee.name.text !== "UTC") return [];
+        if (call.arguments.length < 1 || call.arguments.length > 7 || call.arguments.some(ts.isSpreadElement)) return [];
 
         const argumentValues = call.arguments.map((argument) => resolveStaticIntegerKeys(argument));
         if (argumentValues.some((values) => values.length === 0)) return [];
