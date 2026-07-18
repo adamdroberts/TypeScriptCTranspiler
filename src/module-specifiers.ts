@@ -133,6 +133,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
             if (ownPredicateText.length > 0) return ownPredicateText;
+            const reflectGetText = resolveStaticReflectGetCall(node);
+            if (reflectGetText.length > 0) return reflectGetText;
             const reflectHasText = resolveStaticReflectHasCall(node);
             if (reflectHasText.length > 0) return reflectHasText;
             const integrityPredicateText = resolveStaticObjectIntegrityPredicateCall(node);
@@ -763,6 +765,60 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
             const index = Number(key);
             return index >= 0 && index < object.text.length;
+        }
+        return null;
+    };
+
+    const resolveStaticReflectGetCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "get") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Reflect") return [];
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object) return [];
+        const keys = resolveKeyTexts(call.arguments[1]!);
+        if (keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const key of keys) {
+            const values = staticReflectGet(object, key);
+            if (!values) return [];
+            out.push(...values);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const staticReflectGet = (object: ts.Expression, key: string): string[] | null => {
+        if (ts.isObjectLiteralExpression(object)) {
+            for (const prop of object.properties) {
+                if (ts.isSpreadAssignment(prop)) return null;
+                if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+                const propName = staticPropertyName(prop.name);
+                if (propName === null) return null;
+                if (propName === key) {
+                    const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+                    const values = resolve(valueExpr);
+                    return values.length === 0 ? null : values;
+                }
+            }
+            return null;
+        }
+        if (ts.isArrayLiteralExpression(object)) {
+            if (key === "length") return [String(object.elements.length)];
+            if (!/^(0|[1-9][0-9]*)$/.test(key)) return null;
+            const element = object.elements[Number(key)];
+            if (!element || ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return null;
+            const values = resolve(element);
+            return values.length === 0 ? null : values;
+        }
+        if (ts.isStringLiteral(object) || ts.isNoSubstitutionTemplateLiteral(object)) {
+            if (key === "length") return [String(object.text.length)];
+            if (!/^(0|[1-9][0-9]*)$/.test(key)) return null;
+            const char = object.text[Number(key)];
+            return char === undefined ? null : [char];
         }
         return null;
     };
