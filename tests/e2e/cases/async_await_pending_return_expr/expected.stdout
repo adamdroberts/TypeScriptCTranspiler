@@ -109,6 +109,9 @@ arrow-logical-and-inline-await-return-await: arrow-logical-and-await
 nullish-inline-await-return-await: nullish-await
 method-nullish-inline-await-return-await: method-nullish-await
 arrow-nullish-inline-await-return-await: arrow-nullish-await
+prelude-local-inline-await-return: fn-prelude-local-await!
+method-prelude-local-inline-await-return: method-prelude-class-method-prelude-local-await!
+arrow-prelude-local-inline-await-return: value-arrow-prelude-local-await!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!

@@ -120,6 +120,11 @@ async function nullishInlineAwaitReturn(prefix: string | undefined): Promise<str
     return prefix ?? await delay(141, "nullish-await");
 }
 
+async function preludeLocalInlineAwaitReturn(prefix: string): Promise<string> {
+    const label = prefix + "prelude-local-";
+    return label + await delay(144, "await") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -428,6 +433,11 @@ class Worker {
     async nullishInlineAwaitReturnMethod(prefix: string | undefined): Promise<string> {
         return prefix ?? await delay(142, "method-nullish-await");
     }
+
+    async preludeLocalInlineAwaitReturnMethod(prefix: string): Promise<string> {
+        const label = this.prefix + prefix + "method-prelude-local-";
+        return label + await delay(145, "await") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -536,6 +546,12 @@ const arrowLogicalAndInlineAwaitReturn = async (flag: boolean): Promise<any> => 
 
 const arrowNullishInlineAwaitReturn = async (prefix: string | undefined): Promise<string> => {
     return prefix ?? await delay(143, "arrow-nullish-await");
+};
+
+const arrowPreludeLocalInlineAwaitReturn = async (prefix: string): Promise<string> => {
+    const label = prefix + "arrow-prelude-";
+    const decorated = label + "local-";
+    return decorated + await delay(146, "await") + "!";
 };
 
 suffix().then((value: string): void => {
@@ -668,6 +684,10 @@ nullishInlineAwaitReturn("nullish-sync").then((value: string): void => {
 
 nullishInlineAwaitReturn(undefined).then((value: string): void => {
     console.log("nullish-inline-await-return-await:", value);
+});
+
+preludeLocalInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-local-inline-await-return:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -892,6 +912,10 @@ new Worker("method-nullish-source").nullishInlineAwaitReturnMethod(undefined).th
     console.log("method-nullish-inline-await-return-await:", value);
 });
 
+new Worker("method-prelude-").preludeLocalInlineAwaitReturnMethod("class-").then((value: string): void => {
+    console.log("method-prelude-local-inline-await-return:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1018,4 +1042,8 @@ arrowNullishInlineAwaitReturn("arrow-nullish-sync").then((value: string): void =
 
 arrowNullishInlineAwaitReturn(undefined).then((value: string): void => {
     console.log("arrow-nullish-inline-await-return-await:", value);
+});
+
+arrowPreludeLocalInlineAwaitReturn("value-").then((value: string): void => {
+    console.log("arrow-prelude-local-inline-await-return:", value);
 });
