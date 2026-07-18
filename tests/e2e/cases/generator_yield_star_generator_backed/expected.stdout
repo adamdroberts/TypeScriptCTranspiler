@@ -1,0 +1,6 @@
+outer before
+outer after
+for-of: 1|2|
+outer before
+outer after
+manual: 1 2 true outer done

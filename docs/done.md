@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- `yield*` materializes generator-backed array sources before delegation, allowing `yield* innerGenerator()` to forward yielded values in the existing AOT generator subset. Test: `generator_yield_star_generator_backed`
 - Dynamic promise combinators consume typed string iterable inputs as one-character dynamic values across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_combinators_dynamic`
 - Dynamic promise combinators assimilate delayed nested thenables from generator-backed iterable inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_generator_recursive`
 - `Promise.try` assimilates delayed dynamic thenables that resolve to nested native Promise records, covering nested fulfillment and rejection. Test: `promise_try_thenable_nested_promise_async`
@@ -1918,6 +1919,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_yield_star_custom_iterator` | materialized generator yield* supports custom class iterator objects |
 | `generator_yield_star_custom_iterator_self` | materialized generator yield* supports direct self-iterable custom iterator objects |
 | `generator_yield_star_custom_iterator_inherited_next` | materialized generator yield* supports custom iterator objects with inherited next |
+| `generator_yield_star_generator_backed` | materialized generator yield* supports generator-backed iterable sources |
 | `generator_backed_iterable` | typed custom iterable class whose Symbol.iterator returns a materialized generator-backed IterableIterator |
 | `generator_next_argument` | array-backed generator next(value?, ...ignored) evaluates and ignores input values |
 | `generator_return_value` | materialized generator return values are exposed once by completed next() and return(...ignored) evaluates extras |

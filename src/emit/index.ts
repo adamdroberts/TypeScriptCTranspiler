@@ -29406,7 +29406,8 @@ class Emitter {
         let arrayExpr: string;
         let sourceElemType: CType;
         if (source.ty.kind === "array" && source.ty.elem) {
-            arrayExpr = source.c;
+            const tmp = this.freshTemp("_yield_star_source");
+            arrayExpr = `({ tsc_array_t* ${tmp} = ${source.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`;
             sourceElemType = source.ty.elem;
         } else if (source.ty.kind === "map" && source.ty.key && source.ty.elem) {
             const map = this.freshTemp("_yield_map");
@@ -31064,7 +31065,8 @@ class Emitter {
         let arrayExpr: string;
         let elemType: CType;
         if (source.ty.kind === "array" && source.ty.elem) {
-            arrayExpr = source.c;
+            const tmp = this.freshTemp("_yield_star_source");
+            arrayExpr = `({ tsc_array_t* ${tmp} = ${source.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`;
             elemType = source.ty.elem;
         } else if (source.ty.kind === "map" && source.ty.key && source.ty.elem) {
             const map = this.freshTemp("_yield_map");
