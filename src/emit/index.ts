@@ -212,6 +212,7 @@ interface AsyncAwaitPreludeExpressionReturnContinuation {
 
 interface AsyncAwaitTryCatchReturnContinuation {
     preludeStatements: readonly ts.Statement[];
+    tryPreludeStatements: readonly ts.Statement[];
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression | null;
@@ -227,6 +228,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
 
 interface AsyncAwaitTryFinallyReturnContinuation {
     preludeStatements: readonly ts.Statement[];
+    tryPreludeStatements: readonly ts.Statement[];
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression | null;
@@ -21516,6 +21518,40 @@ class Emitter {
         return { preludeStatements, captures, nextIndex: index };
     }
 
+    private asyncAwaitTryBlockLocalPrelude(
+        block: ts.Block,
+    ): { preludeStatements: ts.Statement[]; captures: AsyncAwaitContinuationParam[]; nextIndex: number } | null {
+        const preludeStatements: ts.Statement[] = [];
+        const captures: AsyncAwaitContinuationParam[] = [];
+        const captureSymbols = new Set<ts.Symbol>();
+        let index = 0;
+        while (index < block.statements.length) {
+            const stmt = block.statements[index]!;
+            if (this.awaitedContinuationStep(stmt) || this.awaitedReturnContinuationStep(stmt)) break;
+            if (!ts.isVariableStatement(stmt)) return null;
+            if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+            for (const decl of stmt.declarationList.declarations) {
+                if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                const symbol = this.symbolForIdentifier(decl.name);
+                if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                if (!this.isSideEffectFreeTopLevelConstInitializer(decl.initializer)) return null;
+                const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
+                const name = mangleIdent(decl.name.text);
+                captureSymbols.add(symbol);
+                captures.push({
+                    symbol,
+                    name,
+                    type,
+                    field: `capture_${name}`,
+                });
+            }
+            preludeStatements.push(stmt);
+            index++;
+        }
+        return { preludeStatements, captures, nextIndex: index };
+    }
+
     private expressionDeclaredOrCurrentType(expr: ts.Expression): ts.Type {
         if (ts.isIdentifier(expr)) {
             const sym = this.symbolForIdentifier(expr);
@@ -25116,7 +25152,10 @@ class Emitter {
         if (!ts.isTryStatement(tryStmt) || !tryStmt.catchClause || tryStmt.finallyBlock) return null;
         if (tryStmt.catchClause.block.statements.length < 1) return null;
 
-        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[0]!);
+        const tryPrelude = this.asyncAwaitTryBlockLocalPrelude(tryStmt.tryBlock);
+        if (!tryPrelude) return null;
+        const remainingTryStatements = tryStmt.tryBlock.statements.length - tryPrelude.nextIndex;
+        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
         const catchStatements = tryStmt.catchClause.block.statements;
         const catchStmt = catchStatements[catchStatements.length - 1]!;
         const catchPreludeStatements = catchStatements.slice(0, -1);
@@ -25124,7 +25163,7 @@ class Emitter {
         const catchPreludeInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         if (!awaited) {
-            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[0]!);
+            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited) return null;
@@ -25135,14 +25174,14 @@ class Emitter {
         const catchThrowExpr = ts.isThrowStatement(catchStmt) ? catchStmt.expression : null;
         let successReturnExpr: ts.Expression | null = null;
         if (successReturnsAwaited) {
-            if (remainingStatements !== 1 || tryStmt.tryBlock.statements.length !== 1) return null;
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else if (remainingStatements === 1) {
-            if (tryStmt.tryBlock.statements.length !== 2) return null;
-            const tryReturn = tryStmt.tryBlock.statements[1]!;
+            if (remainingTryStatements !== 2) return null;
+            const tryReturn = tryStmt.tryBlock.statements[tryPrelude.nextIndex + 1]!;
             if (!ts.isReturnStatement(tryReturn)) return null;
             successReturnExpr = tryReturn.expression ? this.unwrapTransparentExpression(tryReturn.expression) : null;
         } else {
-            if (tryStmt.tryBlock.statements.length !== 1) return null;
+            if (remainingTryStatements !== 1) return null;
             const finalReturn = body.statements[prelude.nextIndex + 1]!;
             if (!ts.isReturnStatement(finalReturn)) return null;
             successReturnExpr = finalReturn.expression ? this.unwrapTransparentExpression(finalReturn.expression) : null;
@@ -25156,7 +25195,7 @@ class Emitter {
             : null;
         if (catchDecl && !catchSymbol) return null;
 
-        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures];
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures, ...tryPrelude.captures];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -25265,6 +25304,7 @@ class Emitter {
 
         return {
             preludeStatements: prelude.preludeStatements,
+            tryPreludeStatements: tryPrelude.preludeStatements,
             variable: awaited.variable,
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
@@ -25288,6 +25328,7 @@ class Emitter {
         const continuation = this.asyncAwaitTryCatchReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
+        this.emitAsyncAwaitPreludeStatements(buf, continuation.tryPreludeStatements, continuation.params);
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -25483,29 +25524,32 @@ class Emitter {
         const tryStmt = body.statements[prelude.nextIndex]!;
         if (!ts.isTryStatement(tryStmt) || tryStmt.catchClause || !tryStmt.finallyBlock) return null;
 
-        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[0]!);
+        const tryPrelude = this.asyncAwaitTryBlockLocalPrelude(tryStmt.tryBlock);
+        if (!tryPrelude) return null;
+        const remainingTryStatements = tryStmt.tryBlock.statements.length - tryPrelude.nextIndex;
+        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
         let successReturnsAwaited = false;
         if (!awaited) {
-            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[0]!);
+            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited) return null;
         let successReturnExpr: ts.Expression | null = null;
         if (successReturnsAwaited) {
-            if (remainingStatements !== 1 || tryStmt.tryBlock.statements.length !== 1) return null;
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else if (remainingStatements === 1) {
-            if (tryStmt.tryBlock.statements.length !== 2) return null;
-            const tryReturn = tryStmt.tryBlock.statements[1]!;
+            if (remainingTryStatements !== 2) return null;
+            const tryReturn = tryStmt.tryBlock.statements[tryPrelude.nextIndex + 1]!;
             if (!ts.isReturnStatement(tryReturn)) return null;
             successReturnExpr = tryReturn.expression ? this.unwrapTransparentExpression(tryReturn.expression) : null;
         } else {
-            if (tryStmt.tryBlock.statements.length !== 1) return null;
+            if (remainingTryStatements !== 1) return null;
             const finalReturn = body.statements[prelude.nextIndex + 1]!;
             if (!ts.isReturnStatement(finalReturn)) return null;
             successReturnExpr = finalReturn.expression ? this.unwrapTransparentExpression(finalReturn.expression) : null;
         }
 
-        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures];
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures, ...tryPrelude.captures];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -25606,6 +25650,7 @@ class Emitter {
 
         return {
             preludeStatements: prelude.preludeStatements,
+            tryPreludeStatements: tryPrelude.preludeStatements,
             variable: awaited.variable,
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
@@ -25627,6 +25672,7 @@ class Emitter {
         const continuation = this.asyncAwaitTryFinallyReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
+        this.emitAsyncAwaitPreludeStatements(buf, continuation.tryPreludeStatements, continuation.params);
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;

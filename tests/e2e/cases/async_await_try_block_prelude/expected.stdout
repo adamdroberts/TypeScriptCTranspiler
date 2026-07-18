@@ -1,0 +1,6 @@
+decl-catch-try-prelude: decl-caught:decl-bad
+decl-finally-try-prelude: decl-final|decl-final-ok D
+value-catch-try-prelude: value-try:value-ok
+value-finally-try-prelude: value-final-bad DV
+method-catch-try-prelude: class-method-caught:method-bad
+method-finally-try-prelude: class-method-final|method-final-ok DVclass-M
