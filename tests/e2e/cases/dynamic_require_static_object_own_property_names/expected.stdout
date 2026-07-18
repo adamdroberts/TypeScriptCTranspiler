@@ -1,0 +1,2 @@
+object own names require: own-a own-b
+object own names direct: own-c own-d
