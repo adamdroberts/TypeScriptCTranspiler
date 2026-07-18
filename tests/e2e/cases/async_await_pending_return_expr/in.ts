@@ -135,6 +135,12 @@ async function preludeDirectReturnAwait(prefix: string): Promise<string> {
     return await delay(150, label + "await");
 }
 
+async function preludeIfBranchInlineAwaitReturn(flag: boolean, prefix: string): Promise<string> {
+    const label = prefix + "prelude-if-";
+    if (flag) return label + await delay(153, "await") + "!";
+    return label + "sync!";
+}
+
 class Worker {
     prefix: string;
 
@@ -458,6 +464,12 @@ class Worker {
         const label = this.prefix + prefix + "method-prelude-direct-";
         return await delay(151, label + "await");
     }
+
+    async preludeIfBranchInlineAwaitReturnMethod(flag: boolean, prefix: string): Promise<string> {
+        const label = this.prefix + prefix + "method-prelude-if-";
+        if (flag) return label + await delay(154, "await") + "!";
+        return label + "sync!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -582,6 +594,12 @@ const arrowPreludeNullishLocalInlineAwaitReturn = async (prefix: string | undefi
 const arrowPreludeDirectReturnAwait = async (prefix: string): Promise<string> => {
     const label = prefix + "arrow-prelude-direct-";
     return await delay(152, label + "await");
+};
+
+const arrowPreludeIfBranchInlineAwaitReturn = async (flag: boolean, prefix: string): Promise<string> => {
+    const label = prefix + "arrow-prelude-if-";
+    if (flag) return label + await delay(155, "await") + "!";
+    return label + "sync!";
 };
 
 suffix().then((value: string): void => {
@@ -726,6 +744,10 @@ preludeConditionalLocalInlineAwaitReturn(true, "fn-").then((value: string): void
 
 preludeDirectReturnAwait("fn-").then((value: string): void => {
     console.log("prelude-direct-return-await:", value);
+});
+
+preludeIfBranchInlineAwaitReturn(true, "fn-").then((value: string): void => {
+    console.log("prelude-if-branch-inline-await-return:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -962,6 +984,10 @@ new Worker("method-prelude-").preludeDirectReturnAwaitMethod("class-").then((val
     console.log("method-prelude-direct-return-await:", value);
 });
 
+new Worker("method-prelude-").preludeIfBranchInlineAwaitReturnMethod(true, "class-").then((value: string): void => {
+    console.log("method-prelude-if-branch-inline-await-return:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1100,4 +1126,8 @@ arrowPreludeNullishLocalInlineAwaitReturn(undefined).then((value: string): void 
 
 arrowPreludeDirectReturnAwait("value-").then((value: string): void => {
     console.log("arrow-prelude-direct-return-await:", value);
+});
+
+arrowPreludeIfBranchInlineAwaitReturn(true, "value-").then((value: string): void => {
+    console.log("arrow-prelude-if-branch-inline-await-return:", value);
 });
