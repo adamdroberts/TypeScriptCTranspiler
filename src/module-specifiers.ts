@@ -119,6 +119,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringStaticText.length > 0) return stringStaticText;
             const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
             if (regexpEscapeText.length > 0) return regexpEscapeText;
+            const uriText = resolveStaticUriCall(node);
+            if (uriText.length > 0) return uriText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
@@ -442,6 +444,41 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             const escaped = escapeRegExpAscii(value);
             if (escaped === null) return [];
             out.push(escaped);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticUriCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isIdentifier(callee)) return [];
+        const name = callee.text;
+        if (
+            name !== "encodeURI" &&
+            name !== "encodeURIComponent" &&
+            name !== "decodeURI" &&
+            name !== "decodeURIComponent"
+        ) {
+            return [];
+        }
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+        const out: string[] = [];
+        for (const value of values) {
+            try {
+                if (name === "encodeURI") {
+                    out.push(encodeURI(value));
+                } else if (name === "encodeURIComponent") {
+                    out.push(encodeURIComponent(value));
+                } else if (name === "decodeURI") {
+                    out.push(decodeURI(value));
+                } else {
+                    out.push(decodeURIComponent(value));
+                }
+            } catch {
+                return [];
+            }
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);

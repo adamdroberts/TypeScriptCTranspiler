@@ -441,6 +441,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - CommonJS computed named-export metadata accepts checker-proven finite literal-union keys, including JavaScript JSDoc union keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_union_computed_exports`
 - CommonJS computed named-export metadata accepts checker-proven single literal keys, including JavaScript JSDoc single-literal keys, and lowers them through existing AOT export dispatch. Test: `node_modules_commonjs_jsdoc_single_computed_exports`
 - CommonJS computed named-export metadata accepts static string-array `.join(...)` export keys through the finite AOT computed-property resolver. Test: `node_modules_commonjs_computed_string_exports`
+- Finite dynamic `require(...)` proofs resolve static URI encode/decode helper specifier fragments into the AOT module graph. Test: `dynamic_require_static_uri`
 - Finite dynamic `require(...)` proofs resolve static ASCII `RegExp.escape(...)` specifier fragments into the AOT module graph. Test: `dynamic_require_static_regexp_escape`
 - Finite dynamic `require(...)` proofs resolve static string `.toString()` and `.valueOf()` identity specifier fragments into the AOT module graph. Test: `dynamic_require_static_string_identity`
 - Finite dynamic `require(...)` proofs resolve static `String.fromCharCode(...)` and `String.fromCodePoint(...)` specifier fragments for finite integer arguments into the AOT module graph. Test: `dynamic_require_static_string_from_code`
