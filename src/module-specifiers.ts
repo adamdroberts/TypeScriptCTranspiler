@@ -2013,6 +2013,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Reflect") return [];
 
+        const bufferValues = resolveStaticBufferReflectGet(call.arguments[0]!, call.arguments[1]!);
+        if (bufferValues.length > 0) return bufferValues;
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object) return [];
         const keys = resolveKeyTexts(call.arguments[1]!);
@@ -2058,6 +2061,31 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return char === undefined ? null : [char];
         }
         return null;
+    };
+
+    const resolveStaticBufferReflectGet = (objectExpr: ts.Expression, keyExpr: ts.Expression): string[] => {
+        const buffers = resolveStaticBufferExpression(objectExpr);
+        if (buffers.length === 0) return [];
+        const keys = resolveKeyTexts(keyExpr);
+        if (keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const key of keys) {
+                const value = staticBufferReflectGet(buffer, key);
+                if (value === null) return [];
+                out.push(value);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const staticBufferReflectGet = (buffer: Buffer, key: string): string | null => {
+        if (key === "length") return String(buffer.length);
+        if (!/^(0|[1-9][0-9]*)$/.test(key)) return null;
+        const index = Number(key);
+        return index >= 0 && index < buffer.length ? String(buffer[index]) : null;
     };
 
     const resolveStaticDescriptorPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
@@ -2202,6 +2230,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Reflect") return [];
 
+        const bufferHas = resolveStaticBufferReflectHas(call.arguments[0]!, call.arguments[1]!);
+        if (bufferHas.length > 0) return bufferHas;
+
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object) return [];
         const keys = resolveKeyTexts(call.arguments[1]!);
@@ -2215,6 +2246,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticBufferReflectHas = (objectExpr: ts.Expression, keyExpr: ts.Expression): string[] => {
+        const buffers = resolveStaticBufferExpression(objectExpr);
+        if (buffers.length === 0) return [];
+        const keys = resolveKeyTexts(keyExpr);
+        if (keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const key of keys) {
+                out.push(String(staticBufferReflectHas(buffer, key)));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const staticBufferReflectHas = (buffer: Buffer, key: string): boolean => {
+        if (key === "length") return true;
+        return staticBufferHasOwnKey(buffer, key);
     };
 
     const staticReflectHas = (object: ts.Expression, key: string): boolean | null => {
