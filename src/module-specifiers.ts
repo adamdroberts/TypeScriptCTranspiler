@@ -154,6 +154,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferIntegerWriteText.length > 0) return bufferIntegerWriteText;
             const bufferIntegerReadText = resolveStaticBufferIntegerReadCall(node);
             if (bufferIntegerReadText.length > 0) return bufferIntegerReadText;
+            const bufferFloatWriteText = resolveStaticBufferFloatWriteCall(node);
+            if (bufferFloatWriteText.length > 0) return bufferFloatWriteText;
             const bufferFloatReadText = resolveStaticBufferFloatReadCall(node);
             if (bufferFloatReadText.length > 0) return bufferFloatReadText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
@@ -1503,6 +1505,44 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return [];
                 }
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferFloatWriteCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (
+            method !== "writeFloatLE" &&
+            method !== "writeFloatBE" &&
+            method !== "writeDoubleLE" &&
+            method !== "writeDoubleBE"
+        ) {
+            return [];
+        }
+
+        const buffers = resolveStaticBufferExpression(callee.expression);
+        if (buffers.length === 0) return [];
+        const values = resolveStaticNumberValues(call.arguments[0]!);
+        if (values.length === 0) return [];
+        const offsets = resolveStaticOptionalBufferIntegerArg(call.arguments[1], undefined);
+        if (offsets.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const value of values) {
+                for (const offset of offsets) {
+                    try {
+                        const receiver = Buffer.from(buffer);
+                        out.push(String((receiver[method as keyof Buffer] as (...args: unknown[]) => number)(value, offset)));
+                    } catch {
+                        return [];
+                    }
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
             }
         }
         return dedupe(out);
