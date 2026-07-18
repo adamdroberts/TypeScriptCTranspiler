@@ -43027,7 +43027,11 @@ class Emitter {
                 ty: arrayType(source.ty.elem),
             };
         }
-        return source;
+        const tmp = this.freshTemp("_promiseItems");
+        return {
+            c: `({ tsc_array_t* ${tmp} = ${source.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`,
+            ty: source.ty,
+        };
     }
 
     private ensurePromiseExecutorEnv(): string {
