@@ -954,6 +954,13 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupeBuffers(out);
     };
 
+    const resolveStaticBufferValueOfExpression = (call: ts.CallExpression): Buffer[] => {
+        if (call.arguments.length > 0 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "valueOf") return [];
+        return resolveStaticBufferExpression(callee.expression);
+    };
+
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
@@ -967,6 +974,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (fillBuffers.length > 0) return fillBuffers;
         const swapBuffers = resolveStaticBufferSwapExpression(unwrapped);
         if (swapBuffers.length > 0) return swapBuffers;
+        const valueOfBuffers = resolveStaticBufferValueOfExpression(unwrapped);
+        if (valueOfBuffers.length > 0) return valueOfBuffers;
         const callee = unwrapStaticExpression(unwrapped.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "concat") return [];
         const target = unwrapStaticExpression(callee.expression);
