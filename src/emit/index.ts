@@ -25697,15 +25697,19 @@ class Emitter {
     ): { variable: ts.Identifier | null; awaitExpr: ts.AwaitExpression } | null {
         const local = this.awaitedLocalDeclaration(stmt);
         if (local) return local;
-        if (!ts.isExpressionStatement(stmt) || !ts.isAwaitExpression(stmt.expression)) return null;
-        return { variable: null, awaitExpr: stmt.expression };
+        if (!ts.isExpressionStatement(stmt)) return null;
+        const expression = this.unwrapTransparentExpression(stmt.expression);
+        if (!ts.isAwaitExpression(expression)) return null;
+        return { variable: null, awaitExpr: expression };
     }
 
     private awaitedReturnContinuationStep(
         stmt: ts.Statement,
     ): { variable: null; awaitExpr: ts.AwaitExpression } | null {
-        if (!ts.isReturnStatement(stmt) || !stmt.expression || !ts.isAwaitExpression(stmt.expression)) return null;
-        return { variable: null, awaitExpr: stmt.expression };
+        if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+        const expression = this.unwrapTransparentExpression(stmt.expression);
+        if (!ts.isAwaitExpression(expression)) return null;
+        return { variable: null, awaitExpr: expression };
     }
 
     private asyncAwaitTwoStepContinuationReferences(

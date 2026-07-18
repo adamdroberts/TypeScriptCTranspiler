@@ -1,0 +1,6 @@
+parenthesized-expression-statement: parenthesized-done
+parenthesized-try-catch-fulfilled: try-ok
+parenthesized-try-catch-rejected: caught:bad
+parenthesized-try-finally-fulfilled: finally-ok F
+parenthesized-try-finally-rejected: final-bad FR
+parenthesized-return-await: return-ok
