@@ -14465,6 +14465,9 @@ class Emitter {
             return name.text;
         }
         if (ts.isComputedPropertyName(name)) {
+            const names = this.staticComputedPropertyExpressionTexts(name.expression);
+            if (names.length === 1) return names[0]!;
+            if (names.length > 1) return null;
             return this.sideEffectFreeStringLiteralText(name.expression, seenConsts);
         }
         return null;
@@ -15338,7 +15341,7 @@ class Emitter {
         if (!ts.isStringLiteralLike(specifier)) return null;
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
-        if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
+        if (!sf) return null;
         if (!this.hasCommonJsEsModuleMarker(sf)) {
             const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
             if (defaultMember && !this.isDirectCommonJsDefaultExportAccess(defaultMember)) {
@@ -15367,7 +15370,7 @@ class Emitter {
         if (!ts.isStringLiteralLike(specifier)) return null;
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
-        if (!sf || !this.isJavaScriptSourceFile(sf)) return null;
+        if (!sf) return null;
         const exportName = importSpec.propertyName?.text ?? importSpec.name.text;
         const decl = this.commonJsExportedMemberDeclaration(sf, exportName);
         if (decl) return { name: exportName, decl, specifier: specifier.text };
@@ -15611,7 +15614,6 @@ class Emitter {
     }
 
     private commonJsObjectAssignExports(stmt: ts.Statement): CommonJsObjectAssignExport[] | null {
-        if (!this.isJavaScriptSourceFile(stmt.getSourceFile())) return null;
         if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) return null;
         return this.commonJsObjectAssignExportCall(stmt.expression);
     }
@@ -16577,7 +16579,7 @@ class Emitter {
         const cur = this.unwrapTransparentExpression(source);
         if (ts.isObjectLiteralExpression(cur)) return this.commonJsObjectAssignExportObjectEntries(cur);
         if (ts.isIdentifier(cur)) {
-            const decl = this.untypedJsObjectLiteralVariableDeclaration(cur);
+            const decl = this.staticObjectLiteralVariableDeclaration(cur);
             const init = decl?.initializer;
             if (init && ts.isObjectLiteralExpression(init)) return this.commonJsObjectAssignExportObjectEntries(init);
         }
@@ -21398,6 +21400,17 @@ class Emitter {
     private untypedJsObjectLiteralVariableDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
         const decl = this.untypedJsLiteralVariableDeclaration(id);
         return decl &&
+            decl.initializer &&
+            ts.isObjectLiteralExpression(decl.initializer)
+                ? decl
+                : null;
+    }
+
+    private staticObjectLiteralVariableDeclaration(id: ts.Identifier): ts.VariableDeclaration | null {
+        const sym = this.symbolForIdentifier(id);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        return decl &&
+            ts.isVariableDeclaration(decl) &&
             decl.initializer &&
             ts.isObjectLiteralExpression(decl.initializer)
                 ? decl
