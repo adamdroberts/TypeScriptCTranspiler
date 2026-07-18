@@ -1,3 +1,3 @@
 {
-  "description": "async source try/catch and try/finally continuations capture await-free locals declared before the try statement"
+  "description": "async source try/catch and try/finally continuations capture initialized and later-assigned locals declared before the try statement"
 }

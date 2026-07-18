@@ -4,3 +4,6 @@ value-catch-source-prelude: value-catch:value-ok
 value-finally-source-prelude: value-final-bad decl-final|value-final|
 method-catch-source-prelude: class-method-caught:method-bad
 method-finally-source-prelude: class-method-final|method-final-ok decl-final|value-final|class-method-final|
+decl-catch-assigned-source-prelude: decl-assigned-decl-assigned-ok
+value-finally-assigned-source-prelude: value-assigned-final|value-assigned-ok decl-final|value-final|class-method-final|value-assigned-final|
+method-catch-assigned-source-prelude: class-method-assigned-method-assigned-ok

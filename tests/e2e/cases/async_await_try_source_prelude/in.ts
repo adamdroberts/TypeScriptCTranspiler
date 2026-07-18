@@ -30,6 +30,17 @@ async function declaredFinallySourcePrelude(): Promise<string> {
     }
 }
 
+async function declaredCatchAssignedSourcePrelude(): Promise<string> {
+    let head: string;
+    head = "decl-assigned-";
+    try {
+        const value = await delay(7, "decl-assigned-ok");
+        return head + value;
+    } catch (e) {
+        return "decl-assigned-caught:" + e;
+    }
+}
+
 const valueCatchSourcePrelude = async (): Promise<string> => {
     const head = "value-";
     try {
@@ -44,6 +55,17 @@ const valueFinallySourcePrelude = async (): Promise<string> => {
     const head = "value-final|";
     try {
         const value = await delayedRejectAfter(4, "value-final-bad");
+        return head + value;
+    } finally {
+        trace += head;
+    }
+};
+
+const valueFinallyAssignedSourcePrelude = async (): Promise<string> => {
+    let head: string;
+    head = "value-assigned-final|";
+    try {
+        const value = await delay(8, "value-assigned-ok");
         return head + value;
     } finally {
         trace += head;
@@ -76,6 +98,17 @@ class SourcePreludeWorker {
             trace += head;
         }
     }
+
+    async catchAssignedSourcePrelude(): Promise<string> {
+        let head: string;
+        head = this.prefix + "method-assigned-";
+        try {
+            const value = await delay(9, "method-assigned-ok");
+            return head + value;
+        } catch (e) {
+            return this.prefix + "method-assigned-caught:" + e;
+        }
+    }
 }
 
 const worker = new SourcePreludeWorker("class-");
@@ -102,4 +135,16 @@ worker.catchSourcePrelude().then((value: string): void => {
 
 worker.finallySourcePrelude().then((value: string): void => {
     console.log("method-finally-source-prelude:", value, trace);
+});
+
+declaredCatchAssignedSourcePrelude().then((value: string): void => {
+    console.log("decl-catch-assigned-source-prelude:", value);
+});
+
+valueFinallyAssignedSourcePrelude().then((value: string): void => {
+    console.log("value-finally-assigned-source-prelude:", value, trace);
+});
+
+worker.catchAssignedSourcePrelude().then((value: string): void => {
+    console.log("method-catch-assigned-source-prelude:", value);
 });

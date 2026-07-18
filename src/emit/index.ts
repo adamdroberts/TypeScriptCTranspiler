@@ -21466,6 +21466,8 @@ class Emitter {
         const preludeStatements: ts.Statement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
+        const declared = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const initialized = new Set<ts.Symbol>();
         let index = 0;
         let ok = true;
         const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
@@ -21480,6 +21482,21 @@ class Emitter {
             const stmt = body.statements[index]!;
             if (stop(stmt)) break;
             if (ts.isExpressionStatement(stmt)) {
+                const assignment = this.unwrapTransparentExpression(stmt.expression);
+                if (ts.isBinaryExpression(assignment) && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(assignment.left)) {
+                    const symbol = this.symbolForIdentifier(assignment.left);
+                    const capture = symbol ? declared.get(symbol) : undefined;
+                    if (capture) {
+                        if (!symbol || initialized.has(symbol)) return null;
+                        visitNoAwaitOrNestedScope(assignment.right);
+                        if (!ok) return null;
+                        initialized.add(symbol);
+                        captures.push(capture);
+                        preludeStatements.push(stmt);
+                        index++;
+                        continue;
+                    }
+                }
                 visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
                 preludeStatements.push(stmt);
@@ -21489,25 +21506,32 @@ class Emitter {
             if (ts.isVariableStatement(stmt)) {
                 if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
                 for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                    if (!ts.isIdentifier(decl.name)) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
+                    const name = mangleIdent(decl.name.text);
+                    const capture = {
+                        symbol,
+                        name,
+                        type,
+                        field: `capture_${name}`,
+                    };
+                    captureSymbols.add(symbol);
+                    if (!decl.initializer) {
+                        if (stmt.declarationList.flags & ts.NodeFlags.Const) return null;
+                        declared.set(symbol, capture);
+                        continue;
+                    }
                     if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
                         visitNoAwaitOrNestedScope(decl.initializer);
                         if (!ok) return null;
                     } else if (type.kind !== "function") {
                         return null;
                     }
-                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
-                    const name = mangleIdent(decl.name.text);
-                    captureSymbols.add(symbol);
-                    captures.push({
-                        symbol,
-                        name,
-                        type,
-                        field: `capture_${name}`,
-                    });
+                    initialized.add(symbol);
+                    captures.push(capture);
                 }
                 preludeStatements.push(stmt);
                 index++;
