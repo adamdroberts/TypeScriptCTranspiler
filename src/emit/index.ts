@@ -21392,6 +21392,9 @@ class Emitter {
             type.kind === "set" ||
             type.kind === "weakmap" ||
             type.kind === "weakset" ||
+            type.kind === "regexp" ||
+            type.kind === "date" ||
+            type.kind === "error" ||
             type.kind === "class";
     }
 

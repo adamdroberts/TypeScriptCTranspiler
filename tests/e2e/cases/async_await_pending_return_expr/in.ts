@@ -360,6 +360,30 @@ async function preludeWeakSetFiveAwait(prefix: string): Promise<string> {
     return (seen.has(key) ? "true" : "false") + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
 }
 
+async function preludeBuiltinsAwaitedLocalReturn(prefix: string): Promise<string> {
+    const pattern = new RegExp("^" + prefix + "value$");
+    const stamp = new Date(Date.UTC(2020, 1, 3, 4, 5, 6, 7));
+    const problem = new Error(prefix + "error");
+    const value = await delay(289, "value");
+    return (pattern.test(prefix + value) ? "true" : "false") + ":" + stamp.toISOString() + ":" + problem.toString();
+}
+
+async function preludeRegExpInlineAwaitReturn(prefix: string): Promise<string> {
+    const pattern = new RegExp("^" + prefix + "inline-value$");
+    return pattern.toString() + ":" + await delay(290, prefix + "inline-value");
+}
+
+async function preludeDateErrorFiveAwait(prefix: string): Promise<string> {
+    const stamp = new Date(Date.UTC(2021, 2, 4, 5, 6, 7, 8));
+    const problem = new TypeError(prefix + "five-error");
+    const first = await delay(291, prefix + "one");
+    const second = await delay(292, first + "-two");
+    const third = await delay(293, first + ":" + second + "-three");
+    const fourth = await delay(294, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(295, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return stamp.toISOString() + ":" + problem.toString() + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
+}
+
 class Worker {
     prefix: string;
 
@@ -1705,4 +1729,16 @@ preludeWeakMapInlineAwaitReturn("fn-").then((value: string): void => {
 
 preludeWeakSetFiveAwait("fn-").then((value: string): void => {
     console.log("prelude-weak-set-five-await:", value);
+});
+
+preludeBuiltinsAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-builtins-awaited-local-return:", value);
+});
+
+preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-regexp-inline-await-return:", value);
+});
+
+preludeDateErrorFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-date-error-five-await:", value);
 });
