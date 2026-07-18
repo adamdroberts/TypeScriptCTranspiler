@@ -1358,6 +1358,11 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return val;
         }
 
+        if (ts.isCallExpression(cur)) {
+            const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
+            if (valueOfReceiver) return resolveCollectionExpression(valueOfReceiver);
+        }
+
         if (ts.isPropertyAccessExpression(cur)) {
             const obj = resolveCollectionExpression(cur.expression);
             if (obj && ts.isObjectLiteralExpression(obj)) {
@@ -1404,6 +1409,18 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticObjectPrototypeValueOfReceiver = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "call") return null;
+        const methodAccess = unwrapStaticExpression(callee.expression);
+        if (!ts.isPropertyAccessExpression(methodAccess) || methodAccess.name.text !== "valueOf") return null;
+        const prototypeAccess = unwrapStaticExpression(methodAccess.expression);
+        if (!ts.isPropertyAccessExpression(prototypeAccess) || prototypeAccess.name.text !== "prototype") return null;
+        const target = unwrapStaticExpression(prototypeAccess.expression);
+        return ts.isIdentifier(target) && target.text === "Object" ? call.arguments[0]! : null;
     };
 
     const resolveStaticCollectionAccess = (
