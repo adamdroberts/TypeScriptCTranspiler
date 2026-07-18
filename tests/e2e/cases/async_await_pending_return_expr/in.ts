@@ -71,6 +71,15 @@ async function branchMixedInlineAwaitReturn(flag: boolean, prefix: string): Prom
     return prefix + "branch-mixed-sync!";
 }
 
+async function branchConditionalInlineAwaitReturn(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+    if (outer) {
+        return inner
+            ? prefix + await delay(129, "branch-conditional-inner") + "!"
+            : prefix + "branch-conditional-sync!";
+    }
+    return prefix + await delay(130, "branch-conditional-fallthrough") + "!";
+}
+
 async function nestedBranchInlineAwaitReturn(outer: boolean, inner: boolean, prefix: string): Promise<string> {
     if (outer) {
         if (inner) return prefix + await delay(102, "nested-inner") + "!";
@@ -359,6 +368,15 @@ class Worker {
         return this.prefix + prefix + await delay(121, "method-branch-mixed-await") + "!";
     }
 
+    async branchConditionalInlineAwaitReturnMethod(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+        if (outer) {
+            return inner
+                ? this.prefix + prefix + await delay(131, "method-branch-conditional-inner") + "!"
+                : this.prefix + prefix + "method-branch-conditional-sync!";
+        }
+        return this.prefix + prefix + await delay(132, "method-branch-conditional-fallthrough") + "!";
+    }
+
     async nestedBranchInlineAwaitReturnMethod(outer: boolean, inner: boolean, prefix: string): Promise<string> {
         if (outer) {
             if (inner) return this.prefix + prefix + await delay(105, "method-nested-inner") + "!";
@@ -447,6 +465,15 @@ const arrowBranchMixedInlineAwaitReturn = async (flag: boolean, prefix: string):
     return prefix + "arrow-branch-mixed-sync!";
 };
 
+const arrowBranchConditionalInlineAwaitReturn = async (outer: boolean, inner: boolean, prefix: string): Promise<string> => {
+    if (outer) {
+        return inner
+            ? prefix + await delay(133, "arrow-branch-conditional-inner") + "!"
+            : prefix + "arrow-branch-conditional-sync!";
+    }
+    return prefix + await delay(134, "arrow-branch-conditional-fallthrough") + "!";
+};
+
 const arrowNestedBranchInlineAwaitReturn = async (outer: boolean, inner: boolean, prefix: string): Promise<string> => {
     if (outer) {
         if (inner) return prefix + await delay(108, "arrow-nested-inner") + "!";
@@ -529,6 +556,18 @@ branchMixedInlineAwaitReturn(true, "fn-").then((value: string): void => {
 
 branchMixedInlineAwaitReturn(false, "fn-").then((value: string): void => {
     console.log("branch-mixed-inline-await-return-sync:", value);
+});
+
+branchConditionalInlineAwaitReturn(true, true, "fn-").then((value: string): void => {
+    console.log("branch-conditional-inline-await-return-inner:", value);
+});
+
+branchConditionalInlineAwaitReturn(true, false, "fn-").then((value: string): void => {
+    console.log("branch-conditional-inline-await-return-sync:", value);
+});
+
+branchConditionalInlineAwaitReturn(false, false, "fn-").then((value: string): void => {
+    console.log("branch-conditional-inline-await-return-fallthrough:", value);
 });
 
 nestedBranchInlineAwaitReturn(true, true, "fn-").then((value: string): void => {
@@ -717,6 +756,18 @@ new Worker("method-branch-mixed-").branchMixedInlineAwaitReturnMethod(false, "cl
     console.log("method-branch-mixed-inline-await-return-await:", value);
 });
 
+new Worker("method-branch-conditional-").branchConditionalInlineAwaitReturnMethod(true, true, "class-").then((value: string): void => {
+    console.log("method-branch-conditional-inline-await-return-inner:", value);
+});
+
+new Worker("method-branch-conditional-").branchConditionalInlineAwaitReturnMethod(true, false, "class-").then((value: string): void => {
+    console.log("method-branch-conditional-inline-await-return-sync:", value);
+});
+
+new Worker("method-branch-conditional-").branchConditionalInlineAwaitReturnMethod(false, false, "class-").then((value: string): void => {
+    console.log("method-branch-conditional-inline-await-return-fallthrough:", value);
+});
+
 new Worker("method-nested-").nestedBranchInlineAwaitReturnMethod(true, true, "class-").then((value: string): void => {
     console.log("method-nested-branch-inline-await-return-inner:", value);
 });
@@ -807,6 +858,18 @@ arrowBranchMixedInlineAwaitReturn(true, "value-").then((value: string): void => 
 
 arrowBranchMixedInlineAwaitReturn(false, "value-").then((value: string): void => {
     console.log("arrow-branch-mixed-inline-await-return-sync:", value);
+});
+
+arrowBranchConditionalInlineAwaitReturn(true, true, "value-").then((value: string): void => {
+    console.log("arrow-branch-conditional-inline-await-return-inner:", value);
+});
+
+arrowBranchConditionalInlineAwaitReturn(true, false, "value-").then((value: string): void => {
+    console.log("arrow-branch-conditional-inline-await-return-sync:", value);
+});
+
+arrowBranchConditionalInlineAwaitReturn(false, false, "value-").then((value: string): void => {
+    console.log("arrow-branch-conditional-inline-await-return-fallthrough:", value);
 });
 
 arrowNestedBranchInlineAwaitReturn(true, true, "value-").then((value: string): void => {

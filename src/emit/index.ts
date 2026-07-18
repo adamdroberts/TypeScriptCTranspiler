@@ -25670,6 +25670,13 @@ class Emitter {
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (ts.isReturnStatement(stmt)) {
             if (!stmt.expression) return null;
+            if (ts.isConditionalExpression(stmt.expression)) {
+                return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+                    stmt.expression,
+                    parameters,
+                    thisValue,
+                );
+            }
             const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
                 stmt.expression,
                 parameters,

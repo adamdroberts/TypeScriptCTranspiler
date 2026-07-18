@@ -1,10 +1,13 @@
 branch-mixed-inline-await-return-sync: fn-branch-mixed-sync!
+branch-conditional-inline-await-return-sync: fn-branch-conditional-sync!
 conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
 nested-conditional-inline-await-return-sync: fn-nested-conditional-sync!
 method-branch-mixed-inline-await-return-sync: method-branch-mixed-class-method-branch-mixed-sync!
+method-branch-conditional-inline-await-return-sync: method-branch-conditional-class-method-branch-conditional-sync!
 method-conditional-mixed-inline-await-return-sync: method-conditional-class-method-conditional-mixed-sync!
 method-nested-conditional-inline-await-return-sync: method-nested-conditional-class-method-nested-conditional-sync!
 arrow-branch-mixed-inline-await-return-sync: value-arrow-branch-mixed-sync!
+arrow-branch-conditional-inline-await-return-sync: value-arrow-branch-conditional-sync!
 arrow-conditional-mixed-inline-await-return-sync: value-arrow-conditional-mixed-sync!
 arrow-nested-conditional-inline-await-return-sync: value-arrow-nested-conditional-sync!
 suffix: ready!
@@ -82,6 +85,12 @@ method-nested-conditional-inline-await-return-inner: method-nested-conditional-c
 method-nested-conditional-inline-await-return-fallthrough: method-nested-conditional-class-method-nested-conditional-fallthrough!
 arrow-nested-conditional-inline-await-return-inner: value-arrow-nested-conditional-inner!
 arrow-nested-conditional-inline-await-return-fallthrough: value-arrow-nested-conditional-fallthrough!
+branch-conditional-inline-await-return-inner: fn-branch-conditional-inner!
+branch-conditional-inline-await-return-fallthrough: fn-branch-conditional-fallthrough!
+method-branch-conditional-inline-await-return-inner: method-branch-conditional-class-method-branch-conditional-inner!
+method-branch-conditional-inline-await-return-fallthrough: method-branch-conditional-class-method-branch-conditional-fallthrough!
+arrow-branch-conditional-inline-await-return-inner: value-arrow-branch-conditional-inner!
+arrow-branch-conditional-inline-await-return-fallthrough: value-arrow-branch-conditional-fallthrough!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
