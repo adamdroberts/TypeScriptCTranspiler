@@ -21388,6 +21388,7 @@ class Emitter {
             type.kind === "bigint" ||
             type.kind === "symbol" ||
             type.kind === "value" ||
+            type.kind === "promise" ||
             type.kind === "array" ||
             type.kind === "map" ||
             type.kind === "set" ||
