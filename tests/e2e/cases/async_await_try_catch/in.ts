@@ -63,6 +63,15 @@ async function pendingTryRejected(): Promise<string> {
     }
 }
 
+async function pendingTryRejectedTransparentCatchReturn(): Promise<string> {
+    try {
+        const value = await delayedReject("transparent bad");
+        return "never " + value;
+    } catch (e) {
+        return ("transparent caught " + e) as string;
+    }
+}
+
 async function pendingTryCatchFallthroughFulfilled(): Promise<string> {
     try {
         const value = await delay(3, "ok");
@@ -291,6 +300,10 @@ pendingTryFulfilled().then((value: string): void => {
 
 pendingTryRejected().then((value: string): void => {
     console.log("pending-rejected:", value);
+});
+
+pendingTryRejectedTransparentCatchReturn().then((value: string): void => {
+    console.log("pending-transparent-catch-return:", value);
 });
 
 pendingTryCatchFallthroughFulfilled().then((value: string): void => {
