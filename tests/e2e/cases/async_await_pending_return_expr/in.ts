@@ -66,6 +66,14 @@ async function branchInlineAwaitReturn(flag: boolean, prefix: string): Promise<s
     return prefix + await delay(97, "inline-false") + "!";
 }
 
+async function nestedBranchInlineAwaitReturn(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+    if (outer) {
+        if (inner) return prefix + await delay(102, "nested-inner") + "!";
+        return prefix + await delay(103, "nested-outer") + "!";
+    }
+    return prefix + await delay(104, "nested-fallthrough") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -320,6 +328,14 @@ class Worker {
         if (flag) return this.prefix + prefix + await delay(98, "method-inline-true") + "!";
         return this.prefix + prefix + await delay(99, "method-inline-false") + "!";
     }
+
+    async nestedBranchInlineAwaitReturnMethod(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+        if (outer) {
+            if (inner) return this.prefix + prefix + await delay(105, "method-nested-inner") + "!";
+            return this.prefix + prefix + await delay(106, "method-nested-outer") + "!";
+        }
+        return this.prefix + prefix + await delay(107, "method-nested-fallthrough") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -376,6 +392,14 @@ const arrowBranchInlineAwaitReturn = async (flag: boolean, prefix: string): Prom
     return prefix + await delay(101, "arrow-inline-false") + "!";
 };
 
+const arrowNestedBranchInlineAwaitReturn = async (outer: boolean, inner: boolean, prefix: string): Promise<string> => {
+    if (outer) {
+        if (inner) return prefix + await delay(108, "arrow-nested-inner") + "!";
+        return prefix + await delay(109, "arrow-nested-outer") + "!";
+    }
+    return prefix + await delay(110, "arrow-nested-fallthrough") + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -422,6 +446,18 @@ branchInlineAwaitReturn(true, "fn-").then((value: string): void => {
 
 branchInlineAwaitReturn(false, "fn-").then((value: string): void => {
     console.log("branch-inline-await-return-false:", value);
+});
+
+nestedBranchInlineAwaitReturn(true, true, "fn-").then((value: string): void => {
+    console.log("nested-branch-inline-await-return-inner:", value);
+});
+
+nestedBranchInlineAwaitReturn(true, false, "fn-").then((value: string): void => {
+    console.log("nested-branch-inline-await-return-outer:", value);
+});
+
+nestedBranchInlineAwaitReturn(false, false, "fn-").then((value: string): void => {
+    console.log("nested-branch-inline-await-return-fallthrough:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -562,6 +598,18 @@ new Worker("method-inline-").branchInlineAwaitReturnMethod(false, "class-").then
     console.log("method-branch-inline-await-return-false:", value);
 });
 
+new Worker("method-nested-").nestedBranchInlineAwaitReturnMethod(true, true, "class-").then((value: string): void => {
+    console.log("method-nested-branch-inline-await-return-inner:", value);
+});
+
+new Worker("method-nested-").nestedBranchInlineAwaitReturnMethod(true, false, "class-").then((value: string): void => {
+    console.log("method-nested-branch-inline-await-return-outer:", value);
+});
+
+new Worker("method-nested-").nestedBranchInlineAwaitReturnMethod(false, false, "class-").then((value: string): void => {
+    console.log("method-nested-branch-inline-await-return-fallthrough:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -604,4 +652,16 @@ arrowBranchInlineAwaitReturn(true, "value-").then((value: string): void => {
 
 arrowBranchInlineAwaitReturn(false, "value-").then((value: string): void => {
     console.log("arrow-branch-inline-await-return-false:", value);
+});
+
+arrowNestedBranchInlineAwaitReturn(true, true, "value-").then((value: string): void => {
+    console.log("arrow-nested-branch-inline-await-return-inner:", value);
+});
+
+arrowNestedBranchInlineAwaitReturn(true, false, "value-").then((value: string): void => {
+    console.log("arrow-nested-branch-inline-await-return-outer:", value);
+});
+
+arrowNestedBranchInlineAwaitReturn(false, false, "value-").then((value: string): void => {
+    console.log("arrow-nested-branch-inline-await-return-fallthrough:", value);
 });
