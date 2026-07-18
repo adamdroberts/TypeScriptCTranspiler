@@ -17,6 +17,10 @@ interface PreludeCaptureRecord {
     suffix: string;
 }
 
+interface PreludeCaptureKey {
+    id: string;
+}
+
 async function suffix(): Promise<string> {
     const value = await delay(5, "ready");
     return value + "!";
@@ -325,6 +329,35 @@ async function preludeSetFiveAwait(prefix: string): Promise<string> {
     const fourth = await delay(280, first + ":" + second + ":" + third + "-four");
     const fifth = await delay(281, first + ":" + second + ":" + third + ":" + fourth + "-five");
     return (seen.has(prefix + "set-five-") ? "true" : "false") + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
+}
+
+async function preludeWeakMapSetAwaitedLocalReturn(prefix: string): Promise<string> {
+    const key: PreludeCaptureKey = { id: prefix + "weak-key" };
+    const labels = new WeakMap<PreludeCaptureKey, string>();
+    labels.set(key, prefix + "weak-map-local-");
+    const seen = new WeakSet<PreludeCaptureKey>();
+    seen.add(key);
+    const value = await delay(282, "value");
+    return labels.get(key) + value + "-" + (seen.has(key) ? "true" : "false");
+}
+
+async function preludeWeakMapInlineAwaitReturn(prefix: string): Promise<string> {
+    const key: PreludeCaptureKey = { id: prefix + "weak-inline-key" };
+    const labels = new WeakMap<PreludeCaptureKey, string>();
+    labels.set(key, prefix + "weak-map-inline-");
+    return labels.get(key) + await delay(283, "value");
+}
+
+async function preludeWeakSetFiveAwait(prefix: string): Promise<string> {
+    const key: PreludeCaptureKey = { id: prefix + "weak-set-five-key" };
+    const seen = new WeakSet<PreludeCaptureKey>();
+    seen.add(key);
+    const first = await delay(284, prefix + "one");
+    const second = await delay(285, first + "-two");
+    const third = await delay(286, first + ":" + second + "-three");
+    const fourth = await delay(287, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(288, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return (seen.has(key) ? "true" : "false") + ":" + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
 }
 
 class Worker {
@@ -1660,4 +1693,16 @@ preludeMapInlineAwaitReturn("fn-").then((value: string): void => {
 
 preludeSetFiveAwait("fn-").then((value: string): void => {
     console.log("prelude-set-five-await:", value);
+});
+
+preludeWeakMapSetAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-weak-map-set-awaited-local-return:", value);
+});
+
+preludeWeakMapInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-weak-map-inline-await-return:", value);
+});
+
+preludeWeakSetFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-weak-set-five-await:", value);
 });
