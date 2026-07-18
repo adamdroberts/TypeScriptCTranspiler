@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static global `URL.canParse(...)` boolean specifier fragments for the supported absolute and base-resolved URL subset. Test: `dynamic_require_static_url_can_parse`.
 - Finite dynamic `require(...)` proofs now resolve static global `btoa(...)` and `atob(...)` specifier fragments using the supported runtime base64 codec semantics. Test: `dynamic_require_static_base64_globals`.
 - Finite dynamic `require(...)` proofs now resolve static `new URLSearchParams(...).getAll(...)` collection results through indexed, `.at(...)`, and `.join(...)` specifier fragments. Test: `dynamic_require_static_url_search_params_get_all`.
 - Finite dynamic `require(...)` proofs now resolve static `new URLSearchParams(...).get(...)` and `.has(...)` specifier fragments for static query inputs and static names/values. Test: `dynamic_require_static_url_search_params_get_has`.

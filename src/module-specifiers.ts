@@ -128,6 +128,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (uriText.length > 0) return uriText;
             const base64Text = resolveStaticBase64Call(node);
             if (base64Text.length > 0) return base64Text;
+            const urlCanParseText = resolveStaticUrlCanParseCall(node);
+            if (urlCanParseText.length > 0) return urlCanParseText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -676,6 +678,43 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 return [];
             }
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const canParseRuntimeUrl = (value: string): boolean => {
+        const schemeColon = value.indexOf(":");
+        return schemeColon >= 0 &&
+            schemeColon + 2 < value.length &&
+            value[schemeColon + 1] === "/" &&
+            value[schemeColon + 2] === "/";
+    };
+
+    const resolveStaticUrlCanParseCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) {
+            return [];
+        }
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "canParse") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "URL") return [];
+
+        const inputs = resolve(call.arguments[0]!);
+        if (inputs.length === 0) return [];
+        const baseArg = call.arguments[1];
+        const bases = !baseArg || isStaticUndefinedExpression(baseArg)
+            ? [undefined]
+            : resolve(baseArg);
+        if (bases.length === 0) return [];
+
+        const out: string[] = [];
+        for (const input of inputs) {
+            for (const base of bases) {
+                out.push(String(base === undefined
+                    ? canParseRuntimeUrl(input)
+                    : canParseRuntimeUrl(input) || canParseRuntimeUrl(base)));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
         }
         return dedupe(out);
     };
