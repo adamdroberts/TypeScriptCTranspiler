@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now materialize simple static `Object.fromEntries([[key, value], ...])` collection wrappers for property lookup, key/value/entry enumeration, and `Reflect.get(...)` fragments. Test: `dynamic_require_static_object_from_entries`.
 - Finite dynamic `require(...)` proofs now resolve static Buffer `indexOf(...)`, `lastIndexOf(...)`, and `includes(...)` fragments with a finite third encoding argument. Test: `dynamic_require_static_buffer_search_encoding`.
 - Finite dynamic `require(...)` proofs now cover static Buffer own-key-list fragments from `Object.keys(...)`, `Object.getOwnPropertyNames(...)`, `Reflect.ownKeys(...)`, `Object.values(...)`, and `Object.entries(...)` over numeric byte keys. Test: `dynamic_require_static_buffer_own_key_lists`.
 - Finite dynamic `require(...)` proofs now resolve static Buffer own-descriptor `.value`, `.writable`, `.enumerable`, and `.configurable` fragments for `Object.getOwnPropertyDescriptor(...)`, `Reflect.getOwnPropertyDescriptor(...)`, and descriptor-map reads over numeric byte keys. Test: `dynamic_require_static_buffer_descriptor_properties`.
