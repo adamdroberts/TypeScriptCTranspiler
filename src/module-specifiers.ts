@@ -121,6 +121,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (atText.length > 0) return atText;
             const stringIndexText = resolveStaticStringIndexCall(node);
             if (stringIndexText.length > 0) return stringIndexText;
+            const stringCodeText = resolveStaticStringCodeCall(node);
+            if (stringCodeText.length > 0) return stringCodeText;
             const stringConcatText = resolveStaticStringConcatCall(node);
             if (stringConcatText.length > 0) return stringConcatText;
             const joinText = resolveStaticArrayJoinCall(node);
@@ -630,6 +632,31 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             for (const index of indices) {
                 if (method === "at" && (index < -value.length || index >= value.length)) return [];
                 out.push(method === "charAt" ? value.charAt(index) : value.at(index)!);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringCodeCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "charCodeAt" && method !== "codePointAt") return [];
+        const values = resolve(callee.expression);
+        const indices = resolveStaticIntegerKeys(call.arguments[0]!);
+        if (values.length === 0 || indices.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const index of indices) {
+                if (index < 0 || index >= value.length) return [];
+                const code = method === "charCodeAt"
+                    ? value.charCodeAt(index)
+                    : value.codePointAt(index);
+                if (code === undefined || !Number.isFinite(code)) return [];
+                out.push(String(code));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
