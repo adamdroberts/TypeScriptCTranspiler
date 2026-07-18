@@ -174,6 +174,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (arrayPredicateText.length > 0) return arrayPredicateText;
             const arrayMutationText = resolveStaticArrayMutationCall(node);
             if (arrayMutationText.length > 0) return arrayMutationText;
+            const arraySearchText = resolveStaticArraySearchCall(node);
+            if (arraySearchText.length > 0) return arraySearchText;
             const sameValueText = resolveStaticObjectIsCall(node);
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
@@ -3019,7 +3021,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
         if (method === "push" || method === "unshift") {
             if (call.arguments.some((argument) => resolve(argument).length === 0)) return [];
-        return [String(receiverElements.length + call.arguments.length)];
+            return [String(receiverElements.length + call.arguments.length)];
         }
 
         if (call.arguments.length !== 0) return [];
@@ -3027,6 +3029,62 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             ? receiverElements[receiverElements.length - 1]
             : receiverElements[0];
         return element ? resolve(element) : ["undefined"];
+    };
+
+    const resolveStaticArraySearchCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (
+            method !== "some" &&
+            method !== "every" &&
+            method !== "find" &&
+            method !== "findIndex" &&
+            method !== "findLast" &&
+            method !== "findLastIndex"
+        ) {
+            return [];
+        }
+        const receiver = resolveCollectionExpression(callee.expression);
+        if (!receiver || !ts.isArrayLiteralExpression(receiver)) return [];
+        const receiverElements = denseStaticArrayElements(receiver);
+        if (!receiverElements) return [];
+
+        const predicate = call.arguments[0]!;
+        const indexes = method === "findLast" || method === "findLastIndex"
+            ? receiverElements.map((_, index) => index).reverse()
+            : receiverElements.map((_, index) => index);
+
+        let matchedIndex = -1;
+        for (const index of indexes) {
+            const keep = evaluateStaticArrayPredicateCallback(predicate, receiverElements[index]!, index);
+            if (keep === null) return [];
+            if (keep) {
+                matchedIndex = index;
+                break;
+            }
+        }
+
+        switch (method) {
+            case "some":
+                return [String(matchedIndex !== -1)];
+            case "every": {
+                for (let i = 0; i < receiverElements.length; i++) {
+                    const keep = evaluateStaticArrayPredicateCallback(predicate, receiverElements[i]!, i);
+                    if (keep === null) return [];
+                    if (!keep) return ["false"];
+                }
+                return ["true"];
+            }
+            case "find":
+            case "findLast":
+                return matchedIndex === -1 ? ["undefined"] : resolve(receiverElements[matchedIndex]!);
+            case "findIndex":
+            case "findLastIndex":
+                return [String(matchedIndex)];
+        }
+        return [];
     };
 
     const mapStaticArrayCallback = (elements: ts.Expression[], callback: ts.Expression): ts.Expression[] | null => {
