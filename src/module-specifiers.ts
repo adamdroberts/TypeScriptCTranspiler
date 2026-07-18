@@ -164,6 +164,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferSearchText.length > 0) return bufferSearchText;
             const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
             if (bufferIsBufferText.length > 0) return bufferIsBufferText;
+            const textDecoderText = resolveStaticTextDecoderDecodeCall(node);
+            if (textDecoderText.length > 0) return textDecoderText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
             const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
@@ -987,9 +989,32 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return resolveStaticBufferExpression(callee.expression);
     };
 
+    const resolveStaticTextEncoderEncodeExpression = (call: ts.CallExpression): Buffer[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "encode") return [];
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(receiver)) return [];
+        const ctor = unwrapStaticExpression(receiver.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "TextEncoder") return [];
+        if ((receiver.arguments?.length ?? 0) > 0 || receiver.arguments?.some(ts.isSpreadElement)) return [];
+        const values = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0])
+            ? [""]
+            : resolve(call.arguments[0]);
+        if (values.length === 0) return [];
+        const out: Buffer[] = [];
+        for (const value of values) {
+            out.push(Buffer.from(value, "utf8"));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupeBuffers(out);
+    };
+
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
+        const encodedBuffers = resolveStaticTextEncoderEncodeExpression(unwrapped);
+        if (encodedBuffers.length > 0) return encodedBuffers;
         const fromBuffers = resolveStaticBufferFromExpression(unwrapped);
         if (fromBuffers.length > 0) return fromBuffers;
         const allocBuffers = resolveStaticBufferAllocExpression(unwrapped);
@@ -1040,6 +1065,29 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupeBuffers(out);
+    };
+
+    const resolveStaticTextDecoderDecodeCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "decode") return [];
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(receiver)) return [];
+        const ctor = unwrapStaticExpression(receiver.expression);
+        if (!ts.isIdentifier(ctor) || ctor.text !== "TextDecoder") return [];
+        if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return [];
+        const labelValues = !receiver.arguments?.[0] || isStaticUndefinedExpression(receiver.arguments[0])
+            ? ["utf-8"]
+            : resolve(receiver.arguments[0]);
+        if (labelValues.length === 0) return [];
+        for (const label of labelValues) {
+            const normalized = label.toLowerCase();
+            if (normalized !== "utf-8" && normalized !== "utf8") return [];
+        }
+        if (!call.arguments[0] || isStaticUndefinedExpression(call.arguments[0])) return [""];
+        const buffers = resolveStaticBufferExpression(call.arguments[0]);
+        if (buffers.length === 0) return [];
+        return dedupe(buffers.map((buffer) => buffer.toString("utf8")));
     };
 
     const dedupeBuffers = (buffers: Buffer[]): Buffer[] => {

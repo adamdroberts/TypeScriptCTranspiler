@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs resolve static `TextEncoder.encode(...)` Buffer fragments and `TextDecoder.decode(...)` UTF-8 string fragments over finite inputs. Test: `dynamic_require_static_text_encoder_decoder`
 - Finite dynamic `require(...)` proofs resolve static `Set.prototype.isSubsetOf(...)`, `.isSupersetOf(...)`, and `.isDisjointFrom(...)` relation fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`
 - Finite dynamic `require(...)` proofs materialize static `Set.prototype.union(...)`, `.intersection(...)`, `.difference(...)`, and `.symmetricDifference(...)` collection fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`
 - Finite dynamic `require(...)` proofs materialize static `new Set(...).keys()` / `.values()` / `.entries()` and `new Map(...).keys()` / `.values()` / `.entries()` collection fragments over finite constructor sources, with a matching `Set.entries()` stdlib declaration. Test: `dynamic_require_static_map_set_fragments`
