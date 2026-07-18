@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs resolve static dense array `.reduce(...)` and `.reduceRight(...)` fragments for explicit initial values and a conservative inline callback subset with static accumulator/element/index substitution. Test: `dynamic_require_static_array_reduce_hof`
 - Finite dynamic `require(...)` proofs resolve static dense array `.some(...)`, `.every(...)`, `.find(...)`, `.findIndex(...)`, `.findLast(...)`, and `.findLastIndex(...)` predicate/search fragments for a conservative inline callback subset with static element/index substitution. Test: `dynamic_require_static_array_predicate_hof`
 - Finite dynamic `require(...)` proofs materialize static dense array `.map(...)`, `.filter(...)`, and `.flatMap(...)` wrappers for a conservative inline callback subset with static element/index substitution, static boolean predicates, and `Object.entries(...)` composition. Test: `dynamic_require_static_array_hof_collections`
 - Finite dynamic `require(...)` proofs resolve static dense array `.pop()` / `.shift()` removed-value fragments, `.push(...)` / `.unshift(...)` length fragments, and `.splice(start?, deleteCount?, ...items)` removed-array collection wrappers, including empty-array `undefined`, omitted versus explicit `undefined` splice delete-count semantics, and `Object.entries(...)` composition. Test: `dynamic_require_static_array_stack_splice_collections`
