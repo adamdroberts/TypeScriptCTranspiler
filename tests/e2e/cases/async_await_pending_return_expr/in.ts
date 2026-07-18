@@ -63,6 +63,16 @@ async function preludeExpressionStatementFiveAwait(prefix: string): Promise<stri
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
 }
 
+async function preludeLocalFiveAwait(prefix: string): Promise<string> {
+    const label = prefix + "local-five-";
+    const first = await delay(1, label + "one");
+    const second = await delay(2, label + first + "-two");
+    const third = await delay(3, label + first + ":" + second + "-three");
+    const fourth = await delay(4, label + first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(5, label + first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return label + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+}
+
 async function inlineAwaitReturn(prefix: string): Promise<string> {
     return prefix + await delay(87, "inline") + "!";
 }
@@ -461,6 +471,16 @@ class Worker {
         return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
     }
 
+    async preludeLocalFiveAwaitMethod(prefix: string): Promise<string> {
+        const label = this.prefix + prefix + "method-local-five-";
+        const first = await delay(1, label + "one");
+        const second = await delay(2, label + first + "-two");
+        const third = await delay(3, label + first + ":" + second + "-three");
+        const fourth = await delay(4, label + first + ":" + second + ":" + third + "-four");
+        const fifth = await delay(5, label + first + ":" + second + ":" + third + ":" + fourth + "-five");
+        return label + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+    }
+
     async inlineAwaitReturnMethod(prefix: string): Promise<string> {
         return this.prefix + prefix + await delay(88, "method-inline") + "!";
     }
@@ -657,6 +677,16 @@ const arrowPreludeExpressionStatementFiveAwait = async (prefix: string): Promise
     const fourth = await delay(263, first + ":" + second + ":" + third + "-four");
     const fifth = await delay(264, first + ":" + second + ":" + third + ":" + fourth + "-five");
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
+};
+
+const arrowPreludeLocalFiveAwait = async (prefix: string): Promise<string> => {
+    const label = prefix + "arrow-local-five-";
+    const first = await delay(1, label + "one");
+    const second = await delay(2, label + first + "-two");
+    const third = await delay(3, label + first + ":" + second + "-three");
+    const fourth = await delay(4, label + first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(5, label + first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return label + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "!";
 };
 
 const arrowInlineAwaitReturn = async (prefix: string): Promise<string> => {
@@ -1278,6 +1308,15 @@ arrowFourAwait("value-").then((value: string): void => {
 
 arrowFiveAwait("value-").then((value: string): void => {
     console.log("arrow-five-await:", value);
+    preludeLocalFiveAwait("fn-").then((fnValue: string): void => {
+        console.log("prelude-local-five-await:", fnValue);
+        new Worker("method-prelude-five-").preludeLocalFiveAwaitMethod("class-").then((methodValue: string): void => {
+            console.log("method-prelude-local-five-await:", methodValue);
+            arrowPreludeLocalFiveAwait("value-").then((arrowValue: string): void => {
+                console.log("arrow-prelude-local-five-await:", arrowValue);
+            });
+        });
+    });
 });
 
 arrowPreludeExpressionStatementFiveAwait("value-").then((value: string): void => {

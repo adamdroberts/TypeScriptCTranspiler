@@ -25297,6 +25297,8 @@ class Emitter {
         const result = body.statements[body.statements.length - 1]!;
         if (!ts.isReturnStatement(result)) return null;
         const preludeStatements: ts.Statement[] = [];
+        const captures: AsyncAwaitContinuationParam[] = [];
+        const captureSymbols = new Set<ts.Symbol>();
         let firstAwaitIndex = 0;
         let ok = true;
         const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
@@ -25309,11 +25311,44 @@ class Emitter {
         };
         while (firstAwaitIndex < body.statements.length - 1) {
             const stmt = body.statements[firstAwaitIndex]!;
-            if (!ts.isExpressionStatement(stmt)) break;
-            visitNoAwaitOrNestedScope(stmt.expression);
-            if (!ok) return null;
-            preludeStatements.push(stmt);
-            firstAwaitIndex++;
+            if (ts.isExpressionStatement(stmt)) {
+                visitNoAwaitOrNestedScope(stmt.expression);
+                if (!ok) return null;
+                preludeStatements.push(stmt);
+                firstAwaitIndex++;
+                continue;
+            }
+            if (ts.isVariableStatement(stmt)) {
+                if (this.awaitedLocalDeclaration(stmt)) break;
+                preludeStatements.push(stmt);
+                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                    visitNoAwaitOrNestedScope(decl.initializer);
+                    if (!ok) return null;
+                    const symbol = this.symbolForIdentifier(decl.name);
+                    if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                    const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (
+                        type.kind !== "number" &&
+                        type.kind !== "boolean" &&
+                        type.kind !== "string" &&
+                        type.kind !== "bigint" &&
+                        type.kind !== "value"
+                    ) return null;
+                    const name = mangleIdent(decl.name.text);
+                    captureSymbols.add(symbol);
+                    captures.push({
+                        symbol,
+                        name,
+                        type,
+                        field: `capture_${name}`,
+                    });
+                }
+                firstAwaitIndex++;
+                continue;
+            }
+            break;
         }
         if (body.statements.length - firstAwaitIndex < 6) return null;
         const steps: AsyncAwaitLeadingStep[] = [];
@@ -25322,7 +25357,7 @@ class Emitter {
             if (!step) return null;
             steps.push(step);
         }
-        const params = this.asyncAwaitContinuationParameters(parameters);
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...captures];
         const referenced = this.asyncAwaitLeadingContinuationReferences(
             steps,
             result.expression ?? null,
