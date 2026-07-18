@@ -21524,30 +21524,55 @@ class Emitter {
         const preludeStatements: ts.Statement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
+        const declared = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const initialized = new Set<ts.Symbol>();
         let index = 0;
         while (index < block.statements.length) {
             const stmt = block.statements[index]!;
             if (this.awaitedContinuationStep(stmt) || this.awaitedReturnContinuationStep(stmt)) break;
-            if (!ts.isVariableStatement(stmt)) return null;
-            if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
-            for (const decl of stmt.declarationList.declarations) {
-                if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                const symbol = this.symbolForIdentifier(decl.name);
-                if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
-                if (!this.isSideEffectFreeTopLevelConstInitializer(decl.initializer)) return null;
-                const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
-                const name = mangleIdent(decl.name.text);
-                captureSymbols.add(symbol);
-                captures.push({
-                    symbol,
-                    name,
-                    type,
-                    field: `capture_${name}`,
-                });
+            if (ts.isExpressionStatement(stmt)) {
+                const assignment = this.unwrapTransparentExpression(stmt.expression);
+                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
+                const symbol = this.symbolForIdentifier(assignment.left);
+                const capture = symbol ? declared.get(symbol) : undefined;
+                if (!symbol || !capture || initialized.has(symbol)) return null;
+                if (!this.isSideEffectFreeTopLevelConstInitializer(assignment.right)) return null;
+                initialized.add(symbol);
+                captures.push(capture);
+                preludeStatements.push(stmt);
+                index++;
+                continue;
             }
-            preludeStatements.push(stmt);
-            index++;
+            if (ts.isVariableStatement(stmt)) {
+                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name)) return null;
+                    const symbol = this.symbolForIdentifier(decl.name);
+                    if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                    const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
+                    const name = mangleIdent(decl.name.text);
+                    const capture = {
+                        symbol,
+                        name,
+                        type,
+                        field: `capture_${name}`,
+                    };
+                    captureSymbols.add(symbol);
+                    if (!decl.initializer) {
+                        if (stmt.declarationList.flags & ts.NodeFlags.Const) return null;
+                        declared.set(symbol, capture);
+                        continue;
+                    }
+                    if (!this.isSideEffectFreeTopLevelConstInitializer(decl.initializer)) return null;
+                    initialized.add(symbol);
+                    captures.push(capture);
+                }
+                preludeStatements.push(stmt);
+                index++;
+                continue;
+            }
+            return null;
         }
         return { preludeStatements, captures, nextIndex: index };
     }

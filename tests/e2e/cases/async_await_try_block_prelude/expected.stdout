@@ -4,3 +4,6 @@ value-catch-try-prelude: value-try:value-ok
 value-finally-try-prelude: value-final-bad DV
 method-catch-try-prelude: class-method-caught:method-bad
 method-finally-try-prelude: class-method-final|method-final-ok DVclass-M
+decl-catch-assigned-try-prelude: decl-assigned-decl-assigned-ok
+value-finally-assigned-try-prelude: value-assigned-final|value-assigned-ok DVclass-MA
+method-catch-assigned-try-prelude: class-method-assigned-method-assigned-ok
