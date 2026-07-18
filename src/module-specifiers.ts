@@ -238,6 +238,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringIndex.length > 0) return stringIndex;
             const bufferIndex = resolveStaticBufferElementAccess(node);
             if (bufferIndex.length > 0) return bufferIndex;
+            const bufferJsonDataIndex = resolveStaticBufferToJsonDataElementAccess(node);
+            if (bufferJsonDataIndex.length > 0) return bufferJsonDataIndex;
             const stringSplit = resolveStaticStringSplitAccess(node);
             if (stringSplit.length > 0) return stringSplit;
             const enumValues = resolveStaticEnumAccess(node.expression, node.argumentExpression);
@@ -253,6 +255,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (numericConstant.length > 0) return numericConstant;
             const bufferLength = resolveStaticBufferLengthAccess(node);
             if (bufferLength.length > 0) return bufferLength;
+            const bufferJsonProperty = resolveStaticBufferToJsonPropertyAccess(node);
+            if (bufferJsonProperty.length > 0) return bufferJsonProperty;
             const descriptorProperty = resolveStaticDescriptorPropertyAccess(node);
             if (descriptorProperty.length > 0) return descriptorProperty;
             const enumValues = resolveStaticEnumAccess(node.expression, node.name);
@@ -1687,6 +1691,48 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupe(out);
     };
 
+    const resolveStaticBufferToJsonBuffers = (expr: ts.Expression): Buffer[] => {
+        const call = unwrapStaticExpression(expr);
+        if (!ts.isCallExpression(call) || call.arguments.length > 0 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toJSON") return [];
+        return resolveStaticBufferExpression(callee.expression);
+    };
+
+    const resolveStaticBufferToJsonDataAccess = (expr: ts.Expression): Buffer[] => {
+        const access = unwrapStaticExpression(expr);
+        if (!ts.isPropertyAccessExpression(access) || access.name.text !== "data") return [];
+        return resolveStaticBufferToJsonBuffers(access.expression);
+    };
+
+    const resolveStaticBufferToJsonPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
+        if (access.name.text === "type") {
+            const buffers = resolveStaticBufferToJsonBuffers(access.expression);
+            return buffers.length > 0 ? ["Buffer"] : [];
+        }
+        if (access.name.text !== "length") return [];
+        const buffers = resolveStaticBufferToJsonDataAccess(access.expression);
+        return buffers.length > 0 ? dedupe(buffers.map((buffer) => String(buffer.length))) : [];
+    };
+
+    const resolveStaticBufferToJsonDataElementAccess = (access: ts.ElementAccessExpression): string[] => {
+        if (!access.argumentExpression) return [];
+        const buffers = resolveStaticBufferToJsonDataAccess(access.expression);
+        if (buffers.length === 0) return [];
+        const indexes = resolveStaticIntegerKeys(access.argumentExpression);
+        if (indexes.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const index of indexes) {
+                const value = buffer[index];
+                out.push(value === undefined ? "undefined" : String(value));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
     const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
         if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
@@ -2518,6 +2564,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isCallExpression(cur)) {
             const urlSearchParamsValues = resolveStaticUrlSearchParamsGetAllCollectionExpression(cur);
             if (urlSearchParamsValues) return resolveCollectionExpression(urlSearchParamsValues);
+            const bufferJson = resolveStaticBufferToJsonCollectionExpression(cur);
+            if (bufferJson) return resolveCollectionExpression(bufferJson);
             const jsonParsed = resolveStaticJsonParseCollectionExpression(cur);
             if (jsonParsed) return resolveCollectionExpression(jsonParsed);
             const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
@@ -2570,6 +2618,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticBufferToJsonCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length > 0 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toJSON") return null;
+        const buffers = resolveStaticBufferExpression(callee.expression);
+        if (buffers.length !== 1) return null;
+        return jsonValueToStaticExpression(buffers[0]!.toJSON());
     };
 
     const resolveStaticUrlSearchParamsGetAllCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
