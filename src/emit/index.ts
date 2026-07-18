@@ -25686,10 +25686,12 @@ class Emitter {
         if (!ts.isVariableStatement(stmt)) return null;
         if (stmt.declarationList.declarations.length !== 1) return null;
         const variable = stmt.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name) || !variable.initializer || !ts.isAwaitExpression(variable.initializer)) {
+        if (!ts.isIdentifier(variable.name) || !variable.initializer) {
             return null;
         }
-        return { variable: variable.name, awaitExpr: variable.initializer };
+        const initializer = this.unwrapTransparentExpression(variable.initializer);
+        if (!ts.isAwaitExpression(initializer)) return null;
+        return { variable: variable.name, awaitExpr: initializer };
     }
 
     private awaitedContinuationStep(

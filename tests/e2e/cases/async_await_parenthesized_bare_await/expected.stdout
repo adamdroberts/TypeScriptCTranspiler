@@ -4,3 +4,8 @@ parenthesized-try-catch-rejected: caught:bad
 parenthesized-try-finally-fulfilled: finally-ok F
 parenthesized-try-finally-rejected: final-bad FR
 parenthesized-return-await: return-ok
+parenthesized-awaited-local: parenthesized-local
+parenthesized-awaited-local-try-catch-fulfilled: try-local:try-local-ok
+parenthesized-awaited-local-try-catch-rejected: try-local-caught:try-local-bad
+parenthesized-awaited-local-try-finally: finally-local:finally-local-ok FRL
+parenthesized-awaited-local-chain: chain-one:one-two
