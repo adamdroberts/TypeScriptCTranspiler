@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Dynamic thenable assimilation recursively adopts nested dynamic thenables when both the outer and inner thenables settle from later microtasks, including nested fulfillment and rejection. Test: `promise_thenable_async_recursive`
 - `new Promise<T>(executor)` resolve callbacks assimilate delayed dynamic thenables when the executor settles from a scheduled callback and the thenable settles from a later microtask. Test: `promise_executor_thenable_async`
 - `Promise.try` assimilates returned dynamic thenables that settle from later microtasks while preserving first-settlement behavior. Test: `promise_try_thenable_async`
 - `Promise.finally` waits for finalizer callback results resolved through dynamic thenable assimilation, including delayed microtask settlement that preserves the original fulfilled/rejected state and finalizer rejection that overrides it. Test: `promise_finally_thenable_async`
@@ -1764,6 +1765,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `promise_returned_thenable_throw_after_settle` | returned dynamic thenables that throw after settlement preserve the first settlement |
 | `promise_settled` | settled Promise.resolve/reject with synchronous then/catch/finally chaining and array/Set combinators |
 | `promise_thenable_assimilation` | immediate dynamic thenable assimilation through Promise.resolve and callbacks |
+| `promise_thenable_async_recursive` | delayed dynamic thenables recursively assimilate nested delayed thenables |
 | `promise_thenable_getter_edges` | Promise.resolve handles primitive passthrough plus throwing and non-callable dynamic then getters |
 | `promise_thenable_inherited_then` | Promise.resolve assimilates inherited dynamic then methods and getters |
 | `promise_thenable_recursive` | immediate dynamic thenables recursively assimilate settled nested thenables |

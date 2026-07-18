@@ -1,0 +1,4 @@
+{
+  "description": "dynamic thenables recursively assimilate nested thenables that settle from later microtasks",
+  "features": ["promise", "thenable", "queueMicrotask"]
+}
