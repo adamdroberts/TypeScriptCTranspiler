@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now captures typed `FSStats` and `FSDirent` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `AggregateError` prelude locals through the Error-family continuation path across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `WeakRef<T>` and `FinalizationRegistry<T>` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `Event` and `EventTarget` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.

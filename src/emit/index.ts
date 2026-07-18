@@ -21411,6 +21411,8 @@ class Emitter {
             type.kind === "dataview" ||
             type.kind === "textencoder" ||
             type.kind === "textdecoder" ||
+            type.kind === "fsstats" ||
+            type.kind === "fsdirent" ||
             type.kind === "class";
     }
 
