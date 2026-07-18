@@ -801,14 +801,17 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     const resolveStaticBufferAllocExpression = (call: ts.CallExpression): Buffer[] => {
         if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
-        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "alloc") return [];
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "alloc" && method !== "allocUnsafe" && method !== "allocUnsafeSlow") return [];
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (method !== "alloc" && call.arguments.length > 1) return [];
 
         const sizes = resolveStaticIntegerKeys(call.arguments[0]!);
         if (sizes.length === 0) return [];
         const fillArg = call.arguments[1];
-        const fills = !fillArg || isStaticUndefinedExpression(fillArg)
+        const fills = method !== "alloc" || !fillArg || isStaticUndefinedExpression(fillArg)
             ? [0]
             : resolveStaticIntegerKeys(fillArg);
         if (fills.length === 0) return [];
@@ -1005,7 +1008,9 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const receiver = unwrapStaticExpression(callee.expression);
         if (!ts.isCallExpression(receiver)) return [];
         const receiverCallee = unwrapStaticExpression(receiver.expression);
-        if (!ts.isPropertyAccessExpression(receiverCallee) || receiverCallee.name.text !== "alloc") return [];
+        if (!ts.isPropertyAccessExpression(receiverCallee)) return [];
+        const receiverMethod = receiverCallee.name.text;
+        if (receiverMethod !== "alloc" && receiverMethod !== "allocUnsafe" && receiverMethod !== "allocUnsafeSlow") return [];
 
         const buffers = resolveStaticBufferExpression(receiver);
         if (buffers.length === 0) return [];
