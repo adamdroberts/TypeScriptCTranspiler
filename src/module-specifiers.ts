@@ -123,6 +123,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringIndexText.length > 0) return stringIndexText;
             const stringCodeText = resolveStaticStringCodeCall(node);
             if (stringCodeText.length > 0) return stringCodeText;
+            const stringSearchText = resolveStaticStringSearchCall(node);
+            if (stringSearchText.length > 0) return stringSearchText;
             const stringConcatText = resolveStaticStringConcatCall(node);
             if (stringConcatText.length > 0) return stringConcatText;
             const joinText = resolveStaticArrayJoinCall(node);
@@ -658,6 +660,51 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 if (code === undefined || !Number.isFinite(code)) return [];
                 out.push(String(code));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringSearchCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (
+            method !== "indexOf" &&
+            method !== "lastIndexOf" &&
+            method !== "includes" &&
+            method !== "startsWith" &&
+            method !== "endsWith"
+        ) {
+            return [];
+        }
+        const values = resolve(callee.expression);
+        const needles = resolve(call.arguments[0]!);
+        const positions = call.arguments.length === 1 || isStaticUndefinedExpression(call.arguments[1]!)
+            ? [undefined]
+            : resolveStaticIntegerKeys(call.arguments[1]!);
+        if (values.length === 0 || needles.length === 0 || positions.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const needle of needles) {
+                for (const position of positions) {
+                    let result: number | boolean;
+                    if (method === "indexOf") {
+                        result = value.indexOf(needle, position);
+                    } else if (method === "lastIndexOf") {
+                        result = value.lastIndexOf(needle, position);
+                    } else if (method === "includes") {
+                        result = value.includes(needle, position);
+                    } else if (method === "startsWith") {
+                        result = value.startsWith(needle, position);
+                    } else {
+                        result = value.endsWith(needle, position);
+                    }
+                    out.push(String(result));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
             }
         }
         return dedupe(out);
