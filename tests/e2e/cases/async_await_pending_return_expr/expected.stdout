@@ -39,7 +39,13 @@ method-branch-return-await-false: method-branch-false
 arrow-branch-return-await-true: arrow-true
 arrow-branch-return-await-false: arrow-false
 method-two-await: method-one:class-method-two-method-one!
+branch-inline-await-return-true: fn-inline-true!
+branch-inline-await-return-false: fn-inline-false!
+method-branch-inline-await-return-true: method-inline-class-method-inline-true!
+method-branch-inline-await-return-false: method-inline-class-method-inline-false!
 arrow-two-await: arrow-one:value-arrow-one!
+arrow-branch-inline-await-return-true: value-arrow-inline-true!
+arrow-branch-inline-await-return-false: value-arrow-inline-false!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!

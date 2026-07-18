@@ -61,6 +61,11 @@ async function branchReturnAwait(flag: boolean): Promise<string> {
     return await delay(91, "branch-false");
 }
 
+async function branchInlineAwaitReturn(flag: boolean, prefix: string): Promise<string> {
+    if (flag) return prefix + await delay(96, "inline-true") + "!";
+    return prefix + await delay(97, "inline-false") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -310,6 +315,11 @@ class Worker {
         if (flag) return await delay(92, this.prefix + "branch-true");
         return await delay(93, this.prefix + "branch-false");
     }
+
+    async branchInlineAwaitReturnMethod(flag: boolean, prefix: string): Promise<string> {
+        if (flag) return this.prefix + prefix + await delay(98, "method-inline-true") + "!";
+        return this.prefix + prefix + await delay(99, "method-inline-false") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -361,6 +371,11 @@ const arrowBranchReturnAwait = async (flag: boolean): Promise<string> => {
     return await delay(95, "arrow-false");
 };
 
+const arrowBranchInlineAwaitReturn = async (flag: boolean, prefix: string): Promise<string> => {
+    if (flag) return prefix + await delay(100, "arrow-inline-true") + "!";
+    return prefix + await delay(101, "arrow-inline-false") + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -399,6 +414,14 @@ branchReturnAwait(true).then((value: string): void => {
 
 branchReturnAwait(false).then((value: string): void => {
     console.log("branch-return-await-false:", value);
+});
+
+branchInlineAwaitReturn(true, "fn-").then((value: string): void => {
+    console.log("branch-inline-await-return-true:", value);
+});
+
+branchInlineAwaitReturn(false, "fn-").then((value: string): void => {
+    console.log("branch-inline-await-return-false:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -531,6 +554,14 @@ new Worker("method-").branchReturnAwaitMethod(false).then((value: string): void 
     console.log("method-branch-return-await-false:", value);
 });
 
+new Worker("method-inline-").branchInlineAwaitReturnMethod(true, "class-").then((value: string): void => {
+    console.log("method-branch-inline-await-return-true:", value);
+});
+
+new Worker("method-inline-").branchInlineAwaitReturnMethod(false, "class-").then((value: string): void => {
+    console.log("method-branch-inline-await-return-false:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -565,4 +596,12 @@ arrowBranchReturnAwait(true).then((value: string): void => {
 
 arrowBranchReturnAwait(false).then((value: string): void => {
     console.log("arrow-branch-return-await-false:", value);
+});
+
+arrowBranchInlineAwaitReturn(true, "value-").then((value: string): void => {
+    console.log("arrow-branch-inline-await-return-true:", value);
+});
+
+arrowBranchInlineAwaitReturn(false, "value-").then((value: string): void => {
+    console.log("arrow-branch-inline-await-return-false:", value);
 });

@@ -193,6 +193,13 @@ interface AsyncAwaitExpressionReturnContinuation {
     thisValue: EmitResult | null;
 }
 
+interface AsyncAwaitIfExpressionReturnContinuation {
+    condition: ts.Expression;
+    thenContinuation: AsyncAwaitExpressionReturnContinuation;
+    elseContinuation: AsyncAwaitExpressionReturnContinuation | null;
+    fallthroughContinuation: AsyncAwaitExpressionReturnContinuation | null;
+}
+
 interface AsyncAwaitContinuationReferences {
     params: AsyncAwaitContinuationParam[];
     usesThis: boolean;
@@ -23191,6 +23198,12 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
+                                this.emitAsyncAwaitIfExpressionReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24623,6 +24636,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
+                !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLeadingReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitFourStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25316,11 +25330,20 @@ class Emitter {
         if (body.statements.length !== 1) return null;
         const result = body.statements[0]!;
         if (!ts.isReturnStatement(result) || !result.expression || ts.isAwaitExpression(result.expression)) return null;
+        return this.asyncAwaitExpressionReturnContinuationForExpression(result.expression, parameters, thisValue);
+    }
+
+    private asyncAwaitExpressionReturnContinuationForExpression(
+        returnExpr: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitExpressionReturnContinuation | null {
+        if (ts.isAwaitExpression(returnExpr)) return null;
         let awaitExpr: ts.AwaitExpression | null = null;
         let ok = true;
         const visitFindAwait = (node: ts.Node): void => {
             if (!ok) return;
-            if (node !== result.expression && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (node !== returnExpr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
             if (ts.isAwaitExpression(node)) {
                 if (awaitExpr) {
                     ok = false;
@@ -25331,7 +25354,7 @@ class Emitter {
             }
             ts.forEachChild(node, visitFindAwait);
         };
-        visitFindAwait(result.expression);
+        visitFindAwait(returnExpr);
         if (!ok || !awaitExpr) return null;
         const foundAwaitExpr = awaitExpr as ts.AwaitExpression;
         const visitSource = (node: ts.Node): void => {
@@ -25354,7 +25377,7 @@ class Emitter {
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
             if (node === awaitExpr) return;
-            if (node !== result.expression && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+            if (node !== returnExpr && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
                 ok = false;
                 return;
             }
@@ -25378,11 +25401,11 @@ class Emitter {
             }
             ts.forEachChild(node, visitReferences);
         };
-        visitReferences(result.expression);
+        visitReferences(returnExpr);
         if (!ok) return null;
         return {
             awaitExpr: foundAwaitExpr,
-            returnExpr: result.expression,
+            returnExpr,
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,
         };
@@ -25396,6 +25419,30 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitExpressionReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
+    }
+
+    private asyncAwaitExpressionReturnContinuationSupported(
+        continuation: AsyncAwaitExpressionReturnContinuation,
+    ): boolean {
+        const promise = this.prepareType(mapTsType(
+            continuation.awaitExpr.expression,
+            this.checker.getTypeAtLocation(continuation.awaitExpr.expression),
+            this.checker,
+        ));
+        if (promise.kind !== "promise") return false;
+        const awaitedType = this.prepareType(mapTsType(
+            continuation.awaitExpr,
+            this.checker.getTypeAtLocation(continuation.awaitExpr),
+            this.checker,
+        ));
+        return awaitedType.kind !== "never";
+    }
+
+    private emitAsyncAwaitExpressionReturnContinuationResult(
+        buf: CBuf,
+        continuation: AsyncAwaitExpressionReturnContinuation,
+    ): boolean {
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -25437,6 +25484,113 @@ class Emitter {
         buf.close();
         buf.line(`return ${resultPromise};`);
         return true;
+    }
+
+    private asyncAwaitIfExpressionReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnContinuation | null {
+        if (body.statements.length !== 1 && body.statements.length !== 2) return null;
+        const ifStatement = body.statements[0]!;
+        if (!ts.isIfStatement(ifStatement)) return null;
+
+        let conditionOk = true;
+        const visitCondition = (node: ts.Node): void => {
+            if (!conditionOk) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                conditionOk = false;
+                return;
+            }
+            ts.forEachChild(node, visitCondition);
+        };
+        visitCondition(ifStatement.expression);
+        if (!conditionOk) return null;
+
+        const returnFromStatement = (stmt: ts.Statement): ts.ReturnStatement | null => {
+            if (ts.isReturnStatement(stmt)) return stmt;
+            if (ts.isBlock(stmt) && stmt.statements.length === 1 && ts.isReturnStatement(stmt.statements[0]!)) {
+                return stmt.statements[0]!;
+            }
+            return null;
+        };
+
+        const thenReturn = returnFromStatement(ifStatement.thenStatement);
+        if (!thenReturn?.expression) return null;
+        const thenContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+            thenReturn.expression,
+            parameters,
+            thisValue,
+        );
+        if (!thenContinuation) return null;
+
+        let elseContinuation: AsyncAwaitExpressionReturnContinuation | null = null;
+        let fallthroughContinuation: AsyncAwaitExpressionReturnContinuation | null = null;
+
+        if (ifStatement.elseStatement) {
+            if (body.statements.length !== 1) return null;
+            const elseReturn = returnFromStatement(ifStatement.elseStatement);
+            if (!elseReturn?.expression) return null;
+            elseContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                elseReturn.expression,
+                parameters,
+                thisValue,
+            );
+            if (!elseContinuation) return null;
+        } else {
+            if (body.statements.length !== 2) return null;
+            const fallthrough = body.statements[1]!;
+            if (!ts.isReturnStatement(fallthrough) || !fallthrough.expression) return null;
+            fallthroughContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                fallthrough.expression,
+                parameters,
+                thisValue,
+            );
+            if (!fallthroughContinuation) return null;
+        }
+
+        return {
+            condition: ifStatement.expression,
+            thenContinuation,
+            elseContinuation,
+            fallthroughContinuation,
+        };
+    }
+
+    private emitAsyncAwaitIfExpressionReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const continuation = this.asyncAwaitIfExpressionReturnContinuation(body, parameters, thisValue);
+        if (!continuation) return false;
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation.thenContinuation)) return false;
+        if (
+            continuation.elseContinuation &&
+            !this.asyncAwaitExpressionReturnContinuationSupported(continuation.elseContinuation)
+        ) {
+            return false;
+        }
+        if (
+            continuation.fallthroughContinuation &&
+            !this.asyncAwaitExpressionReturnContinuationSupported(continuation.fallthroughContinuation)
+        ) {
+            return false;
+        }
+
+        const cond = this.emitBoolExpr(continuation.condition);
+        buf.open(`if (${cond})`);
+        if (!this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.thenContinuation)) return false;
+        buf.close();
+        if (continuation.elseContinuation) {
+            buf.open("else");
+            if (!this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.elseContinuation)) return false;
+            buf.close();
+            return true;
+        }
+        if (!continuation.fallthroughContinuation) return false;
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation.fallthroughContinuation);
     }
 
     private ensureAsyncAwaitExpressionReturnContinuationAdapter(
@@ -45631,6 +45785,12 @@ class Emitter {
                 const handledAsyncAwait =
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
+                        this.emitAsyncAwaitIfExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
                         this.emitAsyncAwaitExpressionReturnContinuation(
                             this.defs,
                             info.fn.body,
