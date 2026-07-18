@@ -1,0 +1,3 @@
+{
+  "description": "yield* materializes generator-backed iterable sources before delegation"
+}
