@@ -172,6 +172,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (numericPredicateText.length > 0) return numericPredicateText;
             const arrayPredicateText = resolveStaticArrayPredicateCall(node);
             if (arrayPredicateText.length > 0) return arrayPredicateText;
+            const arrayMutationText = resolveStaticArrayMutationCall(node);
+            if (arrayMutationText.length > 0) return arrayMutationText;
             const sameValueText = resolveStaticObjectIsCall(node);
             if (sameValueText.length > 0) return sameValueText;
             const ownPredicateText = resolveStaticObjectHasOwnCall(node);
@@ -2825,7 +2827,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return null;
         const method = callee.name.text;
-        if (method !== "slice" && method !== "concat" && method !== "copyWithin" && method !== "fill" && method !== "flat" && method !== "reverse" && method !== "sort" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
+        if (method !== "slice" && method !== "concat" && method !== "copyWithin" && method !== "fill" && method !== "flat" && method !== "reverse" && method !== "sort" && method !== "splice" && method !== "toReversed" && method !== "toSorted" && method !== "with" && method !== "toSpliced") return null;
         const receiver = resolveCollectionExpression(callee.expression);
         if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
         const receiverElements = denseStaticArrayElements(receiver);
@@ -2898,6 +2900,26 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return ts.factory.createArrayLiteralExpression(elements);
         }
 
+        if (method === "splice") {
+            if (call.arguments.some((argument, index) => index >= 2 && resolve(argument).length === 0)) return null;
+            if (call.arguments.length === 0) {
+                return ts.factory.createArrayLiteralExpression([]);
+            }
+            const starts = isStaticUndefinedExpression(call.arguments[0]!)
+                ? [0]
+                : resolveStaticIntegerKeys(call.arguments[0]!);
+            if (starts.length !== 1) return null;
+            const start = normalizeStaticArraySliceIndex(starts[0]!, receiverElements.length);
+            const deleteCounts = call.arguments.length === 1
+                ? [receiverElements.length - start]
+                : isStaticUndefinedExpression(call.arguments[1]!)
+                    ? [0]
+                    : resolveStaticIntegerKeys(call.arguments[1]!);
+            if (deleteCounts.length !== 1) return null;
+            const deleteCount = Math.min(Math.max(deleteCounts[0]!, 0), receiverElements.length - start);
+            return ts.factory.createArrayLiteralExpression(receiverElements.slice(start, start + deleteCount));
+        }
+
         if (method === "with") {
             if (call.arguments.length !== 2) return null;
             const indexes = resolveStaticIntegerKeys(call.arguments[0]!);
@@ -2961,6 +2983,29 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         }
         return ts.factory.createArrayLiteralExpression(elements);
+    };
+
+    const resolveStaticArrayMutationCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "pop" && method !== "shift" && method !== "push" && method !== "unshift") return [];
+        const receiver = resolveCollectionExpression(callee.expression);
+        if (!receiver || !ts.isArrayLiteralExpression(receiver)) return [];
+        const receiverElements = denseStaticArrayElements(receiver);
+        if (!receiverElements) return [];
+
+        if (method === "push" || method === "unshift") {
+            if (call.arguments.some((argument) => resolve(argument).length === 0)) return [];
+            return [String(receiverElements.length + call.arguments.length)];
+        }
+
+        if (call.arguments.length !== 0) return [];
+        const element = method === "pop"
+            ? receiverElements[receiverElements.length - 1]
+            : receiverElements[0];
+        return element ? resolve(element) : ["undefined"];
     };
 
     const flattenStaticArrayDepth = (elements: ts.Expression[], depth: number): ts.Expression[] | null => {

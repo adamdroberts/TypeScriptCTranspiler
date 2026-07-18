@@ -1,0 +1,1 @@
+module.exports.label = "array_stack_splice_splice_tail";
