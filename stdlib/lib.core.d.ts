@@ -432,6 +432,7 @@ interface Set<T> extends Iterable<T> {
     clear(): void;
     keys(...ignored: any[]): T[];
     values(...ignored: any[]): T[];
+    entries(...ignored: any[]): ObjectEntry<T, T>[];
     forEach(cb: (value: T, value2: T, set: Set<T>) => void, thisArg?: any, ...ignored: any[]): void;
     union(other: Set<T>, ...ignored: any[]): Set<T>;
     intersection(other: Set<T>, ...ignored: any[]): Set<T>;

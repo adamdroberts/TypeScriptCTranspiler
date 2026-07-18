@@ -2771,6 +2771,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (objectGroupBy) return resolveCollectionExpression(objectGroupBy);
             const mapGroupBy = resolveStaticMapGroupByCollectionExpression(cur);
             if (mapGroupBy) return resolveCollectionExpression(mapGroupBy);
+            const mapSetCollections = resolveStaticMapSetCollectionExpression(cur);
+            if (mapSetCollections) return resolveCollectionExpression(mapSetCollections);
             const mapGet = resolveStaticMapGetCollectionExpression(cur);
             if (mapGet) return resolveCollectionExpression(mapGet);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
@@ -3472,6 +3474,52 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticMapSetCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 0 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const method = callee.name.text;
+        if (method !== "keys" && method !== "values" && method !== "entries") return null;
+
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isNewExpression(receiver)) return null;
+        const ctor = unwrapStaticExpression(receiver.expression);
+        if (!ts.isIdentifier(ctor)) return null;
+        if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return null;
+        const source = receiver.arguments?.[0];
+
+        if (ctor.text === "Set") {
+            const values = resolveStaticArrayFromSetSource(source);
+            if (!values) return null;
+            if (method === "entries") {
+                const elements = denseStaticArrayElements(values);
+                if (!elements) return null;
+                return ts.factory.createArrayLiteralExpression(elements.map((element) => {
+                    return ts.factory.createArrayLiteralExpression([element, element]);
+                }));
+            }
+            return values;
+        }
+
+        if (ctor.text !== "Map") return null;
+        const entries = resolveStaticArrayFromMapSource(source);
+        if (!entries) return null;
+        if (method === "entries") return entries;
+
+        const out: ts.Expression[] = [];
+        for (const element of entries.elements) {
+            if (ts.isSpreadElement(element)) return null;
+            const entry = resolveCollectionExpression(element);
+            if (!entry || !ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
+            const keyExpr = entry.elements[0];
+            const valueExpr = entry.elements[1];
+            if (!keyExpr || !valueExpr || ts.isSpreadElement(keyExpr) || ts.isSpreadElement(valueExpr)) return null;
+            out.push(method === "keys" ? keyExpr : valueExpr);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createArrayLiteralExpression(out);
     };
 
     const resolveStaticMapSetSizeAccess = (expr: ts.PropertyAccessExpression): string[] => {
