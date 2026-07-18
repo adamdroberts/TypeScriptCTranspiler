@@ -7,3 +7,6 @@ method-finally-try-prelude: class-method-final|method-final-ok DVclass-M
 decl-catch-assigned-try-prelude: decl-assigned-decl-assigned-ok
 value-finally-assigned-try-prelude: value-assigned-final|value-assigned-ok DVclass-MA
 method-catch-assigned-try-prelude: class-method-assigned-method-assigned-ok
+decl-combined-assigned-try-prelude: decl-combined-caught:decl-combined-bad DVclass-MAC
+value-combined-try-prelude: value-combined|value-combined-ok DVclass-MACB
+method-combined-assigned-try-prelude: class-method-combined-caught:method-combined-bad DVclass-MACBclass-C

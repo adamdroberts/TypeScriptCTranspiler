@@ -7,3 +7,6 @@ method-finally-source-prelude: class-method-final|method-final-ok decl-final|val
 decl-catch-assigned-source-prelude: decl-assigned-decl-assigned-ok
 value-finally-assigned-source-prelude: value-assigned-final|value-assigned-ok decl-final|value-final|class-method-final|value-assigned-final|
 method-catch-assigned-source-prelude: class-method-assigned-method-assigned-ok
+decl-combined-assigned-source-prelude: decl-combined-assigned-caught:decl-combined-bad decl-final|value-final|class-method-final|value-assigned-final|C
+value-combined-source-prelude: value-combined|value-combined-ok decl-final|value-final|class-method-final|value-assigned-final|Cvalue-combined|
+method-combined-assigned-source-prelude: class-method-combined-assigned-caught:method-combined-bad decl-final|value-final|class-method-final|value-assigned-final|Cvalue-combined|class-C
