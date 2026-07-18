@@ -142,6 +142,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferAllocToStringText.length > 0) return bufferAllocToStringText;
             const bufferToStringText = resolveStaticBufferToStringCall(node);
             if (bufferToStringText.length > 0) return bufferToStringText;
+            const bufferToLocaleStringText = resolveStaticBufferToLocaleStringCall(node);
+            if (bufferToLocaleStringText.length > 0) return bufferToLocaleStringText;
             const bufferCompareText = resolveStaticBufferCompareCall(node);
             if (bufferCompareText.length > 0) return bufferCompareText;
             const bufferCopyText = resolveStaticBufferCopyCall(node);
@@ -1130,6 +1132,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const resolveStaticBufferToLocaleStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 0 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toLocaleString") return [];
+        const buffers = resolveStaticBufferExpression(callee.expression);
+        return buffers.length > 0 ? dedupe(buffers.map((buffer) => buffer.toString("utf8"))) : [];
     };
 
     const resolveStaticBufferConcatToStringCall = (call: ts.CallExpression): string[] => {
