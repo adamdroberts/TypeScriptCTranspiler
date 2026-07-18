@@ -20,6 +20,7 @@ arrow-logical-or-inline-await-return-sync: arrow-logical-or-sync
 arrow-logical-and-inline-await-return-sync: false
 arrow-nullish-inline-await-return-sync: arrow-nullish-sync
 arrow-prelude-branch-conditional-inline-await-return-sync: value-arrow-prelude-branch-conditional-sync!
+arrow-prelude-nested-conditional-inline-await-return-sync: value-arrow-prelude-nested-conditional-sync!
 suffix: ready!
 double: 42
 tagged: fn-tag
@@ -130,6 +131,8 @@ arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
 arrow-prelude-nested-if-branch-inline-await-return-fallthrough: value-arrow-prelude-nested-if-fallthrough!
 prelude-branch-conditional-inline-await-return-inner: fn-prelude-branch-conditional-inner!
 method-prelude-branch-conditional-inline-await-return-fallthrough: method-prelude-class-method-prelude-branch-conditional-fallthrough!
+prelude-nested-conditional-inline-await-return-fallthrough: fn-prelude-nested-conditional-fallthrough!
+method-prelude-nested-conditional-inline-await-return-inner: method-prelude-class-method-prelude-nested-conditional-inner!
 four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
 method-four-await: method-one:class-method-four-method-one:method-one:class-method-four-method-one-three:method-one:class-method-four-method-one:method-one:class-method-four-method-one-three-four!
 arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four!

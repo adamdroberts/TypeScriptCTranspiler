@@ -160,6 +160,15 @@ async function preludeBranchConditionalInlineAwaitReturn(outer: boolean, inner: 
     return label + await delay(181, "fallthrough") + "!";
 }
 
+async function preludeNestedConditionalInlineAwaitReturn(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+    const label = prefix + "prelude-nested-conditional-";
+    return outer
+        ? inner
+            ? label + await delay(190, "inner") + "!"
+            : label + "sync!"
+        : label + await delay(191, "fallthrough") + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -508,6 +517,15 @@ class Worker {
         }
         return label + await delay(183, "fallthrough") + "!";
     }
+
+    async preludeNestedConditionalInlineAwaitReturnMethod(outer: boolean, inner: boolean, prefix: string): Promise<string> {
+        const label = this.prefix + prefix + "method-prelude-nested-conditional-";
+        return outer
+            ? inner
+                ? label + await delay(192, "inner") + "!"
+                : label + "sync!"
+            : label + await delay(193, "fallthrough") + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -657,6 +675,15 @@ const arrowPreludeBranchConditionalInlineAwaitReturn = async (outer: boolean, in
             : label + "sync!";
     }
     return label + await delay(185, "fallthrough") + "!";
+};
+
+const arrowPreludeNestedConditionalInlineAwaitReturn = async (outer: boolean, inner: boolean, prefix: string): Promise<string> => {
+    const label = prefix + "arrow-prelude-nested-conditional-";
+    return outer
+        ? inner
+            ? label + await delay(194, "inner") + "!"
+            : label + "sync!"
+        : label + await delay(195, "fallthrough") + "!";
 };
 
 suffix().then((value: string): void => {
@@ -813,6 +840,10 @@ preludeNestedIfBranchInlineAwaitReturn(true, true, "fn-").then((value: string): 
 
 preludeBranchConditionalInlineAwaitReturn(true, true, "fn-").then((value: string): void => {
     console.log("prelude-branch-conditional-inline-await-return-inner:", value);
+});
+
+preludeNestedConditionalInlineAwaitReturn(false, false, "fn-").then((value: string): void => {
+    console.log("prelude-nested-conditional-inline-await-return-fallthrough:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -1061,6 +1092,10 @@ new Worker("method-prelude-").preludeBranchConditionalInlineAwaitReturnMethod(fa
     console.log("method-prelude-branch-conditional-inline-await-return-fallthrough:", value);
 });
 
+new Worker("method-prelude-").preludeNestedConditionalInlineAwaitReturnMethod(true, true, "class-").then((value: string): void => {
+    console.log("method-prelude-nested-conditional-inline-await-return-inner:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1211,4 +1246,8 @@ arrowPreludeNestedIfBranchInlineAwaitReturn(false, false, "value-").then((value:
 
 arrowPreludeBranchConditionalInlineAwaitReturn(true, false, "value-").then((value: string): void => {
     console.log("arrow-prelude-branch-conditional-inline-await-return-sync:", value);
+});
+
+arrowPreludeNestedConditionalInlineAwaitReturn(true, false, "value-").then((value: string): void => {
+    console.log("arrow-prelude-nested-conditional-inline-await-return-sync:", value);
 });
