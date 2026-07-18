@@ -180,6 +180,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return resolveStaticCollectionAccess(node.expression, node.argumentExpression);
         }
         if (ts.isPropertyAccessExpression(node)) {
+            const numericConstant = resolveStaticNumericConstantAccess(node);
+            if (numericConstant.length > 0) return numericConstant;
             const enumValues = resolveStaticEnumAccess(node.expression, node.name);
             if (enumValues.length > 0) return enumValues;
             return resolveStaticCollectionAccess(node.expression, node.name);
@@ -656,6 +658,61 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticNumericConstantAccess = (access: ts.PropertyAccessExpression): string[] => {
+        const target = unwrapStaticExpression(access.expression);
+        if (!ts.isIdentifier(target)) return [];
+        let value: number | null = null;
+        if (target.text === "Math") {
+            switch (access.name.text) {
+                case "E":
+                    value = Math.E;
+                    break;
+                case "LN2":
+                    value = Math.LN2;
+                    break;
+                case "LN10":
+                    value = Math.LN10;
+                    break;
+                case "LOG2E":
+                    value = Math.LOG2E;
+                    break;
+                case "LOG10E":
+                    value = Math.LOG10E;
+                    break;
+                case "PI":
+                    value = Math.PI;
+                    break;
+                case "SQRT1_2":
+                    value = Math.SQRT1_2;
+                    break;
+                case "SQRT2":
+                    value = Math.SQRT2;
+                    break;
+            }
+        } else if (target.text === "Number") {
+            switch (access.name.text) {
+                case "EPSILON":
+                    value = Number.EPSILON;
+                    break;
+                case "MAX_SAFE_INTEGER":
+                    value = Number.MAX_SAFE_INTEGER;
+                    break;
+                case "MAX_VALUE":
+                    value = Number.MAX_VALUE;
+                    break;
+                case "MIN_SAFE_INTEGER":
+                    value = Number.MIN_SAFE_INTEGER;
+                    break;
+                case "MIN_VALUE":
+                    value = Number.MIN_VALUE;
+                    break;
+            }
+        }
+        return value !== null && Number.isFinite(value)
+            ? [Object.is(value, -0) ? "0" : String(value)]
+            : [];
     };
 
     const flattenArrayLiteral = (array: ts.ArrayLiteralExpression): ts.ArrayLiteralExpression | null => {
