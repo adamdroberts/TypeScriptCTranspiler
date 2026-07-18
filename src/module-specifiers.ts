@@ -125,6 +125,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (numericParserText.length > 0) return numericParserText;
             const dateText = resolveStaticDateCall(node);
             if (dateText.length > 0) return dateText;
+            const mathText = resolveStaticMathCall(node);
+            if (mathText.length > 0) return mathText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
             const atText = resolveStaticArrayAtCall(node);
@@ -582,6 +584,75 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
             if (!Number.isFinite(stamp)) return [];
             out.push(String(stamp));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticMathCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Math") return [];
+        const method = callee.name.text;
+
+        const applyMath = (args: number[]): number | null => {
+            switch (method) {
+                case "abs":
+                    return args.length === 1 ? Math.abs(args[0]!) : null;
+                case "floor":
+                    return args.length === 1 ? Math.floor(args[0]!) : null;
+                case "ceil":
+                    return args.length === 1 ? Math.ceil(args[0]!) : null;
+                case "trunc":
+                    return args.length === 1 ? Math.trunc(args[0]!) : null;
+                case "round":
+                    return args.length === 1 ? Math.round(args[0]!) : null;
+                case "sqrt":
+                    return args.length === 1 ? Math.sqrt(args[0]!) : null;
+                case "cbrt":
+                    return args.length === 1 ? Math.cbrt(args[0]!) : null;
+                case "sign":
+                    return args.length === 1 ? Math.sign(args[0]!) : null;
+                case "clz32":
+                    return args.length === 1 ? Math.clz32(args[0]!) : null;
+                case "fround":
+                    return args.length === 1 ? Math.fround(args[0]!) : null;
+                case "pow":
+                    return args.length === 2 ? Math.pow(args[0]!, args[1]!) : null;
+                case "imul":
+                    return args.length === 2 ? Math.imul(args[0]!, args[1]!) : null;
+                case "min":
+                    return args.length >= 1 ? Math.min(...args) : null;
+                case "max":
+                    return args.length >= 1 ? Math.max(...args) : null;
+                case "hypot":
+                    return args.length >= 1 ? Math.hypot(...args) : null;
+                default:
+                    return null;
+            }
+        };
+
+        const argumentValues = call.arguments.map((argument) => resolveStaticNumberValues(argument));
+        if (argumentValues.some((values) => values.length === 0)) return [];
+        let tuples: number[][] = [[]];
+        for (const values of argumentValues) {
+            const next: number[][] = [];
+            for (const tuple of tuples) {
+                for (const value of values) {
+                    next.push([...tuple, value]);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            tuples = next;
+        }
+
+        const out: string[] = [];
+        for (const tuple of tuples) {
+            const value = applyMath(tuple);
+            if (value === null || !Number.isFinite(value)) return [];
+            out.push(Object.is(value, -0) ? "0" : String(value));
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
@@ -1299,6 +1370,18 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             keys.push(Number(text));
         }
         return keys;
+    };
+
+    const resolveStaticNumberValues = (expr: ts.Expression): number[] => {
+        const texts = resolve(expr);
+        if (texts.length === 0) return [];
+        const values: number[] = [];
+        for (const text of texts) {
+            const value = Number(text);
+            if (!Number.isFinite(value)) return [];
+            values.push(value);
+        }
+        return values;
     };
 
     const resolveStaticIntegerKeys = (keyExpr: ts.Expression | ts.Identifier): number[] => {
