@@ -30,6 +30,23 @@ const liftedCombinedTryCatchFinally = async (flag: boolean): Promise<string> => 
     }
 };
 
+const liftedCombinedTryCatchFinallyPrelude = async (): Promise<string> => {
+    try {
+        const value = await delayedRejectAfter(11, "lifted-combined-prelude-bad");
+        return "lifted-combined-prelude:" + value;
+    } catch (e) {
+        const label = "lifted-combined-prelude-caught:";
+        let suffix: string;
+        suffix = ":done";
+        return label + e + suffix;
+    } finally {
+        const marker = "Y";
+        let suffix: string;
+        suffix = "!";
+        trace += marker + suffix;
+    }
+};
+
 function makeNestedCombinedTryCatchFinally(prefix: string): (flag: boolean) => Promise<string> {
     return async (flag: boolean): Promise<string> => {
         try {
@@ -39,6 +56,25 @@ function makeNestedCombinedTryCatchFinally(prefix: string): (flag: boolean) => P
             return prefix + "nested-catch:" + e;
         } finally {
             trace += flag ? "N" : "n";
+        }
+    };
+}
+
+function makeNestedCombinedTryCatchFinallyPrelude(prefix: string): () => Promise<string> {
+    return async (): Promise<string> => {
+        try {
+            const value = await delayedRejectAfter(12, "nested-combined-prelude-bad");
+            return prefix + "nested-combined-prelude:" + value;
+        } catch (e) {
+            const label = prefix + "nested-combined-prelude-caught:";
+            let suffix: string;
+            suffix = ":done";
+            return label + e + suffix;
+        } finally {
+            const marker = "y";
+            let suffix: string;
+            suffix = "!";
+            trace += marker + suffix;
         }
     };
 }
@@ -58,6 +94,23 @@ class CombinedTryWorker {
             return this.prefix + "method-catch:" + e;
         } finally {
             trace += flag ? "M" : "m";
+        }
+    }
+
+    async combinedTryCatchFinallyPrelude(): Promise<string> {
+        try {
+            const value = await delayedRejectAfter(13, "method-combined-prelude-bad");
+            return this.prefix + "method-combined-prelude:" + value;
+        } catch (e) {
+            const label = this.prefix + "method-combined-prelude-caught:";
+            let suffix: string;
+            suffix = ":done";
+            return label + e + suffix;
+        } finally {
+            const marker = "Z";
+            let suffix: string;
+            suffix = "!";
+            trace += marker + suffix;
         }
     }
 }
@@ -87,6 +140,7 @@ async function combinedTryCatchFinallyThrowRejected(): Promise<string> {
 }
 
 const nestedCombinedTryCatchFinally = makeNestedCombinedTryCatchFinally("closure-");
+const nestedCombinedTryCatchFinallyPrelude = makeNestedCombinedTryCatchFinallyPrelude("closure-");
 const worker = new CombinedTryWorker("class-");
 
 combinedTryCatchFinally(true).then((value: string): void => {
@@ -127,4 +181,16 @@ combinedTryCatchFinallyThrowFulfilled().catch((reason: string): void => {
 
 combinedTryCatchFinallyThrowRejected().catch((reason: string): void => {
     console.log("combined-try-catch-finally-throw-rejected:", reason, trace);
+});
+
+liftedCombinedTryCatchFinallyPrelude().then((value: string): void => {
+    console.log("lifted-combined-try-catch-finally-prelude:", value, trace);
+});
+
+nestedCombinedTryCatchFinallyPrelude().then((value: string): void => {
+    console.log("nested-combined-try-catch-finally-prelude:", value, trace);
+});
+
+worker.combinedTryCatchFinallyPrelude().then((value: string): void => {
+    console.log("method-combined-try-catch-finally-prelude:", value, trace);
 });
