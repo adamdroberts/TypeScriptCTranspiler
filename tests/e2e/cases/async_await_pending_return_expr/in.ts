@@ -23,6 +23,9 @@ interface PreludeCaptureKey {
     id: string;
 }
 
+function preludeFinalizationCleanup(_heldValue: string): void {
+}
+
 async function suffix(): Promise<string> {
     const value = await delay(5, "ready");
     return value + "!";
@@ -348,6 +351,17 @@ async function preludeWeakMapInlineAwaitReturn(prefix: string): Promise<string> 
     const labels = new WeakMap<PreludeCaptureKey, string>();
     labels.set(key, prefix + "weak-map-inline-");
     return labels.get(key) + await delay(283, "value");
+}
+
+async function preludeWeakRefFinalizationAwaitedLocalReturn(prefix: string): Promise<string> {
+    const target: PreludeCaptureRecord = { label: prefix + "weak-ref-local", suffix: "!" };
+    const token: PreludeCaptureKey = { id: prefix + "weak-ref-token" };
+    const ref = new WeakRef<PreludeCaptureRecord>(target);
+    const registry = new FinalizationRegistry<string>(preludeFinalizationCleanup);
+    const value = await delay(284, prefix + "weak-ref-value");
+    const found = ref.deref();
+    registry.register(target, value, token);
+    return (found?.label ?? "missing") + found?.suffix + ":" + registry.unregister(token) + ":" + ref.toString() + ":" + registry.toString() + ":" + value;
 }
 
 async function preludeWeakSetFiveAwait(prefix: string): Promise<string> {
@@ -1797,6 +1811,10 @@ preludeWeakMapSetAwaitedLocalReturn("fn-").then((value: string): void => {
 
 preludeWeakMapInlineAwaitReturn("fn-").then((value: string): void => {
     console.log("prelude-weak-map-inline-await-return:", value);
+});
+
+preludeWeakRefFinalizationAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-weak-ref-finalization-awaited-local-return:", value);
 });
 
 preludeWeakSetFiveAwait("fn-").then((value: string): void => {
