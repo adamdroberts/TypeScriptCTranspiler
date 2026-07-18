@@ -1774,9 +1774,18 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     const resolveStaticUrlSearchParamsCall = (call: ts.CallExpression): string[] => {
-        if (call.arguments.length !== 0) return [];
         const callee = unwrapStaticExpression(call.expression);
-        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "toString") return [];
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "toString" && method !== "get" && method !== "has") return [];
+        if (
+            (method === "toString" && call.arguments.length !== 0) ||
+            (method === "get" && call.arguments.length !== 1) ||
+            (method === "has" && (call.arguments.length < 1 || call.arguments.length > 2)) ||
+            call.arguments.some(ts.isSpreadElement)
+        ) {
+            return [];
+        }
         const source = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(source)) return [];
         const ctor = unwrapStaticExpression(source.expression);
@@ -1789,7 +1798,32 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (values.length === 0) return [];
         const out: string[] = [];
         for (const value of values) {
-            out.push(new URLSearchParams(value).toString());
+            const params = new URLSearchParams(value);
+            if (method === "toString") {
+                out.push(params.toString());
+                continue;
+            }
+            const names = resolve(call.arguments[0]!);
+            if (names.length === 0) return [];
+            if (method === "get") {
+                for (const name of names) {
+                    out.push(params.get(name) ?? "null");
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+                continue;
+            }
+            const expectedValues = call.arguments.length === 2
+                ? resolve(call.arguments[1]!)
+                : [undefined];
+            if (expectedValues.length === 0) return [];
+            for (const name of names) {
+                for (const expectedValue of expectedValues) {
+                    out.push(String(expectedValue === undefined
+                        ? params.has(name)
+                        : params.has(name, expectedValue)));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
