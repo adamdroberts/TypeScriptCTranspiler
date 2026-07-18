@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now accepts bounded await-free expression-statement preludes before final pending-await return continuations, while still capturing later leading locals across suspension. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation coverage now proves bounded leading `const` / `let` locals before final `||`, `??`, and `&&` return expressions whose awaited right side reads those captures. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation coverage now proves bounded leading `const` / `let` locals before nested conditional return-expression trees that mix pending-`await` and synchronous leaves. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation coverage now proves bounded leading `const` / `let` locals before `if` / fallthrough branches whose return expression is a conditional tree mixing pending-`await` and synchronous leaves. Test: `async_await_pending_return_expr`.
