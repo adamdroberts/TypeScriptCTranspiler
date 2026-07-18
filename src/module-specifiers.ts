@@ -2691,6 +2691,36 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return ts.factory.createArrayLiteralExpression(elements);
     };
 
+    const flattenObjectLiteral = (object: ts.ObjectLiteralExpression): ts.ObjectLiteralExpression | null => {
+        if (!object.properties.some(ts.isSpreadAssignment)) return object;
+        let out = ts.factory.createObjectLiteralExpression([]);
+        for (const prop of object.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                if (isStaticNullishCollectionSource(prop.expression)) continue;
+                const spread = resolveCollectionExpression(prop.expression);
+                if (!spread || !ts.isObjectLiteralExpression(spread)) return null;
+                for (const spreadProp of spread.properties) {
+                    if (!ts.isPropertyAssignment(spreadProp) && !ts.isShorthandPropertyAssignment(spreadProp)) return null;
+                    const key = staticPropertyName(spreadProp.name);
+                    if (key === null) return null;
+                    const value = ts.isPropertyAssignment(spreadProp) ? spreadProp.initializer : spreadProp.name;
+                    const next = withStaticObjectProperty(out, key, value);
+                    if (!next) return null;
+                    out = next;
+                }
+                continue;
+            }
+            if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+            const key = staticPropertyName(prop.name);
+            if (key === null) return null;
+            const value = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+            const next = withStaticObjectProperty(out, key, value);
+            if (!next) return null;
+            out = next;
+        }
+        return out;
+    };
+
     const resolveCollectionExpression = (node: ts.Expression): ts.Expression | null => {
         let cur = node;
         while (
@@ -2775,6 +2805,10 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
         if (ts.isArrayLiteralExpression(cur)) {
             return flattenArrayLiteral(cur);
+        }
+
+        if (ts.isObjectLiteralExpression(cur)) {
+            return flattenObjectLiteral(cur);
         }
 
         return cur;
