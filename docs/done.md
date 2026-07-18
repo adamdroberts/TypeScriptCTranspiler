@@ -6,6 +6,8 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ---
 
+- Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `while` break/continue, break-terminated `switch`, and `try`/`catch`/`finally` after a pending awaited local, matching the existing async-method subset. Test: `async_await_pending_return_expr`
+
 ## 1. Language core
 
 ### Literals
