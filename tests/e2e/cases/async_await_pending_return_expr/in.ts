@@ -42,6 +42,12 @@ async function tagged(prefix: string): Promise<string> {
     return prefix + value;
 }
 
+async function directAssignmentAwaitReturn(prefix: string): Promise<string> {
+    let value: string;
+    value = await delay(13, prefix + "direct-assignment");
+    return value;
+}
+
 async function staged(prefix: string): Promise<string> {
     const value = await delay(14, "stage");
     const decorated = prefix + value;
@@ -551,6 +557,12 @@ class Worker {
         return decorated;
     }
 
+    async directAssignmentAwaitReturnMethod(suffix: string): Promise<string> {
+        let value: string;
+        value = await delay(20, this.prefix + "method-direct-assignment" + suffix);
+        return value;
+    }
+
     async initializedAssignmentExpressionAwaitReturnMethod(suffix: string): Promise<string> {
         let decorated = this.prefix + "init-";
         decorated = decorated + await delay(24, "method-assignment") + suffix;
@@ -969,6 +981,12 @@ const arrowAssignmentExpressionAwaitReturn = async (prefix: string): Promise<str
     return decorated;
 };
 
+const arrowDirectAssignmentAwaitReturn = async (prefix: string): Promise<string> => {
+    let value: string;
+    value = await delay(21, prefix + "arrow-direct-assignment");
+    return value;
+};
+
 const arrowInitializedAssignmentExpressionAwaitReturn = async (prefix: string): Promise<string> => {
     let decorated = prefix + "init-";
     decorated = decorated + await delay(26, "arrow-assignment") + "!";
@@ -1196,6 +1214,10 @@ tagged("fn-").then((value: string): void => {
     console.log("tagged:", value);
 });
 
+directAssignmentAwaitReturn("fn-").then((value: string): void => {
+    console.log("direct-assignment-await-return:", value);
+});
+
 twoAwait("fn-").then((value: string): void => {
     console.log("two-await:", value);
 });
@@ -1402,6 +1424,10 @@ new Worker("this-").initializerExpressionAwaitReturnMethod("!").then((value: str
 
 new Worker("this-").assignmentExpressionAwaitReturnMethod("!").then((value: string): void => {
     console.log("method-assignment-expression-await-return:", value);
+});
+
+new Worker("this-").directAssignmentAwaitReturnMethod("!").then((value: string): void => {
+    console.log("method-direct-assignment-await-return:", value);
 });
 
 new Worker("this-").initializedAssignmentExpressionAwaitReturnMethod("!").then((value: string): void => {
@@ -1672,6 +1698,10 @@ arrowInitializerExpressionAwaitReturn("value-").then((value: string): void => {
 
 arrowAssignmentExpressionAwaitReturn("value-").then((value: string): void => {
     console.log("arrow-assignment-expression-await-return:", value);
+});
+
+arrowDirectAssignmentAwaitReturn("value-").then((value: string): void => {
+    console.log("arrow-direct-assignment-await-return:", value);
 });
 
 arrowInitializedAssignmentExpressionAwaitReturn("value-").then((value: string): void => {

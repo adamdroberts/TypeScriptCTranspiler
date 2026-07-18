@@ -23334,6 +23334,7 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
+                                this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, m.body) ||
                                 this.emitAsyncAwaitInitializerReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24814,6 +24815,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
+                !this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, fd.body) &&
                 !this.emitAsyncAwaitInitializerReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitAssignmentReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitTryCatchReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -24862,6 +24864,39 @@ class Emitter {
 
     private emitDirectAsyncAwaitReturnAlias(buf: CBuf, body: ts.Block): boolean {
         const directAwaitAlias = this.directAsyncAwaitReturnAlias(body);
+        if (!directAwaitAlias) return false;
+        const source = this.emitExpr(directAwaitAlias.expression);
+        if (this.prepareType(source.ty).kind === "promise") {
+            buf.line(`return tsc_promise_adopt(${source.c});`);
+        } else {
+            buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.expression)};`);
+        }
+        return true;
+    }
+
+    private directAsyncAwaitAssignmentReturnAlias(body: ts.Block): ts.AwaitExpression | null {
+        if (body.statements.length !== 3) return null;
+        const declaration = body.statements[0];
+        const assignmentStmt = body.statements[1];
+        const result = body.statements[2];
+        if (!ts.isVariableStatement(declaration) || !ts.isExpressionStatement(assignmentStmt) || !ts.isReturnStatement(result)) return null;
+        if (!(declaration.declarationList.flags & ts.NodeFlags.Let)) return null;
+        if (declaration.declarationList.declarations.length !== 1) return null;
+        const variable = declaration.declarationList.declarations[0]!;
+        if (!ts.isIdentifier(variable.name) || variable.initializer) return null;
+        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
+        if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
+        const rhs = this.unwrapTransparentExpression(assignment.right);
+        if (!ts.isAwaitExpression(rhs)) return null;
+        const variableSymbol = this.symbolForIdentifier(variable.name);
+        const assignedSymbol = this.symbolForIdentifier(assignment.left);
+        const resultSymbol = this.symbolForIdentifier(result.expression);
+        return variableSymbol && variableSymbol === assignedSymbol && variableSymbol === resultSymbol ? rhs : null;
+    }
+
+    private emitDirectAsyncAwaitAssignmentReturnAlias(buf: CBuf, body: ts.Block): boolean {
+        const directAwaitAlias = this.directAsyncAwaitAssignmentReturnAlias(body);
         if (!directAwaitAlias) return false;
         const source = this.emitExpr(directAwaitAlias.expression);
         if (this.prepareType(source.ty).kind === "promise") {
@@ -37322,6 +37357,7 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
+                                this.emitDirectAsyncAwaitAssignmentReturnAlias(body, fnBody) ||
                                 this.emitAsyncAwaitInitializerReturnContinuation(
                                     body,
                                     fnBody,
@@ -47424,6 +47460,7 @@ class Emitter {
                 const handledAsyncAwait =
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
+                        this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, info.fn.body) ||
                         this.emitAsyncAwaitInitializerReturnContinuation(
                             this.defs,
                             info.fn.body,
