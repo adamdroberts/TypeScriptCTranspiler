@@ -144,6 +144,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferCompareText.length > 0) return bufferCompareText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
             if (bufferEqualsText.length > 0) return bufferEqualsText;
+            const bufferSearchText = resolveStaticBufferSearchCall(node);
+            if (bufferSearchText.length > 0) return bufferSearchText;
             const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
             if (bufferIsBufferText.length > 0) return bufferIsBufferText;
             const numericParserText = resolveStaticNumericParserCall(node);
@@ -1090,6 +1092,59 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             for (const right of rightBuffers) {
                 out.push(String(left.equals(right)));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferSearchNeedles = (expr: ts.Expression): Array<Buffer | string | number> => {
+        const buffers = resolveStaticBufferExpression(expr);
+        if (buffers.length > 0) return buffers;
+        const raw = unwrapStaticExpression(expr);
+        if (!ts.isStringLiteralLike(raw) && !ts.isNoSubstitutionTemplateLiteral(raw)) {
+            const bytes = resolveStaticIntegerKeys(expr);
+            if (bytes.length > 0) return bytes;
+        }
+        const strings = resolve(expr);
+        if (strings.length > 0) return strings;
+        const bytes = resolveStaticIntegerKeys(expr);
+        if (bytes.length > 0) return bytes;
+        return [];
+    };
+
+    const resolveStaticBufferSearchOffsets = (expr: ts.Expression | undefined): Array<number | undefined> => {
+        if (!expr || isStaticUndefinedExpression(expr)) return [undefined];
+        const offsets = resolveStaticIntegerKeys(expr);
+        return offsets.length > 0 ? offsets : [];
+    };
+
+    const resolveStaticBufferSearchCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "indexOf" && method !== "lastIndexOf" && method !== "includes") return [];
+
+        const haystacks = resolveStaticBufferExpression(callee.expression);
+        if (haystacks.length === 0) return [];
+        const needles = resolveStaticBufferSearchNeedles(call.arguments[0]!);
+        if (needles.length === 0) return [];
+        const offsets = resolveStaticBufferSearchOffsets(call.arguments[1]);
+        if (offsets.length === 0) return [];
+
+        const out: string[] = [];
+        for (const haystack of haystacks) {
+            for (const needle of needles) {
+                for (const offset of offsets) {
+                    if (method === "includes") {
+                        out.push(String(haystack.includes(needle, offset)));
+                    } else if (method === "indexOf") {
+                        out.push(String(haystack.indexOf(needle, offset)));
+                    } else {
+                        out.push(String(haystack.lastIndexOf(needle, offset)));
+                    }
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
             }
         }
         return dedupe(out);
