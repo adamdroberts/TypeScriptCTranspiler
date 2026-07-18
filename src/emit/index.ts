@@ -23214,6 +23214,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitConditionalExpressionReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24647,6 +24653,7 @@ class Emitter {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
                 !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitConditionalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLeadingReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitFourStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25351,10 +25358,15 @@ class Emitter {
         if (ts.isAwaitExpression(returnExpr)) return null;
         let awaitExpr: ts.AwaitExpression | null = null;
         let ok = true;
-        const visitFindAwait = (node: ts.Node): void => {
+        const visitFindAwait = (node: ts.Node, conditionalDepth = 0): void => {
             if (!ok) return;
             if (node !== returnExpr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            const nextConditionalDepth = conditionalDepth + (ts.isConditionalExpression(node) ? 1 : 0);
             if (ts.isAwaitExpression(node)) {
+                if (conditionalDepth > 0) {
+                    ok = false;
+                    return;
+                }
                 if (awaitExpr) {
                     ok = false;
                     return;
@@ -25362,7 +25374,7 @@ class Emitter {
                 awaitExpr = node;
                 return;
             }
-            ts.forEachChild(node, visitFindAwait);
+            ts.forEachChild(node, (child) => visitFindAwait(child, nextConditionalDepth));
         };
         visitFindAwait(returnExpr);
         if (!ok || !awaitExpr) return null;
@@ -25432,6 +25444,20 @@ class Emitter {
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
 
+    private asyncAwaitConditionExpressionSupported(condition: ts.Expression): boolean {
+        let ok = true;
+        const visitCondition = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visitCondition);
+        };
+        visitCondition(condition);
+        return ok;
+    }
+
     private asyncAwaitExpressionReturnContinuationSupported(
         continuation: AsyncAwaitExpressionReturnContinuation,
     ): boolean {
@@ -25494,6 +25520,50 @@ class Emitter {
         buf.close();
         buf.line(`return ${resultPromise};`);
         return true;
+    }
+
+    private asyncAwaitConditionalExpressionReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitIfExpressionReturnNode | null {
+        if (body.statements.length !== 1) return null;
+        const result = body.statements[0]!;
+        if (!ts.isReturnStatement(result) || !result.expression || !ts.isConditionalExpression(result.expression)) {
+            return null;
+        }
+        const expr = result.expression;
+        if (!this.asyncAwaitConditionExpressionSupported(expr.condition)) return null;
+        const whenTrue = this.asyncAwaitExpressionReturnContinuationForExpression(
+            expr.whenTrue,
+            parameters,
+            thisValue,
+        );
+        const whenFalse = this.asyncAwaitExpressionReturnContinuationForExpression(
+            expr.whenFalse,
+            parameters,
+            thisValue,
+        );
+        if (!whenTrue || !whenFalse) return null;
+        return {
+            kind: "if",
+            condition: expr.condition,
+            thenBranch: { kind: "return", continuation: whenTrue },
+            elseBranch: { kind: "return", continuation: whenFalse },
+            fallthroughBranch: null,
+        };
+    }
+
+    private emitAsyncAwaitConditionalExpressionReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const continuation = this.asyncAwaitConditionalExpressionReturnContinuation(body, parameters, thisValue);
+        if (!continuation) return false;
+        if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
+        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation);
     }
 
     private asyncAwaitIfExpressionReturnContinuation(
@@ -25562,17 +25632,7 @@ class Emitter {
         if (!ifStatement.elseStatement && !fallthroughBranch) return null;
         if (ifStatement.elseStatement && fallthroughBranch) return null;
 
-        let conditionOk = true;
-        const visitCondition = (node: ts.Node): void => {
-            if (!conditionOk) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
-                conditionOk = false;
-                return;
-            }
-            ts.forEachChild(node, visitCondition);
-        };
-        visitCondition(ifStatement.expression);
-        if (!conditionOk) return null;
+        if (!this.asyncAwaitConditionExpressionSupported(ifStatement.expression)) return null;
 
         const thenBranch = this.asyncAwaitIfExpressionReturnBranchFromStatement(
             ifStatement.thenStatement,
@@ -45832,6 +45892,12 @@ class Emitter {
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
                         this.emitAsyncAwaitIfExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
+                        this.emitAsyncAwaitConditionalExpressionReturnContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,
