@@ -1,0 +1,1 @@
+call fulfilled thenable|call rejected thenable|settle fulfilled thenable|settle rejected thenable|fulfilled:fulfilled value|rejected:rejected reason
