@@ -67,7 +67,9 @@ arrow-initialized-direct-assignment-await-return: value-arrow-initialized-direct
 method-loop: loop-looploop
 arrow-expression-body-inline-await-return: value-arrow-expression-body-inline!
 method-for: for-forfor
+closure-expression-body-direct-await: value-closure-direct
 method-for-continue: for-continue-for-continue0for-continue2
+closure-expression-body-inline-await-return: value-closure-inline!
 method-for-of: forof-of!
 method-for-in: forin-0in
 method-loop-control: control-ctrl0ctrl2
