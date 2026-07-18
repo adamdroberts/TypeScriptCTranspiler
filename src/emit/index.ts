@@ -207,6 +207,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
     successReturnsAwaited: boolean;
     catchClause: ts.CatchClause;
     catchReturnExpr: ts.Expression | null;
+    catchThrowExpr: ts.Expression | null;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
     usesAwaited: boolean;
@@ -24792,14 +24793,16 @@ class Emitter {
         if (tryStmt.catchClause.block.statements.length !== 1) return null;
 
         let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[0]!);
-        const catchReturn = tryStmt.catchClause.block.statements[0]!;
+        const catchStmt = tryStmt.catchClause.block.statements[0]!;
         let successReturnsAwaited = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[0]!);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited) return null;
-        if (!ts.isReturnStatement(catchReturn)) return null;
+        if (!ts.isReturnStatement(catchStmt) && !ts.isThrowStatement(catchStmt)) return null;
+        const catchReturnExpr = ts.isReturnStatement(catchStmt) ? catchStmt.expression ?? null : null;
+        const catchThrowExpr = ts.isThrowStatement(catchStmt) ? catchStmt.expression : null;
         let successReturnExpr: ts.Expression | null = null;
         if (successReturnsAwaited) {
             if (body.statements.length !== 1 || tryStmt.tryBlock.statements.length !== 1) return null;
@@ -24873,7 +24876,8 @@ class Emitter {
 
         visit(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
         if (successReturnExpr) visit(successReturnExpr, { allowAwaited: true, allowCatch: false });
-        if (catchReturn.expression) visit(catchReturn.expression, { allowAwaited: false, allowCatch: !!catchSymbol });
+        if (catchReturnExpr) visit(catchReturnExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
+        if (catchThrowExpr) visit(catchThrowExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
         if (!ok) return null;
 
         return {
@@ -24882,7 +24886,8 @@ class Emitter {
             successReturnExpr,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
-            catchReturnExpr: catchReturn.expression ?? null,
+            catchReturnExpr,
+            catchThrowExpr,
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,
             usesAwaited,
@@ -25038,24 +25043,33 @@ class Emitter {
         this.argumentValueScopes.push(scope);
         if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
         let catchReturned: EmitResult | null = null;
+        let catchThrown: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            if (continuation.catchReturnExpr) catchReturned = this.emitExpr(continuation.catchReturnExpr);
+            if (continuation.catchThrowExpr) {
+                catchThrown = this.emitExpr(continuation.catchThrowExpr);
+            } else if (continuation.catchReturnExpr) {
+                catchReturned = this.emitExpr(continuation.catchReturnExpr);
+            }
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
             if (catchSym) this.catchStringSymbols.delete(catchSym);
         }
-        const catchReturnType = catchReturned ? this.prepareType(catchReturned.ty) : T_VOID;
-        if (!catchReturned || catchReturnType.kind === "void" || catchReturnType.kind === "never") {
-            if (catchReturned) buf.line(`${catchReturned.c};`);
-            buf.line("tsc_try_pop();");
-            buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+        if (catchThrown) {
+            buf.line(`tsc_throw_str(${this.coerceToString(catchThrown, continuation.catchThrowExpr!)});`);
         } else {
-            buf.line(`${catchReturnType.c} ${catchReturnVar} = ${catchReturned.c};`);
-            buf.line("tsc_try_pop();");
-            buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: catchReturnVar, ty: catchReturnType }, continuation.catchReturnExpr!)};`);
+            const catchReturnType = catchReturned ? this.prepareType(catchReturned.ty) : T_VOID;
+            if (!catchReturned || catchReturnType.kind === "void" || catchReturnType.kind === "never") {
+                if (catchReturned) buf.line(`${catchReturned.c};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+            } else {
+                buf.line(`${catchReturnType.c} ${catchReturnVar} = ${catchReturned.c};`);
+                buf.line("tsc_try_pop();");
+                buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: catchReturnVar, ty: catchReturnType }, continuation.catchReturnExpr!)};`);
+            }
         }
         buf.close();
         buf.open("else");

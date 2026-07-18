@@ -1,0 +1,6 @@
+pending-catch-throw-fulfilled: fulfilled:ok
+pending-catch-throw-rejected: rethrown:bad
+arrow-catch-throw-fulfilled: arrow:arrow-ok
+arrow-catch-throw-rejected: arrow-rethrown:arrow-bad
+closure-catch-throw-fulfilled: closure:closure-ok
+closure-catch-throw-rejected: closure-rethrown:closure-bad
