@@ -2742,6 +2742,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const arrayFrom = resolveStaticArrayFromCollectionExpression(cur);
+            if (arrayFrom) return resolveCollectionExpression(arrayFrom);
             const objectWrapperReceiver = resolveStaticObjectWrapperReceiver(cur);
             if (objectWrapperReceiver) return resolveCollectionExpression(objectWrapperReceiver);
             const objectDescriptorBuilt = resolveStaticObjectDescriptorBuiltCollectionExpression(cur);
@@ -2812,6 +2814,95 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticArrayFromCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "from") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Array") return null;
+        return resolveStaticArrayFromSource(call.arguments[0]!);
+    };
+
+    const resolveStaticArrayFromSource = (expr: ts.Expression): ts.ArrayLiteralExpression | null => {
+        const source = resolveCollectionExpression(expr);
+        if (source && ts.isArrayLiteralExpression(source)) {
+            const elements: ts.Expression[] = [];
+            for (const element of source.elements) {
+                if (ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return null;
+                elements.push(element);
+            }
+            return ts.factory.createArrayLiteralExpression(elements);
+        }
+        if (source && (ts.isStringLiteral(source) || ts.isNoSubstitutionTemplateLiteral(source))) {
+            return ts.factory.createArrayLiteralExpression(
+                Array.from(source.text).map((char) => ts.factory.createStringLiteral(char)),
+            );
+        }
+
+        const ctor = unwrapStaticExpression(expr);
+        if (!ts.isNewExpression(ctor)) return null;
+        const ctorExpr = unwrapStaticExpression(ctor.expression);
+        if (!ts.isIdentifier(ctorExpr)) return null;
+        if ((ctor.arguments?.length ?? 0) > 1 || ctor.arguments?.some(ts.isSpreadElement)) return null;
+        const arg = ctor.arguments?.[0];
+        if (ctorExpr.text === "Set") return resolveStaticArrayFromSetSource(arg);
+        if (ctorExpr.text === "Map") return resolveStaticArrayFromMapSource(arg);
+        return null;
+    };
+
+    const resolveStaticArrayFromSetSource = (expr: ts.Expression | undefined): ts.ArrayLiteralExpression | null => {
+        if (!expr || isStaticNullishCollectionSource(expr)) return ts.factory.createArrayLiteralExpression([]);
+        const source = resolveCollectionExpression(expr);
+        let elements: ts.NodeArray<ts.Expression>;
+        if (source && ts.isArrayLiteralExpression(source)) {
+            elements = source.elements;
+        } else if (source && (ts.isStringLiteral(source) || ts.isNoSubstitutionTemplateLiteral(source))) {
+            return ts.factory.createArrayLiteralExpression(
+                Array.from(new Set(Array.from(source.text))).map((char) => ts.factory.createStringLiteral(char)),
+            );
+        } else {
+            return null;
+        }
+
+        const seenValues = new Set<string>();
+        const out: ts.Expression[] = [];
+        for (const element of elements) {
+            if (ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return null;
+            const values = resolve(element);
+            if (values.length !== 1) return null;
+            const value = values[0]!;
+            if (seenValues.has(value)) continue;
+            seenValues.add(value);
+            out.push(element);
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createArrayLiteralExpression(out);
+    };
+
+    const resolveStaticArrayFromMapSource = (expr: ts.Expression | undefined): ts.ArrayLiteralExpression | null => {
+        if (!expr || isStaticNullishCollectionSource(expr)) return ts.factory.createArrayLiteralExpression([]);
+        const entries = resolveStaticEntryCollectionExpression(expr);
+        if (!entries) return null;
+
+        const order: string[] = [];
+        const slots = new Map<string, ts.ArrayLiteralExpression>();
+        for (const element of entries.elements) {
+            if (ts.isSpreadElement(element)) return null;
+            const entry = resolveCollectionExpression(element);
+            if (!entry || !ts.isArrayLiteralExpression(entry) || entry.elements.length < 2) return null;
+            const keyExpr = entry.elements[0];
+            const valueExpr = entry.elements[1];
+            if (!keyExpr || !valueExpr || ts.isSpreadElement(keyExpr) || ts.isSpreadElement(valueExpr)) return null;
+            const keyValues = resolve(keyExpr);
+            if (keyValues.length !== 1) return null;
+            const key = keyValues[0]!;
+            if (!slots.has(key)) order.push(key);
+            slots.set(key, ts.factory.createArrayLiteralExpression([keyExpr, valueExpr]));
+            if (order.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createArrayLiteralExpression(order.map((key) => slots.get(key)!));
     };
 
     const resolveStaticObjectWrapperReceiver = (call: ts.CallExpression): ts.Expression | null => {
