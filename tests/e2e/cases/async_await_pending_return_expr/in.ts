@@ -225,6 +225,17 @@ async function preludeLocalAwaitedLocalReturn(prefix: string): Promise<string> {
     return label + value + "!";
 }
 
+async function awaitExpressionStatementReturn(prefix: string): Promise<string> {
+    await delay(1, "ignored");
+    return prefix + "await-expression-done";
+}
+
+async function preludeAwaitExpressionStatementReturn(prefix: string): Promise<string> {
+    const label = prefix + "prelude-await-expression-";
+    await delay(1, "ignored");
+    return label + "done";
+}
+
 class Worker {
     prefix: string;
 
@@ -638,6 +649,11 @@ class Worker {
         const value = await delay(1, "local");
         return label + value + "!";
     }
+
+    async awaitExpressionStatementReturnMethod(prefix: string): Promise<string> {
+        await delay(1, "ignored");
+        return this.prefix + prefix + "method-await-expression-done";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -852,6 +868,11 @@ const arrowPreludeLocalAwaitedLocalReturn = async (prefix: string): Promise<stri
     const label = prefix + "arrow-local-awaited-";
     const value = await delay(1, "local");
     return label + value + "!";
+};
+
+const arrowAwaitExpressionStatementReturn = async (prefix: string): Promise<string> => {
+    await delay(1, "ignored");
+    return prefix + "arrow-await-expression-done";
 };
 
 suffix().then((value: string): void => {
@@ -1493,6 +1514,18 @@ arrowPreludeExpressionStatementAwaitedLocalReturn("value-").then((value: string)
             console.log("method-prelude-local-awaited-local-return:", methodValue);
             arrowPreludeLocalAwaitedLocalReturn("value-").then((arrowValue: string): void => {
                 console.log("arrow-prelude-local-awaited-local-return:", arrowValue);
+                awaitExpressionStatementReturn("fn-").then((fnAwaitExpressionValue: string): void => {
+                    console.log("await-expression-statement-return:", fnAwaitExpressionValue);
+                    new Worker("method-await-expression-").awaitExpressionStatementReturnMethod("class-").then((methodAwaitExpressionValue: string): void => {
+                        console.log("method-await-expression-statement-return:", methodAwaitExpressionValue);
+                        arrowAwaitExpressionStatementReturn("value-").then((arrowAwaitExpressionValue: string): void => {
+                            console.log("arrow-await-expression-statement-return:", arrowAwaitExpressionValue);
+                            preludeAwaitExpressionStatementReturn("fn-").then((preludeAwaitExpressionValue: string): void => {
+                                console.log("prelude-await-expression-statement-return:", preludeAwaitExpressionValue);
+                            });
+                        });
+                    });
+                });
             });
         });
     });
