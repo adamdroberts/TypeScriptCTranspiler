@@ -1,0 +1,3 @@
+{
+  "description": "lazy yield* materializes generator-backed iterable sources before delegated suspension"
+}

@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Lazy `yield*` now has focused coverage for generator-backed array sources, confirming delegated values suspend one at a time after source materialization. Test: `generator_lazy_yield_star_generator_backed`.
 - `yield*` now materializes generator-backed array sources before delegation, so `yield* innerGenerator()` forwards yielded values in the existing AOT generator subset. Test: `generator_yield_star_generator_backed`.
 - Dynamic promise combinators now consume typed string iterable inputs as one-character dynamic values for `Promise.all`, `race`, `any`, and `allSettled`. Test: `promise_combinators_dynamic`.
 - Dynamic promise combinator coverage now proves `Promise.all`, `race`, `any`, and `allSettled` assimilate delayed nested thenables from generator-backed iterable inputs. Test: `promise_thenable_async_combinator_generator_recursive`.
