@@ -146,6 +146,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferCompareText.length > 0) return bufferCompareText;
             const bufferCopyText = resolveStaticBufferCopyCall(node);
             if (bufferCopyText.length > 0) return bufferCopyText;
+            const bufferWriteText = resolveStaticBufferWriteCall(node);
+            if (bufferWriteText.length > 0) return bufferWriteText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
             if (bufferEqualsText.length > 0) return bufferEqualsText;
             const bufferSearchText = resolveStaticBufferSearchCall(node);
@@ -1271,6 +1273,48 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                         for (const sourceEnd of sourceEnds) {
                             try {
                                 out.push(String(source.copy(Buffer.from(target), targetStart, sourceStart, sourceEnd)));
+                            } catch {
+                                return [];
+                            }
+                            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                        }
+                    }
+                }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticBufferWriteCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 4 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "write") return [];
+
+        const receivers = resolveStaticBufferExpression(callee.expression);
+        if (receivers.length === 0) return [];
+        const texts = resolve(call.arguments[0]!);
+        if (texts.length === 0) return [];
+        const offsets = resolveStaticOptionalBufferIntegerArg(call.arguments[1], undefined);
+        if (offsets.length === 0) return [];
+        const lengths = resolveStaticOptionalBufferIntegerArg(call.arguments[2], undefined);
+        if (lengths.length === 0) return [];
+        const encodingArg = call.arguments[3];
+        const encodings = !encodingArg || isStaticUndefinedExpression(encodingArg)
+            ? [undefined]
+            : resolve(encodingArg);
+        if (encodings.length === 0) return [];
+
+        const out: string[] = [];
+        for (const receiver of receivers) {
+            for (const text of texts) {
+                for (const offset of offsets) {
+                    for (const length of lengths) {
+                        for (const encoding of encodings) {
+                            const nodeEncoding = nodeBufferEncoding(encoding);
+                            if (!nodeEncoding) return [];
+                            try {
+                                const buffer = Buffer.from(receiver);
+                                out.push(String((buffer.write as (...args: unknown[]) => number)(text, offset, length, nodeEncoding)));
                             } catch {
                                 return [];
                             }
