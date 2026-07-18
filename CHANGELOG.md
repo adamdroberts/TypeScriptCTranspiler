@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now captures typed `symbol` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `URL`, `URLSearchParams`, `Buffer`, `ArrayBuffer`, and `DataView` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `RegExp`, `Date`, and `Error` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `WeakMap` / `WeakSet` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.

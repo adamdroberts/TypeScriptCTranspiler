@@ -368,6 +368,13 @@ async function preludeBuiltinsAwaitedLocalReturn(prefix: string): Promise<string
     return (pattern.test(prefix + value) ? "true" : "false") + ":" + stamp.toISOString() + ":" + problem.toString();
 }
 
+async function preludeSymbolBigIntAwaitedLocalReturn(prefix: string): Promise<string> {
+    const marker: symbol = Symbol(prefix + "symbol-local");
+    const count: bigint = BigInt(40) + 2n;
+    const value = await delay(289, "value");
+    return marker.description + ":" + count.toString() + ":" + value;
+}
+
 async function preludeRegExpInlineAwaitReturn(prefix: string): Promise<string> {
     const pattern = new RegExp("^" + prefix + "inline-value$");
     return pattern.toString() + ":" + await delay(290, prefix + "inline-value");
@@ -1757,6 +1764,10 @@ preludeWeakSetFiveAwait("fn-").then((value: string): void => {
 
 preludeBuiltinsAwaitedLocalReturn("fn-").then((value: string): void => {
     console.log("prelude-builtins-awaited-local-return:", value);
+});
+
+preludeSymbolBigIntAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-symbol-bigint-awaited-local-return:", value);
 });
 
 preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {
