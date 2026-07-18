@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now captures statically typed array prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths without stack-array lifetime leaks. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures leading `const` / `let` locals before the bounded single awaited-local plus final return continuation. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures leading `const` / `let` locals before arbitrary-length leading awaited-local chains followed by a final return. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now accepts await-free expression-statement preludes before arbitrary-length leading awaited-local chains followed by a final return. Test: `async_await_pending_return_expr`.

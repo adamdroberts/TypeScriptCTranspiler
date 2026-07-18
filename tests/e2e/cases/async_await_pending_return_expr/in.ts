@@ -236,6 +236,27 @@ async function preludeAwaitExpressionStatementReturn(prefix: string): Promise<st
     return label + "done";
 }
 
+async function preludeArrayAwaitedLocalReturn(prefix: string): Promise<string> {
+    const parts = [prefix, "array-local-"];
+    const value = await delay(260, "value");
+    return parts[0] + parts[1] + parts.length + "-" + value;
+}
+
+async function preludeArrayInlineAwaitReturn(prefix: string): Promise<string> {
+    const parts = [prefix, "array-inline-"];
+    return parts[0] + parts[1] + await delay(261, "value") + "-" + parts.length;
+}
+
+async function preludeArrayFiveAwait(prefix: string): Promise<string> {
+    const parts = [prefix, "array-five-"];
+    const first = await delay(262, parts[0] + "one");
+    const second = await delay(263, parts[1] + first + "-two");
+    const third = await delay(264, first + ":" + second + "-three");
+    const fourth = await delay(265, first + ":" + second + ":" + third + "-four");
+    const fifth = await delay(266, first + ":" + second + ":" + third + ":" + fourth + "-five");
+    return parts[0] + parts[1] + first + ":" + second + ":" + third + ":" + fourth + ":" + fifth;
+}
+
 class Worker {
     prefix: string;
 
@@ -1529,4 +1550,16 @@ arrowPreludeExpressionStatementAwaitedLocalReturn("value-").then((value: string)
             });
         });
     });
+});
+
+preludeArrayAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-array-awaited-local-return:", value);
+});
+
+preludeArrayInlineAwaitReturn("fn-").then((value: string): void => {
+    console.log("prelude-array-inline-await-return:", value);
+});
+
+preludeArrayFiveAwait("fn-").then((value: string): void => {
+    console.log("prelude-array-five-await:", value);
 });

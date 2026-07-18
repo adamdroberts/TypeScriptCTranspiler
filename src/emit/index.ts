@@ -438,6 +438,7 @@ class Emitter {
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
     private awaitExpressionValueScopes: Map<ts.AwaitExpression, EmitResult>[] = [];
+    private asyncAwaitEscapingSymbols = new Set<ts.Symbol>();
     private catchStringSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
@@ -21380,6 +21381,38 @@ class Emitter {
         return base;
     }
 
+    private isAsyncAwaitPreludeCaptureType(type: CType): boolean {
+        return type.kind === "number" ||
+            type.kind === "boolean" ||
+            type.kind === "string" ||
+            type.kind === "bigint" ||
+            type.kind === "value" ||
+            type.kind === "array";
+    }
+
+    private emitAsyncAwaitPreludeStatements(
+        buf: CBuf,
+        statements: readonly ts.Statement[],
+        params: readonly AsyncAwaitContinuationParam[],
+    ): void {
+        const added: ts.Symbol[] = [];
+        for (const param of params) {
+            if (!this.asyncAwaitEscapingSymbols.has(param.symbol)) {
+                this.asyncAwaitEscapingSymbols.add(param.symbol);
+                added.push(param.symbol);
+            }
+        }
+        try {
+            for (const stmt of statements) {
+                this.emitStmt(buf, stmt);
+            }
+        } finally {
+            for (const symbol of added) {
+                this.asyncAwaitEscapingSymbols.delete(symbol);
+            }
+        }
+    }
+
     private expressionDeclaredOrCurrentType(expr: ts.Expression): ts.Type {
         if (ts.isIdentifier(expr)) {
             const sym = this.symbolForIdentifier(expr);
@@ -22270,6 +22303,7 @@ class Emitter {
         if (mapped.kind !== "array" || !mapped.elem) return null;
         const sym = this.symbolForIdentifier(d.name);
         if (!sym) return null;
+        if (this.asyncAwaitEscapingSymbols.has(sym)) return null;
         const stmt = d.parent.parent;
         const scope = stmt?.parent;
         if (!scope || !ts.isBlock(scope)) return null;
@@ -25502,13 +25536,7 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                    if (
-                        type.kind !== "number" &&
-                        type.kind !== "boolean" &&
-                        type.kind !== "string" &&
-                        type.kind !== "bigint" &&
-                        type.kind !== "value"
-                    ) return null;
+                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
                     captures.push({
@@ -26124,13 +26152,7 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                    if (
-                        type.kind !== "number" &&
-                        type.kind !== "boolean" &&
-                        type.kind !== "string" &&
-                        type.kind !== "bigint" &&
-                        type.kind !== "value"
-                    ) return null;
+                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
                     captures.push({
@@ -26378,13 +26400,7 @@ class Emitter {
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                    if (
-                        type.kind !== "number" &&
-                        type.kind !== "boolean" &&
-                        type.kind !== "string" &&
-                        type.kind !== "bigint" &&
-                        type.kind !== "value"
-                    ) return null;
+                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
                     captures.push({
@@ -26463,15 +26479,11 @@ class Emitter {
         if (!match) return false;
         if ("awaitExpr" in match.result) {
             if (!this.asyncAwaitExpressionReturnContinuationSupported(match.result)) return false;
-            for (const stmt of match.preludeStatements) {
-                this.emitStmt(buf, stmt);
-            }
+            this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, match.result.params);
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
         }
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(match.result)) return false;
-        for (const stmt of match.preludeStatements) {
-            this.emitStmt(buf, stmt);
-        }
+        this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, this.asyncAwaitIfExpressionReturnBranchParams(match.result));
         return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
     }
 
@@ -26894,6 +26906,28 @@ class Emitter {
             !!(branch.fallthroughBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.fallthroughBranch));
     }
 
+    private asyncAwaitIfExpressionReturnBranchParams(
+        branch: AsyncAwaitIfExpressionReturnNode,
+    ): AsyncAwaitContinuationParam[] {
+        const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const visit = (node: AsyncAwaitIfExpressionReturnNode): void => {
+            if (node.kind === "return") {
+                for (const param of node.continuation.params) {
+                    paramsBySymbol.set(param.symbol, param);
+                }
+                return;
+            }
+            if (node.kind === "syncReturn") {
+                return;
+            }
+            visit(node.thenBranch);
+            if (node.elseBranch) visit(node.elseBranch);
+            if (node.fallthroughBranch) visit(node.fallthroughBranch);
+        };
+        visit(branch);
+        return [...paramsBySymbol.values()];
+    }
+
     private asyncAwaitIfExpressionReturnBranchSupported(
         branch: AsyncAwaitIfExpressionReturnNode,
     ): boolean {
@@ -27048,9 +27082,7 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitLeadingReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
-        for (const stmt of continuation.preludeStatements) {
-            this.emitStmt(buf, stmt);
-        }
+        this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
         const firstStep = continuation.steps[0]!;
         const firstSource = this.emitExpr(firstStep.awaitExpr.expression);
         const promiseTypes: CType[] = [this.prepareType(firstSource.ty)];
@@ -27909,9 +27941,7 @@ class Emitter {
     ): boolean {
         const continuation = this.asyncAwaitReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
-        for (const stmt of continuation.preludeStatements) {
-            this.emitStmt(buf, stmt);
-        }
+        this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
