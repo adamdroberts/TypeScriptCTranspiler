@@ -54,6 +54,12 @@ async function initializerExpressionAwaitReturn(prefix: string): Promise<string>
     return decorated;
 }
 
+async function assignmentExpressionAwaitReturn(prefix: string): Promise<string> {
+    let decorated: string;
+    decorated = prefix + await delay(17, "assignment") + "!";
+    return decorated;
+}
+
 async function twoAwait(prefix: string): Promise<string> {
     const first = await delay(45, "one");
     const second = await delay(46, prefix + first + "-two");
@@ -533,6 +539,12 @@ class Worker {
         return decorated;
     }
 
+    async assignmentExpressionAwaitReturnMethod(suffix: string): Promise<string> {
+        let decorated: string;
+        decorated = this.prefix + await delay(23, "method-assignment") + suffix;
+        return decorated;
+    }
+
     async sideEffectThis(): Promise<string> {
         const value = await delay(23, "side");
         this.prefix = this.prefix + value;
@@ -939,6 +951,12 @@ const arrowInitializerExpressionAwaitReturn = async (prefix: string): Promise<st
     return decorated;
 };
 
+const arrowAssignmentExpressionAwaitReturn = async (prefix: string): Promise<string> => {
+    let decorated: string;
+    decorated = prefix + await delay(25, "arrow-assignment") + "!";
+    return decorated;
+};
+
 const arrowTwoAwait = async (prefix: string): Promise<string> => {
     const first = await delay(49, "arrow-one");
     const second = await delay(50, prefix + first);
@@ -1336,6 +1354,10 @@ initializerExpressionAwaitReturn("fn-").then((value: string): void => {
     console.log("initializer-expression-await-return:", value);
 });
 
+assignmentExpressionAwaitReturn("fn-").then((value: string): void => {
+    console.log("assignment-expression-await-return:", value);
+});
+
 new Worker("job-").label().then((value: string): void => {
     console.log("method:", value);
 });
@@ -1354,6 +1376,10 @@ new Worker("this-").stagedThis("!").then((value: string): void => {
 
 new Worker("this-").initializerExpressionAwaitReturnMethod("!").then((value: string): void => {
     console.log("method-initializer-expression-await-return:", value);
+});
+
+new Worker("this-").assignmentExpressionAwaitReturnMethod("!").then((value: string): void => {
+    console.log("method-assignment-expression-await-return:", value);
 });
 
 new Worker("effect-").sideEffectThis().then((value: string): void => {
@@ -1616,6 +1642,10 @@ arrowParam("value-").then((value: string): void => {
 
 arrowInitializerExpressionAwaitReturn("value-").then((value: string): void => {
     console.log("arrow-initializer-expression-await-return:", value);
+});
+
+arrowAssignmentExpressionAwaitReturn("value-").then((value: string): void => {
+    console.log("arrow-assignment-expression-await-return:", value);
 });
 
 arrowTwoAwait("value-").then((value: string): void => {
