@@ -799,6 +799,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-object-assign-computed-module-exports": cjsPackage("tsc2c-cjs-object-assign-computed-module-exports", {
         "index.js": 'module.exports.__esModule = true;\nconst defaultKey = "def" + "ault";\nconst labelKey = `label`;\nconst countKey = "co" + "unt";\nconst doubleKey = "dou" + "ble";\nObject.assign(module.exports, {\n  [defaultKey]: function greet(name) { return "hello " + name; },\n  [labelKey]: "assign-computed-module",\n  [countKey]: 68,\n  [doubleKey]: function double(value) { return value * 2; }\n});\n',
     }),
+    "tsc2c-cjs-object-assign-enum-computed-exports": {
+        packageJson: { name: "tsc2c-cjs-object-assign-enum-computed-exports", version: "1.0.0", main: "index.ts" },
+        files: {
+            "index.ts": 'declare const exports: any;\nexports.__esModule = true;\nenum ExportKey {\n  Default = "default",\n  Label = "label",\n  Count = "count",\n  Double = "double"\n}\nconst api = {\n  [ExportKey.Default]: function greet(name: string): string { return "hello " + name; },\n  [ExportKey.Label]: "assign-enum-computed",\n  [ExportKey.Count]: 70\n};\nObject.assign(exports, { ...api, [ExportKey.Double]: function double(value: number): number { return value * 2; } });\nexport {};\n',
+        },
+    },
     "tsc2c-cjs-object-assign-getter-exports": cjsPackage("tsc2c-cjs-object-assign-getter-exports", {
         "index.js": 'exports.__esModule = true;\nObject.assign(exports, {\n  get label() { return "assign-getter"; },\n  get count() { return 54; },\n  get double() { return function double(value) { return value * 2; }; }\n});\n',
     }),
