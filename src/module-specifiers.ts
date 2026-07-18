@@ -144,6 +144,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferToStringText.length > 0) return bufferToStringText;
             const bufferCompareText = resolveStaticBufferCompareCall(node);
             if (bufferCompareText.length > 0) return bufferCompareText;
+            const bufferCopyText = resolveStaticBufferCopyCall(node);
+            if (bufferCopyText.length > 0) return bufferCopyText;
             const bufferEqualsText = resolveStaticBufferEqualsCall(node);
             if (bufferEqualsText.length > 0) return bufferEqualsText;
             const bufferSearchText = resolveStaticBufferSearchCall(node);
@@ -1230,6 +1232,51 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 for (const [leftRange, rightRange] of pairs) {
                     out.push(compareStaticBuffers(leftRange, rightRange));
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticOptionalBufferIntegerArg = (
+        expr: ts.Expression | undefined,
+        defaultValue: number | undefined,
+    ): Array<number | undefined> => {
+        if (!expr || isStaticUndefinedExpression(expr)) return [defaultValue];
+        const values = resolveStaticIntegerKeys(expr);
+        return values.length > 0 ? values : [];
+    };
+
+    const resolveStaticBufferCopyCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 4 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "copy") return [];
+
+        const sources = resolveStaticBufferExpression(callee.expression);
+        if (sources.length === 0) return [];
+        const targets = resolveStaticBufferExpression(call.arguments[0]!);
+        if (targets.length === 0) return [];
+        const targetStarts = resolveStaticOptionalBufferIntegerArg(call.arguments[1], undefined);
+        if (targetStarts.length === 0) return [];
+        const sourceStarts = resolveStaticOptionalBufferIntegerArg(call.arguments[2], undefined);
+        if (sourceStarts.length === 0) return [];
+        const sourceEnds = resolveStaticOptionalBufferIntegerArg(call.arguments[3], undefined);
+        if (sourceEnds.length === 0) return [];
+
+        const out: string[] = [];
+        for (const source of sources) {
+            for (const target of targets) {
+                for (const targetStart of targetStarts) {
+                    for (const sourceStart of sourceStarts) {
+                        for (const sourceEnd of sourceEnds) {
+                            try {
+                                out.push(String(source.copy(Buffer.from(target), targetStart, sourceStart, sourceEnd)));
+                            } catch {
+                                return [];
+                            }
+                            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                        }
+                    }
                 }
             }
         }
