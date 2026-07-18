@@ -887,6 +887,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Finite dynamic `require(...)` proofs resolve static Buffer numeric byte-index specifier fragments over statically constructed Buffers. Test: `dynamic_require_static_buffer_index`
 - Finite dynamic `require(...)` proofs resolve static Buffer instance `.length` specifier fragments over statically constructed Buffers. Test: `dynamic_require_static_buffer_length`
 - Finite dynamic `require(...)` proofs resolve static Buffer instance zero-argument `.toLocaleString()` specifier fragments over statically constructed Buffers. Test: `dynamic_require_static_buffer_to_locale_string`
+- Finite dynamic `require(...)` proofs resolve static Buffer instance zero-argument `.valueOf()` identity fragments through chained `.toString(...)`, `.length`, and numeric byte-index specifiers. Test: `dynamic_require_static_buffer_value_of`
 - Finite dynamic `require(...)` proofs resolve static Buffer instance `.swap16()` / `.swap32()` / `.swap64()` calls followed by `.toString(encoding?)` over statically constructed Buffers. Test: `dynamic_require_static_buffer_swap_to_string`
 - Finite dynamic `require(...)` proofs resolve static Buffer instance `.write(...)` byte-count specifier fragments over static text, ranges, encodings, and receiver Buffers. Test: `dynamic_require_static_buffer_write`
 - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`
