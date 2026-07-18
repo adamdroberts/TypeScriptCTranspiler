@@ -300,6 +300,26 @@ async function pendingTryFinallyExpressionlessFallthroughRejected(): Promise<voi
     return;
 }
 
+async function pendingTryFinallyThrowOverridesFulfilled(): Promise<string> {
+    try {
+        const value = await delay(11, "finally-throw-ok");
+        return "never " + value;
+    } finally {
+        finallyTrace += "X";
+        throw "finally override fulfilled " + finallyTrace;
+    }
+}
+
+async function pendingTryFinallyThrowOverridesRejected(): Promise<string> {
+    try {
+        const value = await delayedRejectAfter(12, "finally-throw-bad");
+        return "never " + value;
+    } finally {
+        finallyTrace += "x";
+        throw "finally override rejected " + finallyTrace;
+    }
+}
+
 recover().then((value: string): void => {
     console.log("recover:", value);
 });
@@ -426,4 +446,12 @@ pendingTryFinallyExpressionlessFallthroughFulfilled().then((_value: any): void =
 
 pendingTryFinallyExpressionlessFallthroughRejected().catch((reason: string): void => {
     console.log("pending-finally-expressionless-fallthrough-rejected:", reason, finallyTrace);
+});
+
+pendingTryFinallyThrowOverridesFulfilled().catch((reason: string): void => {
+    console.log("pending-finally-throw-overrides-fulfilled:", reason, finallyTrace);
+});
+
+pendingTryFinallyThrowOverridesRejected().catch((reason: string): void => {
+    console.log("pending-finally-throw-overrides-rejected:", reason, finallyTrace);
 });

@@ -30,3 +30,5 @@ pending-finally-expressionless-rejected: void final bad RrbgFfBGEe
 pending-bare-finally-expressionless-fulfilled: RrbgFfBGEeH
 pending-finally-expressionless-fallthrough-fulfilled: RrbgFfBGEeHI
 pending-finally-expressionless-fallthrough-rejected: void final fall bad RrbgFfBGEeHIi
+pending-finally-throw-overrides-fulfilled: finally override fulfilled RrbgFfBGEeHIiX RrbgFfBGEeHIiX
+pending-finally-throw-overrides-rejected: finally override rejected RrbgFfBGEeHIiXx RrbgFfBGEeHIiXx
