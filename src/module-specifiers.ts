@@ -2712,6 +2712,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const objectIntegrityReceiver = resolveStaticObjectIntegrityReceiver(cur);
+            if (objectIntegrityReceiver) return resolveCollectionExpression(objectIntegrityReceiver);
             const objectEntries = resolveStaticObjectEntriesCollectionExpression(cur);
             if (objectEntries) return resolveCollectionExpression(objectEntries);
             const objectFromEntries = resolveStaticObjectFromEntriesCollectionExpression(cur);
@@ -2772,6 +2774,18 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticObjectIntegrityReceiver = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return null;
+        const method = callee.name.text;
+        return method === "freeze" || method === "seal" || method === "preventExtensions"
+            ? call.arguments[0]!
+            : null;
     };
 
     const resolveStaticObjectFromEntriesCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
