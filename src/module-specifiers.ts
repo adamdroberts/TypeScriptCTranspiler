@@ -226,6 +226,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isElementAccessExpression(node) && node.argumentExpression) {
             const stringIndex = resolveStaticStringElementAccess(node);
             if (stringIndex.length > 0) return stringIndex;
+            const bufferIndex = resolveStaticBufferElementAccess(node);
+            if (bufferIndex.length > 0) return bufferIndex;
             const stringSplit = resolveStaticStringSplitAccess(node);
             if (stringSplit.length > 0) return stringSplit;
             const enumValues = resolveStaticEnumAccess(node.expression, node.argumentExpression);
@@ -1474,6 +1476,24 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (access.name.text !== "length") return [];
         const buffers = resolveStaticBufferExpression(access.expression);
         return buffers.length > 0 ? dedupe(buffers.map((buffer) => String(buffer.length))) : [];
+    };
+
+    const resolveStaticBufferElementAccess = (access: ts.ElementAccessExpression): string[] => {
+        if (!access.argumentExpression) return [];
+        const buffers = resolveStaticBufferExpression(access.expression);
+        if (buffers.length === 0) return [];
+        const indexes = resolveStaticIntegerKeys(access.argumentExpression);
+        if (indexes.length === 0) return [];
+
+        const out: string[] = [];
+        for (const buffer of buffers) {
+            for (const index of indexes) {
+                const value = buffer[index];
+                out.push(value === undefined ? "undefined" : String(value));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticNumericParserCall = (call: ts.CallExpression): string[] => {
