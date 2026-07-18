@@ -4,6 +4,7 @@ const viewLength = require("./abdv_dv_len_" + new DataView(new ArrayBuffer(8), 2
 const explicitViewLength = require("./abdv_dv_len_" + new DataView(new ArrayBuffer(8), 2, 3).byteLength);
 const defaultOffsetViewLength = require("./abdv_dv_len_" + new DataView(new ArrayBuffer(8), undefined, 2).byteLength);
 const viewOffset = require("./abdv_dv_offset_" + new DataView(new ArrayBuffer(8), 2, 3).byteOffset);
+const viewBufferLength = require("./abdv_ab_len_" + new DataView(new ArrayBuffer(12), 4, 3).buffer.byteLength);
 
 console.log(
     arrayLength.label,
@@ -12,4 +13,5 @@ console.log(
     explicitViewLength.label,
     defaultOffsetViewLength.label,
     viewOffset.label,
+    viewBufferLength.label,
 );

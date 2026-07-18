@@ -271,6 +271,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (arrayBufferLength.length > 0) return arrayBufferLength;
             const dataViewProperty = resolveStaticDataViewPropertyAccess(node);
             if (dataViewProperty.length > 0) return dataViewProperty;
+            const dataViewBufferLength = resolveStaticDataViewBufferLengthAccess(node);
+            if (dataViewBufferLength.length > 0) return dataViewBufferLength;
             const bufferJsonProperty = resolveStaticBufferToJsonPropertyAccess(node);
             if (bufferJsonProperty.length > 0) return bufferJsonProperty;
             const descriptorProperty = resolveStaticDescriptorPropertyAccess(node);
@@ -1812,6 +1814,42 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 for (const byteLength of explicitLengths) {
                     if (!Number.isSafeInteger(byteLength) || byteLength < 0 || offset + byteLength > bufferLength) return [];
                     out.push(String(access.name.text === "byteOffset" ? offset : byteLength));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticDataViewBufferLengthAccess = (access: ts.PropertyAccessExpression): string[] => {
+        if (access.name.text !== "byteLength") return [];
+        const bufferAccess = unwrapStaticExpression(access.expression);
+        if (!ts.isPropertyAccessExpression(bufferAccess) || bufferAccess.name.text !== "buffer") return [];
+        const current = unwrapStaticExpression(bufferAccess.expression);
+        if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
+        const target = unwrapStaticExpression(current.expression);
+        if (!ts.isIdentifier(target) || target.text !== "DataView") return [];
+        const args = current.arguments ?? [];
+        if (args.length < 1 || args.length > 3) return [];
+
+        const bufferLengths = resolveStaticArrayBufferByteLengths(args[0]!);
+        if (bufferLengths.length === 0) return [];
+        const offsets = args.length < 2 || isStaticUndefinedExpression(args[1]!)
+            ? [0]
+            : resolveStaticIntegerKeys(args[1]!);
+        if (offsets.length === 0) return [];
+
+        const out: string[] = [];
+        for (const bufferLength of bufferLengths) {
+            for (const offset of offsets) {
+                if (!Number.isSafeInteger(offset) || offset < 0 || offset > bufferLength) return [];
+                const lengths = args.length < 3 || isStaticUndefinedExpression(args[2]!)
+                    ? [bufferLength - offset]
+                    : resolveStaticIntegerKeys(args[2]!);
+                if (lengths.length === 0) return [];
+                for (const length of lengths) {
+                    if (!Number.isSafeInteger(length) || length < 0 || offset + length > bufferLength) return [];
+                    out.push(String(bufferLength));
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
             }
