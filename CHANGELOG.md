@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `ArrayBuffer.byteLength` and `DataView.byteLength` / `.byteOffset` constructor metadata fragments. Test: `dynamic_require_static_array_buffer_data_view`.
 - Finite dynamic `require(...)` proofs now resolve static `TextEncoder.encode(...)` Buffer fragments and `TextDecoder.decode(...)` UTF-8 string fragments over finite inputs. Test: `dynamic_require_static_text_encoder_decoder`.
 - Finite dynamic `require(...)` proofs now resolve static `Set.prototype.isSubsetOf(...)`, `.isSupersetOf(...)`, and `.isDisjointFrom(...)` relation fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`.
 - Finite dynamic `require(...)` proofs now materialize static `Set.prototype.union(...)`, `.intersection(...)`, `.difference(...)`, and `.symmetricDifference(...)` collection fragments over finite Set-like sources. Test: `dynamic_require_static_set_composition_collections`.
