@@ -6,6 +6,8 @@ pending-fulfilled: pending ok
 pending-fallthrough-fulfilled: fallthrough done
 pending-rejected: pending caught bad
 pending-transparent-catch-return: transparent caught transparent bad
+pending-transparent-catch-throw: transparent throw transparent throw bad
+pending-catch-prelude-transparent-return: prelude caught prelude bad!
 pending-fallthrough-rejected: fallthrough caught fall bad
 pending-bare-rejected: bare pending caught bare bad
 pending-bare-fallthrough-rejected: bare fallthrough caught bare fall bad
