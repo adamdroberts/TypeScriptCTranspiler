@@ -26705,6 +26705,17 @@ class Emitter {
         if (ts.isReturnStatement(stmt)) {
             if (!stmt.expression) return null;
             const expression = this.unwrapTransparentExpression(stmt.expression);
+            if (ts.isAwaitExpression(expression)) {
+                return {
+                    kind: "return",
+                    continuation: {
+                        awaitExpr: expression,
+                        returnExpr: expression,
+                        params: [],
+                        thisValue: null,
+                    },
+                };
+            }
             if (ts.isConditionalExpression(expression)) {
                 return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
                     expression,
