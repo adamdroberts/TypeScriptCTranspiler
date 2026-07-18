@@ -1,0 +1,8 @@
+try-catch-return-await-fulfilled: tc-ok
+try-catch-return-await-rejected: tc-caught:tc-bad
+try-finally-return-await-fulfilled: tf-ok F
+try-finally-return-await-rejected: tf-bad FR
+arrow-try-catch-return-await-fulfilled: arrow-ok
+arrow-try-catch-return-await-rejected: arrow-caught:arrow-bad
+closure-try-finally-return-await-fulfilled: closure-ok FRf
+closure-try-finally-return-await-rejected: closure-bad FRfr

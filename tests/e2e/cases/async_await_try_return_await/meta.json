@@ -1,0 +1,3 @@
+{
+  "description": "async try/catch and try/finally support direct return-await continuations"
+}
