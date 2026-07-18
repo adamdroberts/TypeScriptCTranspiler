@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs materialize static dense array `.toSpliced(...)` copy wrappers, including omitted versus explicit `undefined` delete-count semantics and inserted specifier fragments. Test: `dynamic_require_static_array_to_spliced_collections`
 - Finite dynamic `require(...)` proofs materialize static dense array `.toReversed()` and in-range `.with(index, value)` copy wrappers, including negative `.with(...)` indexes. Test: `dynamic_require_static_array_copy_more_collections`
 - Finite dynamic `require(...)` proofs materialize static dense array `.slice(...)` and `.concat(...)` copy wrappers, including negative slice bounds and array-operand concat spreading. Test: `dynamic_require_static_array_copy_collections`
 - Finite dynamic `require(...)` proofs materialize static `Array.of(...)` collection wrappers for existing index, `.at(...)`, `.join(...)`, `Object.values(...)`, and `Object.entries(...)` specifier paths. Test: `dynamic_require_static_array_of_collections`

@@ -2825,7 +2825,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return null;
         const method = callee.name.text;
-        if (method !== "slice" && method !== "concat" && method !== "toReversed" && method !== "with") return null;
+        if (method !== "slice" && method !== "concat" && method !== "toReversed" && method !== "with" && method !== "toSpliced") return null;
         const receiver = resolveCollectionExpression(callee.expression);
         if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
         const receiverElements = denseStaticArrayElements(receiver);
@@ -2844,6 +2844,31 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (index < 0 || index >= receiverElements.length) return null;
             const elements = [...receiverElements];
             elements[index] = call.arguments[1]!;
+            return ts.factory.createArrayLiteralExpression(elements);
+        }
+
+        if (method === "toSpliced") {
+            if (call.arguments.length === 0) {
+                return ts.factory.createArrayLiteralExpression(receiverElements);
+            }
+            const starts = isStaticUndefinedExpression(call.arguments[0]!)
+                ? [0]
+                : resolveStaticIntegerKeys(call.arguments[0]!);
+            if (starts.length !== 1) return null;
+            const start = normalizeStaticArraySliceIndex(starts[0]!, receiverElements.length);
+            const deleteCounts = call.arguments.length === 1
+                ? [receiverElements.length - start]
+                : isStaticUndefinedExpression(call.arguments[1]!)
+                    ? [0]
+                    : resolveStaticIntegerKeys(call.arguments[1]!);
+            if (deleteCounts.length !== 1) return null;
+            const deleteCount = Math.min(Math.max(deleteCounts[0]!, 0), receiverElements.length - start);
+            const elements = [
+                ...receiverElements.slice(0, start),
+                ...call.arguments.slice(2),
+                ...receiverElements.slice(start + deleteCount),
+            ];
+            if (elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
             return ts.factory.createArrayLiteralExpression(elements);
         }
 
