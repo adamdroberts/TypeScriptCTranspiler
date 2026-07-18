@@ -183,6 +183,14 @@ async function preludeExpressionStatementInlineAwaitReturn(prefix: string): Prom
     return label + trace + await delay(210, "await") + "!";
 }
 
+async function preludeExpressionStatementDirectReturnAwait(prefix: string): Promise<string> {
+    let trace = "direct-";
+    trace = trace + "expr-";
+    const label = prefix + trace + "prelude-direct-expr-";
+    trace = trace + "tail";
+    return await delay(220, label + trace);
+}
+
 class Worker {
     prefix: string;
 
@@ -554,6 +562,14 @@ class Worker {
         trace = trace + "again-";
         return label + trace + await delay(211, "await") + "!";
     }
+
+    async preludeExpressionStatementDirectReturnAwaitMethod(prefix: string): Promise<string> {
+        let trace = "direct-";
+        trace = trace + "expr-";
+        const label = this.prefix + prefix + trace + "method-prelude-direct-expr-";
+        trace = trace + "tail";
+        return await delay(221, label + trace);
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -728,6 +744,14 @@ const arrowPreludeExpressionStatementInlineAwaitReturn = async (prefix: string):
     return label + trace + await delay(212, "await") + "!";
 };
 
+const arrowPreludeExpressionStatementDirectReturnAwait = async (prefix: string): Promise<string> => {
+    let trace = "direct-";
+    trace = trace + "expr-";
+    const label = prefix + trace + "arrow-prelude-direct-expr-";
+    trace = trace + "tail";
+    return await delay(222, label + trace);
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -894,6 +918,10 @@ preludeLogicalOrLocalInlineAwaitReturn("fn-").then((value: string): void => {
 
 preludeExpressionStatementInlineAwaitReturn("fn-").then((value: string): void => {
     console.log("prelude-expression-statement-inline-await-return:", value);
+});
+
+preludeExpressionStatementDirectReturnAwait("fn-").then((value: string): void => {
+    console.log("prelude-expression-statement-direct-return-await:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -1154,6 +1182,10 @@ new Worker("method-prelude-").preludeExpressionStatementInlineAwaitReturnMethod(
     console.log("method-prelude-expression-statement-inline-await-return:", value);
 });
 
+new Worker("method-prelude-").preludeExpressionStatementDirectReturnAwaitMethod("class-").then((value: string): void => {
+    console.log("method-prelude-expression-statement-direct-return-await:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1316,4 +1348,8 @@ arrowPreludeLogicalAndLocalInlineAwaitReturn("value-").then((value: any): void =
 
 arrowPreludeExpressionStatementInlineAwaitReturn("value-").then((value: string): void => {
     console.log("arrow-prelude-expression-statement-inline-await-return:", value);
+});
+
+arrowPreludeExpressionStatementDirectReturnAwait("value-").then((value: string): void => {
+    console.log("arrow-prelude-expression-statement-direct-return-await:", value);
 });
