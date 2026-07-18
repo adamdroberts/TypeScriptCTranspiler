@@ -191,6 +191,13 @@ async function preludeExpressionStatementDirectReturnAwait(prefix: string): Prom
     return await delay(220, label + trace);
 }
 
+async function preludeExpressionStatementAwaitedLocalReturn(prefix: string): Promise<string> {
+    prefix = prefix + "awaited-";
+    prefix = prefix + "expr-";
+    const value = await delay(230, "local");
+    return prefix + value + "!";
+}
+
 class Worker {
     prefix: string;
 
@@ -570,6 +577,13 @@ class Worker {
         trace = trace + "tail";
         return await delay(221, label + trace);
     }
+
+    async preludeExpressionStatementAwaitedLocalReturnMethod(prefix: string): Promise<string> {
+        prefix = prefix + "awaited-";
+        prefix = prefix + "expr-";
+        const value = await delay(231, "local");
+        return this.prefix + prefix + value + "!";
+    }
 }
 
 const arrow = async (): Promise<string> => {
@@ -752,6 +766,13 @@ const arrowPreludeExpressionStatementDirectReturnAwait = async (prefix: string):
     return await delay(222, label + trace);
 };
 
+const arrowPreludeExpressionStatementAwaitedLocalReturn = async (prefix: string): Promise<string> => {
+    prefix = prefix + "awaited-";
+    prefix = prefix + "expr-";
+    const value = await delay(232, "local");
+    return prefix + value + "!";
+};
+
 suffix().then((value: string): void => {
     console.log("suffix:", value);
 });
@@ -922,6 +943,10 @@ preludeExpressionStatementInlineAwaitReturn("fn-").then((value: string): void =>
 
 preludeExpressionStatementDirectReturnAwait("fn-").then((value: string): void => {
     console.log("prelude-expression-statement-direct-return-await:", value);
+});
+
+preludeExpressionStatementAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-expression-statement-awaited-local-return:", value);
 });
 
 staged("fn-").then((value: string): void => {
@@ -1186,6 +1211,10 @@ new Worker("method-prelude-").preludeExpressionStatementDirectReturnAwaitMethod(
     console.log("method-prelude-expression-statement-direct-return-await:", value);
 });
 
+new Worker("method-prelude-").preludeExpressionStatementAwaitedLocalReturnMethod("class-").then((value: string): void => {
+    console.log("method-prelude-expression-statement-awaited-local-return:", value);
+});
+
 arrow().then((value: string): void => {
     console.log("arrow:", value);
 });
@@ -1352,4 +1381,8 @@ arrowPreludeExpressionStatementInlineAwaitReturn("value-").then((value: string):
 
 arrowPreludeExpressionStatementDirectReturnAwait("value-").then((value: string): void => {
     console.log("arrow-prelude-expression-statement-direct-return-await:", value);
+});
+
+arrowPreludeExpressionStatementAwaitedLocalReturn("value-").then((value: string): void => {
+    console.log("arrow-prelude-expression-statement-awaited-local-return:", value);
 });
