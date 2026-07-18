@@ -1,0 +1,3 @@
+sync:
+fulfilled: call outer resolve|call outer reject|external|settle outer resolve|settle outer reject|call inner resolve|call inner reject|settle inner resolve|settle inner reject|fulfilled:final
+rejected: call outer resolve|call outer reject|external|settle outer resolve|settle outer reject|call inner resolve|call inner reject|settle inner resolve|settle inner reject|fulfilled:final|rejected:inner bad
