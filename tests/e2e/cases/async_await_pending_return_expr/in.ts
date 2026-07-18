@@ -381,6 +381,14 @@ async function preludePromiseRaceReturn(prefix: string): Promise<string> {
     return (ready === ready ? "same" : "different") + ":" + value;
 }
 
+async function preludeTextCodecAwaitedLocalReturn(prefix: string): Promise<string> {
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const value = await delay(289, prefix + "codec");
+    const encoded = encoder.encode(value);
+    return decoder.decode(encoded) + ":" + encoded.length;
+}
+
 async function preludeRegExpInlineAwaitReturn(prefix: string): Promise<string> {
     const pattern = new RegExp("^" + prefix + "inline-value$");
     return pattern.toString() + ":" + await delay(290, prefix + "inline-value");
@@ -1778,6 +1786,10 @@ preludeSymbolBigIntAwaitedLocalReturn("fn-").then((value: string): void => {
 
 preludePromiseRaceReturn("fn-").then((value: string): void => {
     console.log("prelude-promise-race-return:", value);
+});
+
+preludeTextCodecAwaitedLocalReturn("fn-").then((value: string): void => {
+    console.log("prelude-text-codec-awaited-local-return:", value);
 });
 
 preludeRegExpInlineAwaitReturn("fn-").then((value: string): void => {

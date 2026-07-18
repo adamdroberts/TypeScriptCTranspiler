@@ -21402,6 +21402,8 @@ class Emitter {
             type.kind === "buffer" ||
             type.kind === "arraybuffer" ||
             type.kind === "dataview" ||
+            type.kind === "textencoder" ||
+            type.kind === "textdecoder" ||
             type.kind === "class";
     }
 
