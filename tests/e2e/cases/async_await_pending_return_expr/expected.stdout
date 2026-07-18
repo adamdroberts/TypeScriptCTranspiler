@@ -1,3 +1,6 @@
+conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
+method-conditional-mixed-inline-await-return-sync: method-conditional-class-method-conditional-mixed-sync!
+arrow-conditional-mixed-inline-await-return-sync: value-arrow-conditional-mixed-sync!
 suffix: ready!
 double: 42
 tagged: fn-tag
@@ -61,6 +64,9 @@ method-conditional-inline-await-return-true: method-conditional-class-method-con
 method-conditional-inline-await-return-false: method-conditional-class-method-conditional-false!
 arrow-conditional-inline-await-return-true: value-arrow-conditional-true!
 arrow-conditional-inline-await-return-false: value-arrow-conditional-false!
+conditional-mixed-inline-await-return-await: fn-conditional-mixed-await!
+method-conditional-mixed-inline-await-return-await: method-conditional-class-method-conditional-mixed-await!
+arrow-conditional-mixed-inline-await-return-await: value-arrow-conditional-mixed-await!
 three-await: one:fn-one-two:one:fn-one-two-three!
 method-three-await: method-one:class-method-three-method-one:method-one:class-method-three-method-one-three!
 arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
