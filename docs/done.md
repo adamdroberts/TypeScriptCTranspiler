@@ -11,6 +11,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 - Source `try`/`catch` pending-`await` catch paths support transparent catch throws and catch prelude locals feeding transparent return expressions. Test: `async_await_try_catch`
 - Source `try`/`catch` pending-`await` catch-prelude locals are preserved for lifted async function values and nested async closures. Test: `async_await_try_catch_values`
 - Source `try`/`finally` pending-`await` finally-prelude locals are preserved for lifted async function values and nested async closures. Test: `async_await_try_catch_values`
+- Source `try`/`catch` and `try`/`finally` pending-`await` prelude locals are preserved for class async methods that read `this` across the source-try continuation. Test: `async_await_try_catch_values`
 
 ## 1. Language core
 

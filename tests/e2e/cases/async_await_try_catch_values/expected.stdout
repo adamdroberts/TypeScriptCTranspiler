@@ -10,3 +10,5 @@ lifted-try-catch-prelude: lifted-prelude-caught:lifted-prelude-bad:done
 nested-try-catch-prelude: nested-prelude-caught:nested-prelude-bad:done
 lifted-try-finally-prelude: lifted-final-prelude:lifted-final-prelude-ok FRrfP!
 nested-try-finally-prelude: nested-final-prelude-bad FRrfP!p!
+method-try-catch-prelude: class-method-prelude-caught:method-prelude-bad:done
+method-try-finally-prelude: method-final-prelude-bad FRrfP!p!M!

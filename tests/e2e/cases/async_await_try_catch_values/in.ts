@@ -106,10 +106,43 @@ function makeNestedTryFinallyPrelude(): () => Promise<string> {
     };
 }
 
+class TryWorker {
+    prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async catchPreludeMethod(): Promise<string> {
+        try {
+            const value = await delayedRejectAfter(11, "method-prelude-bad");
+            return this.prefix + "method-prelude:" + value;
+        } catch (e) {
+            const label = this.prefix + "method-prelude-caught:";
+            let suffix: string;
+            suffix = ":done";
+            return label + e + suffix;
+        }
+    }
+
+    async finallyPreludeMethod(): Promise<string> {
+        try {
+            const value = await delayedRejectAfter(12, "method-final-prelude-bad");
+            return this.prefix + "method-final-prelude:" + value;
+        } finally {
+            const marker = "M";
+            let suffix: string;
+            suffix = "!";
+            trace += marker + suffix;
+        }
+    }
+}
+
 const nestedTryCatch = makeNestedTryCatch();
 const nestedTryCatchPrelude = makeNestedTryCatchPrelude();
 const nestedTryFinally = makeNestedTryFinally();
 const nestedTryFinallyPrelude = makeNestedTryFinallyPrelude();
+const methodWorker = new TryWorker("class-");
 
 liftedTryCatch(true).then((value: string): void => {
     console.log("lifted-try-catch-fulfilled:", value);
@@ -157,4 +190,12 @@ nestedTryFinally(false).catch((reason: string): void => {
 
 nestedTryFinallyPrelude().catch((reason: string): void => {
     console.log("nested-try-finally-prelude:", reason, trace);
+});
+
+methodWorker.catchPreludeMethod().then((value: string): void => {
+    console.log("method-try-catch-prelude:", value);
+});
+
+methodWorker.finallyPreludeMethod().catch((reason: string): void => {
+    console.log("method-try-finally-prelude:", reason, trace);
 });
