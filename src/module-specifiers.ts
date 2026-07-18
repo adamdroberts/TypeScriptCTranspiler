@@ -880,6 +880,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupeBuffers(out);
     };
 
+    const resolveStaticBufferFillExpression = (call: ts.CallExpression): Buffer[] => {
+        if (call.arguments.length < 1 || call.arguments.length > 3 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "fill") return [];
+
+        const receivers = resolveStaticBufferExpression(callee.expression);
+        if (receivers.length === 0) return [];
+        const fills = resolveStaticIntegerKeys(call.arguments[0]!);
+        if (fills.length === 0) return [];
+        const ranges = resolveStaticBufferRangeArgs(call.arguments[1], call.arguments[2]);
+        if (ranges.length === 0) return [];
+
+        const out: Buffer[] = [];
+        for (const receiver of receivers) {
+            for (const fill of fills) {
+                for (const [start, end] of ranges) {
+                    if ((start !== undefined && start < 0) || (end !== undefined && end < 0)) return [];
+                    const buffer = Buffer.from(receiver);
+                    buffer.fill(fill & 0xff, start, end);
+                    out.push(buffer);
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupeBuffers(out);
+    };
+
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
@@ -889,6 +916,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (allocBuffers.length > 0) return allocBuffers;
         const sliceBuffers = resolveStaticBufferSliceExpression(unwrapped);
         if (sliceBuffers.length > 0) return sliceBuffers;
+        const fillBuffers = resolveStaticBufferFillExpression(unwrapped);
+        if (fillBuffers.length > 0) return fillBuffers;
         const callee = unwrapStaticExpression(unwrapped.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "concat") return [];
         const target = unwrapStaticExpression(callee.expression);
