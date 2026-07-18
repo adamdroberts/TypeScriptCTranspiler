@@ -140,6 +140,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (bufferConcatToStringText.length > 0) return bufferConcatToStringText;
             const bufferAllocToStringText = resolveStaticBufferAllocToStringCall(node);
             if (bufferAllocToStringText.length > 0) return bufferAllocToStringText;
+            const bufferCompareText = resolveStaticBufferCompareCall(node);
+            if (bufferCompareText.length > 0) return bufferCompareText;
             const bufferIsBufferText = resolveStaticBufferIsBufferCall(node);
             if (bufferIsBufferText.length > 0) return bufferIsBufferText;
             const numericParserText = resolveStaticNumericParserCall(node);
@@ -1026,6 +1028,46 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 const nodeEncoding = nodeBufferEncoding(encoding);
                 if (!nodeEncoding) return [];
                 out.push(buffer.toString(nodeEncoding));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const compareStaticBuffers = (left: Buffer, right: Buffer): string => {
+        const result = Buffer.compare(left, right);
+        return String(result < 0 ? -1 : result > 0 ? 1 : 0);
+    };
+
+    const resolveStaticBufferCompareCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        let leftExpr: ts.Expression | null = null;
+        let rightExpr: ts.Expression | null = null;
+
+        if (ts.isPropertyAccessExpression(callee) && callee.name.text === "compare") {
+            const target = unwrapStaticExpression(callee.expression);
+            if (ts.isIdentifier(target) && target.text === "Buffer") {
+                if (call.arguments.length !== 2) return [];
+                leftExpr = call.arguments[0]!;
+                rightExpr = call.arguments[1]!;
+            } else {
+                if (call.arguments.length !== 1) return [];
+                leftExpr = target;
+                rightExpr = call.arguments[0]!;
+            }
+        }
+        if (!leftExpr || !rightExpr) return [];
+
+        const leftBuffers = resolveStaticBufferExpression(leftExpr);
+        if (leftBuffers.length === 0) return [];
+        const rightBuffers = resolveStaticBufferExpression(rightExpr);
+        if (rightBuffers.length === 0) return [];
+
+        const out: string[] = [];
+        for (const left of leftBuffers) {
+            for (const right of rightBuffers) {
+                out.push(compareStaticBuffers(left, right));
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
