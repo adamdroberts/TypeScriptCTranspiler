@@ -3418,7 +3418,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
-        if (method !== "has" && method !== "get") return [];
+        if (
+            method !== "has" &&
+            method !== "get" &&
+            method !== "isSubsetOf" &&
+            method !== "isSupersetOf" &&
+            method !== "isDisjointFrom"
+        ) {
+            return [];
+        }
 
         const receiver = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(receiver)) return [];
@@ -3427,10 +3435,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return [];
 
         const source = receiver.arguments?.[0];
-        const keyValues = call.arguments.length === 1 ? resolve(call.arguments[0]!) : [];
-        if (keyValues.length === 0) return [];
-
-        if (ctor.text === "Set" && method === "has") {
+        if (ctor.text === "Set" && method !== "get") {
+            if (call.arguments.length !== 1) return [];
             const elements = resolveStaticArrayFromSetSource(source);
             if (!elements) return [];
             const values = new Set<string>();
@@ -3440,10 +3446,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 if (elementValues.length !== 1) return [];
                 values.add(elementValues[0]!);
             }
+            if (method !== "has") {
+                const other = resolveStaticArrayFromSource(call.arguments[0]!);
+                if (!other) return [];
+                const otherElements = denseStaticArrayElements(other);
+                if (!otherElements) return [];
+                const otherValues = new Set<string>();
+                for (const element of otherElements) {
+                    const elementValues = resolve(element);
+                    if (elementValues.length !== 1) return [];
+                    otherValues.add(elementValues[0]!);
+                }
+                if (method === "isSubsetOf") {
+                    return [String([...values].every((value) => otherValues.has(value)))];
+                }
+                if (method === "isSupersetOf") {
+                    return [String([...otherValues].every((value) => values.has(value)))];
+                }
+                return [String([...values].every((value) => !otherValues.has(value)))];
+            }
+            const keyValues = resolve(call.arguments[0]!);
+            if (keyValues.length === 0) return [];
             return dedupe(keyValues.map((key) => String(values.has(key))));
         }
 
         if (ctor.text !== "Map") return [];
+        const keyValues = call.arguments.length === 1 ? resolve(call.arguments[0]!) : [];
+        if (keyValues.length === 0) return [];
         const entries = resolveStaticArrayFromMapSource(source);
         if (!entries) return [];
         const slots = new Map<string, ts.Expression>();

@@ -1,1 +1,1 @@
-set_comp_right set_comp_middle set_comp_left set_comp_right set_comp_tail
+set_comp_right set_comp_middle set_comp_left set_comp_right set_comp_tail set_rel_subset_true set_rel_subset_false set_rel_superset_true set_rel_superset_false set_rel_disjoint_true set_rel_disjoint_false
