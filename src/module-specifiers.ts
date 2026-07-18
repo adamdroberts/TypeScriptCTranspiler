@@ -125,6 +125,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (uriText.length > 0) return uriText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
+            const globalNumericPredicateText = resolveStaticGlobalNumericPredicateCall(node);
+            if (globalNumericPredicateText.length > 0) return globalNumericPredicateText;
             const numericPredicateText = resolveStaticNumericPredicateCall(node);
             if (numericPredicateText.length > 0) return numericPredicateText;
             const arrayPredicateText = resolveStaticArrayPredicateCall(node);
@@ -641,6 +643,43 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return String(Number.isSafeInteger(value));
             }
         }));
+    };
+
+    const resolveStaticGlobalNumericPredicateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isIdentifier(callee) || (callee.text !== "isFinite" && callee.text !== "isNaN")) return [];
+        const values = resolveStaticCoercedNumberValues(call.arguments[0]!);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => {
+            return callee.text === "isFinite"
+                ? String(Number.isFinite(value))
+                : String(Number.isNaN(value));
+        }));
+    };
+
+    const resolveStaticCoercedNumberValues = (expr: ts.Expression): number[] => {
+        const value = unwrapStaticExpression(expr);
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) return [Number(value.text)];
+        if (ts.isNumericLiteral(value)) return [Number(value.text)];
+        if (value.kind === ts.SyntaxKind.TrueKeyword) return [1];
+        if (value.kind === ts.SyntaxKind.FalseKeyword || value.kind === ts.SyntaxKind.NullKeyword) return [0];
+        if (
+            value.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(value) && value.text === "undefined") ||
+            ts.isVoidExpression(value)
+        ) {
+            return [NaN];
+        }
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            (value.operator === ts.SyntaxKind.PlusToken || value.operator === ts.SyntaxKind.MinusToken) &&
+            ts.isNumericLiteral(value.operand)
+        ) {
+            const num = Number(value.operand.text);
+            return [value.operator === ts.SyntaxKind.MinusToken ? -num : num];
+        }
+        return [];
     };
 
     const resolveStaticArrayPredicateCall = (call: ts.CallExpression): string[] => {
