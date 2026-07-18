@@ -870,6 +870,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Finite dynamic `require(...)` proofs resolve static `Buffer.byteLength(...)` specifier fragments for static string inputs and supported static encodings. Test: `dynamic_require_static_buffer_byte_length`
 - Finite dynamic `require(...)` proofs resolve static `Buffer.isEncoding(...)` boolean specifier fragments for the supported Buffer encoding allow-list. Test: `dynamic_require_static_buffer_is_encoding`
 - Finite dynamic `require(...)` proofs resolve static `Buffer.from(string, encoding?).toString(encoding?)` specifier fragments for the supported Buffer string encoding subset. Test: `dynamic_require_static_buffer_from_to_string`
+- Finite dynamic `require(...)` proofs resolve static `Buffer.isBuffer(...)` boolean specifier fragments for static Buffer construction calls and obvious non-Buffer literals. Test: `dynamic_require_static_buffer_is_buffer`
 - Named and default imports from `"buffer"` / `"node:buffer"` route to the supported `Buffer` static helper subset. Test: `buffer_module_import`
 - `atob` / `btoa` imports from `"buffer"` / `"node:buffer"` route to the existing base64 helpers across named, aliased named, namespace, and default import forms. Test: `buffer_base64_import`
 - Finite dynamic `require(...)` proofs resolve static global `btoa(...)` and `atob(...)` specifier fragments using the supported runtime base64 codec semantics. Test: `dynamic_require_static_base64_globals`
