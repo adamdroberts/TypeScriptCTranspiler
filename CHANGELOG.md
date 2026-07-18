@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Pending `await` continuation lowering now supports arbitrary-length leading awaited-local chains followed by a final return for async functions, async methods, and async arrow/function values. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now supports a bounded four-leading-await shape for async functions, async methods, and async arrow/function values when later awaited expressions and the final return read earlier awaited locals. Test: `async_await_pending_return_expr`.
 - Runtime switch statements lowered through `if` / `else` chains now route unlabeled `break` statements to the generated switch end label instead of emitting invalid C breaks. Test: `switch`.
 - Plain `for` loops lowered through the internal `while` form now route unlabeled `continue` statements through the generated incrementor step instead of skipping it. Test: `for_continue`.

@@ -37,3 +37,6 @@ arrow-three-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three!
 four-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four!
 method-four-await: method-one:class-method-four-method-one:method-one:class-method-four-method-one-three:method-one:class-method-four-method-one:method-one:class-method-four-method-one-three-four!
 arrow-four-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four!
+five-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
+method-five-await: method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three:method-one:class-method-five-method-one:method-one:class-method-five-method-one-three-four-five!
+arrow-five-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four-five!
