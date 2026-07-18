@@ -110,6 +110,53 @@ const arrowTryFinallyReturnAwaitTryPrelude = async (): Promise<string> => {
     }
 };
 
+async function tryCatchFinallyReturnAwaitSourcePrelude(): Promise<string> {
+    let label: string;
+    label = "combined-source-";
+    try {
+        return await delayedRejectAfter(16, "combined-decl-bad");
+    } catch (e) {
+        const head = label + "caught:";
+        let suffix: string;
+        suffix = ":done";
+        return head + e + suffix;
+    } finally {
+        const marker = "C";
+        trace += marker;
+    }
+}
+
+const arrowTryCatchFinallyReturnAwaitTryPrelude = async (): Promise<string> => {
+    try {
+        let label: string;
+        label = "arrow-combined-try-";
+        return await delay(17, label + "ok");
+    } catch (e) {
+        return "arrow-combined-caught:" + e;
+    } finally {
+        const marker = "B";
+        trace += marker;
+    }
+};
+
+function makeClosureTryCatchFinallyReturnAwaitSourcePrelude(prefix: string): () => Promise<string> {
+    return async (): Promise<string> => {
+        let label: string;
+        label = prefix + "combined-source-";
+        try {
+            return await delayedRejectAfter(18, "closure-combined-bad");
+        } catch (e) {
+            const head = label + "caught:";
+            let suffix: string;
+            suffix = ":done";
+            return head + e + suffix;
+        } finally {
+            const marker = "c";
+            trace += marker;
+        }
+    };
+}
+
 class ReturnAwaitWorker {
     prefix: string;
 
@@ -126,9 +173,23 @@ class ReturnAwaitWorker {
             return label + "caught:" + e;
         }
     }
+
+    async tryCatchFinallyReturnAwaitSourcePrelude(): Promise<string> {
+        let label: string;
+        label = this.prefix + "method-combined-source-";
+        try {
+            return await delay(19, label + "ok");
+        } catch (e) {
+            return label + "caught:" + e;
+        } finally {
+            const marker = "D";
+            trace += marker;
+        }
+    }
 }
 
 const closureTryFinally = makeClosureTryFinally();
+const closureTryCatchFinallyReturnAwaitSourcePrelude = makeClosureTryCatchFinallyReturnAwaitSourcePrelude("closure-");
 const returnAwaitWorker = new ReturnAwaitWorker("class-");
 
 tryCatchReturnAwaitFulfilled().then((value: string): void => {
@@ -189,4 +250,20 @@ arrowTryFinallyReturnAwaitTryPrelude().then((value: string): void => {
 
 returnAwaitWorker.tryCatchReturnAwaitSourcePrelude().then((value: string): void => {
     console.log("method-try-catch-return-await-source-prelude:", value);
+});
+
+tryCatchFinallyReturnAwaitSourcePrelude().then((value: string): void => {
+    console.log("try-catch-finally-return-await-source-prelude:", value, trace);
+});
+
+arrowTryCatchFinallyReturnAwaitTryPrelude().then((value: string): void => {
+    console.log("arrow-try-catch-finally-return-await-try-prelude:", value, trace);
+});
+
+closureTryCatchFinallyReturnAwaitSourcePrelude().then((value: string): void => {
+    console.log("closure-try-catch-finally-return-await-source-prelude:", value, trace);
+});
+
+returnAwaitWorker.tryCatchFinallyReturnAwaitSourcePrelude().then((value: string): void => {
+    console.log("method-try-catch-finally-return-await-source-prelude:", value, trace);
 });
