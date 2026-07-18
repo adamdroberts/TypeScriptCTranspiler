@@ -26733,6 +26733,34 @@ class Emitter {
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
 
+    private emitAsyncAwaitExpressionBodyReturn(
+        buf: CBuf,
+        expressionBody: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const expression = this.unwrapTransparentExpression(expressionBody);
+        if (ts.isAwaitExpression(expression)) {
+            const sourceType = this.prepareType(mapTsType(
+                expression.expression,
+                this.checker.getTypeAtLocation(expression.expression),
+                this.checker,
+            ));
+            if (sourceType.kind !== "promise") return false;
+            const source = this.emitExpr(expression.expression);
+            buf.line(`return tsc_promise_adopt(${source.c});`);
+            return true;
+        }
+        const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+        );
+        if (!continuation) return false;
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
+    }
+
     private isAsyncAwaitShortCircuitBinary(node: ts.Node): node is ts.BinaryExpression {
         return ts.isBinaryExpression(node) &&
             (node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
@@ -37476,15 +37504,23 @@ class Emitter {
                             if (isAsync) body.line("return tsc_promise_resolve(tsc_value_undefined());");
                         }
                     } else {
-                        const r = this.emitExpr(fnBody);
-                        if (isAsync) {
-                            if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
-                            else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
-                        } else if (ret.kind === "void") {
-                            body.line(`(void)(${r.c});`);
-                            body.line("return;");
-                        } else {
-                            body.line(`return ${this.coerce(r, ret, fnBody)};`);
+                        const handledAsyncAwaitExpressionBody = isAsync && this.emitAsyncAwaitExpressionBodyReturn(
+                            body,
+                            fnBody,
+                            runtimeParams,
+                            type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                        );
+                        if (!handledAsyncAwaitExpressionBody) {
+                            const r = this.emitExpr(fnBody);
+                            if (isAsync) {
+                                if (r.ty.kind === "promise") body.line(`return tsc_promise_adopt(${r.c});`);
+                                else body.line(`return ${this.promiseResolveResult(r, fnBody)};`);
+                            } else if (ret.kind === "void") {
+                                body.line(`(void)(${r.c});`);
+                                body.line("return;");
+                            } else {
+                                body.line(`return ${this.coerce(r, ret, fnBody)};`);
+                            }
                         }
                     }
                 } finally {
@@ -47579,13 +47615,21 @@ class Emitter {
                     if (isAsync) this.defs.line("return tsc_promise_resolve(tsc_value_undefined());");
                 }
             } else {
-                const r = this.emitExpr(info.fn.body);
-                if (isAsync) {
-                    if (r.ty.kind === "promise") this.defs.line(`return tsc_promise_adopt(${r.c});`);
-                    else this.defs.line(`return ${this.promiseResolveResult(r, info.fn.body)};`);
-                } else {
-                    const coerced = this.coerce(r, mappedRet, info.fn.body);
-                    this.defs.line(`return ${coerced};`);
+                const handledAsyncAwaitExpressionBody = isAsync && this.emitAsyncAwaitExpressionBodyReturn(
+                    this.defs,
+                    info.fn.body,
+                    info.fn.parameters,
+                    thisType ? { c: "__tsc_this", ty: thisType } : null,
+                );
+                if (!handledAsyncAwaitExpressionBody) {
+                    const r = this.emitExpr(info.fn.body);
+                    if (isAsync) {
+                        if (r.ty.kind === "promise") this.defs.line(`return tsc_promise_adopt(${r.c});`);
+                        else this.defs.line(`return ${this.promiseResolveResult(r, info.fn.body)};`);
+                    } else {
+                        const coerced = this.coerce(r, mappedRet, info.fn.body);
+                        this.defs.line(`return ${coerced};`);
+                    }
                 }
             }
         } finally {

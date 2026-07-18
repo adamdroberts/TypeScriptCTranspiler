@@ -1063,6 +1063,12 @@ const arrowParenthesizedAssignmentExpressionAwaitReturn = async (prefix: string)
     return (decorated);
 };
 
+const arrowExpressionBodyDirectAwait = async (prefix: string): Promise<string> =>
+    await delay(27, prefix + "arrow-expression-body-direct");
+
+const arrowExpressionBodyInlineAwaitReturn = async (prefix: string): Promise<string> =>
+    prefix + await delay(28, "arrow-expression-body-inline") + "!";
+
 const arrowDirectAssignmentAwaitReturn = async (prefix: string): Promise<string> => {
     let value: string;
     value = await delay(21, prefix + "arrow-direct-assignment");
@@ -1842,6 +1848,14 @@ arrowAssignmentExpressionAwaitReturn("value-").then((value: string): void => {
 
 arrowParenthesizedAssignmentExpressionAwaitReturn("value-").then((value: string): void => {
     console.log("arrow-parenthesized-assignment-expression-await-return:", value);
+});
+
+arrowExpressionBodyDirectAwait("value-").then((value: string): void => {
+    console.log("arrow-expression-body-direct-await:", value);
+});
+
+arrowExpressionBodyInlineAwaitReturn("value-").then((value: string): void => {
+    console.log("arrow-expression-body-inline-await-return:", value);
 });
 
 arrowDirectAssignmentAwaitReturn("value-").then((value: string): void => {
