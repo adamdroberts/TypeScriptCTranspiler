@@ -44,6 +44,18 @@ const liftedTryFinally = async (flag: boolean): Promise<string> => {
     }
 };
 
+const liftedTryFinallyPrelude = async (): Promise<string> => {
+    try {
+        const value = await delay(9, "lifted-final-prelude-ok");
+        return "lifted-final-prelude:" + value;
+    } finally {
+        const marker = "P";
+        let suffix: string;
+        suffix = "!";
+        trace += marker + suffix;
+    }
+};
+
 function makeNestedTryCatch(): (flag: boolean) => Promise<string> {
     return async function (flag: boolean): Promise<string> {
         try {
@@ -80,9 +92,24 @@ function makeNestedTryFinally(): (flag: boolean) => Promise<string> {
     };
 }
 
+function makeNestedTryFinallyPrelude(): () => Promise<string> {
+    return async (): Promise<string> => {
+        try {
+            const value = await delayedRejectAfter(10, "nested-final-prelude-bad");
+            return "nested-final-prelude:" + value;
+        } finally {
+            const marker = "p";
+            let suffix: string;
+            suffix = "!";
+            trace += marker + suffix;
+        }
+    };
+}
+
 const nestedTryCatch = makeNestedTryCatch();
 const nestedTryCatchPrelude = makeNestedTryCatchPrelude();
 const nestedTryFinally = makeNestedTryFinally();
+const nestedTryFinallyPrelude = makeNestedTryFinallyPrelude();
 
 liftedTryCatch(true).then((value: string): void => {
     console.log("lifted-try-catch-fulfilled:", value);
@@ -104,6 +131,10 @@ liftedTryFinally(false).catch((reason: string): void => {
     console.log("lifted-try-finally-rejected:", reason, trace);
 });
 
+liftedTryFinallyPrelude().then((value: string): void => {
+    console.log("lifted-try-finally-prelude:", value, trace);
+});
+
 nestedTryCatch(true).then((value: string): void => {
     console.log("nested-try-catch-fulfilled:", value);
 });
@@ -122,4 +153,8 @@ nestedTryFinally(true).then((value: string): void => {
 
 nestedTryFinally(false).catch((reason: string): void => {
     console.log("nested-try-finally-rejected:", reason, trace);
+});
+
+nestedTryFinallyPrelude().catch((reason: string): void => {
+    console.log("nested-try-finally-prelude:", reason, trace);
 });

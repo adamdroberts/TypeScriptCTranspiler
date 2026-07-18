@@ -8,3 +8,5 @@ nested-try-finally-rejected: nested-final-bad FRr
 nested-try-finally-fulfilled: nested-final:nested-final-ok FRrf
 lifted-try-catch-prelude: lifted-prelude-caught:lifted-prelude-bad:done
 nested-try-catch-prelude: nested-prelude-caught:nested-prelude-bad:done
+lifted-try-finally-prelude: lifted-final-prelude:lifted-final-prelude-ok FRrfP!
+nested-try-finally-prelude: nested-final-prelude-bad FRrfP!p!
