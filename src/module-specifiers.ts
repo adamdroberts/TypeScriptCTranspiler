@@ -2742,6 +2742,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const arrayCopy = resolveStaticArrayCopyCollectionExpression(cur);
+            if (arrayCopy) return resolveCollectionExpression(arrayCopy);
             const arrayOf = resolveStaticArrayOfCollectionExpression(cur);
             if (arrayOf) return resolveCollectionExpression(arrayOf);
             const arrayFrom = resolveStaticArrayFromCollectionExpression(cur);
@@ -2816,6 +2818,61 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticArrayCopyCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const method = callee.name.text;
+        if (method !== "slice" && method !== "concat") return null;
+        const receiver = resolveCollectionExpression(callee.expression);
+        if (!receiver || !ts.isArrayLiteralExpression(receiver)) return null;
+        const receiverElements = denseStaticArrayElements(receiver);
+        if (!receiverElements) return null;
+
+        if (method === "slice") {
+            if (call.arguments.length > 2) return null;
+            const starts = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0]!)
+                ? [0]
+                : resolveStaticIntegerKeys(call.arguments[0]!);
+            const ends = !call.arguments[1] || isStaticUndefinedExpression(call.arguments[1]!)
+                ? [receiverElements.length]
+                : resolveStaticIntegerKeys(call.arguments[1]!);
+            if (starts.length !== 1 || ends.length !== 1) return null;
+            const start = normalizeStaticArraySliceIndex(starts[0]!, receiverElements.length);
+            const end = normalizeStaticArraySliceIndex(ends[0]!, receiverElements.length);
+            return ts.factory.createArrayLiteralExpression(receiverElements.slice(start, Math.max(start, end)));
+        }
+
+        const elements = [...receiverElements];
+        for (const arg of call.arguments) {
+            const value = resolveCollectionExpression(arg);
+            if (value && ts.isArrayLiteralExpression(value)) {
+                const argElements = denseStaticArrayElements(value);
+                if (!argElements) return null;
+                elements.push(...argElements);
+            } else {
+                elements.push(arg);
+            }
+            if (elements.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        }
+        return ts.factory.createArrayLiteralExpression(elements);
+    };
+
+    const denseStaticArrayElements = (array: ts.ArrayLiteralExpression): ts.Expression[] | null => {
+        const elements: ts.Expression[] = [];
+        for (const element of array.elements) {
+            if (ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return null;
+            elements.push(element);
+        }
+        return elements;
+    };
+
+    const normalizeStaticArraySliceIndex = (index: number, length: number): number => {
+        return index < 0
+            ? Math.max(length + index, 0)
+            : Math.min(index, length);
     };
 
     const resolveStaticArrayOfCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
