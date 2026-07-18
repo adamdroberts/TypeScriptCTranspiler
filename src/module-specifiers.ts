@@ -198,6 +198,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isPropertyAccessExpression(node)) {
             const numericConstant = resolveStaticNumericConstantAccess(node);
             if (numericConstant.length > 0) return numericConstant;
+            const descriptorProperty = resolveStaticDescriptorPropertyAccess(node);
+            if (descriptorProperty.length > 0) return descriptorProperty;
             const enumValues = resolveStaticEnumAccess(node.expression, node.name);
             if (enumValues.length > 0) return enumValues;
             return resolveStaticCollectionAccess(node.expression, node.name);
@@ -819,6 +821,110 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (!/^(0|[1-9][0-9]*)$/.test(key)) return null;
             const char = object.text[Number(key)];
             return char === undefined ? null : [char];
+        }
+        return null;
+    };
+
+    const resolveStaticDescriptorPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
+        const property = access.name.text;
+        if (
+            property !== "value" &&
+            property !== "writable" &&
+            property !== "enumerable" &&
+            property !== "configurable"
+        ) {
+            return [];
+        }
+        const descriptor = resolveStaticDescriptor(access.expression);
+        if (!descriptor) return [];
+        switch (property) {
+            case "value":
+                return descriptor.value;
+            case "writable":
+                return [String(descriptor.writable)];
+            case "enumerable":
+                return [String(descriptor.enumerable)];
+            default:
+                return [String(descriptor.configurable)];
+        }
+    };
+
+    const resolveStaticDescriptor = (
+        expr: ts.Expression,
+    ): { value: string[]; writable: boolean; enumerable: boolean; configurable: boolean } | null => {
+        const call = unwrapStaticExpression(expr);
+        if (!ts.isCallExpression(call) || call.arguments.length < 2 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return null;
+        const target = unwrapStaticExpression(callee.expression);
+        const method = callee.name.text;
+        const isObjectDescriptor =
+            ts.isIdentifier(target) &&
+            target.text === "Object" &&
+            method === "getOwnPropertyDescriptor";
+        const isReflectDescriptor =
+            ts.isIdentifier(target) &&
+            target.text === "Reflect" &&
+            method === "getOwnPropertyDescriptor";
+        if (!isObjectDescriptor && !isReflectDescriptor) return null;
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object) return null;
+        const keys = resolveKeyTexts(call.arguments[1]!);
+        if (keys.length !== 1) return null;
+        return staticDescriptorFor(object, keys[0]!);
+    };
+
+    const staticDescriptorFor = (
+        object: ts.Expression,
+        key: string,
+    ): { value: string[]; writable: boolean; enumerable: boolean; configurable: boolean } | null => {
+        if (ts.isObjectLiteralExpression(object)) {
+            for (const prop of object.properties) {
+                if (ts.isSpreadAssignment(prop)) return null;
+                if (!ts.isPropertyAssignment(prop) && !ts.isShorthandPropertyAssignment(prop)) return null;
+                const propName = staticPropertyName(prop.name);
+                if (propName === null) return null;
+                if (propName !== key) continue;
+                const valueExpr = ts.isPropertyAssignment(prop) ? prop.initializer : prop.name;
+                const value = resolve(valueExpr);
+                return value.length === 0
+                    ? null
+                    : { value, writable: true, enumerable: true, configurable: true };
+            }
+            return null;
+        }
+        if (ts.isArrayLiteralExpression(object)) {
+            if (key === "length") {
+                return {
+                    value: [String(object.elements.length)],
+                    writable: true,
+                    enumerable: false,
+                    configurable: false,
+                };
+            }
+            if (!/^(0|[1-9][0-9]*)$/.test(key)) return null;
+            const element = object.elements[Number(key)];
+            if (!element || ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return null;
+            const value = resolve(element);
+            return value.length === 0
+                ? null
+                : { value, writable: true, enumerable: true, configurable: true };
+        }
+        if (ts.isStringLiteral(object) || ts.isNoSubstitutionTemplateLiteral(object)) {
+            if (key === "length") {
+                return {
+                    value: [String(object.text.length)],
+                    writable: false,
+                    enumerable: false,
+                    configurable: false,
+                };
+            }
+            if (!/^(0|[1-9][0-9]*)$/.test(key)) return null;
+            const char = object.text[Number(key)];
+            return char === undefined
+                ? null
+                : { value: [char], writable: false, enumerable: true, configurable: false };
         }
         return null;
     };
