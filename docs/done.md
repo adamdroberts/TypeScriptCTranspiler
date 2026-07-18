@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- `Promise.try` assimilates delayed dynamic thenables that resolve to nested native Promise records, covering nested fulfillment and rejection. Test: `promise_try_thenable_nested_promise_async`
 - Dynamic promise combinators assimilate delayed nested thenables from direct self-iterable custom iterator object inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`. Test: `promise_thenable_async_combinator_custom_iterator_self_recursive`
 - Dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs whose `[Symbol.iterator]()` returns a class iterator object with `next()`, including inherited iterator and inherited `next()` owner routing. Test: `promise_thenable_async_combinator_custom_iterator_recursive`
 - Dynamic promise combinators assimilate delayed nested thenables from typed custom iterable class inputs across `Promise.all`, `Promise.race`, `Promise.any`, and `Promise.allSettled`, including inherited iterator methods. Test: `promise_thenable_async_combinator_custom_iterable_recursive`
@@ -185,6 +186,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - `new Promise<T>(executor)` resolve callbacks assimilate dynamic thenables and nested native Promise records through the existing Promise resolution procedure. Test: `promise_executor_thenable_assimilation`
 - `new Promise<T>(executor)` resolve callbacks assimilate delayed dynamic thenables when the executor settles from a scheduled callback and the thenable settles from a later microtask. Test: `promise_executor_thenable_async`
 - `new Promise<T>(executor)` resolve callbacks assimilate delayed dynamic thenables that resolve to nested native Promise records. Test: `promise_executor_thenable_nested_promise_async`
+- `Promise.try` callback returns assimilate delayed dynamic thenables that resolve to nested native Promise records. Test: `promise_try_thenable_nested_promise_async`
 - `new Promise<T>(executor)` resolve/reject callbacks can safely settle the returned Promise from scheduled callbacks because executor callback environments are heap-backed and target the returned pending record. Test: `promise_executor_async_settle`
 - `Promise.all(...)`, `Promise.allSettled(...)`, `Promise.race(...)`, `Promise.any(...)`, `Promise.try(...)`, and synchronous `.then(...)` / `.catch(...)` / `.finally(...)` evaluate and ignore trailing arguments. Test: `promise_ignored_arguments`
 - Promise instances expose empty own-property and read-only integrity results through `Object.keys`, `Object.values`, `Object.entries`, `Object.getOwnPropertyNames`, `Object.getOwnPropertyDescriptor(s)`, `Object.hasOwn`, inherited `hasOwnProperty(prop, ...ignored)` / `propertyIsEnumerable(prop, ...ignored)`, `Object.isExtensible(...)`, `Object.isSealed(...)`, `Object.isFrozen(...)`, `Reflect.ownKeys`, `Reflect.getOwnPropertyDescriptor`, and `Reflect.isExtensible(...)`, while preserving receiver/key/trailing-argument evaluation. Test: `promise_object_methods`

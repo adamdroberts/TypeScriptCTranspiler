@@ -1,0 +1,4 @@
+{
+  "description": "Promise.try assimilates delayed thenables that resolve to nested native Promise records",
+  "features": ["promise", "thenable", "queueMicrotask", "setImmediate"]
+}
