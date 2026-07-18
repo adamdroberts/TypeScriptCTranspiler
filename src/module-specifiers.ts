@@ -129,6 +129,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (numericPredicateText.length > 0) return numericPredicateText;
             const arrayPredicateText = resolveStaticArrayPredicateCall(node);
             if (arrayPredicateText.length > 0) return arrayPredicateText;
+            const ownPredicateText = resolveStaticObjectHasOwnCall(node);
+            if (ownPredicateText.length > 0) return ownPredicateText;
             const dateText = resolveStaticDateCall(node);
             if (dateText.length > 0) return dateText;
             const mathText = resolveStaticMathCall(node);
@@ -652,6 +654,55 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return ["false"];
         }
         return [];
+    };
+
+    const resolveStaticObjectHasOwnCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 2 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "hasOwn") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Object") return [];
+
+        const object = resolveCollectionExpression(call.arguments[0]!);
+        if (!object) return [];
+        const keys = resolveKeyTexts(call.arguments[1]!);
+        if (keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const key of keys) {
+            const value = staticObjectHasOwn(object, key);
+            if (value === null) return [];
+            out.push(String(value));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const staticObjectHasOwn = (object: ts.Expression, key: string): boolean | null => {
+        if (ts.isObjectLiteralExpression(object)) {
+            for (const prop of object.properties) {
+                if (ts.isSpreadAssignment(prop)) return null;
+                if (!prop.name) return null;
+                const propName = staticPropertyName(prop.name);
+                if (propName === null) return null;
+                if (propName === key) return true;
+            }
+            return false;
+        }
+        if (ts.isArrayLiteralExpression(object)) {
+            if (key === "length") return true;
+            if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
+            const index = Number(key);
+            const element = object.elements[index];
+            return element !== undefined && !ts.isSpreadElement(element) && element.kind !== ts.SyntaxKind.OmittedExpression;
+        }
+        if (ts.isStringLiteral(object) || ts.isNoSubstitutionTemplateLiteral(object)) {
+            if (key === "length") return true;
+            if (!/^(0|[1-9][0-9]*)$/.test(key)) return false;
+            const index = Number(key);
+            return index >= 0 && index < object.text.length;
+        }
+        return null;
     };
 
     const resolveStaticDateCall = (call: ts.CallExpression): string[] => {
