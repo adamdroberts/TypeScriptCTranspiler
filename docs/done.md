@@ -6,6 +6,7 @@ Verify all at once: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`.
 
 ---
 
+- Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered across async declarations, lifted async function values, and class async methods that read `this`. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` continuations support the combined catch-plus-finally form for fulfilled and rejected awaited sources. Test: `async_await_try_catch_finally`
 - Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `while` break/continue, break-terminated `switch`, and `try`/`catch`/`finally` after a pending awaited local, matching the existing async-method subset. Test: `async_await_pending_return_expr`
 - Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `do while`, plain `for`, `for...of`, `for...in`, early return, and post-await throw after a pending awaited local. Test: `async_await_pending_return_expr`
