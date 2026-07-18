@@ -23329,6 +23329,12 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
+                                this.emitAsyncAwaitInitializerReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitTryCatchReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24797,6 +24803,7 @@ class Emitter {
         try {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
+                !this.emitAsyncAwaitInitializerReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitTryCatchReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitTryFinallyReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -24851,6 +24858,40 @@ class Emitter {
             buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.expression)};`);
         }
         return true;
+    }
+
+    private asyncAwaitInitializerReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitExpressionReturnContinuation | null {
+        if (body.statements.length !== 2) return null;
+        const declaration = body.statements[0];
+        const result = body.statements[1];
+        if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
+        if (!(declaration.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+        if (declaration.declarationList.declarations.length !== 1) return null;
+        const variable = declaration.declarationList.declarations[0]!;
+        if (!ts.isIdentifier(variable.name) || !variable.initializer) return null;
+        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const variableSymbol = this.symbolForIdentifier(variable.name);
+        const resultSymbol = this.symbolForIdentifier(result.expression);
+        if (!variableSymbol || variableSymbol !== resultSymbol) return null;
+        const initializer = this.unwrapTransparentExpression(variable.initializer);
+        if (ts.isAwaitExpression(initializer)) return null;
+        return this.asyncAwaitExpressionReturnContinuationForExpression(initializer, parameters, thisValue);
+    }
+
+    private emitAsyncAwaitInitializerReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const continuation = this.asyncAwaitInitializerReturnContinuation(body, parameters, thisValue);
+        if (!continuation) return false;
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
 
     private asyncAwaitTryCatchReturnContinuation(
@@ -37197,6 +37238,12 @@ class Emitter {
                         const handledAsyncAwait =
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
+                                this.emitAsyncAwaitInitializerReturnContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitTryCatchReturnContinuation(
                                     body,
                                     fnBody,
@@ -47287,6 +47334,12 @@ class Emitter {
                 const handledAsyncAwait =
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
+                        this.emitAsyncAwaitInitializerReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
                         this.emitAsyncAwaitTryCatchReturnContinuation(
                             this.defs,
                             info.fn.body,
