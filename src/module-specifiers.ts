@@ -149,6 +149,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return out;
         }
         if (ts.isElementAccessExpression(node) && node.argumentExpression) {
+            const stringIndex = resolveStaticStringElementAccess(node);
+            if (stringIndex.length > 0) return stringIndex;
             const stringSplit = resolveStaticStringSplitAccess(node);
             if (stringSplit.length > 0) return stringSplit;
             const enumValues = resolveStaticEnumAccess(node.expression, node.argumentExpression);
@@ -628,6 +630,24 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             for (const index of indices) {
                 if (method === "at" && (index < -value.length || index >= value.length)) return [];
                 out.push(method === "charAt" ? value.charAt(index) : value.at(index)!);
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringElementAccess = (expr: ts.ElementAccessExpression): string[] => {
+        if (!expr.argumentExpression) return [];
+        const values = resolve(expr.expression);
+        const keys = resolveStaticNumericKeys(expr.argumentExpression);
+        if (values.length === 0 || keys.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const key of keys) {
+                const char = value[key];
+                if (char === undefined) return [];
+                out.push(char);
                 if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
