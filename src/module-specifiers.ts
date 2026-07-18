@@ -440,7 +440,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const target = unwrapStaticExpression(callee.expression);
         if (!ts.isIdentifier(target) || target.text !== "Object") return [];
         const method = callee.name.text;
-        if (method !== "keys" && method !== "values") return [];
+        if (method !== "keys" && method !== "values" && method !== "getOwnPropertyNames") return [];
 
         const object = resolveCollectionExpression(call.arguments[0]!);
         if (!object || !ts.isObjectLiteralExpression(object)) return [];
@@ -450,7 +450,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (ts.isSpreadAssignment(prop)) return [];
             const propName = prop.name ? staticPropertyName(prop.name) : null;
             if (propName === null) return [];
-            if (method === "keys") {
+            if (method === "keys" || method === "getOwnPropertyNames") {
                 slots.push([propName]);
                 continue;
             }
