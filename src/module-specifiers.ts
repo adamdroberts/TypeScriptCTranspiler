@@ -125,6 +125,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (numericParserText.length > 0) return numericParserText;
             const numericPredicateText = resolveStaticNumericPredicateCall(node);
             if (numericPredicateText.length > 0) return numericPredicateText;
+            const arrayPredicateText = resolveStaticArrayPredicateCall(node);
+            if (arrayPredicateText.length > 0) return arrayPredicateText;
             const dateText = resolveStaticDateCall(node);
             if (dateText.length > 0) return dateText;
             const mathText = resolveStaticMathCall(node);
@@ -568,6 +570,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return String(Number.isSafeInteger(value));
             }
         }));
+    };
+
+    const resolveStaticArrayPredicateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "isArray") return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Array") return [];
+        const value = resolveCollectionExpression(call.arguments[0]!);
+        if (!value) return [];
+        if (ts.isArrayLiteralExpression(value)) return ["true"];
+        if (
+            ts.isObjectLiteralExpression(value) ||
+            ts.isStringLiteral(value) ||
+            ts.isNoSubstitutionTemplateLiteral(value) ||
+            ts.isNumericLiteral(value) ||
+            ts.isBigIntLiteral(value) ||
+            value.kind === ts.SyntaxKind.TrueKeyword ||
+            value.kind === ts.SyntaxKind.FalseKeyword ||
+            value.kind === ts.SyntaxKind.NullKeyword ||
+            value.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(value) && value.text === "undefined") ||
+            ts.isVoidExpression(value)
+        ) {
+            return ["false"];
+        }
+        return [];
     };
 
     const resolveStaticDateCall = (call: ts.CallExpression): string[] => {
