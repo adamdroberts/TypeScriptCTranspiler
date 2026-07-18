@@ -4,6 +4,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
+
 ### Fixed
 - Pending `await` continuation lowering now captures typed function prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
 - Pending `await` continuation lowering now captures typed `FSStats` and `FSDirent` prelude locals across the bounded single-await, embedded return-await, and arbitrary-length leading awaited-local continuation paths. Test: `async_await_pending_return_expr`.
