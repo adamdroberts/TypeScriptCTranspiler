@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs materialize static `Array.of(...)` collection wrappers for existing index, `.at(...)`, `.join(...)`, `Object.values(...)`, and `Object.entries(...)` specifier paths. Test: `dynamic_require_static_array_of_collections`
 - Finite dynamic `require(...)` proofs materialize one-argument static `Array.from(...)` collection wrappers over finite array/string sources plus finite `new Set(...)` and `new Map(...)` sources. Test: `dynamic_require_static_array_from_collections`
 - Finite dynamic `require(...)` proofs flatten static object-literal spread operands over finite object sources, including later-property overwrite order and nullish spread skipping. Test: `dynamic_require_static_object_spread_collections`
 - Finite dynamic `require(...)` proofs materialize static `Object.defineProperty(...)`, `Object.defineProperties(...)`, and `Object.create(null, descriptors)` collection wrappers for ordinary enumerable/writable/configurable data descriptors. Test: `dynamic_require_static_object_descriptor_built_collections`

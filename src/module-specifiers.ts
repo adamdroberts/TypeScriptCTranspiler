@@ -2742,6 +2742,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         if (ts.isCallExpression(cur)) {
+            const arrayOf = resolveStaticArrayOfCollectionExpression(cur);
+            if (arrayOf) return resolveCollectionExpression(arrayOf);
             const arrayFrom = resolveStaticArrayFromCollectionExpression(cur);
             if (arrayFrom) return resolveCollectionExpression(arrayFrom);
             const objectWrapperReceiver = resolveStaticObjectWrapperReceiver(cur);
@@ -2814,6 +2816,17 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         return cur;
+    };
+
+    const resolveStaticArrayOfCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.some(ts.isSpreadElement) || call.arguments.length > MAX_STATIC_STRING_ALTERNATIVES) {
+            return null;
+        }
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "of") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Array") return null;
+        return ts.factory.createArrayLiteralExpression([...call.arguments]);
     };
 
     const resolveStaticArrayFromCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
@@ -3286,7 +3299,30 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         const object = resolveCollectionExpression(call.arguments[0]!);
-        if (!object || !ts.isObjectLiteralExpression(object)) return [];
+        if (!object) return [];
+        if (ts.isArrayLiteralExpression(object)) {
+            const slots: string[][] = [];
+            for (let index = 0; index < object.elements.length; index++) {
+                const element = object.elements[index];
+                if (!element || ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return [];
+                if (returnsKeys) {
+                    slots.push([String(index)]);
+                    continue;
+                }
+                const values = resolve(element);
+                if (values.length === 0) return [];
+                slots.push(values);
+            }
+
+            const out: string[] = [];
+            for (const key of keys) {
+                const values = slots[key];
+                if (!values) return [];
+                out.push(...values);
+            }
+            return dedupe(out);
+        }
+        if (!ts.isObjectLiteralExpression(object)) return [];
 
         const slots: string[][] = [];
         for (const prop of object.properties) {
@@ -3345,9 +3381,33 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
 
         const object = resolveCollectionExpression(call.arguments[0]!);
-        if (!object || !ts.isObjectLiteralExpression(object)) return [];
+        if (!object) return [];
 
         const slotIndex = tupleIndices[0]!;
+        if (ts.isArrayLiteralExpression(object)) {
+            const slots: string[][] = [];
+            for (let index = 0; index < object.elements.length; index++) {
+                const element = object.elements[index];
+                if (!element || ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression) return [];
+                if (slotIndex === 0) {
+                    slots.push([String(index)]);
+                    continue;
+                }
+                const values = resolve(element);
+                if (values.length === 0) return [];
+                slots.push(values);
+            }
+
+            const out: string[] = [];
+            for (const index of entryIndices) {
+                const values = slots[index];
+                if (!values) return [];
+                out.push(...values);
+            }
+            return dedupe(out);
+        }
+        if (!ts.isObjectLiteralExpression(object)) return [];
+
         const slots: string[][] = [];
         for (const prop of object.properties) {
             if (ts.isSpreadAssignment(prop)) return [];
