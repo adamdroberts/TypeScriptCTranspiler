@@ -123,6 +123,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (uriText.length > 0) return uriText;
             const numericParserText = resolveStaticNumericParserCall(node);
             if (numericParserText.length > 0) return numericParserText;
+            const numericPredicateText = resolveStaticNumericPredicateCall(node);
+            if (numericPredicateText.length > 0) return numericPredicateText;
             const dateText = resolveStaticDateCall(node);
             if (dateText.length > 0) return dateText;
             const mathText = resolveStaticMathCall(node);
@@ -534,6 +536,38 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const resolveStaticNumericPredicateCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const target = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Number") return [];
+        const method = callee.name.text;
+        if (
+            method !== "isFinite" &&
+            method !== "isInteger" &&
+            method !== "isNaN" &&
+            method !== "isSafeInteger"
+        ) {
+            return [];
+        }
+
+        const values = resolveStaticNumberValues(call.arguments[0]!);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => {
+            switch (method) {
+                case "isFinite":
+                    return String(Number.isFinite(value));
+                case "isInteger":
+                    return String(Number.isInteger(value));
+                case "isNaN":
+                    return String(Number.isNaN(value));
+                default:
+                    return String(Number.isSafeInteger(value));
+            }
+        }));
     };
 
     const resolveStaticDateCall = (call: ts.CallExpression): string[] => {
