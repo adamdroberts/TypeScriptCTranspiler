@@ -23335,6 +23335,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitAssignmentReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitTryCatchReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -24804,6 +24810,7 @@ class Emitter {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
                 !this.emitAsyncAwaitInitializerReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitAssignmentReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitTryCatchReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitTryFinallyReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -24889,6 +24896,44 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         const continuation = this.asyncAwaitInitializerReturnContinuation(body, parameters, thisValue);
+        if (!continuation) return false;
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
+    }
+
+    private asyncAwaitAssignmentReturnContinuation(
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): AsyncAwaitExpressionReturnContinuation | null {
+        if (body.statements.length !== 3) return null;
+        const declaration = body.statements[0];
+        const assignmentStmt = body.statements[1];
+        const result = body.statements[2];
+        if (!ts.isVariableStatement(declaration) || !ts.isExpressionStatement(assignmentStmt) || !ts.isReturnStatement(result)) return null;
+        if (!(declaration.declarationList.flags & ts.NodeFlags.Let)) return null;
+        if (declaration.declarationList.declarations.length !== 1) return null;
+        const variable = declaration.declarationList.declarations[0]!;
+        if (!ts.isIdentifier(variable.name) || variable.initializer) return null;
+        if (!result.expression || !ts.isIdentifier(result.expression)) return null;
+        const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
+        if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
+        const variableSymbol = this.symbolForIdentifier(variable.name);
+        const assignedSymbol = this.symbolForIdentifier(assignment.left);
+        const resultSymbol = this.symbolForIdentifier(result.expression);
+        if (!variableSymbol || variableSymbol !== assignedSymbol || variableSymbol !== resultSymbol) return null;
+        const rhs = this.unwrapTransparentExpression(assignment.right);
+        if (ts.isAwaitExpression(rhs)) return null;
+        return this.asyncAwaitExpressionReturnContinuationForExpression(rhs, parameters, thisValue);
+    }
+
+    private emitAsyncAwaitAssignmentReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const continuation = this.asyncAwaitAssignmentReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
@@ -37244,6 +37289,12 @@ class Emitter {
                                     runtimeParams,
                                     type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
                                 ) ||
+                                this.emitAsyncAwaitAssignmentReturnContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitTryCatchReturnContinuation(
                                     body,
                                     fnBody,
@@ -47335,6 +47386,12 @@ class Emitter {
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
                         this.emitAsyncAwaitInitializerReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
+                        this.emitAsyncAwaitAssignmentReturnContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,
