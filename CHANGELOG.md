@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static callable `String(...)` and `Number(...)` constructor fragments for primitive coercions. Test: `dynamic_require_static_primitive_constructors`.
 - Finite dynamic `require(...)` proofs now resolve static global `isFinite(...)` and `isNaN(...)` predicate fragments for primitive coercions. Test: `dynamic_require_static_global_numeric_predicates`.
 - Finite dynamic `require(...)` proofs now treat static `Object.prototype.valueOf.call(...)` wrappers around object and array literal collections as transparent for AOT collection lookup specifier fragments. Test: `dynamic_require_static_object_prototype_value_of_collections`.
 - Finite dynamic `require(...)` proofs now resolve static `Object.prototype.toString.call(...)` tag fragments for finite object, array, primitive, and nullish operands. Test: `dynamic_require_static_object_prototype_to_string`.

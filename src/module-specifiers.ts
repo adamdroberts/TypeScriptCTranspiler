@@ -117,6 +117,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isCallExpression(node)) {
             const booleanText = resolveStaticBooleanCall(node);
             if (booleanText.length > 0) return booleanText;
+            const primitiveConstructorText = resolveStaticPrimitiveConstructorCall(node);
+            if (primitiveConstructorText.length > 0) return primitiveConstructorText;
             const stringStaticText = resolveStaticStringConstructorCall(node);
             if (stringStaticText.length > 0) return stringStaticText;
             const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
@@ -399,6 +401,48 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         ) {
             const texts = resolve(value);
             return texts.length === 0 ? [] : [...new Set(texts.map((text) => text.length > 0))];
+        }
+        return [];
+    };
+
+    const resolveStaticPrimitiveConstructorCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isIdentifier(callee) || (callee.text !== "String" && callee.text !== "Number")) return [];
+        if (callee.text === "String") {
+            if (call.arguments.length === 0) return [""];
+            const values = resolveStaticStringCoercionValues(call.arguments[0]!);
+            return values.length === 0 ? [] : dedupe(values);
+        }
+        if (call.arguments.length === 0) return ["0"];
+        const values = resolveStaticCoercedNumberValues(call.arguments[0]!);
+        return values.length === 0 ? [] : dedupe(values.map((value) => {
+            return Object.is(value, -0) ? "0" : String(value);
+        }));
+    };
+
+    const resolveStaticStringCoercionValues = (expr: ts.Expression): string[] => {
+        const value = unwrapStaticExpression(expr);
+        if (ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value)) return [value.text];
+        if (ts.isNumericLiteral(value)) return [value.text];
+        if (ts.isBigIntLiteral(value)) return [value.text.replace(/n$/i, "")];
+        if (value.kind === ts.SyntaxKind.TrueKeyword) return ["true"];
+        if (value.kind === ts.SyntaxKind.FalseKeyword) return ["false"];
+        if (value.kind === ts.SyntaxKind.NullKeyword) return ["null"];
+        if (
+            value.kind === ts.SyntaxKind.UndefinedKeyword ||
+            (ts.isIdentifier(value) && value.text === "undefined") ||
+            ts.isVoidExpression(value)
+        ) {
+            return ["undefined"];
+        }
+        if (
+            ts.isPrefixUnaryExpression(value) &&
+            value.operator === ts.SyntaxKind.MinusToken &&
+            (ts.isNumericLiteral(value.operand) || ts.isBigIntLiteral(value.operand))
+        ) {
+            const coerced = resolveStaticStringCoercionValues(value.operand);
+            return coerced.length === 1 ? [`-${coerced[0]}`] : [];
         }
         return [];
     };
