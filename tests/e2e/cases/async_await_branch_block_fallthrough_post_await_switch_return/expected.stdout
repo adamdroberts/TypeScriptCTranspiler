@@ -1,0 +1,9 @@
+branch-block-fallthrough-post-await-switch-true: fn-branch
+branch-block-fallthrough-post-await-switch-fall-a: fn-fall-switch-a
+branch-block-fallthrough-post-await-switch-fall-default: fn-fall-switch-default
+method-branch-block-fallthrough-post-await-switch-true: this-method-branch
+method-branch-block-fallthrough-post-await-switch-fall-b: this-method-fall-switch-b
+method-branch-block-fallthrough-post-await-switch-fall-default: this-method-fall-switch-default
+value-branch-block-fallthrough-post-await-switch-true: arrow-value-branch
+value-branch-block-fallthrough-post-await-switch-fall-a: arrow-value-fall-switch-a
+value-branch-block-fallthrough-post-await-switch-fall-default: arrow-value-fall-switch-default
