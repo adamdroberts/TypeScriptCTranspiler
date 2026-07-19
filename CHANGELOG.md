@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Pure JavaScript ESM packages loaded through `allowJs` can namespace-import finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_namespace_import_external_cjs`.
 - Pure JavaScript ESM packages loaded through `allowJs` can named-import finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_named_import_external_cjs`.
 - Pure JavaScript ESM packages loaded through `allowJs` can default-import external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs`.
 - Pure JavaScript ESM package barrels loaded through `allowJs` can expose default-forwarded package-local CommonJS object-literal helpers to named default imports. Test: `node_modules_js_named_default_forward_cjs`.
