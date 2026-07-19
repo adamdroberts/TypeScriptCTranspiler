@@ -1,0 +1,3 @@
+{
+  "description": "Object-literal async methods resume awaited-local, branch, leading, and rejected continuations through dynamic Promise chains"
+}

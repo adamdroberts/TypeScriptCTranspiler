@@ -1358,6 +1358,10 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, receiver) : tsc_value_undefined();
         return prop->value;
     }
+    if (o->is_promise) {
+        tsc_value_t method = tsc_promise_get_method((tsc_promise_t*)o->class_ptr, key);
+        if (!tsc_value_is_undefined(method)) return method;
+    }
     if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_get_receiver((tsc_object_t*)value_ptr(o->prototype), key, receiver);
     }
