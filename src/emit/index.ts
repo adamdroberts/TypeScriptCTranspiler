@@ -28078,12 +28078,22 @@ class Emitter {
             }
         }
         if (statements.length >= 2 && ts.isIfStatement(statements[0]!)) {
-            const fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatements(
-                statements.slice(1),
-                parameters,
-                thisValue,
-                captures,
-            );
+            const fallthroughStatements = statements.slice(1);
+            const fallthroughBlock = ts.factory.createBlock(fallthroughStatements, true);
+            const leadingFallthrough = this.asyncAwaitLeadingReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const preludeFallthrough = leadingFallthrough
+                ? null
+                : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const fallthrough = leadingFallthrough
+                ? { kind: "localLeadingReturn", continuation: leadingFallthrough } as AsyncAwaitIfExpressionReturnNode
+                : preludeFallthrough
+                    ? { kind: "localPreludeReturn", continuation: preludeFallthrough } as AsyncAwaitIfExpressionReturnNode
+                    : this.asyncAwaitIfExpressionReturnBranchFromStatements(
+                        fallthroughStatements,
+                        parameters,
+                        thisValue,
+                        captures,
+                    );
             if (!fallthrough) return null;
             return this.asyncAwaitIfExpressionReturnBranchFromIf(
                 statements[0]!,
