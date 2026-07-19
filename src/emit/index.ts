@@ -28230,13 +28230,19 @@ class Emitter {
         if (nested && (nested.beforeStatements?.length || nested.alternateBeforeStatements?.length)) return null;
         let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
-            if (!trueStep.variable || !falseStep.variable) return null;
-            const trueSymbol = this.symbolForIdentifier(trueStep.variable);
-            const falseSymbol = this.symbolForIdentifier(falseStep.variable);
-            if (!trueSymbol || !falseSymbol) return null;
-            if (trueSymbol !== falseSymbol) {
-                if (nested || !ts.isVariableStatement(whenTrue.statement) || !whenFalse || !ts.isVariableStatement(whenFalse.statement)) return null;
+            if (!trueStep.variable || !falseStep.variable) {
+                if (nested) return null;
+                if (trueStep.variable && !falseStep.variable && !ts.isVariableStatement(whenTrue.statement)) return null;
+                if (falseStep.variable && !trueStep.variable && (!whenFalse || !ts.isVariableStatement(whenFalse.statement))) return null;
                 variable = null;
+            } else {
+                const trueSymbol = this.symbolForIdentifier(trueStep.variable);
+                const falseSymbol = this.symbolForIdentifier(falseStep.variable);
+                if (!trueSymbol || !falseSymbol) return null;
+                if (trueSymbol !== falseSymbol) {
+                    if (nested || !ts.isVariableStatement(whenTrue.statement) || !whenFalse || !ts.isVariableStatement(whenFalse.statement)) return null;
+                    variable = null;
+                }
             }
         }
         let validCondition = true;

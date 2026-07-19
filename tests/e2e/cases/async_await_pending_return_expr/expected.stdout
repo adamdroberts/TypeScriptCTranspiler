@@ -303,6 +303,8 @@ conditional-leading-chain-arm-prelude-value-true: value-arm-value-arm-true-one:v
 conditional-leading-chain-arm-prelude-value-false: value-arm-value-arm-false-one:value-arm-false-one:false
 conditional-leading-chain-branch-local-true: branch-local-second
 conditional-leading-chain-branch-local-false: branch-local-second
+conditional-leading-chain-mixed-local-true: mixed-local-second
+conditional-leading-chain-mixed-local-false: mixed-local-second
 source-try-finally-leading-await-success: finally-await-finally-await-first:second:async-success|between-if|between-error|async-finally
 source-try-finally-leading-await-alternate: finally-await-finally-await-first:second:async-alternate|between-else|between-error|async-finally
 declaration-leading-chain-throw: chain-one:two:three:throw

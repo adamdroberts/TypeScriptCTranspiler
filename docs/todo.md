@@ -34,6 +34,7 @@ This is the next item that most directly expands what programs can be written ag
   - Leading awaited-local chains now support one bounded nested `else if` conditional await selection with Promise-valued leaves; deeper conditional suspension trees remain deferred.
   - Conditional leading await steps now preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values; declaration-bearing or awaited branch preludes remain deferred.
   - Conditional leading await steps now allow branch-local awaited declarations used only as sequencing points; branch-local values that escape the arm remain deferred.
+  - The same sequencing subset now accepts a mixed direct-await arm and branch-local awaited declaration arm.
   - Await-free interstitial `try` / `catch` statements now allow simple catch bindings; awaited try/catch bodies and broader suspension-aware exception graphs remain deferred.
   - Await-free direct-`return await` preludes now also allow simple catch bindings; awaited source try/catch graphs remain deferred.
   - Source `try` / `catch` now supports a bounded leading multi-await chain in the try block across async declarations, class methods, and function values, including receiver capture, pending rejection handoff into the catch continuation, and bounded catch rethrows; broader suspension-aware exception graphs remain deferred.
