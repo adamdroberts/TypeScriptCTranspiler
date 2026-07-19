@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block source `try` / `catch` / `finally` fallthrough-tail coverage already tracked by `async_await_branch_block_source_try_fallthrough`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block long leading awaited-local chain coverage already tracked by `async_await_branch_block_leading_chain_return`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block terminal post-`await` throw coverage already tracked by `async_await_branch_block_post_await_throw`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed source `try` / `catch` pending-`await` catch-throw and catch-prelude wrapper coverage already tracked by `async_await_try_catch`, `async_await_try_catch_throw`, and `async_await_try_catch_prelude`.
@@ -18,6 +19,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block pending-`await` continuation lowering now recognizes source `try` / `catch`, `try` / `finally`, and `try` / `catch` / `finally` awaited returns in fallthrough tails across async declarations, class methods, and async function values. Test: `async_await_branch_block_source_try_fallthrough`.
 - Async branch-block pending-`await` continuation lowering now recognizes long leading awaited-local chains in fallthrough tails across async declarations, class methods, and async function values. Test: `async_await_branch_block_leading_chain_return`.
 - Async branch-block pending-`await` continuation coverage now proves terminal post-await `throw` paths resume and reject without requiring an unreachable trailing `return` across async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_throw`.
 - Terminal post-`await` `throw` continuations no longer require an unreachable trailing `return`, including delayed object-literal async method rejections observed through dynamic Promise `.catch()` / `.finally()` chains. Test: `promise_dynamic_delayed_chain`.

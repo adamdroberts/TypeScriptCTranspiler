@@ -28080,20 +28080,38 @@ class Emitter {
         if (statements.length >= 2 && ts.isIfStatement(statements[0]!)) {
             const fallthroughStatements = statements.slice(1);
             const fallthroughBlock = ts.factory.createBlock(fallthroughStatements, true);
-            const leadingFallthrough = this.asyncAwaitLeadingReturnContinuation(fallthroughBlock, parameters, thisValue);
-            const preludeFallthrough = leadingFallthrough
+            const tryCatchFinallyFallthrough = this.asyncAwaitTryCatchFinallyReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const tryCatchFallthrough = tryCatchFinallyFallthrough
+                ? null
+                : this.asyncAwaitTryCatchReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const tryFinallyFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough
+                ? null
+                : this.asyncAwaitTryFinallyReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const leadingFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough
+                ? null
+                : this.asyncAwaitLeadingReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const preludeFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough
                 ? null
                 : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue);
-            const fallthrough = leadingFallthrough
-                ? { kind: "localLeadingReturn", continuation: leadingFallthrough } as AsyncAwaitIfExpressionReturnNode
-                : preludeFallthrough
-                    ? { kind: "localPreludeReturn", continuation: preludeFallthrough } as AsyncAwaitIfExpressionReturnNode
-                    : this.asyncAwaitIfExpressionReturnBranchFromStatements(
-                        fallthroughStatements,
-                        parameters,
-                        thisValue,
-                        captures,
-                    );
+            let fallthrough: AsyncAwaitIfExpressionReturnNode | null = null;
+            if (tryCatchFinallyFallthrough) {
+                fallthrough = { kind: "localTryCatchFinallyReturn", continuation: tryCatchFinallyFallthrough };
+            } else if (tryCatchFallthrough) {
+                fallthrough = { kind: "localTryCatchReturn", continuation: tryCatchFallthrough };
+            } else if (tryFinallyFallthrough) {
+                fallthrough = { kind: "localTryFinallyReturn", continuation: tryFinallyFallthrough };
+            } else if (leadingFallthrough) {
+                fallthrough = { kind: "localLeadingReturn", continuation: leadingFallthrough };
+            } else if (preludeFallthrough) {
+                fallthrough = { kind: "localPreludeReturn", continuation: preludeFallthrough };
+            } else {
+                fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatements(
+                    fallthroughStatements,
+                    parameters,
+                    thisValue,
+                    captures,
+                );
+            }
             if (!fallthrough) return null;
             return this.asyncAwaitIfExpressionReturnBranchFromIf(
                 statements[0]!,
