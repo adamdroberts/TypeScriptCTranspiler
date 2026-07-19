@@ -249,6 +249,11 @@ interface AsyncAwaitIfExpressionReturnLeaf {
     continuation: AsyncAwaitExpressionReturnContinuation;
 }
 
+interface AsyncAwaitIfLocalReturnLeaf {
+    kind: "localReturn";
+    continuation: AsyncAwaitReturnContinuation;
+}
+
 interface AsyncAwaitIfExpressionSyncReturnLeaf {
     kind: "syncReturn";
     returnExpr: ts.Expression;
@@ -265,6 +270,7 @@ interface AsyncAwaitIfExpressionReturnBranch {
 
 type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
+    | AsyncAwaitIfLocalReturnLeaf
     | AsyncAwaitIfExpressionSyncReturnLeaf
     | AsyncAwaitIfExpressionReturnBranch;
 
@@ -27730,6 +27736,23 @@ class Emitter {
         return awaitedType.kind !== "never";
     }
 
+    private asyncAwaitReturnContinuationSupported(
+        continuation: AsyncAwaitReturnContinuation,
+    ): boolean {
+        const promise = this.prepareType(mapTsType(
+            continuation.awaitExpr.expression,
+            this.checker.getTypeAtLocation(continuation.awaitExpr.expression),
+            this.checker,
+        ));
+        if (promise.kind !== "promise") return false;
+        const awaitedType = this.prepareType(mapTsType(
+            continuation.awaitExpr,
+            this.checker.getTypeAtLocation(continuation.awaitExpr),
+            this.checker,
+        ));
+        return awaitedType.kind !== "never" && !(awaitedType.kind === "void" && continuation.usesAwaited);
+    }
+
     private emitAsyncAwaitExpressionReturnContinuationResult(
         buf: CBuf,
         continuation: AsyncAwaitExpressionReturnContinuation,
@@ -27963,9 +27986,37 @@ class Emitter {
         if (statements.length === 1) {
             return this.asyncAwaitIfExpressionReturnBranchFromStatement(statements[0]!, parameters, thisValue, captures);
         }
-        if (statements.length === 2 && ts.isIfStatement(statements[0]!)) {
-            const fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatement(
-                statements[1]!,
+        if (statements.length === 2) {
+            const awaited = this.awaitedContinuationStep(statements[0]!);
+            const result = statements[1]!;
+            if (awaited && ts.isReturnStatement(result)) {
+                const params = [...this.asyncAwaitContinuationParameters(parameters), ...captures];
+                const referenced = this.asyncAwaitContinuationReferences(
+                    awaited.variable,
+                    [],
+                    result.expression ?? null,
+                    params,
+                    thisValue,
+                );
+                if (!referenced) return null;
+                return {
+                    kind: "localReturn",
+                    continuation: {
+                        preludeStatements: [],
+                        variable: awaited.variable,
+                        awaitExpr: awaited.awaitExpr,
+                        postAwaitStatements: [],
+                        returnExpr: result.expression ?? null,
+                        params: referenced.params,
+                        thisValue: referenced.usesThis ? thisValue : null,
+                        usesAwaited: referenced.usesAwaited,
+                    },
+                };
+            }
+        }
+        if (statements.length >= 2 && ts.isIfStatement(statements[0]!)) {
+            const fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatements(
+                statements.slice(1),
                 parameters,
                 thisValue,
                 captures,
@@ -28068,7 +28119,7 @@ class Emitter {
     private asyncAwaitIfExpressionReturnBranchHasAwait(
         branch: AsyncAwaitIfExpressionReturnNode,
     ): boolean {
-        if (branch.kind === "return") return true;
+        if (branch.kind === "return" || branch.kind === "localReturn") return true;
         if (branch.kind === "syncReturn") return false;
         return this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.thenBranch) ||
             !!(branch.elseBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.elseBranch)) ||
@@ -28080,7 +28131,7 @@ class Emitter {
     ): AsyncAwaitContinuationParam[] {
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         const visit = (node: AsyncAwaitIfExpressionReturnNode): void => {
-            if (node.kind === "return") {
+            if (node.kind === "return" || node.kind === "localReturn") {
                 for (const param of node.continuation.params) {
                     paramsBySymbol.set(param.symbol, param);
                 }
@@ -28103,6 +28154,9 @@ class Emitter {
         if (branch.kind === "return") {
             return this.asyncAwaitExpressionReturnContinuationSupported(branch.continuation);
         }
+        if (branch.kind === "localReturn") {
+            return this.asyncAwaitReturnContinuationSupported(branch.continuation);
+        }
         if (branch.kind === "syncReturn") {
             return this.asyncAwaitSyncReturnExpressionSupported(branch.returnExpr);
         }
@@ -28117,6 +28171,9 @@ class Emitter {
     ): boolean {
         if (branch.kind === "return") {
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "localReturn") {
+            return this.emitAsyncAwaitReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "syncReturn") {
             return this.emitAsyncAwaitSyncReturnResult(buf, branch.returnExpr);
@@ -29111,6 +29168,13 @@ class Emitter {
         const continuation = this.asyncAwaitReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
+        return this.emitAsyncAwaitReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitReturnContinuationResult(
+        buf: CBuf,
+        continuation: AsyncAwaitReturnContinuation,
+    ): boolean {
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
