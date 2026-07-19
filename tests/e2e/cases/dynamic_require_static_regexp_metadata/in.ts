@@ -12,6 +12,11 @@ const fromLocale = require("./" + (/cat/i).toLocaleString().replace("/cat/i", "l
 const fromTestTrue = require("./rx_test_" + (/a+/.test("baad")));
 const fromTestFalse = require("./rx_test_" + new RegExp("^z+$").test("abc"));
 const fromGlobalTest = require("./rx_test_global_" + new RegExp("a", "g").test("ba"));
+const regexpMatch = /([a-z]+)-(\d+)(?:-(x))?/.exec("id abc-42 done")!;
+const fromExecFull = require("./rx_exec_full_" + regexpMatch[0]);
+const fromExecWord = require("./rx_exec_word_" + regexpMatch[1]);
+const fromExecNum = require("./rx_exec_num_" + regexpMatch[2]);
+const fromExecMissing = require("./rx_exec_missing_" + regexpMatch[3]);
 
 console.log(
     fromSource.label,
@@ -28,4 +33,8 @@ console.log(
     fromTestTrue.label,
     fromTestFalse.label,
     fromGlobalTest.label,
+    fromExecFull.label,
+    fromExecWord.label,
+    fromExecNum.label,
+    fromExecMissing.label,
 );
