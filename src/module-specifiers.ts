@@ -3360,6 +3360,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (jsonParsed) return resolveCollectionExpression(jsonParsed);
             const regexpExec = resolveStaticRegExpExecCollectionExpression(cur);
             if (regexpExec) return resolveCollectionExpression(regexpExec);
+            const stringMatch = resolveStaticStringMatchCollectionExpression(cur);
+            if (stringMatch) return resolveCollectionExpression(stringMatch);
             const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
             if (valueOfReceiver) return resolveCollectionExpression(valueOfReceiver);
         }
@@ -4652,6 +4654,24 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (inputs.length !== 1) return null;
 
         const match = regexps[0]!.exec(inputs[0]!);
+        if (!match || match.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        return ts.factory.createArrayLiteralExpression(Array.from(match, (value) => {
+            return value === undefined
+                ? ts.factory.createIdentifier("undefined")
+                : ts.factory.createStringLiteral(value);
+        }));
+    };
+
+    const resolveStaticStringMatchCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "match") return null;
+        const inputs = resolve(callee.expression);
+        if (inputs.length !== 1) return null;
+        const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        if (regexps.length !== 1) return null;
+
+        const match = inputs[0]!.match(regexps[0]!);
         if (!match || match.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
         return ts.factory.createArrayLiteralExpression(Array.from(match, (value) => {
             return value === undefined

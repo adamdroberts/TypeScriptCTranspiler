@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now treat static `String.prototype.match(...)` results with fresh RegExp arguments as match-array collection operands, including captured indexes, missing captures, global match indexes, and `.length`. Test: `dynamic_require_static_string_match`.
 - Finite dynamic `require(...)` proofs now resolve fresh static RegExp `.source` / `.flags` / flag boolean metadata, zero-argument `.toString()` / `.toLocaleString()`, fresh `.test(...)` boolean fragments, and fresh `.exec(...)` match-array index and `.length` fragments. Test: `dynamic_require_static_regexp_metadata`.
 - Finite dynamic `require(...)` proofs now resolve static `new Date(...)` `.getTime()` / `.valueOf()` / `.toISOString()` / `.toJSON()` / `.toUTCString()` / `.toGMTString()` / UTC getter fragments for finite deterministic timestamp inputs, including earlier `const` Date aliases, plus fresh inline Date `setTime(...)` / `setUTC*()` return-value fragments. Test: `dynamic_require_static_date_instance`.
 - Finite dynamic `require(...)` proofs now resolve static `Date.parse(...)` specifier fragments for finite deterministic ISO string inputs. Test: `dynamic_require_static_date_parse`.
