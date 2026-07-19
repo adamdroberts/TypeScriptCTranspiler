@@ -31205,13 +31205,11 @@ class Emitter {
     private asyncAwaitInterstitialControlFlowSupported(stmt: ts.Statement): boolean {
         let ok = true;
         const visitVariableDeclarationList = (declarationList: ts.VariableDeclarationList): void => {
-            if (!(declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) {
-                ok = false;
-                return;
-            }
+            const isConstOrLet = (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
+            const isVar = !isConstOrLet;
             for (const declaration of declarationList.declarations) {
                 if (!ts.isIdentifier(declaration.name) ||
-                    (!declaration.initializer && !(declarationList.flags & ts.NodeFlags.Let))) {
+                    (!declaration.initializer && (isVar || !(declarationList.flags & ts.NodeFlags.Let)))) {
                     ok = false;
                     return;
                 }
