@@ -5444,12 +5444,31 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const values = resolve(callee.expression);
         if (values.length === 0) return [];
 
-        const searchValues = resolve(call.arguments[0]!);
-        if (searchValues.length === 0) return [];
         const replacementValues = resolve(call.arguments[1]!);
         if (replacementValues.length === 0) return [];
 
         const out: string[] = [];
+        const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        if (regexps.length > 0) {
+            for (const value of values) {
+                for (const regexp of regexps) {
+                    for (const replacement of replacementValues) {
+                        try {
+                            out.push(method === "replace"
+                                ? value.replace(regexp, replacement)
+                                : value.replaceAll(regexp, replacement));
+                        } catch {
+                            return [];
+                        }
+                        if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                    }
+                }
+            }
+            return dedupe(out);
+        }
+
+        const searchValues = resolve(call.arguments[0]!);
+        if (searchValues.length === 0) return [];
         for (const value of values) {
             for (const search of searchValues) {
                 for (const replacement of replacementValues) {

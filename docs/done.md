@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Finite dynamic `require(...)` proofs resolve static `String.prototype.replace(...)` / `.replaceAll(...)` fragments with fresh RegExp search operands and string replacements. Test: `dynamic_require_static_string_regexp_replace`
 - Finite dynamic `require(...)` proofs resolve static `String.prototype.search(...)` fragments with fresh RegExp arguments. Test: `dynamic_require_static_string_regexp_search`
 - Finite dynamic `require(...)` proofs treat static `String.prototype.match(...)` results with fresh RegExp arguments as match-array collection operands, including captured indexes, missing captures, global match indexes, and `.length`. Test: `dynamic_require_static_string_match`
 - Finite dynamic `require(...)` proofs resolve fresh static RegExp `.source` / `.flags` / flag boolean metadata, zero-argument `.toString()` / `.toLocaleString()`, fresh `.test(...)` boolean fragments, and fresh `.exec(...)` match-array index and `.length` fragments. Test: `dynamic_require_static_regexp_metadata`
