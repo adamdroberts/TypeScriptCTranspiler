@@ -399,6 +399,17 @@ interface AsyncAwaitIfExpressionReturnBranch {
     fallthroughBranch: AsyncAwaitIfExpressionReturnNode | null;
 }
 
+interface AsyncAwaitSwitchExpressionReturnClause {
+    expression: ts.Expression | null;
+    branch: AsyncAwaitIfExpressionReturnNode;
+}
+
+interface AsyncAwaitSwitchExpressionReturnBranch {
+    kind: "switch";
+    expression: ts.Expression;
+    clauses: readonly AsyncAwaitSwitchExpressionReturnClause[];
+}
+
 type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
     | AsyncAwaitIfLocalReturnLeaf
@@ -408,7 +419,8 @@ type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfLocalLeadingReturnLeaf
     | AsyncAwaitIfLocalPreludeReturnLeaf
     | AsyncAwaitIfExpressionSyncReturnLeaf
-    | AsyncAwaitIfExpressionReturnBranch;
+    | AsyncAwaitIfExpressionReturnBranch
+    | AsyncAwaitSwitchExpressionReturnBranch;
 
 interface AsyncAwaitContinuationReferences {
     params: AsyncAwaitContinuationParam[];
@@ -30180,7 +30192,7 @@ class Emitter {
                 thisValue,
                 captures,
             );
-            continuation = branch?.kind === "if" && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch)
+            continuation = branch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch)
                 ? branch
                 : null;
         }
@@ -31255,7 +31267,7 @@ class Emitter {
         thisValue: EmitResult | null,
     ): AsyncAwaitIfExpressionReturnNode | null {
         const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(body.statements, parameters, thisValue);
-        return branch?.kind === "if" && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch) ? branch : null;
+        return branch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch) ? branch : null;
     }
 
     private asyncAwaitIfExpressionReturnBranchFromStatements(
@@ -31417,7 +31429,42 @@ class Emitter {
         if (ts.isIfStatement(stmt)) {
             return this.asyncAwaitIfExpressionReturnBranchFromIf(stmt, null, parameters, thisValue, captures);
         }
+        if (ts.isSwitchStatement(stmt)) {
+            return this.asyncAwaitIfExpressionReturnBranchFromSwitch(stmt, parameters, thisValue, captures);
+        }
         return null;
+    }
+
+    private asyncAwaitIfExpressionReturnBranchFromSwitch(
+        switchStatement: ts.SwitchStatement,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
+    ): AsyncAwaitSwitchExpressionReturnBranch | null {
+        if (!this.asyncAwaitConditionExpressionSupported(switchStatement.expression)) return null;
+        const clauses: AsyncAwaitSwitchExpressionReturnClause[] = [];
+        let hasDefault = false;
+        for (const clause of switchStatement.caseBlock.clauses) {
+            if (ts.isDefaultClause(clause)) {
+                if (hasDefault) return null;
+                hasDefault = true;
+            } else if (!this.asyncAwaitConditionExpressionSupported(clause.expression)) {
+                return null;
+            }
+            const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(
+                clause.statements,
+                parameters,
+                thisValue,
+                captures,
+            );
+            if (!branch) return null;
+            clauses.push({
+                expression: ts.isDefaultClause(clause) ? null : clause.expression,
+                branch,
+            });
+        }
+        if (!hasDefault || clauses.length === 0) return null;
+        return { kind: "switch", expression: switchStatement.expression, clauses };
     }
 
     private asyncAwaitIfExpressionReturnBranchFromIf(
@@ -31467,6 +31514,9 @@ class Emitter {
             branch.kind === "localPreludeReturn"
         ) return true;
         if (branch.kind === "syncReturn") return false;
+        if (branch.kind === "switch") {
+            return branch.clauses.some((clause) => this.asyncAwaitIfExpressionReturnBranchHasAwait(clause.branch));
+        }
         return this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.thenBranch) ||
             !!(branch.elseBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.elseBranch)) ||
             !!(branch.fallthroughBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.fallthroughBranch));
@@ -31503,6 +31553,10 @@ class Emitter {
             if (node.kind === "syncReturn") {
                 return;
             }
+            if (node.kind === "switch") {
+                for (const clause of node.clauses) visit(clause.branch);
+                return;
+            }
             visit(node.thenBranch);
             if (node.elseBranch) visit(node.elseBranch);
             if (node.fallthroughBranch) visit(node.fallthroughBranch);
@@ -31535,6 +31589,9 @@ class Emitter {
         }
         if (branch.kind === "syncReturn") {
             return this.asyncAwaitSyncReturnExpressionSupported(branch.returnExpr);
+        }
+        if (branch.kind === "switch") {
+            return branch.clauses.every((clause) => this.asyncAwaitIfExpressionReturnBranchSupported(clause.branch));
         }
         return this.asyncAwaitIfExpressionReturnBranchSupported(branch.thenBranch) &&
             (!branch.elseBranch || this.asyncAwaitIfExpressionReturnBranchSupported(branch.elseBranch)) &&
@@ -31576,6 +31633,31 @@ class Emitter {
         }
         if (branch.kind === "syncReturn") {
             return this.emitAsyncAwaitSyncReturnResult(buf, branch.returnExpr);
+        }
+        if (branch.kind === "switch") {
+            const discriminant = this.emitExpr(branch.expression);
+            const isString = discriminant.ty.kind === "string";
+            const isBoolean = discriminant.ty.kind === "boolean";
+            if (!isString && !isBoolean) requireNumber(branch.expression, discriminant.ty);
+            const discriminantVar = this.freshTemp("_switch");
+            buf.open("");
+            buf.line(`${discriminant.ty.c} ${discriminantVar} = ${discriminant.c};`);
+            let first = true;
+            for (const clause of branch.clauses) {
+                let condition = "true";
+                if (clause.expression !== null) {
+                    const caseValue = this.emitExpr(clause.expression);
+                    condition = isString
+                        ? `tsc_str_eq(${discriminantVar}, ${this.coerce(caseValue, discriminant.ty, clause.expression)})`
+                        : `(${discriminantVar} == ${this.coerce(caseValue, discriminant.ty, clause.expression)})`;
+                }
+                buf.open(first ? `if (${condition})` : `else if (${condition})`);
+                if (!this.emitAsyncAwaitIfExpressionReturnBranch(buf, clause.branch)) return false;
+                buf.close();
+                first = false;
+            }
+            buf.close();
+            return true;
         }
         const cond = branch.conditionMode === "nullish"
             ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)

@@ -1,0 +1,7 @@
+declaration-default: default
+method-default: method-default
+value-default: value-default
+declaration-zero: zero-done
+declaration-one: one-done
+method-zero: method-zero-done
+value-zero: value-zero-done
