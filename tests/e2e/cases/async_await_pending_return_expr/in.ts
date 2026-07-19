@@ -707,6 +707,74 @@ const deeplyNestedConditionalLeadingPostAwaitValue = async function(kind: number
     return prefix + first + ":" + second + ":" + marker;
 };
 
+async function deeplyNestedConditionalLeadingPrelude(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (kind === 0) {
+        marker = marker + "|zero-pre";
+        first = await delay(1470, prefix + "zero-one");
+    } else if (kind === 1) {
+        marker = marker + "|one-pre";
+        first = await delay(1471, prefix + "one-one");
+    } else if (kind === 2) {
+        marker = marker + "|two-pre";
+        first = await delay(1472, prefix + "two-one");
+    } else {
+        marker = marker + "|other-pre";
+        first = await delay(1473, prefix + "other-one");
+    }
+    const second = await delay(1474, first + ":" + marker);
+    return first + ":" + second + ":" + marker;
+}
+
+class DeeplyNestedConditionalLeadingPreludeMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(kind: number): Promise<string> {
+        let first = this.prefix + "seed";
+        let marker = "initial";
+        if (kind === 0) {
+            marker = marker + "|zero-pre";
+            first = await delay(1475, this.prefix + "zero-one");
+        } else if (kind === 1) {
+            marker = marker + "|one-pre";
+            first = await delay(1476, this.prefix + "one-one");
+        } else if (kind === 2) {
+            marker = marker + "|two-pre";
+            first = await delay(1477, this.prefix + "two-one");
+        } else {
+            marker = marker + "|other-pre";
+            first = await delay(1478, this.prefix + "other-one");
+        }
+        const second = await delay(1479, first + ":" + marker);
+        return this.prefix + first + ":" + second + ":" + marker;
+    }
+}
+
+const deeplyNestedConditionalLeadingPreludeValue = async function(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (kind === 0) {
+        marker = marker + "|zero-pre";
+        first = await delay(1480, prefix + "zero-one");
+    } else if (kind === 1) {
+        marker = marker + "|one-pre";
+        first = await delay(1481, prefix + "one-one");
+    } else if (kind === 2) {
+        marker = marker + "|two-pre";
+        first = await delay(1482, prefix + "two-one");
+    } else {
+        marker = marker + "|other-pre";
+        first = await delay(1483, prefix + "other-one");
+    }
+    const second = await delay(1484, first + ":" + marker);
+    return prefix + first + ":" + second + ":" + marker;
+};
+
 async function conditionalLeadingChainArmPrelude(flag: boolean, prefix: string): Promise<string> {
     let first = prefix + "seed";
     let marker = "initial";
@@ -2731,6 +2799,43 @@ deeplyNestedConditionalLeadingPostAwaitValue(2, "value-deep-post-").then((value:
 });
 deeplyNestedConditionalLeadingPostAwaitValue(3, "value-deep-post-").then((value: string): void => {
     console.log("deeply-nested-conditional-leading-post-await-value-other:", value);
+});
+deeplyNestedConditionalLeadingPrelude(0, "deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-zero:", value);
+});
+deeplyNestedConditionalLeadingPrelude(1, "deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-one:", value);
+});
+deeplyNestedConditionalLeadingPrelude(2, "deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-two:", value);
+});
+deeplyNestedConditionalLeadingPrelude(3, "deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-other:", value);
+});
+const deeplyNestedConditionalLeadingPreludeMethodInstance = new DeeplyNestedConditionalLeadingPreludeMethod("method-deep-pre-");
+deeplyNestedConditionalLeadingPreludeMethodInstance.run(0).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-method-zero:", value);
+});
+deeplyNestedConditionalLeadingPreludeMethodInstance.run(1).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-method-one:", value);
+});
+deeplyNestedConditionalLeadingPreludeMethodInstance.run(2).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-method-two:", value);
+});
+deeplyNestedConditionalLeadingPreludeMethodInstance.run(3).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-method-other:", value);
+});
+deeplyNestedConditionalLeadingPreludeValue(0, "value-deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-value-zero:", value);
+});
+deeplyNestedConditionalLeadingPreludeValue(1, "value-deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-value-one:", value);
+});
+deeplyNestedConditionalLeadingPreludeValue(2, "value-deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-value-two:", value);
+});
+deeplyNestedConditionalLeadingPreludeValue(3, "value-deep-pre-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-prelude-value-other:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

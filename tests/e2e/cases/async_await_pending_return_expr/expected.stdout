@@ -357,3 +357,15 @@ deeply-nested-conditional-leading-post-await-value-zero: value-deep-post-value-d
 deeply-nested-conditional-leading-post-await-value-one: value-deep-post-value-deep-post-one-one:value-deep-post-one-one:initial|one:initial|one
 deeply-nested-conditional-leading-post-await-value-two: value-deep-post-value-deep-post-two-one:value-deep-post-two-one:initial|two:initial|two
 deeply-nested-conditional-leading-post-await-value-other: value-deep-post-value-deep-post-other-one:value-deep-post-other-one:initial|other:initial|other
+deeply-nested-conditional-leading-prelude-zero: deep-pre-zero-one:deep-pre-zero-one:initial|zero-pre:initial|zero-pre
+deeply-nested-conditional-leading-prelude-one: deep-pre-one-one:deep-pre-one-one:initial|one-pre:initial|one-pre
+deeply-nested-conditional-leading-prelude-two: deep-pre-two-one:deep-pre-two-one:initial|two-pre:initial|two-pre
+deeply-nested-conditional-leading-prelude-other: deep-pre-other-one:deep-pre-other-one:initial|other-pre:initial|other-pre
+deeply-nested-conditional-leading-prelude-method-zero: method-deep-pre-method-deep-pre-zero-one:method-deep-pre-zero-one:initial|zero-pre:initial|zero-pre
+deeply-nested-conditional-leading-prelude-method-one: method-deep-pre-method-deep-pre-one-one:method-deep-pre-one-one:initial|one-pre:initial|one-pre
+deeply-nested-conditional-leading-prelude-method-two: method-deep-pre-method-deep-pre-two-one:method-deep-pre-two-one:initial|two-pre:initial|two-pre
+deeply-nested-conditional-leading-prelude-method-other: method-deep-pre-method-deep-pre-other-one:method-deep-pre-other-one:initial|other-pre:initial|other-pre
+deeply-nested-conditional-leading-prelude-value-zero: value-deep-pre-value-deep-pre-zero-one:value-deep-pre-zero-one:initial|zero-pre:initial|zero-pre
+deeply-nested-conditional-leading-prelude-value-one: value-deep-pre-value-deep-pre-one-one:value-deep-pre-one-one:initial|one-pre:initial|one-pre
+deeply-nested-conditional-leading-prelude-value-two: value-deep-pre-value-deep-pre-two-one:value-deep-pre-two-one:initial|two-pre:initial|two-pre
+deeply-nested-conditional-leading-prelude-value-other: value-deep-pre-value-deep-pre-other-one:value-deep-pre-other-one:initial|other-pre:initial|other-pre

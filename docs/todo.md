@@ -32,7 +32,7 @@ This is the next item that most directly expands what programs can be written ag
   - Leading awaited-local chains now support bounded conditional await steps with Promise-valued true and false branches across async declarations, class methods, and function values; nested awaited branch bodies and broader suspension-aware control flow remain deferred.
   - Branch-block leading awaited-local chains now compose the bounded conditional await-step subset with a synchronous fallthrough arm; broader branch-local suspension graphs remain deferred.
   - Leading awaited-local chains now support bounded nested `else if` conditional await selection through two nested levels with Promise-valued leaves; deeper conditional suspension trees remain deferred.
-  - Nested conditional leading await steps now preserve bounded await-free post-await arm state across all four leaves before the next suspension; nested arm preludes and deeper conditional suspension trees remain deferred.
+  - Nested conditional leading await steps now preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension; deeper conditional suspension trees remain deferred.
   - Conditional leading await steps now preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values; declaration-bearing or awaited branch preludes remain deferred.
   - Conditional leading await steps now allow branch-local awaited declarations used only as sequencing points; branch-local values that escape the arm remain deferred.
   - The same sequencing subset now accepts a mixed direct-await arm and branch-local awaited declaration arm.
