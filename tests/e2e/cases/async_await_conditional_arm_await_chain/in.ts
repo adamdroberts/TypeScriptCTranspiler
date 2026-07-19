@@ -69,9 +69,47 @@ async function branch(outer: boolean, kind: number): Promise<string> {
     return "fallthrough";
 }
 
+class BranchWorker {
+    async run(outer: boolean, kind: number): Promise<string> {
+        if (outer) {
+            let first = "branch-method-seed";
+            if (kind === 0) {
+                first = await delay(1, "branch-method-zero-one");
+                first = await delay(1, first + "-two");
+            } else {
+                first = await delay(1, "branch-method-other-one");
+                first = await delay(1, first + "-two");
+            }
+            const third = await delay(1, first + "-three");
+            return third;
+        }
+        return "fallthrough";
+    }
+}
+
+const branchValue = async function(outer: boolean, kind: number): Promise<string> {
+    if (outer) {
+        let first = "branch-value-seed";
+        if (kind === 0) {
+            first = await delay(1, "branch-value-zero-one");
+            first = await delay(1, first + "-two");
+        } else {
+            first = await delay(1, "branch-value-other-one");
+            first = await delay(1, first + "-two");
+        }
+        const third = await delay(1, first + "-three");
+        return third;
+    }
+    return "fallthrough";
+};
+
 declaration(0).then((result: string): void => console.log("declaration-zero:", result));
 declaration(2).then((result: string): void => console.log("declaration-other:", result));
 new Worker().run(1).then((result: string): void => console.log("method-one:", result));
 value(0).then((result: string): void => console.log("value-zero:", result));
 branch(true, 2).then((result: string): void => console.log("branch-other:", result));
 branch(false, 0).then((result: string): void => console.log("branch-fallthrough:", result));
+new BranchWorker().run(true, 1).then((result: string): void => console.log("branch-method-other:", result));
+new BranchWorker().run(false, 0).then((result: string): void => console.log("branch-method-fallthrough:", result));
+branchValue(true, 1).then((result: string): void => console.log("branch-value-other:", result));
+branchValue(false, 0).then((result: string): void => console.log("branch-value-fallthrough:", result));

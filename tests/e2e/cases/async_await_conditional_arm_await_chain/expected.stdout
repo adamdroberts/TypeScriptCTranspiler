@@ -1,6 +1,10 @@
 branch-fallthrough: fallthrough
+branch-method-fallthrough: fallthrough
+branch-value-fallthrough: fallthrough
 declaration-zero: zero-one-two-three
 declaration-other: other-one-two-three
 method-one: method-one-one-two-three
 value-zero: value-zero-one-two-three
 branch-other: branch-other-one-two-three
+branch-method-other: branch-method-other-one-two-three
+branch-value-other: branch-value-other-one-two-three
