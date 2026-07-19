@@ -400,7 +400,7 @@ interface AsyncAwaitIfExpressionReturnBranch {
 }
 
 interface AsyncAwaitSwitchExpressionReturnClause {
-    expression: ts.Expression | null;
+    expressions: readonly (ts.Expression | null)[];
     branch: AsyncAwaitIfExpressionReturnNode;
 }
 
@@ -31463,26 +31463,24 @@ class Emitter {
         if (!this.asyncAwaitConditionExpressionSupported(switchStatement.expression)) return null;
         const clauses: AsyncAwaitSwitchExpressionReturnClause[] = [];
         let hasDefault = false;
+        let pendingExpressions: (ts.Expression | null)[] = [];
         for (const clause of switchStatement.caseBlock.clauses) {
             if (ts.isDefaultClause(clause)) {
                 if (hasDefault) return null;
                 hasDefault = true;
+                pendingExpressions.push(null);
             } else if (!this.asyncAwaitConditionExpressionSupported(clause.expression)) {
                 return null;
+            } else {
+                pendingExpressions.push(clause.expression);
             }
-            const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(
-                clause.statements,
-                parameters,
-                thisValue,
-                captures,
-            );
-            if (!branch) return null;
-            clauses.push({
-                expression: ts.isDefaultClause(clause) ? null : clause.expression,
-                branch,
-            });
+            if (clause.statements.length === 0) continue;
+            const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(clause.statements, parameters, thisValue, captures);
+            if (!branch || pendingExpressions.length === 0) return null;
+            clauses.push({ expressions: pendingExpressions, branch });
+            pendingExpressions = [];
         }
-        if (!hasDefault || clauses.length === 0) return null;
+        if (!hasDefault || clauses.length === 0 || pendingExpressions.length > 0) return null;
         return { kind: "switch", expression: switchStatement.expression, clauses };
     }
 
@@ -31663,13 +31661,14 @@ class Emitter {
             buf.line(`${discriminant.ty.c} ${discriminantVar} = ${discriminant.c};`);
             let first = true;
             for (const clause of branch.clauses) {
-                let condition = "true";
-                if (clause.expression !== null) {
-                    const caseValue = this.emitExpr(clause.expression);
-                    condition = isString
-                        ? `tsc_str_eq(${discriminantVar}, ${this.coerce(caseValue, discriminant.ty, clause.expression)})`
-                        : `(${discriminantVar} == ${this.coerce(caseValue, discriminant.ty, clause.expression)})`;
-                }
+                const conditions = clause.expressions.map((expression) => {
+                    if (expression === null) return "true";
+                    const caseValue = this.emitExpr(expression);
+                    return isString
+                        ? `tsc_str_eq(${discriminantVar}, ${this.coerce(caseValue, discriminant.ty, expression)})`
+                        : `(${discriminantVar} == ${this.coerce(caseValue, discriminant.ty, expression)})`;
+                });
+                const condition = conditions.join(" || ");
                 buf.open(first ? `if (${condition})` : `else if (${condition})`);
                 if (!this.emitAsyncAwaitIfExpressionReturnBranch(buf, clause.branch)) return false;
                 buf.close();

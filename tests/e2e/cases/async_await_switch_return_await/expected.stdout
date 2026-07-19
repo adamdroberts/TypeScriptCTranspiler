@@ -1,7 +1,9 @@
 declaration-default: default
 method-default: method-default
 value-default: value-default
-declaration-zero: zero-done
-declaration-one: one-done
+declaration-zero: zero-or-one-done
+declaration-one: zero-or-one-done
 method-zero: method-zero-done
+method-fallthrough: method-zero-done
 value-zero: value-zero-done
+value-fallthrough: value-zero-done
