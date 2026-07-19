@@ -28442,17 +28442,44 @@ class Emitter {
                 if (!valid) return null;
             }
         }
-        const variables = leaves.map((leaf, leafIndex) => {
-            const first = this.awaitedContinuationStep(leaf.statements[awaitSteps[leafIndex]![0]!]!);
-            return first?.variable ?? null;
-        });
-        const variable = variables[0]!;
+        const variables = leaves.map((leaf, leafIndex) => awaitSteps[leafIndex]!.map((awaitIndex) => {
+            const step = this.awaitedContinuationStep(leaf.statements[awaitIndex]!);
+            return step?.variable ?? null;
+        }));
+        const firstVariables = variables.map((candidate) => candidate[0]!);
+        let variable: ts.Identifier | null = firstVariables[0]!;
         const variableSymbol = variable ? this.symbolForIdentifier(variable) : null;
         if (variable && !variableSymbol) return null;
-        if (variables.some((candidate) => {
-            if (!candidate || !variable) return candidate !== variable;
-            return this.symbolForIdentifier(candidate) !== variableSymbol;
-        })) return null;
+        const sharedVariable = firstVariables.every((candidate) => {
+            if (!candidate || !variable) return candidate === variable;
+            return this.symbolForIdentifier(candidate) === variableSymbol;
+        });
+        if (!sharedVariable) {
+            for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
+                const leaf = leaves[leafIndex]!;
+                for (let stepIndex = 0; stepIndex < stepCount; stepIndex++) {
+                    const awaitIndex = awaitSteps[leafIndex]![stepIndex]!;
+                    const statement = leaf.statements[awaitIndex]!;
+                    const local = this.awaitedLocalDeclaration(statement);
+                    if (variables[leafIndex]![stepIndex] && !local) return null;
+                    const localSymbol = local ? this.symbolForIdentifier(local.variable) : null;
+                    if (!localSymbol) continue;
+                    let escapes = false;
+                    const visit = (node: ts.Node): void => {
+                        if (escapes) return;
+                        if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
+                            this.symbolForIdentifier(node) === localSymbol) {
+                            escapes = true;
+                            return;
+                        }
+                        ts.forEachChild(node, visit);
+                    };
+                    for (const later of leaf.statements.slice(awaitIndex + 1)) visit(later);
+                    if (escapes) return null;
+                }
+            }
+            variable = null;
+        }
         const steps: AsyncAwaitLeadingStep[] = [];
         for (let stepIndex = 0; stepIndex < stepCount; stepIndex++) {
             const branches: AsyncAwaitLeadingConditionalBranch[] = [];
@@ -32343,7 +32370,7 @@ class Emitter {
                 params,
                 thisValue,
                 returnAwaited,
-                steps[0]!.alternateAwaitExpr ? steps[0]! : null,
+                steps[0]!.conditionalBranches || steps[0]!.alternateAwaitExpr ? steps[0]! : null,
             );
         }
 
