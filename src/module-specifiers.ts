@@ -2842,74 +2842,147 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return out;
     };
 
+    const resolveFreshStaticDateRecords = (expr: ts.Expression): Date[] => {
+        const current = unwrapStaticExpression(expr);
+        if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
+        const target = unwrapStaticExpression(current.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Date") return [];
+        const args = current.arguments ?? [];
+        if (args.length !== 1) return [];
+
+        const stamps = isStaticDateStringExpression(args[0]!)
+            ? resolve(args[0]!).map((value) => Date.parse(value))
+            : resolveStaticNumberValues(args[0]!);
+        if (stamps.length === 0 || stamps.some((stamp) => !Number.isFinite(stamp))) return [];
+
+        const out: Date[] = [];
+        for (const stamp of stamps) {
+            out.push(new Date(stamp));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return out;
+    };
+
     const resolveStaticDateInstanceCall = (call: ts.CallExpression): string[] => {
-        if (call.arguments.length !== 0) return [];
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
-        if (
-            method !== "getTime" &&
-            method !== "valueOf" &&
-            method !== "toISOString" &&
-            method !== "toJSON" &&
-            method !== "toUTCString" &&
-            method !== "toGMTString" &&
-            method !== "getUTCFullYear" &&
-            method !== "getUTCMonth" &&
-            method !== "getUTCDate" &&
-            method !== "getUTCDay" &&
-            method !== "getUTCHours" &&
-            method !== "getUTCMinutes" &&
-            method !== "getUTCSeconds" &&
-            method !== "getUTCMilliseconds"
-        ) {
-            return [];
-        }
-        const dates = resolveStaticDateRecords(callee.expression);
-        if (dates.length === 0) return [];
-        const out: string[] = [];
-        for (const date of dates) {
-            const stamp = date.getTime();
-            if (!Number.isFinite(stamp)) return [];
-            switch (method) {
-                case "getTime":
-                case "valueOf":
-                    out.push(String(stamp));
-                    break;
-                case "toUTCString":
-                case "toGMTString":
-                    out.push(date.toUTCString());
-                    break;
-                case "toISOString":
-                case "toJSON":
-                    out.push(date.toISOString());
-                    break;
-                case "getUTCFullYear":
-                    out.push(String(date.getUTCFullYear()));
-                    break;
-                case "getUTCMonth":
-                    out.push(String(date.getUTCMonth()));
-                    break;
-                case "getUTCDate":
-                    out.push(String(date.getUTCDate()));
-                    break;
-                case "getUTCDay":
-                    out.push(String(date.getUTCDay()));
-                    break;
-                case "getUTCHours":
-                    out.push(String(date.getUTCHours()));
-                    break;
-                case "getUTCMinutes":
-                    out.push(String(date.getUTCMinutes()));
-                    break;
-                case "getUTCSeconds":
-                    out.push(String(date.getUTCSeconds()));
-                    break;
-                case "getUTCMilliseconds":
-                    out.push(String(date.getUTCMilliseconds()));
-                    break;
+
+        const zeroArgMethods = new Set([
+            "getTime",
+            "valueOf",
+            "toISOString",
+            "toJSON",
+            "toUTCString",
+            "toGMTString",
+            "getUTCFullYear",
+            "getUTCMonth",
+            "getUTCDate",
+            "getUTCDay",
+            "getUTCHours",
+            "getUTCMinutes",
+            "getUTCSeconds",
+            "getUTCMilliseconds",
+        ]);
+        if (zeroArgMethods.has(method)) {
+            if (call.arguments.length !== 0) return [];
+            const dates = resolveStaticDateRecords(callee.expression);
+            if (dates.length === 0) return [];
+            const out: string[] = [];
+            for (const date of dates) {
+                const stamp = date.getTime();
+                if (!Number.isFinite(stamp)) return [];
+                switch (method) {
+                    case "getTime":
+                    case "valueOf":
+                        out.push(String(stamp));
+                        break;
+                    case "toUTCString":
+                    case "toGMTString":
+                        out.push(date.toUTCString());
+                        break;
+                    case "toISOString":
+                    case "toJSON":
+                        out.push(date.toISOString());
+                        break;
+                    case "getUTCFullYear":
+                        out.push(String(date.getUTCFullYear()));
+                        break;
+                    case "getUTCMonth":
+                        out.push(String(date.getUTCMonth()));
+                        break;
+                    case "getUTCDate":
+                        out.push(String(date.getUTCDate()));
+                        break;
+                    case "getUTCDay":
+                        out.push(String(date.getUTCDay()));
+                        break;
+                    case "getUTCHours":
+                        out.push(String(date.getUTCHours()));
+                        break;
+                    case "getUTCMinutes":
+                        out.push(String(date.getUTCMinutes()));
+                        break;
+                    case "getUTCSeconds":
+                        out.push(String(date.getUTCSeconds()));
+                        break;
+                    case "getUTCMilliseconds":
+                        out.push(String(date.getUTCMilliseconds()));
+                        break;
+                }
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
-            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            return dedupe(out);
+        }
+
+        return resolveStaticFreshDateMutatorCall(method, callee.expression, call.arguments);
+    };
+
+    const resolveStaticFreshDateMutatorCall = (
+        method: string,
+        receiver: ts.Expression,
+        args: ts.NodeArray<ts.Expression>,
+    ): string[] => {
+        const ranges: Record<string, [number, number]> = {
+            setTime: [1, 1],
+            setUTCFullYear: [1, 3],
+            setUTCMonth: [1, 2],
+            setUTCDate: [1, 1],
+            setUTCHours: [1, 4],
+            setUTCMinutes: [1, 3],
+            setUTCSeconds: [1, 2],
+            setUTCMilliseconds: [1, 1],
+        };
+        const range = ranges[method];
+        if (!range || args.length < range[0] || args.length > range[1] || args.some(ts.isSpreadElement)) return [];
+
+        const dates = resolveFreshStaticDateRecords(receiver);
+        if (dates.length === 0) return [];
+        const argumentValues = args.map((argument) => resolveStaticNumberValues(argument));
+        if (argumentValues.some((values) => values.length === 0)) return [];
+
+        let tuples: number[][] = [[]];
+        for (const values of argumentValues) {
+            const next: number[][] = [];
+            for (const tuple of tuples) {
+                for (const value of values) {
+                    next.push([...tuple, value]);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            tuples = next;
+        }
+
+        const out: string[] = [];
+        for (const sourceDate of dates) {
+            for (const tuple of tuples) {
+                const date = new Date(sourceDate.getTime());
+                const setter = Date.prototype[method as keyof Date] as unknown as (this: Date, ...values: number[]) => number;
+                const stamp = setter.call(date, ...tuple);
+                if (!Number.isFinite(stamp)) return [];
+                out.push(String(stamp));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
         }
         return dedupe(out);
     };
