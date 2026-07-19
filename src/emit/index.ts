@@ -28395,6 +28395,94 @@ class Emitter {
         return { variable: null, awaitExpr: expression };
     }
 
+    private asyncAwaitConditionalLeadingSteps(stmt: ts.Statement): AsyncAwaitLeadingStep[] | null {
+        if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
+        type Leaf = {
+            condition: ts.Expression | null;
+            statements: readonly ts.Statement[];
+        };
+        const leaves: Leaf[] = [];
+        const collect = (branch: ts.Statement, condition: ts.Expression | null): boolean => {
+            if (ts.isIfStatement(branch) && branch.elseStatement) {
+                if (!collect(branch.thenStatement, branch.expression)) return false;
+                return collect(branch.elseStatement, null);
+            }
+            const statements = ts.isBlock(branch) ? branch.statements : [branch];
+            leaves.push({ condition, statements });
+            return true;
+        };
+        if (!collect(stmt, null) || leaves.length < 2) return null;
+        const awaitSteps = leaves.map((leaf) => {
+            const indices: number[] = [];
+            for (let i = 0; i < leaf.statements.length; i++) {
+                if (this.awaitedContinuationStep(leaf.statements[i]!)) indices.push(i);
+            }
+            return indices;
+        });
+        if (awaitSteps.some((indices) => indices.length === 0)) return null;
+        const stepCount = awaitSteps[0]!.length;
+        if (stepCount < 2 || awaitSteps.some((indices) => indices.length !== stepCount)) return null;
+        for (const leaf of leaves) {
+            for (const statement of leaf.statements) {
+                if (!this.awaitedContinuationStep(statement) && !this.asyncAwaitInterstitialControlFlowSupported(statement)) {
+                    return null;
+                }
+            }
+            if (leaf.condition) {
+                let valid = true;
+                const visit = (node: ts.Node): void => {
+                    if (!valid) return;
+                    if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                        valid = false;
+                        return;
+                    }
+                    ts.forEachChild(node, visit);
+                };
+                visit(leaf.condition);
+                if (!valid) return null;
+            }
+        }
+        const variables = leaves.map((leaf, leafIndex) => {
+            const first = this.awaitedContinuationStep(leaf.statements[awaitSteps[leafIndex]![0]!]!);
+            return first?.variable ?? null;
+        });
+        const variable = variables[0]!;
+        const variableSymbol = variable ? this.symbolForIdentifier(variable) : null;
+        if (variable && !variableSymbol) return null;
+        if (variables.some((candidate) => {
+            if (!candidate || !variable) return candidate !== variable;
+            return this.symbolForIdentifier(candidate) !== variableSymbol;
+        })) return null;
+        const steps: AsyncAwaitLeadingStep[] = [];
+        for (let stepIndex = 0; stepIndex < stepCount; stepIndex++) {
+            const branches: AsyncAwaitLeadingConditionalBranch[] = [];
+            for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
+                const leaf = leaves[leafIndex]!;
+                const awaitIndex = awaitSteps[leafIndex]![stepIndex]!;
+                const nextAwaitIndex = stepIndex + 1 < stepCount
+                    ? awaitSteps[leafIndex]![stepIndex + 1]!
+                    : leaf.statements.length;
+                const step = this.awaitedContinuationStep(leaf.statements[awaitIndex]!);
+                if (!step) return null;
+                branches.push({
+                    awaitExpr: step.awaitExpr,
+                    condition: leaf.condition,
+                    beforeStatements: stepIndex === 0 ? leaf.statements.slice(0, awaitIndex) : [],
+                    afterStatements: leaf.statements.slice(awaitIndex + 1, nextAwaitIndex),
+                });
+            }
+            steps.push({
+                variable,
+                awaitExpr: branches[0]!.awaitExpr,
+                condition: branches[0]!.condition ?? undefined,
+                beforeStatements: branches[0]!.beforeStatements,
+                afterStatements: branches[0]!.afterStatements,
+                conditionalBranches: branches,
+            });
+        }
+        return steps;
+    }
+
     private asyncAwaitTwoStepContinuationReferences(
         firstName: ts.Identifier,
         secondName: ts.Identifier,
@@ -28681,7 +28769,7 @@ class Emitter {
         };
         while (firstAwaitIndex < body.statements.length - 1) {
             const stmt = body.statements[firstAwaitIndex]!;
-            if (this.asyncAwaitConditionalLeadingStep(stmt) || this.awaitedContinuationStep(stmt)) break;
+            if (this.asyncAwaitConditionalLeadingSteps(stmt) || this.asyncAwaitConditionalLeadingStep(stmt) || this.awaitedContinuationStep(stmt)) break;
             if (ts.isExpressionStatement(stmt)) {
                 visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
@@ -28733,7 +28821,18 @@ class Emitter {
             : null;
         let pendingBetween: ts.Statement[] = [];
         for (const stmt of chainStatements) {
-            const step = this.asyncAwaitConditionalLeadingStep(stmt) ?? this.awaitedContinuationStep(stmt);
+            const conditionalSteps = this.asyncAwaitConditionalLeadingSteps(stmt);
+            const step = conditionalSteps ? null : (this.asyncAwaitConditionalLeadingStep(stmt) ?? this.awaitedContinuationStep(stmt));
+            if (conditionalSteps) {
+                for (const conditionalStep of conditionalSteps) {
+                    steps.push(conditionalStep);
+                    if (steps.length > 1) {
+                        betweenStatements.push(pendingBetween);
+                        pendingBetween = [];
+                    }
+                }
+                continue;
+            }
             if (step) {
                 steps.push(step);
                 if (steps.length > 1) {
