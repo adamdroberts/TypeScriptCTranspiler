@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Finite dynamic `require(...)` proofs now resolve static `util.format(...)` string fragments from default, namespace, named, and aliased named util bindings when all format arguments have finite static string values. Test: `dynamic_require_static_util_format`.
 - Finite dynamic `require(...)` proofs now resolve static `querystring.escape(...)` and `querystring.unescape(...)` fragments from default, namespace, named, and aliased named querystring bindings. Test: `dynamic_require_static_querystring_escape`.
 - Finite dynamic `require(...)` proofs now resolve static `path.basename(...)`, `path.dirname(...)`, and `path.extname(...)` fragments from default, namespace, and named path bindings. Test: `dynamic_require_static_path_fragments`.
 
