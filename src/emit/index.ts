@@ -15387,6 +15387,9 @@ class Emitter {
         const info = this.resolvedModuleInfoForSpecifier(specifier.text, id.getSourceFile().fileName);
         const sf = info?.sf;
         if (!sf) return null;
+        if (this.isJavaScriptSourceFile(sf) && sf.statements.some(ts.isExportAssignment)) {
+            return null;
+        }
         if (!this.hasCommonJsEsModuleMarker(sf)) {
             const defaultMember = this.commonJsExportedMemberDeclaration(sf, "default");
             if (defaultMember && !this.isDirectCommonJsDefaultExportAccess(defaultMember)) {
@@ -20938,6 +20941,8 @@ class Emitter {
         const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
         if (commonJsDecl) return commonJsDecl;
         if (name === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
+            const defaultExport = info.sf.statements.find(ts.isExportAssignment);
+            if (defaultExport) return defaultExport;
             if (!this.hasCommonJsEsModuleMarker(info.sf)) {
                 return info.sf;
             }
