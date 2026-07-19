@@ -621,6 +621,12 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'import helper from "./helper.cjs";\nexport const label = helper.label;\nexport function compute(value) { return helper.compute(value); }\n',
         "helper.cjs": 'module.exports = { label: "js-import-cjs", compute(value) { return value * 11; } };\n',
     }),
+    "tsc2c-js-import-external-cjs-package": esmPackage("tsc2c-js-import-external-cjs-package", {
+        "index.js": 'import helper from "tsc2c-js-import-external-cjs-helper";\nexport const label = helper.label;\nexport function compute(value) { return helper.compute(value); }\n',
+    }),
+    "tsc2c-js-import-external-cjs-helper": cjsPackage("tsc2c-js-import-external-cjs-helper", {
+        "index.js": 'module.exports = { label: "js-import-external-cjs", compute(value) { return value * 21; } };\n',
+    }),
     "tsc2c-js-named-import-cjs-package": esmPackage("tsc2c-js-named-import-cjs-package", {
         "index.js": 'import { compute, label } from "./helper.cjs";\nexport const message = label + ":" + compute(3);\nexport function wrap(value) { return label + ":" + compute(value); }\n',
         "helper.cjs": 'module.exports = { label: "js-named-import-cjs", compute(value) { return value * 12; } };\n',
