@@ -2847,14 +2847,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
-        if (method !== "getTime" && method !== "valueOf" && method !== "toISOString" && method !== "toJSON") return [];
+        if (
+            method !== "getTime" &&
+            method !== "valueOf" &&
+            method !== "toISOString" &&
+            method !== "toJSON" &&
+            method !== "toUTCString" &&
+            method !== "toGMTString"
+        ) {
+            return [];
+        }
         const dates = resolveStaticDateRecords(callee.expression);
         if (dates.length === 0) return [];
         const out: string[] = [];
         for (const date of dates) {
             const stamp = date.getTime();
             if (!Number.isFinite(stamp)) return [];
-            out.push(method === "getTime" || method === "valueOf" ? String(stamp) : date.toISOString());
+            out.push(method === "getTime" || method === "valueOf"
+                ? String(stamp)
+                : method === "toUTCString" || method === "toGMTString"
+                    ? date.toUTCString()
+                    : date.toISOString());
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);

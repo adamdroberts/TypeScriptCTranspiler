@@ -6,7 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
-- Finite dynamic `require(...)` proofs resolve static `new Date(...)` `.getTime()` / `.valueOf()` / `.toISOString()` / `.toJSON()` fragments for finite deterministic timestamp inputs, including earlier `const` Date aliases. Test: `dynamic_require_static_date_instance`
+- Finite dynamic `require(...)` proofs resolve static `new Date(...)` `.getTime()` / `.valueOf()` / `.toISOString()` / `.toJSON()` / `.toUTCString()` / `.toGMTString()` fragments for finite deterministic timestamp inputs, including earlier `const` Date aliases. Test: `dynamic_require_static_date_instance`
 - Finite dynamic `require(...)` proofs resolve static `Date.parse(...)` specifier fragments for finite deterministic ISO string inputs. Test: `dynamic_require_static_date_parse`
 - Finite dynamic `require(...)` proofs resolve static `new URL(input, base?).href` / `.protocol` / `.host` / `.hostname` / `.port` / `.pathname` / `.search` / `.hash` / `.origin` metadata fragments and zero-argument `.toString()` / `.toJSON()` / `.toLocaleString()` results, including earlier `const` URL aliases. Test: `dynamic_require_static_url_properties`
 - Finite dynamic `require(...)` proofs resolve static `ArrayBuffer.byteLength`, `DataView.byteLength` / `.byteOffset`, and `DataView.buffer.byteLength` constructor metadata fragments, including earlier `const` ArrayBuffer/DataView aliases. Test: `dynamic_require_static_array_buffer_data_view`
