@@ -28446,6 +28446,26 @@ class Emitter {
                     return symbol ? [symbol] : [];
                 });
             });
+            const uninitializedPreludeSymbols = leaf.statements.slice(0, firstAwaitIndex).flatMap((statement) => {
+                if (!ts.isVariableStatement(statement)) return [];
+                if (!(statement.declarationList.flags & ts.NodeFlags.Let)) return [];
+                return statement.declarationList.declarations.flatMap((declaration) => {
+                    if (!ts.isIdentifier(declaration.name) || declaration.initializer) return [];
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    return symbol ? [symbol] : [];
+                });
+            });
+            if (uninitializedPreludeSymbols.length > 0) {
+                const assignedSymbols = new Set<ts.Symbol>();
+                for (const statement of leaf.statements.slice(0, firstAwaitIndex)) {
+                    if (!ts.isExpressionStatement(statement) || !ts.isBinaryExpression(statement.expression) ||
+                        statement.expression.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                        !ts.isIdentifier(statement.expression.left)) continue;
+                    const symbol = this.symbolForIdentifier(statement.expression.left);
+                    if (symbol) assignedSymbols.add(symbol);
+                }
+                if (uninitializedPreludeSymbols.some((symbol) => !assignedSymbols.has(symbol))) return null;
+            }
             if (preludeSymbols.length > 0) {
                 let escapes = false;
                 const visit = (node: ts.Node): void => {
@@ -31185,7 +31205,9 @@ class Emitter {
         }
         if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
         for (const declaration of stmt.declarationList.declarations) {
-            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+            if (!ts.isIdentifier(declaration.name) ||
+                (!declaration.initializer && !(stmt.declarationList.flags & ts.NodeFlags.Let))) return false;
+            if (!declaration.initializer) continue;
             let ok = true;
             const visit = (node: ts.Node): void => {
                 if (!ok) return;

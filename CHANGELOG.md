@@ -27,6 +27,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Nested conditional leading await steps now preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now preserve safe initialized branch-local declaration preludes used by the first await source across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_prelude_declaration`.
+- Conditional leading await steps now preserve branch-local `let` preludes assigned before the first await source across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_assigned_prelude`.
 - Conditional leading await steps now allow branch-local awaited declarations used only as sequencing points. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now accept mixed bare-await and branch-local declaration arms when both values are used only for sequencing. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now preserve bounded await-free post-await statements in both direct arms before the next suspension. Test: `async_await_pending_return_expr`.
