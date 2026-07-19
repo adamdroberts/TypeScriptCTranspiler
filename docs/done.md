@@ -114,6 +114,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered for nested async closures with captured locals. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered across async declarations, lifted async function values, and class async methods that read `this`. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` continuations support the combined catch-plus-finally form for fulfilled and rejected awaited sources. Test: `async_await_try_catch_finally`
+- Branch-block pending-`await` continuations preserve branch-local prelude statements before awaited local returns across async declarations, class methods, and async function values. Test: `async_await_branch_block_prelude_return`
 - Branch-block pending-`await` continuations resume awaited locals returned from `if` branches and fallthrough blocks across async declarations, class methods, and async function values. Test: `async_await_branch_block_local_return`
 - Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `while` break/continue, break-terminated `switch`, and `try`/`catch`/`finally` after a pending awaited local, matching the existing async-method subset. Test: `async_await_pending_return_expr`
 - Post-await synchronous loop/control-flow continuations support async function declarations and async function values for `do while`, plain `for`, `for...of`, `for...in`, early return, and post-await throw after a pending awaited local. Test: `async_await_pending_return_expr`
@@ -2903,6 +2904,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_dynamic_edges` | Array.from dynamic nullish, string, and non-iterable edge behavior |
 | `array_from_set` | Array.from over typed Set sources with and without mapper callbacks |
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
+| `async_await_branch_block_prelude_return` | async branch blocks preserve branch-local preludes before awaited locals returned from the branch |
 | `async_await_branch_block_local_return` | async branch blocks resume awaited locals returned from the branch or fallthrough path |
 | `async_await_closure_return_expr` | returned async closures resume pending expression-return continuations |
 | `async_await_try_catch` | async try/catch and try/finally pending continuations support catch/finally return, fallthrough return, and expressionless return subsets |

@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block pending-`await` continuation lowering now supports branch-local prelude statements before awaited local returns across async declarations, class methods, and async function values. Test: `async_await_branch_block_prelude_return`.
 - Async pending-`await` continuation lowering now supports branch-block awaited local returns across async declarations, class methods, and async function values. Test: `async_await_branch_block_local_return`.
 - Pure JavaScript ESM package namespace imports loaded through `allowJs` can read export-star members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_package_namespace_export_star_external_cjs`.
 - Pure JavaScript ESM package namespace imports loaded through `allowJs` can read aliased re-exports from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_package_namespace_aliased_reexport_external_cjs`.
