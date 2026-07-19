@@ -52,6 +52,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Bounded DNS callback forms now preserve the documented ordering for default-like `dns.lookup(...)` options and `dns.lookupService(...)` error callbacks relative to already-queued DNS promise continuations. Tests: `dns_lookup_option_forms`, `dns_lookup_service`, `dns_lookup_hints`.
 - Trapless array Proxy forwarding now preserves the existing dense intermediate-slot behavior when `set` / `defineProperty` grows the target array through the Proxy path. Test: `proxy_array_mutation_forward`.
 - Finite dynamic `require(...)` proofs now resolve static `URL` and `URLSearchParams` constructor fragments through named imports from `url` and `node:url`, including aliased imports. Test: `dynamic_require_static_url_import_constructors`.
 - Finite dynamic `require(...)` proofs now resolve static `new URL(...).username` and `.password` credential fragments, including base-resolved URLs. Test: `dynamic_require_static_url_credentials`.
