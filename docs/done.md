@@ -285,6 +285,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Named async function-expression values use the async function-value path for awaited-local, branch, and leading continuations. Test: `async_await_named_function_values`
 - Static async class methods use the async method path for awaited-local, branch, and leading continuations. Test: `async_await_static_method_continuation`
 - Object-literal async methods use the async function-value path for awaited-local, branch, leading, and rejected continuations, with boxed Promise values exposing dynamic `.then()` / `.catch()` / `.finally()` methods. Test: `async_await_object_method_continuation`
+- Branch-block pending-`await` continuations resume terminal post-await `throw` paths without requiring an unreachable trailing `return`, including async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_throw`
 - Terminal post-`await` `throw` continuations no longer require an unreachable trailing `return`, so delayed object-literal async method rejections drain through dynamic Promise `.catch()` / `.finally()` chains. Test: `promise_dynamic_delayed_chain`
 - Source `try`/`catch` and `try`/`finally` pending-`await` continuations accept transparent wrappers such as parentheses and `as` assertions around fulfilled-path return expressions, and source `try`/`catch` catch-path returns cover the same transparent wrappers. Tests: `async_await_pending_return_expr`, `async_await_try_catch`
 - Non-lifted expression-bodied async closure values capture outer locals into the pending-`await` continuation environment when the returned expression reads those locals after suspension, including returned expressions that combine those captures with direct closure parameters after direct and embedded pending awaits. Test: `async_await_pending_return_expr`
@@ -2929,6 +2930,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_block_post_await_switch_return` | async branch blocks resume synchronous post-await switch/return control flow |
 | `async_await_branch_block_post_await_loop_return` | async branch blocks resume synchronous post-await loop/return control flow |
 | `async_await_branch_block_post_await_try_return` | async branch blocks resume synchronous post-await try/catch/finally before final return control flow |
+| `async_await_branch_block_post_await_throw` | async branch blocks resume terminal post-await throws without trailing returns |
 | `async_await_branch_block_source_try_return` | async branch blocks route source try/catch/finally awaited returns through specialized continuations |
 | `async_await_branch_block_leading_void_return` | async branch blocks resume leading awaited-local chains with void sequencing |
 | `async_await_branch_block_return_await_prelude` | async branch blocks preserve branch-local preludes before direct return-await |
