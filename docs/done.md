@@ -378,6 +378,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Branch-local source `try` / `catch` routes direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try`
 - Branch-local source `try` / `finally` runs finally bodies on direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try_finally`
 - Branch-local source `try` / `catch` / `finally` composes direct `return await` fulfillment, catch recovery, finally routing, and bounded finally-throw overrides across async declarations, class methods, and async function values. Tests: `async_await_branch_return_await_try_catch_finally`, `async_await_branch_return_await_finally_throw`
+- Unequal conditional leading await arms now route bounded branch-local sequencing chains into a common synchronous return, including a two-await versus one-await branch shape across async declarations, class methods, and async function values. Test: `async_await_conditional_unequal_sequence`
 - Branch-block pending-`await` continuations resume fallthrough tails shaped as awaited-local continuations ending in terminal post-await `throw`, including async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_throw`
 - Branch-block pending-`await` continuations route source `try` / `catch`, `try` / `finally`, and `try` / `catch` / `finally` awaited returns from fallthrough tails, including rejection catch/finally behavior across async declarations, class methods, and async function values. Test: `async_await_branch_block_source_try_fallthrough`
 - Branch-block pending-`await` continuations resume long leading awaited-local chains in fallthrough tails, including six-await chains whose later awaited expressions read earlier awaited locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_leading_chain_return`
@@ -3071,6 +3072,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_return_await_try_finally` | branch try/finally runs on direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_try_catch_finally` | branch try/catch/finally routes direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_finally_throw` | branch finally throws override direct return-await fulfillment and rejection |
+| `async_await_conditional_unequal_sequence` | unequal conditional await chains join a common return |
 | `async_await_branch_block_post_await_return` | async branch blocks resume synchronous post-await locals before returning |
 | `async_await_branch_block_prelude_return` | async branch blocks preserve branch-local preludes before awaited locals returned from the branch |
 | `async_await_branch_block_local_return` | async branch blocks resume awaited locals returned from the branch or fallthrough path |
