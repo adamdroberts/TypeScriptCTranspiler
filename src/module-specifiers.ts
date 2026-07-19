@@ -245,6 +245,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (mathText.length > 0) return mathText;
             const pathText = resolvePathCall(node);
             if (pathText.length > 0) return pathText;
+            const queryStringText = resolveStaticQueryStringCall(node);
+            if (queryStringText.length > 0) return queryStringText;
             const urlSearchParamsText = resolveStaticUrlSearchParamsCall(node);
             if (urlSearchParamsText.length > 0) return urlSearchParamsText;
             const jsonStringifyText = resolveStaticJsonStringifyCall(node);
@@ -473,6 +475,21 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return parts.length === 1 ? path.dirname(parts[0]!) : "";
                 case "extname":
                     return parts.length === 1 ? path.extname(parts[0]!) : "";
+            }
+        }).filter((value) => value !== ""));
+    };
+
+    const resolveStaticQueryStringCall = (call: ts.CallExpression): string[] => {
+        const name = staticQueryStringCallName(call);
+        if (!name || call.arguments.length < 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const values = resolve(call.arguments[0]!);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => {
+            if (name === "escape") return encodeURIComponent(value);
+            try {
+                return decodeURIComponent(value);
+            } catch {
+                return "";
             }
         }).filter((value) => value !== ""));
     };
@@ -6348,6 +6365,54 @@ function isPathModuleSpecifier(node: ts.Node | undefined): boolean {
     return !!node &&
         ts.isStringLiteralLike(node) &&
         (node.text === "path" || node.text === "node:path");
+}
+
+function staticQueryStringCallName(call: ts.CallExpression): "escape" | "unescape" | null {
+    const callee = unwrapStaticExpression(call.expression);
+    if (ts.isPropertyAccessExpression(callee)) {
+        const name = callee.name.text;
+        if (name !== "escape" && name !== "unescape") return null;
+        const target = unwrapStaticExpression(callee.expression);
+        return ts.isIdentifier(target) && isQueryStringNamespaceIdentifier(target) ? name : null;
+    }
+    if (!ts.isIdentifier(callee)) return null;
+    const imported = queryStringNamedImport(callee);
+    return imported === "escape" || imported === "unescape" ? imported : null;
+}
+
+function isQueryStringNamespaceIdentifier(id: ts.Identifier): boolean {
+    if (isIdentifierShadowedInLocalScope(id)) return false;
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (ts.isImportDeclaration(stmt) && isQueryStringModuleSpecifier(stmt.moduleSpecifier)) {
+            const bindings = stmt.importClause?.namedBindings;
+            if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === id.text) return true;
+            if (stmt.importClause?.name?.text === id.text) return true;
+        }
+    }
+    return false;
+}
+
+function queryStringNamedImport(id: ts.Identifier): "escape" | "unescape" | null {
+    if (isIdentifierShadowedInLocalScope(id)) return null;
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (!ts.isImportDeclaration(stmt) || !isQueryStringModuleSpecifier(stmt.moduleSpecifier)) continue;
+        const bindings = stmt.importClause?.namedBindings;
+        if (!bindings || !ts.isNamedImports(bindings)) continue;
+        for (const element of bindings.elements) {
+            if (element.name.text !== id.text) continue;
+            const imported = element.propertyName?.text ?? element.name.text;
+            if (imported === "escape" || imported === "unescape") return imported;
+        }
+    }
+    return null;
+}
+
+function isQueryStringModuleSpecifier(node: ts.Node | undefined): boolean {
+    return !!node &&
+        ts.isStringLiteralLike(node) &&
+        (node.text === "querystring" || node.text === "node:querystring");
 }
 
 function jsonValueToStaticExpression(value: unknown): ts.Expression | null {
