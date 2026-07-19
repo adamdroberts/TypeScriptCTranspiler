@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript ESM package namespace imports loaded through `allowJs` can read and call finite members through aliased named re-exports from package-local CommonJS object-literal helpers. Test: `node_modules_js_package_namespace_aliased_re_export_cjs`
 - Pure JavaScript ESM package namespace imports loaded through `allowJs` can read and call finite members through namespace re-exports from package-local CommonJS object-literal helpers. Test: `node_modules_js_package_namespace_re_export_cjs`
 - Pure JavaScript ESM package barrels loaded through `allowJs` can use namespace re-exports from package-local CommonJS object-literal helpers. Test: `node_modules_js_namespace_re_export_cjs`
 - Pure JavaScript ESM package barrels loaded through `allowJs` can use aliased named re-exports from package-local CommonJS object-literal helpers. Test: `node_modules_js_aliased_re_export_cjs`
