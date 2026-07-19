@@ -641,6 +641,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'export { default as helper } from "./helper.cjs";\n',
         "helper.cjs": 'module.exports = { label: "js-default-reexport-cjs", compute(value) { return value * 15; } };\n',
     }),
+    "tsc2c-js-default-forward-cjs-package": esmPackage("tsc2c-js-default-forward-cjs-package", {
+        "index.js": 'export { default } from "./helper.cjs";\n',
+        "helper.cjs": 'module.exports = { label: "js-default-forward-cjs", compute(value) { return value * 19; } };\n',
+    }),
     "tsc2c-js-export-star-cjs-package": esmPackage("tsc2c-js-export-star-cjs-package", {
         "index.js": 'export * from "./helper.cjs";\n',
         "helper.cjs": 'module.exports = { label: "js-export-star-cjs", compute(value) { return value * 16; } };\n',
