@@ -1,0 +1,4 @@
+static-awaited-local: static-local!
+static-branch-true: static-branch!
+static-branch-false: static-fallthrough!
+static-leading: static-first-second!
