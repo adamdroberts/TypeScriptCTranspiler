@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed CommonJS whole-value `module.exports = ...` boxed runtime default subsets for inline-function logical/nullish/conditional, postfix-update, delete, and comma expressions already tracked by `node_modules_commonjs_module_exports_runtime_function_default` and `node_modules_commonjs_module_exports_runtime_update_delete_default`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed `url` / `node:url` named `URL` and `URLSearchParams` import-constructor finite dynamic-require proofs already tracked by `dynamic_require_static_url_import_constructors`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed static URL credential metadata finite dynamic-require proofs already tracked by `dynamic_require_static_url_credentials`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed static `URL.searchParams` finite dynamic-require proofs already tracked by `dynamic_require_static_url_search_params_property`.
