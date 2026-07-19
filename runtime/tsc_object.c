@@ -76,6 +76,22 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     return o;
 }
 
+static size_t proxy_array_target_length(tsc_value_t target) {
+    if (!value_is_box(target) || value_tag(target) != TSC_VALUE_TAG_ARRAY) return 0;
+    return ((const tsc_array_t*)value_ptr(target))->len;
+}
+
+static void proxy_fill_forwarded_array_growth_slots(tsc_value_t target, const tsc_str_t* key, size_t old_len, bool success) {
+    if (!success || !value_is_box(target) || value_tag(target) != TSC_VALUE_TAG_ARRAY) return;
+    size_t idx = 0;
+    if (!tsc_str_array_index(key, &idx) || idx < old_len) return;
+    tsc_array_t* array = (tsc_array_t*)value_ptr(target);
+    for (size_t i = old_len; i < idx && i < array->len; i++) {
+        tsc_array_clear_hole(array, i);
+        TSC_ARR(tsc_value_t, array, i) = tsc_value_string(tsc_str_from_lit("undefined", 9));
+    }
+}
+
 static void object_prototype_require_receiver(tsc_value_t receiver, const char* method) {
     if (tsc_value_is_nullish(receiver)) {
         char buf[128];
@@ -1063,7 +1079,10 @@ bool tsc_object_set_receiver(tsc_object_t* o, tsc_str_t* key, tsc_value_t value,
                     value_tag(o->proxy_target) == TSC_VALUE_TAG_FUNCTION
                 )
             ) {
-                return tsc_value_set_prop(o->proxy_target, key, value);
+                size_t old_len = proxy_array_target_length(o->proxy_target);
+                bool success = tsc_value_set_prop(o->proxy_target, key, value);
+                proxy_fill_forwarded_array_growth_slots(o->proxy_target, key, old_len, success);
+                return success;
             }
             return tsc_value_set_prop_receiver(o->proxy_target, key, value, receiver);
         }
@@ -1114,7 +1133,10 @@ bool tsc_object_define_desc(tsc_object_t* o, tsc_str_t* key, tsc_value_t value, 
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            return tsc_value_define_property_desc(o->proxy_target, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+            size_t old_len = proxy_array_target_length(o->proxy_target);
+            bool success = tsc_value_define_property_desc(o->proxy_target, key, value, has_value, writable, has_writable, enumerable, has_enumerable, configurable, has_configurable);
+            proxy_fill_forwarded_array_growth_slots(o->proxy_target, key, old_len, success);
+            return success;
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
         tsc_object_t* desc = tsc_object_new();
@@ -1193,7 +1215,10 @@ bool tsc_object_define_accessor(tsc_object_t* o, tsc_str_t* key, tsc_accessor_ge
         if (o->proxy_revoked) tsc_throw_str(tsc_str_from_cstr("Cannot perform 'defineProperty' on a proxy that has been revoked"));
         tsc_value_t trap = tsc_value_get_prop(o->proxy_handler, tsc_str_from_lit("defineProperty", 14));
         if (tsc_value_is_undefined(trap) || tsc_value_is_nullish(trap)) {
-            return tsc_value_define_accessor_desc(o->proxy_target, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
+            size_t old_len = proxy_array_target_length(o->proxy_target);
+            bool success = tsc_value_define_accessor_desc(o->proxy_target, key, getter, getter_env, has_getter, setter, setter_env, has_setter, enumerable, has_enumerable, configurable, has_configurable);
+            proxy_fill_forwarded_array_growth_slots(o->proxy_target, key, old_len, success);
+            return success;
         }
         tsc_proxy_require_callable_trap(trap, "Proxy defineProperty trap must be callable");
         tsc_object_t* desc = tsc_object_new();

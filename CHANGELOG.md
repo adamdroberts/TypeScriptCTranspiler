@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 9 Proxy/Reflect remaining-work entry against completed callable/newable/object/array/function Proxy forwarding, trap lookup/validation, receiver identity, Object helper integration, invariant, integrity, construct `newTarget`, and Reflect validation subsets.
 - `docs/todo.md` now rebaselines the Phase 7 generator remaining-work entry against completed lazy generator subsets for simple branch/switch/loop control flow, non-suspending source `try` / `catch` / `finally`, suspended expression trees, compound assignments, suspended throw-yield, `return yield`, simple `.next(value)` assignments, and bounded lazy `yield*`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed finite dynamic-require proof subsets for URL metadata, ArrayBuffer/DataView, TextEncoder/TextDecoder, Set/Map relation and fragment composition, static descriptor/Reflect/numeric parser fragments, and static Buffer construction/inspection/mutation/search fragments.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed finite dynamic-require proof subsets for dense-array higher-order/mutating/copy collection wrappers and Object spread/descriptor/assign/prototype/integrity/fromEntries collection wrappers.
@@ -50,6 +51,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Trapless array Proxy forwarding now preserves the existing dense intermediate-slot behavior when `set` / `defineProperty` grows the target array through the Proxy path. Test: `proxy_array_mutation_forward`.
 - Finite dynamic `require(...)` proofs now resolve static `URL` and `URLSearchParams` constructor fragments through named imports from `url` and `node:url`, including aliased imports. Test: `dynamic_require_static_url_import_constructors`.
 - Finite dynamic `require(...)` proofs now resolve static `new URL(...).username` and `.password` credential fragments, including base-resolved URLs. Test: `dynamic_require_static_url_credentials`.
 - Finite dynamic `require(...)` proofs now resolve static `new URL(...).searchParams` fragments through `.toString()`, `.get(...)`, `.has(...)`, `.size`, `Array.from(...)`, and `Object.fromEntries(...)`. Test: `dynamic_require_static_url_search_params_property`.
