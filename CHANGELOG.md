@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block pending-`await` continuation coverage now proves branch-local synchronous post-await `if` / return control flow across async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_if_return`.
 - Async branch-block pending-`await` continuation coverage now proves branch-local synchronous post-await locals can run before returning across async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_return`.
 - Async pending-`await` continuation lowering now preserves uninitialized `let` assignment preludes before awaited local returns, including inside branch blocks. Tests: `async_await_assigned_prelude_return`, `async_await_branch_block_assigned_prelude_return`.
 - Async branch-block pending-`await` continuation lowering now supports branch-local prelude statements before awaited local returns across async declarations, class methods, and async function values. Test: `async_await_branch_block_prelude_return`.

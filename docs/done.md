@@ -114,6 +114,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered for nested async closures with captured locals. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered across async declarations, lifted async function values, and class async methods that read `this`. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` continuations support the combined catch-plus-finally form for fulfilled and rejected awaited sources. Test: `async_await_try_catch_finally`
+- Branch-block pending-`await` continuations resume branch-local synchronous post-await `if` / return control flow across async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_if_return`
 - Branch-block pending-`await` continuations resume branch-local synchronous post-await locals before returning across async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_return`
 - Bounded single awaited-local continuations preserve uninitialized `let` assignment preludes before awaited local returns at function body scope and inside branch blocks. Tests: `async_await_assigned_prelude_return`, `async_await_branch_block_assigned_prelude_return`
 - Branch-block pending-`await` continuations preserve branch-local prelude statements before awaited local returns across async declarations, class methods, and async function values. Test: `async_await_branch_block_prelude_return`
@@ -2908,6 +2909,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `array_from_map` | Array.from over typed Map<K, V> sources with and without mapper callbacks |
 | `async_await_assigned_prelude_return` | async awaited local returns preserve uninitialized let assignment preludes |
 | `async_await_branch_block_assigned_prelude_return` | async branch blocks preserve uninitialized let assignment preludes before awaited local returns |
+| `async_await_branch_block_post_await_if_return` | async branch blocks resume synchronous post-await if/return control flow |
 | `async_await_branch_block_post_await_return` | async branch blocks resume synchronous post-await locals before returning |
 | `async_await_branch_block_prelude_return` | async branch blocks preserve branch-local preludes before awaited locals returned from the branch |
 | `async_await_branch_block_local_return` | async branch blocks resume awaited locals returned from the branch or fallthrough path |
