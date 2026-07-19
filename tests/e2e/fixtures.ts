@@ -617,6 +617,10 @@ const packages: Record<string, PackageFixture> = {
         "bridge.js": 'export { label, scale } from "./core.js";\nexport { default } from "./core.js";\n',
         "core.js": 'export const label = "js-transitive-reexport";\nexport function scale(value) { return value * 10; }\nexport default function greet(name) { return "hello " + name; }\n',
     }),
+    "tsc2c-js-import-cjs-package": esmPackage("tsc2c-js-import-cjs-package", {
+        "index.js": 'import helper from "./helper.cjs";\nexport const label = helper.label;\nexport function compute(value) { return helper.compute(value); }\n',
+        "helper.cjs": 'module.exports = { label: "js-import-cjs", compute(value) { return value * 11; } };\n',
+    }),
     "tsc2c-js-reexport-package": esmPackage("tsc2c-js-reexport-package", {
         "index.js": 'export { default as greet, label, compute as calc } from "./core.js";\nexport * from "./extra.js";\n',
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',

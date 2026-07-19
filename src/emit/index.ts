@@ -15363,12 +15363,17 @@ class Emitter {
             ts.isPropertyAccessExpression(target.left) &&
             this.isModuleExportsAccess(target.left)
         ) {
-            if (!this.hasCommonJsEsModuleMarker(target.getSourceFile())) {
-                const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
+            const targetFile = target.getSourceFile();
+            if (!this.hasCommonJsEsModuleMarker(targetFile)) {
+                const defaultMember = this.commonJsExportedMemberDeclaration(targetFile, "default");
                 if (defaultMember) return defaultMember;
+                if (!this.commonJsModuleExportsValueDeclaration(targetFile) &&
+                    this.commonJsExportedMemberDeclarations(targetFile).length > 0) {
+                    return targetFile;
+                }
                 return target;
             }
-            const defaultMember = this.commonJsExportedMemberDeclaration(target.getSourceFile(), "default");
+            const defaultMember = this.commonJsExportedMemberDeclaration(targetFile, "default");
             if (defaultMember) return defaultMember;
             return null;
         }
