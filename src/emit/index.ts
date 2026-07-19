@@ -179,8 +179,10 @@ interface AsyncAwaitLeadingStep {
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
     beforeStatements?: readonly ts.Statement[];
+    afterStatements?: readonly ts.Statement[];
     alternateAwaitExpr?: ts.AwaitExpression;
     alternateBeforeStatements?: readonly ts.Statement[];
+    alternateAfterStatements?: readonly ts.Statement[];
     condition?: ts.Expression;
     alternateAlternateAwaitExpr?: ts.AwaitExpression;
     alternateCondition?: ts.Expression;
@@ -28208,12 +28210,24 @@ class Emitter {
     private asyncAwaitConditionalLeadingStep(stmt: ts.Statement, depth = 0): AsyncAwaitLeadingStep | null {
         if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
         if (depth > 1) return null;
-        const splitBranch = (branch: ts.Statement): { statement: ts.Statement; beforeStatements: readonly ts.Statement[] } | null => {
-            if (!ts.isBlock(branch)) return { statement: branch, beforeStatements: [] };
-            if (branch.statements.length === 0) return null;
+        const splitBranch = (branch: ts.Statement): {
+            statement: ts.Statement;
+            beforeStatements: readonly ts.Statement[];
+            afterStatements: readonly ts.Statement[];
+        } | null => {
+            if (!ts.isBlock(branch)) return { statement: branch, beforeStatements: [], afterStatements: [] };
+            let awaitIndex = -1;
+            for (let i = 0; i < branch.statements.length; i++) {
+                if (this.awaitedContinuationStep(branch.statements[i]!)) {
+                    if (awaitIndex !== -1) return null;
+                    awaitIndex = i;
+                }
+            }
+            if (awaitIndex === -1) return null;
             return {
-                statement: branch.statements[branch.statements.length - 1]!,
-                beforeStatements: branch.statements.slice(0, -1),
+                statement: branch.statements[awaitIndex]!,
+                beforeStatements: branch.statements.slice(0, awaitIndex),
+                afterStatements: branch.statements.slice(awaitIndex + 1),
             };
         };
         const whenTrue = splitBranch(stmt.thenStatement);
@@ -28226,8 +28240,10 @@ class Emitter {
         const falseStep = nested ?? (whenFalse ? this.awaitedContinuationStep(whenFalse.statement) : null);
         if (!trueStep || !falseStep) return null;
         if (!whenTrue.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (!whenTrue.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (whenFalse && !whenFalse.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && (nested.beforeStatements?.length || nested.alternateBeforeStatements?.length)) return null;
+        if (whenFalse && !whenFalse.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && (nested.beforeStatements?.length || nested.alternateBeforeStatements?.length || nested.afterStatements?.length || nested.alternateAfterStatements?.length)) return null;
         let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) {
@@ -28260,8 +28276,10 @@ class Emitter {
             variable,
             awaitExpr: trueStep.awaitExpr,
             beforeStatements: whenTrue.beforeStatements,
+            afterStatements: whenTrue.afterStatements,
             alternateAwaitExpr: falseStep.awaitExpr,
             alternateBeforeStatements: nested ? [] : whenFalse!.beforeStatements,
+            alternateAfterStatements: nested ? [] : whenFalse!.afterStatements,
             condition: stmt.expression,
             alternateAlternateAwaitExpr: nested?.alternateAwaitExpr,
             alternateCondition: nested?.condition,
@@ -28795,6 +28813,14 @@ class Emitter {
             visit(statement, 0);
             if (!ok) return null;
         }
+        for (const statement of steps[0]!.afterStatements ?? []) {
+            visit(statement, 1);
+            if (!ok) return null;
+        }
+        for (const statement of steps[0]!.alternateAfterStatements ?? []) {
+            visit(statement, 1);
+            if (!ok) return null;
+        }
         for (let i = 1; i < steps.length; i++) {
             visit(steps[i]!.awaitExpr.expression, i);
             if (!ok) return null;
@@ -28820,6 +28846,14 @@ class Emitter {
             }
             for (const statement of steps[i]!.alternateBeforeStatements ?? []) {
                 visit(statement, i);
+                if (!ok) return null;
+            }
+            for (const statement of steps[i]!.afterStatements ?? []) {
+                visit(statement, i + 1);
+                if (!ok) return null;
+            }
+            for (const statement of steps[i]!.alternateAfterStatements ?? []) {
+                visit(statement, i + 1);
                 if (!ok) return null;
             }
             for (const stmt of betweenStatements[i - 1] ?? []) {
@@ -31107,10 +31141,15 @@ class Emitter {
             if (awaitedType.kind === "never" || (awaitedType.kind === "void" && continuation.usesAwaitedLocals[i])) {
                 return false;
             }
+            if (i === continuation.steps.length - 1 &&
+                (continuation.steps[i]!.afterStatements?.length || continuation.steps[i]!.alternateAfterStatements?.length)) {
+                return false;
+            }
         }
 
         const sourcePromise = this.freshTemp("_await_source");
         const resultPromise = resultPromiseOverride ?? this.freshTemp("_await_result");
+        let firstConditionVar: string | null = null;
         const adapter = this.ensureAsyncAwaitLeadingReturnContinuationAdapter(
             continuation.steps,
             continuation.betweenStatements,
@@ -31131,6 +31170,7 @@ class Emitter {
             ? (() => {
                 const condition = this.emitExpr(firstStep.condition!);
                 const conditionVar = this.freshTemp("_await_condition");
+                firstConditionVar = conditionVar;
                 buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, firstStep.condition!)};`);
                 buf.open(`if (${conditionVar})`);
                 for (const statement of firstStep.beforeStatements ?? []) this.emitStmt(buf, statement);
@@ -31160,6 +31200,7 @@ class Emitter {
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->receiver = ${sourcePromise};`);
         buf.line(`${env}->result_promise = ${resultPromise};`);
+        if (firstConditionVar) buf.line(`${env}->branch_choice = ${firstConditionVar};`);
         for (const param of continuation.params) {
             buf.line(`${env}->${param.field} = ${param.name};`);
         }
@@ -31243,6 +31284,7 @@ class Emitter {
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
+        this.structDecls.line("bool branch_choice;");
         for (const param of params) {
             this.structDecls.line(`${param.type.c} ${param.field};`);
         }
@@ -31294,6 +31336,14 @@ class Emitter {
         let secondConditionVar: string | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
+            if (firstStep.afterStatements?.length || firstStep.alternateAfterStatements?.length) {
+                buf.open("if (state->branch_choice)");
+                for (const statement of firstStep.afterStatements ?? []) this.emitStmt(buf, statement);
+                buf.close();
+                buf.open("else");
+                for (const statement of firstStep.alternateAfterStatements ?? []) this.emitStmt(buf, statement);
+                buf.close();
+            }
             for (const stmt of betweenStatements[0] ?? []) {
                 this.emitStmt(buf, stmt);
             }
@@ -31348,6 +31398,9 @@ class Emitter {
         }
         for (const capture of interstitialCaptures) {
             buf.line(`${envVar}->${capture.field} = ${capture.name};`);
+        }
+        if (secondConditionVar) {
+            buf.line(`${envVar}->branch_choice = ${secondConditionVar};`);
         }
         if (thisValue) {
             buf.line(`${envVar}->this_arg = state->this_arg;`);

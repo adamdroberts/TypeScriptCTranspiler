@@ -656,6 +656,20 @@ async function conditionalLeadingChainMixedLocalSequence(flag: boolean, prefix: 
     return second;
 }
 
+async function conditionalLeadingChainArmPostAwait(flag: boolean, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (flag) {
+        first = await delay(451, prefix + "true-one");
+        marker = marker + "|true-after";
+    } else {
+        first = await delay(452, prefix + "false-one");
+        marker = marker + "|false-after";
+    }
+    const second = await delay(453, first + ":" + marker);
+    return first + ":" + second;
+}
+
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
     const first = await delay(324, "one");
     const ignored = await delay(325);
@@ -2447,6 +2461,12 @@ conditionalLeadingChainMixedLocalSequence(true, "mixed-local-").then((value: str
 });
 conditionalLeadingChainMixedLocalSequence(false, "mixed-local-").then((value: string): void => {
     console.log("conditional-leading-chain-mixed-local-false:", value);
+});
+conditionalLeadingChainArmPostAwait(true, "arm-after-").then((value: string): void => {
+    console.log("conditional-leading-chain-arm-post-await-true:", value);
+});
+conditionalLeadingChainArmPostAwait(false, "arm-after-").then((value: string): void => {
+    console.log("conditional-leading-chain-arm-post-await-false:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

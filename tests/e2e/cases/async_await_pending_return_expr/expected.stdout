@@ -305,6 +305,8 @@ conditional-leading-chain-branch-local-true: branch-local-second
 conditional-leading-chain-branch-local-false: branch-local-second
 conditional-leading-chain-mixed-local-true: mixed-local-second
 conditional-leading-chain-mixed-local-false: mixed-local-second
+conditional-leading-chain-arm-post-await-true: arm-after-true-one:arm-after-true-one:initial|true-after
+conditional-leading-chain-arm-post-await-false: arm-after-false-one:arm-after-false-one:initial|false-after
 source-try-finally-leading-await-success: finally-await-finally-await-first:second:async-success|between-if|between-error|async-finally
 source-try-finally-leading-await-alternate: finally-await-finally-await-first:second:async-alternate|between-else|between-error|async-finally
 declaration-leading-chain-throw: chain-one:two:three:throw

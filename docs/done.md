@@ -3076,6 +3076,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
 | `async_await_pending_return_expr` | conditional leading await steps allow branch-local awaited declarations used only as sequencing points |
 | `async_await_pending_return_expr` | conditional leading await steps accept mixed bare-await and branch-local declaration arms for sequencing |
+| `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free post-await statements in both direct arms before the next suspension |
 | `async_await_pending_return_expr` | combined source try/catch/finally composes bounded leading multi-await chains with catch recovery, finally routing, and finally-throw override |
 | `async_await_try_finally_prelude` | async try/finally pending continuations support synchronous initialized and later-assigned finally-local declarations |
 | `async_await_parenthesized_bare_await` | async continuations unwrap parenthesized awaited locals, bare awaits, direct return-awaits, try/catch, try/finally, and try/finally fallthrough |
