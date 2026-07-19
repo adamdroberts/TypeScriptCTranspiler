@@ -17,7 +17,7 @@ This is the next item that most directly expands what programs can be written ag
   - The same bounded interstitial extension now covers await-free `switch` statements without branch-local declarations; awaited branch bodies and general state-machine lowering remain deferred.
   - The bounded interstitial extension also covers await-free `while` / `do` / `for` loop statements without loop-local declarations; loops containing awaits or declaration lists remain deferred.
   - Leading chains now also accept bare `Promise<void>` sequencing awaits between awaited locals; general awaited expressions and nested awaited control flow remain deferred.
-  - Await-free interstitial `try` / `catch` / `finally` statements without catch bindings or declarations are now covered; source try blocks containing awaited returns remain deferred.
+  - Await-free interstitial `try` / `catch` / `finally` statements with simple initialized or assigned-before-use `const` / `let` locals are now covered; source try blocks containing awaited returns and broader declaration/destructuring forms remain deferred.
   - Leading chains now cover a terminal direct `return await`; general direct-return-await control-flow and nested awaited expressions remain deferred.
   - Direct branch `return await` arms now preserve safe initialized branch-local declaration preludes across declarations, methods, function values, and branch-block fallthrough; awaited, escaping, and broader branch return-await graphs remain deferred.
   - The same direct branch `return await` subset now preserves branch-local `let` declarations assigned before the awaited source; assignments after suspension and broader mutable branch state remain deferred.
