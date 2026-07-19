@@ -28074,6 +28074,10 @@ class Emitter {
             return null;
         }
         if (ts.isBlock(stmt)) {
+            const continuation = this.asyncAwaitReturnContinuation(stmt, parameters, thisValue);
+            if (continuation) {
+                return { kind: "localReturn", continuation };
+            }
             return this.asyncAwaitIfExpressionReturnBranchFromStatements(stmt.statements, parameters, thisValue, captures);
         }
         if (ts.isIfStatement(stmt)) {
@@ -28173,6 +28177,7 @@ class Emitter {
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "localReturn") {
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
             return this.emitAsyncAwaitReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "syncReturn") {
