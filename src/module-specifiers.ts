@@ -2853,7 +2853,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             method !== "toISOString" &&
             method !== "toJSON" &&
             method !== "toUTCString" &&
-            method !== "toGMTString"
+            method !== "toGMTString" &&
+            method !== "getUTCFullYear" &&
+            method !== "getUTCMonth" &&
+            method !== "getUTCDate" &&
+            method !== "getUTCDay" &&
+            method !== "getUTCHours" &&
+            method !== "getUTCMinutes" &&
+            method !== "getUTCSeconds" &&
+            method !== "getUTCMilliseconds"
         ) {
             return [];
         }
@@ -2863,11 +2871,44 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const date of dates) {
             const stamp = date.getTime();
             if (!Number.isFinite(stamp)) return [];
-            out.push(method === "getTime" || method === "valueOf"
-                ? String(stamp)
-                : method === "toUTCString" || method === "toGMTString"
-                    ? date.toUTCString()
-                    : date.toISOString());
+            switch (method) {
+                case "getTime":
+                case "valueOf":
+                    out.push(String(stamp));
+                    break;
+                case "toUTCString":
+                case "toGMTString":
+                    out.push(date.toUTCString());
+                    break;
+                case "toISOString":
+                case "toJSON":
+                    out.push(date.toISOString());
+                    break;
+                case "getUTCFullYear":
+                    out.push(String(date.getUTCFullYear()));
+                    break;
+                case "getUTCMonth":
+                    out.push(String(date.getUTCMonth()));
+                    break;
+                case "getUTCDate":
+                    out.push(String(date.getUTCDate()));
+                    break;
+                case "getUTCDay":
+                    out.push(String(date.getUTCDay()));
+                    break;
+                case "getUTCHours":
+                    out.push(String(date.getUTCHours()));
+                    break;
+                case "getUTCMinutes":
+                    out.push(String(date.getUTCMinutes()));
+                    break;
+                case "getUTCSeconds":
+                    out.push(String(date.getUTCSeconds()));
+                    break;
+                case "getUTCMilliseconds":
+                    out.push(String(date.getUTCMilliseconds()));
+                    break;
+            }
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
