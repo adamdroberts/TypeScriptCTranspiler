@@ -3956,6 +3956,11 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             );
         }
 
+        const urlSearchParamsValues = resolveStaticUrlSearchParamsSourceTexts(expr);
+        if (urlSearchParamsValues.length === 1) {
+            return staticUrlSearchParamsEntries(urlSearchParamsValues[0]!);
+        }
+
         const ctor = unwrapStaticExpression(expr);
         if (!ts.isNewExpression(ctor)) return null;
         const ctorExpr = unwrapStaticExpression(ctor.expression);
@@ -4558,6 +4563,11 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const collection = resolveCollectionExpression(expr);
         if (collection && ts.isArrayLiteralExpression(collection)) return collection;
 
+        const urlSearchParamsValues = resolveStaticUrlSearchParamsSourceTexts(expr);
+        if (urlSearchParamsValues.length === 1) {
+            return staticUrlSearchParamsEntries(urlSearchParamsValues[0]!);
+        }
+
         const source = unwrapStaticExpression(expr);
         if (!ts.isNewExpression(source)) return null;
         const ctor = unwrapStaticExpression(source.expression);
@@ -4571,19 +4581,39 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return entries && ts.isArrayLiteralExpression(entries) ? entries : null;
     };
 
-    const resolveStaticArrayFromUrlSearchParamsSource = (expr: ts.Expression | undefined): ts.ArrayLiteralExpression | null => {
-        const values = !expr || isStaticUndefinedExpression(expr)
-            ? [""]
-            : resolve(expr);
-        if (values.length !== 1) return null;
-        const entries = Array.from(new URLSearchParams(values[0]!));
+    const resolveStaticUrlSearchParamsSourceTexts = (expr: ts.Expression | undefined): string[] => {
+        if (!expr || isStaticUndefinedExpression(expr)) return [""];
+        const source = unwrapStaticExpression(expr);
+        if (ts.isNewExpression(source)) {
+            const ctor = unwrapStaticExpression(source.expression);
+            if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return [];
+            if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
+            const arg = source.arguments?.[0];
+            return !arg || isStaticUndefinedExpression(arg) ? [""] : resolve(arg);
+        }
+        if (ts.isPropertyAccessExpression(source) && source.name.text === "searchParams") {
+            const urls = resolveStaticUrlRecords(source.expression);
+            if (urls.length === 0) return [];
+            return dedupe(urls.map((url) => url.searchParams.toString()));
+        }
+        return [];
+    };
+
+    const staticUrlSearchParamsEntries = (value: string): ts.ArrayLiteralExpression | null => {
+        const entries = Array.from(new URLSearchParams(value));
         if (entries.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
-        return ts.factory.createArrayLiteralExpression(entries.map(([key, value]) => {
+        return ts.factory.createArrayLiteralExpression(entries.map(([key, entryValue]) => {
             return ts.factory.createArrayLiteralExpression([
                 ts.factory.createStringLiteral(key),
-                ts.factory.createStringLiteral(value),
+                ts.factory.createStringLiteral(entryValue),
             ]);
         }));
+    };
+
+    const resolveStaticArrayFromUrlSearchParamsSource = (expr: ts.Expression | undefined): ts.ArrayLiteralExpression | null => {
+        const values = resolveStaticUrlSearchParamsSourceTexts(expr);
+        if (values.length !== 1) return null;
+        return staticUrlSearchParamsEntries(values[0]!);
     };
 
     const resolveStaticObjectEntriesCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
@@ -4631,15 +4661,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         ) {
             return null;
         }
-        const source = unwrapStaticExpression(callee.expression);
-        if (!ts.isNewExpression(source)) return null;
-        const ctor = unwrapStaticExpression(source.expression);
-        if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return null;
-        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return null;
-        const arg = source.arguments?.[0];
-        const values = !arg || isStaticUndefinedExpression(arg)
-            ? [""]
-            : resolve(arg);
+        const values = resolveStaticUrlSearchParamsSourceTexts(callee.expression);
         if (values.length !== 1) return null;
         const params = new URLSearchParams(values[0]!);
         if (method === "getAll") {
@@ -4659,7 +4681,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 Array.from(params.values()).map((value) => ts.factory.createStringLiteral(value)),
             );
         }
-        return resolveStaticArrayFromUrlSearchParamsSource(arg);
+        return staticUrlSearchParamsEntries(values[0]!);
     };
 
     const resolveStaticJsonParseCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
@@ -5040,15 +5062,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         ) {
             return [];
         }
-        const source = unwrapStaticExpression(callee.expression);
-        if (!ts.isNewExpression(source)) return [];
-        const ctor = unwrapStaticExpression(source.expression);
-        if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return [];
-        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
-        const arg = source.arguments?.[0];
-        const values = !arg || isStaticUndefinedExpression(arg)
-            ? [""]
-            : resolve(arg);
+        const values = resolveStaticUrlSearchParamsSourceTexts(callee.expression);
         if (values.length === 0) return [];
         const out: string[] = [];
         for (const value of values) {
@@ -5085,15 +5099,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
     const resolveStaticUrlSearchParamsSizeAccess = (expr: ts.PropertyAccessExpression): string[] => {
         if (expr.name.text !== "size") return [];
-        const source = unwrapStaticExpression(expr.expression);
-        if (!ts.isNewExpression(source)) return [];
-        const ctor = unwrapStaticExpression(source.expression);
-        if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return [];
-        if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
-        const arg = source.arguments?.[0];
-        const values = !arg || isStaticUndefinedExpression(arg)
-            ? [""]
-            : resolve(arg);
+        const values = resolveStaticUrlSearchParamsSourceTexts(expr.expression);
         if (values.length === 0) return [];
         return dedupe(values.map((value) => String(new URLSearchParams(value).size)));
     };
