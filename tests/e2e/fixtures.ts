@@ -603,6 +603,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'import * as helper from "./helper.js";\nexport const message = helper.label + ":" + helper.scale(5);\nexport function wrap(value) { return helper.label + ":" + helper.scale(value); }\n',
         "helper.js": 'export const label = "js-namespace-import";\nexport function scale(value) { return value * 8; }\n',
     }),
+    "tsc2c-js-side-effect-import-package": esmPackage("tsc2c-js-side-effect-import-package", {
+        "index.js": 'import "./setup.js";\nexport const label = "js-side-effect-import";\n',
+        "setup.js": 'console.log("js package setup");\n',
+    }),
     "tsc2c-js-reexport-package": esmPackage("tsc2c-js-reexport-package", {
         "index.js": 'export { default as greet, label, compute as calc } from "./core.js";\nexport * from "./extra.js";\n',
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',

@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript package entries loaded through `allowJs` eagerly run package-local side-effect imports before exported values are used. Test: `node_modules_js_side_effect_import`
 - Pure JavaScript package entries loaded through `allowJs` can use package-local namespace imports from JavaScript modules when computing exported values and functions. Test: `node_modules_js_namespace_import`
 - Pure JavaScript package entries loaded through `allowJs` can use package-local default imports from JavaScript modules when computing exported values and functions. Test: `node_modules_js_default_import`
 - Pure JavaScript package barrels loaded through `allowJs` resolve finite `export * as namespace from "./module.js"` re-exports to package-local ESM members for namespace property reads and calls. Test: `node_modules_js_namespace_re_export`
