@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed `url` / `node:url` named `URL` and `URLSearchParams` import-constructor finite dynamic-require proofs already tracked by `dynamic_require_static_url_import_constructors`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed static URL credential metadata finite dynamic-require proofs already tracked by `dynamic_require_static_url_credentials`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed static `URL.searchParams` finite dynamic-require proofs already tracked by `dynamic_require_static_url_search_params_property`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed sorted `URLSearchParams` entry-collection composition for finite dynamic-require proofs already tracked by `dynamic_require_static_url_search_params_sorted_collections`.
@@ -38,6 +39,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Finite dynamic `require(...)` proofs now resolve static `URL` and `URLSearchParams` constructor fragments through named imports from `url` and `node:url`, including aliased imports. Test: `dynamic_require_static_url_import_constructors`.
 - Finite dynamic `require(...)` proofs now resolve static `new URL(...).username` and `.password` credential fragments, including base-resolved URLs. Test: `dynamic_require_static_url_credentials`.
 - Finite dynamic `require(...)` proofs now resolve static `new URL(...).searchParams` fragments through `.toString()`, `.get(...)`, `.has(...)`, `.size`, `Array.from(...)`, and `Object.fromEntries(...)`. Test: `dynamic_require_static_url_search_params_property`.
 - Finite dynamic `require(...)` proofs now compose `Array.from(new URLSearchParams(...)).sort()` entry collections through indexed reads and `Object.fromEntries(...)`, using JavaScript default array stringification when sorting nested finite arrays. Test: `dynamic_require_static_url_search_params_sorted_collections`.
