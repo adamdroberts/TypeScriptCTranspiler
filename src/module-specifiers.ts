@@ -3439,7 +3439,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (method === "toSorted" || method === "sort") {
             if (call.arguments.length !== 0) return null;
             const sortable = receiverElements.map((element, index) => {
-                const texts = resolve(element);
+                const texts = resolveStaticDefaultSortText(element);
                 return texts.length === 1 ? { element, text: texts[0]!, index } : null;
             });
             if (sortable.some((entry) => entry === null)) return null;
@@ -3881,6 +3881,37 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             elements.push(element);
         }
         return elements;
+    };
+
+    const resolveStaticDefaultSortText = (expr: ts.Expression): string[] => {
+        const direct = resolve(expr);
+        if (direct.length > 0) return direct;
+        const collection = resolveCollectionExpression(expr);
+        if (!collection || !ts.isArrayLiteralExpression(collection)) return [];
+        const elements = denseStaticArrayElements(collection);
+        if (!elements) return [];
+        const parts: string[][] = [];
+        for (const element of elements) {
+            if (isStaticUndefinedExpression(element) || element.kind === ts.SyntaxKind.NullKeyword) {
+                parts.push([""]);
+                continue;
+            }
+            const values = resolve(element);
+            if (values.length === 0) return [];
+            parts.push(values);
+        }
+        let out = [""];
+        for (let index = 0; index < parts.length; index++) {
+            const next: string[] = [];
+            for (const prefix of out) {
+                for (const value of parts[index]!) {
+                    next.push(index === 0 ? value : `${prefix},${value}`);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            out = dedupe(next);
+        }
+        return out;
     };
 
     const normalizeStaticArraySliceIndex = (index: number, length: number): number => {
