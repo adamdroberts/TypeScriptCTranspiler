@@ -983,6 +983,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             property !== "protocol" &&
             property !== "host" &&
             property !== "hostname" &&
+            property !== "username" &&
+            property !== "password" &&
             property !== "port" &&
             property !== "pathname" &&
             property !== "search" &&
