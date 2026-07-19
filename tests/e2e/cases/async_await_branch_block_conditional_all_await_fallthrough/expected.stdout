@@ -1,0 +1,9 @@
+branch-block-conditional-all-await-fallthrough-branch: fn-branch
+branch-block-conditional-all-await-fallthrough-left: fn-fall-left
+branch-block-conditional-all-await-fallthrough-right: fn-fall-right
+method-branch-block-conditional-all-await-fallthrough-branch: this-method-branch
+method-branch-block-conditional-all-await-fallthrough-left: this-method-fall-left
+method-branch-block-conditional-all-await-fallthrough-right: this-method-fall-right
+value-branch-block-conditional-all-await-fallthrough-branch: arrow-value-branch
+value-branch-block-conditional-all-await-fallthrough-left: arrow-value-fall-left
+value-branch-block-conditional-all-await-fallthrough-right: arrow-value-fall-right
