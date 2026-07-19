@@ -185,13 +185,17 @@ interface AsyncAwaitLeadingStep {
     alternateAfterStatements?: readonly ts.Statement[];
     alternateAlternateBeforeStatements?: readonly ts.Statement[];
     alternateThirdBeforeStatements?: readonly ts.Statement[];
+    alternateFourthBeforeStatements?: readonly ts.Statement[];
     alternateAlternateAfterStatements?: readonly ts.Statement[];
     alternateThirdAfterStatements?: readonly ts.Statement[];
+    alternateFourthAfterStatements?: readonly ts.Statement[];
     condition?: ts.Expression;
     alternateAlternateAwaitExpr?: ts.AwaitExpression;
     alternateCondition?: ts.Expression;
     alternateAlternateCondition?: ts.Expression;
     alternateThirdAwaitExpr?: ts.AwaitExpression;
+    alternateThirdCondition?: ts.Expression;
+    alternateFourthAwaitExpr?: ts.AwaitExpression;
 }
 
 interface AsyncAwaitLeadingReturnContinuation {
@@ -28215,7 +28219,7 @@ class Emitter {
 
     private asyncAwaitConditionalLeadingStep(stmt: ts.Statement, depth = 0): AsyncAwaitLeadingStep | null {
         if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
-        if (depth > 2) return null;
+        if (depth > 3) return null;
         const splitBranch = (branch: ts.Statement): {
             statement: ts.Statement;
             beforeStatements: readonly ts.Statement[];
@@ -28252,9 +28256,11 @@ class Emitter {
         if (nested && !(nested.beforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAlternateBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && !(nested.alternateThirdBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.afterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAlternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && !(nested.alternateThirdAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) {
@@ -28296,10 +28302,14 @@ class Emitter {
             alternateCondition: nested?.condition,
             alternateAlternateCondition: nested?.alternateCondition,
             alternateThirdAwaitExpr: nested?.alternateAlternateAwaitExpr,
+            alternateThirdCondition: nested?.alternateAlternateCondition,
+            alternateFourthAwaitExpr: nested?.alternateThirdAwaitExpr,
             alternateAlternateBeforeStatements: nested?.alternateBeforeStatements,
             alternateThirdBeforeStatements: nested?.alternateAlternateBeforeStatements,
+            alternateFourthBeforeStatements: nested?.alternateThirdBeforeStatements,
             alternateAlternateAfterStatements: nested?.alternateAfterStatements,
             alternateThirdAfterStatements: nested?.alternateAlternateAfterStatements,
+            alternateFourthAfterStatements: nested?.alternateThirdAfterStatements,
         };
     }
 
@@ -28818,6 +28828,10 @@ class Emitter {
             visit(steps[0]!.alternateThirdAwaitExpr.expression, 0);
             if (!ok) return null;
         }
+        if (steps[0]!.alternateFourthAwaitExpr) {
+            visit(steps[0]!.alternateFourthAwaitExpr.expression, 0);
+            if (!ok) return null;
+        }
         if (steps[0]!.condition) {
             visit(steps[0]!.condition!, 0);
             if (!ok) return null;
@@ -28828,6 +28842,10 @@ class Emitter {
         }
         if (steps[0]!.alternateAlternateCondition) {
             visit(steps[0]!.alternateAlternateCondition!, 0);
+            if (!ok) return null;
+        }
+        if (steps[0]!.alternateThirdCondition) {
+            visit(steps[0]!.alternateThirdCondition!, 0);
             if (!ok) return null;
         }
         for (const statement of steps[0]!.beforeStatements ?? []) {
@@ -28843,6 +28861,10 @@ class Emitter {
             if (!ok) return null;
         }
         for (const statement of steps[0]!.alternateThirdBeforeStatements ?? []) {
+            visit(statement, 0);
+            if (!ok) return null;
+        }
+        for (const statement of steps[0]!.alternateFourthBeforeStatements ?? []) {
             visit(statement, 0);
             if (!ok) return null;
         }
@@ -28862,6 +28884,10 @@ class Emitter {
             visit(statement, 1);
             if (!ok) return null;
         }
+        for (const statement of steps[0]!.alternateFourthAfterStatements ?? []) {
+            visit(statement, 1);
+            if (!ok) return null;
+        }
         for (let i = 1; i < steps.length; i++) {
             visit(steps[i]!.awaitExpr.expression, i);
             if (!ok) return null;
@@ -28877,6 +28903,10 @@ class Emitter {
                 visit(steps[i]!.alternateThirdAwaitExpr!.expression, i);
                 if (!ok) return null;
             }
+            if (steps[i]!.alternateFourthAwaitExpr) {
+                visit(steps[i]!.alternateFourthAwaitExpr!.expression, i);
+                if (!ok) return null;
+            }
             if (steps[i]!.condition) {
                 visit(steps[i]!.condition!, i);
                 if (!ok) return null;
@@ -28887,6 +28917,10 @@ class Emitter {
             }
             if (steps[i]!.alternateAlternateCondition) {
                 visit(steps[i]!.alternateAlternateCondition!, i);
+                if (!ok) return null;
+            }
+            if (steps[i]!.alternateThirdCondition) {
+                visit(steps[i]!.alternateThirdCondition!, i);
                 if (!ok) return null;
             }
             for (const statement of steps[i]!.beforeStatements ?? []) {
@@ -28905,6 +28939,10 @@ class Emitter {
                 visit(statement, i);
                 if (!ok) return null;
             }
+            for (const statement of steps[i]!.alternateFourthBeforeStatements ?? []) {
+                visit(statement, i);
+                if (!ok) return null;
+            }
             for (const statement of steps[i]!.afterStatements ?? []) {
                 visit(statement, i + 1);
                 if (!ok) return null;
@@ -28918,6 +28956,10 @@ class Emitter {
                 if (!ok) return null;
             }
             for (const statement of steps[i]!.alternateThirdAfterStatements ?? []) {
+                visit(statement, i + 1);
+                if (!ok) return null;
+            }
+            for (const statement of steps[i]!.alternateFourthAfterStatements ?? []) {
                 visit(statement, i + 1);
                 if (!ok) return null;
             }
@@ -29903,6 +29945,14 @@ class Emitter {
                         this.checker,
                     ));
                     if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promise.c) return false;
+                }
+                if (step.alternateFourthAwaitExpr) {
+                    const alternateFourthPromise = this.prepareType(mapTsType(
+                        step.alternateFourthAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateFourthAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateFourthPromise.kind !== "promise" || alternateFourthPromise.c !== promise.c) return false;
                 }
             }
             const awaitedType = this.prepareType(mapTsType(
@@ -31182,6 +31232,15 @@ class Emitter {
                 if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promiseTypes[0]!.c) return false;
                 alternatePromiseTypes[0]!.push(alternateThirdPromise);
             }
+            if (firstStep.alternateFourthAwaitExpr) {
+                const alternateFourthPromise = this.prepareType(mapTsType(
+                    firstStep.alternateFourthAwaitExpr.expression,
+                    this.checker.getTypeAtLocation(firstStep.alternateFourthAwaitExpr.expression),
+                    this.checker,
+                ));
+                if (alternateFourthPromise.kind !== "promise" || alternateFourthPromise.c !== promiseTypes[0]!.c) return false;
+                alternatePromiseTypes[0]!.push(alternateFourthPromise);
+            }
         }
         for (let i = 1; i < continuation.steps.length; i++) {
             const step = continuation.steps[i]!;
@@ -31218,6 +31277,15 @@ class Emitter {
                     ));
                     if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promiseType.c) return false;
                     alternateTypes.push(alternateThirdPromise);
+                }
+                if (step.alternateFourthAwaitExpr) {
+                    const alternateFourthPromise = this.prepareType(mapTsType(
+                        step.alternateFourthAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateFourthAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateFourthPromise.kind !== "promise" || alternateFourthPromise.c !== promiseType.c) return false;
+                    alternateTypes.push(alternateFourthPromise);
                 }
             }
             alternatePromiseTypes.push(alternateTypes);
@@ -31260,7 +31328,34 @@ class Emitter {
                 buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, firstStep.condition!)};`);
                 const branchChoiceVar = this.freshTemp("_await_branch_choice");
                 firstConditionVar = branchChoiceVar;
-                if (firstStep.alternateThirdAwaitExpr) {
+                if (firstStep.alternateFourthAwaitExpr) {
+                    const alternateCondition = this.emitExpr(firstStep.alternateCondition!);
+                    const alternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateAlternateCondition = this.emitExpr(firstStep.alternateAlternateCondition!);
+                    const alternateAlternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateThirdCondition = this.emitExpr(firstStep.alternateThirdCondition!);
+                    const alternateThirdConditionVar = this.freshTemp("_await_condition");
+                    buf.line(`int ${branchChoiceVar};`);
+                    buf.open(`if (${conditionVar})`);
+                    buf.line(`${branchChoiceVar} = 0;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateConditionVar} = ${this.coerce(alternateCondition, T_BOOLEAN, firstStep.alternateCondition!)};`);
+                    buf.open(`if (${alternateConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 1;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateAlternateConditionVar} = ${this.coerce(alternateAlternateCondition, T_BOOLEAN, firstStep.alternateAlternateCondition!)};`);
+                    buf.open(`if (${alternateAlternateConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 2;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateThirdConditionVar} = ${this.coerce(alternateThirdCondition, T_BOOLEAN, firstStep.alternateThirdCondition!)};`);
+                    buf.line(`${branchChoiceVar} = ${alternateThirdConditionVar} ? 3 : 4;`);
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                } else if (firstStep.alternateThirdAwaitExpr) {
                     const alternateCondition = this.emitExpr(firstStep.alternateCondition!);
                     const alternateConditionVar = this.freshTemp("_await_condition");
                     const alternateAlternateCondition = this.emitExpr(firstStep.alternateAlternateCondition!);
@@ -31304,9 +31399,14 @@ class Emitter {
                     for (const statement of firstStep.alternateAlternateBeforeStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
-                if (firstStep.alternateThirdBeforeStatements?.length) {
+                if (firstStep.alternateThirdBeforeStatements?.length || firstStep.alternateFourthBeforeStatements?.length) {
+                    buf.open(`else if (${branchChoiceVar} == 3)`);
+                    for (const statement of firstStep.alternateThirdBeforeStatements ?? []) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                if (firstStep.alternateFourthBeforeStatements?.length) {
                     buf.open("else");
-                    for (const statement of firstStep.alternateThirdBeforeStatements) this.emitStmt(buf, statement);
+                    for (const statement of firstStep.alternateFourthBeforeStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
                 const alternateSource = this.emitExpr(firstStep.alternateAwaitExpr.expression);
@@ -31329,7 +31429,16 @@ class Emitter {
                     promiseTypes[0]!,
                     firstStep.alternateThirdAwaitExpr.expression,
                 );
-                return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : ${alternateThirdSourceC})))`;
+                if (!firstStep.alternateFourthAwaitExpr) {
+                    return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : ${alternateThirdSourceC})))`;
+                }
+                const alternateFourthSource = this.emitExpr(firstStep.alternateFourthAwaitExpr.expression);
+                const alternateFourthSourceC = this.coerce(
+                    alternateFourthSource,
+                    promiseTypes[0]!,
+                    firstStep.alternateFourthAwaitExpr.expression,
+                );
+                return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${branchChoiceVar} == 3 ? ${alternateThirdSourceC} : ${alternateFourthSourceC}))))`;
             })()
             : firstSourceC;
         buf.line(`tsc_promise_t* const ${sourcePromise} = ${firstConditionalSource};`);
@@ -31472,13 +31581,15 @@ class Emitter {
         let secondAlternateSource: EmitResult | null = null;
         let secondAlternateAlternateSource: EmitResult | null = null;
         let secondAlternateThirdSource: EmitResult | null = null;
+        let secondAlternateFourthSource: EmitResult | null = null;
         let secondCondition: EmitResult | null = null;
         let secondConditionVar: string | null = null;
         let secondBranchChoiceVar: string | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
             if (firstStep.afterStatements?.length || firstStep.alternateAfterStatements?.length ||
-                firstStep.alternateAlternateAfterStatements?.length || firstStep.alternateThirdAfterStatements?.length) {
+                firstStep.alternateAlternateAfterStatements?.length || firstStep.alternateThirdAfterStatements?.length ||
+                firstStep.alternateFourthAfterStatements?.length) {
                 buf.open("if (state->branch_choice == 0)");
                 for (const statement of firstStep.afterStatements ?? []) this.emitStmt(buf, statement);
                 buf.close();
@@ -31490,9 +31601,14 @@ class Emitter {
                     for (const statement of firstStep.alternateAlternateAfterStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
-                if (firstStep.alternateThirdAfterStatements?.length) {
+                if (firstStep.alternateThirdAfterStatements?.length || firstStep.alternateFourthAfterStatements?.length) {
+                    buf.open("else if (state->branch_choice == 3)");
+                    for (const statement of firstStep.alternateThirdAfterStatements ?? []) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                if (firstStep.alternateFourthAfterStatements?.length) {
                     buf.open("else");
-                    for (const statement of firstStep.alternateThirdAfterStatements) this.emitStmt(buf, statement);
+                    for (const statement of firstStep.alternateFourthAfterStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
             }
@@ -31504,7 +31620,34 @@ class Emitter {
                 secondConditionVar = this.freshTemp("_await_condition");
                 buf.line(`bool ${secondConditionVar} = ${this.coerce(secondCondition, T_BOOLEAN, secondStep.condition)};`);
                 secondBranchChoiceVar = this.freshTemp("_await_branch_choice");
-                if (secondStep.alternateThirdAwaitExpr) {
+                if (secondStep.alternateFourthAwaitExpr) {
+                    const alternateCondition = this.emitExpr(secondStep.alternateCondition!);
+                    const alternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateAlternateCondition = this.emitExpr(secondStep.alternateAlternateCondition!);
+                    const alternateAlternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateThirdCondition = this.emitExpr(secondStep.alternateThirdCondition!);
+                    const alternateThirdConditionVar = this.freshTemp("_await_condition");
+                    buf.line(`int ${secondBranchChoiceVar};`);
+                    buf.open(`if (${secondConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 0;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateConditionVar} = ${this.coerce(alternateCondition, T_BOOLEAN, secondStep.alternateCondition!)};`);
+                    buf.open(`if (${alternateConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 1;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateAlternateConditionVar} = ${this.coerce(alternateAlternateCondition, T_BOOLEAN, secondStep.alternateAlternateCondition!)};`);
+                    buf.open(`if (${alternateAlternateConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 2;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateThirdConditionVar} = ${this.coerce(alternateThirdCondition, T_BOOLEAN, secondStep.alternateThirdCondition!)};`);
+                    buf.line(`${secondBranchChoiceVar} = ${alternateThirdConditionVar} ? 3 : 4;`);
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                } else if (secondStep.alternateThirdAwaitExpr) {
                     const alternateCondition = this.emitExpr(secondStep.alternateCondition!);
                     const alternateConditionVar = this.freshTemp("_await_condition");
                     const alternateAlternateCondition = this.emitExpr(secondStep.alternateAlternateCondition!);
@@ -31548,9 +31691,14 @@ class Emitter {
                     for (const statement of secondStep.alternateAlternateBeforeStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
-                if (secondStep.alternateThirdBeforeStatements?.length) {
+                if (secondStep.alternateThirdBeforeStatements?.length || secondStep.alternateFourthBeforeStatements?.length) {
+                    buf.open(`else if (${secondBranchChoiceVar} == 3)`);
+                    for (const statement of secondStep.alternateThirdBeforeStatements ?? []) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                if (secondStep.alternateFourthBeforeStatements?.length) {
                     buf.open("else");
-                    for (const statement of secondStep.alternateThirdBeforeStatements) this.emitStmt(buf, statement);
+                    for (const statement of secondStep.alternateFourthBeforeStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
             }
@@ -31561,6 +31709,9 @@ class Emitter {
                     secondAlternateAlternateSource = this.emitExpr(secondStep.alternateAlternateAwaitExpr.expression);
                     if (secondStep.alternateThirdAwaitExpr) {
                         secondAlternateThirdSource = this.emitExpr(secondStep.alternateThirdAwaitExpr.expression);
+                        if (secondStep.alternateFourthAwaitExpr) {
+                            secondAlternateFourthSource = this.emitExpr(secondStep.alternateFourthAwaitExpr.expression);
+                        }
                     }
                 }
             }
@@ -31589,7 +31740,15 @@ class Emitter {
                     promiseTypes[1]!,
                     secondStep.alternateThirdAwaitExpr!.expression,
                 );
-                return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : ${alternateThirdSourceC})))`;
+                if (!secondAlternateFourthSource) {
+                    return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : ${alternateThirdSourceC})))`;
+                }
+                const alternateFourthSourceC = this.coerce(
+                    secondAlternateFourthSource,
+                    promiseTypes[1]!,
+                    secondStep.alternateFourthAwaitExpr!.expression,
+                );
+                return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${secondBranchChoiceVar} == 3 ? ${alternateThirdSourceC} : ${alternateFourthSourceC}))))`;
             })()
             : secondSourceC;
         buf.line(`tsc_promise_t* const ${sourceVar} = ${stagedSecondSource};`);
@@ -32427,9 +32586,14 @@ class Emitter {
                     for (const stmt of conditionalStep.alternateAlternateAfterStatements) this.emitStmt(buf, stmt);
                     buf.close();
                 }
-                if (conditionalStep.alternateThirdAfterStatements?.length) {
+                if (conditionalStep.alternateThirdAfterStatements?.length || conditionalStep.alternateFourthAfterStatements?.length) {
+                    buf.open("else if (state->branch_choice == 3)");
+                    for (const stmt of conditionalStep.alternateThirdAfterStatements ?? []) this.emitStmt(buf, stmt);
+                    buf.close();
+                }
+                if (conditionalStep.alternateFourthAfterStatements?.length) {
                     buf.open("else");
-                    for (const stmt of conditionalStep.alternateThirdAfterStatements) this.emitStmt(buf, stmt);
+                    for (const stmt of conditionalStep.alternateFourthAfterStatements) this.emitStmt(buf, stmt);
                     buf.close();
                 }
             } else {
