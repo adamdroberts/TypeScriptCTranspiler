@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail conditional embedded-await return-expression coverage already tracked by `async_await_branch_block_conditional_await_fallthrough`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail embedded-await return-expression coverage already tracked by `async_await_branch_block_embedded_await_fallthrough`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail direct `return await` prelude coverage already tracked by `async_await_branch_block_return_await_fallthrough`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail terminal post-`await` throw coverage already tracked by `async_await_branch_block_fallthrough_post_await_throw`.
@@ -22,6 +23,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block pending-`await` continuation coverage now proves fallthrough-tail conditional return expressions can mix synchronous and embedded-awaited leaves while preserving prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_conditional_await_fallthrough`.
 - Async branch-block pending-`await` continuation coverage now proves fallthrough-tail return expressions with embedded awaits preserve prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_embedded_await_fallthrough`.
 - Async branch-block direct `return await` continuation coverage now proves fallthrough-tail prelude locals are preserved across async declarations, class methods, and async function values. Test: `async_await_branch_block_return_await_fallthrough`.
 - Async branch-block pending-`await` continuation lowering now recognizes fallthrough tails shaped as awaited-local continuations ending in terminal post-await `throw` across async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_throw`.

@@ -1,0 +1,9 @@
+branch-block-conditional-await-fallthrough-sync: fn-fall-sync
+method-branch-block-conditional-await-fallthrough-sync: this-method-fall-sync
+value-branch-block-conditional-await-fallthrough-sync: arrow-value-fall-sync
+branch-block-conditional-await-fallthrough-branch: fn-branch
+branch-block-conditional-await-fallthrough-await: fn-fall-await
+method-branch-block-conditional-await-fallthrough-branch: this-method-branch
+method-branch-block-conditional-await-fallthrough-await: this-method-fall-await
+value-branch-block-conditional-await-fallthrough-branch: arrow-value-branch
+value-branch-block-conditional-await-fallthrough-await: arrow-value-fall-await
