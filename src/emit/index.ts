@@ -33869,14 +33869,22 @@ class Emitter {
         const resolvedVar = this.freshTemp("_await_resolved");
         const eh = this.freshTemp("_await_eh");
         const variableSymbol = variable ? this.symbolForIdentifier(variable) : null;
-        const awaitedValue = awaitedType.kind === "void" || (!variableSymbol && !successReturnsAwaited)
+        const conditionalBranchSymbols = (conditionalStep?.conditionalBranches ?? [])
+            .map((branch) => branch.variable ? this.symbolForIdentifier(branch.variable) : null)
+            .filter((symbol): symbol is ts.Symbol => !!symbol);
+        const awaitedValueTarget = returnExpr ?? variable ?? conditionalStep?.conditionalBranches?.[0]?.awaitExpr ?? conditionalStep?.awaitExpr;
+        const awaitedValue = awaitedType.kind === "void" ||
+            ((!variableSymbol && conditionalBranchSymbols.length === 0) && !successReturnsAwaited)
             ? null
-            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, returnExpr ?? variable!);
+            : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, awaitedValueTarget!);
         const scope = new Map<ts.Symbol, string>();
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
         if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
+        if (awaitedType.kind !== "void") {
+            for (const symbol of conditionalBranchSymbols) scope.set(symbol, valueVar);
+        }
 
         const buf = new CBuf();
         buf.open(`void ${name}(void* env)`);
