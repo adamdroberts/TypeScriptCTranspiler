@@ -378,6 +378,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Direct branch `return await` preserves captured locals mutated by await-free `while`, `do while`, and declaration-free `for` preludes across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_loop_prelude`
 - Direct branch `return await` now preserves captured locals mutated by await-free loops containing simple initialized `const` / `let` locals across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_loop_local_declaration`
 - Direct branch `return await` also preserves captured locals mutated by await-free `for-in` and `for-of` loops containing simple initialized `const` / `let` locals across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_loop_iter_declaration`
+- Direct branch `return await` also preserves captured locals mutated by await-free loops containing uninitialized `let` locals assigned before use across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_loop_uninitialized_let`
 - Direct branch `return await` preserves captured locals mutated by an await-free `try` / `finally` prelude across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try_prelude`
 - Branch-local source `try` / `catch` routes direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try`
 - Branch-local source `try` / `finally` runs finally bodies on direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try_finally`
@@ -3078,6 +3079,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_return_await_loop_prelude` | branch return-await arms preserve await-free loop preludes |
 | `async_await_branch_return_await_loop_local_declaration` | branch return-await arms preserve loop-local const/let declarations |
 | `async_await_branch_return_await_loop_iter_declaration` | branch return-await arms preserve for-in/of loop-local declarations |
+| `async_await_branch_return_await_loop_uninitialized_let` | branch return-await arms preserve assigned-before-use loop-local let declarations |
 | `async_await_branch_return_await_try_prelude` | branch return-await arms preserve await-free try/finally preludes |
 | `async_await_branch_return_await_try` | branch try/catch routes direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_try_finally` | branch try/finally runs on direct return-await fulfillment and rejection |

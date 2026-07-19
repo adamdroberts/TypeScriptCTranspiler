@@ -31210,11 +31210,12 @@ class Emitter {
                 return;
             }
             for (const declaration of declarationList.declarations) {
-                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+                if (!ts.isIdentifier(declaration.name) ||
+                    (!declaration.initializer && !(declarationList.flags & ts.NodeFlags.Let))) {
                     ok = false;
                     return;
                 }
-                visit(declaration.initializer);
+                if (declaration.initializer) visit(declaration.initializer);
                 if (!ok) return;
             }
         };
