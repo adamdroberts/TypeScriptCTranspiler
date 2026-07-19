@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail post-`await` `if` return control-flow coverage already tracked by `async_await_branch_block_fallthrough_post_await_if_return`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail post-`await` `try` / `catch` / `finally` return control-flow coverage already tracked by `async_await_branch_block_fallthrough_post_await_try_return`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail post-`await` loop return control-flow coverage already tracked by `async_await_branch_block_fallthrough_post_await_loop_return`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail post-`await` switch return control-flow coverage already tracked by `async_await_branch_block_fallthrough_post_await_switch_return`.
@@ -28,6 +29,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block pending-`await` continuation coverage now proves fallthrough-tail post-`await` `if` / return control flow across async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_if_return`.
 - Async branch-block pending-`await` continuation coverage now proves fallthrough-tail post-`await` `try` / `catch` / `finally` before final return control flow across async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_try_return`.
 - Async branch-block pending-`await` continuation coverage now proves fallthrough-tail post-`await` loop / return control flow across async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_loop_return`.
 - Async branch-block pending-`await` continuation coverage now proves fallthrough-tail post-`await` `switch` / return control flow across async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_switch_return`.
