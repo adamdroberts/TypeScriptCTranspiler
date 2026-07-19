@@ -1,0 +1,9 @@
+branch-block-fallthrough-post-await-try-true: fn-branch
+branch-block-fallthrough-post-await-try-fall-ok: fn-fall-ok-F
+branch-block-fallthrough-post-await-try-fall-catch: caught-fn-fall-bad-F
+method-branch-block-fallthrough-post-await-try-true: this-method-branch
+method-branch-block-fallthrough-post-await-try-fall-ok: this-method-fall-ok-M
+method-branch-block-fallthrough-post-await-try-fall-catch: caught-this-method-fall-bad-M
+value-branch-block-fallthrough-post-await-try-true: arrow-value-branch
+value-branch-block-fallthrough-post-await-try-fall-ok: arrow-value-fall-ok-V
+value-branch-block-fallthrough-post-await-try-fall-catch: caught-arrow-value-fall-bad-V
