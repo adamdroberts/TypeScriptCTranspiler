@@ -313,6 +313,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Direct `return await` constructors with directly awaited callees now also cover mixed literal/direct-await arguments. Test: `async_await_interstitial_expression`
 - Staged multi-await `return await` binary expressions now preserve side-effect-free `void` leaves, including JavaScript-compatible string coercion to `"undefined"`. Test: `async_await_interstitial_expression`
 - Leading awaited-local chains now have ten-await branch/fallthrough coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`
+- Nested conditional leading await steps now support a seven-leaf Promise-valued selection across async declarations, class methods, function values, and a branch-block fallthrough tail. Test: `async_await_seven_leaf_conditional`
 - Leading awaited-local chains now reject through terminal post-await `throw` statements after multiple suspensions for async declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Leading awaited-local chains now support initialized or uninitialized `let` aliases assigned from awaited promises across multiple suspensions, including repeated assignment to the same alias, for declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`
