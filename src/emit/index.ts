@@ -21048,13 +21048,24 @@ class Emitter {
             if (
                 !ts.isExportDeclaration(stmt) ||
                 !stmt.exportClause ||
-                !ts.isNamespaceExport(stmt.exportClause) ||
-                stmt.exportClause.name.text !== receiver.name.text ||
                 !stmt.moduleSpecifier ||
                 !ts.isStringLiteralLike(stmt.moduleSpecifier)
             ) {
                 continue;
             }
+            let matchesReExport = false;
+            if (ts.isNamespaceExport(stmt.exportClause)) {
+                matchesReExport = stmt.exportClause.name.text === receiver.name.text;
+            } else if (ts.isNamedExports(stmt.exportClause)) {
+                for (const element of stmt.exportClause.elements) {
+                    const localName = element.propertyName?.text ?? element.name.text;
+                    if (element.name.text === receiver.name.text && localName === "default") {
+                        matchesReExport = true;
+                        break;
+                    }
+                }
+            }
+            if (!matchesReExport) continue;
             const target = this.resolvedModuleInfoForSpecifier(stmt.moduleSpecifier.text, sf.fileName);
             const decl = target ? this.commonJsExportedMemberDeclaration(target.sf, memberName) : null;
             if (decl) return { name: memberName, decl };
