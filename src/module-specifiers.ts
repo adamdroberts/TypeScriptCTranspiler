@@ -124,6 +124,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringStaticText.length > 0) return stringStaticText;
             const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
             if (regexpEscapeText.length > 0) return regexpEscapeText;
+            const regexpStringText = resolveStaticRegExpStringCall(node);
+            if (regexpStringText.length > 0) return regexpStringText;
             const uriText = resolveStaticUriCall(node);
             if (uriText.length > 0) return uriText;
             const base64Text = resolveStaticBase64Call(node);
@@ -279,6 +281,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (dataViewBufferLength.length > 0) return dataViewBufferLength;
             const urlProperty = resolveStaticUrlPropertyAccess(node);
             if (urlProperty.length > 0) return urlProperty;
+            const regexpProperty = resolveStaticRegExpPropertyAccess(node);
+            if (regexpProperty.length > 0) return regexpProperty;
             const bufferJsonProperty = resolveStaticBufferToJsonPropertyAccess(node);
             if (bufferJsonProperty.length > 0) return bufferJsonProperty;
             const descriptorProperty = resolveStaticDescriptorPropertyAccess(node);
@@ -692,6 +696,85 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
+    };
+
+    const resolveStaticRegExpRecords = (expr: ts.Expression): RegExp[] => {
+        const current = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(current)) {
+            const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveStaticRegExpRecords(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
+        if (ts.isRegularExpressionLiteral(current)) {
+            const text = current.text;
+            const slash = text.lastIndexOf("/");
+            if (slash <= 0) return [];
+            try {
+                return [new RegExp(text.slice(1, slash), text.slice(slash + 1))];
+            } catch {
+                return [];
+            }
+        }
+        if (!ts.isCallExpression(current) && !ts.isNewExpression(current)) return [];
+        if (current.arguments?.some(ts.isSpreadElement)) return [];
+        const target = unwrapStaticExpression(current.expression);
+        if (!ts.isIdentifier(target) || target.text !== "RegExp") return [];
+        const args = current.arguments ?? [];
+        if (args.length > 2) return [];
+
+        const patterns = args[0] ? resolve(args[0]) : [""];
+        if (patterns.length === 0) return [];
+        const flags = !args[1] || isStaticUndefinedExpression(args[1])
+            ? [undefined]
+            : resolve(args[1]);
+        if (flags.length === 0) return [];
+
+        const out: RegExp[] = [];
+        for (const pattern of patterns) {
+            for (const flag of flags) {
+                try {
+                    out.push(new RegExp(pattern, flag));
+                } catch {
+                    return [];
+                }
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return out;
+    };
+
+    const resolveStaticRegExpPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
+        const property = access.name.text;
+        if (
+            property !== "source" &&
+            property !== "flags" &&
+            property !== "global" &&
+            property !== "ignoreCase" &&
+            property !== "multiline" &&
+            property !== "dotAll" &&
+            property !== "unicode" &&
+            property !== "sticky" &&
+            property !== "hasIndices"
+        ) {
+            return [];
+        }
+        const regexps = resolveStaticRegExpRecords(access.expression);
+        if (regexps.length === 0) return [];
+        return dedupe(regexps.map((regexp) => String(regexp[property as keyof RegExp])));
+    };
+
+    const resolveStaticRegExpStringCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "toString" && method !== "toLocaleString") return [];
+        const regexps = resolveStaticRegExpRecords(callee.expression);
+        if (regexps.length === 0) return [];
+        return dedupe(regexps.map((regexp) => regexp.toString()));
     };
 
     const resolveStaticUriCall = (call: ts.CallExpression): string[] => {
