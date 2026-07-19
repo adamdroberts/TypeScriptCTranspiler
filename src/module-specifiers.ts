@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import * as path from "node:path";
+import { format as nodeUtilFormat } from "node:util";
 import ts from "typescript";
 
 const MAX_STATIC_STRING_ALTERNATIVES = 64;
@@ -247,6 +248,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (pathText.length > 0) return pathText;
             const queryStringText = resolveStaticQueryStringCall(node);
             if (queryStringText.length > 0) return queryStringText;
+            const utilFormatText = resolveStaticUtilFormatCall(node);
+            if (utilFormatText.length > 0) return utilFormatText;
             const urlSearchParamsText = resolveStaticUrlSearchParamsCall(node);
             if (urlSearchParamsText.length > 0) return urlSearchParamsText;
             const jsonStringifyText = resolveStaticJsonStringifyCall(node);
@@ -492,6 +495,26 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 return "";
             }
         }).filter((value) => value !== ""));
+    };
+
+    const resolveStaticUtilFormatCall = (call: ts.CallExpression): string[] => {
+        if (!isStaticUtilFormatCall(call) || call.arguments.length === 0 || call.arguments.some(ts.isSpreadElement)) {
+            return [];
+        }
+        const argValues = call.arguments.map((arg) => resolve(arg));
+        if (argValues.some((values) => values.length === 0)) return [];
+        let encoded = [""];
+        for (const values of argValues) {
+            const next: string[] = [];
+            for (const prefix of encoded) {
+                for (const value of values) {
+                    next.push(prefix === "" ? value : `${prefix}\0${value}`);
+                    if (next.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+            encoded = dedupe(next);
+        }
+        return dedupe(encoded.map((joined) => nodeUtilFormat(...joined.split("\0"))).filter((value) => value !== ""));
     };
 
     const resolveStaticBooleanCall = (call: ts.CallExpression): string[] => {
@@ -6413,6 +6436,51 @@ function isQueryStringModuleSpecifier(node: ts.Node | undefined): boolean {
     return !!node &&
         ts.isStringLiteralLike(node) &&
         (node.text === "querystring" || node.text === "node:querystring");
+}
+
+function isStaticUtilFormatCall(call: ts.CallExpression): boolean {
+    const callee = unwrapStaticExpression(call.expression);
+    if (ts.isPropertyAccessExpression(callee)) {
+        if (callee.name.text !== "format") return false;
+        const target = unwrapStaticExpression(callee.expression);
+        return ts.isIdentifier(target) && isUtilNamespaceIdentifier(target);
+    }
+    return ts.isIdentifier(callee) && utilNamedImport(callee) === "format";
+}
+
+function isUtilNamespaceIdentifier(id: ts.Identifier): boolean {
+    if (isIdentifierShadowedInLocalScope(id)) return false;
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (ts.isImportDeclaration(stmt) && isUtilModuleSpecifier(stmt.moduleSpecifier)) {
+            const bindings = stmt.importClause?.namedBindings;
+            if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === id.text) return true;
+            if (stmt.importClause?.name?.text === id.text) return true;
+        }
+    }
+    return false;
+}
+
+function utilNamedImport(id: ts.Identifier): "format" | null {
+    if (isIdentifierShadowedInLocalScope(id)) return null;
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (!ts.isImportDeclaration(stmt) || !isUtilModuleSpecifier(stmt.moduleSpecifier)) continue;
+        const bindings = stmt.importClause?.namedBindings;
+        if (!bindings || !ts.isNamedImports(bindings)) continue;
+        for (const element of bindings.elements) {
+            if (element.name.text !== id.text) continue;
+            const imported = element.propertyName?.text ?? element.name.text;
+            if (imported === "format") return imported;
+        }
+    }
+    return null;
+}
+
+function isUtilModuleSpecifier(node: ts.Node | undefined): boolean {
+    return !!node &&
+        ts.isStringLiteralLike(node) &&
+        (node.text === "util" || node.text === "node:util");
 }
 
 function jsonValueToStaticExpression(value: unknown): ts.Expression | null {
