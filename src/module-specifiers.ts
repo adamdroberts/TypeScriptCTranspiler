@@ -5468,6 +5468,11 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         init: ts.ArrayLiteralExpression,
         keyExpr: ts.Expression | ts.Identifier,
     ): string[] => {
+        const keyTexts = resolveKeyTexts(keyExpr);
+        if (keyTexts.length === 1 && keyTexts[0] === "length") {
+            return [String(init.elements.length)];
+        }
+
         const elements: string[][] = [];
         for (const element of init.elements) {
             if (ts.isSpreadElement(element)) return [];

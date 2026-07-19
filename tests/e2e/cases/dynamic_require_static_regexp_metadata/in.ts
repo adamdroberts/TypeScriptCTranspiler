@@ -17,6 +17,7 @@ const fromExecFull = require("./rx_exec_full_" + regexpMatch[0]);
 const fromExecWord = require("./rx_exec_word_" + regexpMatch[1]);
 const fromExecNum = require("./rx_exec_num_" + regexpMatch[2]);
 const fromExecMissing = require("./rx_exec_missing_" + regexpMatch[3]);
+const fromExecLength = require("./rx_exec_len_" + regexpMatch.length);
 
 console.log(
     fromSource.label,
@@ -37,4 +38,5 @@ console.log(
     fromExecWord.label,
     fromExecNum.label,
     fromExecMissing.label,
+    fromExecLength.label,
 );
