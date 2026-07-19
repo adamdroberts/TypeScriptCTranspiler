@@ -28425,11 +28425,40 @@ class Emitter {
         if (awaitSteps.some((indices) => indices.length === 0)) return null;
         const stepCount = awaitSteps[0]!.length;
         if (stepCount < 2 || awaitSteps.some((indices) => indices.length !== stepCount)) return null;
-        for (const leaf of leaves) {
-            for (const statement of leaf.statements) {
-                if (!this.awaitedContinuationStep(statement) && !this.asyncAwaitInterstitialControlFlowSupported(statement)) {
+        for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
+            const leaf = leaves[leafIndex]!;
+            const firstAwaitIndex = awaitSteps[leafIndex]![0]!;
+            for (let statementIndex = 0; statementIndex < leaf.statements.length; statementIndex++) {
+                const statement = leaf.statements[statementIndex]!;
+                if (!this.awaitedContinuationStep(statement) && !(
+                    statementIndex < firstAwaitIndex
+                        ? this.asyncAwaitConditionalLeadingPreludeStatementSupported(statement)
+                        : this.asyncAwaitInterstitialControlFlowSupported(statement)
+                )) {
                     return null;
                 }
+            }
+            const preludeSymbols = leaf.statements.slice(0, firstAwaitIndex).flatMap((statement) => {
+                if (!ts.isVariableStatement(statement)) return [];
+                return statement.declarationList.declarations.flatMap((declaration) => {
+                    if (!ts.isIdentifier(declaration.name)) return [];
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    return symbol ? [symbol] : [];
+                });
+            });
+            if (preludeSymbols.length > 0) {
+                let escapes = false;
+                const visit = (node: ts.Node): void => {
+                    if (escapes) return;
+                    if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
+                        preludeSymbols.includes(this.symbolForIdentifier(node)!)) {
+                        escapes = true;
+                        return;
+                    }
+                    ts.forEachChild(node, visit);
+                };
+                for (const later of leaf.statements.slice(firstAwaitIndex + 1)) visit(later);
+                if (escapes) return null;
             }
             if (leaf.condition) {
                 let valid = true;
@@ -31150,6 +31179,28 @@ class Emitter {
         return ok;
     }
 
+    private asyncAwaitConditionalLeadingPreludeStatementSupported(stmt: ts.Statement): boolean {
+        if (!ts.isVariableStatement(stmt)) {
+            return this.asyncAwaitInterstitialControlFlowSupported(stmt);
+        }
+        if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
+        for (const declaration of stmt.declarationList.declarations) {
+            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+            let ok = true;
+            const visit = (node: ts.Node): void => {
+                if (!ok) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    ok = false;
+                    return;
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(declaration.initializer);
+            if (!ok) return false;
+        }
+        return true;
+    }
+
     private asyncAwaitDirectPreludeControlFlowSupported(stmt: ts.Statement): boolean {
         let ok = true;
         const visit = (node: ts.Node): void => {
@@ -31645,8 +31696,19 @@ class Emitter {
         returnResult = true,
     ): boolean {
         const firstStep = continuation.steps[0]!;
-        const firstSource = this.emitExpr(firstStep.awaitExpr.expression);
-        const promiseTypes: CType[] = [this.prepareType(firstSource.ty)];
+        const firstBranchPreludeDeclarations = (firstStep.conditionalBranches ?? [])
+            .some((branch) => branch.beforeStatements.some((statement) => ts.isVariableStatement(statement)));
+        const firstSource = firstBranchPreludeDeclarations
+            ? null
+            : this.emitExpr(firstStep.awaitExpr.expression);
+        const firstPromiseType = firstSource
+            ? this.prepareType(firstSource.ty)
+            : this.prepareType(mapTsType(
+                firstStep.awaitExpr.expression,
+                this.checker.getTypeAtLocation(firstStep.awaitExpr.expression),
+                this.checker,
+            ));
+        const promiseTypes: CType[] = [firstPromiseType];
         const alternatePromiseTypes: (CType | null)[][] = [[]];
         if (promiseTypes[0]!.kind !== "promise") return false;
         if (firstStep.alternateAwaitExpr) {
@@ -31853,7 +31915,9 @@ class Emitter {
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
-        const firstSourceC = this.coerce(firstSource, promiseTypes[0]!, firstStep.awaitExpr.expression);
+        const firstSourceC = firstSource
+            ? this.coerce(firstSource, promiseTypes[0]!, firstStep.awaitExpr.expression)
+            : "";
         const firstConditionalSource = firstStep.conditionalBranches
             ? (() => {
                 const branches = firstStep.conditionalBranches!;
@@ -31883,6 +31947,23 @@ class Emitter {
                 buf.line(`${branchChoiceVar} = ${branches.length - 1};`);
                 buf.close();
                 for (let i = 1; i < nestedElseCount; i++) buf.close();
+                const hasBranchPreludeDeclarations = branches.some((branch) =>
+                    branch.beforeStatements.some((statement) => ts.isVariableStatement(statement)));
+                if (hasBranchPreludeDeclarations) {
+                    const stagedSourceVar = this.freshTemp("_await_branch_source");
+                    buf.line(`${promiseTypes[0]!.c} ${stagedSourceVar};`);
+                    for (let i = 0; i < branches.length; i++) {
+                        const branch = branches[i]!;
+                        if (i === 0) buf.open(`if (${branchChoiceVar} == 0)`);
+                        else buf.open(`else if (${branchChoiceVar} == ${i})`);
+                        for (const statement of branch.beforeStatements) this.emitStmt(buf, statement);
+                        const source = this.emitExpr(branch.awaitExpr.expression);
+                        const sourceC = this.coerce(source, promiseTypes[0]!, branch.awaitExpr.expression);
+                        buf.line(`${stagedSourceVar} = ${sourceC};`);
+                        buf.close();
+                    }
+                    return stagedSourceVar;
+                }
                 for (let i = 0; i < branches.length; i++) {
                     const branch = branches[i]!;
                     if (i === 0) buf.open(`if (${branchChoiceVar} == 0)`);

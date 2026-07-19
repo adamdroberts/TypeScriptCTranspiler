@@ -325,6 +325,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Conditional arm leading chains now compose branch-local value flow with a sibling direct-await sequencing arm across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_mixed_branch_value_flow`
 - Conditional arm leading chains now allow branch-local awaited values to update outer captured state before a sequencing-only await across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_post_state`
 - Conditional arm leading chains now allow the final branch-local awaited value to update outer captured state before the common return across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_final_state`
+- Conditional leading await steps now preserve safe initialized branch-local declaration preludes used by the first await source across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_prelude_declaration`
 - Leading awaited-local chains now reject through terminal post-await `throw` statements after multiple suspensions for async declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Leading awaited-local chains now support initialized or uninitialized `let` aliases assigned from awaited promises across multiple suspensions, including repeated assignment to the same alias, for declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`
@@ -3100,6 +3101,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_pending_return_expr` | leading awaited-local chains support bounded nested else-if conditional await selection through four nested levels with Promise-valued leaves |
 | `async_await_pending_return_expr` | nested conditional leading await steps preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
+| `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations remain scoped around the first conditional await source |
 | `async_await_pending_return_expr` | conditional leading await steps allow branch-local awaited declarations used only as sequencing points |
 | `async_await_pending_return_expr` | conditional leading await steps accept mixed bare-await and branch-local declaration arms for sequencing |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free post-await statements in both direct arms before the next suspension |
