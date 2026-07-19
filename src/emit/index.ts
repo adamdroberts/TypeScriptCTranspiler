@@ -269,6 +269,11 @@ interface AsyncAwaitIfLocalTryCatchFinallyReturnLeaf {
     continuation: AsyncAwaitTryCatchFinallyReturnContinuation;
 }
 
+interface AsyncAwaitIfLocalLeadingReturnLeaf {
+    kind: "localLeadingReturn";
+    continuation: AsyncAwaitLeadingReturnContinuation;
+}
+
 interface AsyncAwaitIfExpressionSyncReturnLeaf {
     kind: "syncReturn";
     returnExpr: ts.Expression;
@@ -289,6 +294,7 @@ type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfLocalTryCatchReturnLeaf
     | AsyncAwaitIfLocalTryFinallyReturnLeaf
     | AsyncAwaitIfLocalTryCatchFinallyReturnLeaf
+    | AsyncAwaitIfLocalLeadingReturnLeaf
     | AsyncAwaitIfExpressionSyncReturnLeaf
     | AsyncAwaitIfExpressionReturnBranch;
 
@@ -27245,7 +27251,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): AsyncAwaitLeadingReturnContinuation | null {
-        if (body.statements.length < 6) return null;
+        if (body.statements.length < 3) return null;
         const result = body.statements[body.statements.length - 1]!;
         if (!ts.isReturnStatement(result)) return null;
         const preludeStatements: ts.Statement[] = [];
@@ -27300,7 +27306,7 @@ class Emitter {
             }
             break;
         }
-        if (body.statements.length - firstAwaitIndex < 6) return null;
+        if (body.statements.length - firstAwaitIndex < 3) return null;
         const steps: AsyncAwaitLeadingStep[] = [];
         for (const stmt of body.statements.slice(firstAwaitIndex, -1)) {
             const step = this.awaitedLocalDeclaration(stmt);
@@ -27765,6 +27771,29 @@ class Emitter {
         return awaitedType.kind !== "never" && !(awaitedType.kind === "void" && continuation.usesAwaited);
     }
 
+    private asyncAwaitLeadingReturnContinuationSupported(
+        continuation: AsyncAwaitLeadingReturnContinuation,
+    ): boolean {
+        for (let i = 0; i < continuation.steps.length; i++) {
+            const step = continuation.steps[i]!;
+            const promise = this.prepareType(mapTsType(
+                step.awaitExpr.expression,
+                this.checker.getTypeAtLocation(step.awaitExpr.expression),
+                this.checker,
+            ));
+            if (promise.kind !== "promise") return false;
+            const awaitedType = this.prepareType(mapTsType(
+                step.awaitExpr,
+                this.checker.getTypeAtLocation(step.awaitExpr),
+                this.checker,
+            ));
+            if (awaitedType.kind === "never" || (awaitedType.kind === "void" && continuation.usesAwaitedLocals[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private emitAsyncAwaitExpressionReturnContinuationResult(
         buf: CBuf,
         continuation: AsyncAwaitExpressionReturnContinuation,
@@ -28098,6 +28127,10 @@ class Emitter {
             if (tryFinallyContinuation) {
                 return { kind: "localTryFinallyReturn", continuation: tryFinallyContinuation };
             }
+            const leadingContinuation = this.asyncAwaitLeadingReturnContinuation(stmt, parameters, thisValue);
+            if (leadingContinuation) {
+                return { kind: "localLeadingReturn", continuation: leadingContinuation };
+            }
             const continuation = this.asyncAwaitReturnContinuation(stmt, parameters, thisValue);
             if (continuation) {
                 return { kind: "localReturn", continuation };
@@ -28152,7 +28185,8 @@ class Emitter {
             branch.kind === "localReturn" ||
             branch.kind === "localTryCatchReturn" ||
             branch.kind === "localTryFinallyReturn" ||
-            branch.kind === "localTryCatchFinallyReturn"
+            branch.kind === "localTryCatchFinallyReturn" ||
+            branch.kind === "localLeadingReturn"
         ) return true;
         if (branch.kind === "syncReturn") return false;
         return this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.thenBranch) ||
@@ -28170,7 +28204,8 @@ class Emitter {
                 node.kind === "localReturn" ||
                 node.kind === "localTryCatchReturn" ||
                 node.kind === "localTryFinallyReturn" ||
-                node.kind === "localTryCatchFinallyReturn"
+                node.kind === "localTryCatchFinallyReturn" ||
+                node.kind === "localLeadingReturn"
             ) {
                 for (const param of node.continuation.params) {
                     paramsBySymbol.set(param.symbol, param);
@@ -28197,6 +28232,9 @@ class Emitter {
         if (branch.kind === "localReturn") {
             return this.asyncAwaitReturnContinuationSupported(branch.continuation);
         }
+        if (branch.kind === "localLeadingReturn") {
+            return this.asyncAwaitLeadingReturnContinuationSupported(branch.continuation);
+        }
         if (
             branch.kind === "localTryCatchReturn" ||
             branch.kind === "localTryFinallyReturn" ||
@@ -28222,6 +28260,10 @@ class Emitter {
         if (branch.kind === "localReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
             return this.emitAsyncAwaitReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "localLeadingReturn") {
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
+            return this.emitAsyncAwaitLeadingReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "localTryCatchReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
@@ -28372,6 +28414,13 @@ class Emitter {
         const continuation = this.asyncAwaitLeadingReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
+        return this.emitAsyncAwaitLeadingReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitLeadingReturnContinuationResult(
+        buf: CBuf,
+        continuation: AsyncAwaitLeadingReturnContinuation,
+    ): boolean {
         const firstStep = continuation.steps[0]!;
         const firstSource = this.emitExpr(firstStep.awaitExpr.expression);
         const promiseTypes: CType[] = [this.prepareType(firstSource.ty)];
