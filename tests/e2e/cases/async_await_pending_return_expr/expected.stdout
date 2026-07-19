@@ -333,3 +333,15 @@ conditional-leading-chain-final-post-await-method-true: method-final-method-fina
 conditional-leading-chain-final-post-await-method-false: method-final-method-final-first:false:initial|false-final
 conditional-leading-chain-final-post-await-value-true: value-final-value-final-first:true:initial|true-final
 conditional-leading-chain-final-post-await-value-false: value-final-value-final-first:false:initial|false-final
+deeply-nested-conditional-leading-chain-zero: deep-zero-one:deep-zero-one:two
+deeply-nested-conditional-leading-chain-one: deep-one-one:deep-one-one:two
+deeply-nested-conditional-leading-chain-two: deep-two-one:deep-two-one:two
+deeply-nested-conditional-leading-chain-other: deep-other-one:deep-other-one:two
+deeply-nested-conditional-leading-chain-method-zero: method-deep-method-deep-zero-one:method-deep-zero-one:two
+deeply-nested-conditional-leading-chain-method-one: method-deep-method-deep-one-one:method-deep-one-one:two
+deeply-nested-conditional-leading-chain-method-two: method-deep-method-deep-two-one:method-deep-two-one:two
+deeply-nested-conditional-leading-chain-method-other: method-deep-method-deep-other-one:method-deep-other-one:two
+deeply-nested-conditional-leading-chain-value-zero: value-deep-value-deep-zero-one:value-deep-zero-one:two
+deeply-nested-conditional-leading-chain-value-one: value-deep-value-deep-one-one:value-deep-one-one:two
+deeply-nested-conditional-leading-chain-value-two: value-deep-value-deep-two-one:value-deep-two-one:two
+deeply-nested-conditional-leading-chain-value-other: value-deep-value-deep-other-one:value-deep-other-one:two

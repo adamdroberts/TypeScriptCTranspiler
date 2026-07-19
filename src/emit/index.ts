@@ -186,6 +186,8 @@ interface AsyncAwaitLeadingStep {
     condition?: ts.Expression;
     alternateAlternateAwaitExpr?: ts.AwaitExpression;
     alternateCondition?: ts.Expression;
+    alternateAlternateCondition?: ts.Expression;
+    alternateThirdAwaitExpr?: ts.AwaitExpression;
 }
 
 interface AsyncAwaitLeadingReturnContinuation {
@@ -28209,7 +28211,7 @@ class Emitter {
 
     private asyncAwaitConditionalLeadingStep(stmt: ts.Statement, depth = 0): AsyncAwaitLeadingStep | null {
         if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
-        if (depth > 1) return null;
+        if (depth > 2) return null;
         const splitBranch = (branch: ts.Statement): {
             statement: ts.Statement;
             beforeStatements: readonly ts.Statement[];
@@ -28283,6 +28285,8 @@ class Emitter {
             condition: stmt.expression,
             alternateAlternateAwaitExpr: nested?.alternateAwaitExpr,
             alternateCondition: nested?.condition,
+            alternateAlternateCondition: nested?.alternateCondition,
+            alternateThirdAwaitExpr: nested?.alternateAlternateAwaitExpr,
         };
     }
 
@@ -28797,12 +28801,20 @@ class Emitter {
             visit(steps[0]!.alternateAlternateAwaitExpr.expression, 0);
             if (!ok) return null;
         }
+        if (steps[0]!.alternateThirdAwaitExpr) {
+            visit(steps[0]!.alternateThirdAwaitExpr.expression, 0);
+            if (!ok) return null;
+        }
         if (steps[0]!.condition) {
             visit(steps[0]!.condition!, 0);
             if (!ok) return null;
         }
         if (steps[0]!.alternateCondition) {
             visit(steps[0]!.alternateCondition!, 0);
+            if (!ok) return null;
+        }
+        if (steps[0]!.alternateAlternateCondition) {
+            visit(steps[0]!.alternateAlternateCondition!, 0);
             if (!ok) return null;
         }
         for (const statement of steps[0]!.beforeStatements ?? []) {
@@ -28832,12 +28844,20 @@ class Emitter {
                 visit(steps[i]!.alternateAlternateAwaitExpr!.expression, i);
                 if (!ok) return null;
             }
+            if (steps[i]!.alternateThirdAwaitExpr) {
+                visit(steps[i]!.alternateThirdAwaitExpr!.expression, i);
+                if (!ok) return null;
+            }
             if (steps[i]!.condition) {
                 visit(steps[i]!.condition!, i);
                 if (!ok) return null;
             }
             if (steps[i]!.alternateCondition) {
                 visit(steps[i]!.alternateCondition!, i);
+                if (!ok) return null;
+            }
+            if (steps[i]!.alternateAlternateCondition) {
+                visit(steps[i]!.alternateAlternateCondition!, i);
                 if (!ok) return null;
             }
             for (const statement of steps[i]!.beforeStatements ?? []) {
@@ -29830,6 +29850,14 @@ class Emitter {
                         this.checker,
                     ));
                     if (alternateAlternatePromise.kind !== "promise" || alternateAlternatePromise.c !== promise.c) return false;
+                }
+                if (step.alternateThirdAwaitExpr) {
+                    const alternateThirdPromise = this.prepareType(mapTsType(
+                        step.alternateThirdAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateThirdAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promise.c) return false;
                 }
             }
             const awaitedType = this.prepareType(mapTsType(
@@ -31100,6 +31128,15 @@ class Emitter {
                 if (alternateAlternatePromise.kind !== "promise" || alternateAlternatePromise.c !== promiseTypes[0]!.c) return false;
                 alternatePromiseTypes[0]!.push(alternateAlternatePromise);
             }
+            if (firstStep.alternateThirdAwaitExpr) {
+                const alternateThirdPromise = this.prepareType(mapTsType(
+                    firstStep.alternateThirdAwaitExpr.expression,
+                    this.checker.getTypeAtLocation(firstStep.alternateThirdAwaitExpr.expression),
+                    this.checker,
+                ));
+                if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promiseTypes[0]!.c) return false;
+                alternatePromiseTypes[0]!.push(alternateThirdPromise);
+            }
         }
         for (let i = 1; i < continuation.steps.length; i++) {
             const step = continuation.steps[i]!;
@@ -31127,6 +31164,24 @@ class Emitter {
                     ));
                     if (alternateAlternatePromise.kind !== "promise" || alternateAlternatePromise.c !== promiseType.c) return false;
                     alternateTypes.push(alternateAlternatePromise);
+                }
+                if (step.alternateThirdAwaitExpr) {
+                    const alternateThirdPromise = this.prepareType(mapTsType(
+                        step.alternateThirdAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateThirdAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promiseType.c) return false;
+                    alternateTypes.push(alternateThirdPromise);
+                }
+                if (step.alternateThirdAwaitExpr) {
+                    const alternateThirdPromise = this.prepareType(mapTsType(
+                        step.alternateThirdAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateThirdAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateThirdPromise.kind !== "promise" || alternateThirdPromise.c !== promiseType.c) return false;
+                    alternateTypes.push(alternateThirdPromise);
                 }
             }
             alternatePromiseTypes.push(alternateTypes);
@@ -31186,7 +31241,17 @@ class Emitter {
                     promiseTypes[0]!,
                     firstStep.alternateAlternateAwaitExpr.expression,
                 );
-                return `(${conditionVar} ? ${firstSourceC} : (${alternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
+                if (!firstStep.alternateThirdAwaitExpr) {
+                    return `(${conditionVar} ? ${firstSourceC} : (${alternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
+                }
+                const alternateAlternateCondition = this.emitExpr(firstStep.alternateAlternateCondition!);
+                const alternateThirdSource = this.emitExpr(firstStep.alternateThirdAwaitExpr.expression);
+                const alternateThirdSourceC = this.coerce(
+                    alternateThirdSource,
+                    promiseTypes[0]!,
+                    firstStep.alternateThirdAwaitExpr.expression,
+                );
+                return `(${conditionVar} ? ${firstSourceC} : (${alternateCondition.c} ? ${alternateSourceC} : (${alternateAlternateCondition.c} ? ${alternateAlternateSourceC} : ${alternateThirdSourceC})))`;
             })()
             : firstSourceC;
         buf.line(`tsc_promise_t* const ${sourcePromise} = ${firstConditionalSource};`);
@@ -31328,8 +31393,10 @@ class Emitter {
         let secondSource: EmitResult;
         let secondAlternateSource: EmitResult | null = null;
         let secondAlternateAlternateSource: EmitResult | null = null;
+        let secondAlternateThirdSource: EmitResult | null = null;
         let secondCondition: EmitResult | null = null;
         let secondAlternateCondition: EmitResult | null = null;
+        let secondAlternateAlternateCondition: EmitResult | null = null;
         let secondConditionVar: string | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
@@ -31361,6 +31428,10 @@ class Emitter {
                 if (secondStep.alternateAlternateAwaitExpr) {
                     secondAlternateAlternateSource = this.emitExpr(secondStep.alternateAlternateAwaitExpr.expression);
                     secondAlternateCondition = this.emitExpr(secondStep.alternateCondition!);
+                    if (secondStep.alternateThirdAwaitExpr) {
+                        secondAlternateThirdSource = this.emitExpr(secondStep.alternateThirdAwaitExpr.expression);
+                        secondAlternateAlternateCondition = this.emitExpr(secondStep.alternateAlternateCondition!);
+                    }
                 }
             }
         } finally {
@@ -31380,7 +31451,15 @@ class Emitter {
                     promiseTypes[1]!,
                     secondStep.alternateAlternateAwaitExpr!.expression,
                 );
-                return `(${secondConditionVar!} ? ${secondSourceC} : (${secondAlternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
+                if (!secondAlternateThirdSource || !secondAlternateAlternateCondition) {
+                    return `(${secondConditionVar!} ? ${secondSourceC} : (${secondAlternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
+                }
+                const alternateThirdSourceC = this.coerce(
+                    secondAlternateThirdSource,
+                    promiseTypes[1]!,
+                    secondStep.alternateThirdAwaitExpr!.expression,
+                );
+                return `(${secondConditionVar!} ? ${secondSourceC} : (${secondAlternateCondition.c} ? ${alternateSourceC} : (${secondAlternateAlternateCondition.c} ? ${alternateAlternateSourceC} : ${alternateThirdSourceC})))`;
             })()
             : secondSourceC;
         buf.line(`tsc_promise_t* const ${sourceVar} = ${stagedSecondSource};`);
