@@ -2548,6 +2548,29 @@ interface TextDecoderConstructor {
 }
 declare var TextDecoder: TextDecoderConstructor;
 
+/** Optional GCD-style explicit concurrency (requires libdispatch when used). */
+interface DispatchQueue {
+    readonly label: string;
+}
+interface DispatchQueueConstructor {
+    /** Creates a serial queue: tasks run one at a time, in FIFO order. */
+    new (label: string): DispatchQueue;
+    /** The shared concurrent worker pool. */
+    concurrent(): DispatchQueue;
+}
+declare var DispatchQueue: DispatchQueueConstructor;
+declare namespace dispatch {
+    /**
+     * Runs `task` on `queue` on a worker thread. Resolves with the task's
+     * return value on the main event loop. Task captures must be `const`
+     * primitives (number/string/boolean) or DispatchQueue references, and the
+     * task body may not use `await` or `this`.
+     */
+    function async<T>(queue: DispatchQueue, task: () => T): Promise<T>;
+    /** Runs `task` on `queue` and blocks the caller until it completes. */
+    function sync<T>(queue: DispatchQueue, task: () => T): T;
+}
+
 interface UtilTypes {
     isDate(object: any): object is Date;
     isRegExp(object: any): object is RegExp;

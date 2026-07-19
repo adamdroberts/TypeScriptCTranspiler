@@ -26,6 +26,7 @@ import {
     T_EVENT,
     T_EVENT_EMITTER,
     T_EVENT_TARGET,
+    T_DISPATCH_QUEUE,
     T_FS_DIRENT,
     T_FS_STATS,
     T_HASH,
@@ -408,6 +409,8 @@ type DataDescriptorData = Extract<DescriptorData, { kind: "data" }>;
 export interface EmittedProgram {
     mainC: string;
     diagnostics: string[];
+    /** True when the program uses the dispatch API and must link libdispatch. */
+    usesDispatch: boolean;
 }
 
 export function emitProgram(
@@ -474,6 +477,8 @@ class Emitter {
     private microtaskAdapters = new Map<string, string>();
     private immediateAdapters = new Map<string, string>();
     private timeoutAdapters = new Map<string, string>();
+    private dispatchTaskAdapters = new Map<string, string>();
+    private usesDispatch = false;
     private timersPromisesSetTimeoutAdapters = 0;
     private timersPromisesSchedulerWaitAdapters = 0;
     private timersPromisesSchedulerYieldAdapters = 0;
@@ -14912,7 +14917,7 @@ class Emitter {
         }
 
         if (this.diagnostics.length > 0) {
-            return { mainC: "", diagnostics: this.diagnostics };
+            return { mainC: "", diagnostics: this.diagnostics, usesDispatch: this.usesDispatch };
         }
 
         const out = new CBuf();
@@ -14970,7 +14975,7 @@ class Emitter {
         out.line("    tsc_run_event_loop();");
         out.line("    return 0;");
         out.line("}");
-        return { mainC: out.toString(), diagnostics: this.diagnostics };
+        return { mainC: out.toString(), diagnostics: this.diagnostics, usesDispatch: this.usesDispatch };
     }
 
     private emitModule(sf: ts.SourceFile, modId: string): void {
@@ -39297,6 +39302,30 @@ class Emitter {
         const memberName = pa.name.text;
         const recvExpr = pa.expression;
 
+        // Must run before the generic namespace-receiver path: `dispatch` is a
+        // declared namespace in lib.core.d.ts but lowers to the libdispatch
+        // runtime, not to mangled namespace functions.
+        if (
+            ts.isIdentifier(recvExpr) &&
+            recvExpr.text === "dispatch" &&
+            this.isUnshadowedGlobalIdentifier(recvExpr, "dispatch")
+        ) {
+            return this.emitDispatchCall(call, memberName);
+        }
+        if (
+            ts.isIdentifier(recvExpr) &&
+            recvExpr.text === "DispatchQueue" &&
+            memberName === "concurrent" &&
+            this.isUnshadowedGlobalIdentifier(recvExpr, "DispatchQueue")
+        ) {
+            this.usesDispatch = true;
+            return this.emitSequencedExpr(
+                T_DISPATCH_QUEUE,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "tsc_dispatch_queue_concurrent()",
+            );
+        }
+
         if (this.isSocketAddressConstructor(recvExpr) && memberName === "parse") {
             if (call.arguments.length < 1) unsupported(call, "SocketAddress.parse expects one argument");
             const input = this.emitExpr(call.arguments[0]!);
@@ -46138,6 +46167,178 @@ class Emitter {
             pieces.push(`tsc_set_immediate(${adapter}, ${env})`);
             return `({ ${pieces.join("; ")}; })`;
         });
+    }
+
+    private emitDispatchCall(call: ts.CallExpression, name: string): EmitResult {
+        if (name !== "async" && name !== "sync") unsupported(call, `dispatch.${name}`);
+        if (call.arguments.length < 2) {
+            unsupported(call, `dispatch.${name} expects a queue and a task function`);
+        }
+        const queueNode = call.arguments[0]!;
+        const taskArgNode = call.arguments[1]!;
+        const taskFn = this.unwrapTransparentExpression(taskArgNode);
+        if (!ts.isArrowFunction(taskFn) && !ts.isFunctionExpression(taskFn)) {
+            unsupported(taskArgNode, "dispatch task must be an inline arrow or function expression in this subset");
+        }
+        this.validateDispatchTask(taskFn);
+        const queue = this.emitExpr(queueNode);
+        if (this.prepareType(queue.ty).kind !== "dispatchqueue") {
+            unsupported(queueNode, `dispatch.${name} queue must be a DispatchQueue`);
+        }
+        // Emit the task closure outside the enclosing async/try context: its
+        // body runs on a worker thread where throw/return must lower to plain
+        // tsc_throw_str/typed returns (the dispatch trampoline adds the try
+        // frame), never to the enclosing async function's promise returns.
+        const savedAsyncStack = this.asyncFunctionStack;
+        const savedTryDepth = this.tryDepth;
+        this.asyncFunctionStack = [];
+        this.tryDepth = 0;
+        let task: EmitResult;
+        try {
+            task = this.emitExpr(taskArgNode);
+        } finally {
+            this.asyncFunctionStack = savedAsyncStack;
+            this.tryDepth = savedTryDepth;
+        }
+        const adapter = this.ensureDispatchTaskAdapter(taskArgNode, task.ty);
+        this.usesDispatch = true;
+        const envType = `${adapter}_env_t`;
+        const specs: SequencedCallArg[] = [
+            { value: queue, target: queue.ty, node: queueNode },
+            { value: task, target: task.ty, node: taskArgNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 2),
+        ];
+        if (name === "async") {
+            const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+            const resultTy = mapped.kind === "promise" ? mapped : promiseType(T_VALUE);
+            return this.emitSequencedExpr(resultTy, specs, ([q, fn]) => {
+                const env = this.freshTemp("_dispatch_env");
+                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_dispatch_async(${q}, ${adapter}, ${env}); })`;
+            });
+        }
+        const retTy = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (retTy.kind === "void" || retTy.kind === "never") {
+            return this.emitSequencedExpr(T_VOID, specs, ([q, fn]) => {
+                const env = this.freshTemp("_dispatch_env");
+                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; (void)tsc_dispatch_sync(${q}, ${adapter}, ${env}); })`;
+            });
+        }
+        return this.emitSequencedExpr(retTy, specs, ([q, fn]) => {
+            const env = this.freshTemp("_dispatch_env");
+            const result = this.freshTemp("_dispatch_result");
+            const converted = this.coerce({ c: result, ty: T_VALUE }, retTy, call);
+            return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_value_t ${result} = tsc_dispatch_sync(${q}, ${adapter}, ${env}); ${converted}; })`;
+        });
+    }
+
+    /** Compile-time capture discipline for dispatch tasks: the task body may
+     *  not await or use `this`, and every free variable it reaches must be an
+     *  immutable primitive (or a DispatchQueue) so no mutable state is shared
+     *  across threads. */
+    private validateDispatchTask(fn: ts.ArrowFunction | ts.FunctionExpression): void {
+        if (fn.parameters.length > 0) {
+            unsupported(fn, "dispatch task must not take parameters");
+        }
+        if (ts.getModifiers(fn)?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)) {
+            unsupported(fn, "dispatch tasks may not be async or use await in this subset");
+        }
+        const allowedCaptureKinds = new Set(["number", "boolean", "string", "dispatchqueue"]);
+        const visit = (node: ts.Node): void => {
+            if (ts.isAwaitExpression(node)) {
+                unsupported(node, "dispatch tasks may not use await in this subset");
+            }
+            if (node.kind === ts.SyntaxKind.ThisKeyword) {
+                unsupported(node, "dispatch tasks may not use this");
+            }
+            if (
+                (ts.isFunctionLike(node) || ts.isFunctionDeclaration(node)) &&
+                ts.canHaveModifiers(node) &&
+                ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.AsyncKeyword)
+            ) {
+                unsupported(node, "dispatch tasks may not contain async functions in this subset");
+            }
+            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
+                const sym = this.symbolForIdentifier(node);
+                const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+                if (
+                    sym &&
+                    decl &&
+                    // Globals declared in lib shims (Error, console, dispatch,
+                    // ...) are runtime intercepts, not shared mutable state.
+                    !decl.getSourceFile().isDeclarationFile &&
+                    !this.isNodeWithin(decl, fn) &&
+                    (this.isCapturableValueDeclaration(decl) || this.isTopLevelValueDeclaration(decl))
+                ) {
+                    if (ts.isVariableDeclaration(decl) || ts.isBindingElement(decl) || ts.isParameter(decl)) {
+                        const isConst =
+                            ts.isParameter(decl) ||
+                            (ts.getCombinedNodeFlags(decl) & ts.NodeFlags.Const) !== 0;
+                        if (!isConst) {
+                            unsupported(
+                                node,
+                                "dispatch task captures must be const; copy mutable state into a const binding before dispatching",
+                            );
+                        }
+                        const type = this.prepareType(mapTsType(
+                            decl,
+                            this.checker.getTypeOfSymbolAtLocation(sym, decl),
+                            this.checker,
+                        ));
+                        if (!allowedCaptureKinds.has(type.kind)) {
+                            unsupported(
+                                node,
+                                "dispatch task captures must be primitives (number/string/boolean) or DispatchQueue in this subset",
+                            );
+                        }
+                    }
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        if (fn.body) visit(fn.body);
+    }
+
+    private ensureDispatchTaskAdapter(expr: ts.Expression, type: CType): string {
+        const prepared = this.prepareType(type);
+        if (prepared.kind !== "function" || !prepared.ret || !prepared.closureName) {
+            unsupported(expr, "dispatch task must be a function");
+        }
+        if (prepared.thisParam && prepared.thisParam.kind !== "value") {
+            unsupported(expr, "dispatch task this parameter must be any/unknown");
+        }
+        if ((prepared.params ?? []).length !== 0) {
+            unsupported(expr, "dispatch task must not take parameters");
+        }
+        const ret = this.prepareType(prepared.ret);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "void", "never", "value"]);
+        if (!allowedReturnKinds.has(ret.kind)) {
+            unsupported(expr, "dispatch task return type must be number/string/boolean/void in this subset");
+        }
+        const key = `dispatch:${this.typeKey(prepared)}`;
+        const existing = this.dispatchTaskAdapters.get(key);
+        if (existing) return existing;
+        const name = `tsc_dispatch_task_${this.dispatchTaskAdapters.size}`;
+        const envType = `${name}_env_t`;
+        this.dispatchTaskAdapters.set(key, name);
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line(`${prepared.c} fn;`);
+        this.structDecls.close(` ${envType};`);
+        this.protos.line(`tsc_value_t ${name}(void* env);`);
+        const buf = new CBuf();
+        buf.open(`tsc_value_t ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line(`${prepared.c} fn = state->fn;`);
+        const callArgs = ["fn->env", ...(prepared.thisParam ? ["tsc_value_undefined()"] : [])];
+        if (ret.kind === "void" || ret.kind === "never") {
+            buf.line(`(void)fn->fn(${callArgs.join(", ")});`);
+            buf.line("return tsc_value_undefined();");
+        } else {
+            buf.line(`${ret.c} result = fn->fn(${callArgs.join(", ")});`);
+            buf.line(`return ${this.coerce({ c: "result", ty: ret }, T_VALUE, expr)};`);
+        }
+        buf.close();
+        this.closureDefs.write(buf.toString());
+        return name;
     }
 
     private emitSetTimeoutCall(call: ts.CallExpression): EmitResult {
@@ -59254,6 +59455,16 @@ class Emitter {
                 this.ignoredArgumentSpecs(args, 0),
                 () => "tsc_text_encoder_new()",
             );
+        }
+        if (cls === "DispatchQueue") {
+            const args = n.arguments ?? [];
+            if (args.length < 1) unsupported(n, "new DispatchQueue expects a label");
+            const label = this.emitExpr(args[0]!);
+            this.usesDispatch = true;
+            return this.emitSequencedExpr(T_DISPATCH_QUEUE, [
+                { value: label, target: T_STRING, node: args[0]! },
+                ...this.ignoredArgumentSpecs(args, 1),
+            ], ([labelC]) => `tsc_dispatch_queue_serial(${labelC})`);
         }
         if (cls === "TextDecoder") {
             const args = n.arguments ?? [];

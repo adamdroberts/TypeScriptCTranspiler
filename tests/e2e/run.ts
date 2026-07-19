@@ -7,7 +7,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
-import { compile } from "../../src/compile";
+import { compile, findDispatchLinkOptions } from "../../src/compile";
 import { ensureE2eNodeModuleFixtures } from "./fixtures";
 
 const casesDir = path.resolve(import.meta.dir, "cases");
@@ -28,6 +28,8 @@ interface Case {
     release?: boolean;
     customConditions?: string[];
     runEnv?: Record<string, string>;
+    /** compile.dispatch sidecar: case links libdispatch; skipped when absent. */
+    dispatch?: boolean;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -60,10 +62,12 @@ async function discoverCases(): Promise<Case[]> {
         const customConditionsPath = path.join(casesDir, d, "compile.custom_conditions");
         const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
+        const dispatchPath = path.join(casesDir, d, "compile.dispatch");
         const runEnvPath = path.join(casesDir, d, "run.env");
         if (!(await exists(entry))) continue;
 
         const release = await exists(releasePath);
+        const dispatch = await exists(dispatchPath);
         const emitCOnly = await exists(emitCOnlyPath);
         const nativeAddonManifest = await exists(nativeAddonManifestPath)
             ? nativeAddonManifestPath
@@ -112,6 +116,7 @@ async function discoverCases(): Promise<Case[]> {
                 release,
                 customConditions,
                 runEnv,
+                dispatch,
             });
             continue;
         }
@@ -137,6 +142,7 @@ async function discoverCases(): Promise<Case[]> {
             release,
             customConditions,
             runEnv,
+            dispatch,
         });
     }
     return cases.sort((a, b) => a.name.localeCompare(b.name));
@@ -188,15 +194,23 @@ async function main(): Promise<void> {
     const tmpRoot = await fs.mkdtemp(path.join(require("node:os").tmpdir(), "tsc2c-e2e-"));
     let passed = 0;
     let failed = 0;
+    let skipped = 0;
+    const dispatchAvailable = findDispatchLinkOptions() !== null;
     for (const c of cases) {
         const bin = path.join(tmpRoot, c.name);
         const buildDir = path.join(tmpRoot, c.name + "-build");
         process.stdout.write(`e2e: ${c.name} … `);
+        if (c.dispatch && !dispatchAvailable) {
+            console.log("SKIP (libdispatch not installed)");
+            skipped++;
+            continue;
+        }
         const r = await compile({
             entry: c.entry,
             output: bin,
             buildDir,
-            noGc: process.env.TSC2C_NO_GC === "1",
+            // dispatch cases always link the GC: dispatch + --no-gc is rejected.
+            noGc: c.dispatch ? false : process.env.TSC2C_NO_GC === "1",
             release: c.release,
             emitCOnly: c.emitCOnly,
             nativeAddonManifest: c.nativeAddonManifest,
@@ -288,7 +302,7 @@ async function main(): Promise<void> {
         console.log("OK");
         passed++;
     }
-    console.log(`\n${passed} passed, ${failed} failed`);
+    console.log(`\n${passed} passed, ${failed} failed${skipped > 0 ? `, ${skipped} skipped` : ""}`);
     process.exit(failed === 0 ? 0 : 1);
 }
 

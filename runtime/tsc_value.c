@@ -1372,7 +1372,11 @@ tsc_value_t tsc_value_get_prototype_of(tsc_value_t v) {
 }
 
 static tsc_value_t primitive_prototype(tsc_object_t** slot) {
-    if (!*slot) *slot = tsc_object_new();
+    if (!*slot) {
+        tsc_runtime_lock();
+        if (!*slot) *slot = tsc_object_new();
+        tsc_runtime_unlock();
+    }
     return tsc_value_object(*slot);
 }
 
@@ -4435,20 +4439,27 @@ static void reflect_define_method(tsc_object_t* reflect, const char* name, size_
 tsc_value_t tsc_builtin_reflect(void) {
     static tsc_object_t* reflect = NULL;
     if (!reflect) {
-        reflect = tsc_object_new();
-        reflect_define_method(reflect, "apply", 5, 3.0, reflect_apply_method);
-        reflect_define_method(reflect, "construct", 9, 2.0, reflect_construct_method);
-        reflect_define_method(reflect, "defineProperty", 14, 3.0, reflect_define_property_method);
-        reflect_define_method(reflect, "deleteProperty", 14, 2.0, reflect_delete_property_method);
-        reflect_define_method(reflect, "get", 3, 2.0, reflect_get_method);
-        reflect_define_method(reflect, "getOwnPropertyDescriptor", 24, 2.0, reflect_get_own_property_descriptor_method);
-        reflect_define_method(reflect, "getPrototypeOf", 14, 1.0, reflect_get_prototype_of_method);
-        reflect_define_method(reflect, "has", 3, 2.0, reflect_has_method);
-        reflect_define_method(reflect, "isExtensible", 12, 1.0, reflect_is_extensible_method);
-        reflect_define_method(reflect, "ownKeys", 7, 1.0, reflect_own_keys_method);
-        reflect_define_method(reflect, "preventExtensions", 17, 1.0, reflect_prevent_extensions_method);
-        reflect_define_method(reflect, "set", 3, 3.0, reflect_set_method);
-        reflect_define_method(reflect, "setPrototypeOf", 14, 2.0, reflect_set_prototype_of_method);
+        tsc_runtime_lock();
+        if (reflect) {
+            tsc_runtime_unlock();
+            return tsc_value_object(reflect);
+        }
+        tsc_object_t* built = tsc_object_new();
+        reflect_define_method(built, "apply", 5, 3.0, reflect_apply_method);
+        reflect_define_method(built, "construct", 9, 2.0, reflect_construct_method);
+        reflect_define_method(built, "defineProperty", 14, 3.0, reflect_define_property_method);
+        reflect_define_method(built, "deleteProperty", 14, 2.0, reflect_delete_property_method);
+        reflect_define_method(built, "get", 3, 2.0, reflect_get_method);
+        reflect_define_method(built, "getOwnPropertyDescriptor", 24, 2.0, reflect_get_own_property_descriptor_method);
+        reflect_define_method(built, "getPrototypeOf", 14, 1.0, reflect_get_prototype_of_method);
+        reflect_define_method(built, "has", 3, 2.0, reflect_has_method);
+        reflect_define_method(built, "isExtensible", 12, 1.0, reflect_is_extensible_method);
+        reflect_define_method(built, "ownKeys", 7, 1.0, reflect_own_keys_method);
+        reflect_define_method(built, "preventExtensions", 17, 1.0, reflect_prevent_extensions_method);
+        reflect_define_method(built, "set", 3, 3.0, reflect_set_method);
+        reflect_define_method(built, "setPrototypeOf", 14, 2.0, reflect_set_prototype_of_method);
+        reflect = built;
+        tsc_runtime_unlock();
     }
     return tsc_value_object(reflect);
 }

@@ -19,8 +19,12 @@ tsc_value_t tsc_function_default_prototype(void) {
     static bool initialized = false;
     static tsc_value_t prototype;
     if (!initialized) {
-        prototype = tsc_value_object(tsc_object_new());
-        initialized = true;
+        tsc_runtime_lock();
+        if (!initialized) {
+            prototype = tsc_value_object(tsc_object_new());
+            initialized = true;
+        }
+        tsc_runtime_unlock();
     }
     return prototype;
 }
@@ -117,8 +121,128 @@ void* tsc_no_gc_malloc_uninit(size_t n) {
 }
 #endif
 
-static tsc_try_frame_t* g_try_top = NULL;
-static tsc_str_t* g_current_error = NULL;
+#ifdef TSC_THREADS
+#include <pthread.h>
+
+static pthread_t g_main_thread;
+static bool g_main_thread_set = false;
+static pthread_mutex_t g_runtime_mutex;
+static pthread_mutex_t g_loop_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_loop_cond = PTHREAD_COND_INITIALIZER;
+
+/* Cross-thread posts from dispatch workers to the main event loop. The entry
+ * buffer is GC-allocated and rooted by a static, and boxed values keep a raw
+ * `keepalive` pointer copy so the conservative collector can see the payload
+ * (NaN-boxed words are not recognized as pointers during scanning). */
+typedef enum {
+    TSC_CROSS_SETTLE,
+    TSC_CROSS_MICROTASK,
+    TSC_CROSS_NEXT_TICK,
+    TSC_CROSS_IMMEDIATE,
+    TSC_CROSS_TIMEOUT,
+} tsc_cross_kind_t;
+typedef struct {
+    tsc_cross_kind_t kind;
+    tsc_promise_t* promise;
+    tsc_value_t value;
+    void* keepalive;
+    bool is_error;
+    void (*fn)(void*);
+    void* env;
+    double delay;
+} tsc_cross_entry_t;
+static tsc_cross_entry_t* g_cross_queue = NULL;
+static size_t g_cross_len = 0;
+static size_t g_cross_cap = 0;
+/* Dispatch tasks scheduled but not yet settled on the main loop. */
+static size_t g_dispatch_outstanding = 0;
+
+void tsc_runtime_lock(void) { pthread_mutex_lock(&g_runtime_mutex); }
+void tsc_runtime_unlock(void) { pthread_mutex_unlock(&g_runtime_mutex); }
+
+bool tsc_is_main_thread(void) {
+    return !g_main_thread_set || pthread_equal(pthread_self(), g_main_thread);
+}
+
+static void tsc_cross_post(tsc_cross_entry_t entry) {
+    if (value_is_box(entry.value)) entry.keepalive = value_ptr(entry.value);
+    pthread_mutex_lock(&g_loop_mutex);
+    if (g_cross_len == g_cross_cap) {
+        size_t next = g_cross_cap ? g_cross_cap * 2 : 8;
+        tsc_cross_entry_t* entries = (tsc_cross_entry_t*)TSC_GC_REALLOC(g_cross_queue, next * sizeof(tsc_cross_entry_t));
+        if (!entries) tsc_panic("dispatch: out of memory");
+        g_cross_queue = entries;
+        g_cross_cap = next;
+    }
+    g_cross_queue[g_cross_len++] = entry;
+    pthread_cond_signal(&g_loop_cond);
+    pthread_mutex_unlock(&g_loop_mutex);
+}
+
+void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error) {
+    tsc_cross_entry_t entry = {0};
+    entry.kind = TSC_CROSS_SETTLE;
+    entry.promise = p;
+    entry.value = value;
+    entry.is_error = is_error;
+    tsc_cross_post(entry);
+}
+
+void tsc_dispatch_task_scheduled(void) {
+    pthread_mutex_lock(&g_loop_mutex);
+    g_dispatch_outstanding++;
+    pthread_mutex_unlock(&g_loop_mutex);
+}
+
+static bool tsc_dispatch_pending(void) {
+    pthread_mutex_lock(&g_loop_mutex);
+    bool pending = g_dispatch_outstanding > 0 || g_cross_len > 0;
+    pthread_mutex_unlock(&g_loop_mutex);
+    return pending;
+}
+
+/* Runs on the main thread: move cross-posted work into the regular loop
+ * queues and settle dispatch promises. */
+static void tsc_drain_cross_queue(void) {
+    for (;;) {
+        pthread_mutex_lock(&g_loop_mutex);
+        if (g_cross_len == 0) {
+            pthread_mutex_unlock(&g_loop_mutex);
+            return;
+        }
+        tsc_cross_entry_t entry = g_cross_queue[0];
+        memmove(g_cross_queue, g_cross_queue + 1, (g_cross_len - 1) * sizeof(tsc_cross_entry_t));
+        g_cross_len--;
+        if (entry.kind == TSC_CROSS_SETTLE && g_dispatch_outstanding > 0) g_dispatch_outstanding--;
+        pthread_mutex_unlock(&g_loop_mutex);
+        switch (entry.kind) {
+            case TSC_CROSS_SETTLE:
+                if (entry.is_error) tsc_promise_reject_in_place(entry.promise, entry.value);
+                else tsc_promise_fulfill_in_place(entry.promise, entry.value);
+                break;
+            case TSC_CROSS_MICROTASK: tsc_queue_microtask(entry.fn, entry.env); break;
+            case TSC_CROSS_NEXT_TICK: tsc_process_next_tick(entry.fn, entry.env); break;
+            case TSC_CROSS_IMMEDIATE: tsc_set_immediate(entry.fn, entry.env); break;
+            case TSC_CROSS_TIMEOUT: tsc_set_timeout(entry.fn, entry.env, entry.delay); break;
+        }
+    }
+}
+#else
+void tsc_runtime_lock(void) {}
+void tsc_runtime_unlock(void) {}
+bool tsc_is_main_thread(void) { return true; }
+void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error) {
+    if (is_error) tsc_promise_reject_in_place(p, value);
+    else tsc_promise_fulfill_in_place(p, value);
+}
+void tsc_dispatch_task_scheduled(void) {}
+#endif
+
+/* Exception state is thread-local in TSC_THREADS builds so dispatch tasks
+ * get independent try/throw stacks; without TSC_THREADS this is a plain
+ * static exactly as before. */
+static TSC_TLS tsc_try_frame_t* g_try_top = NULL;
+static TSC_TLS tsc_str_t* g_current_error = NULL;
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
 static bool g_dynamic_stats_enabled = false;
@@ -458,6 +582,19 @@ void tsc_dynamic_stat_hit(tsc_dynamic_stat_kind_t kind) {
 
 void tsc_bootstrap(int argc, char** argv) {
     TSC_GC_INIT();
+#ifdef TSC_THREADS
+#ifndef TSC_NO_GC
+    GC_allow_register_threads();
+#endif
+    g_main_thread = pthread_self();
+    g_main_thread_set = true;
+    /* Recursive: lazy-singleton init paths re-enter through shape creation. */
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&g_runtime_mutex, &attr);
+    pthread_mutexattr_destroy(&attr);
+#endif
     tsc_argc = argc;
     tsc_argv = argv;
     const char* dynamic_stats = getenv("TSC_DYNAMIC_STATS");
@@ -961,6 +1098,17 @@ double tsc_process_stdio_rows(int fd) {
 
 void tsc_process_next_tick(tsc_next_tick_fn_t fn, void* env) {
     if (!fn) return;
+#ifdef TSC_THREADS
+    if (!tsc_is_main_thread()) {
+        tsc_cross_entry_t entry = {0};
+        entry.kind = TSC_CROSS_NEXT_TICK;
+        entry.value = tsc_value_undefined();
+        entry.fn = fn;
+        entry.env = env;
+        tsc_cross_post(entry);
+        return;
+    }
+#endif
     if (g_next_tick_len == g_next_tick_cap) {
         size_t next = g_next_tick_cap ? g_next_tick_cap * 2 : 8;
         tsc_next_tick_entry_t* entries = (tsc_next_tick_entry_t*)TSC_GC_REALLOC(g_next_tick_queue, next * sizeof(tsc_next_tick_entry_t));
@@ -991,6 +1139,17 @@ void tsc_process_drain_next_ticks(void) {
 
 void tsc_queue_microtask(tsc_microtask_fn_t fn, void* env) {
     if (!fn) return;
+#ifdef TSC_THREADS
+    if (!tsc_is_main_thread()) {
+        tsc_cross_entry_t entry = {0};
+        entry.kind = TSC_CROSS_MICROTASK;
+        entry.value = tsc_value_undefined();
+        entry.fn = fn;
+        entry.env = env;
+        tsc_cross_post(entry);
+        return;
+    }
+#endif
     if (g_microtask_len == g_microtask_cap) {
         size_t next = g_microtask_cap ? g_microtask_cap * 2 : 8;
         tsc_microtask_entry_t* entries = (tsc_microtask_entry_t*)TSC_GC_REALLOC(g_microtask_queue, next * sizeof(tsc_microtask_entry_t));
@@ -1022,6 +1181,17 @@ void tsc_drain_microtasks_and_next_ticks(void) {
 
 double tsc_set_immediate(tsc_immediate_fn_t fn, void* env) {
     if (!fn) return 0.0;
+#ifdef TSC_THREADS
+    if (!tsc_is_main_thread()) {
+        tsc_cross_entry_t entry = {0};
+        entry.kind = TSC_CROSS_IMMEDIATE;
+        entry.value = tsc_value_undefined();
+        entry.fn = fn;
+        entry.env = env;
+        tsc_cross_post(entry);
+        return 0.0;
+    }
+#endif
     if (g_immediate_len == g_immediate_cap) {
         size_t next = g_immediate_cap ? g_immediate_cap * 2 : 8;
         tsc_immediate_entry_t* entries = (tsc_immediate_entry_t*)TSC_GC_REALLOC(g_immediate_queue, next * sizeof(tsc_immediate_entry_t));
@@ -1079,6 +1249,18 @@ static bool tsc_timeout_ready(const tsc_timeout_entry_t* entry, double now_ms) {
 
 double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay) {
     if (!fn) return 0.0;
+#ifdef TSC_THREADS
+    if (!tsc_is_main_thread()) {
+        tsc_cross_entry_t entry = {0};
+        entry.kind = TSC_CROSS_TIMEOUT;
+        entry.value = tsc_value_undefined();
+        entry.fn = fn;
+        entry.env = env;
+        entry.delay = delay;
+        tsc_cross_post(entry);
+        return 0.0;
+    }
+#endif
     if (g_timeout_len == g_timeout_cap) {
         size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
         tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
@@ -1176,6 +1358,7 @@ static double tsc_next_timeout_delay_ms(void) {
     return delay;
 }
 
+#ifndef TSC_THREADS
 static void tsc_sleep_ms(double delay_ms) {
     if (delay_ms <= 0.0) return;
     struct timespec ts;
@@ -1183,9 +1366,39 @@ static void tsc_sleep_ms(double delay_ms) {
     ts.tv_nsec = (long)((delay_ms - ((double)ts.tv_sec * 1000.0)) * 1000000.0);
     nanosleep(&ts, NULL);
 }
+#endif
+
+#ifdef TSC_THREADS
+/* Wait until a worker posts cross-thread work or the next timer is due. */
+static void tsc_loop_idle_wait(double delay_ms) {
+    pthread_mutex_lock(&g_loop_mutex);
+    if (g_cross_len == 0) {
+        if (delay_ms < 0.0) {
+            pthread_cond_wait(&g_loop_cond, &g_loop_mutex);
+        } else if (delay_ms > 0.0) {
+            struct timespec ts;
+            clock_gettime(CLOCK_REALTIME, &ts);
+            time_t sec = (time_t)(delay_ms / 1000.0);
+            long nsec = (long)((delay_ms - (double)sec * 1000.0) * 1000000.0);
+            ts.tv_sec += sec;
+            ts.tv_nsec += nsec;
+            if (ts.tv_nsec >= 1000000000L) { ts.tv_sec++; ts.tv_nsec -= 1000000000L; }
+            pthread_cond_timedwait(&g_loop_cond, &g_loop_mutex, &ts);
+        }
+    }
+    pthread_mutex_unlock(&g_loop_mutex);
+}
+#endif
 
 void tsc_run_event_loop(void) {
-    while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_active_timeout() || g_immediate_len > 0) {
+    while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_active_timeout() || g_immediate_len > 0
+#ifdef TSC_THREADS
+           || tsc_dispatch_pending()
+#endif
+    ) {
+#ifdef TSC_THREADS
+        tsc_drain_cross_queue();
+#endif
         tsc_drain_microtasks_and_next_ticks();
         if (tsc_has_ready_timeout()) {
             tsc_drain_timeouts();
@@ -1195,8 +1408,16 @@ void tsc_run_event_loop(void) {
             tsc_drain_immediates();
             tsc_drain_microtasks_and_next_ticks();
         }
-        if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0 && tsc_has_active_timeout()) {
-            tsc_sleep_ms(tsc_next_timeout_delay_ms());
+        if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0) {
+#ifdef TSC_THREADS
+            if (tsc_dispatch_pending() || tsc_has_active_timeout()) {
+                tsc_loop_idle_wait(tsc_has_active_timeout() ? tsc_next_timeout_delay_ms() : -1.0);
+            }
+#else
+            if (tsc_has_active_timeout()) {
+                tsc_sleep_ms(tsc_next_timeout_delay_ms());
+            }
+#endif
         }
     }
 }

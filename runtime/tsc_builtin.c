@@ -19,15 +19,19 @@ static tsc_symbol_t* tsc_symbol_species_singleton = NULL;
 
 tsc_symbol_t* tsc_symbol_new(const tsc_str_t* description) {
     tsc_symbol_t* sym = (tsc_symbol_t*)TSC_GC_MALLOC(sizeof(tsc_symbol_t));
-    sym->id = tsc_next_symbol_id++;
+    sym->id = TSC_ID_INC(tsc_next_symbol_id) - 1;
     sym->description = (tsc_str_t*)description;
     sym->global_key = NULL;
     return sym;
 }
 
 tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key) {
+    tsc_runtime_lock();
     for (tsc_symbol_registry_entry_t* e = tsc_symbol_registry; e; e = e->next) {
-        if (tsc_str_eq(e->key, key)) return e->sym;
+        if (tsc_str_eq(e->key, key)) {
+            tsc_runtime_unlock();
+            return e->sym;
+        }
     }
     tsc_symbol_t* sym = tsc_symbol_new(key);
     sym->global_key = (tsc_str_t*)key;
@@ -37,6 +41,7 @@ tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key) {
     entry->sym = sym;
     entry->next = tsc_symbol_registry;
     tsc_symbol_registry = entry;
+    tsc_runtime_unlock();
     return sym;
 }
 
@@ -46,48 +51,72 @@ tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym) {
 
 tsc_symbol_t* tsc_symbol_iterator(void) {
     if (!tsc_symbol_iterator_singleton) {
-        tsc_symbol_iterator_singleton =
-            tsc_symbol_new(tsc_str_from_lit("Symbol.iterator", 15));
+        tsc_runtime_lock();
+        if (!tsc_symbol_iterator_singleton) {
+            tsc_symbol_iterator_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.iterator", 15));
+        }
+        tsc_runtime_unlock();
     }
     return tsc_symbol_iterator_singleton;
 }
 
 tsc_symbol_t* tsc_symbol_async_iterator(void) {
     if (!tsc_symbol_async_iterator_singleton) {
-        tsc_symbol_async_iterator_singleton =
-            tsc_symbol_new(tsc_str_from_lit("Symbol.asyncIterator", 20));
+        tsc_runtime_lock();
+        if (!tsc_symbol_async_iterator_singleton) {
+            tsc_symbol_async_iterator_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.asyncIterator", 20));
+        }
+        tsc_runtime_unlock();
     }
     return tsc_symbol_async_iterator_singleton;
 }
 
 tsc_symbol_t* tsc_symbol_unscopables(void) {
     if (!tsc_symbol_unscopables_singleton) {
-        tsc_symbol_unscopables_singleton =
-            tsc_symbol_new(tsc_str_from_lit("Symbol.unscopables", 18));
+        tsc_runtime_lock();
+        if (!tsc_symbol_unscopables_singleton) {
+            tsc_symbol_unscopables_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.unscopables", 18));
+        }
+        tsc_runtime_unlock();
     }
     return tsc_symbol_unscopables_singleton;
 }
 
 tsc_symbol_t* tsc_symbol_is_concat_spreadable(void) {
     if (!tsc_symbol_is_concat_spreadable_singleton) {
-        tsc_symbol_is_concat_spreadable_singleton =
-            tsc_symbol_new(tsc_str_from_lit("Symbol.isConcatSpreadable", 25));
+        tsc_runtime_lock();
+        if (!tsc_symbol_is_concat_spreadable_singleton) {
+            tsc_symbol_is_concat_spreadable_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.isConcatSpreadable", 25));
+        }
+        tsc_runtime_unlock();
     }
     return tsc_symbol_is_concat_spreadable_singleton;
 }
 
 tsc_symbol_t* tsc_symbol_to_string_tag(void) {
     if (!tsc_symbol_to_string_tag_singleton) {
-        tsc_symbol_to_string_tag_singleton =
-            tsc_symbol_new(tsc_str_from_lit("Symbol.toStringTag", 18));
+        tsc_runtime_lock();
+        if (!tsc_symbol_to_string_tag_singleton) {
+            tsc_symbol_to_string_tag_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.toStringTag", 18));
+        }
+        tsc_runtime_unlock();
     }
     return tsc_symbol_to_string_tag_singleton;
 }
 
 tsc_symbol_t* tsc_symbol_species(void) {
     if (!tsc_symbol_species_singleton) {
-        tsc_symbol_species_singleton =
-            tsc_symbol_new(tsc_str_from_lit("Symbol.species", 14));
+        tsc_runtime_lock();
+        if (!tsc_symbol_species_singleton) {
+            tsc_symbol_species_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.species", 14));
+        }
+        tsc_runtime_unlock();
     }
     return tsc_symbol_species_singleton;
 }
