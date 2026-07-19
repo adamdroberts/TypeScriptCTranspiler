@@ -31465,8 +31465,8 @@ class Emitter {
         let hasDefault = false;
         let pendingExpressions: (ts.Expression | null)[] = [];
         for (const clause of switchStatement.caseBlock.clauses) {
+            if (hasDefault) return null;
             if (ts.isDefaultClause(clause)) {
-                if (hasDefault) return null;
                 hasDefault = true;
                 pendingExpressions.push(null);
             } else if (!this.asyncAwaitConditionExpressionSupported(clause.expression)) {
