@@ -466,6 +466,13 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     return path.resolve(...parts);
                 case "normalize":
                     return parts.length === 1 ? path.normalize(parts[0]!) : "";
+                case "basename":
+                    return parts.length === 1 ? path.basename(parts[0]!) :
+                        parts.length === 2 ? path.basename(parts[0]!, parts[1]!) : "";
+                case "dirname":
+                    return parts.length === 1 ? path.dirname(parts[0]!) : "";
+                case "extname":
+                    return parts.length === 1 ? path.extname(parts[0]!) : "";
             }
         }).filter((value) => value !== ""));
     };
@@ -6262,17 +6269,28 @@ function templateRawText(node: ts.TemplateLiteralLikeNode): string {
     return rawText ?? node.text;
 }
 
-function staticPathCallName(call: ts.CallExpression): "join" | "resolve" | "normalize" | null {
+function staticPathCallName(call: ts.CallExpression): "join" | "resolve" | "normalize" | "basename" | "dirname" | "extname" | null {
     const callee = unwrapStaticExpression(call.expression);
     if (ts.isPropertyAccessExpression(callee)) {
         const name = callee.name.text;
-        if (name !== "join" && name !== "resolve" && name !== "normalize") return null;
+        if (!isStaticPathStringMethod(name)) return null;
         const target = unwrapStaticExpression(callee.expression);
         return ts.isIdentifier(target) && isPathNamespaceIdentifier(target) ? name : null;
     }
     if (!ts.isIdentifier(callee)) return null;
     const imported = pathNamedImport(callee);
-    return imported === "join" || imported === "resolve" || imported === "normalize" ? imported : null;
+    return imported && isStaticPathStringMethod(imported) ? imported : null;
+}
+
+function isStaticPathStringMethod(
+    name: string,
+): name is "join" | "resolve" | "normalize" | "basename" | "dirname" | "extname" {
+    return name === "join" ||
+        name === "resolve" ||
+        name === "normalize" ||
+        name === "basename" ||
+        name === "dirname" ||
+        name === "extname";
 }
 
 function isPathNamespaceIdentifier(id: ts.Identifier): boolean {
@@ -6299,7 +6317,7 @@ function isPathNamespaceIdentifier(id: ts.Identifier): boolean {
     return false;
 }
 
-function pathNamedImport(id: ts.Identifier): "join" | "resolve" | "normalize" | null {
+function pathNamedImport(id: ts.Identifier): "join" | "resolve" | "normalize" | "basename" | "dirname" | "extname" | null {
     if (isIdentifierShadowedInLocalScope(id)) return null;
     const sf = id.getSourceFile();
     for (const stmt of sf.statements) {
@@ -6309,7 +6327,7 @@ function pathNamedImport(id: ts.Identifier): "join" | "resolve" | "normalize" | 
         for (const element of bindings.elements) {
             if (element.name.text !== id.text) continue;
             const imported = element.propertyName?.text ?? element.name.text;
-            if (imported === "join" || imported === "resolve" || imported === "normalize") return imported;
+            if (isStaticPathStringMethod(imported)) return imported;
         }
     }
     return null;
