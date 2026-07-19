@@ -19114,7 +19114,7 @@ class Emitter {
             this.commonJsExportGlobals.add(cName);
             this.globalDecls.line(`static ${ty.c} ${cName};`);
         }
-        const value = this.isCommonJsModuleExportsDefaultInitializerValue(assignment.right)
+        const value = ty.kind === "value" && this.isCommonJsModuleExportsDefaultInitializerValue(assignment.right)
             ? this.emitCommonJsModuleExportsDefaultValue(assignment.right)
             : this.emitExpr(assignment.right);
         buf.line(`${cName} = ${this.coerce(value, ty, assignment.right)};`);
@@ -37103,7 +37103,7 @@ class Emitter {
             if (exportDecl) {
                 const cName = this.ensureCommonJsModuleExportsGlobal(exportDecl, spec);
                 const ty = this.commonJsExportedCType(exportDecl);
-                if (ty.kind === "bigint") return { c: cName, ty };
+                if (ty.kind !== "value") return { c: cName, ty };
                 return { c: this.coerce({ c: cName, ty }, T_VALUE, call), ty: T_VALUE };
             }
             return this.emitCommonJsRequireModuleValue(call, spec);
