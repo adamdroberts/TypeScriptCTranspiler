@@ -44718,7 +44718,7 @@ class Emitter {
                     ty: T_STRING,
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, hostname, service], callbackNode);
-                return `({ tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); (void)${callbackCall}; })`;
+                return `({ tsc_dns_lookup_service_result_t ${result} = tsc_dns_lookup_service(${addressC}, ${portC}); if (${result}.error) tsc_drain_microtasks_and_next_ticks(); (void)${callbackCall}; })`;
             });
         }
         if (call.arguments.length < 2) {
@@ -44744,6 +44744,7 @@ class Emitter {
         if (optionsNode && evaluateDefaultOptions) {
             specs.push({ value: this.emitExpr(optionsNode), target: T_VOID, node: optionsNode });
         }
+        const checkpointBeforeCallback = method === "lookup" && this.dnsLookupCallbackNeedsMicrotaskCheckpoint(optionsNode);
         specs.push(
             { value: callback, target: callbackType, node: callbackNode },
             ...this.ignoredArgumentSpecs(call.arguments, callbackIndex + 1),
@@ -44781,7 +44782,7 @@ class Emitter {
                     ty: arrayType(T_VALUE),
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); (void)${callbackCall}; })`;
+                return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_lookup_all(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${checkpointBeforeCallback ? "tsc_drain_microtasks_and_next_ticks(); " : ""}(void)${callbackCall}; })`;
             }
             const address: EmitResult = {
                 c: `${result}.address ? ${result}.address : tsc_str_from_lit("", 0)`,
@@ -44789,8 +44790,28 @@ class Emitter {
             };
             const family: EmitResult = { c: `${result}.family`, ty: T_NUMBER };
             const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, address, family], callbackNode);
-            return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); (void)${callbackCall}; })`;
+            return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${checkpointBeforeCallback ? "tsc_drain_microtasks_and_next_ticks(); " : ""}(void)${callbackCall}; })`;
         });
+    }
+
+    private dnsLookupCallbackNeedsMicrotaskCheckpoint(options: ts.Expression | undefined): boolean {
+        if (!options) return false;
+        if (this.shouldEvaluateDnsDefaultOptions(options)) return true;
+        const resolved = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolved) || this.isNullExpression(resolved)) return true;
+        const numericFamily = this.dnsLookupNumberValue(resolved);
+        if (numericFamily !== null) return false;
+        if (!ts.isObjectLiteralExpression(resolved)) return false;
+        for (const prop of resolved.properties) {
+            let key: string | null = null;
+            if (ts.isPropertyAssignment(prop)) {
+                key = this.staticPropertyName(prop.name);
+            } else if (ts.isShorthandPropertyAssignment(prop)) {
+                key = prop.name.text;
+            }
+            if (key === "hints" || key === "order" || key === "verbatim") return false;
+        }
+        return true;
     }
 
     private dnsLookupHintConstant(name: string): number | null {
