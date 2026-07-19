@@ -20,6 +20,7 @@ This is the next item that most directly expands what programs can be written ag
   - Await-free interstitial `try` / `catch` / `finally` statements without catch bindings or declarations are now covered; source try blocks containing awaited returns remain deferred.
   - Leading chains now cover a terminal direct `return await`; general direct-return-await control-flow and nested awaited expressions remain deferred.
   - Direct branch `return await` arms now preserve safe initialized branch-local declaration preludes across declarations, methods, function values, and branch-block fallthrough; awaited, escaping, and broader branch return-await graphs remain deferred.
+  - The same direct branch `return await` subset now preserves branch-local `let` declarations assigned before the awaited source; assignments after suspension and broader mutable branch state remain deferred.
   - Direct `return await` with await-free expression-statement and bounded control-flow preludes is covered for async declarations; nested awaits and broader state-machine forms remain deferred.
   - The same direct-prelude `return await` subset is covered for class methods and function values; broader nested-await forms remain deferred.
   - Direct-prelude `return await` accepts await-free initialized locals and uninitialized assignments before the awaited source; general locals crossing nested suspension points remain deferred.
