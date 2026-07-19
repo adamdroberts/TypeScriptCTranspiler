@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed source `try` / `catch` / `finally` direct `return await` prelude-routing coverage already tracked by `async_await_try_return_await`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed awaited-alias, assignment-awaited-alias, embedded return-await, initializer-return, assignment-return, bounded single-await, and leading awaited-local continuation subsets.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed expression-bodied async arrow and captured-closure direct/embedded pending-await coverage with parameter reads.
 - `docs/todo.md` now rebaselines the Phase 6 thenable-assimilation remaining-work entry against completed microtask-delayed nested thenable coverage for direct `Promise.resolve(...)` and dynamic Promise combinators.
