@@ -322,6 +322,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Conditional arm leading chains now compose equal-length branch-local awaited declaration sequences used only for sequencing across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_sequence`
 - Conditional arm leading chains now allow branch-local first awaited values to feed the next branch-local sequencing await across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_value_flow`
 - Conditional arm leading chains now compose branch-local value flow across multiple consecutive conditional suspensions before a sequencing-only terminal await. Test: `async_await_conditional_branch_local_multi_value_flow`
+- Conditional arm leading chains now compose branch-local value flow with a sibling direct-await sequencing arm across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_mixed_branch_value_flow`
 - Conditional arm leading chains now allow branch-local awaited values to update outer captured state before a sequencing-only await across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_post_state`
 - Conditional arm leading chains now allow the final branch-local awaited value to update outer captured state before the common return across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_final_state`
 - Leading awaited-local chains now reject through terminal post-await `throw` statements after multiple suspensions for async declarations, class methods, and function values. Test: `async_await_pending_return_expr`
@@ -3093,6 +3094,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_conditional_branch_local_sequence` | conditional arms compose equal-length branch-local awaited declaration sequences used only for sequencing |
 | `async_await_conditional_branch_local_value_flow` | branch-local first awaited values feed the next sequencing-only await expression |
 | `async_await_conditional_branch_local_multi_value_flow` | branch-local values feed multiple consecutive sequencing-only conditional awaits |
+| `async_await_conditional_mixed_branch_value_flow` | branch-local value flow composes with a sibling direct-await sequencing arm |
 | `async_await_conditional_branch_local_post_state` | branch-local awaited values update outer state before a sequencing-only await |
 | `async_await_conditional_branch_local_final_state` | final branch-local awaited values update outer state before the common return |
 | `async_await_pending_return_expr` | leading awaited-local chains support bounded nested else-if conditional await selection through four nested levels with Promise-valued leaves |
