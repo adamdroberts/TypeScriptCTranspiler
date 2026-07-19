@@ -15457,6 +15457,8 @@ class Emitter {
         const exportName = importSpec.propertyName?.text ?? importSpec.name.text;
         const decl = this.commonJsExportedMemberDeclaration(sf, exportName);
         if (decl) return { name: exportName, decl, specifier: specifier.text };
+        const starDecl = this.commonJsExportStarMemberDeclaration(sf, exportName);
+        if (starDecl) return { name: exportName, decl: starDecl, specifier: specifier.text };
         if (exportName === "default" && !this.hasCommonJsEsModuleMarker(sf)) {
             return { name: "default", decl: sf, specifier: specifier.text };
         }
@@ -20515,6 +20517,23 @@ class Emitter {
         return null;
     }
 
+    private commonJsExportStarMemberDeclaration(sf: ts.SourceFile, name: string): ts.Node | null {
+        for (const stmt of sf.statements) {
+            if (
+                !ts.isExportDeclaration(stmt) ||
+                stmt.exportClause ||
+                !stmt.moduleSpecifier ||
+                !ts.isStringLiteralLike(stmt.moduleSpecifier)
+            ) {
+                continue;
+            }
+            const info = this.resolvedModuleInfoForSpecifier(stmt.moduleSpecifier.text, sf.fileName);
+            const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
+            if (commonJsDecl) return commonJsDecl;
+        }
+        return null;
+    }
+
     private commonJsModuleExportsDeclaredObjectValueExports(
         stmt: ts.Statement,
     ): CommonJsObjectAssignExportEntry[] | null {
@@ -21035,20 +21054,7 @@ class Emitter {
                 if (ts.isIdentifier(decl.name) && decl.name.text === name) return decl;
             }
         }
-        for (const stmt of sf.statements) {
-            if (
-                !ts.isExportDeclaration(stmt) ||
-                stmt.exportClause ||
-                !stmt.moduleSpecifier ||
-                !ts.isStringLiteralLike(stmt.moduleSpecifier)
-            ) {
-                continue;
-            }
-            const info = this.resolvedModuleInfoForSpecifier(stmt.moduleSpecifier.text, sf.fileName);
-            const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
-            if (commonJsDecl) return commonJsDecl;
-        }
-        return null;
+        return this.commonJsExportStarMemberDeclaration(sf, name);
     }
 
     private moduleNamespaceMemberDeclaration(access: CommonJsExportAccess): ts.Node | null {
