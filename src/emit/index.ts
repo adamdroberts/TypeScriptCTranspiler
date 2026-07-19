@@ -31331,7 +31331,8 @@ class Emitter {
             const fallthroughStatements = statements.slice(1);
             if (
                 fallthroughStatements.length > 0 &&
-                ts.isReturnStatement(fallthroughStatements[fallthroughStatements.length - 1]!)
+                (ts.isReturnStatement(fallthroughStatements[fallthroughStatements.length - 1]!) ||
+                    ts.isThrowStatement(fallthroughStatements[fallthroughStatements.length - 1]!))
             ) {
                 const sharedTail = this.asyncAwaitIfExpressionReturnBranchFromSharedTailIf(
                     statements[0]!,
