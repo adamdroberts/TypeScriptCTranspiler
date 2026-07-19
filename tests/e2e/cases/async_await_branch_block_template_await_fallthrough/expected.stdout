@@ -1,0 +1,6 @@
+branch-block-template-await-fallthrough-true: fn-branch
+branch-block-template-await-fallthrough-false: fn-fall-template!
+method-branch-block-template-await-fallthrough-true: this-method-branch
+method-branch-block-template-await-fallthrough-false: this-method-fall-template!
+value-branch-block-template-await-fallthrough-true: arrow-value-branch
+value-branch-block-template-await-fallthrough-false: arrow-value-fall-template!
