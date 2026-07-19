@@ -31525,11 +31525,17 @@ class Emitter {
         const clauses: AsyncAwaitSwitchExpressionReturnClause[] = [];
         let defaultClause: AsyncAwaitSwitchExpressionReturnClause | null = null;
         let hasDefault = false;
+        let defaultFallsThrough = false;
         let pendingExpressions: (ts.Expression | null)[] = [];
         for (const clause of switchStatement.caseBlock.clauses) {
             if (ts.isDefaultClause(clause)) {
-                if (hasDefault || pendingExpressions.length > 0 || clause.statements.length === 0) return null;
+                if (hasDefault) return null;
                 hasDefault = true;
+                if (clause.statements.length === 0) {
+                    defaultFallsThrough = true;
+                    continue;
+                }
+                if (pendingExpressions.length > 0) return null;
                 const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(clause.statements, parameters, thisValue, captures);
                 if (!branch) return null;
                 defaultClause = { expressions: [null], branch };
@@ -31543,9 +31549,13 @@ class Emitter {
             const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(clause.statements, parameters, thisValue, captures);
             if (!branch || pendingExpressions.length === 0) return null;
             clauses.push({ expressions: pendingExpressions, branch });
+            if (defaultFallsThrough) {
+                defaultClause = { expressions: [null], branch };
+                defaultFallsThrough = false;
+            }
             pendingExpressions = [];
         }
-        if (!hasDefault || !defaultClause || clauses.length === 0 || pendingExpressions.length > 0) return null;
+        if (!hasDefault || !defaultClause || defaultFallsThrough || clauses.length === 0 || pendingExpressions.length > 0) return null;
         clauses.push(defaultClause);
         return { kind: "switch", expression: switchStatement.expression, clauses };
     }

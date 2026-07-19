@@ -1,0 +1,7 @@
+declaration-default: declaration-shared
+declaration-one: declaration-shared
+declaration-two: declaration-shared
+method-default: method-shared
+method-one: method-shared
+value-default: value-shared
+value-one: value-shared
