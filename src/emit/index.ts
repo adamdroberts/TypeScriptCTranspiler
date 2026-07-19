@@ -21026,6 +21026,52 @@ class Emitter {
         return null;
     }
 
+    private moduleNamespaceReExportMemberDeclaration(access: CommonJsExportAccess): { name: string; decl: ts.Node } | null {
+        if (!ts.isPropertyAccessExpression(access)) return null;
+        const receiver = access.expression;
+        if (
+            !ts.isPropertyAccessExpression(receiver) ||
+            !ts.isIdentifier(receiver.expression) ||
+            !ts.isIdentifier(receiver.name)
+        ) {
+            return null;
+        }
+        const memberName = this.commonJsAccessMemberName(access);
+        if (memberName == null) return null;
+        const spec = this.moduleNamespaceImportSpecifier(receiver.expression);
+        const info = spec && !this.isNodeBuiltinModuleSpecifier(spec)
+            ? this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName)
+            : null;
+        const sf = info?.sf;
+        if (!sf) return null;
+        for (const stmt of sf.statements) {
+            if (
+                !ts.isExportDeclaration(stmt) ||
+                !stmt.exportClause ||
+                !ts.isNamespaceExport(stmt.exportClause) ||
+                stmt.exportClause.name.text !== receiver.name.text ||
+                !stmt.moduleSpecifier ||
+                !ts.isStringLiteralLike(stmt.moduleSpecifier)
+            ) {
+                continue;
+            }
+            const target = this.resolvedModuleInfoForSpecifier(stmt.moduleSpecifier.text, sf.fileName);
+            const decl = target ? this.commonJsExportedMemberDeclaration(target.sf, memberName) : null;
+            if (decl) return { name: memberName, decl };
+        }
+        return null;
+    }
+
+    private moduleNamespaceReExportMemberCName(access: CommonJsExportAccess): string | null {
+        const member = this.moduleNamespaceReExportMemberDeclaration(access);
+        return member ? this.commonJsExportedDeclarationCName(member.decl, member.name) : null;
+    }
+
+    private moduleNamespaceReExportMemberType(access: CommonJsExportAccess): CType | null {
+        const member = this.moduleNamespaceReExportMemberDeclaration(access);
+        return member ? this.commonJsExportedCType(member.decl) : null;
+    }
+
     private esmExportedMemberDeclaration(sf: ts.SourceFile, name: string): ts.Node | null {
         const hasExportModifier = (node: ts.Node): boolean => {
             const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
@@ -39131,6 +39177,57 @@ class Emitter {
                 ? this.callSpecsFromSignature(call, call.arguments, params)
                 : call.arguments.map((arg) => ({ value: this.emitExpr(arg), target: T_VALUE, node: arg }));
             return this.emitSequencedCall(requireMember, retType, specs);
+        }
+
+        const moduleNsReExportMember = this.moduleNamespaceReExportMemberCName(pa);
+        if (moduleNsReExportMember) {
+            const memberInfo = this.moduleNamespaceReExportMemberDeclaration(pa);
+            const memberTy = this.moduleNamespaceReExportMemberType(pa);
+            if (
+                memberInfo &&
+                memberTy?.kind === "function" &&
+                (
+                    ((ts.isPropertyAccessExpression(memberInfo.decl) || ts.isElementAccessExpression(memberInfo.decl)) && this.commonJsExportNames(memberInfo.decl).length > 0) ||
+                    this.isCommonJsStaticRequireBackedExportProperty(memberInfo.decl) ||
+                    (ts.isCallExpression(memberInfo.decl) && !!this.commonJsDefinePropertyExportForCallDeclaration(memberInfo.decl)) ||
+                    (ts.isPropertyAssignment(memberInfo.decl) && !!this.commonJsDefinePropertiesExportEntry(memberInfo.decl)) ||
+                    (ts.isPropertyAssignment(memberInfo.decl) && !!this.commonJsDefinePropertiesFromEntriesExportEntry(memberInfo.decl)) ||
+                    (this.isCommonJsModuleExportsObjectExportEntry(memberInfo.decl) && !ts.isShorthandPropertyAssignment(memberInfo.decl)) ||
+                    (ts.isArrayLiteralExpression(memberInfo.decl) && !!this.commonJsObjectFromEntriesExportEntry(memberInfo.decl)) ||
+                    (ts.isArrayLiteralExpression(memberInfo.decl) && !!this.commonJsDefinePropertiesFromEntriesExportEntry(memberInfo.decl)) ||
+                    !!this.commonJsObjectAssignExportEntry(memberInfo.decl)
+                )
+            ) {
+                return this.emitClosureCall(call, { c: moduleNsReExportMember, ty: memberTy });
+            }
+            if (memberTy?.kind === "value") {
+                return this.emitDynamicValueCall(call, { c: moduleNsReExportMember, ty: T_VALUE });
+            }
+            const sig = this.checker.getResolvedSignature(call);
+            const params = sig?.getParameters() ?? [];
+            const useMemberFunctionType =
+                memberTy?.kind === "function" &&
+                (!sig || (params.length === 0 && call.arguments.length > 0));
+            if (!sig && !useMemberFunctionType) unsupported(call, "unresolved module namespace re-export function");
+            const retType = useMemberFunctionType && memberTy?.kind === "function"
+                ? memberTy.ret ?? T_VOID
+                : sig
+                    ? mapTsType(call, sig.getReturnType(), this.checker)
+                    : memberTy?.kind === "function" && memberTy.ret
+                        ? memberTy.ret
+                        : T_VALUE;
+            if (
+                call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
+                !this.signatureHasRestParameter(params)
+            ) {
+                return this.emitStaticSpreadCall(call, moduleNsReExportMember, retType, params);
+            }
+            const specs = useMemberFunctionType && memberTy?.kind === "function"
+                ? this.callSpecsFromFunctionType(call, call.arguments, memberTy.params ?? [])
+                : sig
+                ? this.callSpecsFromSignature(call, call.arguments, params)
+                : call.arguments.map((arg) => ({ value: this.emitExpr(arg), target: T_VALUE, node: arg }));
+            return this.emitSequencedCall(moduleNsReExportMember, retType, specs);
         }
 
         const moduleNsMember = this.moduleNamespaceMemberCName(pa);
@@ -59728,6 +59825,11 @@ class Emitter {
                 const decl = this.requireModuleMemberDeclaration(pa);
                 const ty = decl ? this.commonJsExportedCType(decl) : mapType(pa, this.checker);
                 return { c: requireMember, ty };
+            }
+            const moduleNsReExportMember = this.moduleNamespaceReExportMemberCName(pa);
+            if (moduleNsReExportMember) {
+                const ty = this.moduleNamespaceReExportMemberType(pa) ?? mapType(pa, this.checker);
+                return { c: moduleNsReExportMember, ty };
             }
             const moduleNsMember = this.moduleNamespaceMemberCName(pa);
             if (moduleNsMember) {
