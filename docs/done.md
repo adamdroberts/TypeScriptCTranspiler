@@ -114,6 +114,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered for nested async closures with captured locals. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` combined catch-plus-finally continuations are covered across async declarations, lifted async function values, and class async methods that read `this`. Test: `async_await_try_catch_finally`
 - Source `try`/`catch`/`finally` pending-`await` continuations support the combined catch-plus-finally form for fulfilled and rejected awaited sources. Test: `async_await_try_catch_finally`
+- Branch-block direct `return await` continuations preserve branch-local prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_return_await_prelude`
 - Branch-block pending-`await` continuations resume branch-local leading awaited-local chains with unused `Promise<void>` sequencing awaits across async declarations, class methods, and async function values. Test: `async_await_branch_block_leading_void_return`
 - Branch-block pending-`await` continuations route branch-local source `try` / `catch`, `try` / `finally`, and `try` / `catch` / `finally` awaited returns through the specialized source-try continuation adapters across async declarations, class methods, and async function values. Test: `async_await_branch_block_source_try_return`
 - Branch-block pending-`await` continuations resume branch-local synchronous post-await `if` / return, `switch` / return, loop / return, and `try` / `catch` / `finally` before final return control flow across async declarations, class methods, and async function values. Tests: `async_await_branch_block_post_await_if_return`, `async_await_branch_block_post_await_switch_return`, `async_await_branch_block_post_await_loop_return`, `async_await_branch_block_post_await_try_return`
@@ -2917,6 +2918,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_block_post_await_try_return` | async branch blocks resume synchronous post-await try/catch/finally before final return control flow |
 | `async_await_branch_block_source_try_return` | async branch blocks route source try/catch/finally awaited returns through specialized continuations |
 | `async_await_branch_block_leading_void_return` | async branch blocks resume leading awaited-local chains with void sequencing |
+| `async_await_branch_block_return_await_prelude` | async branch blocks preserve branch-local preludes before direct return-await |
 | `async_await_branch_block_post_await_return` | async branch blocks resume synchronous post-await locals before returning |
 | `async_await_branch_block_prelude_return` | async branch blocks preserve branch-local preludes before awaited locals returned from the branch |
 | `async_await_branch_block_local_return` | async branch blocks resume awaited locals returned from the branch or fallthrough path |

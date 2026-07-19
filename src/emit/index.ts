@@ -274,6 +274,11 @@ interface AsyncAwaitIfLocalLeadingReturnLeaf {
     continuation: AsyncAwaitLeadingReturnContinuation;
 }
 
+interface AsyncAwaitIfLocalPreludeReturnLeaf {
+    kind: "localPreludeReturn";
+    continuation: AsyncAwaitPreludeExpressionReturnContinuation;
+}
+
 interface AsyncAwaitIfExpressionSyncReturnLeaf {
     kind: "syncReturn";
     returnExpr: ts.Expression;
@@ -295,6 +300,7 @@ type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfLocalTryFinallyReturnLeaf
     | AsyncAwaitIfLocalTryCatchFinallyReturnLeaf
     | AsyncAwaitIfLocalLeadingReturnLeaf
+    | AsyncAwaitIfLocalPreludeReturnLeaf
     | AsyncAwaitIfExpressionSyncReturnLeaf
     | AsyncAwaitIfExpressionReturnBranch;
 
@@ -27617,6 +27623,27 @@ class Emitter {
         return continuation ? { preludeStatements, result: continuation } : null;
     }
 
+    private asyncAwaitPreludeExpressionReturnContinuationSupported(
+        match: AsyncAwaitPreludeExpressionReturnContinuation,
+    ): boolean {
+        if ("awaitExpr" in match.result) {
+            return this.asyncAwaitExpressionReturnContinuationSupported(match.result);
+        }
+        return this.asyncAwaitIfExpressionReturnBranchSupported(match.result);
+    }
+
+    private emitAsyncAwaitPreludeExpressionReturnContinuationResult(
+        buf: CBuf,
+        match: AsyncAwaitPreludeExpressionReturnContinuation,
+    ): boolean {
+        if ("awaitExpr" in match.result) {
+            this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, match.result.params);
+            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
+        }
+        this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, this.asyncAwaitIfExpressionReturnBranchParams(match.result));
+        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
+    }
+
     private emitAsyncAwaitPreludeExpressionReturnContinuation(
         buf: CBuf,
         body: ts.Block,
@@ -27625,14 +27652,8 @@ class Emitter {
     ): boolean {
         const match = this.asyncAwaitPreludeExpressionReturnContinuation(body, parameters, thisValue);
         if (!match) return false;
-        if ("awaitExpr" in match.result) {
-            if (!this.asyncAwaitExpressionReturnContinuationSupported(match.result)) return false;
-            this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, match.result.params);
-            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
-        }
-        if (!this.asyncAwaitIfExpressionReturnBranchSupported(match.result)) return false;
-        this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, this.asyncAwaitIfExpressionReturnBranchParams(match.result));
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
+        if (!this.asyncAwaitPreludeExpressionReturnContinuationSupported(match)) return false;
+        return this.emitAsyncAwaitPreludeExpressionReturnContinuationResult(buf, match);
     }
 
     private emitAsyncAwaitExpressionReturnContinuation(
@@ -28131,6 +28152,10 @@ class Emitter {
             if (leadingContinuation) {
                 return { kind: "localLeadingReturn", continuation: leadingContinuation };
             }
+            const preludeContinuation = this.asyncAwaitPreludeExpressionReturnContinuation(stmt, parameters, thisValue);
+            if (preludeContinuation) {
+                return { kind: "localPreludeReturn", continuation: preludeContinuation };
+            }
             const continuation = this.asyncAwaitReturnContinuation(stmt, parameters, thisValue);
             if (continuation) {
                 return { kind: "localReturn", continuation };
@@ -28186,7 +28211,8 @@ class Emitter {
             branch.kind === "localTryCatchReturn" ||
             branch.kind === "localTryFinallyReturn" ||
             branch.kind === "localTryCatchFinallyReturn" ||
-            branch.kind === "localLeadingReturn"
+            branch.kind === "localLeadingReturn" ||
+            branch.kind === "localPreludeReturn"
         ) return true;
         if (branch.kind === "syncReturn") return false;
         return this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.thenBranch) ||
@@ -28208,6 +28234,16 @@ class Emitter {
                 node.kind === "localLeadingReturn"
             ) {
                 for (const param of node.continuation.params) {
+                    paramsBySymbol.set(param.symbol, param);
+                }
+                return;
+            }
+            if (node.kind === "localPreludeReturn") {
+                const continuation = node.continuation;
+                const params = "awaitExpr" in continuation.result
+                    ? continuation.result.params
+                    : this.asyncAwaitIfExpressionReturnBranchParams(continuation.result);
+                for (const param of params) {
                     paramsBySymbol.set(param.symbol, param);
                 }
                 return;
@@ -28234,6 +28270,9 @@ class Emitter {
         }
         if (branch.kind === "localLeadingReturn") {
             return this.asyncAwaitLeadingReturnContinuationSupported(branch.continuation);
+        }
+        if (branch.kind === "localPreludeReturn") {
+            return this.asyncAwaitPreludeExpressionReturnContinuationSupported(branch.continuation);
         }
         if (
             branch.kind === "localTryCatchReturn" ||
@@ -28264,6 +28303,9 @@ class Emitter {
         if (branch.kind === "localLeadingReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
             return this.emitAsyncAwaitLeadingReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "localPreludeReturn") {
+            return this.emitAsyncAwaitPreludeExpressionReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "localTryCatchReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
