@@ -595,6 +595,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'import { offset } from "./helper.js";\nexport const label = "relative-js";\nexport function compute(value) { return value + offset; }\n',
         "helper.js": "export const offset = 10;\n",
     }),
+    "tsc2c-js-default-import-package": esmPackage("tsc2c-js-default-import-package", {
+        "index.js": 'import format, { label } from "./helper.js";\nexport const message = format(label);\nexport function wrap(value) { return format(value); }\n',
+        "helper.js": 'export const label = "js-default-import";\nexport default function format(value) { return "[" + value + "]"; }\n',
+    }),
     "tsc2c-js-reexport-package": esmPackage("tsc2c-js-reexport-package", {
         "index.js": 'export { default as greet, label, compute as calc } from "./core.js";\nexport * from "./extra.js";\n',
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',
