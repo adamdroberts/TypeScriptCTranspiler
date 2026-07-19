@@ -1,0 +1,3 @@
+{
+  "description": "Async branch blocks resume fallthrough short-circuit return expressions with awaits on the left operand"
+}
