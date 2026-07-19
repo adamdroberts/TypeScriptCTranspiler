@@ -1,6 +1,8 @@
 direct-assignment-init-trace: fn-init|this-method-init|value-arrow-init|
 branch-conditional-leading-chain-fallthrough: branch-fallthrough
 branch-six-leaf-conditional-leading-chain-fallthrough: branch-six-fallthrough
+branch-six-leaf-conditional-leading-chain-method-fallthrough: method-branch-six-fallthrough
+branch-six-leaf-conditional-leading-chain-value-fallthrough: value-branch-six-fallthrough
 branch-mixed-inline-await-return-sync: fn-branch-mixed-sync!
 branch-conditional-inline-await-return-sync: fn-branch-conditional-sync!
 conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
@@ -409,3 +411,15 @@ branch-six-leaf-conditional-leading-chain-two: branch-six-two-one:branch-six-two
 branch-six-leaf-conditional-leading-chain-three: branch-six-three-one:branch-six-three-one:initial|three-pre|three-post:initial|three-pre|three-post
 branch-six-leaf-conditional-leading-chain-four: branch-six-four-one:branch-six-four-one:initial|four-pre|four-post:initial|four-pre|four-post
 branch-six-leaf-conditional-leading-chain-other: branch-six-other-one:branch-six-other-one:initial|other-pre|other-post:initial|other-pre|other-post
+branch-six-leaf-conditional-leading-chain-method-zero: method-branch-six-method-branch-six-zero-one:method-branch-six-zero-one:initial|zero-pre|zero-post:initial|zero-pre|zero-post
+branch-six-leaf-conditional-leading-chain-method-one: method-branch-six-method-branch-six-one-one:method-branch-six-one-one:initial|one-pre|one-post:initial|one-pre|one-post
+branch-six-leaf-conditional-leading-chain-method-two: method-branch-six-method-branch-six-two-one:method-branch-six-two-one:initial|two-pre|two-post:initial|two-pre|two-post
+branch-six-leaf-conditional-leading-chain-method-three: method-branch-six-method-branch-six-three-one:method-branch-six-three-one:initial|three-pre|three-post:initial|three-pre|three-post
+branch-six-leaf-conditional-leading-chain-method-four: method-branch-six-method-branch-six-four-one:method-branch-six-four-one:initial|four-pre|four-post:initial|four-pre|four-post
+branch-six-leaf-conditional-leading-chain-method-other: method-branch-six-method-branch-six-other-one:method-branch-six-other-one:initial|other-pre|other-post:initial|other-pre|other-post
+branch-six-leaf-conditional-leading-chain-value-zero: value-branch-six-value-branch-six-zero-one:value-branch-six-zero-one:initial|zero-pre|zero-post:initial|zero-pre|zero-post
+branch-six-leaf-conditional-leading-chain-value-one: value-branch-six-value-branch-six-one-one:value-branch-six-one-one:initial|one-pre|one-post:initial|one-pre|one-post
+branch-six-leaf-conditional-leading-chain-value-two: value-branch-six-value-branch-six-two-one:value-branch-six-two-one:initial|two-pre|two-post:initial|two-pre|two-post
+branch-six-leaf-conditional-leading-chain-value-three: value-branch-six-value-branch-six-three-one:value-branch-six-three-one:initial|three-pre|three-post:initial|three-pre|three-post
+branch-six-leaf-conditional-leading-chain-value-four: value-branch-six-value-branch-six-four-one:value-branch-six-four-one:initial|four-pre|four-post:initial|four-pre|four-post
+branch-six-leaf-conditional-leading-chain-value-other: value-branch-six-value-branch-six-other-one:value-branch-six-other-one:initial|other-pre|other-post:initial|other-pre|other-post

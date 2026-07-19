@@ -1006,6 +1006,84 @@ async function branchSixLeafConditionalLeadingChain(outer: boolean, kind: number
     return prefix + "fallthrough";
 }
 
+class BranchSixLeafConditionalLeadingChainMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(outer: boolean, kind: number): Promise<string> {
+        if (outer) {
+            let first = this.prefix + "seed";
+            let marker = "initial";
+            if (kind === 0) {
+                marker = marker + "|zero-pre";
+                first = await delay(1550, this.prefix + "zero-one");
+                marker = marker + "|zero-post";
+            } else if (kind === 1) {
+                marker = marker + "|one-pre";
+                first = await delay(1551, this.prefix + "one-one");
+                marker = marker + "|one-post";
+            } else if (kind === 2) {
+                marker = marker + "|two-pre";
+                first = await delay(1552, this.prefix + "two-one");
+                marker = marker + "|two-post";
+            } else if (kind === 3) {
+                marker = marker + "|three-pre";
+                first = await delay(1553, this.prefix + "three-one");
+                marker = marker + "|three-post";
+            } else if (kind === 4) {
+                marker = marker + "|four-pre";
+                first = await delay(1554, this.prefix + "four-one");
+                marker = marker + "|four-post";
+            } else {
+                marker = marker + "|other-pre";
+                first = await delay(1555, this.prefix + "other-one");
+                marker = marker + "|other-post";
+            }
+            const second = await delay(1556, first + ":" + marker);
+            return this.prefix + first + ":" + second + ":" + marker;
+        }
+        return this.prefix + "fallthrough";
+    }
+}
+
+const branchSixLeafConditionalLeadingChainValue = async function(outer: boolean, kind: number, prefix: string): Promise<string> {
+    if (outer) {
+        let first = prefix + "seed";
+        let marker = "initial";
+        if (kind === 0) {
+            marker = marker + "|zero-pre";
+            first = await delay(1560, prefix + "zero-one");
+            marker = marker + "|zero-post";
+        } else if (kind === 1) {
+            marker = marker + "|one-pre";
+            first = await delay(1561, prefix + "one-one");
+            marker = marker + "|one-post";
+        } else if (kind === 2) {
+            marker = marker + "|two-pre";
+            first = await delay(1562, prefix + "two-one");
+            marker = marker + "|two-post";
+        } else if (kind === 3) {
+            marker = marker + "|three-pre";
+            first = await delay(1563, prefix + "three-one");
+            marker = marker + "|three-post";
+        } else if (kind === 4) {
+            marker = marker + "|four-pre";
+            first = await delay(1564, prefix + "four-one");
+            marker = marker + "|four-post";
+        } else {
+            marker = marker + "|other-pre";
+            first = await delay(1565, prefix + "other-one");
+            marker = marker + "|other-post";
+        }
+        const second = await delay(1566, first + ":" + marker);
+        return prefix + first + ":" + second + ":" + marker;
+    }
+    return prefix + "fallthrough";
+};
+
 async function conditionalLeadingChainArmPrelude(flag: boolean, prefix: string): Promise<string> {
     let first = prefix + "seed";
     let marker = "initial";
@@ -3189,6 +3267,49 @@ branchSixLeafConditionalLeadingChain(true, 5, "branch-six-").then((value: string
 });
 branchSixLeafConditionalLeadingChain(false, 0, "branch-six-").then((value: string): void => {
     console.log("branch-six-leaf-conditional-leading-chain-fallthrough:", value);
+});
+const branchSixLeafConditionalLeadingChainMethodInstance = new BranchSixLeafConditionalLeadingChainMethod("method-branch-six-");
+branchSixLeafConditionalLeadingChainMethodInstance.run(true, 0).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-zero:", value);
+});
+branchSixLeafConditionalLeadingChainMethodInstance.run(true, 1).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-one:", value);
+});
+branchSixLeafConditionalLeadingChainMethodInstance.run(true, 2).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-two:", value);
+});
+branchSixLeafConditionalLeadingChainMethodInstance.run(true, 3).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-three:", value);
+});
+branchSixLeafConditionalLeadingChainMethodInstance.run(true, 4).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-four:", value);
+});
+branchSixLeafConditionalLeadingChainMethodInstance.run(true, 5).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-other:", value);
+});
+branchSixLeafConditionalLeadingChainMethodInstance.run(false, 0).then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-method-fallthrough:", value);
+});
+branchSixLeafConditionalLeadingChainValue(true, 0, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-zero:", value);
+});
+branchSixLeafConditionalLeadingChainValue(true, 1, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-one:", value);
+});
+branchSixLeafConditionalLeadingChainValue(true, 2, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-two:", value);
+});
+branchSixLeafConditionalLeadingChainValue(true, 3, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-three:", value);
+});
+branchSixLeafConditionalLeadingChainValue(true, 4, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-four:", value);
+});
+branchSixLeafConditionalLeadingChainValue(true, 5, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-other:", value);
+});
+branchSixLeafConditionalLeadingChainValue(false, 0, "value-branch-six-").then((value: string): void => {
+    console.log("branch-six-leaf-conditional-leading-chain-value-fallthrough:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

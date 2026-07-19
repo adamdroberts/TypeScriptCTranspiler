@@ -23,7 +23,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Leading awaited-local chains now support bounded conditional await steps with Promise-valued true and false branches across async declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
 - Branch-block leading awaited-local chains now compose bounded conditional await steps with a synchronous fallthrough arm. Test: `async_await_pending_return_expr`.
 - Leading awaited-local chains now support bounded nested `else if` conditional await selection through four nested levels with Promise-valued leaves. Test: `async_await_pending_return_expr`.
-- Branch-block leading awaited-local chains now compose the six-leaf nested conditional await subset with a synchronous fallthrough arm. Test: `async_await_pending_return_expr`.
+- Branch-block leading awaited-local chains now compose the six-leaf nested conditional await subset with a synchronous fallthrough arm across async declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
 - Nested conditional leading await steps now preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now allow branch-local awaited declarations used only as sequencing points. Test: `async_await_pending_return_expr`.

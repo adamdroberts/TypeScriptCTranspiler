@@ -3072,7 +3072,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_pending_return_expr` | source try/finally leading chains preserve bounded finally return-await overrides across async class methods and async function values, including receiver and closure capture |
 | `async_await_pending_return_expr` | leading awaited-local chains support bounded conditional await steps with Promise-valued true and false branches across async declarations, class methods, and function values |
 | `async_await_pending_return_expr` | branch-block leading awaited-local chains compose bounded conditional await steps with a synchronous fallthrough arm |
-| `async_await_pending_return_expr` | branch-block leading awaited-local chains compose the six-leaf nested conditional await subset with a synchronous fallthrough arm |
+| `async_await_pending_return_expr` | branch-block leading awaited-local chains compose the six-leaf nested conditional await subset with a synchronous fallthrough arm across async declarations, class methods, and function values |
 | `async_await_pending_return_expr` | leading awaited-local chains support bounded nested else-if conditional await selection through four nested levels with Promise-valued leaves |
 | `async_await_pending_return_expr` | nested conditional leading await steps preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
