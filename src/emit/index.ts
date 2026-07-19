@@ -15357,15 +15357,20 @@ class Emitter {
 
     private commonJsDefaultReExportInfoForImport(id: ts.Identifier): { specifier: string; containingFile: string } | null {
         const raw = this.checker.getSymbolAtLocation(id);
-        const importSpec = (raw?.declarations ?? []).find((decl): decl is ts.ImportSpecifier =>
-            ts.isImportSpecifier(decl) && decl.name.text === id.text,
+        const importDeclNode = (raw?.declarations ?? []).find((decl) =>
+            (ts.isImportSpecifier(decl) && decl.name.text === id.text) ||
+            (ts.isImportClause(decl) && decl.name?.text === id.text),
         );
-        if (!importSpec) return null;
-        const importDecl = importSpec.parent.parent.parent;
+        if (!importDeclNode) return null;
+        const importDecl = ts.isImportSpecifier(importDeclNode)
+            ? importDeclNode.parent.parent.parent
+            : importDeclNode.parent;
         if (!ts.isImportDeclaration(importDecl)) return null;
         const packageSpecifier = importDecl.moduleSpecifier;
         if (!ts.isStringLiteralLike(packageSpecifier)) return null;
-        const importedName = importSpec.propertyName?.text ?? importSpec.name.text;
+        const importedName = ts.isImportSpecifier(importDeclNode)
+            ? importDeclNode.propertyName?.text ?? importDeclNode.name.text
+            : "default";
         const packageInfo = this.resolvedModuleInfoForSpecifier(packageSpecifier.text, id.getSourceFile().fileName);
         const packageSource = packageInfo?.sf;
         if (!packageSource) return null;
