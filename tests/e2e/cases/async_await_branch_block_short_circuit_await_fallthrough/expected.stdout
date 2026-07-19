@@ -1,0 +1,12 @@
+branch-block-short-circuit-await-fallthrough-or: fn-fall-or-sync
+method-branch-block-short-circuit-await-fallthrough-or: this-method-fall-or-sync
+value-branch-block-short-circuit-await-fallthrough-or: arrow-value-fall-or-sync
+branch-block-short-circuit-await-fallthrough-branch: fn-branch
+branch-block-short-circuit-await-fallthrough-and: fn-fall-and
+branch-block-short-circuit-await-fallthrough-nullish: fn-fall-nullish
+method-branch-block-short-circuit-await-fallthrough-branch: this-method-branch
+method-branch-block-short-circuit-await-fallthrough-and: this-method-fall-and
+method-branch-block-short-circuit-await-fallthrough-nullish: this-method-fall-nullish
+value-branch-block-short-circuit-await-fallthrough-branch: arrow-value-branch
+value-branch-block-short-circuit-await-fallthrough-and: arrow-value-fall-and
+value-branch-block-short-circuit-await-fallthrough-nullish: arrow-value-fall-nullish
