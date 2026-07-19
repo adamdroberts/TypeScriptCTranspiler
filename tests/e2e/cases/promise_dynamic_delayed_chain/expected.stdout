@@ -1,0 +1,3 @@
+dynamic-delayed-catch: delayed-bad
+dynamic-delayed-finally
+dynamic-delayed-value: delayed-recovered

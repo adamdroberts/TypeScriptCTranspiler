@@ -26670,7 +26670,8 @@ class Emitter {
         if (body.statements.length < 2) return null;
         const result = body.statements[body.statements.length - 1]!;
         const terminalSwitch = ts.isSwitchStatement(result) ? result : null;
-        if (!ts.isReturnStatement(result) && !terminalSwitch) return null;
+        const terminalThrow = ts.isThrowStatement(result) ? result : null;
+        if (!ts.isReturnStatement(result) && !terminalSwitch && !terminalThrow) return null;
         if (terminalSwitch && !this.switchStatementAlwaysExits(terminalSwitch)) return null;
         const prelude = this.asyncAwaitBodyPreludeBefore(body, (stmt) => !!this.awaitedContinuationStep(stmt));
         if (!prelude) return null;
@@ -26686,7 +26687,7 @@ class Emitter {
         ));
         if (sourceType.kind !== "promise") return null;
         const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures];
-        const postAwaitStatements = terminalSwitch
+        const postAwaitStatements = terminalSwitch || terminalThrow
             ? body.statements.slice(declarationIndex + 1)
             : body.statements.slice(declarationIndex + 1, -1);
         const returnExpr = ts.isReturnStatement(result) ? result.expression ?? null : null;
