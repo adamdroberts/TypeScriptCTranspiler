@@ -21171,6 +21171,15 @@ class Emitter {
         }
         if (!info) return null;
         const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
+        if (
+            name === "default" &&
+            commonJsDecl &&
+            this.isJavaScriptSourceFile(info.sf) &&
+            !this.hasCommonJsEsModuleMarker(info.sf) &&
+            this.isDirectCommonJsDefaultExportAccess(commonJsDecl)
+        ) {
+            return info.sf;
+        }
         if (commonJsDecl) return commonJsDecl;
         const esmDecl = this.esmExportedMemberDeclaration(info.sf, name);
         if (esmDecl) return esmDecl;
@@ -21210,7 +21219,7 @@ class Emitter {
                 : null;
             if (spec) {
                 const name = this.commonJsAccessMemberName(access);
-                if (name) {
+                if (name && name !== "default") {
                     const member = this.emitCommonJsRequireModulePropertyValue(access, spec, name, "import");
                     if (member) return member.c;
                 }
