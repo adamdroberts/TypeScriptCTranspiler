@@ -31523,25 +31523,30 @@ class Emitter {
     ): AsyncAwaitSwitchExpressionReturnBranch | null {
         if (!this.asyncAwaitConditionExpressionSupported(switchStatement.expression)) return null;
         const clauses: AsyncAwaitSwitchExpressionReturnClause[] = [];
+        let defaultClause: AsyncAwaitSwitchExpressionReturnClause | null = null;
         let hasDefault = false;
         let pendingExpressions: (ts.Expression | null)[] = [];
         for (const clause of switchStatement.caseBlock.clauses) {
-            if (hasDefault) return null;
             if (ts.isDefaultClause(clause)) {
+                if (hasDefault || pendingExpressions.length > 0 || clause.statements.length === 0) return null;
                 hasDefault = true;
-                pendingExpressions.push(null);
+                const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(clause.statements, parameters, thisValue, captures);
+                if (!branch) return null;
+                defaultClause = { expressions: [null], branch };
             } else if (!this.asyncAwaitConditionExpressionSupported(clause.expression)) {
                 return null;
             } else {
                 pendingExpressions.push(clause.expression);
             }
             if (clause.statements.length === 0) continue;
+            if (ts.isDefaultClause(clause)) continue;
             const branch = this.asyncAwaitIfExpressionReturnBranchFromStatements(clause.statements, parameters, thisValue, captures);
             if (!branch || pendingExpressions.length === 0) return null;
             clauses.push({ expressions: pendingExpressions, branch });
             pendingExpressions = [];
         }
-        if (!hasDefault || clauses.length === 0 || pendingExpressions.length > 0) return null;
+        if (!hasDefault || !defaultClause || clauses.length === 0 || pendingExpressions.length > 0) return null;
+        clauses.push(defaultClause);
         return { kind: "switch", expression: switchStatement.expression, clauses };
     }
 

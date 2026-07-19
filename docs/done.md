@@ -373,6 +373,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Direct branch `return await` arms preserve safe initialized branch-local declaration preludes across async declarations, class methods, async function values, and branch-block fallthrough. Test: `async_await_branch_return_await_prelude_declaration`
 - Direct branch `return await` arms preserve branch-local `let` declaration preludes assigned before the awaited source across async declarations, class methods, async function values, and branch-block fallthrough. Test: `async_await_branch_return_await_assigned_prelude`
 - Direct branch `return await` now covers bounded `switch` statements with a terminal `default`, empty fallthrough case labels, and terminating clauses across async declarations, class methods, and async function values. Test: `async_await_switch_return_await`
+- Direct branch `return await` now reorders a non-empty `default` clause that precedes later terminating cases into the fallback position across async declarations, class methods, and async function values. Test: `async_await_switch_default_before_case`
 - Direct branch `return await` preserves captured locals mutated by await-free `while`, `do while`, and declaration-free `for` preludes across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_loop_prelude`
 - Direct branch `return await` preserves captured locals mutated by an await-free `try` / `finally` prelude across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try_prelude`
 - Branch-local source `try` / `catch` routes direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try`
@@ -3069,6 +3070,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_return_await_prelude_declaration` | branch return-await arms preserve branch-local declaration preludes |
 | `async_await_branch_return_await_assigned_prelude` | branch return-await arms preserve assigned branch-local declaration preludes |
 | `async_await_switch_return_await` | switch return-await clauses preserve branch selection and delayed adoption |
+| `async_await_switch_default_before_case` | switch return-await reorders a terminating default before later cases |
 | `async_await_branch_return_await_loop_prelude` | branch return-await arms preserve await-free loop preludes |
 | `async_await_branch_return_await_try_prelude` | branch return-await arms preserve await-free try/finally preludes |
 | `async_await_branch_return_await_try` | branch try/catch routes direct return-await fulfillment and rejection |
