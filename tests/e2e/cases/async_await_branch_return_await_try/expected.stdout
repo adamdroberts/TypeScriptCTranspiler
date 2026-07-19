@@ -1,0 +1,6 @@
+declaration-ok: declaration-ok
+declaration-catch: declaration-caught-declaration-bad
+method-ok: method-ok
+method-catch: method-caught-method-bad
+value-ok: value-ok
+value-catch: value-caught-value-bad
