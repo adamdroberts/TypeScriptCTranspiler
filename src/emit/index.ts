@@ -27934,6 +27934,7 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        outerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitReturnContinuation | null {
         if (body.statements.length < 2) return null;
         const result = body.statements[body.statements.length - 1]!;
@@ -27954,7 +27955,7 @@ class Emitter {
             this.checker,
         ));
         if (sourceType.kind !== "promise") return null;
-        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures];
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...outerCaptures, ...prelude.captures];
         const postAwaitStatements = terminalSwitch || terminalThrow
             ? body.statements.slice(declarationIndex + 1)
             : body.statements.slice(declarationIndex + 1, -1);
@@ -31354,7 +31355,7 @@ class Emitter {
                 : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue, captures);
             const localFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough || preludeFallthrough
                 ? null
-                : this.asyncAwaitReturnContinuation(fallthroughBlock, parameters, thisValue);
+                : this.asyncAwaitReturnContinuation(fallthroughBlock, parameters, thisValue, captures);
             let fallthrough: AsyncAwaitIfExpressionReturnNode | null = null;
             if (tryCatchFinallyFallthrough) {
                 fallthrough = { kind: "localTryCatchFinallyReturn", continuation: tryCatchFinallyFallthrough };
@@ -31495,7 +31496,7 @@ class Emitter {
             if (preludeContinuation) {
                 return { kind: "localPreludeReturn", continuation: preludeContinuation };
             }
-            const continuation = this.asyncAwaitReturnContinuation(stmt, parameters, thisValue);
+            const continuation = this.asyncAwaitReturnContinuation(stmt, parameters, thisValue, captures);
             if (continuation) {
                 return { kind: "localReturn", continuation };
             }
