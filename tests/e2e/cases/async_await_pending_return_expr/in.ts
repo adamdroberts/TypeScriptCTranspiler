@@ -867,6 +867,110 @@ const fiveLeafConditionalLeadingChainValue = async function(kind: number, prefix
     return prefix + first + ":" + second + ":" + marker;
 };
 
+async function sixLeafConditionalLeadingChain(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (kind === 0) {
+        marker = marker + "|zero-pre";
+        first = await delay(1510, prefix + "zero-one");
+        marker = marker + "|zero-post";
+    } else if (kind === 1) {
+        marker = marker + "|one-pre";
+        first = await delay(1511, prefix + "one-one");
+        marker = marker + "|one-post";
+    } else if (kind === 2) {
+        marker = marker + "|two-pre";
+        first = await delay(1512, prefix + "two-one");
+        marker = marker + "|two-post";
+    } else if (kind === 3) {
+        marker = marker + "|three-pre";
+        first = await delay(1513, prefix + "three-one");
+        marker = marker + "|three-post";
+    } else if (kind === 4) {
+        marker = marker + "|four-pre";
+        first = await delay(1514, prefix + "four-one");
+        marker = marker + "|four-post";
+    } else {
+        marker = marker + "|other-pre";
+        first = await delay(1515, prefix + "other-one");
+        marker = marker + "|other-post";
+    }
+    const second = await delay(1516, first + ":" + marker);
+    return first + ":" + second + ":" + marker;
+}
+
+class SixLeafConditionalLeadingChainMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(kind: number): Promise<string> {
+        let first = this.prefix + "seed";
+        let marker = "initial";
+        if (kind === 0) {
+            marker = marker + "|zero-pre";
+            first = await delay(1517, this.prefix + "zero-one");
+            marker = marker + "|zero-post";
+        } else if (kind === 1) {
+            marker = marker + "|one-pre";
+            first = await delay(1518, this.prefix + "one-one");
+            marker = marker + "|one-post";
+        } else if (kind === 2) {
+            marker = marker + "|two-pre";
+            first = await delay(1519, this.prefix + "two-one");
+            marker = marker + "|two-post";
+        } else if (kind === 3) {
+            marker = marker + "|three-pre";
+            first = await delay(1520, this.prefix + "three-one");
+            marker = marker + "|three-post";
+        } else if (kind === 4) {
+            marker = marker + "|four-pre";
+            first = await delay(1521, this.prefix + "four-one");
+            marker = marker + "|four-post";
+        } else {
+            marker = marker + "|other-pre";
+            first = await delay(1522, this.prefix + "other-one");
+            marker = marker + "|other-post";
+        }
+        const second = await delay(1523, first + ":" + marker);
+        return this.prefix + first + ":" + second + ":" + marker;
+    }
+}
+
+const sixLeafConditionalLeadingChainValue = async function(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (kind === 0) {
+        marker = marker + "|zero-pre";
+        first = await delay(1524, prefix + "zero-one");
+        marker = marker + "|zero-post";
+    } else if (kind === 1) {
+        marker = marker + "|one-pre";
+        first = await delay(1525, prefix + "one-one");
+        marker = marker + "|one-post";
+    } else if (kind === 2) {
+        marker = marker + "|two-pre";
+        first = await delay(1526, prefix + "two-one");
+        marker = marker + "|two-post";
+    } else if (kind === 3) {
+        marker = marker + "|three-pre";
+        first = await delay(1527, prefix + "three-one");
+        marker = marker + "|three-post";
+    } else if (kind === 4) {
+        marker = marker + "|four-pre";
+        first = await delay(1528, prefix + "four-one");
+        marker = marker + "|four-post";
+    } else {
+        marker = marker + "|other-pre";
+        first = await delay(1529, prefix + "other-one");
+        marker = marker + "|other-post";
+    }
+    const second = await delay(1530, first + ":" + marker);
+    return prefix + first + ":" + second + ":" + marker;
+};
+
 async function conditionalLeadingChainArmPrelude(flag: boolean, prefix: string): Promise<string> {
     let first = prefix + "seed";
     let marker = "initial";
@@ -2974,6 +3078,61 @@ fiveLeafConditionalLeadingChainValue(3, "value-five-").then((value: string): voi
 });
 fiveLeafConditionalLeadingChainValue(4, "value-five-").then((value: string): void => {
     console.log("five-leaf-conditional-leading-chain-value-other:", value);
+});
+sixLeafConditionalLeadingChain(0, "six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-zero:", value);
+});
+sixLeafConditionalLeadingChain(1, "six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-one:", value);
+});
+sixLeafConditionalLeadingChain(2, "six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-two:", value);
+});
+sixLeafConditionalLeadingChain(3, "six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-three:", value);
+});
+sixLeafConditionalLeadingChain(4, "six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-four:", value);
+});
+sixLeafConditionalLeadingChain(5, "six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-other:", value);
+});
+const sixLeafConditionalLeadingChainMethodInstance = new SixLeafConditionalLeadingChainMethod("method-six-");
+sixLeafConditionalLeadingChainMethodInstance.run(0).then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-method-zero:", value);
+});
+sixLeafConditionalLeadingChainMethodInstance.run(1).then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-method-one:", value);
+});
+sixLeafConditionalLeadingChainMethodInstance.run(2).then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-method-two:", value);
+});
+sixLeafConditionalLeadingChainMethodInstance.run(3).then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-method-three:", value);
+});
+sixLeafConditionalLeadingChainMethodInstance.run(4).then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-method-four:", value);
+});
+sixLeafConditionalLeadingChainMethodInstance.run(5).then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-method-other:", value);
+});
+sixLeafConditionalLeadingChainValue(0, "value-six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-value-zero:", value);
+});
+sixLeafConditionalLeadingChainValue(1, "value-six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-value-one:", value);
+});
+sixLeafConditionalLeadingChainValue(2, "value-six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-value-two:", value);
+});
+sixLeafConditionalLeadingChainValue(3, "value-six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-value-three:", value);
+});
+sixLeafConditionalLeadingChainValue(4, "value-six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-value-four:", value);
+});
+sixLeafConditionalLeadingChainValue(5, "value-six-").then((value: string): void => {
+    console.log("six-leaf-conditional-leading-chain-value-other:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {
