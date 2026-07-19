@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now removes the completed Phase 14 `allowJs` package-source coverage paragraph and keeps only the remaining broader pure-JS package-source work in the active TODO entry.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed mixed CJS/ESM interop subsets for CommonJS default/named/namespace default interop and JavaScript ESM import/re-export/namespace-import paths over package-local or external CommonJS object-literal dependencies.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed CommonJS computed named-export finite key subsets for direct dynamic alternatives, JSDoc/single/union literal keys, static string-array composition, tuple/object-map checker-proven element access, object enumeration helpers, and `Object.fromEntries(...)` finite key alternatives.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed CommonJS finite static wrapper subsets for module aliases/destructuring, IIFE parameter aliases, factory call/apply/Reflect.apply/bind invocation, static require-argument factory wrappers, and zero-argument object-returning factory/IIFE wrappers.
