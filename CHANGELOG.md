@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Pure JavaScript package barrels loaded through `allowJs` now resolve finite `export * as namespace from "./module.js"` re-exports to package-local ESM members for namespace property reads and calls. Test: `node_modules_js_namespace_re_export`.
 - Pure JavaScript packages loaded through `allowJs` now preserve ESM `export default` values for default imports and namespace `default` reads, with focused coverage for default re-export barrels plus named re-exports from package-local JavaScript modules. Tests: `node_modules_js_package`, `node_modules_js_default_re_export`.
 - Finite dynamic `require(...)` proofs now resolve static `String.prototype.replace(...)` / `.replaceAll(...)` fragments with fresh RegExp search operands and string replacements. Test: `dynamic_require_static_string_regexp_replace`.
 - Finite dynamic `require(...)` proofs now resolve static `String.prototype.search(...)` fragments with fresh RegExp arguments. Test: `dynamic_require_static_string_regexp_search`.
