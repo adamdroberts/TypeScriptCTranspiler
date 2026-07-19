@@ -670,6 +670,20 @@ async function conditionalLeadingChainArmPostAwait(flag: boolean, prefix: string
     return first + ":" + second;
 }
 
+async function conditionalLeadingChainFinalPostAwait(flag: boolean, prefix: string): Promise<string> {
+        const first = await delay(1400, prefix + "first");
+    let result = first;
+    let marker = "initial";
+    if (flag) {
+        result = await delay(1401, first + ":true");
+        marker = marker + "|true-final";
+    } else {
+        result = await delay(1402, first + ":false");
+        marker = marker + "|false-final";
+    }
+    return result + ":" + marker;
+}
+
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
     const first = await delay(324, "one");
     const ignored = await delay(325);
@@ -2467,6 +2481,12 @@ conditionalLeadingChainArmPostAwait(true, "arm-after-").then((value: string): vo
 });
 conditionalLeadingChainArmPostAwait(false, "arm-after-").then((value: string): void => {
     console.log("conditional-leading-chain-arm-post-await-false:", value);
+});
+conditionalLeadingChainFinalPostAwait(true, "final-").then((value: string): void => {
+    console.log("conditional-leading-chain-final-post-await-true:", value);
+});
+conditionalLeadingChainFinalPostAwait(false, "final-").then((value: string): void => {
+    console.log("conditional-leading-chain-final-post-await-false:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

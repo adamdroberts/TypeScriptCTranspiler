@@ -327,3 +327,5 @@ arrow-six-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow
 leading-void-six-await: one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four:one:fn-one-two:one:fn-one-two-three:one:fn-one-two:one:fn-one-two-three-four-five!
 method-leading-void-six-await: method-one:class-method-void-six-method-one:method-one:class-method-void-six-method-one-three:method-one:class-method-void-six-method-one:method-one:class-method-void-six-method-one-three-four:method-one:class-method-void-six-method-one:method-one:class-method-void-six-method-one-three:method-one:class-method-void-six-method-one:method-one:class-method-void-six-method-one-three-four-five!
 arrow-leading-void-six-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four-five!
+conditional-leading-chain-final-post-await-true: final-first:true:initial|true-final
+conditional-leading-chain-final-post-await-false: final-first:false:initial|false-final

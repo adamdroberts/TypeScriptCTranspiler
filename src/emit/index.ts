@@ -31141,10 +31141,6 @@ class Emitter {
             if (awaitedType.kind === "never" || (awaitedType.kind === "void" && continuation.usesAwaitedLocals[i])) {
                 return false;
             }
-            if (i === continuation.steps.length - 1 &&
-                (continuation.steps[i]!.afterStatements?.length || continuation.steps[i]!.alternateAfterStatements?.length)) {
-                return false;
-            }
         }
 
         const sourcePromise = this.freshTemp("_await_source");
@@ -31240,6 +31236,7 @@ class Emitter {
                 params,
                 thisValue,
                 returnAwaited,
+                steps[0]!.alternateAwaitExpr ? steps[0]! : null,
             );
         }
 
@@ -32151,6 +32148,7 @@ class Emitter {
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
         successReturnsAwaited = false,
+        conditionalStep: AsyncAwaitLeadingStep | null = null,
     ): string {
         const name = `tsc_async_await_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -32158,6 +32156,7 @@ class Emitter {
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
+        if (conditionalStep) this.structDecls.line("bool branch_choice;");
         for (const param of params) {
             this.structDecls.line(`${param.type.c} ${param.field};`);
         }
@@ -32207,7 +32206,16 @@ class Emitter {
         this.asyncAwaitContinuationAdapterDepth++;
         this.asyncAwaitContinuationReturnTargets.push({ resultPromise: "_ret" });
         try {
-            for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
+            if (conditionalStep) {
+                buf.open("if (state->branch_choice)");
+                for (const stmt of conditionalStep.afterStatements ?? []) this.emitStmt(buf, stmt);
+                buf.close();
+                buf.open("else");
+                for (const stmt of conditionalStep.alternateAfterStatements ?? []) this.emitStmt(buf, stmt);
+                buf.close();
+            } else {
+                for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
+            }
             if (successReturnsAwaited && awaitedType.kind !== "void") {
                 returned = { c: valueVar, ty: awaitedType };
             } else if (returnExpr && !successReturnsAwaited) {
