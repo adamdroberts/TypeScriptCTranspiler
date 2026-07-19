@@ -177,6 +177,7 @@ interface AsyncAwaitFourStepReturnContinuation {
 
 interface AsyncAwaitLeadingConditionalBranch {
     awaitExpr: ts.AwaitExpression;
+    variable: ts.Identifier | null;
     condition: ts.Expression | null;
     beforeStatements: readonly ts.Statement[];
     afterStatements: readonly ts.Statement[];
@@ -28372,12 +28373,14 @@ class Emitter {
             conditionalBranches: [
                 {
                     awaitExpr: trueStep.awaitExpr,
+                    variable: trueStep.variable,
                     condition: stmt.expression,
                     beforeStatements: whenTrue.beforeStatements,
                     afterStatements: whenTrue.afterStatements,
                 },
                 ...(nested?.conditionalBranches ?? (whenFalse ? [{
                     awaitExpr: falseStep.awaitExpr,
+                    variable: falseStep.variable,
                     condition: null,
                     beforeStatements: whenFalse.beforeStatements,
                     afterStatements: whenFalse.afterStatements,
@@ -28464,17 +28467,24 @@ class Emitter {
                     if (variables[leafIndex]![stepIndex] && !local) return null;
                     const localSymbol = local ? this.symbolForIdentifier(local.variable) : null;
                     if (!localSymbol) continue;
+                    const nextAwaitIndex = stepIndex + 1 < stepCount
+                        ? awaitSteps[leafIndex]![stepIndex + 1]!
+                        : -1;
+                    const nextAwaitExpr = nextAwaitIndex >= 0
+                        ? this.awaitedContinuationStep(leaf.statements[nextAwaitIndex]!)?.awaitExpr.expression ?? null
+                        : null;
                     let escapes = false;
-                    const visit = (node: ts.Node): void => {
+                    const visit = (node: ts.Node, allowNextAwaitReference: boolean): void => {
                         if (escapes) return;
                         if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
-                            this.symbolForIdentifier(node) === localSymbol) {
+                            this.symbolForIdentifier(node) === localSymbol && !allowNextAwaitReference) {
                             escapes = true;
                             return;
                         }
-                        ts.forEachChild(node, visit);
+                        const childAllowsNextAwaitReference = allowNextAwaitReference || node === nextAwaitExpr;
+                        ts.forEachChild(node, (child) => visit(child, childAllowsNextAwaitReference));
                     };
-                    for (const later of leaf.statements.slice(awaitIndex + 1)) visit(later);
+                    for (const later of leaf.statements.slice(awaitIndex + 1)) visit(later, false);
                     if (escapes) return null;
                 }
             }
@@ -28493,6 +28503,7 @@ class Emitter {
                 if (!step) return null;
                 branches.push({
                     awaitExpr: step.awaitExpr,
+                    variable: step.variable,
                     condition: leaf.condition,
                     beforeStatements: stepIndex === 0 ? leaf.statements.slice(0, awaitIndex) : [],
                     afterStatements: leaf.statements.slice(awaitIndex + 1, nextAwaitIndex),
@@ -28961,12 +28972,18 @@ class Emitter {
         const symbolIndices = new Map<ts.Symbol, number[]>();
         for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
             const step = steps[stepIndex]!;
-            if (!step.variable) continue;
-            const symbol = this.symbolForIdentifier(step.variable);
-            if (!symbol) return null;
-            const indices = symbolIndices.get(symbol) ?? [];
-            indices.push(stepIndex);
-            symbolIndices.set(symbol, indices);
+            const variables = [
+                step.variable,
+                ...(step.conditionalBranches ?? []).map((branch) => branch.variable),
+            ];
+            for (const variable of variables) {
+                if (!variable) continue;
+                const symbol = this.symbolForIdentifier(variable);
+                if (!symbol) return null;
+                const indices = symbolIndices.get(symbol) ?? [];
+                if (!indices.includes(stepIndex)) indices.push(stepIndex);
+                symbolIndices.set(symbol, indices);
+            }
         }
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
@@ -32379,6 +32396,9 @@ class Emitter {
         const firstPromiseType = promiseTypes[0]!;
         const firstAwaitedType = awaitedTypes[0]!;
         const firstSymbol = firstStep.variable ? this.symbolForIdentifier(firstStep.variable) : null;
+        const firstBranchSymbols = (firstStep.conditionalBranches ?? [])
+            .map((branch) => branch.variable ? this.symbolForIdentifier(branch.variable) : null)
+            .filter((symbol): symbol is ts.Symbol => !!symbol);
         const firstCapture = firstStep.variable && firstSymbol && firstAwaitedType.kind !== "void"
             ? {
                 symbol: firstSymbol,
@@ -32437,7 +32457,10 @@ class Emitter {
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
-        if (firstSymbol && firstAwaitedType.kind !== "void") scope.set(firstSymbol, valueVar);
+        if (firstAwaitedType.kind !== "void") {
+            if (firstSymbol) scope.set(firstSymbol, valueVar);
+            for (const symbol of firstBranchSymbols) scope.set(symbol, valueVar);
+        }
 
         const buf = new CBuf();
         buf.open(`void ${name}(void* env)`);
@@ -32454,7 +32477,7 @@ class Emitter {
         buf.line(`tsc_try_frame_t ${eh};`);
         buf.line(`tsc_try_push(&${eh});`);
         buf.open(`if (setjmp(${eh}.jb) == 0)`);
-        if (firstValue) {
+        if (firstValue && (firstSymbol || firstBranchSymbols.length > 0)) {
             buf.line(`${firstAwaitedType.c} ${valueVar} = ${firstValue};`);
         }
         this.argumentValueScopes.push(scope);

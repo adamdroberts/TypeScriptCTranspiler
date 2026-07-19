@@ -320,6 +320,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Nested conditional leading await steps now flatten recognized Promise-valued `else if` selections beyond the former fixed arm-field ceiling, including twelve-leaf declaration, method, function-value, and branch-fallthrough coverage. Test: `async_await_deep_conditional_leading_chain`
 - Conditional arm leading chains now compose equal-length sequential awaited assignments into consecutive flattened conditional continuation steps across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_arm_await_chain`
 - Conditional arm leading chains now compose equal-length branch-local awaited declaration sequences used only for sequencing across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_sequence`
+- Conditional arm leading chains now allow branch-local first awaited values to feed the next branch-local sequencing await across declarations, methods, function values, and branch fallthrough. Test: `async_await_conditional_branch_local_value_flow`
 - Leading awaited-local chains now reject through terminal post-await `throw` statements after multiple suspensions for async declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Leading awaited-local chains now support initialized or uninitialized `let` aliases assigned from awaited promises across multiple suspensions, including repeated assignment to the same alias, for declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`
@@ -3087,6 +3088,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_deep_conditional_leading_chain` | flattened deep nested conditional leading await selections preserve branch context and fallthrough |
 | `async_await_conditional_arm_await_chain` | conditional arms compose equal-length sequential awaited assignments before a common continuation |
 | `async_await_conditional_branch_local_sequence` | conditional arms compose equal-length branch-local awaited declaration sequences used only for sequencing |
+| `async_await_conditional_branch_local_value_flow` | branch-local first awaited values feed the next sequencing-only await expression |
 | `async_await_pending_return_expr` | leading awaited-local chains support bounded nested else-if conditional await selection through four nested levels with Promise-valued leaves |
 | `async_await_pending_return_expr` | nested conditional leading await steps preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
