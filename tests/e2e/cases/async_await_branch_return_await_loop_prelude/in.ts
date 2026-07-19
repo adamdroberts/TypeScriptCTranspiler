@@ -9,9 +9,9 @@ async function declaration(flag: boolean, prefix: string): Promise<string> {
         return await delay(1, prefix + "branch-" + count);
     }
     let count = 0;
-    while (count < 3) {
+    do {
         count = count + 1;
-    }
+    } while (count < 3);
     return await delay(2, prefix + "fall-" + count);
 }
 
@@ -19,15 +19,15 @@ class Worker {
     async run(flag: boolean, prefix: string): Promise<string> {
         if (flag) {
             let count = 0;
-            while (count < 2) {
-                count = count + 1;
+            for (; count < 2; count = count + 1) {
+                // The loop body is intentionally empty; the update is the prelude mutation.
             }
             return await delay(3, prefix + "method-branch-" + count);
         }
         let count = 0;
-        while (count < 3) {
+        do {
             count = count + 1;
-        }
+        } while (count < 3);
         return await delay(4, prefix + "method-fall-" + count);
     }
 }
@@ -35,14 +35,14 @@ class Worker {
 const value = async (flag: boolean, prefix: string): Promise<string> => {
     if (flag) {
         let count = 0;
-        while (count < 2) {
+        do {
             count = count + 1;
-        }
+        } while (count < 2);
         return await delay(5, prefix + "value-branch-" + count);
     }
     let count = 0;
-    while (count < 3) {
-        count = count + 1;
+    for (; count < 3; count = count + 1) {
+        // The loop body is intentionally empty; the update is the prelude mutation.
     }
     return await delay(6, prefix + "value-fall-" + count);
 };

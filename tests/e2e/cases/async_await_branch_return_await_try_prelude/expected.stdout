@@ -1,0 +1,6 @@
+declaration-branch: fn-branch-try-finally
+declaration-fall: fn-fall-try-finally
+method-branch: this-method-branch-try-finally
+method-fall: this-method-fall-try-finally
+value-branch: arrow-value-branch-try-finally
+value-fall: arrow-value-fall-try-finally
