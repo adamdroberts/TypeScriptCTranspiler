@@ -35,7 +35,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`.
 - Leading awaited-local chains now support initialized or uninitialized `let` aliases assigned from awaited promises across multiple suspensions, including repeated assignment to the same alias. Test: `async_await_pending_return_expr`.
 - Leading awaited-local chains now propagate terminal post-await `throw` rejections after multiple suspensions across declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
-- Added eight-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
+- Added ten-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Staged multi-await `return await` binary expressions now preserve side-effect-free `void` leaves and stringify them as `undefined` when concatenated. Test: `async_await_interstitial_expression`.
 - Staged multi-await `return await` constructors with directly awaited callees now preserve literal arguments alongside direct awaits. Test: `async_await_interstitial_expression`.
 - Staged multi-await `return await` element access now preserves literal indices alongside direct-awaited receivers and sibling awaits. Test: `async_await_interstitial_expression`.
