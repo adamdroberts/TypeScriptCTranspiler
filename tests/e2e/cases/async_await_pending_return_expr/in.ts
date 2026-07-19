@@ -636,6 +636,16 @@ const conditionalLeadingChainArmPreludeValue = async function(flag: boolean, pre
     return prefix + first + ":" + second;
 };
 
+async function conditionalLeadingChainBranchLocalSequence(flag: boolean, prefix: string): Promise<string> {
+    if (flag) {
+        const ignored = await delay(445, prefix + "true-ignored");
+    } else {
+        const ignored = await delay(446, prefix + "false-ignored");
+    }
+    const second = await delay(447, prefix + "second");
+    return second;
+}
+
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
     const first = await delay(324, "one");
     const ignored = await delay(325);
@@ -2415,6 +2425,12 @@ conditionalLeadingChainArmPreludeValue(true, "value-arm-").then((value: string):
 });
 conditionalLeadingChainArmPreludeValue(false, "value-arm-").then((value: string): void => {
     console.log("conditional-leading-chain-arm-prelude-value-false:", value);
+});
+conditionalLeadingChainBranchLocalSequence(true, "branch-local-").then((value: string): void => {
+    console.log("conditional-leading-chain-branch-local-true:", value);
+});
+conditionalLeadingChainBranchLocalSequence(false, "branch-local-").then((value: string): void => {
+    console.log("conditional-leading-chain-branch-local-false:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

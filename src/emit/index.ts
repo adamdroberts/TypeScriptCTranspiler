@@ -28228,11 +28228,16 @@ class Emitter {
         if (!whenTrue.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (whenFalse && !whenFalse.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && (nested.beforeStatements?.length || nested.alternateBeforeStatements?.length)) return null;
+        let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) return null;
             const trueSymbol = this.symbolForIdentifier(trueStep.variable);
             const falseSymbol = this.symbolForIdentifier(falseStep.variable);
-            if (!trueSymbol || trueSymbol !== falseSymbol) return null;
+            if (!trueSymbol || !falseSymbol) return null;
+            if (trueSymbol !== falseSymbol) {
+                if (nested || !ts.isVariableStatement(whenTrue.statement) || !whenFalse || !ts.isVariableStatement(whenFalse.statement)) return null;
+                variable = null;
+            }
         }
         let validCondition = true;
         const visitCondition = (node: ts.Node): void => {
@@ -28246,7 +28251,7 @@ class Emitter {
         visitCondition(stmt.expression);
         if (!validCondition) return null;
         return {
-            variable: trueStep.variable,
+            variable,
             awaitExpr: trueStep.awaitExpr,
             beforeStatements: whenTrue.beforeStatements,
             alternateAwaitExpr: falseStep.awaitExpr,
