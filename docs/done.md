@@ -285,6 +285,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Named async function-expression values use the async function-value path for awaited-local, branch, and leading continuations. Test: `async_await_named_function_values`
 - Static async class methods use the async method path for awaited-local, branch, and leading continuations. Test: `async_await_static_method_continuation`
 - Object-literal async methods use the async function-value path for awaited-local, branch, leading, and rejected continuations, with boxed Promise values exposing dynamic `.then()` / `.catch()` / `.finally()` methods. Test: `async_await_object_method_continuation`
+- Branch-block pending-`await` continuations resume seven-await leading awaited-local chains while preserving prelude locals on branch and fallthrough arms across async declarations, class methods, and async function values. Test: `async_await_branch_block_leading_prelude_chain_return`
 - Branch-block pending-`await` continuations carry fallthrough prelude captures into nested prelude-expression branch continuations, preserving `&&` / `||` / `??` short-circuit behavior and prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_short_circuit_await_fallthrough`
 - Branch-block pending-`await` continuations resume fallthrough-tail conditional return expressions that mix synchronous and embedded-awaited leaves while preserving prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_conditional_await_fallthrough`
 - Branch-block pending-`await` continuations resume fallthrough-tail return expressions with embedded awaits while preserving prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_embedded_await_fallthrough`
@@ -2941,6 +2942,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_block_fallthrough_post_await_throw` | async branch blocks resume fallthrough terminal post-await throws |
 | `async_await_branch_block_source_try_return` | async branch blocks route source try/catch/finally awaited returns through specialized continuations |
 | `async_await_branch_block_source_try_fallthrough` | async branch blocks route source try/catch/finally awaited returns through fallthrough tails |
+| `async_await_branch_block_leading_prelude_chain_return` | async branch blocks resume seven-await leading local chains with prelude captures |
 | `async_await_branch_block_leading_chain_return` | async branch blocks resume long leading awaited-local chains before returning |
 | `async_await_branch_block_leading_void_return` | async branch blocks resume leading awaited-local chains with void sequencing |
 | `async_await_branch_block_short_circuit_await_fallthrough` | async branch blocks resume fallthrough short-circuit return expressions with embedded awaits |
