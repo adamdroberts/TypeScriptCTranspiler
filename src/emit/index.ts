@@ -31204,11 +31204,32 @@ class Emitter {
 
     private asyncAwaitInterstitialControlFlowSupported(stmt: ts.Statement): boolean {
         let ok = true;
+        const visitVariableDeclarationList = (declarationList: ts.VariableDeclarationList): void => {
+            if (!(declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) {
+                ok = false;
+                return;
+            }
+            for (const declaration of declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+                    ok = false;
+                    return;
+                }
+                visit(declaration.initializer);
+                if (!ok) return;
+            }
+        };
         const visit = (node: ts.Node): void => {
             if (!ok) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node) ||
-                ts.isVariableStatement(node) || ts.isVariableDeclarationList(node)) {
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 ok = false;
+                return;
+            }
+            if (ts.isVariableStatement(node)) {
+                visitVariableDeclarationList(node.declarationList);
+                return;
+            }
+            if (ts.isVariableDeclarationList(node)) {
+                visitVariableDeclarationList(node);
                 return;
             }
             ts.forEachChild(node, visit);
