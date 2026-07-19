@@ -1,0 +1,6 @@
+branch-block-post-await-true: fn-branch!
+branch-block-post-await-false: fn-else!
+method-branch-block-post-await-true: this-method-branch!
+method-branch-block-post-await-false: this-method-else!
+value-branch-block-post-await-true: arrow-value-branch!
+value-branch-block-post-await-false: arrow-value-else!
