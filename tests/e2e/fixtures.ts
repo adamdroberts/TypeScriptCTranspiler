@@ -629,6 +629,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'export { compute, label } from "./helper.cjs";\n',
         "helper.cjs": 'module.exports = { label: "js-reexport-cjs", compute(value) { return value * 13; } };\n',
     }),
+    "tsc2c-js-aliased-reexport-cjs-package": esmPackage("tsc2c-js-aliased-reexport-cjs-package", {
+        "index.js": 'export { compute as scale, label as title } from "./helper.cjs";\n',
+        "helper.cjs": 'module.exports = { label: "js-aliased-reexport-cjs", compute(value) { return value * 17; } };\n',
+    }),
     "tsc2c-js-namespace-import-cjs-package": esmPackage("tsc2c-js-namespace-import-cjs-package", {
         "index.js": 'import * as helper from "./helper.cjs";\nexport const message = helper.label + ":" + helper.compute(4);\nexport function wrap(value) { return helper.label + ":" + helper.compute(value); }\n',
         "helper.cjs": 'module.exports = { label: "js-namespace-import-cjs", compute(value) { return value * 14; } };\n',

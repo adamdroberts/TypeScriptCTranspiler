@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript ESM package barrels loaded through `allowJs` can use aliased named re-exports from package-local CommonJS object-literal helpers. Test: `node_modules_js_aliased_re_export_cjs`
 - Pure JavaScript ESM package barrels loaded through `allowJs` can named-import finite members from export-star re-exports of package-local CommonJS object-literal helpers. Test: `node_modules_js_named_import_export_star_cjs`
 - Pure JavaScript ESM package barrels loaded through `allowJs` can use export-star re-exports from package-local CommonJS object-literal helpers emitted as finite named members. Test: `node_modules_js_export_star_cjs`
 - Pure JavaScript ESM package barrels loaded through `allowJs` can use default re-exports from package-local CommonJS object-literal helpers emitted as finite named members. Test: `node_modules_js_default_re_export_cjs`
