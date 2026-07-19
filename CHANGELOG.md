@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 7 generator remaining-work entry against completed lazy generator subsets for simple branch/switch/loop control flow, non-suspending source `try` / `catch` / `finally`, suspended expression trees, compound assignments, suspended throw-yield, `return yield`, simple `.next(value)` assignments, and bounded lazy `yield*`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed finite dynamic-require proof subsets for URL metadata, ArrayBuffer/DataView, TextEncoder/TextDecoder, Set/Map relation and fragment composition, static descriptor/Reflect/numeric parser fragments, and static Buffer construction/inspection/mutation/search fragments.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed finite dynamic-require proof subsets for dense-array higher-order/mutating/copy collection wrappers and Object spread/descriptor/assign/prototype/integrity/fromEntries collection wrappers.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed CommonJS wrapper subsets for TypeScript-only require/module-require assertion wrappers, unary-IIFE parameter aliases, and object-preserving zero-argument factory/IIFE return wrappers.
