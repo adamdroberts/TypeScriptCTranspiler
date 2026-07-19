@@ -15,6 +15,15 @@ const fromUtcHours = require("./di_utc_hours_" + utcGetterDate.getUTCHours());
 const fromUtcMinutes = require("./di_utc_minutes_" + utcGetterDate.getUTCMinutes());
 const fromUtcSeconds = require("./di_utc_seconds_" + utcGetterDate.getUTCSeconds());
 const fromUtcMillis = require("./di_utc_millis_" + utcGetterDate.getUTCMilliseconds());
+const utcSetterBase = Date.UTC(2020, 0, 31, 23, 59, 58, 900);
+const fromSetTime = require("./di_set_time_" + new Date(utcSetterBase).setTime(Date.UTC(2021, 0, 2, 3, 4, 5, 6)));
+const fromSetUtcYear = require("./di_set_utc_year_" + new Date(utcSetterBase).setUTCFullYear(2021, 5, 7));
+const fromSetUtcMonth = require("./di_set_utc_month_" + new Date(utcSetterBase).setUTCMonth(1, 3));
+const fromSetUtcDate = require("./di_set_utc_date_" + new Date(utcSetterBase).setUTCDate(4));
+const fromSetUtcHours = require("./di_set_utc_hours_" + new Date(utcSetterBase).setUTCHours(4, 5, 6, 7));
+const fromSetUtcMinutes = require("./di_set_utc_minutes_" + new Date(utcSetterBase).setUTCMinutes(8, 9, 10));
+const fromSetUtcSeconds = require("./di_set_utc_seconds_" + new Date(utcSetterBase).setUTCSeconds(11, 12));
+const fromSetUtcMillis = require("./di_set_utc_millis_" + new Date(utcSetterBase).setUTCMilliseconds(13));
 
 console.log(
     fromTime.label,
@@ -32,4 +41,12 @@ console.log(
     fromUtcMinutes.label,
     fromUtcSeconds.label,
     fromUtcMillis.label,
+    fromSetTime.label,
+    fromSetUtcYear.label,
+    fromSetUtcMonth.label,
+    fromSetUtcDate.label,
+    fromSetUtcHours.label,
+    fromSetUtcMinutes.label,
+    fromSetUtcSeconds.label,
+    fromSetUtcMillis.label,
 );
