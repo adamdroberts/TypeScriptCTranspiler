@@ -1,1 +1,1 @@
-source flags rx_global_true rx_ignore_true rx_multiline_true rx_dotall_true rx_unicode_true rx_sticky_true rx_indices_true string locale
+source flags rx_global_true rx_ignore_true rx_multiline_true rx_dotall_true rx_unicode_true rx_sticky_true rx_indices_true string locale rx_test_true rx_test_false rx_test_global_true

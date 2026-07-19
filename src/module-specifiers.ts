@@ -126,6 +126,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (regexpEscapeText.length > 0) return regexpEscapeText;
             const regexpStringText = resolveStaticRegExpStringCall(node);
             if (regexpStringText.length > 0) return regexpStringText;
+            const regexpTestText = resolveStaticRegExpTestCall(node);
+            if (regexpTestText.length > 0) return regexpTestText;
             const uriText = resolveStaticUriCall(node);
             if (uriText.length > 0) return uriText;
             const base64Text = resolveStaticBase64Call(node);
@@ -746,6 +748,46 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return out;
     };
 
+    const resolveFreshStaticRegExpRecords = (expr: ts.Expression): RegExp[] => {
+        const current = unwrapStaticExpression(expr);
+        if (ts.isRegularExpressionLiteral(current)) {
+            const text = current.text;
+            const slash = text.lastIndexOf("/");
+            if (slash <= 0) return [];
+            try {
+                return [new RegExp(text.slice(1, slash), text.slice(slash + 1))];
+            } catch {
+                return [];
+            }
+        }
+        if (!ts.isCallExpression(current) && !ts.isNewExpression(current)) return [];
+        if (current.arguments?.some(ts.isSpreadElement)) return [];
+        const target = unwrapStaticExpression(current.expression);
+        if (!ts.isIdentifier(target) || target.text !== "RegExp") return [];
+        const args = current.arguments ?? [];
+        if (args.length > 2) return [];
+
+        const patterns = args[0] ? resolve(args[0]) : [""];
+        if (patterns.length === 0) return [];
+        const flags = !args[1] || isStaticUndefinedExpression(args[1])
+            ? [undefined]
+            : resolve(args[1]);
+        if (flags.length === 0) return [];
+
+        const out: RegExp[] = [];
+        for (const pattern of patterns) {
+            for (const flag of flags) {
+                try {
+                    out.push(new RegExp(pattern, flag));
+                } catch {
+                    return [];
+                }
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return out;
+    };
+
     const resolveStaticRegExpPropertyAccess = (access: ts.PropertyAccessExpression): string[] => {
         const property = access.name.text;
         if (
@@ -775,6 +817,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const regexps = resolveStaticRegExpRecords(callee.expression);
         if (regexps.length === 0) return [];
         return dedupe(regexps.map((regexp) => regexp.toString()));
+    };
+
+    const resolveStaticRegExpTestCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "test") return [];
+        const regexps = resolveFreshStaticRegExpRecords(callee.expression);
+        if (regexps.length === 0) return [];
+        const inputs = resolve(call.arguments[0]!);
+        if (inputs.length === 0) return [];
+
+        const out: string[] = [];
+        for (const regexp of regexps) {
+            for (const input of inputs) {
+                out.push(String(regexp.test(input)));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticUriCall = (call: ts.CallExpression): string[] => {
