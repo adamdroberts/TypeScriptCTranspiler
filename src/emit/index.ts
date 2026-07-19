@@ -28791,6 +28791,7 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        outerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitLeadingReturnContinuation | null {
         if (body.statements.length < 2) return null;
         const result = body.statements[body.statements.length - 1]!;
@@ -28943,7 +28944,7 @@ class Emitter {
             ));
             if (alternateSourceType.kind !== "promise" || alternateSourceType.c !== firstSourceType.c) return null;
         }
-        const params = [...this.asyncAwaitContinuationParameters(parameters), ...stepFilteredCaptures];
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...outerCaptures, ...stepFilteredCaptures];
         const referenced = this.asyncAwaitLeadingContinuationReferences(
             steps,
             betweenStatements,
@@ -31233,7 +31234,7 @@ class Emitter {
                 : this.asyncAwaitTryFinallyReturnContinuation(fallthroughBlock, parameters, thisValue);
             const leadingFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough
                 ? null
-                : this.asyncAwaitLeadingReturnContinuation(fallthroughBlock, parameters, thisValue);
+                : this.asyncAwaitLeadingReturnContinuation(fallthroughBlock, parameters, thisValue, captures);
             const preludeFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough
                 ? null
                 : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue, captures);
@@ -31326,7 +31327,7 @@ class Emitter {
             if (tryFinallyContinuation) {
                 return { kind: "localTryFinallyReturn", continuation: tryFinallyContinuation };
             }
-            const leadingContinuation = this.asyncAwaitLeadingReturnContinuation(stmt, parameters, thisValue);
+            const leadingContinuation = this.asyncAwaitLeadingReturnContinuation(stmt, parameters, thisValue, captures);
             if (leadingContinuation) {
                 return { kind: "localLeadingReturn", continuation: leadingContinuation };
             }

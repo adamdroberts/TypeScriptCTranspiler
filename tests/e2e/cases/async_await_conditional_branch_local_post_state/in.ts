@@ -44,7 +44,8 @@ const value = async (kind: number): Promise<string> => {
     return result;
 };
 
-async function branch(outer: boolean, kind: number, result: string): Promise<string> {
+async function branch(outer: boolean, kind: number): Promise<string> {
+    let result = "branch-seed";
     if (outer) {
         if (kind === 0) {
             const zero = await delay(1, "branch-zero-one");
@@ -63,5 +64,5 @@ async function branch(outer: boolean, kind: number, result: string): Promise<str
 declaration(0).then((result) => console.log("declaration:", result));
 new Worker().run(1).then((result) => console.log("method:", result));
 value(0).then((result) => console.log("value:", result));
-branch(true, 1, "branch-seed").then((result) => console.log("branch:", result));
-branch(false, 0, "branch-seed").then((result) => console.log("fallthrough:", result));
+branch(true, 1).then((result) => console.log("branch:", result));
+branch(false, 0).then((result) => console.log("fallthrough:", result));
