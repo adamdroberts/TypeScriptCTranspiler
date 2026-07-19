@@ -175,6 +175,13 @@ interface AsyncAwaitFourStepReturnContinuation {
     usesFourthAwaited: boolean;
 }
 
+interface AsyncAwaitLeadingConditionalBranch {
+    awaitExpr: ts.AwaitExpression;
+    condition: ts.Expression | null;
+    beforeStatements: readonly ts.Statement[];
+    afterStatements: readonly ts.Statement[];
+}
+
 interface AsyncAwaitLeadingStep {
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
@@ -216,6 +223,7 @@ interface AsyncAwaitLeadingStep {
     alternateSeventhCondition?: ts.Expression;
     alternateNinthAwaitExpr?: ts.AwaitExpression;
     alternateEighthCondition?: ts.Expression;
+    conditionalBranches?: readonly AsyncAwaitLeadingConditionalBranch[];
 }
 
 interface AsyncAwaitLeadingReturnContinuation {
@@ -28239,7 +28247,6 @@ class Emitter {
 
     private asyncAwaitConditionalLeadingStep(stmt: ts.Statement, depth = 0): AsyncAwaitLeadingStep | null {
         if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
-        if (depth > 8) return null;
         const splitBranch = (branch: ts.Statement): {
             statement: ts.Statement;
             beforeStatements: readonly ts.Statement[];
@@ -28281,7 +28288,8 @@ class Emitter {
         if (nested && !(nested.alternateFifthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSixthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSeventhBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateEighthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && !(nested.conditionalBranches ?? []).every((branch) =>
+            branch.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement)))) return null;
         if (nested && !(nested.afterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAlternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
@@ -28290,7 +28298,8 @@ class Emitter {
         if (nested && !(nested.alternateFifthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSixthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSeventhAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateEighthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && !(nested.conditionalBranches ?? []).every((branch) =>
+            branch.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement)))) return null;
         let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) {
@@ -28360,6 +28369,20 @@ class Emitter {
             alternateSeventhAfterStatements: nested?.alternateSixthAfterStatements,
             alternateEighthAfterStatements: nested?.alternateSeventhAfterStatements,
             alternateNinthAfterStatements: nested?.alternateEighthAfterStatements,
+            conditionalBranches: [
+                {
+                    awaitExpr: trueStep.awaitExpr,
+                    condition: stmt.expression,
+                    beforeStatements: whenTrue.beforeStatements,
+                    afterStatements: whenTrue.afterStatements,
+                },
+                ...(nested?.conditionalBranches ?? (whenFalse ? [{
+                    awaitExpr: falseStep.awaitExpr,
+                    condition: null,
+                    beforeStatements: whenFalse.beforeStatements,
+                    afterStatements: whenFalse.afterStatements,
+                }] : [])),
+            ],
         };
     }
 
@@ -28866,6 +28889,13 @@ class Emitter {
             ts.forEachChild(node, (child) => visit(child, allowedAwaitedCount));
         };
 
+        for (const branch of steps[0]!.conditionalBranches ?? []) {
+            visit(branch.awaitExpr.expression, 0);
+            if (branch.condition) visit(branch.condition, 0);
+            for (const statement of branch.beforeStatements) visit(statement, 0);
+            for (const statement of branch.afterStatements) visit(statement, 1);
+            if (!ok) return null;
+        }
         if (steps[0]!.alternateAwaitExpr) {
             visit(steps[0]!.alternateAwaitExpr!.expression, 0);
             if (!ok) return null;
@@ -29019,6 +29049,13 @@ class Emitter {
             if (!ok) return null;
         }
         for (let i = 1; i < steps.length; i++) {
+            for (const branch of steps[i]!.conditionalBranches ?? []) {
+                visit(branch.awaitExpr.expression, i);
+                if (branch.condition) visit(branch.condition, i);
+                for (const statement of branch.beforeStatements) visit(statement, i);
+                for (const statement of branch.afterStatements) visit(statement, i + 1);
+                if (!ok) return null;
+            }
             visit(steps[i]!.awaitExpr.expression, i);
             if (!ok) return null;
             if (steps[i]!.alternateAwaitExpr) {
@@ -30133,6 +30170,14 @@ class Emitter {
                 this.checker,
             ));
             if (promise.kind !== "promise") return false;
+            for (const branch of step.conditionalBranches ?? []) {
+                const branchPromise = this.prepareType(mapTsType(
+                    branch.awaitExpr.expression,
+                    this.checker.getTypeAtLocation(branch.awaitExpr.expression),
+                    this.checker,
+                ));
+                if (branchPromise.kind !== "promise" || branchPromise.c !== promise.c) return false;
+            }
             if (step.alternateAwaitExpr) {
                 const alternatePromise = this.prepareType(mapTsType(
                     step.alternateAwaitExpr.expression,
@@ -31661,7 +31706,53 @@ class Emitter {
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
         const firstSourceC = this.coerce(firstSource, promiseTypes[0]!, firstStep.awaitExpr.expression);
-        const firstConditionalSource = firstStep.alternateAwaitExpr
+        const firstConditionalSource = firstStep.conditionalBranches
+            ? (() => {
+                const branches = firstStep.conditionalBranches!;
+                const branchChoiceVar = this.freshTemp("_await_branch_choice");
+                firstConditionVar = branchChoiceVar;
+                buf.line(`int ${branchChoiceVar};`);
+                let nestedElseCount = 0;
+                for (let i = 0; i < branches.length - 1; i++) {
+                    if (i === 0) {
+                        const condition = this.emitExpr(branches[i]!.condition!);
+                        const conditionVar = this.freshTemp("_await_condition");
+                        buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, branches[i]!.condition!)};`);
+                        buf.open(`if (${conditionVar})`);
+                    } else {
+                        buf.open("else");
+                        nestedElseCount++;
+                        const condition = this.emitExpr(branches[i]!.condition!);
+                        const conditionVar = this.freshTemp("_await_condition");
+                        buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, branches[i]!.condition!)};`);
+                        buf.open(`if (${conditionVar})`);
+                    }
+                    buf.line(`${branchChoiceVar} = ${i};`);
+                    buf.close();
+                }
+                buf.open("else");
+                nestedElseCount++;
+                buf.line(`${branchChoiceVar} = ${branches.length - 1};`);
+                buf.close();
+                for (let i = 1; i < nestedElseCount; i++) buf.close();
+                for (let i = 0; i < branches.length; i++) {
+                    const branch = branches[i]!;
+                    if (i === 0) buf.open(`if (${branchChoiceVar} == 0)`);
+                    else buf.open(`else if (${branchChoiceVar} == ${i})`);
+                    for (const statement of branch.beforeStatements) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                let stagedSource = "";
+                for (let i = branches.length - 1; i >= 0; i--) {
+                    const source = this.emitExpr(branches[i]!.awaitExpr.expression);
+                    const sourceC = this.coerce(source, promiseTypes[0]!, branches[i]!.awaitExpr.expression);
+                    stagedSource = stagedSource
+                        ? `(${branchChoiceVar} == ${i} ? ${sourceC} : ${stagedSource})`
+                        : sourceC;
+                }
+                return stagedSource;
+            })()
+            : firstStep.alternateAwaitExpr
             ? (() => {
                 const condition = this.emitExpr(firstStep.condition!);
                 const conditionVar = this.freshTemp("_await_condition");
@@ -32252,12 +32343,20 @@ class Emitter {
         let secondAlternateSeventhSource: EmitResult | null = null;
         let secondAlternateEighthSource: EmitResult | null = null;
         let secondAlternateNinthSource: EmitResult | null = null;
+        let genericSecondSourceC: string | null = null;
         let secondCondition: EmitResult | null = null;
         let secondConditionVar: string | null = null;
         let secondBranchChoiceVar: string | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            if (firstStep.afterStatements?.length || firstStep.alternateAfterStatements?.length ||
+            if (firstStep.conditionalBranches) {
+                for (let i = 0; i < firstStep.conditionalBranches.length; i++) {
+                    const branch = firstStep.conditionalBranches[i]!;
+                    buf.open(i === 0 ? "if (state->branch_choice == 0)" : `else if (state->branch_choice == ${i})`);
+                    for (const statement of branch.afterStatements) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+            } else if (firstStep.afterStatements?.length || firstStep.alternateAfterStatements?.length ||
                 firstStep.alternateAlternateAfterStatements?.length || firstStep.alternateThirdAfterStatements?.length ||
                 firstStep.alternateFourthAfterStatements?.length) {
                 buf.open("if (state->branch_choice == 0)");
@@ -32310,7 +32409,53 @@ class Emitter {
             for (const stmt of betweenStatements[0] ?? []) {
                 this.emitStmt(buf, stmt);
             }
-            if (secondStep.condition) {
+            if (secondStep.conditionalBranches) {
+                const branches = secondStep.conditionalBranches;
+                secondCondition = this.emitExpr(branches[0]!.condition!);
+                secondConditionVar = this.freshTemp("_await_condition");
+                buf.line(`bool ${secondConditionVar} = ${this.coerce(secondCondition, T_BOOLEAN, branches[0]!.condition!)};`);
+                secondBranchChoiceVar = this.freshTemp("_await_branch_choice");
+                buf.line(`int ${secondBranchChoiceVar};`);
+                let nestedElseCount = 0;
+                for (let i = 0; i < branches.length - 1; i++) {
+                    if (i === 0) {
+                        buf.open(`if (${secondConditionVar})`);
+                    } else {
+                        buf.open("else");
+                        nestedElseCount++;
+                        const condition = this.emitExpr(branches[i]!.condition!);
+                        const conditionVar = this.freshTemp("_await_condition");
+                        buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, branches[i]!.condition!)};`);
+                        buf.open(`if (${conditionVar})`);
+                    }
+                    buf.line(`${secondBranchChoiceVar} = ${i};`);
+                    buf.close();
+                }
+                buf.open("else");
+                nestedElseCount++;
+                buf.line(`${secondBranchChoiceVar} = ${branches.length - 1};`);
+                buf.close();
+                for (let i = 1; i < nestedElseCount; i++) buf.close();
+                for (let i = 0; i < branches.length; i++) {
+                    const branch = branches[i]!;
+                    if (i === 0) buf.open(`if (${secondBranchChoiceVar} == 0)`);
+                    else buf.open(`else if (${secondBranchChoiceVar} == ${i})`);
+                    for (const statement of branch.beforeStatements) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                const sources: EmitResult[] = [];
+                let staged = "";
+                for (let i = branches.length - 1; i >= 0; i--) {
+                    const source = this.emitExpr(branches[i]!.awaitExpr.expression);
+                    sources[i] = source;
+                    const sourceC = this.coerce(source, promiseTypes[1]!, branches[i]!.awaitExpr.expression);
+                    staged = staged
+                        ? `(${secondBranchChoiceVar} == ${i} ? ${sourceC} : ${staged})`
+                        : sourceC;
+                }
+                secondSource = sources[0]!;
+                genericSecondSourceC = staged;
+            } else if (secondStep.condition) {
                 secondCondition = this.emitExpr(secondStep.condition);
                 secondConditionVar = this.freshTemp("_await_condition");
                 buf.line(`bool ${secondConditionVar} = ${this.coerce(secondCondition, T_BOOLEAN, secondStep.condition)};`);
@@ -32711,7 +32856,7 @@ class Emitter {
             this.argumentValueScopes.pop();
         }
         const secondSourceC = this.coerce(secondSource!, promiseTypes[1]!, secondStep.awaitExpr.expression);
-        const stagedSecondSource = secondAlternateSource && secondCondition && secondBranchChoiceVar
+        const stagedSecondSource = genericSecondSourceC ?? (secondAlternateSource && secondCondition && secondBranchChoiceVar
             ? (() => {
                 const alternateSourceC = this.coerce(secondAlternateSource, promiseTypes[1]!, secondStep.alternateAwaitExpr!.expression);
                 if (!secondAlternateAlternateSource) {
@@ -32780,7 +32925,7 @@ class Emitter {
                 );
                 return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${secondBranchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${secondBranchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${secondBranchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${secondBranchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${secondBranchChoiceVar} == 7 ? ${alternateSeventhSourceC} : (${secondBranchChoiceVar} == 8 ? ${alternateEighthSourceC} : ${alternateNinthSourceC})))))))))`;
             })()
-            : secondSourceC;
+            : secondSourceC);
         buf.line(`tsc_promise_t* const ${sourceVar} = ${stagedSecondSource};`);
         buf.line(`${tailEnvType}* const ${envVar} = (${tailEnvType}*)TSC_GC_MALLOC(sizeof(${tailEnvType}));`);
         buf.line(`${envVar}->receiver = ${sourceVar};`);
@@ -33604,7 +33749,14 @@ class Emitter {
         this.asyncAwaitContinuationAdapterDepth++;
         this.asyncAwaitContinuationReturnTargets.push({ resultPromise: "_ret" });
         try {
-            if (conditionalStep) {
+            if (conditionalStep?.conditionalBranches) {
+                for (let i = 0; i < conditionalStep.conditionalBranches.length; i++) {
+                    const branch = conditionalStep.conditionalBranches[i]!;
+                    buf.open(i === 0 ? "if (state->branch_choice == 0)" : `else if (state->branch_choice == ${i})`);
+                    for (const stmt of branch.afterStatements) this.emitStmt(buf, stmt);
+                    buf.close();
+                }
+            } else if (conditionalStep) {
                 buf.open("if (state->branch_choice == 0)");
                 for (const stmt of conditionalStep.afterStatements ?? []) this.emitStmt(buf, stmt);
                 buf.close();
