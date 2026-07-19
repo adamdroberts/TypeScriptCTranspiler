@@ -128,6 +128,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (regexpStringText.length > 0) return regexpStringText;
             const regexpTestText = resolveStaticRegExpTestCall(node);
             if (regexpTestText.length > 0) return regexpTestText;
+            const stringRegExpSearchText = resolveStaticStringRegExpSearchCall(node);
+            if (stringRegExpSearchText.length > 0) return stringRegExpSearchText;
             const uriText = resolveStaticUriCall(node);
             if (uriText.length > 0) return uriText;
             const base64Text = resolveStaticBase64Call(node);
@@ -4678,6 +4680,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 ? ts.factory.createIdentifier("undefined")
                 : ts.factory.createStringLiteral(value);
         }));
+    };
+
+    const resolveStaticStringRegExpSearchCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "search") return [];
+        const inputs = resolve(callee.expression);
+        if (inputs.length === 0) return [];
+        const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        if (regexps.length === 0) return [];
+
+        const out: string[] = [];
+        for (const input of inputs) {
+            for (const regexp of regexps) {
+                out.push(String(input.search(regexp)));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+            }
+        }
+        return dedupe(out);
     };
 
     const resolveStaticObjectPrototypeValueOfReceiver = (call: ts.CallExpression): ts.Expression | null => {
