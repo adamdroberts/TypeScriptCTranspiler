@@ -38,6 +38,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Added ten-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Nested conditional leading await selection now supports seven Promise-valued leaves across declarations, methods, function values, and branch-block fallthrough. Test: `async_await_seven_leaf_conditional`.
 - Nested conditional leading await selection now supports eight Promise-valued leaves across declarations, methods, function values, and branch-block fallthrough. Test: `async_await_eight_leaf_conditional`.
+- Nested conditional leading await selection now supports nine Promise-valued leaves across declarations, methods, function values, and branch-block fallthrough. Test: `async_await_nine_leaf_conditional`.
 - Staged multi-await `return await` binary expressions now preserve side-effect-free `void` leaves and stringify them as `undefined` when concatenated. Test: `async_await_interstitial_expression`.
 - Staged multi-await `return await` constructors with directly awaited callees now preserve literal arguments alongside direct awaits. Test: `async_await_interstitial_expression`.
 - Staged multi-await `return await` element access now preserves literal indices alongside direct-awaited receivers and sibling awaits. Test: `async_await_interstitial_expression`.
