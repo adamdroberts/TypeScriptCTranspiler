@@ -30142,6 +30142,11 @@ class Emitter {
                 tailStart++;
                 continue;
             }
+            if (this.asyncAwaitPreludeControlFlowStatementSupported(stmt)) {
+                preludeStatements.push(stmt);
+                tailStart++;
+                continue;
+            }
             break;
         }
         if (preludeStatements.length === 0) return null;
@@ -31209,6 +31214,20 @@ class Emitter {
         };
         visit(stmt);
         return ok;
+    }
+
+    private asyncAwaitPreludeControlFlowStatementSupported(stmt: ts.Statement): boolean {
+        if (!(
+            ts.isIfStatement(stmt) ||
+            ts.isSwitchStatement(stmt) ||
+            ts.isWhileStatement(stmt) ||
+            ts.isDoStatement(stmt) ||
+            ts.isForStatement(stmt) ||
+            ts.isForInStatement(stmt) ||
+            ts.isForOfStatement(stmt) ||
+            ts.isTryStatement(stmt)
+        )) return false;
+        return !this.statementAlwaysExits(stmt) && this.asyncAwaitInterstitialControlFlowSupported(stmt);
     }
 
     private asyncAwaitConditionalLeadingPreludeStatementSupported(stmt: ts.Statement): boolean {

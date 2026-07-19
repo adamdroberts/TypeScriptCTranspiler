@@ -373,6 +373,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Direct branch `return await` arms preserve safe initialized branch-local declaration preludes across async declarations, class methods, async function values, and branch-block fallthrough. Test: `async_await_branch_return_await_prelude_declaration`
 - Direct branch `return await` arms preserve branch-local `let` declaration preludes assigned before the awaited source across async declarations, class methods, async function values, and branch-block fallthrough. Test: `async_await_branch_return_await_assigned_prelude`
 - Direct branch `return await` now covers bounded `switch` statements with a required `default` and non-fallthrough clauses across async declarations, class methods, and async function values. Test: `async_await_switch_return_await`
+- Direct branch `return await` preserves captured locals mutated by an await-free `while` prelude across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_loop_prelude`
 - Branch-block pending-`await` continuations resume fallthrough tails shaped as awaited-local continuations ending in terminal post-await `throw`, including async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_throw`
 - Branch-block pending-`await` continuations route source `try` / `catch`, `try` / `finally`, and `try` / `catch` / `finally` awaited returns from fallthrough tails, including rejection catch/finally behavior across async declarations, class methods, and async function values. Test: `async_await_branch_block_source_try_fallthrough`
 - Branch-block pending-`await` continuations resume long leading awaited-local chains in fallthrough tails, including six-await chains whose later awaited expressions read earlier awaited locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_leading_chain_return`
@@ -3060,6 +3061,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_branch_return_await_prelude_declaration` | branch return-await arms preserve branch-local declaration preludes |
 | `async_await_branch_return_await_assigned_prelude` | branch return-await arms preserve assigned branch-local declaration preludes |
 | `async_await_switch_return_await` | switch return-await clauses preserve branch selection and delayed adoption |
+| `async_await_branch_return_await_loop_prelude` | branch return-await arms preserve await-free loop preludes |
 | `async_await_branch_block_post_await_return` | async branch blocks resume synchronous post-await locals before returning |
 | `async_await_branch_block_prelude_return` | async branch blocks preserve branch-local preludes before awaited locals returned from the branch |
 | `async_await_branch_block_local_return` | async branch blocks resume awaited locals returned from the branch or fallthrough path |
