@@ -633,6 +633,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-helper": cjsPackage("tsc2c-js-named-import-external-cjs-helper", {
         "index.js": 'module.exports = { label: "js-named-import-external-cjs", compute(value) { return value * 22; } };\n',
     }),
+    "tsc2c-js-namespace-import-external-cjs-package": esmPackage("tsc2c-js-namespace-import-external-cjs-package", {
+        "index.js": 'import * as helper from "tsc2c-js-namespace-import-external-cjs-helper";\nexport const message = helper.label + ":" + helper.compute(4);\nexport function wrap(value) { return helper.label + ":" + helper.compute(value); }\n',
+    }),
+    "tsc2c-js-namespace-import-external-cjs-helper": cjsPackage("tsc2c-js-namespace-import-external-cjs-helper", {
+        "index.js": 'module.exports = { label: "js-namespace-import-external-cjs", compute(value) { return value * 23; } };\n',
+    }),
     "tsc2c-js-named-import-cjs-package": esmPackage("tsc2c-js-named-import-cjs-package", {
         "index.js": 'import { compute, label } from "./helper.cjs";\nexport const message = label + ":" + compute(3);\nexport function wrap(value) { return label + ":" + compute(value); }\n',
         "helper.cjs": 'module.exports = { label: "js-named-import-cjs", compute(value) { return value * 12; } };\n',
