@@ -600,6 +600,10 @@ const packages: Record<string, PackageFixture> = {
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',
         "extra.js": 'export const extra = "extra-js";\nexport function join(left, right) { return left + ":" + right; }\n',
     }),
+    "tsc2c-js-default-reexport-package": esmPackage("tsc2c-js-default-reexport-package", {
+        "index.js": 'export { default } from "./core.js";\nexport { label } from "./core.js";\n',
+        "core.js": 'export const label = "js-default-reexport";\nexport default function greet(name) { return "hi " + name; }\n',
+    }),
     "tsc2c-cjs-named-package": cjsPackage("tsc2c-cjs-named-package", {
         "index.js": 'exports.label = "cjs";\nexports.add = function add(left, right) { return left + right; };\n',
     }),

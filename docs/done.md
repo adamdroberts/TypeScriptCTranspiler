@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript packages loaded through `allowJs` preserve ESM `export default` values for default imports and namespace `default` reads, including default re-export barrels plus named re-exports from package-local JavaScript modules. Tests: `node_modules_js_package`, `node_modules_js_default_re_export`
 - Finite dynamic `require(...)` proofs resolve static `String.prototype.replace(...)` / `.replaceAll(...)` fragments with fresh RegExp search operands and string replacements. Test: `dynamic_require_static_string_regexp_replace`
 - Finite dynamic `require(...)` proofs resolve static `String.prototype.search(...)` fragments with fresh RegExp arguments. Test: `dynamic_require_static_string_regexp_search`
 - Finite dynamic `require(...)` proofs treat static `String.prototype.match(...)` results with fresh RegExp arguments as match-array collection operands, including captured indexes, missing captures, global match indexes, and `.length`. Test: `dynamic_require_static_string_match`
