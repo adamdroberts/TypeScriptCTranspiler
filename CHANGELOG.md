@@ -10,6 +10,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite dynamic `require(...)` proofs now resolve static `path.basename(...)`, `path.dirname(...)`, and `path.extname(...)` fragments from default, namespace, and named path bindings. Test: `dynamic_require_static_path_fragments`.
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed Set/Map relation and fragment composition plus Map/Object groupBy finite dynamic-require proof subsets.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed dense-array higher-order/mutating/copy collection wrapper and Object spread/descriptor/assign/prototype/integrity/fromEntries finite dynamic-require proof subsets.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed descriptor/Reflect helper, numeric parser, and static Buffer construction/inspection/mutation/search finite dynamic-require proof subsets.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed dynamic-require manifest allow-list coverage, including array/object manifests, package entries, caller-scoped entries, affix filtering, invalid-root rejection, native-package gating, and computed-export allow-lists.
