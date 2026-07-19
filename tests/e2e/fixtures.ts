@@ -621,6 +621,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'import helper from "./helper.cjs";\nexport const label = helper.label;\nexport function compute(value) { return helper.compute(value); }\n',
         "helper.cjs": 'module.exports = { label: "js-import-cjs", compute(value) { return value * 11; } };\n',
     }),
+    "tsc2c-js-named-import-cjs-package": esmPackage("tsc2c-js-named-import-cjs-package", {
+        "index.js": 'import { compute, label } from "./helper.cjs";\nexport const message = label + ":" + compute(3);\nexport function wrap(value) { return label + ":" + compute(value); }\n',
+        "helper.cjs": 'module.exports = { label: "js-named-import-cjs", compute(value) { return value * 12; } };\n',
+    }),
     "tsc2c-js-reexport-package": esmPackage("tsc2c-js-reexport-package", {
         "index.js": 'export { default as greet, label, compute as calc } from "./core.js";\nexport * from "./extra.js";\n',
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',
