@@ -18,7 +18,7 @@ This is the next item that most directly expands what programs can be written ag
 ## 2. Dependent phases
 
 - **Phase 7 remainder — ES language features**
-  - Remaining work: general lazy generator state-machine lowering beyond the current bounded sequential subset, bidirectional `.next(value)` into arbitrary suspended `yield` expressions, `try` control flow across suspension points, `async function*`, broader iterator protocol edge cases beyond the current array/string/Map/Set/custom/dynamic and materialized/lazy generator-backed `yield*` subsets, and async iterables.
+  - Remaining work: general lazy generator state-machine lowering beyond the current bounded sequential, simple branch/switch/loop control-flow, non-suspending `try` / `catch` / `finally`, suspended `throw (yield ...)`, suspended expression-tree, compound-assignment, `return yield`, simple `.next(value)` assignment, and bounded lazy `yield*` subsets; bidirectional `.next(value)` into arbitrary suspended `yield` expressions beyond the documented simple assignment and `return yield` subsets; `try` control flow across suspension points beyond the covered non-suspending source `try` / `catch` / `finally` and suspended throw-yield subsets; `async function*`; broader iterator protocol edge cases beyond the current array/string/Map/Set/custom/dynamic and materialized/lazy generator-backed `yield*` subsets; and async iterables.
 
 - **Phase 9 — `Proxy` + `Reflect`**
   - Remaining work: broader ECMAScript proxy edge-case validation beyond the currently covered callable/newable identity, forwarding, revocation, array identity, result/invariant validation, construct default `newTarget`, and Reflect target validation paths.
