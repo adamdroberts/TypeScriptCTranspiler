@@ -15355,6 +15355,36 @@ class Emitter {
         return sf.statements.find(ts.isExportAssignment) ?? null;
     }
 
+    private commonJsDefaultReExportInfoForImport(id: ts.Identifier): { specifier: string; containingFile: string } | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        const importSpec = (raw?.declarations ?? []).find((decl): decl is ts.ImportSpecifier =>
+            ts.isImportSpecifier(decl) && decl.name.text === id.text,
+        );
+        if (!importSpec) return null;
+        const importDecl = importSpec.parent.parent.parent;
+        if (!ts.isImportDeclaration(importDecl)) return null;
+        const packageSpecifier = importDecl.moduleSpecifier;
+        if (!ts.isStringLiteralLike(packageSpecifier)) return null;
+        const importedName = importSpec.propertyName?.text ?? importSpec.name.text;
+        const packageInfo = this.resolvedModuleInfoForSpecifier(packageSpecifier.text, id.getSourceFile().fileName);
+        const packageSource = packageInfo?.sf;
+        if (!packageSource) return null;
+        for (const stmt of packageSource.statements) {
+            if (!ts.isExportDeclaration(stmt) || !stmt.moduleSpecifier || !ts.isStringLiteralLike(stmt.moduleSpecifier)) {
+                continue;
+            }
+            const clause = stmt.exportClause;
+            if (!clause || !ts.isNamedExports(clause)) continue;
+            for (const element of clause.elements) {
+                const localName = element.propertyName?.text ?? element.name.text;
+                if (element.name.text === importedName && localName === "default") {
+                    return { specifier: stmt.moduleSpecifier.text, containingFile: packageSource.fileName };
+                }
+            }
+        }
+        return null;
+    }
+
     private commonJsDefaultImportDeclaration(id: ts.Identifier): ts.Node | null {
         const target = this.importAliasTargetDeclaration(id);
         if (
@@ -34381,6 +34411,15 @@ class Emitter {
             const commonJsDefaultImport = this.commonJsDefaultImportDeclaration(expr);
             if (commonJsDefaultImport) {
                 if (ts.isSourceFile(commonJsDefaultImport)) {
+                    const reExport = this.commonJsDefaultReExportInfoForImport(expr);
+                    if (reExport) {
+                        return this.emitCommonJsRequireModuleValueForFile(
+                            expr,
+                            reExport.specifier,
+                            reExport.containingFile,
+                            "import",
+                        );
+                    }
                     const raw = this.checker.getSymbolAtLocation(expr);
                     const importClause = (raw?.declarations ?? []).find((decl): decl is ts.ImportClause =>
                         ts.isImportClause(decl) && decl.name?.text === expr.text,
@@ -36723,9 +36762,18 @@ class Emitter {
     }
 
     private emitCommonJsRequireModuleValue(node: ts.Node, spec: string, edgeKind: "import" | "require" = "require"): EmitResult {
-        const nativeAddon = this.emitNativeAddonValue(spec, node.getSourceFile().fileName);
+        return this.emitCommonJsRequireModuleValueForFile(node, spec, node.getSourceFile().fileName, edgeKind);
+    }
+
+    private emitCommonJsRequireModuleValueForFile(
+        node: ts.Node,
+        spec: string,
+        containingFile: string,
+        edgeKind: "import" | "require" = "require",
+    ): EmitResult {
+        const nativeAddon = this.emitNativeAddonValue(spec, containingFile);
         if (nativeAddon) return nativeAddon;
-        const info = this.resolvedModuleInfoForSpecifier(spec, node.getSourceFile().fileName, edgeKind);
+        const info = this.resolvedModuleInfoForSpecifier(spec, containingFile, edgeKind);
         if (!info) unsupported(node, `unresolved require("${spec}")`);
         const exportDecl = this.commonJsModuleExportsValueDeclaration(info.sf);
         if (exportDecl) {
