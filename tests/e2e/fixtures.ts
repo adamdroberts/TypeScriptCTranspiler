@@ -637,6 +637,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'export { default as helper } from "./helper.cjs";\n',
         "helper.cjs": 'module.exports = { label: "js-default-reexport-cjs", compute(value) { return value * 15; } };\n',
     }),
+    "tsc2c-js-export-star-cjs-package": esmPackage("tsc2c-js-export-star-cjs-package", {
+        "index.js": 'export * from "./helper.cjs";\n',
+        "helper.cjs": 'module.exports = { label: "js-export-star-cjs", compute(value) { return value * 16; } };\n',
+    }),
     "tsc2c-js-reexport-package": esmPackage("tsc2c-js-reexport-package", {
         "index.js": 'export { default as greet, label, compute as calc } from "./core.js";\nexport * from "./extra.js";\n',
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',

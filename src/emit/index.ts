@@ -20963,6 +20963,19 @@ class Emitter {
             const spec = importDecl.moduleSpecifier;
             return ts.isStringLiteral(spec) ? spec.text : null;
         }
+        for (const stmt of id.getSourceFile().statements) {
+            if (!ts.isImportDeclaration(stmt) || !stmt.importClause) continue;
+            const spec = stmt.moduleSpecifier;
+            const bindings = stmt.importClause.namedBindings;
+            if (
+                ts.isStringLiteralLike(spec) &&
+                bindings &&
+                ts.isNamespaceImport(bindings) &&
+                bindings.name.text === id.text
+            ) {
+                return spec.text;
+            }
+        }
         return null;
     }
 
@@ -21021,6 +21034,19 @@ class Emitter {
             for (const decl of stmt.declarationList.declarations) {
                 if (ts.isIdentifier(decl.name) && decl.name.text === name) return decl;
             }
+        }
+        for (const stmt of sf.statements) {
+            if (
+                !ts.isExportDeclaration(stmt) ||
+                stmt.exportClause ||
+                !stmt.moduleSpecifier ||
+                !ts.isStringLiteralLike(stmt.moduleSpecifier)
+            ) {
+                continue;
+            }
+            const info = this.resolvedModuleInfoForSpecifier(stmt.moduleSpecifier.text, sf.fileName);
+            const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
+            if (commonJsDecl) return commonJsDecl;
         }
         return null;
     }
