@@ -26619,58 +26619,9 @@ class Emitter {
         if (body.statements.length < 2) return null;
         const result = body.statements[body.statements.length - 1]!;
         if (!ts.isReturnStatement(result)) return null;
-        const preludeStatements: ts.Statement[] = [];
-        const captures: AsyncAwaitContinuationParam[] = [];
-        const captureSymbols = new Set<ts.Symbol>();
-        let declarationIndex = 0;
-        let ok = true;
-        const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
-            if (!ok) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
-                ok = false;
-                return;
-            }
-            ts.forEachChild(node, visitNoAwaitOrNestedScope);
-        };
-        while (declarationIndex < body.statements.length - 1) {
-            const stmt = body.statements[declarationIndex]!;
-            if (this.awaitedContinuationStep(stmt)) break;
-            if (ts.isExpressionStatement(stmt)) {
-                visitNoAwaitOrNestedScope(stmt.expression);
-                if (!ok) return null;
-                preludeStatements.push(stmt);
-                declarationIndex++;
-                continue;
-            }
-            if (ts.isVariableStatement(stmt)) {
-                preludeStatements.push(stmt);
-                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
-                for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
-                    const symbol = this.symbolForIdentifier(decl.name);
-                    if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
-                    const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                    if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
-                        visitNoAwaitOrNestedScope(decl.initializer);
-                        if (!ok) return null;
-                    } else if (type.kind !== "function") {
-                        return null;
-                    }
-                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
-                    const name = mangleIdent(decl.name.text);
-                    captureSymbols.add(symbol);
-                    captures.push({
-                        symbol,
-                        name,
-                        type,
-                        field: `capture_${name}`,
-                    });
-                }
-                declarationIndex++;
-                continue;
-            }
-            break;
-        }
+        const prelude = this.asyncAwaitBodyPreludeBefore(body, (stmt) => !!this.awaitedContinuationStep(stmt));
+        if (!prelude) return null;
+        const declarationIndex = prelude.nextIndex;
         const declaration = body.statements[declarationIndex];
         if (!declaration) return null;
         const awaited = this.awaitedContinuationStep(declaration);
@@ -26681,7 +26632,7 @@ class Emitter {
             this.checker,
         ));
         if (sourceType.kind !== "promise") return null;
-        const params = [...this.asyncAwaitContinuationParameters(parameters), ...captures];
+        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures];
         const postAwaitStatements = body.statements.slice(declarationIndex + 1, -1);
         const referenced = this.asyncAwaitContinuationReferences(
             awaited.variable,
@@ -26692,7 +26643,7 @@ class Emitter {
         );
         if (!referenced) return null;
         return {
-            preludeStatements,
+            preludeStatements: prelude.preludeStatements,
             variable: awaited.variable,
             awaitExpr: awaited.awaitExpr,
             postAwaitStatements,

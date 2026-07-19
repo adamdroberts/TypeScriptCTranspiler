@@ -1,0 +1,3 @@
+{
+  "description": "Async pending-await continuations preserve uninitialized let assignment preludes before awaited local returns"
+}

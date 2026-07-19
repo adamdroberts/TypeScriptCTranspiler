@@ -1,0 +1,6 @@
+branch-block-assigned-prelude-true: fn-branch-value!
+branch-block-assigned-prelude-false: fn-else-value!
+method-branch-block-assigned-prelude-true: this-method-branch-value!
+method-branch-block-assigned-prelude-false: this-method-else-value!
+value-branch-block-assigned-prelude-true: arrow-value-branch-value!
+value-branch-block-assigned-prelude-false: arrow-value-else-value!
