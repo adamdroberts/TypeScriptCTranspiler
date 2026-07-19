@@ -13,7 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
-- Finite dynamic `require(...)` proofs now resolve static `new Date(...)` `.getTime()` / `.valueOf()` / `.toISOString()` / `.toJSON()` fragments for finite deterministic timestamp inputs, including earlier `const` Date aliases. Test: `dynamic_require_static_date_instance`.
+- Finite dynamic `require(...)` proofs now resolve static `new Date(...)` `.getTime()` / `.valueOf()` / `.toISOString()` / `.toJSON()` / `.toUTCString()` / `.toGMTString()` fragments for finite deterministic timestamp inputs, including earlier `const` Date aliases. Test: `dynamic_require_static_date_instance`.
 - Finite dynamic `require(...)` proofs now resolve static `Date.parse(...)` specifier fragments for finite deterministic ISO string inputs. Test: `dynamic_require_static_date_parse`.
 - Finite dynamic `require(...)` proofs now resolve static `new URL(input, base?).href` / `.protocol` / `.host` / `.hostname` / `.port` / `.pathname` / `.search` / `.hash` / `.origin` metadata fragments and zero-argument `.toString()` / `.toJSON()` / `.toLocaleString()` results, including earlier `const` URL aliases. Test: `dynamic_require_static_url_properties`.
 - Finite dynamic `require(...)` proofs now resolve static `ArrayBuffer.byteLength`, `DataView.byteLength` / `.byteOffset`, and `DataView.buffer.byteLength` constructor metadata fragments, including earlier `const` ArrayBuffer/DataView aliases. Test: `dynamic_require_static_array_buffer_data_view`.
