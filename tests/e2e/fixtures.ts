@@ -604,6 +604,10 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'export { default } from "./core.js";\nexport { label } from "./core.js";\n',
         "core.js": 'export const label = "js-default-reexport";\nexport default function greet(name) { return "hi " + name; }\n',
     }),
+    "tsc2c-js-namespace-reexport-package": esmPackage("tsc2c-js-namespace-reexport-package", {
+        "index.js": 'export * as tools from "./tools.js";\n',
+        "tools.js": 'export const label = "js-namespace-reexport";\nexport function scale(value) { return value * 6; }\n',
+    }),
     "tsc2c-cjs-named-package": cjsPackage("tsc2c-cjs-named-package", {
         "index.js": 'exports.label = "cjs";\nexports.add = function add(left, right) { return left + right; };\n',
     }),

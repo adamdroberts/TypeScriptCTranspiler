@@ -20931,15 +20931,84 @@ class Emitter {
         return null;
     }
 
+    private moduleNamespaceReExportInfo(id: ts.Identifier): { specifier: string; containingFile: string } | null {
+        const sym = this.checker.getSymbolAtLocation(id);
+        for (const decl of sym?.declarations ?? []) {
+            if (!ts.isImportSpecifier(decl) || decl.name.text !== id.text) continue;
+            const importDecl = decl.parent.parent.parent;
+            const importSpecifier = importDecl.moduleSpecifier;
+            if (!ts.isStringLiteralLike(importSpecifier)) continue;
+            const importedName = decl.propertyName?.text ?? decl.name.text;
+            const info = this.resolvedModuleInfoForSpecifier(importSpecifier.text, id.getSourceFile().fileName);
+            const sf = info?.sf;
+            if (!sf) continue;
+            for (const stmt of sf.statements) {
+                if (
+                    !ts.isExportDeclaration(stmt) ||
+                    !stmt.exportClause ||
+                    !ts.isNamespaceExport(stmt.exportClause) ||
+                    stmt.exportClause.name.text !== importedName ||
+                    !stmt.moduleSpecifier ||
+                    !ts.isStringLiteralLike(stmt.moduleSpecifier)
+                ) {
+                    continue;
+                }
+                return { specifier: stmt.moduleSpecifier.text, containingFile: sf.fileName };
+            }
+        }
+        return null;
+    }
+
+    private esmExportedMemberDeclaration(sf: ts.SourceFile, name: string): ts.Node | null {
+        const hasExportModifier = (node: ts.Node): boolean => {
+            const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
+            return !!modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+        };
+        for (const stmt of sf.statements) {
+            if (name === "default") {
+                if (ts.isExportAssignment(stmt)) return stmt;
+                if (
+                    (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
+                    this.isDefaultExportDeclaration(stmt)
+                ) {
+                    return stmt;
+                }
+                continue;
+            }
+            if (
+                (ts.isFunctionDeclaration(stmt) || ts.isClassDeclaration(stmt)) &&
+                stmt.name?.text === name &&
+                hasExportModifier(stmt)
+            ) {
+                return stmt;
+            }
+            if (!ts.isVariableStatement(stmt) || !hasExportModifier(stmt)) continue;
+            for (const decl of stmt.declarationList.declarations) {
+                if (ts.isIdentifier(decl.name) && decl.name.text === name) return decl;
+            }
+        }
+        return null;
+    }
+
     private moduleNamespaceMemberDeclaration(access: CommonJsExportAccess): ts.Node | null {
         if (!ts.isIdentifier(access.expression)) return null;
         const spec = this.moduleNamespaceImportSpecifier(access.expression);
-        if (!spec || this.isNodeBuiltinModuleSpecifier(spec)) return null;
         const name = this.commonJsAccessMemberName(access);
         if (name == null) return null;
-        const info = this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName);
+        let info = spec && !this.isNodeBuiltinModuleSpecifier(spec)
+            ? this.resolvedModuleInfoForSpecifier(spec, access.getSourceFile().fileName)
+            : null;
+        if (!info) {
+            const reExport = this.moduleNamespaceReExportInfo(access.expression);
+            info = reExport
+                ? this.resolvedModuleInfoForSpecifier(reExport.specifier, reExport.containingFile)
+                : null;
+        }
+        if (!info) return null;
         const commonJsDecl = info ? this.commonJsExportedMemberDeclaration(info.sf, name) : null;
         if (commonJsDecl) return commonJsDecl;
+        const esmDecl = this.esmExportedMemberDeclaration(info.sf, name);
+        if (esmDecl) return esmDecl;
         if (name === "default" && info && this.isJavaScriptSourceFile(info.sf)) {
             const defaultExport = info.sf.statements.find(ts.isExportAssignment);
             if (defaultExport) return defaultExport;
