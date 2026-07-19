@@ -586,6 +586,56 @@ async function nestedConditionalLeadingChain(kind: number, prefix: string): Prom
     return first + ":" + second;
 }
 
+async function conditionalLeadingChainArmPrelude(flag: boolean, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (flag) {
+        marker = "true";
+        first = await delay(436, prefix + "true-one");
+    } else {
+        marker = "false";
+        first = await delay(437, prefix + "false-one");
+    }
+    const second = await delay(438, first + ":" + marker);
+    return first + ":" + second;
+}
+
+class ConditionalLeadingChainArmPreludeMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean): Promise<string> {
+        let first = this.prefix + "seed";
+        let marker = "initial";
+        if (flag) {
+            marker = "true";
+            first = await delay(439, this.prefix + "true-one");
+        } else {
+            marker = "false";
+            first = await delay(440, this.prefix + "false-one");
+        }
+        const second = await delay(441, first + ":" + marker);
+        return this.prefix + first + ":" + second;
+    }
+}
+
+const conditionalLeadingChainArmPreludeValue = async function(flag: boolean, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (flag) {
+        marker = "true";
+        first = await delay(442, prefix + "true-one");
+    } else {
+        marker = "false";
+        first = await delay(443, prefix + "false-one");
+    }
+    const second = await delay(444, first + ":" + marker);
+    return prefix + first + ":" + second;
+};
+
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
     const first = await delay(324, "one");
     const ignored = await delay(325);
@@ -2346,6 +2396,25 @@ nestedConditionalLeadingChain(1, "nested-").then((value: string): void => {
 });
 nestedConditionalLeadingChain(2, "nested-").then((value: string): void => {
     console.log("nested-conditional-leading-chain-other:", value);
+});
+conditionalLeadingChainArmPrelude(true, "arm-").then((value: string): void => {
+    console.log("conditional-leading-chain-arm-prelude-true:", value);
+});
+conditionalLeadingChainArmPrelude(false, "arm-").then((value: string): void => {
+    console.log("conditional-leading-chain-arm-prelude-false:", value);
+});
+const conditionalLeadingChainArmPreludeMethodInstance = new ConditionalLeadingChainArmPreludeMethod("method-arm-");
+conditionalLeadingChainArmPreludeMethodInstance.run(true).then((value: string): void => {
+    console.log("conditional-leading-chain-arm-prelude-method-true:", value);
+});
+conditionalLeadingChainArmPreludeMethodInstance.run(false).then((value: string): void => {
+    console.log("conditional-leading-chain-arm-prelude-method-false:", value);
+});
+conditionalLeadingChainArmPreludeValue(true, "value-arm-").then((value: string): void => {
+    console.log("conditional-leading-chain-arm-prelude-value-true:", value);
+});
+conditionalLeadingChainArmPreludeValue(false, "value-arm-").then((value: string): void => {
+    console.log("conditional-leading-chain-arm-prelude-value-false:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

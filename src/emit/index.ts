@@ -178,7 +178,9 @@ interface AsyncAwaitFourStepReturnContinuation {
 interface AsyncAwaitLeadingStep {
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
+    beforeStatements?: readonly ts.Statement[];
     alternateAwaitExpr?: ts.AwaitExpression;
+    alternateBeforeStatements?: readonly ts.Statement[];
     condition?: ts.Expression;
     alternateAlternateAwaitExpr?: ts.AwaitExpression;
     alternateCondition?: ts.Expression;
@@ -28206,19 +28208,26 @@ class Emitter {
     private asyncAwaitConditionalLeadingStep(stmt: ts.Statement, depth = 0): AsyncAwaitLeadingStep | null {
         if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
         if (depth > 1) return null;
-        const unwrapBranch = (branch: ts.Statement): ts.Statement | null => {
-            if (!ts.isBlock(branch)) return branch;
-            return branch.statements.length === 1 ? branch.statements[0]! : null;
+        const splitBranch = (branch: ts.Statement): { statement: ts.Statement; beforeStatements: readonly ts.Statement[] } | null => {
+            if (!ts.isBlock(branch)) return { statement: branch, beforeStatements: [] };
+            if (branch.statements.length === 0) return null;
+            return {
+                statement: branch.statements[branch.statements.length - 1]!,
+                beforeStatements: branch.statements.slice(0, -1),
+            };
         };
-        const whenTrue = unwrapBranch(stmt.thenStatement);
+        const whenTrue = splitBranch(stmt.thenStatement);
         const nested = ts.isIfStatement(stmt.elseStatement)
             ? this.asyncAwaitConditionalLeadingStep(stmt.elseStatement, depth + 1)
             : null;
-        const whenFalse = nested ? null : unwrapBranch(stmt.elseStatement);
+        const whenFalse = nested ? null : splitBranch(stmt.elseStatement);
         if (!whenTrue || (!whenFalse && !nested)) return null;
-        const trueStep = this.awaitedContinuationStep(whenTrue);
-        const falseStep = nested ?? (whenFalse ? this.awaitedContinuationStep(whenFalse) : null);
+        const trueStep = this.awaitedContinuationStep(whenTrue.statement);
+        const falseStep = nested ?? (whenFalse ? this.awaitedContinuationStep(whenFalse.statement) : null);
         if (!trueStep || !falseStep) return null;
+        if (!whenTrue.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (whenFalse && !whenFalse.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && (nested.beforeStatements?.length || nested.alternateBeforeStatements?.length)) return null;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) return null;
             const trueSymbol = this.symbolForIdentifier(trueStep.variable);
@@ -28239,7 +28248,9 @@ class Emitter {
         return {
             variable: trueStep.variable,
             awaitExpr: trueStep.awaitExpr,
+            beforeStatements: whenTrue.beforeStatements,
             alternateAwaitExpr: falseStep.awaitExpr,
+            alternateBeforeStatements: nested ? [] : whenFalse!.beforeStatements,
             condition: stmt.expression,
             alternateAlternateAwaitExpr: nested?.alternateAwaitExpr,
             alternateCondition: nested?.condition,
@@ -28762,7 +28773,15 @@ class Emitter {
             if (!ok) return null;
         }
         if (steps[0]!.alternateCondition) {
-            visit(steps[0]!.alternateCondition, 0);
+            visit(steps[0]!.alternateCondition!, 0);
+            if (!ok) return null;
+        }
+        for (const statement of steps[0]!.beforeStatements ?? []) {
+            visit(statement, 0);
+            if (!ok) return null;
+        }
+        for (const statement of steps[0]!.alternateBeforeStatements ?? []) {
+            visit(statement, 0);
             if (!ok) return null;
         }
         for (let i = 1; i < steps.length; i++) {
@@ -28782,6 +28801,14 @@ class Emitter {
             }
             if (steps[i]!.alternateCondition) {
                 visit(steps[i]!.alternateCondition!, i);
+                if (!ok) return null;
+            }
+            for (const statement of steps[i]!.beforeStatements ?? []) {
+                visit(statement, i);
+                if (!ok) return null;
+            }
+            for (const statement of steps[i]!.alternateBeforeStatements ?? []) {
+                visit(statement, i);
                 if (!ok) return null;
             }
             for (const stmt of betweenStatements[i - 1] ?? []) {
@@ -31092,10 +31119,18 @@ class Emitter {
         const firstConditionalSource = firstStep.alternateAwaitExpr
             ? (() => {
                 const condition = this.emitExpr(firstStep.condition!);
+                const conditionVar = this.freshTemp("_await_condition");
+                buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, firstStep.condition!)};`);
+                buf.open(`if (${conditionVar})`);
+                for (const statement of firstStep.beforeStatements ?? []) this.emitStmt(buf, statement);
+                buf.close();
+                buf.open("else");
+                for (const statement of firstStep.alternateBeforeStatements ?? []) this.emitStmt(buf, statement);
+                buf.close();
                 const alternateSource = this.emitExpr(firstStep.alternateAwaitExpr.expression);
                 const alternateSourceC = this.coerce(alternateSource, promiseTypes[0]!, firstStep.alternateAwaitExpr.expression);
                 if (!firstStep.alternateAlternateAwaitExpr) {
-                    return `(${condition.c} ? ${firstSourceC} : ${alternateSourceC})`;
+                    return `(${conditionVar} ? ${firstSourceC} : ${alternateSourceC})`;
                 }
                 const alternateCondition = this.emitExpr(firstStep.alternateCondition!);
                 const alternateAlternateSource = this.emitExpr(firstStep.alternateAlternateAwaitExpr.expression);
@@ -31104,7 +31139,7 @@ class Emitter {
                     promiseTypes[0]!,
                     firstStep.alternateAlternateAwaitExpr.expression,
                 );
-                return `(${condition.c} ? ${firstSourceC} : (${alternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
+                return `(${conditionVar} ? ${firstSourceC} : (${alternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
             })()
             : firstSourceC;
         buf.line(`tsc_promise_t* const ${sourcePromise} = ${firstConditionalSource};`);
@@ -31245,15 +31280,26 @@ class Emitter {
         let secondAlternateAlternateSource: EmitResult | null = null;
         let secondCondition: EmitResult | null = null;
         let secondAlternateCondition: EmitResult | null = null;
+        let secondConditionVar: string | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
             for (const stmt of betweenStatements[0] ?? []) {
                 this.emitStmt(buf, stmt);
             }
+            if (secondStep.condition) {
+                secondCondition = this.emitExpr(secondStep.condition);
+                secondConditionVar = this.freshTemp("_await_condition");
+                buf.line(`bool ${secondConditionVar} = ${this.coerce(secondCondition, T_BOOLEAN, secondStep.condition)};`);
+                buf.open(`if (${secondConditionVar})`);
+                for (const statement of secondStep.beforeStatements ?? []) this.emitStmt(buf, statement);
+                buf.close();
+                buf.open("else");
+                for (const statement of secondStep.alternateBeforeStatements ?? []) this.emitStmt(buf, statement);
+                buf.close();
+            }
             secondSource = this.emitExpr(secondStep.awaitExpr.expression);
             if (secondStep.alternateAwaitExpr) {
                 secondAlternateSource = this.emitExpr(secondStep.alternateAwaitExpr.expression);
-                secondCondition = this.emitExpr(secondStep.condition!);
                 if (secondStep.alternateAlternateAwaitExpr) {
                     secondAlternateAlternateSource = this.emitExpr(secondStep.alternateAlternateAwaitExpr.expression);
                     secondAlternateCondition = this.emitExpr(secondStep.alternateCondition!);
@@ -31269,14 +31315,14 @@ class Emitter {
             ? (() => {
                 const alternateSourceC = this.coerce(secondAlternateSource, promiseTypes[1]!, secondStep.alternateAwaitExpr!.expression);
                 if (!secondAlternateAlternateSource || !secondAlternateCondition) {
-                    return `(${secondCondition!.c} ? ${secondSourceC} : ${alternateSourceC})`;
+                    return `(${secondConditionVar!} ? ${secondSourceC} : ${alternateSourceC})`;
                 }
                 const alternateAlternateSourceC = this.coerce(
                     secondAlternateAlternateSource,
                     promiseTypes[1]!,
                     secondStep.alternateAlternateAwaitExpr!.expression,
                 );
-                return `(${secondCondition!.c} ? ${secondSourceC} : (${secondAlternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
+                return `(${secondConditionVar!} ? ${secondSourceC} : (${secondAlternateCondition.c} ? ${alternateSourceC} : ${alternateAlternateSourceC}))`;
             })()
             : secondSourceC;
         buf.line(`tsc_promise_t* const ${sourceVar} = ${stagedSecondSource};`);

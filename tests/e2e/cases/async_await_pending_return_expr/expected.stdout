@@ -295,6 +295,12 @@ branch-conditional-leading-chain-false: branch-inner-false-one:branch-inner-fals
 nested-conditional-leading-chain-zero: nested-zero-one:nested-zero-one:two
 nested-conditional-leading-chain-one: nested-one-one:nested-one-one:two
 nested-conditional-leading-chain-other: nested-other-one:nested-other-one:two
+conditional-leading-chain-arm-prelude-true: arm-true-one:arm-true-one:true
+conditional-leading-chain-arm-prelude-false: arm-false-one:arm-false-one:false
+conditional-leading-chain-arm-prelude-method-true: method-arm-method-arm-true-one:method-arm-true-one:true
+conditional-leading-chain-arm-prelude-method-false: method-arm-method-arm-false-one:method-arm-false-one:false
+conditional-leading-chain-arm-prelude-value-true: value-arm-value-arm-true-one:value-arm-true-one:true
+conditional-leading-chain-arm-prelude-value-false: value-arm-value-arm-false-one:value-arm-false-one:false
 source-try-finally-leading-await-success: finally-await-finally-await-first:second:async-success|between-if|between-error|async-finally
 source-try-finally-leading-await-alternate: finally-await-finally-await-first:second:async-alternate|between-else|between-error|async-finally
 declaration-leading-chain-throw: chain-one:two:three:throw
