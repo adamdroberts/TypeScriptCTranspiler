@@ -1,0 +1,3 @@
+{
+  "description": "Async leading awaited-local chains preserve sequencing awaits, control flow, and initialized or assigned locals between suspension points"
+}

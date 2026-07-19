@@ -5,6 +5,70 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Combined source `try` / `catch` / `finally` leading chains now preserve initialized local catch preludes before catch recovery and finally routing. Test: `async_await_pending_return_expr`.
+- Leading source `try` / `catch` chains now preserve initialized local catch preludes before the final catch return/throw. Test: `async_await_pending_return_expr`.
+- Combined source `try` / `catch` / `finally` now composes bounded leading multi-await chains with catch recovery and finally routing, including finally-throw override. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` now preserves bounded leading multi-await chains across async declarations, class methods, and function values, including receiver capture, initialized finally locals, finally execution on fulfillment/rejection, and finally-throw override. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now also preserve uninitialized `let` locals assigned in the finally block on both fulfillment and rejection. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now preserve repeated and compound assignments to finally-local state on both fulfillment and rejection. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now support a bounded sequence of leading awaits in the finally body, including await-free post-await mutation and finally-await rejection overriding the original try result. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now preserve await-free expression interstitials between bounded finally awaits. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now support a bounded finally `return await`, including awaited cleanup values and rejection propagation. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now preserve await-free declaration-free control flow between bounded finally awaits. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now preserve simple await-free nested `try`/`catch` interstitials and catch bindings between bounded finally awaits. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now support conditional finally awaits when both branches are Promise-valued. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now support synchronous return values after finally awaits, overriding both fulfilled and rejected try results. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now preserve synchronous return overrides after finally awaits across async class methods and async function values, including receiver and closure capture. Test: `async_await_pending_return_expr`.
+- Source `try` / `finally` leading chains now preserve bounded finally `return await` overrides across async class methods and async function values, including receiver and closure capture. Test: `async_await_pending_return_expr`.
+- Leading awaited-local chains now support bounded conditional await steps with Promise-valued true and false branches across async declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
+- Branch-block leading awaited-local chains now compose bounded conditional await steps with a synchronous fallthrough arm. Test: `async_await_pending_return_expr`.
+- Source `try` / `catch` now preserves bounded leading multi-await chains in the try block across async declarations, class methods, and function values, including receiver capture, pending rejection handoff into the catch continuation, and bounded catch rethrows. Test: `async_await_pending_return_expr`.
+- Await-free direct-`return await` preludes now preserve simple catch bindings before the awaited source. Test: `async_await_interstitial_expression`.
+- Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`.
+- Leading awaited-local chains now support initialized or uninitialized `let` aliases assigned from awaited promises across multiple suspensions, including repeated assignment to the same alias. Test: `async_await_pending_return_expr`.
+- Leading awaited-local chains now propagate terminal post-await `throw` rejections after multiple suspensions across declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
+- Added eight-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
+- Staged multi-await `return await` binary expressions now preserve side-effect-free `void` leaves and stringify them as `undefined` when concatenated. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` constructors with directly awaited callees now preserve literal arguments alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` element access now preserves literal indices alongside direct-awaited receivers and sibling awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` expressions now preserve side-effect-free `typeof void 0` leaves. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` constructors now preserve literal arguments alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` calls now preserve literal arguments alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` expressions now preserve `typeof` regular-expression literal leaves. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` expressions now preserve `typeof` BigInt literal leaves. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` expressions now preserve `typeof` over side-effect-free literal leaves. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` expressions now preserve side-effect-free `typeof undefined` leaves. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` tagged templates now preserve literal substitutions alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` template literals now preserve literal substitutions alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` object literals now preserve literal properties alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` array literals now preserve literal elements alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Staged multi-await `return await` binary expressions now preserve literal leaves alongside direct awaits. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports `typeof` wrappers around direct awaits through the staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports constructors with directly awaited callees and multiple direct-await arguments. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports side-effect-free prefix unary operators around direct awaits through the staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Async `return await` continuations now preserve await-free declaration-free `if`, `switch`, loop, and `try` / `finally` preludes across async declarations, class methods, and function values. Test: `async_await_interstitial_expression`.
+- Those await-free direct-prelude control-flow statements may also contain branch-local declarations when no nested suspension or scoped function/class is present. Test: `async_await_interstitial_expression`.
+- The exact nested `return await (await promise)` form now adopts the inner awaited value while preserving direct-prelude captures. Test: `async_await_interstitial_expression`.
+- Direct `return await` operands may now contain one non-conditional inner await even when the outer expression is non-Promise-valued; the existing expression continuation resolves the resulting value. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports a bounded binary expression with two sibling awaits, sequencing the second source after the first fulfillment. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports a bounded three-sibling-await nested binary expression through staged promise adapters. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports a bounded four-sibling-await nested binary expression through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports left-associated binary expressions with five or more direct-await leaves through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports template literals with multiple direct-await substitutions through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports array literals with multiple direct-await elements through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports calls with multiple direct-await arguments through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports typed object literals with multiple direct-await property initializers through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports constructors with multiple direct-await arguments through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now composes supported await-bearing nested call operands through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports tagged templates with multiple direct-await substitutions through the generic staged sequence adapter. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports dynamic calls with directly awaited callees and multiple direct-await arguments. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports direct-awaited property receivers and element receivers/indices inside multi-await expressions. Test: `async_await_interstitial_expression`.
+- Direct `return await` now supports supported member callees with directly awaited receivers or indices and multiple direct-await arguments. Test: `async_await_interstitial_expression`.
+- Outer direct `return await` now routes two-arm conditionals whose arms are both direct awaits, including direct parameter captures. Test: `async_await_interstitial_expression`.
+- Outer direct `return await` conditionals now also support bounded mixed sync/await arms with their distinct immediate and delayed resolution paths. Test: `async_await_interstitial_expression`.
+- Outer direct `return await` conditionals now route recursively nested bounded conditional trees. Test: `async_await_interstitial_expression`.
+- Outer direct `return await` operands now route bounded `&&`, `||`, and `??` branches with awaited RHS and synchronous short-circuit paths. Test: `async_await_interstitial_expression`.
+- Bounded nested logical RHS branches now recurse through outer direct `return await` operands. Test: `async_await_interstitial_expression`.
 - Optional GCD-style explicit concurrency: `new DispatchQueue(label)`, `DispatchQueue.concurrent()`, `dispatch.async(queue, task)` (returns a Promise settled on the main event loop), and `dispatch.sync(queue, task)`, lowered onto libdispatch worker threads with a compile-time capture discipline (const primitives / DispatchQueue only, no `await`/`this` in tasks). Programs that never use the API build exactly as before with no libdispatch or pthread dependency; dispatch-using programs auto-link libdispatch (probe honors `TSC2C_LIBDISPATCH_PREFIX`) and reject `--no-gc`. Tests: `dispatch_async_basic`, `dispatch_error_propagation`, `dispatch_capture_const_diagnostic`, `dispatch_await_diagnostic`.
 - Thread-aware runtime baseline behind `TSC_THREADS` (compiled only for dispatch-using programs): Boehm GC threaded mode with per-task worker registration and unblocked suspend signals, thread-local exception state, a recursive runtime lock over shape transitions / symbol registry / lazy singletons, atomic id counters, a cross-thread completion queue, and a condvar-driven event loop that waits for outstanding dispatch tasks. Single-threaded builds compile to the identical plain operations.
 - Finite dynamic `require(...)` proofs now resolve static `util.format(...)` string fragments from default, namespace, named, and aliased named util bindings when all format arguments have finite static string values. Test: `dynamic_require_static_util_format`.

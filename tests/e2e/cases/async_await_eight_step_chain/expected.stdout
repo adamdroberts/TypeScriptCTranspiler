@@ -1,0 +1,9 @@
+declaration: 12345678
+method: abcdefgh
+value: ABCDEFGH
+branch-true: b1234567
+branch-false: f1234567
+method-branch-true: m1234567
+method-branch-false: n1234567
+value-branch-true: v1234567
+value-branch-false: x1234567

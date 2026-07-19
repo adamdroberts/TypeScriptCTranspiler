@@ -1,0 +1,82 @@
+method-direct-prelude
+value-direct-prelude
+direct-prelude
+direct-control-if
+direct-control-switch
+direct-control-loop: 0
+direct-control-loop: 1
+direct-control-try
+direct-control-finally
+nested-mixed-return-await: nested-mixed-sync
+nested-short-or-return-await: present
+nested-short-and-return-await: false
+nested-short-nullish-return-await: present
+nested-short-tree-return-await: false
+nested-short-tree-return-await: present
+declaration-between: ONE
+declaration-if
+declaration-switch
+declaration-try
+declaration-finally
+method-between: alpha-middle
+method-if
+method-switch
+method-try
+method-finally
+between: left
+value-if
+value-switch
+value-try
+value-loop: 0
+value-loop: 1
+method: alpha-middle-omega:alpha-middle
+direct-return-await: direct-return-await
+method-direct: method-direct-return-await
+value-direct: value-direct-return-await
+direct-control-return-await: direct-control-return-await
+declaration: ONE-TWO:ONE!
+value: left-right
+leading-void: leading-void
+nested-direct-return-await: nested-return-await
+nested-expression-return-await: nested-expression-return-await
+nested-conditional-return-await: nested-conditional-true
+nested-conditional-return-await: nested-conditional-false
+nested-mixed-return-await: nested-mixed-await
+nested-tree-return-await: nested-tree-true-true
+nested-tree-return-await: nested-tree-true-false
+nested-tree-return-await: nested-tree-false
+nested-short-or-return-await: nested-short-or-await
+nested-short-and-return-await: nested-short-and-await
+nested-short-nullish-return-await: nested-short-nullish-await
+nested-short-tree-return-await: nested-short-tree-await
+nested-nonpromise-return-await: nested-nonpromise-outer
+two-inner-return-await: two-inner-lefttwo-inner-right
+direct-catch-binding-prelude: direct-catch:caught
+tagged-inner-return-await: tag-tagged-inner-left-tagged-inner-right!
+three-inner-return-await: three-inner-leftthree-inner-middlethree-inner-right
+property-access-return-await: 15
+element-access-return-await: e
+prefix-unary-return-await: 1
+logical-prefix-return-await: 0
+template-inner-return-await: template-inner-left:template-inner-middle:template-inner-right
+typeof-return-await: string:undefined:object:bigint:object:undefined:number
+array-inner-return-await: array-inner-left:array-inner-middle:array-inner-right
+call-inner-return-await: call-inner-left:call-inner-middle:call-inner-right
+mixed-array-inner-return-await: mixed-array-inner-left:literal:mixed-array-inner-right
+mixed-object-inner-return-await: mixed-object-inner-left:literal:mixed-object-inner-right
+object-inner-return-await: object-inner-left:object-inner-middle:object-inner-right
+mixed-template-inner-return-await: mixed-template-inner-left:literal:mixed-template-inner-right
+new-inner-return-await: new-inner-left:new-inner-middle:new-inner-right
+four-inner-return-await: four-inner-leftfour-inner-middlefour-inner-nextfour-inner-right
+mixed-tagged-inner-return-await: tag-mixed-tagged-inner-left-literal-mixed-tagged-inner-right!
+nested-array-argument-return-await: all-inner-left:all-inner-middle:all-inner-right
+mixed-call-inner-return-await: mixed-call-inner-left:literal:mixed-call-inner-right
+awaited-callee-return-await: callee-inner-left:callee-inner-middle:callee-inner-right
+mixed-new-inner-return-await: mixed-new-inner-left:literal:mixed-new-inner-right
+mixed-element-literal-return-await: etail
+awaited-constructor-mixed-args-return-await: ctor-mixed-inner-left:literal:ctor-mixed-inner-right
+member-call-return-await: member-inner-leftright
+interstitial-catch-binding: catch-label:catch-first
+awaited-constructor-return-await: ctor-inner-left:ctor-inner-middle:ctor-inner-right
+five-inner-return-await: five-inner-leftfive-inner-middlefive-inner-nextfive-inner-laterfive-inner-right
+mixed-void-literal-return-await: prefix:undefined:one:two:three:four:five

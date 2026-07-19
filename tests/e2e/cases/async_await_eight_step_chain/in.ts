@@ -1,0 +1,120 @@
+import { setTimeout as delay } from "node:timers/promises";
+
+async function declaration(): Promise<string> {
+    const one = await delay(1, "1");
+    const two = await delay(2, one + "2");
+    const three = await delay(3, two + "3");
+    const four = await delay(4, three + "4");
+    const five = await delay(5, four + "5");
+    const six = await delay(6, five + "6");
+    const seven = await delay(7, six + "7");
+    const eight = await delay(8, seven + "8");
+    return eight;
+}
+
+class Chain {
+    async method(): Promise<string> {
+        const one = await delay(1, "a");
+        const two = await delay(2, one + "b");
+        const three = await delay(3, two + "c");
+        const four = await delay(4, three + "d");
+        const five = await delay(5, four + "e");
+        const six = await delay(6, five + "f");
+        const seven = await delay(7, six + "g");
+        const eight = await delay(8, seven + "h");
+        return eight;
+    }
+}
+
+const value = async (): Promise<string> => {
+    const one = await delay(1, "A");
+    const two = await delay(2, one + "B");
+    const three = await delay(3, two + "C");
+    const four = await delay(4, three + "D");
+    const five = await delay(5, four + "E");
+    const six = await delay(6, five + "F");
+    const seven = await delay(7, six + "G");
+    const eight = await delay(8, seven + "H");
+    return eight;
+};
+
+async function branchEight(flag: boolean): Promise<string> {
+    if (flag) {
+        const one = await delay(21, "b");
+        const two = await delay(22, one + "1");
+        const three = await delay(23, two + "2");
+        const four = await delay(24, three + "3");
+        const five = await delay(25, four + "4");
+        const six = await delay(26, five + "5");
+        const seven = await delay(27, six + "6");
+        const eight = await delay(28, seven + "7");
+        return eight;
+    }
+    const one = await delay(29, "f");
+    const two = await delay(30, one + "1");
+    const three = await delay(31, two + "2");
+    const four = await delay(32, three + "3");
+    const five = await delay(33, four + "4");
+    const six = await delay(34, five + "5");
+    const seven = await delay(35, six + "6");
+    const eight = await delay(36, seven + "7");
+    return eight;
+}
+
+class BranchChain {
+    async method(flag: boolean): Promise<string> {
+        if (flag) {
+            const one = await delay(37, "m");
+            const two = await delay(38, one + "1");
+            const three = await delay(39, two + "2");
+            const four = await delay(40, three + "3");
+            const five = await delay(41, four + "4");
+            const six = await delay(42, five + "5");
+            const seven = await delay(43, six + "6");
+            const eight = await delay(44, seven + "7");
+            return eight;
+        }
+        const one = await delay(45, "n");
+        const two = await delay(46, one + "1");
+        const three = await delay(47, two + "2");
+        const four = await delay(48, three + "3");
+        const five = await delay(49, four + "4");
+        const six = await delay(50, five + "5");
+        const seven = await delay(51, six + "6");
+        const eight = await delay(52, seven + "7");
+        return eight;
+    }
+}
+
+const branchValue = async (flag: boolean): Promise<string> => {
+    if (flag) {
+        const one = await delay(53, "v");
+        const two = await delay(54, one + "1");
+        const three = await delay(55, two + "2");
+        const four = await delay(56, three + "3");
+        const five = await delay(57, four + "4");
+        const six = await delay(58, five + "5");
+        const seven = await delay(59, six + "6");
+        const eight = await delay(60, seven + "7");
+        return eight;
+    }
+    const one = await delay(61, "x");
+    const two = await delay(62, one + "1");
+    const three = await delay(63, two + "2");
+    const four = await delay(64, three + "3");
+    const five = await delay(65, four + "4");
+    const six = await delay(66, five + "5");
+    const seven = await delay(67, six + "6");
+    const eight = await delay(68, seven + "7");
+    return eight;
+};
+
+declaration().then((result) => console.log("declaration:", result));
+new Chain().method().then((result) => console.log("method:", result));
+value().then((result) => console.log("value:", result));
+branchEight(true).then((result) => console.log("branch-true:", result));
+branchEight(false).then((result) => console.log("branch-false:", result));
+new BranchChain().method(true).then((result) => console.log("method-branch-true:", result));
+new BranchChain().method(false).then((result) => console.log("method-branch-false:", result));
+branchValue(true).then((result) => console.log("value-branch-true:", result));
+branchValue(false).then((result) => console.log("value-branch-false:", result));

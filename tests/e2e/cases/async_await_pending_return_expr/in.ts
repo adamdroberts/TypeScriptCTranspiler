@@ -115,6 +115,356 @@ async function sourceTryCatchParenthesizedReturn(prefix: string): Promise<string
     }
 }
 
+function rejectAfter(ms: number, reason: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+        setTimeout((): void => {
+            reject(reason);
+        }, ms);
+    });
+}
+
+async function sourceTryLeadingChain(flag: boolean, prefix: string): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(380, "try-chain-first")
+            : rejectAfter(379, "try-chain-rejected"));
+        const second = await delay(381, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        return prefix + "caught-" + error;
+    }
+}
+
+class SourceTryLeadingChainClass {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean): Promise<string> {
+        try {
+            const first = await (flag
+                ? delay(382, "method-chain-first")
+                : rejectAfter(381, "method-chain-rejected"));
+            const second = await delay(383, first + ":second");
+            return this.prefix + second;
+        } catch (error) {
+            return this.prefix + "caught-" + error;
+        }
+    }
+}
+
+const sourceTryLeadingChainValue = async (flag: boolean, prefix: string): Promise<string> => {
+    try {
+        const first = await (flag
+            ? delay(384, "value-chain-first")
+            : rejectAfter(383, "value-chain-rejected"));
+        const second = await delay(385, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        return prefix + "caught-" + error;
+    }
+};
+
+async function sourceTryLeadingChainCatchThrow(prefix: string): Promise<string> {
+    try {
+        const first = await rejectAfter(386, "throw-chain-rejected");
+        const second = await delay(387, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        throw prefix + "caught-" + error;
+    }
+}
+
+async function sourceTryLeadingChainCatchPrelude(prefix: string): Promise<string> {
+    try {
+        const first = await rejectAfter(400, "catch-prelude-rejected");
+        const second = await delay(401, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        const recovered = prefix + "caught-" + error;
+        return recovered;
+    }
+}
+
+async function sourceTryFinallyLeadingChain(
+    flag: boolean,
+    prefix: string,
+    marker: { value: string },
+): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(388, "finally-chain-first")
+            : rejectAfter(387, "finally-chain-rejected"));
+        const second = await delay(389, first + ":second");
+        return prefix + second;
+    } finally {
+        marker.value = marker.value + "|finally";
+    }
+}
+
+class SourceTryFinallyLeadingChainClass {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean, marker: { value: string }): Promise<string> {
+        try {
+            const first = await (flag
+                ? delay(390, "method-finally-first")
+                : rejectAfter(389, "method-finally-rejected"));
+            const second = await delay(391, first + ":second");
+            return this.prefix + second;
+        } finally {
+            marker.value = marker.value + "|finally";
+        }
+    }
+}
+
+const sourceTryFinallyLeadingChainValue = async (
+    flag: boolean,
+    prefix: string,
+    marker: { value: string },
+): Promise<string> => {
+    try {
+        const first = await (flag
+            ? delay(392, "value-finally-first")
+            : rejectAfter(391, "value-finally-rejected"));
+        const second = await delay(393, first + ":second");
+        return prefix + second;
+    } finally {
+        marker.value = marker.value + "|finally";
+    }
+};
+
+async function sourceTryFinallyLeadingChainThrow(flag: boolean, prefix: string): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(394, "finally-throw-first")
+            : rejectAfter(393, "finally-throw-rejected"));
+        const second = await delay(395, first + ":second");
+        return prefix + second;
+    } finally {
+        throw prefix + "finally-override";
+    }
+}
+
+async function sourceTryCatchFinallyLeadingChain(
+    flag: boolean,
+    prefix: string,
+    marker: { value: string },
+): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(396, "catch-finally-first")
+            : rejectAfter(395, "catch-finally-rejected"));
+        const second = await delay(397, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        return prefix + "caught-" + error;
+    } finally {
+        marker.value = marker.value + "|finally";
+    }
+}
+
+async function sourceTryCatchFinallyLeadingChainFinallyThrow(flag: boolean, prefix: string): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(398, "catch-finally-throw-first")
+            : rejectAfter(397, "catch-finally-throw-rejected"));
+        const second = await delay(399, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        return prefix + "caught-" + error;
+    } finally {
+        throw prefix + "finally-override";
+    }
+}
+
+async function sourceTryCatchFinallyLeadingChainCatchPrelude(
+    prefix: string,
+    marker: { value: string },
+): Promise<string> {
+    try {
+        const first = await rejectAfter(402, "combined-catch-prelude-rejected");
+        const second = await delay(403, first + ":second");
+        return prefix + second;
+    } catch (error) {
+        const recovered = prefix + "caught-" + error;
+        return recovered;
+    } finally {
+        marker.value = marker.value + "|finally";
+    }
+}
+
+async function sourceTryFinallyLeadingChainLocal(
+    flag: boolean,
+    prefix: string,
+    marker: { value: string },
+): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(404, "finally-local-first")
+            : rejectAfter(403, "finally-local-rejected"));
+        const second = await delay(405, first + ":second");
+        return prefix + second;
+    } finally {
+        const next = marker.value + "|finally";
+        marker.value = next;
+    }
+}
+
+async function sourceTryFinallyLeadingChainUninitializedLocal(
+    flag: boolean,
+    prefix: string,
+    marker: { value: string },
+): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(406, "finally-uninitialized-first")
+            : rejectAfter(405, "finally-uninitialized-rejected"));
+        const second = await delay(407, first + ":second");
+        return prefix + second;
+    } finally {
+        let next: string;
+        next = marker.value;
+        next += "|finally";
+        marker.value = next;
+    }
+}
+
+async function sourceTryFinallyLeadingAwaitFinally(
+    flag: boolean,
+    cleanupFlag: boolean,
+    prefix: string,
+    marker: { value: string },
+): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(408, "finally-await-first")
+            : rejectAfter(409, "finally-await-try-rejected"));
+        const second = await delay(410, first + ":second");
+        return prefix + second;
+    } finally {
+        await (flag
+            ? delay(250, "finally-await-complete")
+            : rejectAfter(412, "finally-await-rejected"));
+        if (cleanupFlag) {
+            marker.value += "|between-if";
+        } else {
+            marker.value += "|between-else";
+        }
+        try {
+            throw "between-error";
+        } catch (error) {
+            marker.value += "|" + error;
+        }
+        if (cleanupFlag) {
+            await delay(1, "finally-await-second");
+        } else {
+            await delay(2, "finally-await-second-else");
+        }
+        marker.value += "|async-finally";
+    }
+}
+
+async function sourceTryFinallyLeadingReturnAwait(
+    flag: boolean,
+    prefix: string,
+): Promise<string> {
+    try {
+        const first = await delay(252, "finally-return-first");
+        const second = await delay(253, first + ":second");
+        return prefix + second;
+    } finally {
+        return await (flag
+            ? delay(254, "finally-return-value")
+            : rejectAfter(255, "finally-return-rejected"));
+    }
+}
+
+class SourceTryFinallyLeadingReturnAwaitMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean): Promise<string> {
+        try {
+            const first = await delay(268, "method-finally-return-first");
+            const second = await delay(269, first + ":second");
+            return this.prefix + second;
+        } finally {
+            return await (flag
+                ? delay(270, "method-finally-return-value")
+                : rejectAfter(271, "method-finally-return-rejected"));
+        }
+    }
+}
+
+const sourceTryFinallyLeadingReturnAwaitValue = async function(flag: boolean, prefix: string): Promise<string> {
+    try {
+        const first = await delay(272, "value-finally-return-first");
+        const second = await delay(273, first + ":second");
+        return prefix + second;
+    } finally {
+        return await (flag
+            ? delay(274, "value-finally-return-value")
+            : rejectAfter(275, "value-finally-return-rejected"));
+    }
+};
+
+async function sourceTryFinallyLeadingReturnAfterAwait(flag: boolean): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(256, "return-after-first")
+            : rejectAfter(257, "return-after-try-rejected"));
+        const second = await delay(258, first + ":second");
+        return second;
+    } finally {
+        await delay(259, "return-after-cleanup");
+        return flag ? "return-after-success" : "return-after-recovered-rejection";
+    }
+}
+
+class SourceTryFinallyReturnAfterAwaitMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean): Promise<string> {
+        try {
+            const first = await (flag
+                ? delay(260, "method-return-after-first")
+                : rejectAfter(261, "method-return-after-rejected"));
+            const second = await delay(262, first + ":second");
+            return this.prefix + second;
+        } finally {
+            await delay(263, "method-return-after-cleanup");
+            return this.prefix + (flag ? "method-return-after-success" : "method-return-after-recovered");
+        }
+    }
+}
+
+const sourceTryFinallyReturnAfterAwaitValue = async function(flag: boolean, prefix: string): Promise<string> {
+    try {
+        const first = await (flag
+            ? delay(264, "value-return-after-first")
+            : rejectAfter(265, "value-return-after-rejected"));
+        const second = await delay(266, first + ":second");
+        return prefix + second;
+    } finally {
+        await delay(267, "value-return-after-cleanup");
+        return prefix + (flag ? "value-return-after-success" : "value-return-after-recovered");
+    }
+};
+
 async function sourceTryFinallyAssertedReturn(prefix: string): Promise<string> {
     try {
         const value = await delay(305, "try-finally");
@@ -162,6 +512,65 @@ async function sixAwait(prefix: string): Promise<string> {
     const fifth = await delay(310, first + ":" + second + ":" + third + ":" + fourth + "-five");
     const sixth = await delay(311, first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + "-six");
     return first + ":" + second + ":" + third + ":" + fourth + ":" + fifth + ":" + sixth + "!";
+}
+
+async function conditionalLeadingChain(flag: boolean, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    if (flag) {
+        first = await delay(420, prefix + "true-one");
+    } else {
+        first = await delay(421, prefix + "false-one");
+    }
+    const second = await delay(422, first + ":two");
+    return first + ":" + second;
+}
+
+class ConditionalLeadingChainMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean): Promise<string> {
+        let first = this.prefix + "seed";
+        if (flag) {
+            first = await delay(423, this.prefix + "true-one");
+        } else {
+            first = await delay(424, this.prefix + "false-one");
+        }
+        const second = await delay(425, first + ":two");
+        return this.prefix + first + ":" + second;
+    }
+}
+
+const conditionalLeadingChainValue = async function(flag: boolean, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    if (flag) {
+        first = await delay(426, prefix + "true-one");
+    } else {
+        first = await delay(427, prefix + "false-one");
+    }
+    const second = await delay(428, first + ":two");
+    return prefix + first + ":" + second;
+};
+
+async function branchConditionalLeadingChain(
+    outer: boolean,
+    inner: boolean,
+    prefix: string,
+): Promise<string> {
+    if (outer) {
+        let first = prefix + "seed";
+        if (inner) {
+            first = await delay(429, prefix + "inner-true-one");
+        } else {
+            first = await delay(430, prefix + "inner-false-one");
+        }
+        const second = await delay(431, first + ":two");
+        return first + ":" + second;
+    }
+    return prefix + "fallthrough";
 }
 
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
@@ -436,6 +845,20 @@ async function throwDeclarationAfterAwait(prefix: string): Promise<string> {
     const value = await delay(353, "decl-throw");
     throw prefix + value;
     return "never";
+}
+
+async function throwAfterLeadingChain(prefix: string): Promise<string> {
+    const first = await delay(365, prefix + "one");
+    const second = await delay(366, first + ":two");
+    const third = await delay(367, second + ":three");
+    throw third + ":throw";
+}
+
+async function assignmentLeadingChain(prefix: string): Promise<string> {
+    let value: string = prefix + "seed";
+    value = await delay(374, prefix + "one");
+    value = await delay(375, value + ":two");
+    return value + ":done";
 }
 
 async function tryCatchDeclarationAfterAwait(prefix: string): Promise<string> {
@@ -900,6 +1323,20 @@ class Worker {
         const value = await delay(35, "throw");
         throw this.prefix + value;
         return "never";
+    }
+
+    async throwAfterLeadingChain(prefix: string): Promise<string> {
+        const first = await delay(368, this.prefix + prefix + "one");
+        const second = await delay(369, first + ":two");
+        const third = await delay(370, second + ":three");
+        throw third + ":throw";
+    }
+
+    async assignmentLeadingChain(prefix: string): Promise<string> {
+        let value: string = this.prefix + prefix + "seed";
+        value = await delay(376, this.prefix + prefix + "one");
+        value = await delay(377, value + ":two");
+        return value + ":done";
     }
 
     async earlyReturnAfterAwait(flag: boolean): Promise<string> {
@@ -1607,6 +2044,20 @@ const arrowThrowAfterAwait = async (prefix: string): Promise<string> => {
     return "never";
 };
 
+const arrowThrowAfterLeadingChain = async (prefix: string): Promise<string> => {
+    const first = await delay(371, prefix + "one");
+    const second = await delay(372, first + ":two");
+    const third = await delay(373, second + ":three");
+    throw third + ":throw";
+};
+
+const arrowAssignmentLeadingChain = async (prefix: string): Promise<string> => {
+    let value: string = prefix + "seed";
+    value = await delay(378, prefix + "one");
+    value = await delay(379, value + ":two");
+    return value + ":done";
+};
+
 const arrowTryCatchAfterAwait = async (prefix: string): Promise<string> => {
     const value = await delay(347, "arrow-try");
     let result = prefix;
@@ -1652,6 +2103,176 @@ sourceTryCatchParenthesizedReturn("fn-source-").then((value: string): void => {
     console.log("source-try-catch-parenthesized-return:", value);
 });
 
+sourceTryLeadingChain(true, "fn-source-").then((value: string): void => {
+    console.log("source-try-leading-chain-success:", value);
+});
+sourceTryLeadingChain(false, "fn-source-").then((value: string): void => {
+    console.log("source-try-leading-chain-catch:", value);
+});
+
+const sourceTryLeadingChainClass = new SourceTryLeadingChainClass("method-source-");
+sourceTryLeadingChainClass.run(true).then((value: string): void => {
+    console.log("source-try-leading-chain-method-success:", value);
+});
+sourceTryLeadingChainClass.run(false).then((value: string): void => {
+    console.log("source-try-leading-chain-method-catch:", value);
+});
+
+sourceTryLeadingChainValue(true, "value-source-").then((value: string): void => {
+    console.log("source-try-leading-chain-value-success:", value);
+});
+sourceTryLeadingChainValue(false, "value-source-").then((value: string): void => {
+    console.log("source-try-leading-chain-value-catch:", value);
+});
+
+sourceTryLeadingChainCatchThrow("throw-source-").catch((reason: string): string => {
+    console.log("source-try-leading-chain-catch-throw:", reason);
+    return reason;
+});
+
+sourceTryLeadingChainCatchPrelude("catch-prelude-").then((value: string): void => {
+    console.log("source-try-leading-chain-catch-prelude:", value);
+});
+
+const sourceTryFinallyLeadingSuccessMarker = { value: "success" };
+sourceTryFinallyLeadingChain(true, "fn-finally-", sourceTryFinallyLeadingSuccessMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-success:", value + ":" + sourceTryFinallyLeadingSuccessMarker.value);
+});
+const sourceTryFinallyLeadingRejectMarker = { value: "reject" };
+sourceTryFinallyLeadingChain(false, "fn-finally-", sourceTryFinallyLeadingRejectMarker).catch((reason: string): string => {
+    console.log("source-try-finally-leading-reject:", reason + ":" + sourceTryFinallyLeadingRejectMarker.value);
+    return reason;
+});
+
+const sourceTryFinallyLeadingChainClass = new SourceTryFinallyLeadingChainClass("method-finally-");
+const sourceTryFinallyLeadingMethodSuccessMarker = { value: "success" };
+sourceTryFinallyLeadingChainClass.run(true, sourceTryFinallyLeadingMethodSuccessMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-method-success:", value + ":" + sourceTryFinallyLeadingMethodSuccessMarker.value);
+});
+const sourceTryFinallyLeadingMethodRejectMarker = { value: "reject" };
+sourceTryFinallyLeadingChainClass.run(false, sourceTryFinallyLeadingMethodRejectMarker).catch((reason: string): string => {
+    console.log("source-try-finally-leading-method-reject:", reason + ":" + sourceTryFinallyLeadingMethodRejectMarker.value);
+    return reason;
+});
+
+const sourceTryFinallyLeadingValueSuccessMarker = { value: "success" };
+sourceTryFinallyLeadingChainValue(true, "value-finally-", sourceTryFinallyLeadingValueSuccessMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-value-success:", value + ":" + sourceTryFinallyLeadingValueSuccessMarker.value);
+});
+const sourceTryFinallyLeadingValueRejectMarker = { value: "reject" };
+sourceTryFinallyLeadingChainValue(false, "value-finally-", sourceTryFinallyLeadingValueRejectMarker).catch((reason: string): string => {
+    console.log("source-try-finally-leading-value-reject:", reason + ":" + sourceTryFinallyLeadingValueRejectMarker.value);
+    return reason;
+});
+
+sourceTryFinallyLeadingChainThrow(true, "throw-finally-").catch((reason: string): string => {
+    console.log("source-try-finally-leading-throw-success:", reason);
+    return reason;
+});
+sourceTryFinallyLeadingChainThrow(false, "throw-finally-").catch((reason: string): string => {
+    console.log("source-try-finally-leading-throw-reject:", reason);
+    return reason;
+});
+
+const sourceTryCatchFinallyLeadingSuccessMarker = { value: "success" };
+sourceTryCatchFinallyLeadingChain(true, "catch-finally-", sourceTryCatchFinallyLeadingSuccessMarker).then((value: string): void => {
+    console.log("source-try-catch-finally-leading-success:", value + ":" + sourceTryCatchFinallyLeadingSuccessMarker.value);
+});
+const sourceTryCatchFinallyLeadingRejectMarker = { value: "reject" };
+sourceTryCatchFinallyLeadingChain(false, "catch-finally-", sourceTryCatchFinallyLeadingRejectMarker).then((value: string): void => {
+    console.log("source-try-catch-finally-leading-reject:", value + ":" + sourceTryCatchFinallyLeadingRejectMarker.value);
+});
+
+sourceTryCatchFinallyLeadingChainFinallyThrow(true, "catch-finally-throw-").catch((reason: string): string => {
+    console.log("source-try-catch-finally-leading-throw-success:", reason);
+    return reason;
+});
+sourceTryCatchFinallyLeadingChainFinallyThrow(false, "catch-finally-throw-").catch((reason: string): string => {
+    console.log("source-try-catch-finally-leading-throw-reject:", reason);
+    return reason;
+});
+
+const sourceTryCatchFinallyLeadingCatchPreludeMarker = { value: "combined" };
+sourceTryCatchFinallyLeadingChainCatchPrelude("combined-catch-prelude-", sourceTryCatchFinallyLeadingCatchPreludeMarker).then((value: string): void => {
+    console.log("source-try-catch-finally-leading-catch-prelude:", value + ":" + sourceTryCatchFinallyLeadingCatchPreludeMarker.value);
+});
+
+const sourceTryFinallyLeadingLocalSuccessMarker = { value: "local-success" };
+sourceTryFinallyLeadingChainLocal(true, "finally-local-", sourceTryFinallyLeadingLocalSuccessMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-local-success:", value + ":" + sourceTryFinallyLeadingLocalSuccessMarker.value);
+});
+const sourceTryFinallyLeadingLocalRejectMarker = { value: "local-reject" };
+sourceTryFinallyLeadingChainLocal(false, "finally-local-", sourceTryFinallyLeadingLocalRejectMarker).catch((reason: string): string => {
+    console.log("source-try-finally-leading-local-reject:", reason + ":" + sourceTryFinallyLeadingLocalRejectMarker.value);
+    return reason;
+});
+
+const sourceTryFinallyLeadingUninitializedSuccessMarker = { value: "uninitialized-success" };
+sourceTryFinallyLeadingChainUninitializedLocal(true, "finally-uninitialized-", sourceTryFinallyLeadingUninitializedSuccessMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-uninitialized-success:", value + ":" + sourceTryFinallyLeadingUninitializedSuccessMarker.value);
+});
+const sourceTryFinallyLeadingUninitializedRejectMarker = { value: "uninitialized-reject" };
+sourceTryFinallyLeadingChainUninitializedLocal(false, "finally-uninitialized-", sourceTryFinallyLeadingUninitializedRejectMarker).catch((reason: string): string => {
+    console.log("source-try-finally-leading-uninitialized-reject:", reason + ":" + sourceTryFinallyLeadingUninitializedRejectMarker.value);
+    return reason;
+});
+
+const sourceTryFinallyLeadingAwaitFinallySuccessMarker = { value: "async-success" };
+sourceTryFinallyLeadingAwaitFinally(true, true, "finally-await-", sourceTryFinallyLeadingAwaitFinallySuccessMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-await-success:", value + ":" + sourceTryFinallyLeadingAwaitFinallySuccessMarker.value);
+});
+const sourceTryFinallyLeadingAwaitFinallyRejectMarker = { value: "async-reject" };
+sourceTryFinallyLeadingAwaitFinally(false, false, "finally-await-", sourceTryFinallyLeadingAwaitFinallyRejectMarker).catch((reason: string): string => {
+    console.log("source-try-finally-leading-await-reject:", reason + ":" + sourceTryFinallyLeadingAwaitFinallyRejectMarker.value);
+    return reason;
+});
+const sourceTryFinallyLeadingAwaitFinallyAlternateMarker = { value: "async-alternate" };
+sourceTryFinallyLeadingAwaitFinally(true, false, "finally-await-", sourceTryFinallyLeadingAwaitFinallyAlternateMarker).then((value: string): void => {
+    console.log("source-try-finally-leading-await-alternate:", value + ":" + sourceTryFinallyLeadingAwaitFinallyAlternateMarker.value);
+});
+
+sourceTryFinallyLeadingReturnAwait(true, "finally-return-").then((value: string): void => {
+    console.log("source-try-finally-leading-return-await-success:", value);
+});
+sourceTryFinallyLeadingReturnAwait(false, "finally-return-").catch((reason: string): string => {
+    console.log("source-try-finally-leading-return-await-reject:", reason);
+    return reason;
+});
+const sourceTryFinallyLeadingReturnAwaitMethodInstance = new SourceTryFinallyLeadingReturnAwaitMethod("method-");
+sourceTryFinallyLeadingReturnAwaitMethodInstance.run(true).then((value: string): void => {
+    console.log("source-try-finally-leading-return-await-method-success:", value);
+});
+sourceTryFinallyLeadingReturnAwaitMethodInstance.run(false).catch((reason: string): string => {
+    console.log("source-try-finally-leading-return-await-method-reject:", reason);
+    return reason;
+});
+sourceTryFinallyLeadingReturnAwaitValue(true, "value-").then((value: string): void => {
+    console.log("source-try-finally-leading-return-await-value-success:", value);
+});
+sourceTryFinallyLeadingReturnAwaitValue(false, "value-").catch((reason: string): string => {
+    console.log("source-try-finally-leading-return-await-value-reject:", reason);
+    return reason;
+});
+sourceTryFinallyLeadingReturnAfterAwait(true).then((value: string): void => {
+    console.log("source-try-finally-leading-return-after-await-success:", value);
+});
+sourceTryFinallyLeadingReturnAfterAwait(false).then((value: string): void => {
+    console.log("source-try-finally-leading-return-after-await-reject:", value);
+});
+const sourceTryFinallyReturnAfterAwaitMethodInstance = new SourceTryFinallyReturnAfterAwaitMethod("method-");
+sourceTryFinallyReturnAfterAwaitMethodInstance.run(true).then((value: string): void => {
+    console.log("source-try-finally-leading-return-after-await-method-success:", value);
+});
+sourceTryFinallyReturnAfterAwaitMethodInstance.run(false).then((value: string): void => {
+    console.log("source-try-finally-leading-return-after-await-method-reject:", value);
+});
+sourceTryFinallyReturnAfterAwaitValue(true, "value-").then((value: string): void => {
+    console.log("source-try-finally-leading-return-after-await-value-success:", value);
+});
+sourceTryFinallyReturnAfterAwaitValue(false, "value-").then((value: string): void => {
+    console.log("source-try-finally-leading-return-after-await-value-reject:", value);
+});
+
 sourceTryFinallyAssertedReturn("fn-source-").then((value: string): void => {
     console.log("source-try-finally-asserted-return:", value);
 });
@@ -1674,6 +2295,35 @@ fiveAwait("fn-").then((value: string): void => {
 
 sixAwait("fn-").then((value: string): void => {
     console.log("six-await:", value);
+});
+
+conditionalLeadingChain(true, "fn-").then((value: string): void => {
+    console.log("conditional-leading-chain-true:", value);
+});
+conditionalLeadingChain(false, "fn-").then((value: string): void => {
+    console.log("conditional-leading-chain-false:", value);
+});
+const conditionalLeadingChainMethodInstance = new ConditionalLeadingChainMethod("method-");
+conditionalLeadingChainMethodInstance.run(true).then((value: string): void => {
+    console.log("conditional-leading-chain-method-true:", value);
+});
+conditionalLeadingChainMethodInstance.run(false).then((value: string): void => {
+    console.log("conditional-leading-chain-method-false:", value);
+});
+conditionalLeadingChainValue(true, "value-").then((value: string): void => {
+    console.log("conditional-leading-chain-value-true:", value);
+});
+conditionalLeadingChainValue(false, "value-").then((value: string): void => {
+    console.log("conditional-leading-chain-value-false:", value);
+});
+branchConditionalLeadingChain(true, true, "branch-").then((value: string): void => {
+    console.log("branch-conditional-leading-chain-true:", value);
+});
+branchConditionalLeadingChain(true, false, "branch-").then((value: string): void => {
+    console.log("branch-conditional-leading-chain-false:", value);
+});
+branchConditionalLeadingChain(false, true, "branch-").then((value: string): void => {
+    console.log("branch-conditional-leading-chain-fallthrough:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {
@@ -1711,6 +2361,14 @@ earlyReturnDeclarationAfterAwait(true, "fn-return-").then((value: string): void 
 throwDeclarationAfterAwait("fn-throw-").catch((reason: string): string => {
     console.log("declaration-throw-after-await:", reason);
     return "handled";
+});
+
+throwAfterLeadingChain("chain-").catch((reason: string): string => {
+    console.log("declaration-leading-chain-throw:", reason);
+    return reason;
+});
+assignmentLeadingChain("assign-").then((value: string): void => {
+    console.log("declaration-assignment-leading-chain:", value);
 });
 
 tryCatchDeclarationAfterAwait("fn-try-").then((value: string): void => {
@@ -1996,6 +2654,14 @@ new Worker("try-").tryCatchAfterAwait().then((value: string): void => {
 new Worker("reject-").throwAfterAwait().catch((reason: string): string => {
     console.log("method-throw:", reason);
     return "handled";
+});
+
+new Worker("reject-").throwAfterLeadingChain("method-").catch((reason: string): string => {
+    console.log("method-leading-chain-throw:", reason);
+    return reason;
+});
+new Worker("assign-").assignmentLeadingChain("method-").then((value: string): void => {
+    console.log("method-assignment-leading-chain:", value);
 });
 
 new Worker("return-").earlyReturnAfterAwait(true).then((value: string): void => {
@@ -2353,6 +3019,14 @@ arrowEarlyReturnAfterAwait(false, "value-return-").then((value: string): void =>
 arrowThrowAfterAwait("value-throw-").catch((reason: string): string => {
     console.log("arrow-throw-after-await:", reason);
     return "handled";
+});
+
+arrowThrowAfterLeadingChain("value-chain-").catch((reason: string): string => {
+    console.log("value-leading-chain-throw:", reason);
+    return reason;
+});
+arrowAssignmentLeadingChain("value-assign-").then((value: string): void => {
+    console.log("value-assignment-leading-chain:", value);
 });
 
 arrowTryCatchAfterAwait("value-try-").then((value: string): void => {
