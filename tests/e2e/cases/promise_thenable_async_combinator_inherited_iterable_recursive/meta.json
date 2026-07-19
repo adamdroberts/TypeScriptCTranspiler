@@ -1,0 +1,3 @@
+{
+  "description": "Dynamic Promise combinators assimilate delayed nested thenables from inherited custom iterable methods"
+}
