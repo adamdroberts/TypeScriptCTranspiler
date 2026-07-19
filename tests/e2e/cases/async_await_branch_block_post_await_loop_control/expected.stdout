@@ -1,0 +1,6 @@
+branch-block-post-await-loop-control-true: fn-branch-0-2-4
+branch-block-post-await-loop-control-false: fn-else-0-2-4
+method-branch-block-post-await-loop-control-true: this-method-branch-0-2-4
+method-branch-block-post-await-loop-control-false: this-method-else-0-2-4
+value-branch-block-post-await-loop-control-true: arrow-value-branch-0-2-4
+value-branch-block-post-await-loop-control-false: arrow-value-else-0-2-4
