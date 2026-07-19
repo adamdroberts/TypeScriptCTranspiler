@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Pure JavaScript package entries loaded through `allowJs` now have focused coverage for transitive package-local JavaScript import graphs feeding exported values and functions. Test: `node_modules_js_transitive_import`.
 - Pure JavaScript package entries loaded through `allowJs` now have focused coverage for eager package-local side-effect imports before exported values are used. Test: `node_modules_js_side_effect_import`.
 - Pure JavaScript package entries loaded through `allowJs` now have focused coverage for package-local namespace imports from JavaScript modules feeding exported values and functions. Test: `node_modules_js_namespace_import`.
 - Pure JavaScript package entries loaded through `allowJs` now have focused coverage for package-local default imports from JavaScript modules feeding exported values and functions. Test: `node_modules_js_default_import`.

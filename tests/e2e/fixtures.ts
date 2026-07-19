@@ -607,6 +607,11 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'import "./setup.js";\nexport const label = "js-side-effect-import";\n',
         "setup.js": 'console.log("js package setup");\n',
     }),
+    "tsc2c-js-transitive-import-package": esmPackage("tsc2c-js-transitive-import-package", {
+        "index.js": 'import { label, scale } from "./helper.js";\nexport const message = label + ":" + scale(4);\nexport function wrap(value) { return label + ":" + scale(value); }\n',
+        "helper.js": 'import { factor, label } from "./base.js";\nexport { label };\nexport function scale(value) { return value * factor; }\n',
+        "base.js": 'export const label = "js-transitive-import";\nexport const factor = 9;\n',
+    }),
     "tsc2c-js-reexport-package": esmPackage("tsc2c-js-reexport-package", {
         "index.js": 'export { default as greet, label, compute as calc } from "./core.js";\nexport * from "./extra.js";\n',
         "core.js": 'export const label = "js-reexport";\nexport function compute(value) { return value * 4; }\nexport default function greet(name) { return "hello " + name; }\n',
