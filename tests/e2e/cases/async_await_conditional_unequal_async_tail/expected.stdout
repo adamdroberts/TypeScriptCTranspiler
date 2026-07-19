@@ -1,0 +1,6 @@
+declaration-short: fn-tail
+declaration-long: fn-tail
+method-short: this-method-tail
+method-long: this-method-tail
+value-short: arrow-value-tail
+value-long: arrow-value-tail

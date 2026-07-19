@@ -31329,10 +31329,13 @@ class Emitter {
         }
         if (statements.length >= 2 && ts.isIfStatement(statements[0]!)) {
             const fallthroughStatements = statements.slice(1);
-            if (fallthroughStatements.length === 1 && ts.isReturnStatement(fallthroughStatements[0]!)) {
-                const sharedTail = this.asyncAwaitIfExpressionReturnBranchFromSharedReturnIf(
+            if (
+                fallthroughStatements.length > 0 &&
+                ts.isReturnStatement(fallthroughStatements[fallthroughStatements.length - 1]!)
+            ) {
+                const sharedTail = this.asyncAwaitIfExpressionReturnBranchFromSharedTailIf(
                     statements[0]!,
-                    fallthroughStatements[0]!,
+                    fallthroughStatements,
                     parameters,
                     thisValue,
                     captures,
@@ -31389,22 +31392,22 @@ class Emitter {
         return null;
     }
 
-    private asyncAwaitIfExpressionReturnBranchFromSharedReturnIf(
+    private asyncAwaitIfExpressionReturnBranchFromSharedTailIf(
         ifStatement: ts.IfStatement,
-        sharedReturn: ts.ReturnStatement,
+        sharedTail: readonly ts.Statement[],
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         captures: readonly AsyncAwaitContinuationParam[],
     ): AsyncAwaitIfExpressionReturnBranch | null {
         if (!this.asyncAwaitConditionExpressionSupported(ifStatement.expression)) return null;
-        const appendSharedReturn = (statement: ts.Statement): ts.Block | null => {
+        const appendSharedTail = (statement: ts.Statement): ts.Block | null => {
             if (this.statementAlwaysExits(statement)) return null;
             const statements = ts.isBlock(statement)
-                ? [...statement.statements, sharedReturn]
-                : [statement, sharedReturn];
+                ? [...statement.statements, ...sharedTail]
+                : [statement, ...sharedTail];
             return ts.factory.createBlock(statements, true);
         };
-        const thenBlock = appendSharedReturn(ifStatement.thenStatement);
+        const thenBlock = appendSharedTail(ifStatement.thenStatement);
         if (!thenBlock) return null;
         const thenBranch = this.asyncAwaitIfExpressionReturnBranchFromStatement(
             thenBlock,
@@ -31415,7 +31418,7 @@ class Emitter {
         if (!thenBranch) return null;
         const elseBranch = ifStatement.elseStatement
             ? (() => {
-                const elseBlock = appendSharedReturn(ifStatement.elseStatement!);
+                const elseBlock = appendSharedTail(ifStatement.elseStatement!);
                 return elseBlock
                     ? this.asyncAwaitIfExpressionReturnBranchFromStatement(elseBlock, parameters, thisValue, captures)
                     : null;
@@ -31424,7 +31427,7 @@ class Emitter {
         if (ifStatement.elseStatement && !elseBranch) return null;
         const fallthroughBranch = ifStatement.elseStatement
             ? null
-            : this.asyncAwaitIfExpressionReturnBranchFromStatement(sharedReturn, parameters, thisValue, captures);
+            : this.asyncAwaitIfExpressionReturnBranchFromStatements(sharedTail, parameters, thisValue, captures);
         if (!ifStatement.elseStatement && !fallthroughBranch) return null;
         return {
             kind: "if",
