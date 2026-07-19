@@ -28418,16 +28418,29 @@ class Emitter {
             statements: readonly ts.Statement[];
         };
         const leaves: Leaf[] = [];
+        const combineConditions = (
+            parent: ts.Expression | null,
+            condition: ts.Expression,
+            truthy: boolean,
+        ): ts.Expression => {
+            const term = truthy
+                ? condition
+                : ts.factory.createPrefixUnaryExpression(ts.SyntaxKind.ExclamationToken, condition);
+            return parent
+                ? ts.factory.createBinaryExpression(parent, ts.factory.createToken(ts.SyntaxKind.AmpersandAmpersandToken), term)
+                : term;
+        };
         const collect = (branch: ts.Statement, condition: ts.Expression | null): boolean => {
             if (ts.isIfStatement(branch) && branch.elseStatement) {
-                if (!collect(branch.thenStatement, branch.expression)) return false;
-                return collect(branch.elseStatement, null);
+                if (!collect(branch.thenStatement, combineConditions(condition, branch.expression, true))) return false;
+                return collect(branch.elseStatement, combineConditions(condition, branch.expression, false));
             }
             const statements = ts.isBlock(branch) ? branch.statements : [branch];
             leaves.push({ condition, statements });
             return true;
         };
         if (!collect(stmt, null) || leaves.length < 2) return null;
+        leaves[leaves.length - 1]!.condition = null;
         const awaitSteps = leaves.map((leaf) => {
             const indices: number[] = [];
             for (let i = 0; i < leaf.statements.length; i++) {

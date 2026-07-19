@@ -384,6 +384,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Direct-prelude `return await` now preserves captured locals through await-free `try` / `catch` / `finally` preludes with simple initialized or assigned-before-use `const` / `let` declarations across async declarations, class methods, and async function values. Test: `async_await_try_catch_finally_local_declaration_return_await`
 - Direct-prelude `return await` now supports simple initialized or assigned-before-use `const` / `let` locals scoped inside await-free `if` and `switch` branches across async declarations, class methods, and async function values. Test: `async_await_control_flow_local_declaration_return_await`
 - Direct-prelude `return await` now supports simple initialized `var` locals used within await-free loop and control-flow preludes across async declarations, class methods, and async function values. Test: `async_await_control_flow_var_declaration_return_await`
+- Leading conditional await chains now flatten complete nested `if` / `else` trees into bounded equal-length await steps across async declarations, class methods, and async function values. Test: `async_await_nested_conditional_branch_chain`
 - Branch-local source `try` / `catch` routes direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try`
 - Branch-local source `try` / `finally` runs finally bodies on direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try_finally`
 - Branch-local source `try` / `catch` / `finally` composes direct `return await` fulfillment, catch recovery, finally routing, and bounded finally-throw overrides across async declarations, class methods, and async function values. Tests: `async_await_branch_return_await_try_catch_finally`, `async_await_branch_return_await_finally_throw`
@@ -3089,6 +3090,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_try_catch_finally_local_declaration_return_await` | direct return-await preludes preserve try/catch/finally local declarations |
 | `async_await_control_flow_local_declaration_return_await` | direct return-await preludes preserve if/switch local declarations |
 | `async_await_control_flow_var_declaration_return_await` | direct return-await preludes preserve initialized var locals |
+| `async_await_nested_conditional_branch_chain` | nested conditional await trees flatten into equal-length branch steps |
 | `async_await_branch_return_await_try` | branch try/catch routes direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_try_finally` | branch try/finally runs on direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_try_catch_finally` | branch try/catch/finally routes direct return-await fulfillment and rejection |
