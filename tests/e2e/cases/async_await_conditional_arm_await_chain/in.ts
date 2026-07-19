@@ -50,6 +50,34 @@ const value = async function(kind: number): Promise<string> {
     return third;
 };
 
+const objectValue = {
+    async run(kind: number): Promise<string> {
+        let first = "object-seed";
+        if (kind === 0) {
+            first = await delay(1, "object-zero-one");
+            first = await delay(1, first + "-two");
+        } else {
+            first = await delay(1, "object-other-one");
+            first = await delay(1, first + "-two");
+        }
+        const third = await delay(1, first + "-three");
+        return third;
+    },
+};
+
+const arrowValue = async (kind: number): Promise<string> => {
+    let first = "arrow-seed";
+    if (kind === 0) {
+        first = await delay(1, "arrow-zero-one");
+        first = await delay(1, first + "-two");
+    } else {
+        first = await delay(1, "arrow-other-one");
+        first = await delay(1, first + "-two");
+    }
+    const third = await delay(1, first + "-three");
+    return third;
+};
+
 async function branch(outer: boolean, kind: number): Promise<string> {
     if (outer) {
         let first = "branch-seed";
@@ -107,6 +135,8 @@ declaration(0).then((result: string): void => console.log("declaration-zero:", r
 declaration(2).then((result: string): void => console.log("declaration-other:", result));
 new Worker().run(1).then((result: string): void => console.log("method-one:", result));
 value(0).then((result: string): void => console.log("value-zero:", result));
+objectValue.run(1).then((result: string): void => console.log("object-other:", result));
+arrowValue(0).then((result: string): void => console.log("arrow-zero:", result));
 branch(true, 2).then((result: string): void => console.log("branch-other:", result));
 branch(false, 0).then((result: string): void => console.log("branch-fallthrough:", result));
 new BranchWorker().run(true, 1).then((result: string): void => console.log("branch-method-other:", result));
