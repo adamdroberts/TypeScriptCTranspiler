@@ -27517,10 +27517,11 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        outerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitPreludeExpressionReturnContinuation | null {
         if (body.statements.length < 2) return null;
         const preludeStatements: ts.Statement[] = [];
-        const captures: AsyncAwaitContinuationParam[] = [];
+        const localCaptures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
         let ok = true;
         const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
@@ -27558,7 +27559,7 @@ class Emitter {
                     if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
                     const name = mangleIdent(decl.name.text);
                     captureSymbols.add(symbol);
-                    captures.push({
+                    localCaptures.push({
                         symbol,
                         name,
                         type,
@@ -27573,6 +27574,7 @@ class Emitter {
         if (preludeStatements.length === 0) return null;
         const tailStatements = body.statements.slice(tailStart);
         if (tailStatements.length === 0) return null;
+        const captures = [...outerCaptures, ...localCaptures];
         let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
         if (tailStatements.length === 1 && ts.isReturnStatement(tailStatements[0]!)) {
             const result = tailStatements[0]!;
@@ -28092,7 +28094,7 @@ class Emitter {
                 : this.asyncAwaitLeadingReturnContinuation(fallthroughBlock, parameters, thisValue);
             const preludeFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough
                 ? null
-                : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue);
+                : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue, captures);
             const localFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough || preludeFallthrough
                 ? null
                 : this.asyncAwaitReturnContinuation(fallthroughBlock, parameters, thisValue);
@@ -28186,7 +28188,7 @@ class Emitter {
             if (leadingContinuation) {
                 return { kind: "localLeadingReturn", continuation: leadingContinuation };
             }
-            const preludeContinuation = this.asyncAwaitPreludeExpressionReturnContinuation(stmt, parameters, thisValue);
+            const preludeContinuation = this.asyncAwaitPreludeExpressionReturnContinuation(stmt, parameters, thisValue, captures);
             if (preludeContinuation) {
                 return { kind: "localPreludeReturn", continuation: preludeContinuation };
             }
