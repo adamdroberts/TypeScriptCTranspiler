@@ -645,6 +645,12 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-reexport-external-cjs-helper": cjsPackage("tsc2c-js-reexport-external-cjs-helper", {
         "index.js": 'module.exports = { label: "js-reexport-external-cjs", compute(value) { return value * 24; } };\n',
     }),
+    "tsc2c-js-aliased-reexport-external-cjs-package": esmPackage("tsc2c-js-aliased-reexport-external-cjs-package", {
+        "index.js": 'export { compute as scale, label as title } from "tsc2c-js-aliased-reexport-external-cjs-helper";\n',
+    }),
+    "tsc2c-js-aliased-reexport-external-cjs-helper": cjsPackage("tsc2c-js-aliased-reexport-external-cjs-helper", {
+        "index.js": 'module.exports = { label: "js-aliased-reexport-external-cjs", compute(value) { return value * 25; } };\n',
+    }),
     "tsc2c-js-named-import-cjs-package": esmPackage("tsc2c-js-named-import-cjs-package", {
         "index.js": 'import { compute, label } from "./helper.cjs";\nexport const message = label + ":" + compute(3);\nexport function wrap(value) { return label + ":" + compute(value); }\n',
         "helper.cjs": 'module.exports = { label: "js-named-import-cjs", compute(value) { return value * 12; } };\n',
