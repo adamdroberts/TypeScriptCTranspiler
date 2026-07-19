@@ -36,6 +36,7 @@ export type CTypeKind =
     | "textdecoder"
     | "fsstats"
     | "fsdirent"
+    | "dispatchqueue"
     | "function"
     | "value"
     | "unsupported";
@@ -138,6 +139,7 @@ export const T_TEXT_ENCODER: CType = { kind: "textencoder", c: "tsc_text_encoder
 export const T_TEXT_DECODER: CType = { kind: "textdecoder", c: "tsc_text_decoder_t*" };
 export const T_FS_STATS: CType = { kind: "fsstats", c: "tsc_fs_stats_t*" };
 export const T_FS_DIRENT: CType = { kind: "fsdirent", c: "tsc_fs_dirent_t*" };
+export const T_DISPATCH_QUEUE: CType = { kind: "dispatchqueue", c: "tsc_dispatch_queue_t*" };
 export const T_VALUE: CType = { kind: "value", c: "tsc_value_t" };
 
 export function classType(className: string): CType {
@@ -454,6 +456,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "TextDecoder") return T_TEXT_DECODER;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
         if (sym?.getName() === "FSDirent") return T_FS_DIRENT;
+        if (sym?.getName() === "DispatchQueue") return T_DISPATCH_QUEUE;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
         if (sym?.getName() === "ProxyHandler") return T_VALUE;
         if (sym?.getName() === "SocketAddress") return T_VALUE;

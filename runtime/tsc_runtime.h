@@ -22,12 +22,24 @@ void* tsc_no_gc_malloc_uninit(size_t n);
 #  define TSC_GC_REALLOC(p, n)     realloc((p), (n))
 #  define TSC_GC_INIT()            ((void)0)
 #else
+#  if defined(TSC_THREADS) && !defined(GC_THREADS)
+#    define GC_THREADS
+#  endif
 #  include <gc/gc.h>
 #  define TSC_GC_MALLOC(n)         GC_MALLOC(n)
 #  define TSC_GC_MALLOC_UNINIT(n)  GC_MALLOC((n))
 #  define TSC_GC_MALLOC_ATOMIC(n)  GC_MALLOC_ATOMIC(n)
 #  define TSC_GC_REALLOC(p, n)     GC_REALLOC((p), (n))
 #  define TSC_GC_INIT()            GC_INIT()
+#endif
+
+/* TSC_THREADS is defined only for programs that use the optional dispatch
+ * API; without it every threading hook compiles to the plain single-threaded
+ * operation and the runtime has no pthread/libdispatch dependency. */
+#ifdef TSC_THREADS
+#  define TSC_TLS _Thread_local
+#else
+#  define TSC_TLS
 #endif
 
 /* Some libc builds don't expose M_PI by default under strict C11. */
@@ -1113,6 +1125,28 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay);
 void tsc_clear_timeout(double id);
 void tsc_drain_timeouts(void);
 void tsc_run_event_loop(void);
+
+/* ---------------- optional dispatch concurrency (TSC_THREADS) ----------------
+ * Implemented in tsc_dispatch.c, which is compiled into the program only when
+ * the emitter saw a dispatch API use. The lock/cross-post hooks below live in
+ * tsc_core.c and are no-ops (or unreachable) in single-threaded builds. */
+typedef struct tsc_dispatch_queue tsc_dispatch_queue_t;
+typedef tsc_value_t (*tsc_dispatch_task_fn_t)(void* env);
+tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label);
+tsc_dispatch_queue_t* tsc_dispatch_queue_concurrent(void);
+tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env);
+tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env);
+
+/* Global recursive lock serializing rare runtime slow paths (shape
+ * transitions, lazy singleton init, the Symbol registry) when TSC_THREADS. */
+void tsc_runtime_lock(void);
+void tsc_runtime_unlock(void);
+/* True on the thread that ran tsc_bootstrap. Always true without TSC_THREADS. */
+bool tsc_is_main_thread(void);
+/* Post promise settlement from a worker thread to the main event loop. */
+void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error);
+/* Bump/drop the count of dispatch tasks the event loop must wait for. */
+void tsc_dispatch_task_scheduled(void);
 
 /* ------------- fs (sync subset) ------------- */
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);

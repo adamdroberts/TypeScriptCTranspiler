@@ -5,7 +5,7 @@ static uint64_t g_shape_id_counter = 0;
 
 tsc_shape_t* tsc_shape_new_unique(void) {
     tsc_shape_t* s = (tsc_shape_t*)TSC_GC_MALLOC(sizeof(tsc_shape_t));
-    s->shape_id = ++g_shape_id_counter;
+    s->shape_id = TSC_ID_INC(g_shape_id_counter);
     s->parent = NULL;
     s->transition_key = NULL;
     s->transitions = NULL;
@@ -16,7 +16,7 @@ tsc_shape_t* tsc_shape_new_unique(void) {
 
 tsc_shape_t* tsc_shape_new(tsc_shape_t* parent, const tsc_str_t* key) {
     tsc_shape_t* s = (tsc_shape_t*)TSC_GC_MALLOC(sizeof(tsc_shape_t));
-    s->shape_id = ++g_shape_id_counter;
+    s->shape_id = TSC_ID_INC(g_shape_id_counter);
     s->parent = parent;
     s->transition_key = key;
     s->transitions = NULL;
@@ -41,7 +41,11 @@ void tsc_shape_add_transition(tsc_shape_t* parent, tsc_shape_t* child) {
 
 tsc_shape_t* tsc_shape_get_root(void) {
     if (!g_root_shape) {
-        g_root_shape = tsc_shape_new_unique();
+        tsc_runtime_lock();
+        if (!g_root_shape) {
+            g_root_shape = tsc_shape_new_unique();
+        }
+        tsc_runtime_unlock();
     }
     return g_root_shape;
 }
@@ -65,7 +69,7 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_typed_array = false;
     o->shape_version = 1;
     o->shape = tsc_shape_get_root();
-    o->object_id = ++g_object_id_counter;
+    o->object_id = TSC_ID_INC(g_object_id_counter);
     o->proxy_target = tsc_value_undefined();
     o->proxy_handler = tsc_value_undefined();
     o->prototype = prototype;
@@ -154,6 +158,11 @@ static void object_prototype_define_method(tsc_object_t* prototype, const char* 
 
 tsc_value_t tsc_value_object_prototype(void) {
     static tsc_object_t* prototype = NULL;
+    /* No unlocked fast path: the method definitions below re-enter this
+     * getter through tsc_object_new, so `prototype` must be published before
+     * they run. The recursive runtime lock (no-op without TSC_THREADS) keeps
+     * other threads from observing the partially built prototype. */
+    tsc_runtime_lock();
     if (!prototype) {
         prototype = tsc_object_alloc(tsc_value_null());
         object_prototype_define_method(prototype, "hasOwnProperty", 14, 1.0, object_prototype_has_own_property);
@@ -163,6 +172,7 @@ tsc_value_t tsc_value_object_prototype(void) {
         object_prototype_define_method(prototype, "toString", 8, 0.0, object_prototype_to_string);
         object_prototype_define_method(prototype, "valueOf", 7, 0.0, object_prototype_value_of);
     }
+    tsc_runtime_unlock();
     return tsc_value_object(prototype);
 }
 
@@ -233,6 +243,10 @@ static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_
         if (!o->shape) {
             o->shape = tsc_shape_get_root();
         }
+        /* The transition tree is shared across all objects; serialize the
+         * walk-and-append so TSC_THREADS builds never observe a partially
+         * grown transitions array. */
+        tsc_runtime_lock();
         tsc_shape_t* next_shape = NULL;
         for (size_t i = 0; i < o->shape->transitions_len; i++) {
             const tsc_str_t* transition_key = o->shape->transitions[i]->transition_key;
@@ -246,6 +260,7 @@ static void object_shape_changed(tsc_object_t* o, const char* action, const tsc_
             tsc_shape_add_transition(o->shape, next_shape);
         }
         o->shape = next_shape;
+        tsc_runtime_unlock();
     } else {
         o->shape = tsc_shape_new_unique();
     }

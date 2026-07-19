@@ -120,6 +120,7 @@ static void array_constructor_define_method(tsc_value_t constructor, const char*
 }
 
 tsc_value_t tsc_array_constructor_value(void) {
+    tsc_runtime_lock();
     if (!array_constructor_initialized) {
         array_constructor_value = tsc_value_function_generic_named(
             array_constructor_generic,
@@ -147,6 +148,7 @@ tsc_value_t tsc_array_constructor_value(void) {
         array_constructor_initialized = true;
     }
     if (array_prototype_initializing) {
+        tsc_runtime_unlock();
         return array_constructor_value;
     }
     if (array_prototype_initialized) {
@@ -158,6 +160,7 @@ tsc_value_t tsc_array_constructor_value(void) {
     } else if (!array_prototype_initializing) {
         (void)tsc_array_prototype();
     }
+    tsc_runtime_unlock();
     return array_constructor_value;
 }
 
@@ -924,6 +927,7 @@ static void array_unscopables_define(tsc_object_t* object, const char* name, siz
 }
 
 tsc_value_t tsc_array_unscopables_value(void) {
+    tsc_runtime_lock();
     if (!array_unscopables_initialized) {
         tsc_object_t* object = tsc_object_new();
         object->prototype = tsc_value_null();
@@ -946,6 +950,7 @@ tsc_value_t tsc_array_unscopables_value(void) {
         array_unscopables_value = tsc_value_object(object);
         array_unscopables_initialized = true;
     }
+    tsc_runtime_unlock();
     return array_unscopables_value;
 }
 
@@ -1092,6 +1097,7 @@ tsc_value_t tsc_array_symbol_unscopables_descriptor(void) {
 static tsc_value_t tsc_array_default_prototype(void) {
     static bool initialized = false;
     static tsc_value_t prototype;
+    tsc_runtime_lock();
     if (!initialized) {
         array_prototype_initializing = true;
         tsc_array_t* proto = (tsc_array_t*)TSC_GC_MALLOC(sizeof(tsc_array_t));
@@ -1172,6 +1178,7 @@ static tsc_value_t tsc_array_default_prototype(void) {
         array_prototype_initializing = false;
         initialized = true;
     }
+    tsc_runtime_unlock();
     return prototype;
 }
 

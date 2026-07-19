@@ -76,6 +76,7 @@ const RUNTIME_SOURCES = [
     "tsc_promise.c"
 ];
 const NODE_EMBED_RUNTIME_SOURCES = ["tsc_node_embed.cc"];
+const DISPATCH_RUNTIME_SOURCES = ["tsc_dispatch.c"];
 const RUNTIME_HEADERS = ["tsc_runtime.h", "tsc_internal.h"];
 const execFileAsync = promisify(execFile);
 const DYNAMIC_REQUIRE_AOT_MESSAGE =
@@ -345,6 +346,32 @@ function isGlobalEvalOrFunctionValueReference(node: ts.Identifier, checker: ts.T
     if (!sym) return true;
     const source = node.getSourceFile();
     return !(sym.declarations ?? []).some((decl) => decl.getSourceFile() === source);
+}
+
+interface DispatchLinkOptions {
+    includeDir: string;
+    libDir: string;
+}
+
+/** Locate an installed libdispatch (swift-corelibs-libdispatch). Honors
+ *  TSC2C_LIBDISPATCH_PREFIX, then falls back to conventional prefixes. */
+export function findDispatchLinkOptions(): DispatchLinkOptions | null {
+    const prefixes = process.env.TSC2C_LIBDISPATCH_PREFIX
+        ? [process.env.TSC2C_LIBDISPATCH_PREFIX]
+        : ["/usr/local", "/usr"];
+    for (const prefix of prefixes) {
+        const includeDir = path.join(prefix, "include");
+        if (!fsSync.existsSync(path.join(includeDir, "dispatch", "dispatch.h"))) continue;
+        for (const libDir of [path.join(prefix, "lib"), path.join(prefix, "lib64"), path.join(prefix, "lib", "x86_64-linux-gnu")]) {
+            if (
+                fsSync.existsSync(path.join(libDir, "libdispatch.so")) ||
+                fsSync.existsSync(path.join(libDir, "libdispatch.a"))
+            ) {
+                return { includeDir, libDir };
+            }
+        }
+    }
+    return null;
 }
 
 interface NodeEmbedLinkOptions {
@@ -681,7 +708,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         console.error(`[tsc2c] topo: ${graph.topoOrder.join(" -> ")}`);
     }
 
-    const { mainC, diagnostics } = emitProgram(graph, checker, {
+    const { mainC, diagnostics, usesDispatch } = emitProgram(graph, checker, {
         nativeAddons,
         dynamicRequires,
         runtimeCode,
@@ -691,14 +718,22 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
     }
+    if (usesDispatch && opts.noGc) {
+        process.stderr.write(
+            "tsc2c: the dispatch API is not supported with --no-gc (the no-GC arena allocator is not thread-safe)\n",
+        );
+        return { exitCode: 3, buildDir, mainC: "" };
+    }
     const mainPath = path.join(buildDir, "main.c");
     await fs.writeFile(mainPath, mainC, "utf8");
     if (opts.verbose) console.error(`[tsc2c] wrote ${mainPath}`);
 
     const runtimeSrc = path.join(pkg, "runtime");
-    const runtimeSources = usesNodeEmbed
-        ? [...RUNTIME_SOURCES, ...NODE_EMBED_RUNTIME_SOURCES]
-        : RUNTIME_SOURCES;
+    const runtimeSources = [
+        ...RUNTIME_SOURCES,
+        ...(usesNodeEmbed ? NODE_EMBED_RUNTIME_SOURCES : []),
+        ...(usesDispatch ? DISPATCH_RUNTIME_SOURCES : []),
+    ];
     for (const f of runtimeSources) {
         await fs.copyFile(path.join(runtimeSrc, f), path.join(buildDir, f));
     }
@@ -712,6 +747,17 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
 
     const pcFlags = await pcre2Flags();
+    const dispatchLink = usesDispatch ? findDispatchLinkOptions() : null;
+    if (usesDispatch && !dispatchLink) {
+        process.stderr.write(
+            "tsc2c: this program uses the dispatch API, which requires libdispatch (swift-corelibs-libdispatch).\n" +
+            "tsc2c: install it (build https://github.com/swiftlang/swift-corelibs-libdispatch with clang+cmake,\n" +
+            "tsc2c: then `ninja install`), or point TSC2C_LIBDISPATCH_PREFIX at an install prefix containing\n" +
+            "tsc2c: include/dispatch/dispatch.h and lib/libdispatch.so.\n",
+        );
+        if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
+        return { exitCode: 3, buildDir, mainC };
+    }
     const nodeEmbed = usesNodeEmbed ? findNodeEmbedLinkOptions() : null;
     if (usesNodeEmbed && !nodeEmbed) {
         process.stderr.write(
@@ -733,10 +779,14 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             ...(opts.noGc ? ["-DTSC_NO_GC"] : []),
             ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL"] : []),
             ...(usesNodeEmbed ? ["-DTSC_HAS_LIBNODE"] : []),
+            ...(dispatchLink ? ["-DTSC_THREADS", "-pthread", `-I${dispatchLink.includeDir}`] : []),
             ...pcFlags.compileFlags,
         ],
         linkFlags: [
             ...pcFlags.linkFlags,
+            ...(dispatchLink
+                ? [`-L${dispatchLink.libDir}`, "-ldispatch", `-Wl,-rpath,${dispatchLink.libDir}`]
+                : []),
             ...(nodeEmbed
                 ? [nodeEmbed.libnode, ...(nodeEmbed.rpath ? [`-Wl,-rpath,${nodeEmbed.rpath}`] : [])]
                 : []),

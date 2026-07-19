@@ -1,0 +1,2 @@
+caught: Error: boom in sync
+rejected: Error: boom in async

@@ -337,13 +337,31 @@ static inline uint64_t fnv1a64(const unsigned char* p, size_t len) {
     return h;
 }
 
+/* Monotonic id allocation: atomic only in TSC_THREADS builds. */
+#ifdef TSC_THREADS
+#  define TSC_ID_INC(counter) __atomic_add_fetch(&(counter), 1, __ATOMIC_RELAXED)
+#else
+#  define TSC_ID_INC(counter) (++(counter))
+#endif
+
 static inline uint64_t tsc_str_cached_hash(const tsc_str_t* s) {
+#ifdef TSC_THREADS
+    /* The cached hash is idempotent, so racing writers all store the same
+     * value; relaxed atomics just keep the load/store untorn. */
+    uint64_t h = __atomic_load_n(&((tsc_str_t*)s)->hash, __ATOMIC_RELAXED);
+    if (h != 0) return h;
+    h = fnv1a64((const unsigned char*)s->data, s->len);
+    if (h == 0) h = 1;
+    __atomic_store_n(&((tsc_str_t*)s)->hash, h, __ATOMIC_RELAXED);
+    return h;
+#else
     uint64_t h = s->hash;
     if (h != 0) return h;
     h = fnv1a64((const unsigned char*)s->data, s->len);
     if (h == 0) h = 1;
     ((tsc_str_t*)s)->hash = h;
     return h;
+#endif
 }
 
 static inline uint64_t num_hash(double x) {
