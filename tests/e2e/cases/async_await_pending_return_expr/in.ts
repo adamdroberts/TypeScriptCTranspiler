@@ -684,6 +684,42 @@ async function conditionalLeadingChainFinalPostAwait(flag: boolean, prefix: stri
     return result + ":" + marker;
 }
 
+class ConditionalLeadingChainFinalPostAwaitMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(flag: boolean): Promise<string> {
+        const first = await delay(1403, this.prefix + "first");
+        let result = first;
+        let marker = "initial";
+        if (flag) {
+            result = await delay(1404, first + ":true");
+            marker = marker + "|true-final";
+        } else {
+            result = await delay(1405, first + ":false");
+            marker = marker + "|false-final";
+        }
+        return this.prefix + result + ":" + marker;
+    }
+}
+
+const conditionalLeadingChainFinalPostAwaitValue = async function(flag: boolean, prefix: string): Promise<string> {
+    const first = await delay(1406, prefix + "first");
+    let result = first;
+    let marker = "initial";
+    if (flag) {
+        result = await delay(1407, first + ":true");
+        marker = marker + "|true-final";
+    } else {
+        result = await delay(1408, first + ":false");
+        marker = marker + "|false-final";
+    }
+    return prefix + result + ":" + marker;
+};
+
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
     const first = await delay(324, "one");
     const ignored = await delay(325);
@@ -2487,6 +2523,19 @@ conditionalLeadingChainFinalPostAwait(true, "final-").then((value: string): void
 });
 conditionalLeadingChainFinalPostAwait(false, "final-").then((value: string): void => {
     console.log("conditional-leading-chain-final-post-await-false:", value);
+});
+const conditionalLeadingChainFinalPostAwaitMethodInstance = new ConditionalLeadingChainFinalPostAwaitMethod("method-final-");
+conditionalLeadingChainFinalPostAwaitMethodInstance.run(true).then((value: string): void => {
+    console.log("conditional-leading-chain-final-post-await-method-true:", value);
+});
+conditionalLeadingChainFinalPostAwaitMethodInstance.run(false).then((value: string): void => {
+    console.log("conditional-leading-chain-final-post-await-method-false:", value);
+});
+conditionalLeadingChainFinalPostAwaitValue(true, "value-final-").then((value: string): void => {
+    console.log("conditional-leading-chain-final-post-await-value-true:", value);
+});
+conditionalLeadingChainFinalPostAwaitValue(false, "value-final-").then((value: string): void => {
+    console.log("conditional-leading-chain-final-post-await-value-false:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

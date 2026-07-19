@@ -27,7 +27,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Conditional leading await steps now allow branch-local awaited declarations used only as sequencing points. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now accept mixed bare-await and branch-local declaration arms when both values are used only for sequencing. Test: `async_await_pending_return_expr`.
 - Conditional leading await steps now preserve bounded await-free post-await statements in both direct arms before the next suspension. Test: `async_await_pending_return_expr`.
-- Conditional leading await steps now preserve bounded await-free post-await statements in the final conditional step before return. Test: `async_await_pending_return_expr`.
+- Conditional leading await steps now preserve bounded await-free post-await statements in the final conditional step before return across async declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
 - Source `try` / `catch` now preserves bounded leading multi-await chains in the try block across async declarations, class methods, and function values, including receiver capture, pending rejection handoff into the catch continuation, and bounded catch rethrows. Test: `async_await_pending_return_expr`.
 - Await-free direct-`return await` preludes now preserve simple catch bindings before the awaited source. Test: `async_await_interstitial_expression`.
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`.

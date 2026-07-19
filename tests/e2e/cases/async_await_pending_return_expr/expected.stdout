@@ -329,3 +329,7 @@ method-leading-void-six-await: method-one:class-method-void-six-method-one:metho
 arrow-leading-void-six-await: arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three:arrow-one:value-arrow-one:arrow-one:value-arrow-one-three-four-five!
 conditional-leading-chain-final-post-await-true: final-first:true:initial|true-final
 conditional-leading-chain-final-post-await-false: final-first:false:initial|false-final
+conditional-leading-chain-final-post-await-method-true: method-final-method-final-first:true:initial|true-final
+conditional-leading-chain-final-post-await-method-false: method-final-method-final-first:false:initial|false-final
+conditional-leading-chain-final-post-await-value-true: value-final-value-final-first:true:initial|true-final
+conditional-leading-chain-final-post-await-value-false: value-final-value-final-first:false:initial|false-final
