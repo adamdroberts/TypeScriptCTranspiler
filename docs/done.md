@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript ESM packages loaded through `allowJs` can namespace-re-export finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_namespace_reexport_external_cjs`
 - Pure JavaScript ESM packages loaded through `allowJs` can aliased-re-export finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_aliased_reexport_external_cjs`
 - Pure JavaScript ESM packages loaded through `allowJs` can re-export finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_reexport_external_cjs`
 - Pure JavaScript ESM packages loaded through `allowJs` can namespace-import finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_namespace_import_external_cjs`
