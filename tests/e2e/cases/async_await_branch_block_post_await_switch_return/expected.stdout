@@ -1,0 +1,6 @@
+branch-block-post-await-switch-true-a: fn-branch-a
+branch-block-post-await-switch-false-default: fn-else-default
+method-branch-block-post-await-switch-true-default: this-method-branch-default
+method-branch-block-post-await-switch-false-b: this-method-else-b
+value-branch-block-post-await-switch-true-a: arrow-value-branch-a
+value-branch-block-post-await-switch-false-default: arrow-value-else-default
