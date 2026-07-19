@@ -9,6 +9,9 @@ const fromSticky = require("./rx_sticky_" + new RegExp("a", "y").sticky);
 const fromIndices = require("./rx_indices_" + new RegExp("a", "d").hasIndices);
 const fromString = require("./" + new RegExp("x/y", "m").toString().replace("/x\\/y/m", "string"));
 const fromLocale = require("./" + (/cat/i).toLocaleString().replace("/cat/i", "locale"));
+const fromTestTrue = require("./rx_test_" + (/a+/.test("baad")));
+const fromTestFalse = require("./rx_test_" + new RegExp("^z+$").test("abc"));
+const fromGlobalTest = require("./rx_test_global_" + new RegExp("a", "g").test("ba"));
 
 console.log(
     fromSource.label,
@@ -22,4 +25,7 @@ console.log(
     fromIndices.label,
     fromString.label,
     fromLocale.label,
+    fromTestTrue.label,
+    fromTestFalse.label,
+    fromGlobalTest.label,
 );
