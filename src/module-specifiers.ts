@@ -36,6 +36,37 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return dedupe(out);
     };
 
+    const isNamedImportIdentifier = (
+        id: ts.Identifier,
+        moduleNames: readonly string[],
+        exportedName: string,
+    ): boolean => {
+        const sourceFile = id.getSourceFile();
+        for (const stmt of sourceFile.statements) {
+            if (!ts.isImportDeclaration(stmt)) continue;
+            if (!ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+            if (!moduleNames.includes(stmt.moduleSpecifier.text)) continue;
+            const bindings = stmt.importClause?.namedBindings;
+            if (!bindings || !ts.isNamedImports(bindings)) continue;
+            for (const element of bindings.elements) {
+                const importedName = element.propertyName?.text ?? element.name.text;
+                if (importedName === exportedName && element.name.text === id.text) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const isStaticUrlConstructorIdentifier = (id: ts.Identifier): boolean => {
+        return id.text === "URL" || isNamedImportIdentifier(id, ["url", "node:url"], "URL");
+    };
+
+    const isStaticUrlSearchParamsConstructorIdentifier = (id: ts.Identifier): boolean => {
+        return id.text === "URLSearchParams" ||
+            isNamedImportIdentifier(id, ["url", "node:url"], "URLSearchParams");
+    };
+
     const resolve = (node: ts.Expression): string[] => {
         while (
             ts.isParenthesizedExpression(node) ||
@@ -913,7 +944,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "canParse") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "URL") return [];
+        if (!ts.isIdentifier(target) || !isStaticUrlConstructorIdentifier(target)) return [];
 
         const inputs = resolve(call.arguments[0]!);
         if (inputs.length === 0) return [];
@@ -947,7 +978,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
         if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
         const target = unwrapStaticExpression(current.expression);
-        if (!ts.isIdentifier(target) || target.text !== "URL") return [];
+        if (!ts.isIdentifier(target) || !isStaticUrlConstructorIdentifier(target)) return [];
         const args = current.arguments ?? [];
         if (args.length < 1 || args.length > 2) return [];
         if (args.length === 2 && isStaticUndefinedExpression(args[1]!)) return [];
@@ -4588,7 +4619,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const source = unwrapStaticExpression(expr);
         if (ts.isNewExpression(source)) {
             const ctor = unwrapStaticExpression(source.expression);
-            if (!ts.isIdentifier(ctor) || ctor.text !== "URLSearchParams") return [];
+            if (!ts.isIdentifier(ctor) || !isStaticUrlSearchParamsConstructorIdentifier(ctor)) return [];
             if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
             const arg = source.arguments?.[0];
             return !arg || isStaticUndefinedExpression(arg) ? [""] : resolve(arg);
