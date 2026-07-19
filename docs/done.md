@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript ESM package barrels loaded through `allowJs` can expose default-forwarded package-local CommonJS object-literal helpers to named default imports. Test: `node_modules_js_named_default_forward_cjs`
 - Pure JavaScript ESM package namespace imports loaded through `allowJs` can read and call finite members through default-forwarded package-local CommonJS object-literal helpers. Test: `node_modules_js_package_namespace_default_forward_cjs`
 - Pure JavaScript ESM package barrels loaded through `allowJs` can forward package-local CommonJS object-literal helpers as the package default export for default imports. Test: `node_modules_js_default_forward_cjs`
 - Pure JavaScript ESM package namespace imports loaded through `allowJs` can read and call finite members through default re-exports from package-local CommonJS object-literal helpers. Test: `node_modules_js_package_namespace_default_re_export_cjs`
