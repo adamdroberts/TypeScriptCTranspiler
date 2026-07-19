@@ -1,0 +1,6 @@
+branch-block-post-await-try-true-ok: fn-branch-ok-F
+branch-block-post-await-try-false-catch: caught-fn-else-bad-f
+method-branch-block-post-await-try-true-catch: caught-this-method-branch-bad-M
+method-branch-block-post-await-try-false-ok: this-method-else-ok-m
+value-branch-block-post-await-try-true-ok: arrow-value-branch-ok-V
+value-branch-block-post-await-try-false-catch: caught-arrow-value-else-bad-v
