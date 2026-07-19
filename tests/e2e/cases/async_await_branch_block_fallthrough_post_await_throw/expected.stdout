@@ -1,0 +1,6 @@
+branch-fallthrough-post-await-throw-fn-ok: fn-branch-ok
+branch-fallthrough-post-await-throw-fn: fn-fall-bad
+branch-fallthrough-post-await-throw-method-ok: this-method-ok
+branch-fallthrough-post-await-throw-method: this-method-bad
+branch-fallthrough-post-await-throw-value-ok: arrow-value-ok
+branch-fallthrough-post-await-throw-value: arrow-value-bad

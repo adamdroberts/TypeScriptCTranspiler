@@ -28093,6 +28093,9 @@ class Emitter {
             const preludeFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough
                 ? null
                 : this.asyncAwaitPreludeExpressionReturnContinuation(fallthroughBlock, parameters, thisValue);
+            const localFallthrough = tryCatchFinallyFallthrough || tryCatchFallthrough || tryFinallyFallthrough || leadingFallthrough || preludeFallthrough
+                ? null
+                : this.asyncAwaitReturnContinuation(fallthroughBlock, parameters, thisValue);
             let fallthrough: AsyncAwaitIfExpressionReturnNode | null = null;
             if (tryCatchFinallyFallthrough) {
                 fallthrough = { kind: "localTryCatchFinallyReturn", continuation: tryCatchFinallyFallthrough };
@@ -28104,6 +28107,8 @@ class Emitter {
                 fallthrough = { kind: "localLeadingReturn", continuation: leadingFallthrough };
             } else if (preludeFallthrough) {
                 fallthrough = { kind: "localPreludeReturn", continuation: preludeFallthrough };
+            } else if (localFallthrough) {
+                fallthrough = { kind: "localReturn", continuation: localFallthrough };
             } else {
                 fallthrough = this.asyncAwaitIfExpressionReturnBranchFromStatements(
                     fallthroughStatements,
