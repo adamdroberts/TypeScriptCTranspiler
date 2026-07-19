@@ -6,6 +6,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 
 ---
 
+- Pure JavaScript ESM packages loaded through `allowJs` can expose default-forwarded external CommonJS object-literal package dependencies to named default imports through the AOT module graph. Test: `node_modules_js_named_default_forward_external_cjs`
 - Pure JavaScript ESM packages loaded through `allowJs` can default-forward external CommonJS object-literal package dependencies as the package default export through the AOT module graph. Test: `node_modules_js_default_forward_external_cjs`
 - Pure JavaScript ESM packages loaded through `allowJs` can default-re-export external CommonJS object-literal package dependencies as named bindings through the AOT module graph. Test: `node_modules_js_default_reexport_external_cjs`
 - Pure JavaScript ESM packages loaded through `allowJs` can export-star finite members from external CommonJS object-literal package dependencies through the AOT module graph. Test: `node_modules_js_export_star_external_cjs`
