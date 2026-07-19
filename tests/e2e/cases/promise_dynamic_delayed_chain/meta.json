@@ -1,0 +1,3 @@
+{
+  "description": "Dynamic Promise catch/finally chains drain after delayed async object-method rejection"
+}
