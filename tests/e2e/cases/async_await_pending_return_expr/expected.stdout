@@ -1,5 +1,6 @@
 direct-assignment-init-trace: fn-init|this-method-init|value-arrow-init|
 branch-conditional-leading-chain-fallthrough: branch-fallthrough
+branch-six-leaf-conditional-leading-chain-fallthrough: branch-six-fallthrough
 branch-mixed-inline-await-return-sync: fn-branch-mixed-sync!
 branch-conditional-inline-await-return-sync: fn-branch-conditional-sync!
 conditional-mixed-inline-await-return-sync: fn-conditional-mixed-sync!
@@ -402,3 +403,9 @@ six-leaf-conditional-leading-chain-value-two: value-six-value-six-two-one:value-
 six-leaf-conditional-leading-chain-value-three: value-six-value-six-three-one:value-six-three-one:initial|three-pre|three-post:initial|three-pre|three-post
 six-leaf-conditional-leading-chain-value-four: value-six-value-six-four-one:value-six-four-one:initial|four-pre|four-post:initial|four-pre|four-post
 six-leaf-conditional-leading-chain-value-other: value-six-value-six-other-one:value-six-other-one:initial|other-pre|other-post:initial|other-pre|other-post
+branch-six-leaf-conditional-leading-chain-zero: branch-six-zero-one:branch-six-zero-one:initial|zero-pre|zero-post:initial|zero-pre|zero-post
+branch-six-leaf-conditional-leading-chain-one: branch-six-one-one:branch-six-one-one:initial|one-pre|one-post:initial|one-pre|one-post
+branch-six-leaf-conditional-leading-chain-two: branch-six-two-one:branch-six-two-one:initial|two-pre|two-post:initial|two-pre|two-post
+branch-six-leaf-conditional-leading-chain-three: branch-six-three-one:branch-six-three-one:initial|three-pre|three-post:initial|three-pre|three-post
+branch-six-leaf-conditional-leading-chain-four: branch-six-four-one:branch-six-four-one:initial|four-pre|four-post:initial|four-pre|four-post
+branch-six-leaf-conditional-leading-chain-other: branch-six-other-one:branch-six-other-one:initial|other-pre|other-post:initial|other-pre|other-post
