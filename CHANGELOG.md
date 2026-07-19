@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail direct `return await` prelude coverage already tracked by `async_await_branch_block_return_await_fallthrough`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block fallthrough-tail terminal post-`await` throw coverage already tracked by `async_await_branch_block_fallthrough_post_await_throw`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block source `try` / `catch` / `finally` fallthrough-tail coverage already tracked by `async_await_branch_block_source_try_fallthrough`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block long leading awaited-local chain coverage already tracked by `async_await_branch_block_leading_chain_return`.
@@ -20,6 +21,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block direct `return await` continuation coverage now proves fallthrough-tail prelude locals are preserved across async declarations, class methods, and async function values. Test: `async_await_branch_block_return_await_fallthrough`.
 - Async branch-block pending-`await` continuation lowering now recognizes fallthrough tails shaped as awaited-local continuations ending in terminal post-await `throw` across async declarations, class methods, and async function values. Test: `async_await_branch_block_fallthrough_post_await_throw`.
 - Async branch-block pending-`await` continuation lowering now recognizes source `try` / `catch`, `try` / `finally`, and `try` / `catch` / `finally` awaited returns in fallthrough tails across async declarations, class methods, and async function values. Test: `async_await_branch_block_source_try_fallthrough`.
 - Async branch-block pending-`await` continuation lowering now recognizes long leading awaited-local chains in fallthrough tails across async declarations, class methods, and async function values. Test: `async_await_branch_block_leading_chain_return`.
