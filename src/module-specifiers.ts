@@ -202,6 +202,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (integrityPredicateText.length > 0) return integrityPredicateText;
             const dateText = resolveStaticDateCall(node);
             if (dateText.length > 0) return dateText;
+            const dateInstanceText = resolveStaticDateInstanceCall(node);
+            if (dateInstanceText.length > 0) return dateInstanceText;
             const mathText = resolveStaticMathCall(node);
             if (mathText.length > 0) return mathText;
             const pathText = resolvePathCall(node);
@@ -2792,6 +2794,67 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
             if (!Number.isFinite(stamp)) return [];
             out.push(String(stamp));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return dedupe(out);
+    };
+
+    const isStaticDateStringExpression = (expr: ts.Expression): boolean => {
+        const current = unwrapStaticExpression(expr);
+        if (ts.isStringLiteralLike(current) || ts.isNoSubstitutionTemplateLiteral(current) || ts.isTemplateExpression(current)) {
+            return true;
+        }
+        if (!ts.isIdentifier(current)) return false;
+        const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+        if (!decl?.initializer || seen.has(decl)) return false;
+        seen.add(decl);
+        const value = isStaticDateStringExpression(decl.initializer);
+        seen.delete(decl);
+        return value;
+    };
+
+    const resolveStaticDateRecords = (expr: ts.Expression): Date[] => {
+        const current = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(current)) {
+            const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveStaticDateRecords(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
+        if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
+        const target = unwrapStaticExpression(current.expression);
+        if (!ts.isIdentifier(target) || target.text !== "Date") return [];
+        const args = current.arguments ?? [];
+        if (args.length !== 1) return [];
+
+        const stamps = isStaticDateStringExpression(args[0]!)
+            ? resolve(args[0]!).map((value) => Date.parse(value))
+            : resolveStaticNumberValues(args[0]!);
+        if (stamps.length === 0 || stamps.some((stamp) => !Number.isFinite(stamp))) return [];
+
+        const out: Date[] = [];
+        for (const stamp of stamps) {
+            out.push(new Date(stamp));
+            if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+        }
+        return out;
+    };
+
+    const resolveStaticDateInstanceCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "getTime" && method !== "valueOf" && method !== "toISOString" && method !== "toJSON") return [];
+        const dates = resolveStaticDateRecords(callee.expression);
+        if (dates.length === 0) return [];
+        const out: string[] = [];
+        for (const date of dates) {
+            const stamp = date.getTime();
+            if (!Number.isFinite(stamp)) return [];
+            out.push(method === "getTime" || method === "valueOf" ? String(stamp) : date.toISOString());
             if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
         }
         return dedupe(out);
