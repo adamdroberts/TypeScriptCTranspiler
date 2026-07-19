@@ -16,6 +16,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Named async function-expression values now have focused coverage for awaited-local, branch, and leading continuation routing. Test: `async_await_named_function_values`.
 - Block-bodied async arrow function value coverage now proves awaited-local, branch-block, leading-awaited-chain, and prelude-local continuations resume through the async function-value lowering path. Test: `async_await_arrow_block_value_continuation`.
 - Dynamic Promise combinator coverage now proves `Promise.all`, `race`, `any`, and `allSettled` assimilate delayed nested thenables from custom iterable class inputs that inherit their `[Symbol.iterator]` method. Test: `promise_thenable_async_combinator_inherited_iterable_recursive`.
 - Async branch-block direct `return await` continuation lowering now preserves branch-local prelude locals across async declarations, class methods, and async function values. Test: `async_await_branch_block_return_await_prelude`.
