@@ -1,0 +1,6 @@
+declaration-throw: declaration-finally 
+declaration-catch: declaration-caught-declaration-bad d
+method-throw: method-finally d
+method-catch: method-caught-method-bad dm
+value-throw: value-finally dm
+value-catch: value-caught-value-bad dmv
