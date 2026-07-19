@@ -26618,7 +26618,9 @@ class Emitter {
     ): AsyncAwaitReturnContinuation | null {
         if (body.statements.length < 2) return null;
         const result = body.statements[body.statements.length - 1]!;
-        if (!ts.isReturnStatement(result)) return null;
+        const terminalSwitch = ts.isSwitchStatement(result) ? result : null;
+        if (!ts.isReturnStatement(result) && !terminalSwitch) return null;
+        if (terminalSwitch && !this.switchStatementAlwaysExits(terminalSwitch)) return null;
         const prelude = this.asyncAwaitBodyPreludeBefore(body, (stmt) => !!this.awaitedContinuationStep(stmt));
         if (!prelude) return null;
         const declarationIndex = prelude.nextIndex;
@@ -26633,11 +26635,14 @@ class Emitter {
         ));
         if (sourceType.kind !== "promise") return null;
         const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures];
-        const postAwaitStatements = body.statements.slice(declarationIndex + 1, -1);
+        const postAwaitStatements = terminalSwitch
+            ? body.statements.slice(declarationIndex + 1)
+            : body.statements.slice(declarationIndex + 1, -1);
+        const returnExpr = ts.isReturnStatement(result) ? result.expression ?? null : null;
         const referenced = this.asyncAwaitContinuationReferences(
             awaited.variable,
             postAwaitStatements,
-            result.expression ?? null,
+            returnExpr,
             params,
             thisValue,
         );
@@ -26647,7 +26652,7 @@ class Emitter {
             variable: awaited.variable,
             awaitExpr: awaited.awaitExpr,
             postAwaitStatements,
-            returnExpr: result.expression ?? null,
+            returnExpr,
             params: referenced.params,
             thisValue: referenced.usesThis ? thisValue : null,
             usesAwaited: referenced.usesAwaited,
