@@ -345,3 +345,15 @@ deeply-nested-conditional-leading-chain-value-zero: value-deep-value-deep-zero-o
 deeply-nested-conditional-leading-chain-value-one: value-deep-value-deep-one-one:value-deep-one-one:two
 deeply-nested-conditional-leading-chain-value-two: value-deep-value-deep-two-one:value-deep-two-one:two
 deeply-nested-conditional-leading-chain-value-other: value-deep-value-deep-other-one:value-deep-other-one:two
+deeply-nested-conditional-leading-post-await-zero: deep-post-zero-one:deep-post-zero-one:initial|zero:initial|zero
+deeply-nested-conditional-leading-post-await-one: deep-post-one-one:deep-post-one-one:initial|one:initial|one
+deeply-nested-conditional-leading-post-await-two: deep-post-two-one:deep-post-two-one:initial|two:initial|two
+deeply-nested-conditional-leading-post-await-other: deep-post-other-one:deep-post-other-one:initial|other:initial|other
+deeply-nested-conditional-leading-post-await-method-zero: method-deep-post-method-deep-post-zero-one:method-deep-post-zero-one:initial|zero:initial|zero
+deeply-nested-conditional-leading-post-await-method-one: method-deep-post-method-deep-post-one-one:method-deep-post-one-one:initial|one:initial|one
+deeply-nested-conditional-leading-post-await-method-two: method-deep-post-method-deep-post-two-one:method-deep-post-two-one:initial|two:initial|two
+deeply-nested-conditional-leading-post-await-method-other: method-deep-post-method-deep-post-other-one:method-deep-post-other-one:initial|other:initial|other
+deeply-nested-conditional-leading-post-await-value-zero: value-deep-post-value-deep-post-zero-one:value-deep-post-zero-one:initial|zero:initial|zero
+deeply-nested-conditional-leading-post-await-value-one: value-deep-post-value-deep-post-one-one:value-deep-post-one-one:initial|one:initial|one
+deeply-nested-conditional-leading-post-await-value-two: value-deep-post-value-deep-post-two-one:value-deep-post-two-one:initial|two:initial|two
+deeply-nested-conditional-leading-post-await-value-other: value-deep-post-value-deep-post-other-one:value-deep-post-other-one:initial|other:initial|other

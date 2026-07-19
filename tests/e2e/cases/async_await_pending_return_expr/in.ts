@@ -639,6 +639,74 @@ const deeplyNestedConditionalLeadingChainValue = async function(kind: number, pr
     return prefix + first + ":" + second;
 };
 
+async function deeplyNestedConditionalLeadingPostAwait(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (kind === 0) {
+        first = await delay(1450, prefix + "zero-one");
+        marker = marker + "|zero";
+    } else if (kind === 1) {
+        first = await delay(1451, prefix + "one-one");
+        marker = marker + "|one";
+    } else if (kind === 2) {
+        first = await delay(1452, prefix + "two-one");
+        marker = marker + "|two";
+    } else {
+        first = await delay(1453, prefix + "other-one");
+        marker = marker + "|other";
+    }
+    const second = await delay(1454, first + ":" + marker);
+    return first + ":" + second + ":" + marker;
+}
+
+class DeeplyNestedConditionalLeadingPostAwaitMethod {
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async run(kind: number): Promise<string> {
+        let first = this.prefix + "seed";
+        let marker = "initial";
+        if (kind === 0) {
+            first = await delay(1455, this.prefix + "zero-one");
+            marker = marker + "|zero";
+        } else if (kind === 1) {
+            first = await delay(1456, this.prefix + "one-one");
+            marker = marker + "|one";
+        } else if (kind === 2) {
+            first = await delay(1457, this.prefix + "two-one");
+            marker = marker + "|two";
+        } else {
+            first = await delay(1458, this.prefix + "other-one");
+            marker = marker + "|other";
+        }
+        const second = await delay(1459, first + ":" + marker);
+        return this.prefix + first + ":" + second + ":" + marker;
+    }
+}
+
+const deeplyNestedConditionalLeadingPostAwaitValue = async function(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    let marker = "initial";
+    if (kind === 0) {
+        first = await delay(1460, prefix + "zero-one");
+        marker = marker + "|zero";
+    } else if (kind === 1) {
+        first = await delay(1461, prefix + "one-one");
+        marker = marker + "|one";
+    } else if (kind === 2) {
+        first = await delay(1462, prefix + "two-one");
+        marker = marker + "|two";
+    } else {
+        first = await delay(1463, prefix + "other-one");
+        marker = marker + "|other";
+    }
+    const second = await delay(1464, first + ":" + marker);
+    return prefix + first + ":" + second + ":" + marker;
+};
+
 async function conditionalLeadingChainArmPrelude(flag: boolean, prefix: string): Promise<string> {
     let first = prefix + "seed";
     let marker = "initial";
@@ -2626,6 +2694,43 @@ deeplyNestedConditionalLeadingChainValue(2, "value-deep-").then((value: string):
 });
 deeplyNestedConditionalLeadingChainValue(3, "value-deep-").then((value: string): void => {
     console.log("deeply-nested-conditional-leading-chain-value-other:", value);
+});
+deeplyNestedConditionalLeadingPostAwait(0, "deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-zero:", value);
+});
+deeplyNestedConditionalLeadingPostAwait(1, "deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-one:", value);
+});
+deeplyNestedConditionalLeadingPostAwait(2, "deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-two:", value);
+});
+deeplyNestedConditionalLeadingPostAwait(3, "deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-other:", value);
+});
+const deeplyNestedConditionalLeadingPostAwaitMethodInstance = new DeeplyNestedConditionalLeadingPostAwaitMethod("method-deep-post-");
+deeplyNestedConditionalLeadingPostAwaitMethodInstance.run(0).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-method-zero:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitMethodInstance.run(1).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-method-one:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitMethodInstance.run(2).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-method-two:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitMethodInstance.run(3).then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-method-other:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitValue(0, "value-deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-value-zero:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitValue(1, "value-deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-value-one:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitValue(2, "value-deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-value-two:", value);
+});
+deeplyNestedConditionalLeadingPostAwaitValue(3, "value-deep-post-").then((value: string): void => {
+    console.log("deeply-nested-conditional-leading-post-await-value-other:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {
