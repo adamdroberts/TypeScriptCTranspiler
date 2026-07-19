@@ -316,6 +316,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Nested conditional leading await steps now support a seven-leaf Promise-valued selection across async declarations, class methods, function values, and a branch-block fallthrough tail. Test: `async_await_seven_leaf_conditional`
 - Nested conditional leading await steps now support an eight-leaf Promise-valued selection across async declarations, class methods, function values, and a branch-block fallthrough tail. Test: `async_await_eight_leaf_conditional`
 - Nested conditional leading await steps now support a nine-leaf Promise-valued selection across async declarations, class methods, function values, and a branch-block fallthrough tail. Test: `async_await_nine_leaf_conditional`
+- Nested conditional leading await steps now support a ten-leaf Promise-valued selection across async declarations, class methods, function values, and a branch-block fallthrough tail. Test: `async_await_ten_leaf_conditional`
 - Leading awaited-local chains now reject through terminal post-await `throw` statements after multiple suspensions for async declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Leading awaited-local chains now support initialized or uninitialized `let` aliases assigned from awaited promises across multiple suspensions, including repeated assignment to the same alias, for declarations, class methods, and function values. Test: `async_await_pending_return_expr`
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`
@@ -3079,6 +3080,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_seven_leaf_conditional` | nested conditional leading await steps support seven Promise-valued leaves across async contexts and branch fallthrough |
 | `async_await_eight_leaf_conditional` | nested conditional leading await steps support eight Promise-valued leaves across async contexts and branch fallthrough |
 | `async_await_nine_leaf_conditional` | nested conditional leading await steps support nine Promise-valued leaves across async contexts and branch fallthrough |
+| `async_await_ten_leaf_conditional` | nested conditional leading await steps support ten Promise-valued leaves across async contexts and branch fallthrough |
 | `async_await_pending_return_expr` | leading awaited-local chains support bounded nested else-if conditional await selection through four nested levels with Promise-valued leaves |
 | `async_await_pending_return_expr` | nested conditional leading await steps preserve bounded await-free arm preludes and post-await arm state across all four leaves before the next suspension |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |

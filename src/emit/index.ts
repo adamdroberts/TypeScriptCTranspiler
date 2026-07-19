@@ -190,6 +190,7 @@ interface AsyncAwaitLeadingStep {
     alternateSixthBeforeStatements?: readonly ts.Statement[];
     alternateSeventhBeforeStatements?: readonly ts.Statement[];
     alternateEighthBeforeStatements?: readonly ts.Statement[];
+    alternateNinthBeforeStatements?: readonly ts.Statement[];
     alternateAlternateAfterStatements?: readonly ts.Statement[];
     alternateThirdAfterStatements?: readonly ts.Statement[];
     alternateFourthAfterStatements?: readonly ts.Statement[];
@@ -197,6 +198,7 @@ interface AsyncAwaitLeadingStep {
     alternateSixthAfterStatements?: readonly ts.Statement[];
     alternateSeventhAfterStatements?: readonly ts.Statement[];
     alternateEighthAfterStatements?: readonly ts.Statement[];
+    alternateNinthAfterStatements?: readonly ts.Statement[];
     condition?: ts.Expression;
     alternateAlternateAwaitExpr?: ts.AwaitExpression;
     alternateCondition?: ts.Expression;
@@ -212,6 +214,8 @@ interface AsyncAwaitLeadingStep {
     alternateSixthCondition?: ts.Expression;
     alternateEighthAwaitExpr?: ts.AwaitExpression;
     alternateSeventhCondition?: ts.Expression;
+    alternateNinthAwaitExpr?: ts.AwaitExpression;
+    alternateEighthCondition?: ts.Expression;
 }
 
 interface AsyncAwaitLeadingReturnContinuation {
@@ -28235,7 +28239,7 @@ class Emitter {
 
     private asyncAwaitConditionalLeadingStep(stmt: ts.Statement, depth = 0): AsyncAwaitLeadingStep | null {
         if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
-        if (depth > 7) return null;
+        if (depth > 8) return null;
         const splitBranch = (branch: ts.Statement): {
             statement: ts.Statement;
             beforeStatements: readonly ts.Statement[];
@@ -28277,6 +28281,7 @@ class Emitter {
         if (nested && !(nested.alternateFifthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSixthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSeventhBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && !(nested.alternateEighthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.afterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateAlternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
@@ -28285,6 +28290,7 @@ class Emitter {
         if (nested && !(nested.alternateFifthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSixthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         if (nested && !(nested.alternateSeventhAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (nested && !(nested.alternateEighthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
         let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) {
@@ -28336,6 +28342,8 @@ class Emitter {
             alternateSixthCondition: nested?.alternateFifthCondition,
             alternateEighthAwaitExpr: nested?.alternateSeventhAwaitExpr,
             alternateSeventhCondition: nested?.alternateSixthCondition,
+            alternateNinthAwaitExpr: nested?.alternateEighthAwaitExpr,
+            alternateEighthCondition: nested?.alternateSeventhCondition,
             alternateAlternateBeforeStatements: nested?.alternateBeforeStatements,
             alternateThirdBeforeStatements: nested?.alternateAlternateBeforeStatements,
             alternateFourthBeforeStatements: nested?.alternateThirdBeforeStatements,
@@ -28343,6 +28351,7 @@ class Emitter {
             alternateSixthBeforeStatements: nested?.alternateFifthBeforeStatements,
             alternateSeventhBeforeStatements: nested?.alternateSixthBeforeStatements,
             alternateEighthBeforeStatements: nested?.alternateSeventhBeforeStatements,
+            alternateNinthBeforeStatements: nested?.alternateEighthBeforeStatements,
             alternateAlternateAfterStatements: nested?.alternateAfterStatements,
             alternateThirdAfterStatements: nested?.alternateAlternateAfterStatements,
             alternateFourthAfterStatements: nested?.alternateThirdAfterStatements,
@@ -28350,6 +28359,7 @@ class Emitter {
             alternateSixthAfterStatements: nested?.alternateFifthAfterStatements,
             alternateSeventhAfterStatements: nested?.alternateSixthAfterStatements,
             alternateEighthAfterStatements: nested?.alternateSeventhAfterStatements,
+            alternateNinthAfterStatements: nested?.alternateEighthAfterStatements,
         };
     }
 
@@ -28884,6 +28894,10 @@ class Emitter {
             visit(steps[0]!.alternateEighthAwaitExpr.expression, 0);
             if (!ok) return null;
         }
+        if (steps[0]!.alternateNinthAwaitExpr) {
+            visit(steps[0]!.alternateNinthAwaitExpr.expression, 0);
+            if (!ok) return null;
+        }
         if (steps[0]!.alternateFourthAwaitExpr) {
             visit(steps[0]!.alternateFourthAwaitExpr.expression, 0);
             if (!ok) return null;
@@ -28920,6 +28934,10 @@ class Emitter {
             visit(steps[0]!.alternateSeventhCondition!, 0);
             if (!ok) return null;
         }
+        if (steps[0]!.alternateEighthCondition) {
+            visit(steps[0]!.alternateEighthCondition!, 0);
+            if (!ok) return null;
+        }
         for (const statement of steps[0]!.beforeStatements ?? []) {
             visit(statement, 0);
             if (!ok) return null;
@@ -28953,6 +28971,10 @@ class Emitter {
             if (!ok) return null;
         }
         for (const statement of steps[0]!.alternateEighthBeforeStatements ?? []) {
+            visit(statement, 0);
+            if (!ok) return null;
+        }
+        for (const statement of steps[0]!.alternateNinthBeforeStatements ?? []) {
             visit(statement, 0);
             if (!ok) return null;
         }
@@ -28992,6 +29014,10 @@ class Emitter {
             visit(statement, 1);
             if (!ok) return null;
         }
+        for (const statement of steps[0]!.alternateNinthAfterStatements ?? []) {
+            visit(statement, 1);
+            if (!ok) return null;
+        }
         for (let i = 1; i < steps.length; i++) {
             visit(steps[i]!.awaitExpr.expression, i);
             if (!ok) return null;
@@ -29021,6 +29047,10 @@ class Emitter {
             }
             if (steps[i]!.alternateEighthAwaitExpr) {
                 visit(steps[i]!.alternateEighthAwaitExpr!.expression, i);
+                if (!ok) return null;
+            }
+            if (steps[i]!.alternateNinthAwaitExpr) {
+                visit(steps[i]!.alternateNinthAwaitExpr!.expression, i);
                 if (!ok) return null;
             }
             if (steps[i]!.alternateFourthAwaitExpr) {
@@ -29059,6 +29089,10 @@ class Emitter {
                 visit(steps[i]!.alternateSeventhCondition!, i);
                 if (!ok) return null;
             }
+            if (steps[i]!.alternateEighthCondition) {
+                visit(steps[i]!.alternateEighthCondition!, i);
+                if (!ok) return null;
+            }
             for (const statement of steps[i]!.beforeStatements ?? []) {
                 visit(statement, i);
                 if (!ok) return null;
@@ -29095,6 +29129,10 @@ class Emitter {
                 visit(statement, i);
                 if (!ok) return null;
             }
+            for (const statement of steps[i]!.alternateNinthBeforeStatements ?? []) {
+                visit(statement, i);
+                if (!ok) return null;
+            }
             for (const statement of steps[i]!.afterStatements ?? []) {
                 visit(statement, i + 1);
                 if (!ok) return null;
@@ -29128,6 +29166,10 @@ class Emitter {
                 if (!ok) return null;
             }
             for (const statement of steps[i]!.alternateEighthAfterStatements ?? []) {
+                visit(statement, i + 1);
+                if (!ok) return null;
+            }
+            for (const statement of steps[i]!.alternateNinthAfterStatements ?? []) {
                 visit(statement, i + 1);
                 if (!ok) return null;
             }
@@ -30153,6 +30195,14 @@ class Emitter {
                         this.checker,
                     ));
                     if (alternateEighthPromise.kind !== "promise" || alternateEighthPromise.c !== promise.c) return false;
+                }
+                if (step.alternateNinthAwaitExpr) {
+                    const alternateNinthPromise = this.prepareType(mapTsType(
+                        step.alternateNinthAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateNinthAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateNinthPromise.kind !== "promise" || alternateNinthPromise.c !== promise.c) return false;
                 }
             }
             const awaitedType = this.prepareType(mapTsType(
@@ -31477,6 +31527,15 @@ class Emitter {
                 if (alternateEighthPromise.kind !== "promise" || alternateEighthPromise.c !== promiseTypes[0]!.c) return false;
                 alternatePromiseTypes[0]!.push(alternateEighthPromise);
             }
+            if (firstStep.alternateNinthAwaitExpr) {
+                const alternateNinthPromise = this.prepareType(mapTsType(
+                    firstStep.alternateNinthAwaitExpr.expression,
+                    this.checker.getTypeAtLocation(firstStep.alternateNinthAwaitExpr.expression),
+                    this.checker,
+                ));
+                if (alternateNinthPromise.kind !== "promise" || alternateNinthPromise.c !== promiseTypes[0]!.c) return false;
+                alternatePromiseTypes[0]!.push(alternateNinthPromise);
+            }
         }
         for (let i = 1; i < continuation.steps.length; i++) {
             const step = continuation.steps[i]!;
@@ -31559,6 +31618,15 @@ class Emitter {
                     if (alternateEighthPromise.kind !== "promise" || alternateEighthPromise.c !== promiseType.c) return false;
                     alternateTypes.push(alternateEighthPromise);
                 }
+                if (step.alternateNinthAwaitExpr) {
+                    const alternateNinthPromise = this.prepareType(mapTsType(
+                        step.alternateNinthAwaitExpr.expression,
+                        this.checker.getTypeAtLocation(step.alternateNinthAwaitExpr.expression),
+                        this.checker,
+                    ));
+                    if (alternateNinthPromise.kind !== "promise" || alternateNinthPromise.c !== promiseType.c) return false;
+                    alternateTypes.push(alternateNinthPromise);
+                }
             }
             alternatePromiseTypes.push(alternateTypes);
         }
@@ -31600,7 +31668,74 @@ class Emitter {
                 buf.line(`bool ${conditionVar} = ${this.coerce(condition, T_BOOLEAN, firstStep.condition!)};`);
                 const branchChoiceVar = this.freshTemp("_await_branch_choice");
                 firstConditionVar = branchChoiceVar;
-                if (firstStep.alternateEighthAwaitExpr) {
+                if (firstStep.alternateNinthAwaitExpr) {
+                    const alternateCondition = this.emitExpr(firstStep.alternateCondition!);
+                    const alternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateAlternateCondition = this.emitExpr(firstStep.alternateAlternateCondition!);
+                    const alternateAlternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateThirdCondition = this.emitExpr(firstStep.alternateThirdCondition!);
+                    const alternateThirdConditionVar = this.freshTemp("_await_condition");
+                    const alternateFourthCondition = this.emitExpr(firstStep.alternateFourthCondition!);
+                    const alternateFourthConditionVar = this.freshTemp("_await_condition");
+                    const alternateFifthCondition = this.emitExpr(firstStep.alternateFifthCondition!);
+                    const alternateFifthConditionVar = this.freshTemp("_await_condition");
+                    const alternateSixthCondition = this.emitExpr(firstStep.alternateSixthCondition!);
+                    const alternateSixthConditionVar = this.freshTemp("_await_condition");
+                    const alternateSeventhCondition = this.emitExpr(firstStep.alternateSeventhCondition!);
+                    const alternateSeventhConditionVar = this.freshTemp("_await_condition");
+                    const alternateEighthCondition = this.emitExpr(firstStep.alternateEighthCondition!);
+                    const alternateEighthConditionVar = this.freshTemp("_await_condition");
+                    buf.line(`int ${branchChoiceVar};`);
+                    buf.open(`if (${conditionVar})`);
+                    buf.line(`${branchChoiceVar} = 0;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateConditionVar} = ${this.coerce(alternateCondition, T_BOOLEAN, firstStep.alternateCondition!)};`);
+                    buf.open(`if (${alternateConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 1;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateAlternateConditionVar} = ${this.coerce(alternateAlternateCondition, T_BOOLEAN, firstStep.alternateAlternateCondition!)};`);
+                    buf.open(`if (${alternateAlternateConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 2;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateThirdConditionVar} = ${this.coerce(alternateThirdCondition, T_BOOLEAN, firstStep.alternateThirdCondition!)};`);
+                    buf.open(`if (${alternateThirdConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 3;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateFourthConditionVar} = ${this.coerce(alternateFourthCondition, T_BOOLEAN, firstStep.alternateFourthCondition!)};`);
+                    buf.open(`if (${alternateFourthConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 4;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateFifthConditionVar} = ${this.coerce(alternateFifthCondition, T_BOOLEAN, firstStep.alternateFifthCondition!)};`);
+                    buf.open(`if (${alternateFifthConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 5;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateSixthConditionVar} = ${this.coerce(alternateSixthCondition, T_BOOLEAN, firstStep.alternateSixthCondition!)};`);
+                    buf.open(`if (${alternateSixthConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 6;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateSeventhConditionVar} = ${this.coerce(alternateSeventhCondition, T_BOOLEAN, firstStep.alternateSeventhCondition!)};`);
+                    buf.open(`if (${alternateSeventhConditionVar})`);
+                    buf.line(`${branchChoiceVar} = 7;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateEighthConditionVar} = ${this.coerce(alternateEighthCondition, T_BOOLEAN, firstStep.alternateEighthCondition!)};`);
+                    buf.line(`${branchChoiceVar} = ${alternateEighthConditionVar} ? 8 : 9;`);
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                } else if (firstStep.alternateEighthAwaitExpr) {
                     const alternateCondition = this.emitExpr(firstStep.alternateCondition!);
                     const alternateConditionVar = this.freshTemp("_await_condition");
                     const alternateAlternateCondition = this.emitExpr(firstStep.alternateAlternateCondition!);
@@ -31885,8 +32020,13 @@ class Emitter {
                     buf.close();
                 }
                 if (firstStep.alternateEighthBeforeStatements?.length) {
-                    buf.open("else");
+                    buf.open(firstStep.alternateNinthBeforeStatements?.length ? `else if (${branchChoiceVar} == 8)` : "else");
                     for (const statement of firstStep.alternateEighthBeforeStatements) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                if (firstStep.alternateNinthBeforeStatements?.length) {
+                    buf.open("else");
+                    for (const statement of firstStep.alternateNinthBeforeStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
                 const alternateSource = this.emitExpr(firstStep.alternateAwaitExpr.expression);
@@ -31954,7 +32094,16 @@ class Emitter {
                     promiseTypes[0]!,
                     firstStep.alternateEighthAwaitExpr.expression,
                 );
-                return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${branchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${branchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${branchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${branchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${branchChoiceVar} == 7 ? ${alternateSeventhSourceC} : ${alternateEighthSourceC}))))))))`;
+                if (!firstStep.alternateNinthAwaitExpr) {
+                    return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${branchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${branchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${branchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${branchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${branchChoiceVar} == 7 ? ${alternateSeventhSourceC} : ${alternateEighthSourceC}))))))))`;
+                }
+                const alternateNinthSource = this.emitExpr(firstStep.alternateNinthAwaitExpr.expression);
+                const alternateNinthSourceC = this.coerce(
+                    alternateNinthSource,
+                    promiseTypes[0]!,
+                    firstStep.alternateNinthAwaitExpr.expression,
+                );
+                return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${branchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${branchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${branchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${branchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${branchChoiceVar} == 7 ? ${alternateSeventhSourceC} : (${branchChoiceVar} == 8 ? ${alternateEighthSourceC} : ${alternateNinthSourceC})))))))))`;
             })()
             : firstSourceC;
         buf.line(`tsc_promise_t* const ${sourcePromise} = ${firstConditionalSource};`);
@@ -32102,6 +32251,7 @@ class Emitter {
         let secondAlternateSixthSource: EmitResult | null = null;
         let secondAlternateSeventhSource: EmitResult | null = null;
         let secondAlternateEighthSource: EmitResult | null = null;
+        let secondAlternateNinthSource: EmitResult | null = null;
         let secondCondition: EmitResult | null = null;
         let secondConditionVar: string | null = null;
         let secondBranchChoiceVar: string | null = null;
@@ -32147,8 +32297,13 @@ class Emitter {
                     buf.close();
                 }
                 if (firstStep.alternateEighthAfterStatements?.length) {
-                    buf.open("else");
+                    buf.open(firstStep.alternateNinthAfterStatements?.length ? "else if (state->branch_choice == 8)" : "else");
                     for (const statement of firstStep.alternateEighthAfterStatements) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                if (firstStep.alternateNinthAfterStatements?.length) {
+                    buf.open("else");
+                    for (const statement of firstStep.alternateNinthAfterStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
             }
@@ -32160,7 +32315,74 @@ class Emitter {
                 secondConditionVar = this.freshTemp("_await_condition");
                 buf.line(`bool ${secondConditionVar} = ${this.coerce(secondCondition, T_BOOLEAN, secondStep.condition)};`);
                 secondBranchChoiceVar = this.freshTemp("_await_branch_choice");
-                if (secondStep.alternateEighthAwaitExpr) {
+                if (secondStep.alternateNinthAwaitExpr) {
+                    const alternateCondition = this.emitExpr(secondStep.alternateCondition!);
+                    const alternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateAlternateCondition = this.emitExpr(secondStep.alternateAlternateCondition!);
+                    const alternateAlternateConditionVar = this.freshTemp("_await_condition");
+                    const alternateThirdCondition = this.emitExpr(secondStep.alternateThirdCondition!);
+                    const alternateThirdConditionVar = this.freshTemp("_await_condition");
+                    const alternateFourthCondition = this.emitExpr(secondStep.alternateFourthCondition!);
+                    const alternateFourthConditionVar = this.freshTemp("_await_condition");
+                    const alternateFifthCondition = this.emitExpr(secondStep.alternateFifthCondition!);
+                    const alternateFifthConditionVar = this.freshTemp("_await_condition");
+                    const alternateSixthCondition = this.emitExpr(secondStep.alternateSixthCondition!);
+                    const alternateSixthConditionVar = this.freshTemp("_await_condition");
+                    const alternateSeventhCondition = this.emitExpr(secondStep.alternateSeventhCondition!);
+                    const alternateSeventhConditionVar = this.freshTemp("_await_condition");
+                    const alternateEighthCondition = this.emitExpr(secondStep.alternateEighthCondition!);
+                    const alternateEighthConditionVar = this.freshTemp("_await_condition");
+                    buf.line(`int ${secondBranchChoiceVar};`);
+                    buf.open(`if (${secondConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 0;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateConditionVar} = ${this.coerce(alternateCondition, T_BOOLEAN, secondStep.alternateCondition!)};`);
+                    buf.open(`if (${alternateConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 1;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateAlternateConditionVar} = ${this.coerce(alternateAlternateCondition, T_BOOLEAN, secondStep.alternateAlternateCondition!)};`);
+                    buf.open(`if (${alternateAlternateConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 2;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateThirdConditionVar} = ${this.coerce(alternateThirdCondition, T_BOOLEAN, secondStep.alternateThirdCondition!)};`);
+                    buf.open(`if (${alternateThirdConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 3;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateFourthConditionVar} = ${this.coerce(alternateFourthCondition, T_BOOLEAN, secondStep.alternateFourthCondition!)};`);
+                    buf.open(`if (${alternateFourthConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 4;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateFifthConditionVar} = ${this.coerce(alternateFifthCondition, T_BOOLEAN, secondStep.alternateFifthCondition!)};`);
+                    buf.open(`if (${alternateFifthConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 5;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateSixthConditionVar} = ${this.coerce(alternateSixthCondition, T_BOOLEAN, secondStep.alternateSixthCondition!)};`);
+                    buf.open(`if (${alternateSixthConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 6;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateSeventhConditionVar} = ${this.coerce(alternateSeventhCondition, T_BOOLEAN, secondStep.alternateSeventhCondition!)};`);
+                    buf.open(`if (${alternateSeventhConditionVar})`);
+                    buf.line(`${secondBranchChoiceVar} = 7;`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`bool ${alternateEighthConditionVar} = ${this.coerce(alternateEighthCondition, T_BOOLEAN, secondStep.alternateEighthCondition!)};`);
+                    buf.line(`${secondBranchChoiceVar} = ${alternateEighthConditionVar} ? 8 : 9;`);
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                    buf.close();
+                } else if (secondStep.alternateEighthAwaitExpr) {
                     const alternateCondition = this.emitExpr(secondStep.alternateCondition!);
                     const alternateConditionVar = this.freshTemp("_await_condition");
                     const alternateAlternateCondition = this.emitExpr(secondStep.alternateAlternateCondition!);
@@ -32445,8 +32667,13 @@ class Emitter {
                     buf.close();
                 }
                 if (secondStep.alternateEighthBeforeStatements?.length) {
-                    buf.open("else");
+                    buf.open(secondStep.alternateNinthBeforeStatements?.length ? `else if (${secondBranchChoiceVar} == 8)` : "else");
                     for (const statement of secondStep.alternateEighthBeforeStatements) this.emitStmt(buf, statement);
+                    buf.close();
+                }
+                if (secondStep.alternateNinthBeforeStatements?.length) {
+                    buf.open("else");
+                    for (const statement of secondStep.alternateNinthBeforeStatements) this.emitStmt(buf, statement);
                     buf.close();
                 }
             }
@@ -32465,9 +32692,12 @@ class Emitter {
                                     secondAlternateSixthSource = this.emitExpr(secondStep.alternateSixthAwaitExpr.expression);
                                 if (secondStep.alternateSeventhAwaitExpr) {
                                     secondAlternateSeventhSource = this.emitExpr(secondStep.alternateSeventhAwaitExpr.expression);
-                                    if (secondStep.alternateEighthAwaitExpr) {
-                                        secondAlternateEighthSource = this.emitExpr(secondStep.alternateEighthAwaitExpr.expression);
+                                if (secondStep.alternateEighthAwaitExpr) {
+                                    secondAlternateEighthSource = this.emitExpr(secondStep.alternateEighthAwaitExpr.expression);
+                                    if (secondStep.alternateNinthAwaitExpr) {
+                                        secondAlternateNinthSource = this.emitExpr(secondStep.alternateNinthAwaitExpr.expression);
                                     }
+                                }
                                 }
                                 }
                             }
@@ -32540,7 +32770,15 @@ class Emitter {
                     promiseTypes[1]!,
                     secondStep.alternateEighthAwaitExpr!.expression,
                 );
-                return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${secondBranchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${secondBranchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${secondBranchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${secondBranchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${secondBranchChoiceVar} == 7 ? ${alternateSeventhSourceC} : ${alternateEighthSourceC}))))))))`;
+                if (!secondAlternateNinthSource) {
+                    return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${secondBranchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${secondBranchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${secondBranchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${secondBranchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${secondBranchChoiceVar} == 7 ? ${alternateSeventhSourceC} : ${alternateEighthSourceC}))))))))`;
+                }
+                const alternateNinthSourceC = this.coerce(
+                    secondAlternateNinthSource,
+                    promiseTypes[1]!,
+                    secondStep.alternateNinthAwaitExpr!.expression,
+                );
+                return `(${secondBranchChoiceVar} == 0 ? ${secondSourceC} : (${secondBranchChoiceVar} == 1 ? ${alternateSourceC} : (${secondBranchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${secondBranchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${secondBranchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${secondBranchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${secondBranchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${secondBranchChoiceVar} == 7 ? ${alternateSeventhSourceC} : (${secondBranchChoiceVar} == 8 ? ${alternateEighthSourceC} : ${alternateNinthSourceC})))))))))`;
             })()
             : secondSourceC;
         buf.line(`tsc_promise_t* const ${sourceVar} = ${stagedSecondSource};`);
@@ -33404,8 +33642,13 @@ class Emitter {
                     buf.close();
                 }
                 if (conditionalStep.alternateEighthAfterStatements?.length) {
-                    buf.open("else");
+                    buf.open(conditionalStep.alternateNinthAfterStatements?.length ? "else if (state->branch_choice == 8)" : "else");
                     for (const stmt of conditionalStep.alternateEighthAfterStatements) this.emitStmt(buf, stmt);
+                    buf.close();
+                }
+                if (conditionalStep.alternateNinthAfterStatements?.length) {
+                    buf.open("else");
+                    for (const stmt of conditionalStep.alternateNinthAfterStatements) this.emitStmt(buf, stmt);
                     buf.close();
                 }
             } else {
