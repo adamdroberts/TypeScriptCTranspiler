@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phases 11-13 Node stdlib remaining-work entry against completed sync-backed `fs.promises`, bounded events async-iterator/once, process stdio, dns callback/promise, scheduler, child-process callback, and child-process sync/spawnSync subsets.
 - `docs/todo.md` now rebaselines the Phase 9 Proxy/Reflect remaining-work entry against completed callable/newable/object/array/function Proxy forwarding, trap lookup/validation, receiver identity, Object helper integration, invariant, integrity, construct `newTarget`, and Reflect validation subsets.
 - `docs/todo.md` now rebaselines the Phase 7 generator remaining-work entry against completed lazy generator subsets for simple branch/switch/loop control flow, non-suspending source `try` / `catch` / `finally`, suspended expression trees, compound assignments, suspended throw-yield, `return yield`, simple `.next(value)` assignments, and bounded lazy `yield*`.
 - `docs/todo.md` now rebaselines the Phase 14 npm-integration remaining-work entry against completed finite dynamic-require proof subsets for URL metadata, ArrayBuffer/DataView, TextEncoder/TextDecoder, Set/Map relation and fragment composition, static descriptor/Reflect/numeric parser fragments, and static Buffer construction/inspection/mutation/search fragments.
