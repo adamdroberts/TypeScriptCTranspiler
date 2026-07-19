@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Changed
+- `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed branch-block terminal post-`await` throw coverage already tracked by `async_await_branch_block_post_await_throw`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed source `try` / `catch` pending-`await` catch-throw and catch-prelude wrapper coverage already tracked by `async_await_try_catch`, `async_await_try_catch_throw`, and `async_await_try_catch_prelude`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed source `try` / `catch` / `finally` combined catch-plus-finally routing, finally-throw override, and combined prelude coverage already tracked by `async_await_try_catch_finally`, `async_await_try_source_prelude`, and `async_await_try_block_prelude`.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against completed source `try` / `catch` / `finally` direct `return await` prelude-routing coverage already tracked by `async_await_try_return_await`.
@@ -16,6 +17,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - `docs/todo.md` now rebaselines the Phase 6 async/await remaining-work entry against the completed parenthesized await, return-await, catch/finally prelude, and typed prelude-capture subsets already tracked in `docs/done.md`.
 
 ### Fixed
+- Async branch-block pending-`await` continuation coverage now proves terminal post-await `throw` paths resume and reject without requiring an unreachable trailing `return` across async declarations, class methods, and async function values. Test: `async_await_branch_block_post_await_throw`.
 - Terminal post-`await` `throw` continuations no longer require an unreachable trailing `return`, including delayed object-literal async method rejections observed through dynamic Promise `.catch()` / `.finally()` chains. Test: `promise_dynamic_delayed_chain`.
 - Object-literal async methods now have focused coverage for awaited-local, branch, leading, and rejected continuation routing through dynamic Promise `.then()` / `.catch()` / `.finally()` chains. Test: `async_await_object_method_continuation`.
 - Static async class methods now have focused coverage for awaited-local, branch, and leading continuation routing. Test: `async_await_static_method_continuation`.
