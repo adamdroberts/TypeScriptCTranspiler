@@ -254,6 +254,21 @@ interface AsyncAwaitIfLocalReturnLeaf {
     continuation: AsyncAwaitReturnContinuation;
 }
 
+interface AsyncAwaitIfLocalTryCatchReturnLeaf {
+    kind: "localTryCatchReturn";
+    continuation: AsyncAwaitTryCatchReturnContinuation;
+}
+
+interface AsyncAwaitIfLocalTryFinallyReturnLeaf {
+    kind: "localTryFinallyReturn";
+    continuation: AsyncAwaitTryFinallyReturnContinuation;
+}
+
+interface AsyncAwaitIfLocalTryCatchFinallyReturnLeaf {
+    kind: "localTryCatchFinallyReturn";
+    continuation: AsyncAwaitTryCatchFinallyReturnContinuation;
+}
+
 interface AsyncAwaitIfExpressionSyncReturnLeaf {
     kind: "syncReturn";
     returnExpr: ts.Expression;
@@ -271,6 +286,9 @@ interface AsyncAwaitIfExpressionReturnBranch {
 type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
     | AsyncAwaitIfLocalReturnLeaf
+    | AsyncAwaitIfLocalTryCatchReturnLeaf
+    | AsyncAwaitIfLocalTryFinallyReturnLeaf
+    | AsyncAwaitIfLocalTryCatchFinallyReturnLeaf
     | AsyncAwaitIfExpressionSyncReturnLeaf
     | AsyncAwaitIfExpressionReturnBranch;
 
@@ -25622,6 +25640,13 @@ class Emitter {
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
         this.emitAsyncAwaitPreludeStatements(buf, continuation.tryPreludeStatements, continuation.params);
+        return this.emitAsyncAwaitTryCatchReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitTryCatchReturnContinuationResult(
+        buf: CBuf,
+        continuation: AsyncAwaitTryCatchReturnContinuation,
+    ): boolean {
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -25966,6 +25991,13 @@ class Emitter {
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
         this.emitAsyncAwaitPreludeStatements(buf, continuation.tryPreludeStatements, continuation.params);
+        return this.emitAsyncAwaitTryFinallyReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitTryFinallyReturnContinuationResult(
+        buf: CBuf,
+        continuation: AsyncAwaitTryFinallyReturnContinuation,
+    ): boolean {
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -26409,6 +26441,13 @@ class Emitter {
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
         this.emitAsyncAwaitPreludeStatements(buf, continuation.tryPreludeStatements, continuation.params);
+        return this.emitAsyncAwaitTryCatchFinallyReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitTryCatchFinallyReturnContinuationResult(
+        buf: CBuf,
+        continuation: AsyncAwaitTryCatchFinallyReturnContinuation,
+    ): boolean {
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -27709,6 +27748,23 @@ class Emitter {
         return awaitedType.kind !== "never" && !(awaitedType.kind === "void" && continuation.usesAwaited);
     }
 
+    private asyncAwaitTryReturnContinuationSupported(
+        continuation: AsyncAwaitTryCatchReturnContinuation | AsyncAwaitTryFinallyReturnContinuation | AsyncAwaitTryCatchFinallyReturnContinuation,
+    ): boolean {
+        const promise = this.prepareType(mapTsType(
+            continuation.awaitExpr.expression,
+            this.checker.getTypeAtLocation(continuation.awaitExpr.expression),
+            this.checker,
+        ));
+        if (promise.kind !== "promise") return false;
+        const awaitedType = this.prepareType(mapTsType(
+            continuation.awaitExpr,
+            this.checker.getTypeAtLocation(continuation.awaitExpr),
+            this.checker,
+        ));
+        return awaitedType.kind !== "never" && !(awaitedType.kind === "void" && continuation.usesAwaited);
+    }
+
     private emitAsyncAwaitExpressionReturnContinuationResult(
         buf: CBuf,
         continuation: AsyncAwaitExpressionReturnContinuation,
@@ -28030,6 +28086,18 @@ class Emitter {
             return null;
         }
         if (ts.isBlock(stmt)) {
+            const tryCatchFinallyContinuation = this.asyncAwaitTryCatchFinallyReturnContinuation(stmt, parameters, thisValue);
+            if (tryCatchFinallyContinuation) {
+                return { kind: "localTryCatchFinallyReturn", continuation: tryCatchFinallyContinuation };
+            }
+            const tryCatchContinuation = this.asyncAwaitTryCatchReturnContinuation(stmt, parameters, thisValue);
+            if (tryCatchContinuation) {
+                return { kind: "localTryCatchReturn", continuation: tryCatchContinuation };
+            }
+            const tryFinallyContinuation = this.asyncAwaitTryFinallyReturnContinuation(stmt, parameters, thisValue);
+            if (tryFinallyContinuation) {
+                return { kind: "localTryFinallyReturn", continuation: tryFinallyContinuation };
+            }
             const continuation = this.asyncAwaitReturnContinuation(stmt, parameters, thisValue);
             if (continuation) {
                 return { kind: "localReturn", continuation };
@@ -28079,7 +28147,13 @@ class Emitter {
     private asyncAwaitIfExpressionReturnBranchHasAwait(
         branch: AsyncAwaitIfExpressionReturnNode,
     ): boolean {
-        if (branch.kind === "return" || branch.kind === "localReturn") return true;
+        if (
+            branch.kind === "return" ||
+            branch.kind === "localReturn" ||
+            branch.kind === "localTryCatchReturn" ||
+            branch.kind === "localTryFinallyReturn" ||
+            branch.kind === "localTryCatchFinallyReturn"
+        ) return true;
         if (branch.kind === "syncReturn") return false;
         return this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.thenBranch) ||
             !!(branch.elseBranch && this.asyncAwaitIfExpressionReturnBranchHasAwait(branch.elseBranch)) ||
@@ -28091,7 +28165,13 @@ class Emitter {
     ): AsyncAwaitContinuationParam[] {
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         const visit = (node: AsyncAwaitIfExpressionReturnNode): void => {
-            if (node.kind === "return" || node.kind === "localReturn") {
+            if (
+                node.kind === "return" ||
+                node.kind === "localReturn" ||
+                node.kind === "localTryCatchReturn" ||
+                node.kind === "localTryFinallyReturn" ||
+                node.kind === "localTryCatchFinallyReturn"
+            ) {
                 for (const param of node.continuation.params) {
                     paramsBySymbol.set(param.symbol, param);
                 }
@@ -28117,6 +28197,13 @@ class Emitter {
         if (branch.kind === "localReturn") {
             return this.asyncAwaitReturnContinuationSupported(branch.continuation);
         }
+        if (
+            branch.kind === "localTryCatchReturn" ||
+            branch.kind === "localTryFinallyReturn" ||
+            branch.kind === "localTryCatchFinallyReturn"
+        ) {
+            return this.asyncAwaitTryReturnContinuationSupported(branch.continuation);
+        }
         if (branch.kind === "syncReturn") {
             return this.asyncAwaitSyncReturnExpressionSupported(branch.returnExpr);
         }
@@ -28135,6 +28222,21 @@ class Emitter {
         if (branch.kind === "localReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
             return this.emitAsyncAwaitReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "localTryCatchReturn") {
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.tryPreludeStatements, branch.continuation.params);
+            return this.emitAsyncAwaitTryCatchReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "localTryFinallyReturn") {
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.tryPreludeStatements, branch.continuation.params);
+            return this.emitAsyncAwaitTryFinallyReturnContinuationResult(buf, branch.continuation);
+        }
+        if (branch.kind === "localTryCatchFinallyReturn") {
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
+            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.tryPreludeStatements, branch.continuation.params);
+            return this.emitAsyncAwaitTryCatchFinallyReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "syncReturn") {
             return this.emitAsyncAwaitSyncReturnResult(buf, branch.returnExpr);
