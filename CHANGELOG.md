@@ -22,6 +22,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Source `try` / `finally` leading chains now preserve bounded finally `return await` overrides across async class methods and async function values, including receiver and closure capture. Test: `async_await_pending_return_expr`.
 - Leading awaited-local chains now support bounded conditional await steps with Promise-valued true and false branches across async declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
 - Branch-block leading awaited-local chains now compose bounded conditional await steps with a synchronous fallthrough arm. Test: `async_await_pending_return_expr`.
+- Leading awaited-local chains now support one bounded nested `else if` conditional await selection with Promise-valued leaves. Test: `async_await_pending_return_expr`.
 - Source `try` / `catch` now preserves bounded leading multi-await chains in the try block across async declarations, class methods, and function values, including receiver capture, pending rejection handoff into the catch continuation, and bounded catch rethrows. Test: `async_await_pending_return_expr`.
 - Await-free direct-`return await` preludes now preserve simple catch bindings before the awaited source. Test: `async_await_interstitial_expression`.
 - Await-free interstitial `try` / `catch` blocks now preserve simple catch bindings between leading suspension points. Test: `async_await_interstitial_expression`.

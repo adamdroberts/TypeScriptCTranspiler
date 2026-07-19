@@ -573,6 +573,19 @@ async function branchConditionalLeadingChain(
     return prefix + "fallthrough";
 }
 
+async function nestedConditionalLeadingChain(kind: number, prefix: string): Promise<string> {
+    let first = prefix + "seed";
+    if (kind === 0) {
+        first = await delay(432, prefix + "zero-one");
+    } else if (kind === 1) {
+        first = await delay(433, prefix + "one-one");
+    } else {
+        first = await delay(434, prefix + "other-one");
+    }
+    const second = await delay(435, first + ":two");
+    return first + ":" + second;
+}
+
 async function leadingVoidSixAwait(prefix: string): Promise<string> {
     const first = await delay(324, "one");
     const ignored = await delay(325);
@@ -2324,6 +2337,15 @@ branchConditionalLeadingChain(true, false, "branch-").then((value: string): void
 });
 branchConditionalLeadingChain(false, true, "branch-").then((value: string): void => {
     console.log("branch-conditional-leading-chain-fallthrough:", value);
+});
+nestedConditionalLeadingChain(0, "nested-").then((value: string): void => {
+    console.log("nested-conditional-leading-chain-zero:", value);
+});
+nestedConditionalLeadingChain(1, "nested-").then((value: string): void => {
+    console.log("nested-conditional-leading-chain-one:", value);
+});
+nestedConditionalLeadingChain(2, "nested-").then((value: string): void => {
+    console.log("nested-conditional-leading-chain-other:", value);
 });
 
 leadingVoidSixAwait("fn-").then((value: string): void => {

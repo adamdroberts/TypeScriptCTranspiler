@@ -292,6 +292,9 @@ conditional-leading-chain-value-true: value-value-true-one:value-true-one:two
 conditional-leading-chain-value-false: value-value-false-one:value-false-one:two
 branch-conditional-leading-chain-true: branch-inner-true-one:branch-inner-true-one:two
 branch-conditional-leading-chain-false: branch-inner-false-one:branch-inner-false-one:two
+nested-conditional-leading-chain-zero: nested-zero-one:nested-zero-one:two
+nested-conditional-leading-chain-one: nested-one-one:nested-one-one:two
+nested-conditional-leading-chain-other: nested-other-one:nested-other-one:two
 source-try-finally-leading-await-success: finally-await-finally-await-first:second:async-success|between-if|between-error|async-finally
 source-try-finally-leading-await-alternate: finally-await-finally-await-first:second:async-alternate|between-else|between-error|async-finally
 declaration-leading-chain-throw: chain-one:two:three:throw
