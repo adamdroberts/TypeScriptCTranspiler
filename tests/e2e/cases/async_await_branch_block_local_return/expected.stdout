@@ -1,0 +1,6 @@
+branch-block-local-true: fn-branch!
+branch-block-local-false: fn-fallthrough!
+method-branch-block-local-true: this-method-branch!
+method-branch-block-local-false: this-method-fallthrough!
+value-branch-block-local-true: value-value-branch!
+value-branch-block-local-false: value-value-fallthrough!
