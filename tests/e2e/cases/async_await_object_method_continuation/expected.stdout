@@ -1,0 +1,7 @@
+object-catch: object-bad
+object-finally
+object-final-value: object-recovered
+object-awaited-local: object-local!
+object-branch-true: object-branch!
+object-branch-false: object-fallthrough!
+object-leading: object-first-second!

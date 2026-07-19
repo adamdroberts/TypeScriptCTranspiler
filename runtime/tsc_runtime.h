@@ -785,6 +785,7 @@ tsc_promise_t* tsc_promise_all_dynamic(tsc_array_t* src);
 tsc_promise_t* tsc_promise_race_dynamic(tsc_array_t* src);
 tsc_promise_t* tsc_promise_any_dynamic(tsc_array_t* src);
 tsc_promise_t* tsc_promise_all_settled_dynamic(tsc_array_t* src);
+tsc_value_t tsc_promise_get_method(tsc_promise_t* promise, const tsc_str_t* key);
 tsc_promise_t* tsc_promise_reject(tsc_value_t reason);
 tsc_promise_t* tsc_promise_pending(void);
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise);
