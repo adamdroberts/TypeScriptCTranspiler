@@ -1,0 +1,6 @@
+branch-block-embedded-await-fallthrough-true: fn-branch
+branch-block-embedded-await-fallthrough-false: fn-fall-embedded
+method-branch-block-embedded-await-fallthrough-true: this-method-branch
+method-branch-block-embedded-await-fallthrough-false: this-method-fall-embedded
+value-branch-block-embedded-await-fallthrough-true: arrow-value-branch
+value-branch-block-embedded-await-fallthrough-false: arrow-value-fall-embedded
