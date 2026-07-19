@@ -28484,7 +28484,11 @@ class Emitter {
                         const childAllowsNextAwaitReference = allowNextAwaitReference || node === nextAwaitExpr;
                         ts.forEachChild(node, (child) => visit(child, childAllowsNextAwaitReference));
                     };
-                    for (const later of leaf.statements.slice(awaitIndex + 1)) visit(later, false);
+                    for (let laterIndex = awaitIndex + 1; laterIndex < leaf.statements.length; laterIndex++) {
+                        const later = leaf.statements[laterIndex]!;
+                        const allowPostAwaitReference = nextAwaitIndex < 0 || laterIndex < nextAwaitIndex;
+                        visit(later, allowPostAwaitReference);
+                    }
                     if (escapes) return null;
                 }
             }
