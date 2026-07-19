@@ -1,0 +1,9 @@
+branch-block-short-circuit-left-await-fallthrough-branch: fn-branch
+branch-block-short-circuit-left-await-fallthrough-and: fn-fall-and
+branch-block-short-circuit-left-await-fallthrough-or: fn-fall-or
+method-branch-block-short-circuit-left-await-fallthrough-branch: this-method-branch
+method-branch-block-short-circuit-left-await-fallthrough-and: this-method-fall-and
+method-branch-block-short-circuit-left-await-fallthrough-or: this-method-fall-or
+value-branch-block-short-circuit-left-await-fallthrough-branch: arrow-value-branch
+value-branch-block-short-circuit-left-await-fallthrough-and: arrow-value-fall-and
+value-branch-block-short-circuit-left-await-fallthrough-or: arrow-value-fall-or

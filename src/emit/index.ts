@@ -27435,8 +27435,6 @@ class Emitter {
         const visitFindAwait = (node: ts.Node, conditionalDepth = 0, shortCircuitDepth = 0): void => {
             if (!ok) return;
             if (node !== returnExpr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
-            const nextConditionalDepth = conditionalDepth + (ts.isConditionalExpression(node) ? 1 : 0);
-            const nextShortCircuitDepth = shortCircuitDepth + (this.isAsyncAwaitShortCircuitBinary(node) ? 1 : 0);
             if (ts.isAwaitExpression(node)) {
                 if (conditionalDepth > 0 || shortCircuitDepth > 0) {
                     ok = false;
@@ -27449,7 +27447,18 @@ class Emitter {
                 awaitExpr = node;
                 return;
             }
-            ts.forEachChild(node, (child) => visitFindAwait(child, nextConditionalDepth, nextShortCircuitDepth));
+            if (ts.isConditionalExpression(node)) {
+                visitFindAwait(node.condition, conditionalDepth + 1, shortCircuitDepth);
+                visitFindAwait(node.whenTrue, conditionalDepth + 1, shortCircuitDepth);
+                visitFindAwait(node.whenFalse, conditionalDepth + 1, shortCircuitDepth);
+                return;
+            }
+            if (this.isAsyncAwaitShortCircuitBinary(node)) {
+                visitFindAwait(node.left, conditionalDepth, shortCircuitDepth);
+                visitFindAwait(node.right, conditionalDepth, shortCircuitDepth + 1);
+                return;
+            }
+            ts.forEachChild(node, (child) => visitFindAwait(child, conditionalDepth, shortCircuitDepth));
         };
         visitFindAwait(returnExpr);
         if (!ok || !awaitExpr) return null;
