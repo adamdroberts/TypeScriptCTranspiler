@@ -19518,8 +19518,34 @@ class Emitter {
     }
 
     private isDirectCommonJsDefaultExportAccess(decl: ts.Node): boolean {
-        return (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) &&
-            this.commonJsExportNames(decl).includes("default");
+        if (
+            ts.isPropertyAccessExpression(decl) &&
+            decl.name.text === "default" &&
+            ts.isIdentifier(decl.expression) &&
+            decl.expression.text === "exports"
+        ) {
+            return true;
+        }
+        if (
+            ts.isElementAccessExpression(decl) &&
+            this.staticComputedPropertyExpression(decl.argumentExpression) === "default" &&
+            ts.isIdentifier(decl.expression) &&
+            decl.expression.text === "exports"
+        ) {
+            return true;
+        }
+        if (
+            ts.isPropertyAccessExpression(decl) &&
+            decl.name.text === "default" &&
+            ts.isPropertyAccessExpression(decl.expression) &&
+            this.isModuleExportsAccess(decl.expression)
+        ) {
+            return true;
+        }
+        return ts.isElementAccessExpression(decl) &&
+            this.staticComputedPropertyExpression(decl.argumentExpression) === "default" &&
+            ts.isPropertyAccessExpression(decl.expression) &&
+            this.isModuleExportsAccess(decl.expression);
     }
 
     private isModuleExportsAccess(expr: ts.PropertyAccessExpression): boolean {
@@ -19791,7 +19817,20 @@ class Emitter {
             expr = parent;
             parent = parent.parent;
         }
-        return parent && ts.isCallExpression(parent) && parent.expression === expr ? parent : null;
+        if (parent && ts.isCallExpression(parent) && parent.expression === expr) {
+            return parent;
+        }
+        if (
+            parent &&
+            ts.isCallExpression(parent) &&
+            parent.parent &&
+            ts.isPrefixUnaryExpression(parent.parent) &&
+            parent.parent.operand === parent &&
+            this.isCommonJsModuleExportsDefaultPrefixOperator(parent.parent.operator)
+        ) {
+            return parent;
+        }
+        return null;
     }
 
     private commonJsIifeArgumentForIdentifier(id: ts.Identifier): ts.Expression | null {
