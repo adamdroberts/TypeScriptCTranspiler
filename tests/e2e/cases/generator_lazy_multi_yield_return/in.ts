@@ -107,6 +107,7 @@ function makeCapturedMutableGenerator(): [() => Generator<number, number, number
 
 class ThisLeaves {
     marker = 9;
+    items = [7, 8];
 
     *values(): Generator<number, ThisLeaves, number> {
         return (yield 26), (yield 27), this;
@@ -114,6 +115,10 @@ class ThisLeaves {
 
     *propertyValues(): Generator<number, number, number> {
         return this.marker + (yield 46) + (yield 47);
+    }
+
+    *elementValues(): Generator<number, number, number> {
+        return this.items[1] + (yield 48) + (yield 49);
     }
 }
 
@@ -256,3 +261,8 @@ const propertyFirst: any = propertyIter.next();
 const propertySecond: any = propertyIter.next(4);
 const propertyDone: any = propertyIter.next(5);
 console.log("property", propertyFirst.value, propertySecond.value, propertyDone.done, propertyDone.value);
+const elementIter = thisLeaves.elementValues();
+const elementFirst: any = elementIter.next();
+const elementSecond: any = elementIter.next(4);
+const elementDone: any = elementIter.next(5);
+console.log("element", elementFirst.value, elementSecond.value, elementDone.done, elementDone.value);

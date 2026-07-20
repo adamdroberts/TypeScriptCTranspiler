@@ -37584,6 +37584,10 @@ class Emitter {
             if (ts.isIdentifier(unwrapped)) return true;
             if (unwrapped.kind === ts.SyntaxKind.ThisKeyword) return true;
             if (ts.isPropertyAccessExpression(unwrapped)) return visit(unwrapped.expression);
+            if (ts.isElementAccessExpression(unwrapped)) {
+                return this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(unwrapped.argumentExpression)) &&
+                    visit(unwrapped.expression);
+            }
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isPrefixUnaryExpression(unwrapped)) {
@@ -38718,6 +38722,9 @@ class Emitter {
             if (unwrapped.kind === ts.SyntaxKind.ThisKeyword) return this.emitExpr(unwrapped);
             if (ts.isPropertyAccessExpression(unwrapped)) {
                 return this.emitPropertyAccess(unwrapped, build(unwrapped.expression));
+            }
+            if (ts.isElementAccessExpression(unwrapped)) {
+                return this.emitElementAccess(unwrapped, build(unwrapped.expression), this.emitExpr(unwrapped.argumentExpression));
             }
             if (ts.isTypeOfExpression(unwrapped)) {
                 return this.emitSimpleLazyResumeTypeOf(unwrapped, build(unwrapped.expression));
