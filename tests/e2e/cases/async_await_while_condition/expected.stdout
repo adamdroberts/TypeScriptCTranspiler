@@ -16,3 +16,5 @@ await-while-value-true value-loop-yes
 await-while-value-false value-loop-no
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
+await-while-three-logical-true three-logical-yes
+await-while-three-logical-false three-logical-no

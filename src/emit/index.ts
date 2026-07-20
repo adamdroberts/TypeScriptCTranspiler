@@ -32446,7 +32446,7 @@ class Emitter {
             if (!conditionAwaitsAreValid) return;
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             if (ts.isAwaitExpression(node)) {
-                if (awaitExpressions.length >= 2) {
+                if (awaitExpressions.length >= 3) {
                     conditionAwaitsAreValid = false;
                 } else {
                     awaitExpressions.push(node);
@@ -32555,24 +32555,49 @@ class Emitter {
         );
         const capturedParams = [...referenced.values()];
         const continuationThisValue = usesThis ? thisValue : null;
-        if (
-            awaitExpressions.length === 2 &&
-            ts.isBinaryExpression(condition) &&
-            (condition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
-                condition.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-                condition.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(condition.left)) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(condition.right))
-        ) {
-            const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
-                firstAwaitExpr: this.unwrapTransparentExpression(condition.left) as ts.AwaitExpression,
-                secondAwaitExpr: this.unwrapTransparentExpression(condition.right) as ts.AwaitExpression,
-                returnExpr,
-                params: capturedParams,
-                thisValue: continuationThisValue,
-                shortCircuitOperator: condition.operatorToken.kind,
-            };
-            return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation);
+        if (awaitExpressions.length >= 2 && ts.isBinaryExpression(condition)) {
+            const operator = condition.operatorToken.kind;
+            if (
+                operator === ts.SyntaxKind.AmpersandAmpersandToken ||
+                operator === ts.SyntaxKind.BarBarToken ||
+                operator === ts.SyntaxKind.QuestionQuestionToken
+            ) {
+                const flattened: ts.AwaitExpression[] = [];
+                let flattenValid = true;
+                const flatten = (node: ts.Expression): void => {
+                    const current = this.unwrapTransparentExpression(node);
+                    if (ts.isBinaryExpression(current) && current.operatorToken.kind === operator) {
+                        flatten(current.left);
+                        flatten(current.right);
+                    } else if (ts.isAwaitExpression(current)) {
+                        flattened.push(current);
+                    } else {
+                        flattenValid = false;
+                    }
+                };
+                flatten(condition);
+                if (flattenValid && flattened.length === awaitExpressions.length && flattened.length <= 3) {
+                    if (flattened.length === 2) {
+                        const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
+                            firstAwaitExpr: flattened[0]!,
+                            secondAwaitExpr: flattened[1]!,
+                            returnExpr,
+                            params: capturedParams,
+                            thisValue: continuationThisValue,
+                            shortCircuitOperator: operator,
+                        };
+                        return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation);
+                    }
+                    const continuation: AsyncAwaitExpressionSequenceReturnContinuation = {
+                        awaitExprs: flattened,
+                        returnExpr,
+                        params: capturedParams,
+                        thisValue: continuationThisValue,
+                        shortCircuitOperator: operator,
+                    };
+                    return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, continuation);
+                }
+            }
         }
         if (awaitExpressions.length !== 1) return false;
         const continuation: AsyncAwaitExpressionReturnContinuation = {
