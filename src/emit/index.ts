@@ -29505,6 +29505,11 @@ class Emitter {
                 firstAwaitIndex++;
                 continue;
             }
+            if (this.asyncAwaitPreludeControlFlowStatementSupported(stmt)) {
+                preludeStatements.push(stmt);
+                firstAwaitIndex++;
+                continue;
+            }
             break;
         }
         const finalReturnExpression = ts.isReturnStatement(result) && result.expression

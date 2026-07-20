@@ -175,7 +175,7 @@ await-arrow-multiple-declarators arrow-first-second
 await-while-return-await-multiple-true body-loop-multiple-first-second
 await-while-throw-await-multiple-true body-loop-multiple-first-second
 await-for-return-await-multiple-true body-for-multiple-first-second
-await-while-return-await-multiple-prelude-true body-loop-multiple-prelude-first-second
+await-while-return-await-multiple-prelude-true body-loop-multiple-branch-prelude-first-second
 await-while-three-logical-true three-logical-yes
 await-while-three-logical-false three-logical-no
 await-while-method-multiple-true method-loop-first-second

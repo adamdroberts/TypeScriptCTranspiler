@@ -248,6 +248,7 @@ async function chooseForReturnAwaitMultiple(condition: boolean, prefix: string):
 
 async function chooseLoopReturnAwaitMultiplePrelude(condition: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
+        if (condition) prefix += "-branch";
         const source = prefix + "-prelude";
         const first = await laterBodyValue(source + "-first"), second = await laterBodyValue(first + "-second");
         return second;
