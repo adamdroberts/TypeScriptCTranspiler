@@ -196,6 +196,24 @@ async function chooseLoopInitializerEscapingVarFalseBreakThrowAwait(): Promise<s
     throw await laterBodyValue(reason);
 }
 
+class EscapingVarLoopChooser {
+    async choose(): Promise<string> {
+        for (var value = "loop-method-escaping-var"; await laterTrue();) {
+            value += "-updated";
+            break;
+        }
+        return await laterBodyValue(value);
+    }
+}
+
+const chooseEscapingVarLoopValue = async (): Promise<string> => {
+    for (var value = "loop-value-escaping-var"; await laterFalse();) {
+        value += "-unexpected";
+        break;
+    }
+    return await laterBodyValue(value);
+};
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2297,6 +2315,8 @@ chooseLoopInitializerEscapingVarBreakAwait().then((value) => console.log("await-
 chooseLoopInitializerEscapingVarBreakThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-break-throw-await", reason));
 chooseLoopInitializerEscapingVarFalseBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-false-break-await", value));
 chooseLoopInitializerEscapingVarFalseBreakThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-false-break-throw-await", reason));
+new EscapingVarLoopChooser().choose().then((value) => console.log("await-method-loop-initializer-escaping-var-break-await", value));
+chooseEscapingVarLoopValue().then((value) => console.log("await-value-loop-initializer-escaping-var-false-break-await", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
