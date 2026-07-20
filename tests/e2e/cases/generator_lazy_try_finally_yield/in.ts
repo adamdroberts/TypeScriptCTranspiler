@@ -365,3 +365,35 @@ try {
 } catch (error: any) {
     console.log("caught-conditional-finally-mixed-fallback:", caughtConditionalFinallyMixedFallbackFirst.done, caughtConditionalFinallyMixedFallbackFirst.value, error, catchPreludeEvents.join("|"));
 }
+
+let conditionalFinallyOverrideMode = "throw";
+
+function* caughtConditionalFinallyOverride(): Generator<string, string, string> {
+    try {
+        yield "conditional-finally-override-pause";
+    } catch (error: any) {
+        return "catch-override-recovered";
+    } finally {
+        if (conditionalFinallyOverrideMode === "throw") throw "conditional-finally-override-throw";
+        else return "conditional-finally-override-return";
+    }
+}
+
+const caughtConditionalFinallyOverrideThrow = caughtConditionalFinallyOverride();
+const caughtConditionalFinallyOverrideThrowFirst: any = caughtConditionalFinallyOverrideThrow.next();
+try {
+    caughtConditionalFinallyOverrideThrow.throw("original-override");
+} catch (error: any) {
+    console.log("caught-conditional-finally-override-throw:", caughtConditionalFinallyOverrideThrowFirst.done, caughtConditionalFinallyOverrideThrowFirst.value, error);
+}
+
+conditionalFinallyOverrideMode = "return";
+const caughtConditionalFinallyOverrideReturn = caughtConditionalFinallyOverride();
+const caughtConditionalFinallyOverrideReturnFirst: any = caughtConditionalFinallyOverrideReturn.next();
+const caughtConditionalFinallyOverrideReturnDone: any = caughtConditionalFinallyOverrideReturn.throw("original-override");
+console.log("caught-conditional-finally-override-return:", caughtConditionalFinallyOverrideReturnFirst.done, caughtConditionalFinallyOverrideReturnFirst.value, caughtConditionalFinallyOverrideReturnDone.done, caughtConditionalFinallyOverrideReturnDone.value);
+
+const caughtConditionalFinallyOverrideNormal = caughtConditionalFinallyOverride();
+const caughtConditionalFinallyOverrideNormalFirst: any = caughtConditionalFinallyOverrideNormal.next();
+const caughtConditionalFinallyOverrideNormalDone: any = caughtConditionalFinallyOverrideNormal.next();
+console.log("caught-conditional-finally-override-normal:", caughtConditionalFinallyOverrideNormalFirst.done, caughtConditionalFinallyOverrideNormalFirst.value, caughtConditionalFinallyOverrideNormalDone.done, caughtConditionalFinallyOverrideNormalDone.value);

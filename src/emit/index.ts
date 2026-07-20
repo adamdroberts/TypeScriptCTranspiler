@@ -120,6 +120,8 @@ interface LazyGeneratorCatchHandler {
     finallyStatements: readonly ts.Statement[];
     finallyThrow: ts.ThrowStatement | null;
     finallyReturn: ts.ReturnStatement | null;
+    finallyConditionalStatement: ts.Statement | null;
+    finallyConditionalKind: "return" | "throw" | "mixed" | null;
 }
 
 interface LazyForOfInfo {
@@ -35817,7 +35819,14 @@ class Emitter {
             this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(finallyTail.expression))
             ? finallyTail
             : null;
-        const finallyBody = finallyThrow || finallyReturn ? finallyStatements.slice(0, -1) : finallyStatements;
+        const finallyConditionalStatement = !finallyThrow && !finallyReturn && finallyTail && ts.isIfStatement(finallyTail) && finallyTail.elseStatement &&
+            this.lazyGeneratorFinallyConditionalKind(finallyTail) !== null
+            ? finallyTail
+            : null;
+        const finallyConditionalKind = finallyConditionalStatement
+            ? this.lazyGeneratorFinallyConditionalKind(finallyConditionalStatement)
+            : null;
+        const finallyBody = finallyThrow || finallyReturn || finallyConditionalStatement ? finallyStatements.slice(0, -1) : finallyStatements;
         if (
             finallyBody.some((child) => this.nodeContainsYield(child)) ||
             finallyBody.some((child) => this.lazyGeneratorContainsAbruptControlFlow(child)) ||
@@ -35901,7 +35910,41 @@ class Emitter {
             throwStatement = throwCandidate;
         }
         if (!returnStatement && !throwStatement && !catchStatement) return null;
-        return { catchPreludeStatements, catchStatement, catchConditionalKind, returnStatement, throwStatement, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+        return {
+            catchPreludeStatements,
+            catchStatement,
+            catchConditionalKind,
+            returnStatement,
+            throwStatement,
+            catchClause: stmt.catchClause,
+            finallyStatements: finallyBody,
+            finallyThrow,
+            finallyReturn,
+            finallyConditionalStatement,
+            finallyConditionalKind,
+        };
+    }
+
+    private lazyGeneratorFinallyConditionalKind(stmt: ts.Statement): "return" | "throw" | "mixed" | null {
+        if (ts.isIfStatement(stmt)) {
+            if (!stmt.elseStatement || this.nodeContainsYield(stmt.expression)) return null;
+            const thenKind = this.lazyGeneratorFinallyConditionalKind(stmt.thenStatement);
+            const elseKind = this.lazyGeneratorFinallyConditionalKind(stmt.elseStatement);
+            if (!thenKind || !elseKind) return null;
+            return thenKind === elseKind ? thenKind : "mixed";
+        }
+        if (ts.isBlock(stmt)) {
+            return stmt.statements.length === 1
+                ? this.lazyGeneratorFinallyConditionalKind(stmt.statements[0]!)
+                : null;
+        }
+        if (ts.isReturnStatement(stmt) && stmt.expression &&
+            !this.nodeContainsYield(stmt.expression) &&
+            this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(stmt.expression))) return "return";
+        if (ts.isThrowStatement(stmt) && stmt.expression &&
+            !this.nodeContainsYield(stmt.expression) &&
+            this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(stmt.expression))) return "throw";
+        return null;
     }
 
     private isSimpleLazyCatchTerminalStatement(
@@ -36668,7 +36711,7 @@ class Emitter {
     ): void {
         if (!envLocalName || !this.activeLazyGeneratorCloseEnabled) return;
         const deferredCatchThrowHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .find((handler) => handler.finallyStatements.length > 0 &&
+            .find((handler) => (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) &&
                 (!!handler.throwStatement || handler.catchConditionalKind === "throw" || handler.catchConditionalKind === "mixed"));
         const deferredCatchThrow = deferredCatchThrowHandler ? this.freshTemp("_lazy_catch_throw") : null;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
@@ -36691,7 +36734,7 @@ class Emitter {
                         this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                     }
                     if (handler.catchStatement) {
-                        if (handler.finallyStatements.length > 0) {
+                        if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) {
                             if (handler.catchConditionalKind === "throw") {
                                 this.emitLazyGeneratorCatchConditionalThrow(buf, handler.catchStatement, deferredCatchThrow!);
                             } else if (handler.catchConditionalKind === "mixed") {
@@ -36702,7 +36745,7 @@ class Emitter {
                         } else {
                             this.emitLazyGeneratorStmt(buf, handler.catchStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                         }
-                    } else if (handler.finallyStatements.length > 0) {
+                    } else if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) {
                         if (handler.returnStatement) {
                             const returned = this.emitExpr(handler.returnStatement.expression!);
                             buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
@@ -36744,9 +36787,14 @@ class Emitter {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
         }
-        const finallyThrow = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .map((handler) => handler.finallyThrow)
-            .find((throwStatement): throwStatement is ts.ThrowStatement => !!throwStatement);
+        const finallyHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .find((handler) => !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement);
+        if (finallyHandler?.finallyConditionalStatement) {
+            this.emitLazyGeneratorFinallyConditionalCompletion(buf, finallyHandler.finallyConditionalStatement);
+            buf.close();
+            return;
+        }
+        const finallyThrow = finallyHandler?.finallyThrow ?? null;
         if (finallyThrow) {
             buf.line("*state = -1;");
             buf.line("*done = true;");
@@ -36755,9 +36803,7 @@ class Emitter {
             buf.close();
             return;
         }
-        const finallyReturn = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .map((handler) => handler.finallyReturn)
-            .find((returnStatement): returnStatement is ts.ReturnStatement => !!returnStatement);
+        const finallyReturn = finallyHandler?.finallyReturn ?? null;
         if (finallyReturn) {
             const returned = this.emitExpr(finallyReturn.expression!);
             buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, finallyReturn.expression!)};`);
@@ -36805,6 +36851,40 @@ class Emitter {
         buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, stmt.expression)};`);
         buf.line("a->iter_has_return = true;");
         buf.line("a->iter_return_consumed = false;");
+    }
+
+    private emitLazyGeneratorFinallyConditionalCompletion(buf: CBuf, stmt: ts.Statement): void {
+        if (ts.isIfStatement(stmt)) {
+            const condition = this.emitBoolExpr(stmt.expression);
+            buf.open(`if (${condition})`);
+            this.emitLazyGeneratorFinallyConditionalCompletion(buf, stmt.thenStatement);
+            buf.close();
+            if (stmt.elseStatement) {
+                buf.open("else");
+                this.emitLazyGeneratorFinallyConditionalCompletion(buf, stmt.elseStatement);
+                buf.close();
+            }
+            return;
+        }
+        if (ts.isBlock(stmt)) {
+            this.emitLazyGeneratorFinallyConditionalCompletion(buf, stmt.statements[0]!);
+            return;
+        }
+        if (ts.isReturnStatement(stmt) && stmt.expression) {
+            const returned = this.emitExpr(stmt.expression);
+            buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, stmt.expression)};`);
+            buf.line("a->iter_has_return = true;");
+            buf.line("a->iter_return_consumed = false;");
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            buf.line("return;");
+            return;
+        }
+        if (!ts.isThrowStatement(stmt) || !stmt.expression) unsupported(stmt, "lazy conditional finally requires return or throw arms");
+        buf.line("*state = -1;");
+        buf.line("*done = true;");
+        this.emitThrow(buf, stmt);
+        buf.line("return;");
     }
 
     private emitLazyGeneratorCatchConditionalThrow(buf: CBuf, stmt: ts.Statement, deferredThrow: string): void {
@@ -36979,7 +37059,9 @@ class Emitter {
             for (const child of catchReturn.finallyStatements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
-            if (catchReturn.finallyThrow) {
+            if (catchReturn.finallyConditionalStatement) {
+                this.emitLazyGeneratorFinallyConditionalCompletion(buf, catchReturn.finallyConditionalStatement);
+            } else if (catchReturn.finallyThrow) {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");
                 this.emitThrow(buf, catchReturn.finallyThrow);

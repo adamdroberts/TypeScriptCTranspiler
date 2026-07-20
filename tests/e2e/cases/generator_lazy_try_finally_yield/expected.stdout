@@ -24,3 +24,6 @@ caught-conditional-finally: false conditional-finally-pause true special-finally
 caught-conditional-finally-throw: false conditional-finally-throw-pause special-finally-throw before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally|conditional-finally|conditional-finally-throw
 caught-conditional-finally-mixed-special: false conditional-finally-mixed-pause true special-mixed-recovered before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally|conditional-finally|conditional-finally-throw|conditional-finally-mixed
 caught-conditional-finally-mixed-fallback: false conditional-finally-mixed-pause fallback-mixed-throw before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally|conditional-finally|conditional-finally-throw|conditional-finally-mixed|conditional-finally-mixed
+caught-conditional-finally-override-throw: false conditional-finally-override-pause conditional-finally-override-throw
+caught-conditional-finally-override-return: false conditional-finally-override-pause true conditional-finally-override-return
+caught-conditional-finally-override-normal: false conditional-finally-override-pause true conditional-finally-override-return
