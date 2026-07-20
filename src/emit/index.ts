@@ -36368,10 +36368,7 @@ class Emitter {
             }
         }
         buf.line("*state = -1;");
-        buf.line("*done = true;");
-        buf.open(`if (${envLocalName}->lazy_close_throw)`);
-        buf.line(`tsc_throw_str(tsc_value_to_string(${envLocalName}->lazy_close_arg));`);
-        buf.close();
+    buf.line("*done = true;");
         buf.line("return;");
         buf.close();
     }
@@ -36819,7 +36816,7 @@ class Emitter {
         this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
         const lazyCloseFuncName = hasLazyClose ? `_gen_lazy_close_${baseName}_${this.freshTemp("")}` : null;
         if (lazyCloseFuncName) {
-            this.protos.line(`static void ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw);`);
+            this.protos.line(`static bool ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw);`);
         }
         const nextBuf = new CBuf();
         nextBuf.open(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
@@ -36899,7 +36896,7 @@ class Emitter {
         this.closureDefs.write(nextBuf.toString());
         if (lazyCloseFuncName && envType) {
             const closeBuf = new CBuf();
-            closeBuf.open(`static void ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
+            closeBuf.open(`static bool ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
             const closeEnv = this.freshTemp("_lazy_close_env");
             closeBuf.line(`${envType}* const ${closeEnv} = (${envType}*)env;`);
             for (let i = 0; i < yieldStarCount; i++) {
@@ -36914,6 +36911,7 @@ class Emitter {
             closeBuf.line("bool _lazy_close_done = false;");
             closeBuf.line(`a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_lazy_close_done);`);
             closeBuf.close();
+            closeBuf.line("return is_throw;");
             closeBuf.close();
             closeBuf.line();
             this.closureDefs.write(closeBuf.toString());
@@ -54673,7 +54671,7 @@ class Emitter {
                     specs,
                     ([arr, valueArg]) =>
                         `({ tsc_array_t* const ${av} = ${arr!}; ` +
-                        `if (${av}->is_lazy_generator && ${av}->lazy_close) ${av}->lazy_close(${av}, ${av}->env, ${valueArg ?? "tsc_value_undefined()"}, false); ` +
+                        `if (${av}->is_lazy_generator && ${av}->lazy_close) (void)${av}->lazy_close(${av}, ${av}->env, ${valueArg ?? "tsc_value_undefined()"}, false); ` +
                         `${av}->iter_pos = ${av}->len; ` +
                         `${av}->is_lazy_generator = false; ${av}->state = -1; ` +
                         `${av}->iter_return_consumed = true; ` +
@@ -54696,7 +54694,7 @@ class Emitter {
                     ([arr, errArg]) => {
                         const av = this.freshTemp("_iter");
                         return `({ tsc_array_t* const ${av} = ${arr!}; ` +
-                            `if (${av}->is_lazy_generator && ${av}->lazy_close) ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true); ` +
+                            `if (${av}->is_lazy_generator && ${av}->lazy_close && ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true)) tsc_throw_str(${errArg!}); ` +
                             `${av}->iter_pos = ${av}->len; ` +
                             `${av}->is_lazy_generator = false; ` +
                             `${av}->state = -1; ` +

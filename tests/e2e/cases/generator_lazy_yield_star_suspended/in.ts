@@ -27,8 +27,12 @@ function* closableInner(): Generator<string, string, string> {
 }
 
 function* closableOuter(): Generator<string, string, string> {
-    yield* closableInner();
-    events.push("closable-outer-after");
+    try {
+        yield* closableInner();
+        events.push("closable-outer-after");
+    } finally {
+        events.push("closable-outer-finally");
+    }
     return "closable-outer-done";
 }
 
@@ -43,7 +47,11 @@ function* throwingInner(): Generator<string, string, string> {
 }
 
 function* throwingOuter(): Generator<string, string, string> {
-    yield* throwingInner();
+    try {
+        yield* throwingInner();
+    } finally {
+        events.push("throwing-outer-finally");
+    }
     return "throwing-outer-done";
 }
 

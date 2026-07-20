@@ -29,7 +29,7 @@ typedef struct tsc_array {
     int state;
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
-    void (*lazy_close)(struct tsc_array* a, void* env, tsc_value_t arg, bool is_throw);
+    bool (*lazy_close)(struct tsc_array* a, void* env, tsc_value_t arg, bool is_throw);
     tsc_object_t* props;
     tsc_object_t* holes;
     void* data;
