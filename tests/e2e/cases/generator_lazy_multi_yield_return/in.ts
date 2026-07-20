@@ -42,6 +42,10 @@ function* exponentLeaves(): Generator<number, number, number> {
     return (yield 13) ** (yield 14);
 }
 
+function* commaLeaves(): Generator<number, number, number> {
+    return (yield 18), (yield 19);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -108,3 +112,8 @@ const exponentFirst: any = exponentIter.next();
 const exponentSecond: any = exponentIter.next(2);
 const exponentDone: any = exponentIter.next(3);
 console.log("exponent", exponentFirst.value, exponentSecond.value, exponentDone.done, exponentDone.value);
+const commaIter = commaLeaves();
+const commaFirst: any = commaIter.next();
+const commaSecond: any = commaIter.next(4);
+const commaDone: any = commaIter.next(4);
+console.log("comma", commaFirst.value, commaSecond.value, commaDone.done, commaDone.value);

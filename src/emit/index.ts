@@ -37587,7 +37587,7 @@ class Emitter {
             }
             if (!ts.isBinaryExpression(unwrapped)) return false;
             const op = unwrapped.operatorToken.kind;
-            if (![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
+            if (![ts.SyntaxKind.CommaToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
                 ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
                 ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
                 ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken,

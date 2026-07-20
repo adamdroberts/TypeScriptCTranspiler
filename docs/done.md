@@ -247,6 +247,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also preserve bounded `typeof` leaves around yielded operands. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve bounded equality and relational comparison leaves around yielded operands. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve bounded exponentiation leaves around yielded operands. Test: `generator_lazy_multi_yield_return`
+- Finite lazy multi-yield returns also preserve bounded comma-sequencing leaves around yielded operands. Test: `generator_lazy_multi_yield_return`
 - Computed `[Symbol.iterator]()` manual invocation is implemented for typed arrays, strings, Sets, Maps, generator results, custom iterable classes, and custom iterator objects, allowing manual iterator protocol navigation. Test: `manual_symbol_iterator`
 - Generator iterator `next`, `return`, and `throw` property values are non-constructable built-in methods with standard names, arity, and no own `prototype` metadata. Test: `generator_dynamic_symbol_iterator`
 - `for (const k in obj)` enumerates own enumerable string keys. Supports typed classes/interfaces (compile-time field-name lists), typed arrays and Buffers (numeric index strings), and dynamic `tsc_value_t` objects via `tsc_value_object_keys`. The binding type is always `string`. Test: `for_in`
