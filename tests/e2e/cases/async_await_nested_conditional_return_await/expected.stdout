@@ -1,0 +1,6 @@
+declaration-true: declaration-then
+declaration-false: declaration-else
+method-true: method-then
+method-false: method-else
+value-true: arrow-then
+value-false: arrow-else

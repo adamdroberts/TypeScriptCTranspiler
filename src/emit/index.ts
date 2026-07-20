@@ -30843,6 +30843,16 @@ class Emitter {
                     return this.emitAsyncAwaitIfExpressionReturnBranch(buf, logicalContinuation);
                 }
             }
+            if (ts.isConditionalExpression(nestedExpression)) {
+                const conditionalContinuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+                    nestedExpression,
+                    parameters,
+                    thisValue,
+                );
+                if (conditionalContinuation && this.asyncAwaitIfExpressionReturnBranchSupported(conditionalContinuation)) {
+                    return this.emitAsyncAwaitIfExpressionReturnBranch(buf, conditionalContinuation);
+                }
+            }
             const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                 expression.expression,
                 parameters,
