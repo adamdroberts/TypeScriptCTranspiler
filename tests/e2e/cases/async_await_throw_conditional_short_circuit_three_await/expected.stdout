@@ -1,0 +1,6 @@
+declaration-true: fn-three
+declaration-false: fn-or-two
+value-true: arrow-two
+method-false: method-or-two
+method-true: method-three
+value-false: arrow-or-two
