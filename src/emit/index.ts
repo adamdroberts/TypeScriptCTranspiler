@@ -25664,11 +25664,13 @@ class Emitter {
                 }
             }
             if (ts.isConditionalExpression(nestedExpression)) {
+                const returnContextType = this.asyncAwaitReturnContextTypeForBody(body);
                 const branch = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
                     nestedExpression,
                     parameters,
                     thisValue,
                     preludeMatch.captures,
+                    returnContextType,
                 );
                 if (branch && branch.kind === "if" && branch.elseBranch &&
                     this.asyncAwaitIfExpressionReturnBranchHasAwait(branch) &&
@@ -30910,11 +30912,13 @@ class Emitter {
                 }
             }
             if (ts.isConditionalExpression(nestedExpression)) {
+                const returnContextType = this.asyncAwaitReturnContextTypeForExpressionBody(expressionBody);
                 const conditionalContinuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
                     nestedExpression,
                     parameters,
                     thisValue,
                     captures,
+                    returnContextType,
                 );
                 if (conditionalContinuation && this.asyncAwaitIfExpressionReturnBranchSupported(conditionalContinuation)) {
                     return this.emitAsyncAwaitIfExpressionReturnBranch(buf, conditionalContinuation);
@@ -30975,6 +30979,14 @@ class Emitter {
         if (!continuation) return false;
         if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
+    }
+
+    private asyncAwaitReturnContextTypeForExpressionBody(expression: ts.Expression): ts.Type | undefined {
+        const declaration = expression.parent;
+        if (!ts.isFunctionLike(declaration)) return undefined;
+        const signature = this.checker.getSignatureFromDeclaration(declaration);
+        if (!signature) return undefined;
+        return this.checker.getAwaitedType(signature.getReturnType());
     }
 
     private asyncAwaitExpressionClosureCaptures(
@@ -32091,6 +32103,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         captures: readonly AsyncAwaitContinuationParam[] = [],
+        returnContextType?: ts.Type,
     ): AsyncAwaitIfExpressionReturnNode | null {
         if (!this.asyncAwaitConditionExpressionSupported(expr.condition)) return null;
         const thenBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(
@@ -32098,12 +32111,14 @@ class Emitter {
             parameters,
             thisValue,
             captures,
+            returnContextType,
         );
         const elseBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(
             expr.whenFalse,
             parameters,
             thisValue,
             captures,
+            returnContextType,
         );
         if (!thenBranch || !elseBranch) return null;
 
@@ -32121,10 +32136,17 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         captures: readonly AsyncAwaitContinuationParam[] = [],
+        returnContextType?: ts.Type,
     ): AsyncAwaitIfExpressionReturnNode | null {
         const expression = this.unwrapTransparentExpression(expr);
         if (ts.isConditionalExpression(expression)) {
-            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(expression, parameters, thisValue, captures);
+            return this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+                expression,
+                parameters,
+                thisValue,
+                captures,
+                returnContextType,
+            );
         }
         if (ts.isAwaitExpression(expression)) {
             return {
@@ -32180,6 +32202,7 @@ class Emitter {
             parameters,
             thisValue,
             captures,
+            returnContextType,
         );
         if (sequenceContinuation &&
             this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {

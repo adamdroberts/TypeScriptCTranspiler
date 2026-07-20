@@ -6,7 +6,7 @@ function combine(left: string, right: string): string {
 
 async function declaration(flag: boolean): Promise<any> {
     return await (flag
-        ? combine(await delay(1, "declaration-left"), await delay(1, "declaration-right"))
+        ? [await delay(1, "declaration-left"), await delay(1, "declaration-right")]
         : { first: await delay(1, "declaration-first"), second: await delay(1, "declaration-second") });
 }
 
@@ -20,12 +20,12 @@ class Worker {
 
 const value = async (flag: boolean): Promise<any> =>
     await (flag
-        ? `arrow-${await delay(1, "arrow-left")}-${await delay(1, "arrow-right")}`
+        ? [await delay(1, "arrow-left"), await delay(1, "arrow-right")]
         : { first: await delay(1, "arrow-first"), second: await delay(1, "arrow-second") });
 
-declaration(true).then((result) => console.log("declaration-true:", result));
+declaration(true).then((result) => console.log("declaration-true:", JSON.stringify(result)));
 declaration(false).then((result) => console.log("declaration-false:", JSON.stringify(result)));
 new Worker().run(true).then((result) => console.log("method-true:", result));
 new Worker().run(false).then((result) => console.log("method-false:", result));
-value(true).then((result) => console.log("value-true:", result));
+value(true).then((result) => console.log("value-true:", JSON.stringify(result)));
 value(false).then((result) => console.log("value-false:", JSON.stringify(result)));
