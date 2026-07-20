@@ -575,6 +575,22 @@ async function chooseLoopReturnAwaitAliasPostForInLocal(condition: boolean, pref
     return prefix + "-post-for-in-local-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostMutableIterators(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-post-mutable-iterators");
+        for (let item of ["-of"]) {
+            prefix += item;
+            item = "-updated";
+        }
+        for (let item in ["in"]) {
+            prefix += item;
+            item = "-updated";
+        }
+        return value + prefix;
+    }
+    return prefix + "-post-mutable-iterators-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -831,6 +847,8 @@ chooseLoopReturnAwaitAliasPostForOfLocal(true, "body-return").then((value) => co
 chooseLoopReturnAwaitAliasPostForOfLocal(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-for-of-local-false", value));
 chooseLoopReturnAwaitAliasPostForInLocal(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-for-in-local-true", value));
 chooseLoopReturnAwaitAliasPostForInLocal(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-for-in-local-false", value));
+chooseLoopReturnAwaitAliasPostMutableIterators(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-mutable-iterators-true", value));
+chooseLoopReturnAwaitAliasPostMutableIterators(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-mutable-iterators-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
