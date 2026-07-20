@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Source `try` / `finally` and combined `try` / `catch` / `finally` leading routing now preserve multiple simple all-awaited declarators. Regression: `async_await_if_condition`.
 - Source `try` / `catch` leading async/await routing now preserves multiple simple all-awaited declarators in the try block before catch recovery. Regression: `async_await_if_condition`.
 - Branch-block async/await analysis now supports multiple simple all-awaited declarators in one branch-arm `const`/`let` statement. Regression: `async_await_if_condition`.
 - Leading async/await chains now support multiple simple all-awaited declarators in one `const`/`let` statement as sequential suspension steps. Regression: `async_await_while_condition`.

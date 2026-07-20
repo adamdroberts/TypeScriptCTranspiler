@@ -28,6 +28,26 @@ async function chooseTryMultipleAwaitDeclarators(): Promise<string> {
     }
 }
 
+async function chooseTryFinallyMultipleAwaitDeclarators(): Promise<string> {
+    try {
+        const first = await Promise.resolve("finally-first"), second = await Promise.resolve(first + "-second");
+        return second;
+    } finally {
+        void "finally-ran";
+    }
+}
+
+async function chooseTryCatchFinallyMultipleAwaitDeclarators(): Promise<string> {
+    try {
+        const first = await Promise.resolve("combined-first"), second = await Promise.resolve(first + "-second");
+        return second;
+    } catch {
+        return "combined-caught";
+    } finally {
+        void "combined-finally-ran";
+    }
+}
+
 choose(true).then((value) => console.log("await-if-true", value));
 choose(false).then((value) => console.log("await-if-false", value));
 chooseNested(true).then((value) => console.log("await-if-nested-true", value));
@@ -35,6 +55,8 @@ chooseNested(false).then((value) => console.log("await-if-nested-false", value))
 chooseBranchMultipleAwaitDeclarators(true).then((value) => console.log("await-if-branch-multiple-true", value));
 chooseBranchMultipleAwaitDeclarators(false).then((value) => console.log("await-if-branch-multiple-false", value));
 chooseTryMultipleAwaitDeclarators().then((value) => console.log("await-try-multiple-declarators", value));
+chooseTryFinallyMultipleAwaitDeclarators().then((value) => console.log("await-try-finally-multiple-declarators", value));
+chooseTryCatchFinallyMultipleAwaitDeclarators().then((value) => console.log("await-try-catch-finally-multiple-declarators", value));
 
 class Chooser {
     async pick(flag: boolean): Promise<string> {
