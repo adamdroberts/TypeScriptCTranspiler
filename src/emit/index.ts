@@ -30045,6 +30045,7 @@ class Emitter {
         if (shortCircuitContinuation) return shortCircuitContinuation;
         const awaitExprs: ts.AwaitExpression[] = [];
         let structuralSequence = false;
+        let synchronousTail = false;
         let ok = true;
         const isLiteral = (node: ts.Expression): boolean =>
             ts.isStringLiteral(node) ||
@@ -30060,9 +30061,20 @@ class Emitter {
             const operand = this.unwrapTransparentExpression(node.expression);
             return isLiteral(operand) || (ts.isIdentifier(operand) && operand.text === "undefined");
         };
+        const isSynchronousTail = (node: ts.Expression): boolean => {
+            if (ts.isIdentifier(node)) return this.isValueReferenceIdentifier(node);
+            if (ts.isPropertyAccessExpression(node)) {
+                return node.expression.kind === ts.SyntaxKind.ThisKeyword || ts.isIdentifier(node.expression);
+            }
+            return false;
+        };
         const flatten = (node: ts.Expression): void => {
             if (!ok) return;
             const current = this.unwrapTransparentExpression(node);
+            if (ts.isAwaitExpression(current) && synchronousTail) {
+                ok = false;
+                return;
+            }
             if (ts.isBinaryExpression(current)) {
                 if (current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
                     current.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
@@ -30078,6 +30090,10 @@ class Emitter {
                 return;
             }
             if (isSideEffectFreeVoid(current)) {
+                return;
+            }
+            if (isSynchronousTail(current)) {
+                synchronousTail = true;
                 return;
             }
             if (ts.isTypeOfExpression(current)) {
@@ -30822,6 +30838,7 @@ class Emitter {
     ): boolean {
         const expression = this.unwrapTransparentExpression(expressionBody);
         if (ts.isAwaitExpression(expression)) {
+            const captures = this.asyncAwaitExpressionClosureCaptures(expression.expression, parameters);
             const sourceType = this.prepareType(mapTsType(
                 expression.expression,
                 this.checker.getTypeAtLocation(expression.expression),
@@ -30846,6 +30863,7 @@ class Emitter {
                     nestedExpression,
                     parameters,
                     thisValue,
+                    captures,
                 );
                 if (logicalContinuation && this.asyncAwaitIfExpressionReturnBranchSupported(logicalContinuation)) {
                     return this.emitAsyncAwaitIfExpressionReturnBranch(buf, logicalContinuation);
@@ -30856,6 +30874,7 @@ class Emitter {
                     nestedExpression,
                     parameters,
                     thisValue,
+                    captures,
                 );
                 if (conditionalContinuation && this.asyncAwaitIfExpressionReturnBranchSupported(conditionalContinuation)) {
                     return this.emitAsyncAwaitIfExpressionReturnBranch(buf, conditionalContinuation);
@@ -30865,6 +30884,7 @@ class Emitter {
                 nestedExpression,
                 parameters,
                 thisValue,
+                captures,
             );
             if (twoExpressionContinuation && this.asyncAwaitTwoExpressionReturnContinuationSupported(twoExpressionContinuation)) {
                 return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, twoExpressionContinuation);
@@ -30873,6 +30893,7 @@ class Emitter {
                 nestedExpression,
                 parameters,
                 thisValue,
+                captures,
             );
             if (fourExpressionContinuation && this.asyncAwaitThreeExpressionReturnContinuationSupported(fourExpressionContinuation)) {
                 return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, fourExpressionContinuation);
@@ -30881,6 +30902,7 @@ class Emitter {
                 nestedExpression,
                 parameters,
                 thisValue,
+                captures,
             );
             if (threeExpressionContinuation && this.asyncAwaitThreeExpressionReturnContinuationSupported(threeExpressionContinuation)) {
                 return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, threeExpressionContinuation);
@@ -30889,6 +30911,7 @@ class Emitter {
                 expression.expression,
                 parameters,
                 thisValue,
+                captures,
             );
             if (sequenceContinuation && this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {
                 return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, sequenceContinuation);
@@ -30897,6 +30920,7 @@ class Emitter {
                 nestedExpression,
                 parameters,
                 thisValue,
+                captures,
             );
             if (singleContinuation && this.asyncAwaitExpressionReturnContinuationSupported(singleContinuation)) {
                 return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, singleContinuation);
@@ -30911,6 +30935,33 @@ class Emitter {
         if (!continuation) return false;
         if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
+    }
+
+    private asyncAwaitExpressionClosureCaptures(
+        expression: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+    ): AsyncAwaitContinuationParam[] {
+        const parameterSymbols = new Set<ts.Symbol>();
+        for (const parameter of parameters) {
+            if (ts.isIdentifier(parameter.name)) {
+                const symbol = this.symbolForIdentifier(parameter.name);
+                if (symbol) parameterSymbols.add(symbol);
+            }
+        }
+        const captures = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const visit = (node: ts.Node): void => {
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                if (symbol && !parameterSymbols.has(symbol)) {
+                    const capture = this.asyncAwaitClosureCaptureParameter(symbol);
+                    if (capture) captures.set(capture.symbol, capture);
+                }
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(expression);
+        return [...captures.values()];
     }
 
     private isAsyncAwaitShortCircuitBinary(node: ts.Node): node is ts.BinaryExpression {
