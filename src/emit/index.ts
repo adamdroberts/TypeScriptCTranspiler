@@ -36032,22 +36032,20 @@ class Emitter {
         catchPreludeSymbols: ReadonlySet<ts.Symbol> = new Set(),
     ): boolean {
         const expression = this.unwrapTransparentExpression(expr);
-        if (ts.isIdentifier(expression)) {
-            const symbol = this.symbolForIdentifier(expression);
-            return symbol === catchSymbol || (!!symbol && catchPreludeSymbols.has(symbol));
-        }
-        if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) return false;
-        const left = this.unwrapTransparentExpression(expression.left);
-        const right = this.unwrapTransparentExpression(expression.right);
-        const isStringLiteral = (node: ts.Expression): boolean =>
-            ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
-        const isCatch = (node: ts.Expression): boolean =>
-            ts.isIdentifier(node) && this.symbolForIdentifier(node) === catchSymbol;
-        const isPrelude = (node: ts.Expression): boolean =>
-            ts.isIdentifier(node) && !!this.symbolForIdentifier(node) && catchPreludeSymbols.has(this.symbolForIdentifier(node)!);
-        return (isCatch(left) && (isStringLiteral(right) || isPrelude(right))) ||
-            (isStringLiteral(left) && isCatch(right)) ||
-            (isPrelude(left) && isCatch(right));
+        const isStringLeaf = (node: ts.Expression): boolean => {
+            if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return true;
+            if (!ts.isIdentifier(node)) return false;
+            const symbol = this.symbolForIdentifier(node);
+            return !!symbol && catchPreludeSymbols.has(symbol);
+        };
+        const isCatchExpression = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            if (ts.isIdentifier(unwrapped)) return this.symbolForIdentifier(unwrapped) === catchSymbol;
+            if (!ts.isBinaryExpression(unwrapped) || unwrapped.operatorToken.kind !== ts.SyntaxKind.PlusToken) return false;
+            return (isCatchExpression(unwrapped.left) && isStringLeaf(unwrapped.right)) ||
+                (isStringLeaf(unwrapped.left) && isCatchExpression(unwrapped.right));
+        };
+        return isCatchExpression(expression);
     }
 
     private lazyGeneratorTryTerminalReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {

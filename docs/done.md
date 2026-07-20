@@ -212,6 +212,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Lazy generators rethrow a simple catch identifier directly after a suspended yield when no `finally` must carry the binding. Test: `generator_lazy_try_finally_yield`
 - Lazy generators carry a simple catch-identifier rethrow through a non-suspending `finally`, preserving finalizer `throw` / `return` overrides. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support two-leaf string composition in catch rethrows, including through a non-suspending `finally`. Test: `generator_lazy_try_finally_yield`
+- Lazy generators support bounded three-leaf string composition around catch values in direct catch returns and rethrows, including through a non-suspending `finally`. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support bounded catch `if` / `else` recovery with direct literal/catch-value returns, including through a non-suspending `finally`, or direct literal/catch-value throws without cleanup. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support bounded catch `if` / `else` direct literal/catch-value throws through a non-suspending `finally`, preserving finalizer ordering and thrown-value propagation. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support bounded catch `if` / `else` mixed direct literal/catch-value return and throw arms through a non-suspending `finally`, preserving branch-specific completion. Test: `generator_lazy_try_finally_yield`

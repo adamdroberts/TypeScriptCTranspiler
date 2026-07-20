@@ -41,6 +41,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Lazy generators now support terminal literal catch rethrows after suspended yields, preserving bounded catch-prelude and non-suspending `finally` ordering. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now rethrow a simple catch identifier directly after a suspended yield when no `finally` must carry the binding. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now support two-leaf string composition in catch rethrows, including when carried through a non-suspending `finally`. Regression: `generator_lazy_try_finally_yield`.
+- Lazy generators now support bounded three-leaf string composition around catch values in direct returns and rethrows, including through a non-suspending `finally`. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now support bounded no-`finally` catch `if` / `else` recovery with direct literal/catch-value returns or throws. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now support conditional catch return arms through a non-suspending `finally`. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now carry simple catch-identifier rethrows through a non-suspending `finally`, preserving finalizer `throw` / `return` overrides. Regression: `generator_lazy_try_finally_yield`.

@@ -284,6 +284,41 @@ try {
     console.log("caught-composed-rethrow:", caughtComposedRethrowFirst.done, caughtComposedRethrowFirst.value, error, catchPreludeEvents.join("|"));
 }
 
+function* caughtThreeLeafRethrow(): Generator<string, string, string> {
+    try {
+        yield "three-leaf-rethrow-pause";
+    } catch (error: any) {
+        throw "recovered:" + error + ":three-leaf";
+    } finally {
+        catchPreludeEvents.push("three-leaf-rethrow-finally");
+    }
+    return "normal";
+}
+
+const caughtThreeLeafRethrowResult = caughtThreeLeafRethrow();
+const caughtThreeLeafRethrowFirst: any = caughtThreeLeafRethrowResult.next();
+try {
+    caughtThreeLeafRethrowResult.throw("original-three-leaf");
+} catch (error: any) {
+    console.log("caught-three-leaf-rethrow:", caughtThreeLeafRethrowFirst.done, caughtThreeLeafRethrowFirst.value, error, catchPreludeEvents.join("|"));
+}
+
+function* caughtThreeLeafReturn(): Generator<string, string, string> {
+    try {
+        yield "three-leaf-return-pause";
+    } catch (error: any) {
+        return "handled:" + error + ":three-leaf";
+    } finally {
+        catchPreludeEvents.push("three-leaf-return-finally");
+    }
+    return "normal";
+}
+
+const caughtThreeLeafReturnResult = caughtThreeLeafReturn();
+const caughtThreeLeafReturnFirst: any = caughtThreeLeafReturnResult.next();
+const caughtThreeLeafReturnDone: any = caughtThreeLeafReturnResult.throw("original-three-leaf");
+console.log("caught-three-leaf-return:", caughtThreeLeafReturnFirst.done, caughtThreeLeafReturnFirst.value, caughtThreeLeafReturnDone.done, caughtThreeLeafReturnDone.value, catchPreludeEvents.join("|"));
+
 function* caughtConditional(): Generator<string, string, string> {
     try {
         yield "conditional-catch-pause";
