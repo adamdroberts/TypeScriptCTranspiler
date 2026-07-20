@@ -435,6 +435,15 @@ async function chooseWhileContinueAwait(value: string, repeat: boolean): Promise
     return await laterBodyValue(value);
 }
 
+async function chooseWhileContinueThrowAwait(reason: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat)) {
+        reason += "-continued";
+        repeat = false;
+        continue;
+    }
+    throw await laterBodyValue(reason);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2565,6 +2574,7 @@ chooseLoopInitializerEscapingVarNestedForInControlBreakAwait().then((value) => c
 chooseLoopInitializerEscapingVarContinueAwait().then((value) => console.log("await-loop-initializer-escaping-var-continue", value));
 chooseLoopInitializerEscapingVarContinueThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-continue-throw", reason));
 chooseWhileContinueAwait("while-escaping-continue", true).then((value) => console.log("await-while-escaping-var-continue", value));
+chooseWhileContinueThrowAwait("while-escaping-continue-throw", true).catch((reason) => console.log("await-while-escaping-var-continue-throw", reason));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
