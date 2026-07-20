@@ -33,6 +33,12 @@ for (const i in arr) {
     console.log(i);
 }
 
+console.log("--- Buffer ---");
+const bytes = Buffer.from([13, 14]);
+for (const i in bytes) {
+    console.log(i);
+}
+
 console.log("--- dynamic object ---");
 const obj = JSON.parse(`{"alpha":1,"beta":2,"gamma":3}`) as any;
 for (const k in obj) {

@@ -39186,6 +39186,8 @@ class Emitter {
             this.emitForInBody(buf, fis, keysVar, bindingName, bindingIsConst);
             buf.close();
             return;
+        } else if (iter.ty.kind === "buffer") {
+            keysExpr = `({ tsc_buffer_t* const _for_in_buffer = ${iter.c}; tsc_array_t* _for_in_keys = tsc_array_new(sizeof(tsc_str_t*), _for_in_buffer->len ? _for_in_buffer->len : 1); for (size_t _for_in_i = 0; _for_in_i < _for_in_buffer->len; _for_in_i++) { tsc_str_t* _for_in_key = tsc_str_from_int((int64_t)_for_in_i); tsc_array_push_raw(_for_in_keys, &_for_in_key); } _for_in_keys; })`;
         } else if (iter.ty.kind === "class") {
             // Typed-object own enumerable property names — emit a static array.
             const fields = this.classOwnPropertyNames(fis.expression, iter);
