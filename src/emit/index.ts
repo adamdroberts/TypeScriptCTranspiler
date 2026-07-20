@@ -251,6 +251,7 @@ interface AsyncAwaitTwoExpressionReturnContinuation {
     firstAwaitExpr: ts.AwaitExpression;
     secondAwaitExpr: ts.AwaitExpression;
     returnExpr: ts.Expression;
+    shortCircuitOperator?: ts.SyntaxKind;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
 }
@@ -358,6 +359,11 @@ interface AsyncAwaitIfExpressionReturnLeaf {
     continuation: AsyncAwaitExpressionReturnContinuation;
 }
 
+interface AsyncAwaitIfTwoExpressionReturnLeaf {
+    kind: "twoReturn";
+    continuation: AsyncAwaitTwoExpressionReturnContinuation;
+}
+
 interface AsyncAwaitIfLocalReturnLeaf {
     kind: "localReturn";
     continuation: AsyncAwaitReturnContinuation;
@@ -415,6 +421,7 @@ interface AsyncAwaitSwitchExpressionReturnBranch {
 
 type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
+    | AsyncAwaitIfTwoExpressionReturnLeaf
     | AsyncAwaitIfLocalReturnLeaf
     | AsyncAwaitIfLocalTryCatchReturnLeaf
     | AsyncAwaitIfLocalTryFinallyReturnLeaf
@@ -29762,6 +29769,39 @@ class Emitter {
         };
     }
 
+    private asyncAwaitLogicalTwoExpressionReturnContinuationForExpression(
+        returnExpr: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
+    ): AsyncAwaitTwoExpressionReturnContinuation | null {
+        const expression = this.unwrapTransparentExpression(returnExpr);
+        if (!this.isAsyncAwaitShortCircuitBinary(expression)) return null;
+        const first = this.unwrapTransparentExpression(expression.left);
+        const second = this.unwrapTransparentExpression(expression.right);
+        if (!ts.isAwaitExpression(first) || !ts.isAwaitExpression(second)) return null;
+        let ok = true;
+        const visitSource = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visitSource);
+        };
+        visitSource(first.expression);
+        visitSource(second.expression);
+        if (!ok) return null;
+        return {
+            firstAwaitExpr: first,
+            secondAwaitExpr: second,
+            returnExpr: expression,
+            shortCircuitOperator: expression.operatorToken.kind,
+            params: [...this.asyncAwaitContinuationParameters(parameters), ...captures],
+            thisValue,
+        };
+    }
+
     private asyncAwaitThreeExpressionReturnContinuationForExpression(
         returnExpr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
@@ -30963,6 +31003,7 @@ class Emitter {
             continuation.returnExpr,
             continuation.params,
             continuation.thisValue,
+            continuation.shortCircuitOperator,
             rejectResult,
         );
         const envType = `${adapter}_env_t`;
@@ -31242,6 +31283,7 @@ class Emitter {
         returnExpr: ts.Expression,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
+        shortCircuitOperator: ts.SyntaxKind | undefined = undefined,
         rejectResult = false,
     ): string {
         const secondName = `tsc_async_await_two_expression_second_${this.asyncAwaitReturnContinuationAdapters++}`;
@@ -31366,6 +31408,27 @@ class Emitter {
         firstBuf.line(`tsc_try_push(&${firstEh});`);
         firstBuf.open(`if (setjmp(${firstEh}.jb) == 0)`);
         if (firstValueResult) firstBuf.line(`${firstAwaitedType.c} ${firstValue} = ${firstValueResult};`);
+        if (shortCircuitOperator !== undefined) {
+            const firstResult: EmitResult = firstAwaitedType.kind === "void"
+                ? { c: "tsc_value_undefined()", ty: T_VALUE }
+                : { c: firstValue, ty: firstAwaitedType };
+            const truthy = this.truthyExprFromEmitResult(firstResult, firstAwaitExpr);
+            const nullish = this.nullishExprFromEmitResult(firstResult, firstAwaitExpr);
+            const shortCircuit = shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
+                ? `!(${truthy})`
+                : shortCircuitOperator === ts.SyntaxKind.BarBarToken
+                    ? truthy
+                    : `!(${nullish})`;
+            firstBuf.open(`if (${shortCircuit})`);
+            if (rejectResult) {
+                firstBuf.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${this.coerceToString(firstResult, returnExpr)}));`);
+            } else {
+                firstBuf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveResult(firstResult, returnExpr)});`);
+            }
+            firstBuf.line("tsc_try_pop();");
+            firstBuf.line("return;");
+            firstBuf.close();
+        }
         this.argumentValueScopes.push(firstScope);
         this.awaitExpressionValueScopes.push(firstAwaitScope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -31444,6 +31507,15 @@ class Emitter {
         ) return null;
         const leftExpression = this.unwrapTransparentExpression(expr.left);
         if (ts.isAwaitExpression(leftExpression)) {
+            if (ts.isAwaitExpression(this.unwrapTransparentExpression(expr.right))) {
+                const continuation = this.asyncAwaitLogicalTwoExpressionReturnContinuationForExpression(
+                    expr,
+                    parameters,
+                    thisValue,
+                    captures,
+                );
+                return continuation ? { kind: "twoReturn", continuation } : null;
+            }
             if (!this.asyncAwaitSyncReturnExpressionSupported(expr.right)) return null;
             return {
                 kind: "return",
@@ -32048,6 +32120,7 @@ class Emitter {
     ): boolean {
         if (
             branch.kind === "return" ||
+            branch.kind === "twoReturn" ||
             branch.kind === "localReturn" ||
             branch.kind === "localTryCatchReturn" ||
             branch.kind === "localTryFinallyReturn" ||
@@ -32071,6 +32144,7 @@ class Emitter {
         const visit = (node: AsyncAwaitIfExpressionReturnNode): void => {
             if (
                 node.kind === "return" ||
+                node.kind === "twoReturn" ||
                 node.kind === "localReturn" ||
                 node.kind === "localTryCatchReturn" ||
                 node.kind === "localTryFinallyReturn" ||
@@ -32113,6 +32187,9 @@ class Emitter {
         if (branch.kind === "return") {
             return this.asyncAwaitExpressionReturnContinuationSupported(branch.continuation);
         }
+        if (branch.kind === "twoReturn") {
+            return this.asyncAwaitTwoExpressionReturnContinuationSupported(branch.continuation);
+        }
         if (branch.kind === "localReturn") {
             return this.asyncAwaitReturnContinuationSupported(branch.continuation);
         }
@@ -32147,6 +32224,9 @@ class Emitter {
     ): boolean {
         if (branch.kind === "return") {
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, branch.continuation, rejectResult);
+        }
+        if (branch.kind === "twoReturn") {
+            return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, branch.continuation, rejectResult);
         }
         if (branch.kind === "localReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);

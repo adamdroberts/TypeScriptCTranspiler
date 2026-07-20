@@ -1,0 +1,9 @@
+declaration-branch: fn-branch
+declaration-and: fn-fall-and
+method-branch: branch-method
+declaration-or: fn-fall-or
+value-branch: arrow-branch
+method-and: fall-methodand
+method-or: fall-methodor
+value-and: arrow-fall-and
+value-or: arrow-fall-or
