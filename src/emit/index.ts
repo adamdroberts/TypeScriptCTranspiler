@@ -37670,6 +37670,10 @@ class Emitter {
                     closeBuf.line(`bool ${delegatedResult} = ${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
                     closeBuf.open(`if (is_throw && !${delegatedResult})`);
                     closeBuf.line("_delegated_throw_unhandled = false;");
+                    closeBuf.open(`if (${closeEnv}->yield_star_arr_${i}->lazy_close_yielded)`);
+                    closeBuf.line(`a->lazy_close_yielded = true;`);
+                    closeBuf.line(`a->lazy_close_value = ${closeEnv}->yield_star_arr_${i}->lazy_close_value;`);
+                    closeBuf.close();
                     closeBuf.close();
                     closeBuf.open(`if (!is_throw && ${delegatedResult} && ${closeEnv}->yield_star_arr_${i}->lazy_close_yielded)`);
                     closeBuf.line(`a->lazy_close_yielded = true;`);
@@ -37684,6 +37688,9 @@ class Emitter {
                 closeBuf.close();
             }
             if (yieldStarCount > 0) {
+                closeBuf.open("if (is_throw && a->lazy_close_yielded)");
+                closeBuf.line("return false;");
+                closeBuf.close();
                 closeBuf.open("if (is_throw && !_delegated_throw_unhandled)");
                 closeBuf.open("if (a->state >= 0 && a->lazy_next)");
                 closeBuf.line("bool _delegated_close_done = false;");
@@ -40393,6 +40400,9 @@ class Emitter {
                     closeBuf.line("a->is_lazy_generator = false;");
                     closeBuf.line("return false;");
                     closeBuf.close();
+                    closeBuf.line("a->lazy_close_yielded = true;");
+                    closeBuf.line(`a->lazy_close_value = ${this.coerce({ c: `${throwStep}->value`, ty: valueType }, T_VALUE, throwMethod.method)};`);
+                    closeBuf.line("return false;");
                 }
                 closeBuf.line("return true;");
                 closeBuf.close();
@@ -55658,15 +55668,20 @@ class Emitter {
                     ([arr, errArg]) => {
                         const av = this.freshTemp("_iter");
                         const out = this.freshTemp("_step");
+                        const closeHandled = this.freshTemp("_close_handled");
                         return `({ tsc_array_t* const ${av} = ${arr!}; ` +
-                            `if (!((${av}->is_lazy_generator && ${av}->lazy_close)) || ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true)) { ` +
-                            `${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ` +
+                            `bool ${closeHandled} = !((${av}->is_lazy_generator && ${av}->lazy_close)); ` +
+                            `if (!${closeHandled}) ${closeHandled} = ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true); ` +
+                            `if (${closeHandled}) { ${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ` +
                             `${av}->iter_return_consumed = true; tsc_throw_str(${errArg!}); } ` +
-                            `${av}->is_lazy_generator = false; ${av}->iter_pos = ${av}->len; ${av}->state = -1; ` +
                             `tsc_object_t* ${out} = tsc_object_new(); ` +
+                            `if (${av}->lazy_close_yielded) { ` +
+                            `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(false)); ` +
+                            `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->lazy_close_value); ${av}->lazy_close_yielded = false; ` +
+                            `} else { ${av}->is_lazy_generator = false; ${av}->iter_pos = ${av}->len; ${av}->state = -1; ` +
                             `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
                             `if (${av}->iter_has_return && !${av}->iter_return_consumed) { tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->iter_return); ${av}->iter_return_consumed = true; } ` +
-                            `else { tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); } ` +
+                            `else { tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); } } ` +
                             `tsc_value_object(${out}); })`;
                     },
                 );

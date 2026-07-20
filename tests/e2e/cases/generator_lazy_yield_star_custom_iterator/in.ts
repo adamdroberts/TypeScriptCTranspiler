@@ -28,6 +28,7 @@ class CounterIterator {
 
     throw(error: string): Step {
         events.push("throw:" + error);
+        if (error === "yield-error") return { done: false, value: 6 };
         return { done: true, value: 9 };
     }
 }
@@ -48,6 +49,12 @@ function* outerThrow(): Generator<number, string, string> {
     const delegated: any = yield* new Counter();
     events.push("throw-outer-after:" + delegated);
     return "throw-outer-done";
+}
+
+function* outerThrowYield(): Generator<number, string, string> {
+    const delegated: any = yield* new Counter();
+    events.push("throw-yield-outer-after:" + delegated);
+    return "throw-yield-outer-done";
 }
 
 function* outerReturn(): Generator<number, string, string> {
@@ -72,6 +79,13 @@ const throwing = outerThrow();
 const throwingFirst: any = throwing.next();
 const throwingDone: any = throwing.throw("custom-error");
 console.log("custom-iterator-throw", throwingFirst.done, throwingFirst.value, throwingDone.done, throwingDone.value, events.join("|"));
+
+const throwingYield = outerThrowYield();
+const throwingYieldFirst: any = throwingYield.next();
+const throwingYieldStep: any = throwingYield.throw("yield-error");
+const throwingYieldSecond: any = throwingYield.next();
+const throwingYieldDone: any = throwingYield.next();
+console.log("custom-iterator-throw-yield", throwingYieldFirst.done, throwingYieldFirst.value, throwingYieldStep.done, throwingYieldStep.value, throwingYieldSecond.done, throwingYieldSecond.value, throwingYieldDone.done, throwingYieldDone.value, events.join("|"));
 
 const returning = outerReturn();
 const returningFirst: any = returning.next();
