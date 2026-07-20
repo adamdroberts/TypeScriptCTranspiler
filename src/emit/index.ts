@@ -280,6 +280,8 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     conditionExpr: ts.Expression;
     conditionAwaitExpr: ts.AwaitExpression;
     bodyAwaitExpr: ts.AwaitExpression;
+    bodyReturnExpr: ts.Expression;
+    bodyAwaitedAliasSymbols: readonly ts.Symbol[];
     bodyPreludeStatements: readonly ts.Statement[];
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
@@ -32491,6 +32493,8 @@ class Emitter {
         const bodyAction = loopBody[loopBody.length - 1];
         if ((!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction)) || !bodyAction.expression) return false;
         let bodyAwaitExpr: ts.AwaitExpression | null = null;
+        let bodyReturnExpr: ts.Expression | null = null;
+        let bodyAwaitedAliasSymbols: readonly ts.Symbol[] = [];
         let bodyPreludeStatements: readonly ts.Statement[];
         let bodyRejectResult = ts.isThrowStatement(bodyAction);
         const directBodyAwait = this.unwrapTransparentExpression(bodyAction.expression);
@@ -32499,6 +32503,7 @@ class Emitter {
             bodyAwaitExpr = ts.isAwaitExpression(nestedBodyAwait)
                 ? nestedBodyAwait
                 : directBodyAwait;
+            bodyReturnExpr = bodyAwaitExpr;
             bodyPreludeStatements = loopBody.slice(0, -1);
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && ts.isIdentifier(bodyAction.expression) &&
             ts.isVariableStatement(loopBody[loopBody.length - 2])) {
@@ -32507,15 +32512,20 @@ class Emitter {
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 bodyAwaitStatement.declarationList.declarations.length !== 1) return false;
             const declaration = bodyAwaitStatement.declarationList.declarations[0]!;
+            const declarationSymbol = ts.isIdentifier(declaration.name)
+                ? this.symbolForIdentifier(declaration.name)
+                : undefined;
             const declarationAwait = declaration.initializer
                 ? this.unwrapTransparentExpression(declaration.initializer)
                 : null;
             if (!ts.isIdentifier(declaration.name) || !declarationAwait || !ts.isAwaitExpression(declarationAwait) ||
-                this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(bodyAction.expression)) return false;
+                !declarationSymbol || declarationSymbol !== this.symbolForIdentifier(bodyAction.expression)) return false;
             const nestedDeclarationAwait = this.unwrapTransparentExpression(declarationAwait.expression);
             bodyAwaitExpr = ts.isAwaitExpression(nestedDeclarationAwait)
                 ? nestedDeclarationAwait
                 : declarationAwait;
+            bodyReturnExpr = bodyAction.expression;
+            bodyAwaitedAliasSymbols = [declarationSymbol];
             bodyPreludeStatements = loopBody.slice(0, -2);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && ts.isIdentifier(bodyAction.expression)) {
@@ -32527,16 +32537,21 @@ class Emitter {
                 declarationStatement.declarationList.declarations.length !== 1) return false;
             const declaration = declarationStatement.declarationList.declarations[0]!;
             const assignment = assignmentStatement.expression;
-            if (!ts.isIdentifier(declaration.name) || declaration.initializer || !ts.isBinaryExpression(assignment) ||
+            const declarationSymbol = ts.isIdentifier(declaration.name)
+                ? this.symbolForIdentifier(declaration.name)
+                : undefined;
+            if (!ts.isIdentifier(declaration.name) || !declarationSymbol || declaration.initializer || !ts.isBinaryExpression(assignment) ||
                 assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left) ||
-                this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(assignment.left) ||
-                this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(bodyAction.expression)) return false;
+                declarationSymbol !== this.symbolForIdentifier(assignment.left) ||
+                declarationSymbol !== this.symbolForIdentifier(bodyAction.expression)) return false;
             const assignmentAwait = this.unwrapTransparentExpression(assignment.right);
             if (!ts.isAwaitExpression(assignmentAwait)) return false;
             const nestedAssignmentAwait = this.unwrapTransparentExpression(assignmentAwait.expression);
             bodyAwaitExpr = ts.isAwaitExpression(nestedAssignmentAwait)
                 ? nestedAssignmentAwait
                 : assignmentAwait;
+            bodyReturnExpr = bodyAction.expression;
+            bodyAwaitedAliasSymbols = [declarationSymbol];
             bodyPreludeStatements = loopBody.slice(0, -3);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else {
@@ -32554,7 +32569,7 @@ class Emitter {
             return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
         });
         if (!bodyPreludeSupported) return false;
-        if (!bodyAwaitExpr) return false;
+        if (!bodyAwaitExpr || !bodyReturnExpr) return false;
         const conditionAwaitExpr = awaitExpressions[0]!;
         const conditionPromiseType = this.prepareType(mapTsType(
             conditionAwaitExpr.expression,
@@ -32638,6 +32653,8 @@ class Emitter {
             conditionExpr: condition,
             conditionAwaitExpr,
             bodyAwaitExpr,
+            bodyReturnExpr,
+            bodyAwaitedAliasSymbols,
             bodyPreludeStatements,
             bodyRejectResult,
             fallthroughExpr,
@@ -32648,10 +32665,11 @@ class Emitter {
             bodyPromiseType,
             bodyAwaitedType,
             bodyAwaitExpr,
-            bodyAwaitExpr,
+            continuation.bodyReturnExpr,
             continuation.params,
             continuation.thisValue,
             continuation.bodyRejectResult,
+            continuation.bodyAwaitedAliasSymbols,
         );
         const adapter = this.ensureAsyncAwaitLoopConditionReturnAwaitContinuationAdapter(
             conditionPromiseType,
@@ -33665,6 +33683,7 @@ class Emitter {
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
         rejectResult = false,
+        awaitedAliasSymbols: readonly ts.Symbol[] = [],
     ): string {
         const name = `tsc_async_await_expression_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -33693,6 +33712,7 @@ class Emitter {
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
+        for (const symbol of awaitedAliasSymbols) scope.set(symbol, valueVar);
         const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
         awaitScope.set(awaitExpr, awaitedValue
             ? { c: valueVar, ty: awaitedType }
