@@ -35809,6 +35809,10 @@ class Emitter {
     private lazyGeneratorTryCatchReturn(stmt: ts.TryStatement): LazyGeneratorCatchHandler | null {
         if (!stmt.catchClause) return null;
         if (stmt.catchClause.variableDeclaration && !ts.isIdentifier(stmt.catchClause.variableDeclaration.name)) return null;
+        const catchDecl = stmt.catchClause.variableDeclaration;
+        const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
+            ? this.symbolForIdentifier(catchDecl.name)
+            : null;
         const finallyStatements = stmt.finallyBlock?.statements ?? [];
         const finallyTail = finallyStatements[finallyStatements.length - 1];
         const finallyThrow = finallyTail && ts.isThrowStatement(finallyTail) && finallyTail.expression &&
@@ -35864,8 +35868,10 @@ class Emitter {
                         if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return true;
                         const initializer = this.unwrapTransparentExpression(declaration.initializer);
                         const isLiteral = ts.isStringLiteral(initializer) || ts.isNoSubstitutionTemplateLiteral(initializer);
+                        const isCatchAlias = !!catchSymbol && ts.isIdentifier(initializer) &&
+                            this.symbolForIdentifier(initializer) === catchSymbol;
                         const symbol = this.symbolForIdentifier(declaration.name);
-                        if (!isLiteral || !symbol) return true;
+                        if ((!isLiteral && !isCatchAlias) || !symbol) return true;
                         catchPreludeSymbols.add(symbol);
                         return false;
                     })
@@ -35874,10 +35880,6 @@ class Emitter {
         let catchStatement: ts.Statement | null = null;
         let catchConditionalKind: "return" | "throw" | "mixed" | null = null;
         if (conditionalCandidate) {
-            const catchDecl = stmt.catchClause.variableDeclaration;
-            const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
-                ? this.symbolForIdentifier(catchDecl.name)
-                : null;
             const conditionalValid = stmt.finallyBlock
                 ? this.isSimpleLazyCatchConditionalReturn(conditionalCandidate, catchSymbol ?? null, catchPreludeSymbols) ||
                     this.isSimpleLazyCatchConditionalThrow(conditionalCandidate, catchSymbol ?? null, catchPreludeSymbols) ||
@@ -35895,16 +35897,12 @@ class Emitter {
         } else if (returnStatement) {
             const expression = this.unwrapTransparentExpression(returnStatement.expression!);
             if (!this.isSimpleLazyMultiYieldLiteral(expression)) {
-                const catchDecl = stmt.catchClause.variableDeclaration;
                 if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
-                const catchSymbol = this.symbolForIdentifier(catchDecl.name);
                 if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             }
         }
         if (throwCandidate && !throwStatement) {
-            const catchDecl = stmt.catchClause.variableDeclaration;
             if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
-            const catchSymbol = this.symbolForIdentifier(catchDecl.name);
             const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
             if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             throwStatement = throwCandidate;
@@ -36040,7 +36038,10 @@ class Emitter {
         };
         const isCatchExpression = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
-            if (ts.isIdentifier(unwrapped)) return this.symbolForIdentifier(unwrapped) === catchSymbol;
+            if (ts.isIdentifier(unwrapped)) {
+                const symbol = this.symbolForIdentifier(unwrapped);
+                return symbol === catchSymbol || (!!symbol && catchPreludeSymbols.has(symbol));
+            }
             if (!ts.isBinaryExpression(unwrapped) || unwrapped.operatorToken.kind !== ts.SyntaxKind.PlusToken) return false;
             return (isCatchExpression(unwrapped.left) && isStringLeaf(unwrapped.right)) ||
                 (isStringLeaf(unwrapped.left) && isCatchExpression(unwrapped.right));

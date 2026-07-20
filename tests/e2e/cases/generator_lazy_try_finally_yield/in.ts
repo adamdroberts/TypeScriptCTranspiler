@@ -209,6 +209,43 @@ const caughtPreludeAliasFirst: any = caughtPreludeAliasResult.next();
 const caughtPreludeAliasDone: any = caughtPreludeAliasResult.throw("handled-alias");
 console.log("caught-prelude-alias:", caughtPreludeAliasFirst.done, caughtPreludeAliasFirst.value, caughtPreludeAliasDone.done, caughtPreludeAliasDone.value);
 
+function* caughtBindingAliasReturn(): Generator<string, string, string> {
+    try {
+        yield "binding-alias-return-pause";
+    } catch (error: any) {
+        const captured = error;
+        return "alias-return:" + captured;
+    } finally {
+        catchPreludeEvents.push("binding-alias-return-finally");
+    }
+    return "normal";
+}
+
+const caughtBindingAliasReturnResult = caughtBindingAliasReturn();
+const caughtBindingAliasReturnFirst: any = caughtBindingAliasReturnResult.next();
+const caughtBindingAliasReturnDone: any = caughtBindingAliasReturnResult.throw("binding-alias");
+console.log("caught-binding-alias-return:", caughtBindingAliasReturnFirst.done, caughtBindingAliasReturnFirst.value, caughtBindingAliasReturnDone.done, caughtBindingAliasReturnDone.value, catchPreludeEvents.join("|"));
+
+function* caughtBindingAliasThrow(): Generator<string, string, string> {
+    try {
+        yield "binding-alias-throw-pause";
+    } catch (error: any) {
+        const captured = error;
+        throw "alias-throw:" + captured;
+    } finally {
+        catchPreludeEvents.push("binding-alias-throw-finally");
+    }
+    return "normal";
+}
+
+const caughtBindingAliasThrowResult = caughtBindingAliasThrow();
+const caughtBindingAliasThrowFirst: any = caughtBindingAliasThrowResult.next();
+try {
+    caughtBindingAliasThrowResult.throw("binding-alias");
+} catch (error: any) {
+    console.log("caught-binding-alias-throw:", caughtBindingAliasThrowFirst.done, caughtBindingAliasThrowFirst.value, error, catchPreludeEvents.join("|"));
+}
+
 function* caughtRethrow(): Generator<string, string, string> {
     try {
         yield "rethrow-pause";

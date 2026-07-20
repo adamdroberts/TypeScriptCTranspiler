@@ -39,6 +39,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Lazy generators now preserve bounded conditional literal return/throw overrides in non-suspending `finally` blocks across suspended `.throw(...)` and normal completion. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now execute bounded yield-free, non-abrupt catch expression-statement preludes before terminal recovery. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now preserve simple string-literal `const` / `let` aliases in those bounded catch preludes. Regression: `generator_lazy_try_finally_yield`.
+- Lazy generators now preserve simple catch-binding `const` / `let` aliases in bounded catch preludes before terminal returns and rethrows. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now support terminal literal catch rethrows after suspended yields, preserving bounded catch-prelude and non-suspending `finally` ordering. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now rethrow a simple catch identifier directly after a suspended yield when no `finally` must carry the binding. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now support two-leaf string composition in catch rethrows, including when carried through a non-suspending `finally`. Regression: `generator_lazy_try_finally_yield`.

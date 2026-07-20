@@ -209,6 +209,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Lazy generators catch a bounded `.throw(error)` at a suspended `try` block with an unbound, simple unused identifier, directly returned simple identifier, or two-leaf string-concatenated catch and produce a completed iterator result. Test: `generator_lazy_try_finally_yield`
 - Lazy generators compose bounded suspended catch recovery with a non-suspending `finally`, running finalization on handled `.throw(error)` and normal completion and honoring terminal literal `throw` or `return` overrides. Test: `generator_lazy_try_finally_yield`
 - Lazy generators execute bounded yield-free, non-abrupt catch expression-statement preludes and simple string-literal `const` / `let` aliases before terminal recovery. Test: `generator_lazy_try_finally_yield`
+- Lazy generators preserve simple catch-binding `const` / `let` aliases in bounded catch preludes before terminal returns and rethrows. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support a terminal literal catch `throw` after a suspended yield, including bounded catch preludes and non-suspending `finally` ordering. Test: `generator_lazy_try_finally_yield`
 - Lazy generators rethrow a simple catch identifier directly after a suspended yield when no `finally` must carry the binding. Test: `generator_lazy_try_finally_yield`
 - Lazy generators carry a simple catch-identifier rethrow through a non-suspending `finally`, preserving finalizer `throw` / `return` overrides. Test: `generator_lazy_try_finally_yield`
