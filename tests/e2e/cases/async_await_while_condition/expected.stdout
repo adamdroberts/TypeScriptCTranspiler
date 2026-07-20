@@ -346,6 +346,7 @@ await-loop-initializer-capture-throw loop-captured-throw
 await-loop-initializer-multiple-capture loop-multiple-captured-updated
 await-loop-initializer-condition-capture loop-condition-captured-updated
 await-loop-initializer-var-capture loop-var-captured-updated
+await-loop-initializer-uninitialized-var-capture loop-uninitialized-var-captured
 await-method-loop-initializer-condition-capture loop-method-condition-captured-updated
 await-value-loop-initializer-condition-capture loop-value-condition-captured-updated
 await-method-multiple-declarators method-first-second

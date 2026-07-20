@@ -140,6 +140,14 @@ async function chooseLoopInitializerVarCapture(): Promise<string> {
     return "loop-var-capture-fallthrough";
 }
 
+async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
+    for (var value: any; await laterTrue();) {
+        value = "loop-uninitialized-var-captured";
+        return await laterBodyValue(value);
+    }
+    return "loop-uninitialized-var-fallthrough";
+}
+
 class LoopInitializerCaptureChooser {
     async choose(): Promise<string> {
         for (let value = "loop-method-condition-captured"; await laterCondition(value.length > 0);) {
@@ -2164,6 +2172,7 @@ chooseLoopInitializerCaptureThrow().catch((reason) => console.log("await-loop-in
 chooseLoopInitializerMultipleCapture().then((value) => console.log("await-loop-initializer-multiple-capture", value));
 chooseLoopInitializerConditionCapture().then((value) => console.log("await-loop-initializer-condition-capture", value));
 chooseLoopInitializerVarCapture().then((value) => console.log("await-loop-initializer-var-capture", value));
+chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 new LoopInitializerCaptureChooser().choose().then((value) => console.log("await-method-loop-initializer-condition-capture", value));
 chooseLoopInitializerConditionCaptureValue().then((value) => console.log("await-value-loop-initializer-condition-capture", value));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));

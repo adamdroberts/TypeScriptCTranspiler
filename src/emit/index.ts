@@ -33604,7 +33604,12 @@ class Emitter {
                     return;
                 }
                 if (ts.isVariableDeclaration(node)) {
-                    if (!ts.isIdentifier(node.name) || !node.initializer) {
+                    const declarationList = node.parent;
+                    const isVar = ts.isVariableDeclarationList(declarationList) &&
+                        (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0;
+                    const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
+                    if (!ts.isIdentifier(node.name) ||
+                        (!node.initializer && (!isVar || type.kind !== "value"))) {
                         supported = false;
                         return;
                     }
@@ -33614,7 +33619,6 @@ class Emitter {
                         return;
                     }
                     initializerSymbols.push(symbol);
-                    const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
                     initializerCaptures.push({
                         symbol,
                         name: mangleIdent(node.name.text),
