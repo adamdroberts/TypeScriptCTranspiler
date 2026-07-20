@@ -4,6 +4,8 @@ await-while-expression-true expression-loop-yes
 await-while-expression-false expression-loop-no
 await-while-local-true local-loop-local-yes
 await-while-local-false local-loop-local-no
+await-for-condition-true for-yes
+await-for-condition-false for-no
 await-while-method-true method-loop-yes
 await-while-method-false method-loop-no
 await-while-value-true value-loop-yes

@@ -32432,12 +32432,24 @@ class Emitter {
         if (body.statements.length !== 2) return false;
         const loop = body.statements[0]!;
         const fallthrough = body.statements[1]!;
-        if (!ts.isWhileStatement(loop) || !ts.isReturnStatement(fallthrough) || !fallthrough.expression) return false;
-        const condition = this.unwrapTransparentExpression(loop.expression);
+        if (!ts.isReturnStatement(fallthrough) || !fallthrough.expression) return false;
+        const loopCondition = ts.isWhileStatement(loop)
+            ? loop.expression
+            : ts.isForStatement(loop) && !loop.initializer && !loop.incrementor && loop.condition
+                ? loop.condition
+                : null;
+        if (!loopCondition) return false;
+        const condition = this.unwrapTransparentExpression(loopCondition);
         if (!ts.isAwaitExpression(condition)) return false;
-        const loopBody = ts.isBlock(loop.statement)
-            ? loop.statement.statements
-            : [loop.statement];
+        const loopStatement = ts.isWhileStatement(loop)
+            ? loop.statement
+            : ts.isForStatement(loop)
+                ? loop.statement
+                : null;
+        if (!loopStatement) return false;
+        const loopBody = ts.isBlock(loopStatement)
+            ? loopStatement.statements
+            : [loopStatement];
         let loopReturnExpression: ts.Expression | null = null;
         if (loopBody.length === 1 && ts.isReturnStatement(loopBody[0]!) && loopBody[0]!.expression) {
             loopReturnExpression = loopBody[0]!.expression;
