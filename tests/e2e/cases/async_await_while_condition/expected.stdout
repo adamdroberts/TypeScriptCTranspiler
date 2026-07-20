@@ -401,6 +401,7 @@ await-while-three-logical-false three-logical-no
 await-while-method-multiple-true method-loop-first-second
 await-loop-initializer-escaping-var-continue loop-escaping-var-continue-continued-increment
 await-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-continued-increment
+await-while-escaping-var-continue while-escaping-continue-continued
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-while-five-logical-true five-logical-yes
