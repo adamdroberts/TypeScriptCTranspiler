@@ -74,6 +74,14 @@ function* immutableLetLeaves(): Generator<number, number, number> {
     return base + (yield 32) + (yield 33);
 }
 
+function* globalLeaves(): Generator<number, number, number> {
+    return (yield 34) + NaN + (yield 35);
+}
+
+function* infinityLeaves(): Generator<number, number, number> {
+    return (yield 36) + Infinity + (yield 37);
+}
+
 class ThisLeaves {
     marker = 9;
 
@@ -183,6 +191,16 @@ const immutableLetFirst: any = immutableLetIter.next();
 const immutableLetSecond: any = immutableLetIter.next(4);
 const immutableLetDone: any = immutableLetIter.next(5);
 console.log("immutable-let", immutableLetFirst.value, immutableLetSecond.value, immutableLetDone.done, immutableLetDone.value);
+const globalIter = globalLeaves();
+const globalFirst: any = globalIter.next();
+const globalSecond: any = globalIter.next(4);
+const globalDone: any = globalIter.next(5);
+console.log("global", globalFirst.value, globalSecond.value, globalDone.done, globalDone.value);
+const infinityIter = infinityLeaves();
+const infinityFirst: any = infinityIter.next();
+const infinitySecond: any = infinityIter.next(6);
+const infinityDone: any = infinityIter.next(7);
+console.log("infinity", infinityFirst.value, infinitySecond.value, infinityDone.done, infinityDone.value);
 const thisLeaves = new ThisLeaves();
 const thisIter = thisLeaves.values();
 const thisFirst: any = thisIter.next();

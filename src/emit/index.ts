@@ -38696,6 +38696,13 @@ class Emitter {
             if (ts.isIdentifier(unwrapped)) {
                 const symbol = this.symbolForIdentifier(unwrapped);
                 const declaration = symbol?.valueDeclaration;
+                if (
+                    this.isUnshadowedGlobalIdentifier(unwrapped, "NaN") ||
+                    this.isUnshadowedGlobalIdentifier(unwrapped, "Infinity") ||
+                    this.isUnshadowedGlobalIdentifier(unwrapped, "undefined")
+                ) {
+                    return this.emitExpr(unwrapped);
+                }
                 if (!symbol || !declaration || (!ts.isParameter(declaration) && !stableLocals.has(symbol)) || !this.closureEnvBindingForSymbol(symbol)) {
                     unsupported(unwrapped, "lazy multi-yield return identifiers must be stable generator parameters or direct const locals");
                 }
