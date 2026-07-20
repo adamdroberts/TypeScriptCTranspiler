@@ -214,7 +214,8 @@ function* caughtBindingAliasReturn(): Generator<string, string, string> {
         yield "binding-alias-return-pause";
     } catch (error: any) {
         const captured = error;
-        return "alias-return:" + captured;
+        const capturedAgain = captured;
+        return "alias-return:" + capturedAgain;
     } finally {
         catchPreludeEvents.push("binding-alias-return-finally");
     }
@@ -231,7 +232,8 @@ function* caughtBindingAliasThrow(): Generator<string, string, string> {
         yield "binding-alias-throw-pause";
     } catch (error: any) {
         const captured = error;
-        throw "alias-throw:" + captured;
+        const capturedAgain = captured;
+        throw "alias-throw:" + capturedAgain;
     } finally {
         catchPreludeEvents.push("binding-alias-throw-finally");
     }

@@ -35868,8 +35868,11 @@ class Emitter {
                         if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return true;
                         const initializer = this.unwrapTransparentExpression(declaration.initializer);
                         const isLiteral = ts.isStringLiteral(initializer) || ts.isNoSubstitutionTemplateLiteral(initializer);
-                        const isCatchAlias = !!catchSymbol && ts.isIdentifier(initializer) &&
-                            this.symbolForIdentifier(initializer) === catchSymbol;
+                        const initializerSymbol = ts.isIdentifier(initializer)
+                            ? this.symbolForIdentifier(initializer)
+                            : null;
+                        const isCatchAlias = !!initializerSymbol &&
+                            (initializerSymbol === catchSymbol || catchPreludeSymbols.has(initializerSymbol));
                         const symbol = this.symbolForIdentifier(declaration.name);
                         if ((!isLiteral && !isCatchAlias) || !symbol) return true;
                         catchPreludeSymbols.add(symbol);
