@@ -351,6 +351,7 @@ await-loop-initializer-var-capture loop-var-captured-updated
 await-loop-initializer-uninitialized-var-capture loop-uninitialized-var-captured
 await-loop-initializer-typed-uninitialized-var-capture loop-typed-uninitialized-var-captured
 await-loop-initializer-uninitialized-let-capture loop-uninitialized-let-captured
+await-loop-initializer-uninitialized-let-condition-capture loop-uninitialized-let-condition-captured
 await-method-loop-initializer-condition-capture loop-method-condition-captured-updated
 await-value-loop-initializer-condition-capture loop-value-condition-captured-updated
 await-method-multiple-declarators method-first-second
