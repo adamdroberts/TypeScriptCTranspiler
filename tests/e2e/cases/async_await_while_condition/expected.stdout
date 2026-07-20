@@ -408,6 +408,8 @@ await-value-escaping-var-continue while-value-escaping-continue-value-continued
 await-while-escaping-var-continue-if-true while-if-escaping-continue-if-yes
 await-while-escaping-var-continue-if-false while-if-escaping-continue-if-no
 await-while-escaping-var-continue-try-finally while-try-escaping-continue-try-finally
+await-while-escaping-var-continue-try-catch-try while-catch-escaping-continue-try
+await-while-escaping-var-continue-try-catch-catch while-catch-escaping-continue-catch
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-while-five-logical-true five-logical-yes
