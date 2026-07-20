@@ -30827,10 +30827,20 @@ class Emitter {
                 this.checker.getTypeAtLocation(expression.expression),
                 this.checker,
             ));
-            if (sourceType.kind !== "promise") return false;
-            const source = this.emitExpr(expression.expression);
-            buf.line(`return tsc_promise_adopt(${source.c});`);
-            return true;
+            if (sourceType.kind === "promise") {
+                const source = this.emitExpr(expression.expression);
+                buf.line(`return tsc_promise_adopt(${source.c});`);
+                return true;
+            }
+            const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                expression.expression,
+                parameters,
+                thisValue,
+            );
+            if (!sequenceContinuation || !this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {
+                return false;
+            }
+            return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, sequenceContinuation);
         }
         const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
             expression,

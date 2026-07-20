@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Direct `return await` now supports flat five-await non-Promise inner expressions through the staged sequence adapter across async declarations, methods, and expression-bodied async-arrow functions. Test: `async_await_nested_five_return_await`.
 - Branch-block source `try` / `catch` now routes flat five-await throw expressions through catch recovery and the synchronous false-arm fallthrough across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_source_try_catch_throw_five_await`.
 - Branch-block source `try` / `catch` / `finally` now routes flat five-await throw expressions through catch recovery, finally execution, and the synchronous false-arm fallthrough across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_source_try_catch_finally_throw_five_await`.
 - Branch-block source `try` / `finally` now routes flat five-await throw expressions through branch cleanup, preserving source rejection values and the synchronous fallthrough arm across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_source_try_finally_throw_five_await`.
