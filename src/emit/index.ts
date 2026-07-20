@@ -35778,7 +35778,8 @@ class Emitter {
     private isSimpleLazyGeneratorTryFinally(stmt: ts.TryStatement): boolean {
         if (stmt.catchClause || !stmt.finallyBlock) return false;
         const terminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
-        if ((!terminalReturn && this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock)) ||
+        const terminalThrow = this.lazyGeneratorTryTerminalThrow(stmt);
+        if ((!terminalReturn && !terminalThrow && this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock)) ||
             this.lazyGeneratorContainsAbruptControlFlow(stmt.finallyBlock)) {
             return false;
         }
@@ -35792,6 +35793,18 @@ class Emitter {
         const statements = stmt.tryBlock.statements;
         const last = statements[statements.length - 1];
         if (!last || !ts.isReturnStatement(last) || (last.expression && this.nodeContainsYield(last.expression))) return null;
+        for (const child of statements.slice(0, -1)) {
+            if (this.lazyGeneratorContainsAbruptControlFlow(child)) return null;
+        }
+        return last;
+    }
+
+    private lazyGeneratorTryTerminalThrow(stmt: ts.TryStatement): ts.ThrowStatement | null {
+        const statements = stmt.tryBlock.statements;
+        const last = statements[statements.length - 1];
+        if (!last || !ts.isThrowStatement(last) || !last.expression ||
+            this.nodeContainsYield(last.expression) ||
+            !this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(last.expression))) return null;
         for (const child of statements.slice(0, -1)) {
             if (this.lazyGeneratorContainsAbruptControlFlow(child)) return null;
         }
@@ -36538,8 +36551,9 @@ class Emitter {
         if (ts.isTryStatement(stmt) && this.isSimpleLazyGeneratorTryFinally(stmt)) {
             buf.open("");
             const terminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
+            const terminalThrow = this.lazyGeneratorTryTerminalThrow(stmt);
             this.activeLazyGeneratorFinalizers.push(stmt.finallyBlock!.statements.slice());
-            const tryStatements = terminalReturn
+            const tryStatements = terminalReturn || terminalThrow
                 ? stmt.tryBlock.statements.slice(0, -1)
                 : stmt.tryBlock.statements;
             for (const child of tryStatements) {
@@ -36563,6 +36577,10 @@ class Emitter {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");
                 buf.line("return;");
+            } else if (terminalThrow) {
+                buf.line("*state = -1;");
+                buf.line("*done = true;");
+                this.emitThrow(buf, terminalThrow);
             }
             buf.close();
             return;

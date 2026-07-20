@@ -33,3 +33,20 @@ const returned = terminalReturn();
 const returnFirst: any = returned.next();
 const returnDone: any = returned.next("resume");
 console.log("return:", returnFirst.done, returnFirst.value, returnDone.done, returnDone.value, events.join("|"));
+
+function* terminalThrow(): Generator<string, string, string> {
+    try {
+        yield "throw-pause";
+        throw "source-boom";
+    } finally {
+        events.push("throw-finally");
+    }
+}
+
+const thrown = terminalThrow();
+const throwFirst: any = thrown.next();
+try {
+    thrown.next("resume");
+} catch {
+    console.log("throw:", throwFirst.done, throwFirst.value, events.join("|"));
+}
