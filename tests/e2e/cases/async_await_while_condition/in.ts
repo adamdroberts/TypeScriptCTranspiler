@@ -379,8 +379,8 @@ async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: b
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-control");
         if (flag) {
-            const suffix = "-updated";
-            prefix += suffix;
+            const suffix = "-updated", extra = "";
+            prefix += suffix + extra;
         } else {
             let suffix = "";
             prefix += suffix;
@@ -464,8 +464,8 @@ async function chooseLoopReturnAwaitAliasPostTry(condition: boolean, prefix: str
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-try");
         try {
-            const suffix = "-try";
-            prefix += suffix;
+            const suffix = "-try", extra = "";
+            prefix += suffix + extra;
         } catch {
             let suffix = "-catch";
             prefix += suffix;
@@ -597,8 +597,8 @@ async function chooseLoopReturnAwaitAliasPostSwitch(condition: boolean, flag: bo
         switch (flag) {
             case true:
                 {
-                    const suffix = "-switch";
-                    prefix += suffix;
+                    const suffix = "-switch", extra = "";
+                    prefix += suffix + extra;
                 }
                 break;
             case false:
