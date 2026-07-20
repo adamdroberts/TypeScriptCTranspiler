@@ -201,6 +201,14 @@ class LoopInitializerCaptureChooser {
         }
         return "loop-method-condition-fallthrough";
     }
+
+    async chooseUninitializedLetCondition(): Promise<string> {
+        for (let value: any; await laterCondition(value === undefined);) {
+            value = "loop-method-uninitialized-let-condition-captured";
+            return await laterBodyValue(value);
+        }
+        return "loop-method-uninitialized-let-condition-fallthrough";
+    }
 }
 
 const chooseLoopInitializerConditionCaptureValue = async (): Promise<string> => {
@@ -209,6 +217,14 @@ const chooseLoopInitializerConditionCaptureValue = async (): Promise<string> => 
         return await laterBodyValue(value);
     }
     return "loop-value-condition-fallthrough";
+};
+
+const chooseLoopInitializerUninitializedLetConditionValue = async (): Promise<string> => {
+    for (let value: any; await laterCondition(value === undefined);) {
+        value = "loop-value-uninitialized-let-condition-captured";
+        return await laterBodyValue(value);
+    }
+    return "loop-value-uninitialized-let-condition-fallthrough";
 };
 
 async function chooseLoopExpression(flag: boolean, prefix: string): Promise<string> {
@@ -2226,6 +2242,8 @@ chooseLoopInitializerUninitializedLetConditionCapture().then((value) => console.
 chooseLoopInitializerUninitializedLetConditionFallthrough().then((value) => console.log("await-loop-initializer-uninitialized-let-condition-fallthrough", value));
 new LoopInitializerCaptureChooser().choose().then((value) => console.log("await-method-loop-initializer-condition-capture", value));
 chooseLoopInitializerConditionCaptureValue().then((value) => console.log("await-value-loop-initializer-condition-capture", value));
+new LoopInitializerCaptureChooser().chooseUninitializedLetCondition().then((value) => console.log("await-method-loop-initializer-uninitialized-let-condition-capture", value));
+chooseLoopInitializerUninitializedLetConditionValue().then((value) => console.log("await-value-loop-initializer-uninitialized-let-condition-capture", value));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
 new LoopChooser("method-").multipleAwaitDeclarators().then((value) => console.log("await-method-multiple-declarators", value));
 chooseArrowThrowWithLocals("arrow").catch((reason) => console.log("await-arrow-throw-multiple-locals", reason));
