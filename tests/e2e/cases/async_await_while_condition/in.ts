@@ -311,7 +311,13 @@ async function chooseLoopThrowAwaitAliasPostMultiple(condition: boolean): Promis
 async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-control");
-        if (flag) prefix += "-updated";
+        if (flag) {
+            const suffix = "-updated";
+            prefix += suffix;
+        } else {
+            let suffix = "";
+            prefix += suffix;
+        }
         return value + prefix;
     }
     return prefix + "-post-control-fallthrough";
@@ -320,7 +326,13 @@ async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: b
 async function chooseLoopThrowAwaitAliasPostControl(condition: boolean, flag: boolean): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         let reason = await laterBodyValue("body-throw-post-control");
-        if (flag) reason += "-updated";
+        if (flag) {
+            const suffix = "-updated";
+            reason += suffix;
+        } else {
+            let suffix = "";
+            reason += suffix;
+        }
         throw reason;
     }
     return "body-throw-post-control-fallthrough";
