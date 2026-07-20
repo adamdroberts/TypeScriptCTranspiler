@@ -1,0 +1,12 @@
+declaration-true-true: ["declaration-true-true-first","declaration-true-true-second"]
+declaration-true-false: ["declaration-true-false-first","declaration-true-false-second"]
+declaration-false-true: {"first":"declaration-false-true-first","second":"declaration-false-true-second"}
+declaration-false-false: {"first":"declaration-false-false-first","second":"declaration-false-false-second"}
+method-true-true: {"first":"method-true-true-first","second":"method-true-true-second"}
+method-true-false: {"first":"method-true-false-first","second":"method-true-false-second"}
+method-false-true: ["method-false-true-first","method-false-true-second"]
+method-false-false: ["method-false-false-first","method-false-false-second"]
+value-true-true: ["arrow-true-true-first","arrow-true-true-second"]
+value-true-false: ["arrow-true-false-first","arrow-true-false-second"]
+value-false-true: {"first":"arrow-false-true-first","second":"arrow-false-true-second"}
+value-false-false: {"first":"arrow-false-false-first","second":"arrow-false-false-second"}
