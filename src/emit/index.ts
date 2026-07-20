@@ -67751,6 +67751,7 @@ class Emitter {
         }
         const envType = `_gen_lazy_coerce_env_${this.freshTemp("")}`;
         const nextName = `_gen_lazy_coerce_next_${this.freshTemp("")}`;
+        const closeName = `_gen_lazy_coerce_close_${this.freshTemp("")}`;
         const source = this.freshTemp("_lazy_source");
         const out = this.freshTemp("_lazy_coerced");
         const env = this.freshTemp("_lazy_coerce_env");
@@ -67763,6 +67764,7 @@ class Emitter {
         this.structDecls.close(`${envType};`);
         this.structDecls.line();
         this.protos.line(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
+        this.protos.line(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw);`);
 
         const nextBuf = new CBuf();
         nextBuf.open(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
@@ -67794,7 +67796,19 @@ class Emitter {
         nextBuf.line();
         this.closureDefs.write(nextBuf.toString());
 
-        return `({ tsc_array_t* ${source} = ${r.c}; ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->source = ${source}; tsc_array_t* ${out} = tsc_array_new(sizeof(${target.elem.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; ${out}; })`;
+        const closeBuf = new CBuf();
+        closeBuf.open(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
+        closeBuf.line("(void)a;");
+        closeBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
+        closeBuf.open(`if (${env}->source->is_lazy_generator && ${env}->source->lazy_close)`);
+        closeBuf.line(`return ${env}->source->lazy_close(${env}->source, ${env}->source->env, arg, is_throw);`);
+        closeBuf.close();
+        closeBuf.line("return is_throw;");
+        closeBuf.close();
+        closeBuf.line();
+        this.closureDefs.write(closeBuf.toString());
+
+        return `({ tsc_array_t* ${source} = ${r.c}; ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->source = ${source}; tsc_array_t* ${out} = tsc_array_new(sizeof(${target.elem.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; ${out}->lazy_close = (void*)${closeName}; ${out}; })`;
     }
 
     private coerceToString(r: EmitResult, node: ts.Node): string {

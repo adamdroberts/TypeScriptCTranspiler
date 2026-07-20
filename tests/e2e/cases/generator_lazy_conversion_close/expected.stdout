@@ -1,0 +1,2 @@
+return false pause true closed inner-start|inner-finally
+throw false pause inner-start|inner-finally|inner-start|inner-finally
