@@ -20,6 +20,8 @@ await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
 await-while-or-true or-yes
 await-while-or-false or-no
+await-while-nullable-nullish-true nullable-nullish-yes
+await-while-nullable-nullish-false nullable-nullish-no
 await-while-three-logical-true three-logical-yes
 await-while-three-logical-false three-logical-no
 await-while-four-logical-true four-logical-yes

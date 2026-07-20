@@ -32493,13 +32493,23 @@ class Emitter {
         } else {
             return false;
         }
+        let hasNullishOperator = false;
+        const findNullishOperator = (node: ts.Node): void => {
+            if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+                hasNullishOperator = true;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            ts.forEachChild(node, findNullishOperator);
+        };
+        findNullishOperator(condition);
         if (awaitExpressions.some((awaitExpression) => {
             const awaitedType = this.prepareType(mapTsType(
                 awaitExpression,
                 this.checker.getTypeAtLocation(awaitExpression),
                 this.checker,
             ));
-            return awaitedType.kind !== "boolean";
+            return awaitedType.kind !== "boolean" && !(hasNullishOperator && awaitedType.kind === "value");
         })) return false;
         const continuationParams = this.asyncAwaitContinuationParameters(parameters);
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();

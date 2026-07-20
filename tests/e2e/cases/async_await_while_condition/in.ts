@@ -6,6 +6,18 @@ function laterFalse(): Promise<boolean> {
     return new Promise<boolean>((resolve) => setImmediate(() => resolve(false)));
 }
 
+function laterNull(): Promise<boolean | null> {
+    return new Promise<boolean | null>((resolve) => setImmediate(() => resolve(null)));
+}
+
+function laterNullableTrue(): Promise<boolean | null> {
+    return new Promise<boolean | null>((resolve) => setImmediate(() => resolve(true)));
+}
+
+function laterNullableFalse(): Promise<boolean | null> {
+    return new Promise<boolean | null>((resolve) => setImmediate(() => resolve(false)));
+}
+
 async function chooseLoopTrue(): Promise<string> {
     while (await laterTrue()) {
         return "loop-yes";
@@ -124,6 +136,13 @@ async function chooseLoopNullish(flag: boolean): Promise<string> {
     return "nullish-no";
 }
 
+async function chooseLoopNullableNullish(flag: boolean): Promise<string> {
+    while ((await laterNull()) ?? await (flag ? laterNullableTrue() : laterNullableFalse())) {
+        return "nullable-nullish-yes";
+    }
+    return "nullable-nullish-no";
+}
+
 class LoopChooser {
     private readonly prefix: string;
 
@@ -172,6 +191,8 @@ chooseLoopOr(true).then((value) => console.log("await-while-or-true", value));
 chooseLoopOr(false).then((value) => console.log("await-while-or-false", value));
 chooseLoopNullish(true).then((value) => console.log("await-while-nullish-true", value));
 chooseLoopNullish(false).then((value) => console.log("await-while-nullish-false", value));
+chooseLoopNullableNullish(true).then((value) => console.log("await-while-nullable-nullish-true", value));
+chooseLoopNullableNullish(false).then((value) => console.log("await-while-nullable-nullish-false", value));
 new LoopChooser("method-loop-").pick(true).then((value) => console.log("await-while-method-true", value));
 new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-while-method-false", value));
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
