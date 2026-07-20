@@ -442,6 +442,30 @@ async function chooseLoopInitializerEscapingVarContinueFalseThrowAwait(): Promis
     throw await laterBodyValue(reason);
 }
 
+class ForContinueFalseChooser {
+    private readonly suffix: string;
+
+    constructor(suffix: string) {
+        this.suffix = suffix;
+    }
+
+    async choose(value: string): Promise<string> {
+        for (var count = 0; await laterCondition(count > 0); value += this.suffix) {
+            value += "-body";
+            continue;
+        }
+        return await laterBodyValue(value);
+    }
+}
+
+const chooseLoopInitializerEscapingVarContinueFalseValue = async (value: string): Promise<string> => {
+    for (var count = 0; await laterCondition(count > 0); value += "-increment") {
+        value += "-body";
+        continue;
+    }
+    return await laterBodyValue(value);
+};
+
 async function chooseWhileContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat)) {
         value += "-continued";
@@ -2748,6 +2772,8 @@ chooseLoopInitializerEscapingVarContinueAwait().then((value) => console.log("awa
 chooseLoopInitializerEscapingVarContinueThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-continue-throw", reason));
 chooseLoopInitializerEscapingVarContinueFalseAwait().then((value) => console.log("await-loop-initializer-escaping-var-continue-false", value));
 chooseLoopInitializerEscapingVarContinueFalseThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-continue-false-throw", reason));
+new ForContinueFalseChooser("-method").choose("loop-escaping-var-continue-false").then((value) => console.log("await-method-loop-initializer-escaping-var-continue-false", value));
+chooseLoopInitializerEscapingVarContinueFalseValue("loop-escaping-var-continue-false").then((value) => console.log("await-value-loop-initializer-escaping-var-continue-false", value));
 chooseWhileContinueAwait("while-escaping-continue", true).then((value) => console.log("await-while-escaping-var-continue", value));
 chooseWhileContinueAwait("while-escaping-continue-false", false).then((value) => console.log("await-while-escaping-var-continue-false", value));
 chooseWhileContinueThrowAwait("while-escaping-continue-throw", true).catch((reason) => console.log("await-while-escaping-var-continue-throw", reason));
