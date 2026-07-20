@@ -28868,6 +28868,23 @@ class Emitter {
         thisValue: EmitResult | null,
         outerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitLeadingReturnContinuation | null {
+        if (body.statements.length === 1 && ts.isThrowStatement(body.statements[0]!)) {
+            const terminalThrow = body.statements[0]!;
+            const expression = this.unwrapTransparentExpression(terminalThrow.expression);
+            if (!ts.isAwaitExpression(expression)) return null;
+            return {
+                preludeStatements: [],
+                steps: [{ variable: null, awaitExpr: expression }],
+                betweenStatements: [],
+                returnExpr: null,
+                terminalThrowExpr: expression,
+                terminalThrowStatement: terminalThrow,
+                returnAwaited: false,
+                params: [...this.asyncAwaitContinuationParameters(parameters), ...outerCaptures],
+                thisValue: null,
+                usesAwaitedLocals: [false],
+            };
+        }
         if (body.statements.length < 2) return null;
         const result = body.statements[body.statements.length - 1]!;
         const terminalThrow = ts.isThrowStatement(result) ? result : null;
@@ -32705,6 +32722,8 @@ class Emitter {
                 thisValue,
                 returnAwaited,
                 steps[0]!.conditionalBranches || steps[0]!.alternateAwaitExpr ? steps[0]! : null,
+                !!terminalThrowStatement && terminalThrowExpr === steps[0]!.awaitExpr,
+                terminalThrowExpr,
             );
         }
 
@@ -34158,6 +34177,8 @@ class Emitter {
         thisValue: EmitResult | null,
         successReturnsAwaited = false,
         conditionalStep: AsyncAwaitLeadingStep | null = null,
+        terminalThrowAwaited = false,
+        terminalThrowExpr: ts.Expression | null = null,
     ): string {
         const name = `tsc_async_await_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -34186,7 +34207,7 @@ class Emitter {
             .filter((symbol): symbol is ts.Symbol => !!symbol);
         const awaitedValueTarget = returnExpr ?? variable ?? conditionalStep?.conditionalBranches?.[0]?.awaitExpr ?? conditionalStep?.awaitExpr;
         const awaitedValue = awaitedType.kind === "void" ||
-            ((!variableSymbol && conditionalBranchSymbols.length === 0) && !successReturnsAwaited)
+            ((!variableSymbol && conditionalBranchSymbols.length === 0) && !successReturnsAwaited && !terminalThrowAwaited)
             ? null
             : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, awaitedValueTarget!);
         const scope = new Map<ts.Symbol, string>();
@@ -34277,10 +34298,12 @@ class Emitter {
                     for (const stmt of conditionalStep.alternateNinthAfterStatements) this.emitStmt(buf, stmt);
                     buf.close();
                 }
-            } else {
+            } else if (!terminalThrowAwaited) {
                 for (const stmt of postAwaitStatements) this.emitStmt(buf, stmt);
             }
-            if (successReturnsAwaited && awaitedType.kind !== "void") {
+            if (terminalThrowAwaited) {
+                buf.line(`tsc_throw_str(${this.coerceToString({ c: valueVar, ty: awaitedType }, terminalThrowExpr!)});`);
+            } else if (successReturnsAwaited && awaitedType.kind !== "void") {
                 returned = { c: valueVar, ty: awaitedType };
             } else if (returnExpr && !successReturnsAwaited) {
                 returned = this.emitExpr(returnExpr);

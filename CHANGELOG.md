@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Async declarations, methods, and function values now lower single-statement `throw await promise` bodies through the continuation adapter, preserving the awaited rejection value. Test: `async_await_direct_throw_await`.
 - Combined source `try` / `catch` / `finally` leading chains now preserve initialized local catch preludes before catch recovery and finally routing. Test: `async_await_pending_return_expr`.
 - Leading source `try` / `catch` chains now preserve initialized local catch preludes before the final catch return/throw. Test: `async_await_pending_return_expr`.
 - Combined source `try` / `catch` / `finally` now composes bounded leading multi-await chains with catch recovery and finally routing, including finally-throw override. Test: `async_await_pending_return_expr`.
