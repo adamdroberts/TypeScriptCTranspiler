@@ -139,7 +139,7 @@ await-while-return-await-alias-post-for-in-true body-return-post-for-inbody-retu
 await-while-throw-await-alias-post-for-in-true body-throw-post-for-inbody-throw
 await-while-return-await-alias-post-for-of-local-true body-return-post-for-of-localbody-return-item
 await-while-return-await-alias-post-for-in-local-true body-return-post-for-in-localbody-return0
-await-while-return-await-alias-post-mutable-iterators-true body-return-post-mutable-iteratorsbody-return-of0
+await-while-return-await-alias-post-mutable-iterators-true body-return-post-mutable-iteratorsbody-return-of0-var-of0
 await-for-condition-true for-yes
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no

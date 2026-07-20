@@ -32612,7 +32612,6 @@ class Emitter {
 
     private asyncAwaitLoopForOfPostludeSupported(stmt: ts.ForOfStatement | ts.ForInStatement): boolean {
         if (!ts.isVariableDeclarationList(stmt.initializer) ||
-            (stmt.initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
             stmt.initializer.declarations.length !== 1 ||
             !ts.isIdentifier(stmt.initializer.declarations[0]!.name)) return false;
         let ok = true;

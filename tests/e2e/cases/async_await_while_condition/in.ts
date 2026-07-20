@@ -659,6 +659,14 @@ async function chooseLoopReturnAwaitAliasPostMutableIterators(condition: boolean
             if (item === "0") break;
             item = "-updated";
         }
+        for (var item of ["-var-of"]) {
+            prefix += item;
+            break;
+        }
+        for (var key in ["var-in"]) {
+            prefix += key;
+            break;
+        }
         return value + prefix;
     }
     return prefix + "-post-mutable-iterators-fallthrough";
