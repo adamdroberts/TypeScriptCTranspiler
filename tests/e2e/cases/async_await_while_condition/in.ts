@@ -412,9 +412,12 @@ async function chooseLoopThrowAwaitAliasPostTry(condition: boolean): Promise<str
 async function chooseLoopReturnAwaitAliasPostLoop(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-loop");
+        let count = 0;
         while (flag) {
+            count += 1;
+            if (count === 1) continue;
             prefix += "-loop";
-            flag = false;
+            break;
         }
         return value + prefix;
     }
@@ -436,9 +439,12 @@ async function chooseLoopThrowAwaitAliasPostLoop(condition: boolean, flag: boole
 async function chooseLoopReturnAwaitAliasPostFor(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-for");
+        let count = 0;
         for (; flag;) {
+            count += 1;
+            if (count === 1) continue;
             prefix += "-for";
-            flag = false;
+            break;
         }
         return value + prefix;
     }
@@ -460,9 +466,14 @@ async function chooseLoopThrowAwaitAliasPostFor(condition: boolean, flag: boolea
 async function chooseLoopReturnAwaitAliasPostDo(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-do");
+        let first = true;
         do {
+            if (first) {
+                first = false;
+                if (flag) continue;
+            }
             prefix += "-do";
-            flag = false;
+            break;
         } while (flag);
         return value + prefix;
     }
@@ -580,10 +591,12 @@ async function chooseLoopReturnAwaitAliasPostMutableIterators(condition: boolean
         const value = await laterBodyValue(prefix + "-post-mutable-iterators");
         for (let item of ["-of"]) {
             prefix += item;
+            if (item === "-of") continue;
             item = "-updated";
         }
         for (let item in ["in"]) {
             prefix += item;
+            if (item === "0") break;
             item = "-updated";
         }
         return value + prefix;

@@ -32425,8 +32425,9 @@ class Emitter {
         return safe;
     }
 
-    private asyncAwaitLoopBodyControlPreludeSupported(stmt: ts.Statement): boolean {
+    private asyncAwaitLoopBodyControlPreludeSupported(stmt: ts.Statement, allowLoopControl = false): boolean {
         let ok = true;
+        let loopDepth = 0;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (
@@ -32435,8 +32436,7 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 ts.isThrowStatement(node) ||
-                ts.isBreakStatement(node) ||
-                ts.isContinueStatement(node)
+                ((ts.isBreakStatement(node) || ts.isContinueStatement(node)) && (!allowLoopControl || loopDepth === 0))
             ) {
                 ok = false;
                 return;
@@ -32463,6 +32463,13 @@ class Emitter {
                 }
                 return;
             }
+            if (ts.isWhileStatement(node) || ts.isDoStatement(node) || ts.isForStatement(node) ||
+                ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+                loopDepth++;
+                ts.forEachChild(node, visit);
+                loopDepth--;
+                return;
+            }
             ts.forEachChild(node, visit);
         };
         visit(stmt);
@@ -32481,7 +32488,7 @@ class Emitter {
                 (!declaration.initializer && (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0)) return false;
             if (!declaration.initializer) return true;
         } else if (!ts.isExpressionStatement(stmt)) {
-            return this.asyncAwaitLoopBodyControlPreludeSupported(stmt);
+            return this.asyncAwaitLoopBodyControlPreludeSupported(stmt, true);
         }
         let ok = true;
         const visit = (node: ts.Node): void => {
@@ -32504,6 +32511,7 @@ class Emitter {
             stmt.initializer.declarations.length !== 1 ||
             !ts.isIdentifier(stmt.initializer.declarations[0]!.name)) return false;
         let ok = true;
+        let loopDepth = 1;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (
@@ -32512,8 +32520,7 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 ts.isThrowStatement(node) ||
-                ts.isBreakStatement(node) ||
-                ts.isContinueStatement(node) ||
+                ((ts.isBreakStatement(node) || ts.isContinueStatement(node)) && loopDepth === 0) ||
                 ts.isVariableDeclarationList(node)
             ) {
                 ok = false;
@@ -32532,6 +32539,13 @@ class Emitter {
                     }
                     if (declaration.initializer) visit(declaration.initializer);
                 }
+                return;
+            }
+            if (ts.isWhileStatement(node) || ts.isDoStatement(node) || ts.isForStatement(node) ||
+                ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+                loopDepth++;
+                ts.forEachChild(node, visit);
+                loopDepth--;
                 return;
             }
             ts.forEachChild(node, visit);
