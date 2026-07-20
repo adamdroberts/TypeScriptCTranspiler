@@ -32916,10 +32916,11 @@ class Emitter {
         const bodyPreludeSupported = bodyPreludeStatements.every((statement) => {
             if (ts.isExpressionStatement(statement)) return true;
             if (ts.isVariableStatement(statement)) {
-                if (statement.declarationList.declarations.length !== 1) return false;
-                const declaration = statement.declarationList.declarations[0]!;
-                return ts.isIdentifier(declaration.name) &&
-                    (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Const) === 0);
+                if (statement.declarationList.declarations.length === 0) return false;
+                return statement.declarationList.declarations.every((declaration) =>
+                    ts.isIdentifier(declaration.name) &&
+                    (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Const) === 0)
+                );
             }
             return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
         });
