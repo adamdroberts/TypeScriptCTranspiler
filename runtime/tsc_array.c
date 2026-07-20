@@ -1119,6 +1119,8 @@ static tsc_value_t tsc_array_default_prototype(void) {
         proto->env = NULL;
         proto->lazy_next = NULL;
         proto->lazy_close = NULL;
+        proto->lazy_close_yielded = false;
+        proto->lazy_close_value = tsc_value_undefined();
         proto->props = tsc_object_new();
         proto->holes = NULL;
         proto->data = NULL;
@@ -1206,6 +1208,8 @@ tsc_array_t* tsc_array_new(size_t elem_size, size_t initial_cap) {
     a->env = NULL;
     a->lazy_next = NULL;
     a->lazy_close = NULL;
+    a->lazy_close_yielded = false;
+    a->lazy_close_value = tsc_value_undefined();
     a->props = tsc_object_new();
     a->holes = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC(initial_cap * elem_size) : NULL;
@@ -1231,6 +1235,8 @@ tsc_array_t* tsc_array_new_atomic(size_t elem_size, size_t initial_cap) {
     a->env = NULL;
     a->lazy_next = NULL;
     a->lazy_close = NULL;
+    a->lazy_close_yielded = false;
+    a->lazy_close_value = tsc_value_undefined();
     a->props = tsc_object_new();
     a->holes = NULL;
     a->data = initial_cap ? TSC_GC_MALLOC_ATOMIC(initial_cap * elem_size) : NULL;

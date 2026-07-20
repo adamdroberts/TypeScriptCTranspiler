@@ -22,6 +22,7 @@ class CounterIterator {
 
     return(value: string): Step {
         events.push("return:" + value);
+        if (value === "yield-return") return { done: false, value: 5 };
         return { done: true, value: 7 };
     }
 
@@ -55,6 +56,12 @@ function* outerReturn(): Generator<number, string, string> {
     return "return-outer-done";
 }
 
+function* outerReturnYield(): Generator<number, string, string> {
+    const delegated: any = yield* new Counter();
+    events.push("return-yield-outer-after:" + delegated);
+    return "return-yield-outer-done";
+}
+
 const iter = outer();
 const first: any = iter.next();
 const second: any = iter.next();
@@ -70,3 +77,10 @@ const returning = outerReturn();
 const returningFirst: any = returning.next();
 const returningDone: any = returning.return("custom-return");
 console.log("custom-iterator-return", returningFirst.done, returningFirst.value, returningDone.done, returningDone.value, events.join("|"));
+
+const returningYield = outerReturnYield();
+const returningYieldFirst: any = returningYield.next();
+const returningYieldStep: any = returningYield.return("yield-return");
+const returningYieldSecond: any = returningYield.next();
+const returningYieldDone: any = returningYield.next();
+console.log("custom-iterator-return-yield", returningYieldFirst.done, returningYieldFirst.value, returningYieldStep.done, returningYieldStep.value, returningYieldSecond.done, returningYieldSecond.value, returningYieldDone.done, returningYieldDone.value, events.join("|"));

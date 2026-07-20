@@ -37671,7 +37671,11 @@ class Emitter {
                     closeBuf.open(`if (is_throw && !${delegatedResult})`);
                     closeBuf.line("_delegated_throw_unhandled = false;");
                     closeBuf.close();
-                    closeBuf.open(`if (!is_throw && ${delegatedResult})`);
+                    closeBuf.open(`if (!is_throw && ${delegatedResult} && ${closeEnv}->yield_star_arr_${i}->lazy_close_yielded)`);
+                    closeBuf.line(`a->lazy_close_yielded = true;`);
+                    closeBuf.line(`a->lazy_close_value = ${closeEnv}->yield_star_arr_${i}->lazy_close_value;`);
+                    closeBuf.close();
+                    closeBuf.open(`if (!is_throw && ${delegatedResult} && !${closeEnv}->yield_star_arr_${i}->lazy_close_yielded)`);
                     closeBuf.line("_delegated_return_handled = true;");
                     closeBuf.close();
                 } else {
@@ -37686,6 +37690,9 @@ class Emitter {
                 closeBuf.line("a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_delegated_close_done);");
                 closeBuf.close();
                 closeBuf.line("return false;");
+                closeBuf.close();
+                closeBuf.open("if (!is_throw && a->lazy_close_yielded)");
+                closeBuf.line("return true;");
                 closeBuf.close();
                 closeBuf.open("if (!is_throw && _delegated_return_handled)");
                 closeBuf.open("if (a->state >= 0 && a->lazy_next)");
@@ -40363,6 +40370,7 @@ class Emitter {
                 const closeBuf = new CBuf();
                 closeBuf.open(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
                 closeBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
+                closeBuf.line("a->lazy_close_yielded = false;");
                 closeBuf.open("if (is_throw)");
                 if (throwMethod) {
                     const throwSig = this.checker.getSignatureFromDeclaration(throwMethod.method);
@@ -40410,6 +40418,9 @@ class Emitter {
                     closeBuf.line("a->is_lazy_generator = false;");
                     closeBuf.line("return true;");
                     closeBuf.close();
+                    closeBuf.line("a->lazy_close_yielded = true;");
+                    closeBuf.line(`a->lazy_close_value = ${this.coerce({ c: `${returnStep}->value`, ty: valueType }, T_VALUE, returnMethod.method)};`);
+                    closeBuf.line("return true;");
                 }
                 closeBuf.line("return false;");
                 closeBuf.close();
@@ -55622,9 +55633,12 @@ class Emitter {
                     ([arr, valueArg]) =>
                         `({ tsc_array_t* const ${av} = ${arr!}; bool ${closeHandled} = false; ` +
                         `if (${av}->is_lazy_generator && ${av}->lazy_close) ${closeHandled} = ${av}->lazy_close(${av}, ${av}->env, ${valueArg ?? "tsc_value_undefined()"}, false); ` +
-                        `tsc_object_t* ${out} = NULL; if (${closeHandled}) { ${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ${av}->iter_return_consumed = true; ` +
-                        `${out} = tsc_object_new(); tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
-                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->iter_has_return ? ${av}->iter_return : tsc_value_undefined()); ` +
+                        `tsc_object_t* ${out} = NULL; if (${closeHandled}) { ${out} = tsc_object_new(); ` +
+                        `if (${av}->lazy_close_yielded) { tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(false)); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->lazy_close_value); ${av}->lazy_close_yielded = false; ` +
+                        `} else { ${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ${av}->iter_return_consumed = true; ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->iter_has_return ? ${av}->iter_return : tsc_value_undefined()); } ` +
                         `} else { ${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ` +
                         `${av}->iter_return_consumed = true; ${out} = tsc_object_new(); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +

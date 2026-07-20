@@ -554,6 +554,8 @@ typedef struct tsc_array {
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
     bool (*lazy_close)(struct tsc_array* a, void* env, tsc_value_t arg, bool is_throw);
+    bool lazy_close_yielded;
+    tsc_value_t lazy_close_value;
     tsc_object_t* props;
     tsc_object_t* holes;
     void* data;
