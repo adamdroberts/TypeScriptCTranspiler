@@ -1,0 +1,6 @@
+declaration-true: declaration-right
+declaration-false: declaration-fallback
+method-true: method-right
+method-false: method-fallback
+value-true: arrow-right
+value-false: arrow-fallback
