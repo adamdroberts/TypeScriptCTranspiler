@@ -403,7 +403,7 @@ await-loop-initializer-escaping-var-continue loop-escaping-var-continue-continue
 await-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-continued-increment
 await-while-escaping-var-continue while-escaping-continue-continued
 await-while-escaping-var-continue-throw while-escaping-continue-throw-continued
-await-method-escaping-var-continue while-method-escaping-continue-method-continued
+await-method-escaping-var-continue while-escaping-continue-method-continued
 await-value-escaping-var-continue while-value-escaping-continue-value-continued
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
