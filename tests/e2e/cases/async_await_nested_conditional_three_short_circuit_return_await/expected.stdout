@@ -1,0 +1,6 @@
+declaration-true: declaration-three
+declaration-false: declaration-fallback
+method-true: method-three
+method-false: method-fallback
+value-true: arrow-three
+value-false: arrow-fallback
