@@ -256,6 +256,11 @@ interface AsyncAwaitLeadingStep {
     conditionalBranches?: readonly AsyncAwaitLeadingConditionalBranch[];
 }
 
+interface DirectAsyncAwaitReturnAlias {
+    awaitExpr: ts.AwaitExpression;
+    preludeStatements: readonly ts.Statement[];
+}
+
 interface AsyncAwaitLeadingReturnContinuation {
     preludeStatements: readonly ts.Statement[];
     steps: AsyncAwaitLeadingStep[];
@@ -767,6 +772,7 @@ class Emitter {
 
     private emitLineDirective(buf: CBuf, node: ts.Node): void {
         const sf = node.getSourceFile();
+        if (!sf) return;
         const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
         buf.lineRaw(`#line ${line + 1} "${escapeCString(sf.fileName)}"`);
     }
@@ -25652,34 +25658,66 @@ class Emitter {
         this.defs.line();
     }
 
-    private directAsyncAwaitReturnAlias(body: ts.Block): ts.AwaitExpression | null {
+    private directAsyncAwaitReturnAlias(body: ts.Block): DirectAsyncAwaitReturnAlias | null {
         if (body.statements.length !== 2) return null;
         const declaration = body.statements[0];
         const result = body.statements[1];
         if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
         if (!(declaration.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
-        if (declaration.declarationList.declarations.length !== 1) return null;
-        const variable = declaration.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name) || !variable.initializer) {
-            return null;
+        const declarations = declaration.declarationList.declarations;
+        if (declarations.length === 0) return null;
+        let awaitedIndex = -1;
+        let awaitedExpression: ts.AwaitExpression | null = null;
+        const visitSynchronousInitializer = (node: ts.Node): boolean => {
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
+            let ok = true;
+            ts.forEachChild(node, (child) => {
+                if (ok) ok = visitSynchronousInitializer(child);
+            });
+            return ok;
+        };
+        for (let index = 0; index < declarations.length; index++) {
+            const variable = declarations[index]!;
+            if (!ts.isIdentifier(variable.name) || !variable.initializer) return null;
+            const initializer = this.unwrapTransparentExpression(variable.initializer);
+            if (ts.isAwaitExpression(initializer)) {
+                if (awaitedIndex !== -1 || index !== declarations.length - 1) return null;
+                awaitedIndex = index;
+                awaitedExpression = initializer;
+            } else if (!visitSynchronousInitializer(initializer)) {
+                return null;
+            }
         }
-        const initializer = this.unwrapTransparentExpression(variable.initializer);
-        if (!ts.isAwaitExpression(initializer)) return null;
+        if (awaitedIndex < 0 || !awaitedExpression) return null;
+        const variable = declarations[awaitedIndex]!;
+        if (!ts.isIdentifier(variable.name)) return null;
         const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
         if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
         const resultSymbol = this.symbolForIdentifier(resultExpression);
-        return variableSymbol && variableSymbol === resultSymbol ? initializer : null;
+        if (!variableSymbol || variableSymbol !== resultSymbol) return null;
+        const preludeStatements = awaitedIndex > 0
+            ? [ts.factory.updateVariableStatement(
+                declaration,
+                declaration.modifiers,
+                ts.factory.createVariableDeclarationList(
+                    declarations.slice(0, awaitedIndex),
+                    declaration.declarationList.flags,
+                ),
+            )]
+            : [];
+        return { awaitExpr: awaitedExpression, preludeStatements };
     }
 
     private emitDirectAsyncAwaitReturnAlias(buf: CBuf, body: ts.Block): boolean {
         const directAwaitAlias = this.directAsyncAwaitReturnAlias(body);
         if (!directAwaitAlias) return false;
-        const source = this.emitExpr(directAwaitAlias.expression);
+        this.emitAsyncAwaitPreludeStatements(buf, directAwaitAlias.preludeStatements, []);
+        const source = this.emitExpr(directAwaitAlias.awaitExpr.expression);
         if (this.prepareType(source.ty).kind === "promise") {
             buf.line(`return tsc_promise_adopt(${source.c});`);
         } else {
-            buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.expression)};`);
+            buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.awaitExpr.expression)};`);
         }
         return true;
     }

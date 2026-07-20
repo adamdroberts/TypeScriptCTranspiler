@@ -26,6 +26,11 @@ function laterBodyReject(): Promise<string> {
     return new Promise<string>((_resolve, reject) => setImmediate(() => reject("body-rejected")));
 }
 
+async function chooseDirectAwaitMultipleLocals(prefix: string): Promise<string> {
+    const source = prefix + "-source", value = await laterBodyValue(source);
+    return value;
+}
+
 async function chooseLoopTrue(): Promise<string> {
     while (await laterTrue()) {
         return "loop-yes";
@@ -1038,3 +1043,4 @@ new LoopChooser("method-loop-").pick(true).then((value) => console.log("await-wh
 new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-while-method-false", value));
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
 chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));
+chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));

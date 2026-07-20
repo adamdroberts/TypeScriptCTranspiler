@@ -79,6 +79,7 @@ await-while-nullish-true nullish-yes
 await-while-nullish-false nullish-no
 await-while-method-false method-loop-no
 await-while-value-false value-loop-no
+await-direct-multiple-locals direct-multiple-source
 await-while-return-await-true body-await-yes
 await-while-return-await-false body-await-no
 await-while-return-await-reject body-rejected
