@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 async function declaration(flag: boolean, prefix: string): Promise<unknown> {
     if (flag) return await delay(1, prefix + "branch");
-    return { prefix: "fn-", first: await delay(2, "one"), second: await delay(3, "two") };
+    return ["fn-", await delay(2, "one"), await delay(3, "two")];
 }
 
 class Worker {
@@ -17,9 +17,15 @@ const value = async (flag: boolean, prefix: string): Promise<unknown> => {
     return `value-${await delay(8, prefix + "one")}-${await delay(9, "two")}`;
 };
 
+async function typedArray(flag: boolean): Promise<string[]> {
+    if (flag) return ["typed", await delay(10, "branch-one"), await delay(11, "branch-two")];
+    return ["typed", await delay(12, "fall-one"), await delay(13, "fall-two")];
+}
+
 declaration(true, "fn-").then((result) => console.log("declaration-branch:", result));
 declaration(false, "fn-").then((result) => console.log("declaration-fall:", JSON.stringify(result)));
 new Worker().run(true, "method-").then((result) => console.log("method-branch:", result));
 new Worker().run(false, "method-").then((result) => console.log("method-fall:", JSON.stringify(result)));
 value(true, "arrow-").then((result) => console.log("value-branch:", result));
 value(false, "arrow-").then((result) => console.log("value-fall:", result));
+typedArray(false).then((result) => console.log("typed-array:", JSON.stringify(result)));

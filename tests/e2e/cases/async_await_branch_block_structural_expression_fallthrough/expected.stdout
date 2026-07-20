@@ -1,6 +1,7 @@
 declaration-branch: fn-branch
 method-branch: method-branch
-declaration-fall: {"prefix":"fn-","first":"one","second":"two"}
+declaration-fall: ["fn-","one","two"]
 value-branch: arrow-branch
 method-fall: {"prefix":"method-","first":"one","second":"two"}
 value-fall: value-arrow-one-two
+typed-array: ["typed","fall-one","fall-two"]

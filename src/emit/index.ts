@@ -31253,7 +31253,29 @@ class Emitter {
         awaitExprs: readonly ts.AwaitExpression[],
         awaitedTypes: readonly CType[],
     ): EmitResult {
-        const mapped = mapTsType(array, this.checker.getTypeAtLocation(array), this.checker);
+        const contextualType = this.asyncAwaitReturnContextTypes.get(array);
+        const mapped = mapTsType(
+            array,
+            contextualType ?? this.checker.getTypeAtLocation(array),
+            this.checker,
+        );
+        const dynamicContext = contextualType !== undefined &&
+            (contextualType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0;
+        if (mapped.kind === "value" || dynamicContext) {
+            const arrayVar = this.freshTemp("_await_dynamic_array");
+            const pieces = [
+                `tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, array.elements.length)})`,
+            ];
+            for (const element of array.elements) {
+                const value = this.emitExpr(element as ts.Expression);
+                const boxed = this.coerce(value, T_VALUE, element);
+                const valueName = this.freshTemp("_await_dynamic_array_value");
+                pieces.push(`tsc_value_t ${valueName} = ${boxed}`);
+                pieces.push(`tsc_array_push_raw(${arrayVar}, &${valueName})`);
+            }
+            pieces.push(`tsc_value_array(${arrayVar})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        }
         const inferred = awaitedTypes[0] ?? T_VALUE;
         const elementType = mapped.kind === "array" && mapped.elem && mapped.elem.kind !== "value"
             ? mapped.elem
@@ -31568,7 +31590,7 @@ class Emitter {
         const continuation = this.asyncAwaitLogicalExpressionReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation);
+        return this.emitAsyncAwaitIfExpressionReturnBranchWithReturnContext(buf, body, continuation);
     }
 
     private asyncAwaitConditionalExpressionReturnContinuation(
@@ -31842,7 +31864,7 @@ class Emitter {
         const continuation = this.asyncAwaitConditionalExpressionReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation);
+        return this.emitAsyncAwaitIfExpressionReturnBranchWithReturnContext(buf, body, continuation);
     }
 
     private asyncAwaitIfExpressionReturnContinuation(
@@ -32392,6 +32414,35 @@ class Emitter {
         return this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch.fallthroughBranch, rejectResult);
     }
 
+    private emitAsyncAwaitIfExpressionReturnBranchWithReturnContext(
+        buf: CBuf,
+        body: ts.Block,
+        branch: AsyncAwaitIfExpressionReturnNode,
+        rejectResult = false,
+    ): boolean {
+        const returnContextType = this.asyncAwaitReturnContextTypeForBody(body);
+        if (!returnContextType) return this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch, rejectResult);
+        const expressions: ts.Expression[] = [];
+        const visit = (node: ts.Node): void => {
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            if (ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) {
+                expressions.push(node);
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(body);
+        for (const expression of expressions) {
+            this.asyncAwaitReturnContextTypes.set(expression, returnContextType);
+        }
+        try {
+            return this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch, rejectResult);
+        } finally {
+            for (const expression of expressions) {
+                this.asyncAwaitReturnContextTypes.delete(expression);
+            }
+        }
+    }
+
     private emitAsyncAwaitIfExpressionReturnContinuation(
         buf: CBuf,
         body: ts.Block,
@@ -32401,7 +32452,7 @@ class Emitter {
         const continuation = this.asyncAwaitIfExpressionReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation);
+        return this.emitAsyncAwaitIfExpressionReturnBranchWithReturnContext(buf, body, continuation);
     }
 
     private emitAsyncAwaitConditionalExpressionThrowContinuation(
@@ -32427,7 +32478,7 @@ class Emitter {
                 : null;
         if (!continuation || !this.asyncAwaitIfExpressionReturnBranchHasAwait(continuation)) return false;
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation, true);
+        return this.emitAsyncAwaitIfExpressionReturnBranchWithReturnContext(buf, body, continuation, true);
     }
 
     private ensureAsyncAwaitExpressionReturnContinuationAdapter(
