@@ -340,3 +340,28 @@ try {
 } catch (error: any) {
     console.log("caught-conditional-finally-throw:", caughtConditionalFinallyThrowFirst.done, caughtConditionalFinallyThrowFirst.value, error, catchPreludeEvents.join("|"));
 }
+
+function* caughtConditionalFinallyMixed(): Generator<string, string, string> {
+    try {
+        yield "conditional-finally-mixed-pause";
+    } catch (error: any) {
+        if (error === "special") return "special-mixed-recovered";
+        else throw "fallback-mixed-throw";
+    } finally {
+        catchPreludeEvents.push("conditional-finally-mixed");
+    }
+    return "normal";
+}
+
+const caughtConditionalFinallyMixedSpecial = caughtConditionalFinallyMixed();
+const caughtConditionalFinallyMixedSpecialFirst: any = caughtConditionalFinallyMixedSpecial.next();
+const caughtConditionalFinallyMixedSpecialDone: any = caughtConditionalFinallyMixedSpecial.throw("special");
+console.log("caught-conditional-finally-mixed-special:", caughtConditionalFinallyMixedSpecialFirst.done, caughtConditionalFinallyMixedSpecialFirst.value, caughtConditionalFinallyMixedSpecialDone.done, caughtConditionalFinallyMixedSpecialDone.value, catchPreludeEvents.join("|"));
+
+const caughtConditionalFinallyMixedFallback = caughtConditionalFinallyMixed();
+const caughtConditionalFinallyMixedFallbackFirst: any = caughtConditionalFinallyMixedFallback.next();
+try {
+    caughtConditionalFinallyMixedFallback.throw("other");
+} catch (error: any) {
+    console.log("caught-conditional-finally-mixed-fallback:", caughtConditionalFinallyMixedFallbackFirst.done, caughtConditionalFinallyMixedFallbackFirst.value, error, catchPreludeEvents.join("|"));
+}
