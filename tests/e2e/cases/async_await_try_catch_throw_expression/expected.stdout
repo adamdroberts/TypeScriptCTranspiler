@@ -1,0 +1,3 @@
+declaration: fn-throw-suffix-caught
+method: -throwmethod-suffix-caught
+value: arrow-throw-suffix-caught
