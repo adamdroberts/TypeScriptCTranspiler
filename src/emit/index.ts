@@ -32429,15 +32429,13 @@ class Emitter {
         let ok = true;
         let loopDepth = 0;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
-            if (loopDepth <= 1 ||
-                node.declarations.length !== 1) return false;
-            const declaration = node.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name)) return false;
+            if (loopDepth <= 1) return false;
             if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
+                if (node.declarations.length !== 1 || !ts.isIdentifier(node.declarations[0]!.name)) return false;
+                const declaration = node.declarations[0]!;
                 return !declaration.initializer;
             }
-            if (!ts.isForStatement(node.parent) ||
-                (!declaration.initializer && (node.flags & ts.NodeFlags.Let) === 0)) return false;
+            if (!ts.isForStatement(node.parent) || node.declarations.length === 0) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
@@ -32447,7 +32445,11 @@ class Emitter {
                 }
                 ts.forEachChild(child, visitInitializer);
             };
-            if (declaration.initializer) visitInitializer(declaration.initializer);
+            for (const declaration of node.declarations) {
+                if (!ts.isIdentifier(declaration.name) ||
+                    (!declaration.initializer && (node.flags & ts.NodeFlags.Let) === 0)) return false;
+                if (declaration.initializer) visitInitializer(declaration.initializer);
+            }
             return supported;
         };
         const switchClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
@@ -32620,15 +32622,13 @@ class Emitter {
         let ok = true;
         let loopDepth = 1;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
-            if (loopDepth <= 1 ||
-                node.declarations.length !== 1) return false;
-            const declaration = node.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name)) return false;
+            if (loopDepth <= 1) return false;
             if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
+                if (node.declarations.length !== 1 || !ts.isIdentifier(node.declarations[0]!.name)) return false;
+                const declaration = node.declarations[0]!;
                 return !declaration.initializer;
             }
-            if (!ts.isForStatement(node.parent) ||
-                (!declaration.initializer && (node.flags & ts.NodeFlags.Let) === 0)) return false;
+            if (!ts.isForStatement(node.parent) || node.declarations.length === 0) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
@@ -32638,7 +32638,11 @@ class Emitter {
                 }
                 ts.forEachChild(child, visitInitializer);
             };
-            if (declaration.initializer) visitInitializer(declaration.initializer);
+            for (const declaration of node.declarations) {
+                if (!ts.isIdentifier(declaration.name) ||
+                    (!declaration.initializer && (node.flags & ts.NodeFlags.Let) === 0)) return false;
+                if (declaration.initializer) visitInitializer(declaration.initializer);
+            }
             return supported;
         };
         const switchClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
