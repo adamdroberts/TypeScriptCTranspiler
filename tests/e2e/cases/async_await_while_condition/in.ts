@@ -886,6 +886,11 @@ class LoopChooser {
         const source = this.prefix + "throw-source", reason = await laterBodyValue(source);
         throw reason;
     }
+
+    async multipleAwaitDeclarators(): Promise<string> {
+        const first = await laterBodyValue(this.prefix + "first"), second = await laterBodyValue(first + "-second");
+        return second;
+    }
 }
 
 const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
@@ -898,6 +903,11 @@ const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> =
 const chooseArrowThrowWithLocals = async (prefix: string): Promise<string> => {
     const source = prefix + "-throw-source", reason = await laterBodyValue(source);
     throw reason;
+};
+
+const chooseArrowMultipleAwaitDeclarators = async (prefix: string): Promise<string> => {
+    const first = await laterBodyValue(prefix + "-first"), second = await laterBodyValue(first + "-second");
+    return second;
 };
 
 chooseLoopTrue().then((value) => console.log("await-while-true", value));
@@ -1074,4 +1084,6 @@ chooseDirectAwaitAssignedMultipleLocals("direct-assigned-multiple").then((value)
 chooseDirectThrowAwaitMultipleLocals("direct-throw-multiple").catch((reason) => console.log("await-direct-throw-multiple-locals", reason));
 chooseMultipleAwaitDeclarators("multiple-await").then((value) => console.log("await-multiple-declarators", value));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
+new LoopChooser("method-").multipleAwaitDeclarators().then((value) => console.log("await-method-multiple-declarators", value));
 chooseArrowThrowWithLocals("arrow").catch((reason) => console.log("await-arrow-throw-multiple-locals", reason));
+chooseArrowMultipleAwaitDeclarators("arrow").then((value) => console.log("await-arrow-multiple-declarators", value));

@@ -165,6 +165,8 @@ await-while-nullable-nullish-false nullable-nullish-no
 await-while-method-true method-loop-yes
 await-while-value-true value-loop-yes
 await-multiple-declarators multiple-await-first-second
+await-method-multiple-declarators method-first-second
+await-arrow-multiple-declarators arrow-first-second
 await-while-three-logical-true three-logical-yes
 await-while-three-logical-false three-logical-no
 await-while-four-logical-true four-logical-yes
