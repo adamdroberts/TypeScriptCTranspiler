@@ -39,6 +39,32 @@ class Counter {
     }
 }
 
+class NoArgIterator {
+    current: number = 1;
+
+    next(): Step {
+        if (this.current > 1) return { done: true, value: 0 };
+        events.push("noarg-next:" + this.current);
+        return { done: false, value: this.current++ };
+    }
+
+    return(): Step {
+        events.push("noarg-return");
+        return { done: true, value: 11 };
+    }
+
+    throw(): Step {
+        events.push("noarg-throw");
+        return { done: true, value: 12 };
+    }
+}
+
+class NoArgIterable {
+    [Symbol.iterator](): NoArgIterator {
+        return new NoArgIterator();
+    }
+}
+
 function* outer(): Generator<number, string, undefined> {
     const delegated: any = yield* new Counter();
     events.push("outer-after:" + delegated);
@@ -67,6 +93,18 @@ function* outerReturnYield(): Generator<number, string, string> {
     const delegated: any = yield* new Counter();
     events.push("return-yield-outer-after:" + delegated);
     return "return-yield-outer-done";
+}
+
+function* outerNoArgReturn(): Generator<number, string, string> {
+    const delegated: any = yield* new NoArgIterable();
+    events.push("noarg-return-outer-after:" + delegated);
+    return "noarg-return-outer-done";
+}
+
+function* outerNoArgThrow(): Generator<number, string, string> {
+    const delegated: any = yield* new NoArgIterable();
+    events.push("noarg-throw-outer-after:" + delegated);
+    return "noarg-throw-outer-done";
 }
 
 const iter = outer();
@@ -98,3 +136,13 @@ const returningYieldStep: any = returningYield.return("yield-return");
 const returningYieldSecond: any = returningYield.next();
 const returningYieldDone: any = returningYield.next();
 console.log("custom-iterator-return-yield", returningYieldFirst.done, returningYieldFirst.value, returningYieldStep.done, returningYieldStep.value, returningYieldSecond.done, returningYieldSecond.value, returningYieldDone.done, returningYieldDone.value, events.join("|"));
+
+const noArgReturning = outerNoArgReturn();
+const noArgReturningFirst: any = noArgReturning.next();
+const noArgReturningDone: any = noArgReturning.return("ignored");
+console.log("custom-iterator-noarg-return", noArgReturningFirst.done, noArgReturningFirst.value, noArgReturningDone.done, noArgReturningDone.value, events.join("|"));
+
+const noArgThrowing = outerNoArgThrow();
+const noArgThrowingFirst: any = noArgThrowing.next();
+const noArgThrowingDone: any = noArgThrowing.throw("ignored");
+console.log("custom-iterator-noarg-throw", noArgThrowingFirst.done, noArgThrowingFirst.value, noArgThrowingDone.done, noArgThrowingDone.value, events.join("|"));

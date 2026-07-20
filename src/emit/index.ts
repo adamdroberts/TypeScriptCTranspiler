@@ -40383,15 +40383,23 @@ class Emitter {
                     const throwSig = this.checker.getSignatureFromDeclaration(throwMethod.method);
                     if (!throwSig) unsupported(throwMethod.method, "could not resolve iterator throw() signature");
                     const throwParams = throwSig.getParameters();
-                    if (throwParams.length !== 1) unsupported(throwMethod.method, "lazy custom iterator throw() requires one argument");
-                    const throwParam = throwParams[0]!.valueDeclaration ?? throwMethod.method;
-                    const throwType = this.prepareType(mapTsType(throwParam, this.checker.getTypeOfSymbolAtLocation(throwParams[0]!, throwParam), this.checker));
-                    const throwArg = this.coerce({ c: "arg", ty: T_VALUE }, throwType, throwParam);
+                    if (throwParams.length > 1) unsupported(throwMethod.method, "lazy custom iterator throw() accepts zero or one argument");
+                    const throwArg = throwParams.length === 1
+                        ? this.coerce(
+                            { c: "arg", ty: T_VALUE },
+                            this.prepareType(mapTsType(
+                                throwParams[0]!.valueDeclaration ?? throwMethod.method,
+                                this.checker.getTypeOfSymbolAtLocation(throwParams[0]!, throwParams[0]!.valueDeclaration ?? throwMethod.method),
+                                this.checker,
+                            )),
+                            throwParams[0]!.valueDeclaration ?? throwMethod.method,
+                        )
+                        : null;
                     const throwStep = this.freshTemp("_lazy_custom_throw_step");
                     const throwSelf = throwMethod.owner.name!.text === iteratorType.className ? `${env}->iterator` : `((${throwMethod.owner.name!.text}_t*)${env}->iterator)`;
                     const throwName = this.classMethodCName(throwMethod.method.name);
                     if (!throwName) unsupported(throwMethod.method, "could not resolve iterator throw() name");
-                    closeBuf.line(`${stepType.c} const ${throwStep} = ${throwMethod.owner.name!.text}_${throwName}(${throwSelf}, ${throwArg});`);
+                    closeBuf.line(`${stepType.c} const ${throwStep} = ${throwMethod.owner.name!.text}_${throwName}(${throwSelf}${throwArg ? `, ${throwArg}` : ""});`);
                     closeBuf.open(`if (${throwStep}->done)`);
                     closeBuf.line(`a->iter_return = ${this.coerce({ c: `${throwStep}->value`, ty: valueType }, T_VALUE, throwMethod.method)};`);
                     closeBuf.line("a->iter_has_return = true;");
@@ -40411,15 +40419,23 @@ class Emitter {
                     const returnSig = this.checker.getSignatureFromDeclaration(returnMethod.method);
                     if (!returnSig) unsupported(returnMethod.method, "could not resolve iterator return() signature");
                     const returnParams = returnSig.getParameters();
-                    if (returnParams.length !== 1) unsupported(returnMethod.method, "lazy custom iterator return() requires one argument");
-                    const returnParam = returnParams[0]!.valueDeclaration ?? returnMethod.method;
-                    const returnType = this.prepareType(mapTsType(returnParam, this.checker.getTypeOfSymbolAtLocation(returnParams[0]!, returnParam), this.checker));
-                    const returnArg = this.coerce({ c: "arg", ty: T_VALUE }, returnType, returnParam);
+                    if (returnParams.length > 1) unsupported(returnMethod.method, "lazy custom iterator return() accepts zero or one argument");
+                    const returnArg = returnParams.length === 1
+                        ? this.coerce(
+                            { c: "arg", ty: T_VALUE },
+                            this.prepareType(mapTsType(
+                                returnParams[0]!.valueDeclaration ?? returnMethod.method,
+                                this.checker.getTypeOfSymbolAtLocation(returnParams[0]!, returnParams[0]!.valueDeclaration ?? returnMethod.method),
+                                this.checker,
+                            )),
+                            returnParams[0]!.valueDeclaration ?? returnMethod.method,
+                        )
+                        : null;
                     const returnStep = this.freshTemp("_lazy_custom_return_step");
                     const returnSelf = returnMethod.owner.name!.text === iteratorType.className ? `${env}->iterator` : `((${returnMethod.owner.name!.text}_t*)${env}->iterator)`;
                     const returnName = this.classMethodCName(returnMethod.method.name);
                     if (!returnName) unsupported(returnMethod.method, "could not resolve iterator return() name");
-                    closeBuf.line(`${stepType.c} const ${returnStep} = ${returnMethod.owner.name!.text}_${returnName}(${returnSelf}, ${returnArg});`);
+                    closeBuf.line(`${stepType.c} const ${returnStep} = ${returnMethod.owner.name!.text}_${returnName}(${returnSelf}${returnArg ? `, ${returnArg}` : ""});`);
                     closeBuf.open(`if (${returnStep}->done)`);
                     closeBuf.line(`a->iter_return = ${this.coerce({ c: `${returnStep}->value`, ty: valueType }, T_VALUE, returnMethod.method)};`);
                     closeBuf.line("a->iter_has_return = true;");
