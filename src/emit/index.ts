@@ -23992,6 +23992,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitExpressionThrowContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -25435,6 +25441,7 @@ class Emitter {
                 !this.emitAsyncAwaitLogicalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitConditionalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitPreludeExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitExpressionThrowContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLeadingReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitFourStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -30297,6 +30304,24 @@ class Emitter {
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
 
+    private emitAsyncAwaitExpressionThrowContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        if (body.statements.length !== 1 || !ts.isThrowStatement(body.statements[0]!)) return false;
+        const expression = this.unwrapTransparentExpression(body.statements[0]!.expression);
+        if (ts.isAwaitExpression(expression)) return false;
+        const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+        );
+        if (!continuation || !this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation, true);
+    }
+
     private emitAsyncAwaitExpressionBodyReturn(
         buf: CBuf,
         expressionBody: ts.Expression,
@@ -30528,6 +30553,7 @@ class Emitter {
     private emitAsyncAwaitExpressionReturnContinuationResult(
         buf: CBuf,
         continuation: AsyncAwaitExpressionReturnContinuation,
+        rejectResult = false,
     ): boolean {
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
@@ -30548,6 +30574,7 @@ class Emitter {
             continuation.returnExpr,
             continuation.params,
             continuation.thisValue,
+            rejectResult,
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
@@ -31856,6 +31883,7 @@ class Emitter {
         returnExpr: ts.Expression,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
+        rejectResult = false,
     ): string {
         const name = `tsc_async_await_expression_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -31922,7 +31950,11 @@ class Emitter {
             this.argumentValueScopes.pop();
         }
         const returnedType = this.prepareType(returned!.ty);
-        if (returnedType.kind === "void" || returnedType.kind === "never") {
+        if (rejectResult) {
+            const rejected = this.coerceToString(returned!, returnExpr);
+            buf.line("tsc_try_pop();");
+            buf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${rejected}));`);
+        } else if (returnedType.kind === "void" || returnedType.kind === "never") {
             buf.line(`${returned!.c};`);
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
@@ -43513,6 +43545,12 @@ class Emitter {
                                     runtimeParams,
                                     type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
                                 ) ||
+                                this.emitAsyncAwaitExpressionThrowContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
                                     body,
                                     fnBody,
@@ -53974,6 +54012,12 @@ class Emitter {
                             thisType ? { c: "__tsc_this", ty: thisType } : null,
                         ) ||
                         this.emitAsyncAwaitPreludeExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
+                        this.emitAsyncAwaitExpressionThrowContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,
