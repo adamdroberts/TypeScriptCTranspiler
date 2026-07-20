@@ -32919,7 +32919,7 @@ class Emitter {
                 if (statement.declarationList.declarations.length !== 1) return false;
                 const declaration = statement.declarationList.declarations[0]!;
                 return ts.isIdentifier(declaration.name) &&
-                    (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Let) !== 0);
+                    (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Const) === 0);
             }
             return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
         });

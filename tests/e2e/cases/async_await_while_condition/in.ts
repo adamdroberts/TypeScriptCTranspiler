@@ -345,6 +345,16 @@ async function chooseLoopReturnAwaitVarPrelude(condition: boolean, prefix: strin
     return prefix + "-var-prelude-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAssignedVarPrelude(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        var suffix: string;
+        suffix = "-assigned-var-prelude";
+        const value = await laterBodyValue(prefix + suffix);
+        return value + prefix;
+    }
+    return prefix + "-assigned-var-prelude-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-control");
@@ -903,6 +913,8 @@ chooseLoopReturnAwaitAliasPostAssignedVar(true, "body-return").then((value) => c
 chooseLoopReturnAwaitAliasPostAssignedVar(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-assigned-var-false", value));
 chooseLoopReturnAwaitVarPrelude(true, "body-return").then((value) => console.log("await-while-return-await-var-prelude-true", value));
 chooseLoopReturnAwaitVarPrelude(false, "body-return").then((value) => console.log("await-while-return-await-var-prelude-false", value));
+chooseLoopReturnAwaitAssignedVarPrelude(true, "body-return").then((value) => console.log("await-while-return-await-assigned-var-prelude-true", value));
+chooseLoopReturnAwaitAssignedVarPrelude(false, "body-return").then((value) => console.log("await-while-return-await-assigned-var-prelude-false", value));
 chooseLoopReturnAwaitAliasPostControl(true, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-true", value));
 chooseLoopReturnAwaitAliasPostControl(true, false, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-false", value));
 chooseLoopReturnAwaitAliasPostControl(false, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-fallthrough", value));

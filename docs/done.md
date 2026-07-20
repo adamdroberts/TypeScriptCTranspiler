@@ -307,6 +307,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Bounded awaited-loop direct declaration postludes accept initialized `var` locals while retaining the bounded no-await boundary. Test: `async_await_while_condition`
 - Bounded awaited-loop direct declaration postludes accept uninitialized `var` locals assigned synchronously before the final return. Test: `async_await_while_condition`
 - Bounded awaited-loop bodies accept an initialized `var` prelude before the body’s awaited alias. Test: `async_await_while_condition`
+- Bounded awaited-loop bodies accept an uninitialized `var` prelude assigned before the body’s awaited alias. Test: `async_await_while_condition`
 - Bounded awaited-loop `for…of`/`for…in` postludes accept one simple `var` iterator binding alongside `const`/`let`. Test: `async_await_while_condition`
 - Bounded nested await-free loop postludes accept simple `var` declarations in addition to `const`/`let`. Test: `async_await_while_condition`
 - Bounded pending-`await` continuation lowering supports a direct awaited boolean `if` condition before selecting synchronous return arms in async function declarations, class async methods, and async function values, plus an awaited condition nested under an await-free outer `if`. Test: `async_await_if_condition`
@@ -3257,6 +3258,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | awaited-loop postludes preserve initialized var locals |
 | `async_await_while_condition` | awaited-loop postludes preserve assigned var locals |
 | `async_await_while_condition` | awaited-loop bodies preserve var await preludes |
+| `async_await_while_condition` | awaited-loop bodies preserve assigned var await preludes |
 | `async_await_while_condition` | awaited-loop postludes preserve var iterator locals |
 | `async_await_while_condition` | awaited-loop postludes preserve nested var loop locals |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
