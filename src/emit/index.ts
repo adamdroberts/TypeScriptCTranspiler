@@ -25897,7 +25897,9 @@ class Emitter {
         const tryPrelude = this.asyncAwaitTryBlockLocalPrelude(tryStmt.tryBlock);
         if (!tryPrelude) return null;
         const remainingTryStatements = tryStmt.tryBlock.statements.length - tryPrelude.nextIndex;
-        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
+        const firstTryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex];
+        if (!firstTryStatement) return null;
+        let awaited = this.awaitedContinuationStep(firstTryStatement);
         const catchStatements = tryStmt.catchClause.block.statements;
         const catchStmt = catchStatements[catchStatements.length - 1]!;
         const catchPreludeStatements = catchStatements.slice(0, -1);
@@ -25906,7 +25908,7 @@ class Emitter {
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
         if (!awaited) {
-            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
+            awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited && remainingTryStatements === 1) {
@@ -27097,11 +27099,13 @@ class Emitter {
         const tryPrelude = this.asyncAwaitTryBlockLocalPrelude(tryStmt.tryBlock);
         if (!tryPrelude) return null;
         const remainingTryStatements = tryStmt.tryBlock.statements.length - tryPrelude.nextIndex;
-        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
+        const firstTryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex];
+        if (!firstTryStatement) return null;
+        let awaited = this.awaitedContinuationStep(firstTryStatement);
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
         if (!awaited) {
-            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
+            awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited && remainingTryStatements === 1) {
@@ -27647,7 +27651,9 @@ class Emitter {
         const tryPrelude = this.asyncAwaitTryBlockLocalPrelude(tryStmt.tryBlock);
         if (!tryPrelude) return null;
         const remainingTryStatements = tryStmt.tryBlock.statements.length - tryPrelude.nextIndex;
-        let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
+        const firstTryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex];
+        if (!firstTryStatement) return null;
+        let awaited = this.awaitedContinuationStep(firstTryStatement);
         const catchStatements = tryStmt.catchClause.block.statements;
         const catchStmt = catchStatements[catchStatements.length - 1]!;
         const catchPreludeStatements = catchStatements.slice(0, -1);
@@ -27658,7 +27664,7 @@ class Emitter {
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
         if (!awaited) {
-            awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
+            awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited && remainingTryStatements === 1) {

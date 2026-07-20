@@ -4,6 +4,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+### Fixed
+- Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
+
 ### Added
 - Branch-block fallthrough returns now support bounded short-circuit `&&` / `||` / `??` expressions whose left operand is a direct await and whose RHS is synchronous, across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_short_circuit_left_await_fallthrough`.
 - Source `try` / `finally` now preserves a bounded single-awaited throw expression, executing finally before rejecting with the transformed value or the original awaited rejection across async declarations, methods, and async-arrow function values. Test: `async_await_try_finally_throw_expression`.
