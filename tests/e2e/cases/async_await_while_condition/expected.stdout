@@ -52,6 +52,8 @@ await-while-return-await-alias-post-do-fallthrough body-return-post-do-fallthrou
 await-while-throw-await-alias-post-do-fallthrough body-throw-post-do-fallthrough
 await-while-return-await-alias-post-switch-fallthrough body-return-post-switch-fallthrough
 await-while-throw-await-alias-post-switch-fallthrough body-throw-post-switch-fallthrough
+await-while-return-await-alias-post-for-of-false body-return-post-for-of-fallthrough
+await-while-throw-await-alias-post-for-of-false body-throw-post-for-of-fallthrough
 await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
@@ -122,6 +124,8 @@ await-while-return-await-alias-post-switch-true body-return-post-switchbody-retu
 await-while-return-await-alias-post-switch-false body-return-post-switchbody-return
 await-while-throw-await-alias-post-switch-true body-throw-post-switch-switch
 await-while-throw-await-alias-post-switch-false body-throw-post-switch
+await-while-return-await-alias-post-for-of-true body-return-post-for-ofbody-return-for-of
+await-while-throw-await-alias-post-for-of-true body-throw-post-for-ofbody-throw
 await-for-condition-true for-yes
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
