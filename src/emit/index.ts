@@ -284,6 +284,7 @@ interface DirectAsyncAwaitAssignmentReturnAlias {
 interface AsyncAwaitPreludeExpressionReturnContinuation {
     preludeStatements: readonly ts.Statement[];
     result: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation;
+    rejectResult?: boolean;
 }
 
 interface AsyncAwaitTryCatchReturnContinuation {
@@ -30210,9 +30211,12 @@ class Emitter {
         if (tailStatements.length === 0) return null;
         const captures = [...outerCaptures, ...localCaptures];
         let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
-        if (tailStatements.length === 1 && ts.isReturnStatement(tailStatements[0]!)) {
+        let rejectResult = false;
+        if (tailStatements.length === 1 &&
+            (ts.isReturnStatement(tailStatements[0]!) || ts.isThrowStatement(tailStatements[0]!))) {
             const result = tailStatements[0]!;
             if (!result.expression) return null;
+            rejectResult = ts.isThrowStatement(result);
             const expression = this.unwrapTransparentExpression(result.expression);
             if (ts.isAwaitExpression(expression)) {
                 continuation = {
@@ -30257,7 +30261,7 @@ class Emitter {
                 ? branch
                 : null;
         }
-        return continuation ? { preludeStatements, result: continuation } : null;
+        return continuation ? { preludeStatements, result: continuation, rejectResult } : null;
     }
 
     private asyncAwaitPreludeExpressionReturnContinuationSupported(
@@ -30275,7 +30279,7 @@ class Emitter {
     ): boolean {
         if ("awaitExpr" in match.result) {
             this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, match.result.params);
-            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result);
+            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result, !!match.rejectResult);
         }
         this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, this.asyncAwaitIfExpressionReturnBranchParams(match.result));
         return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
