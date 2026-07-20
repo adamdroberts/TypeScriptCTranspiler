@@ -33199,7 +33199,7 @@ class Emitter {
                     (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Const) === 0)
                 );
             }
-            return this.asyncAwaitLoopBodyControlPreludeSupported(statement, false, true);
+            return this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true);
         });
         if (!bodyPreludeSupported) return false;
         if (!bodyReturnExpr) return false;

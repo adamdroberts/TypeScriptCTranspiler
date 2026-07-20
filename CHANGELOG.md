@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Bounded awaited loop conditions now preserve nested await-free loop `break` / `continue` control flow in preludes before synchronous direct `return` bodies across async declarations, class methods, and function values. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve simple top-level ordinary `for` initializer declarations in await-free preludes before synchronous direct `return` bodies across async declarations, class methods, and function values. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve simple top-level `for…of` and `for…in` iterator declarations in await-free preludes before synchronous direct `return` bodies across async declarations, class methods, and function values. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve await-free exhaustive `switch` preludes before synchronous direct `return` bodies across async declarations, class methods, and function values. Regression: `async_await_while_condition`.
