@@ -32474,7 +32474,9 @@ class Emitter {
             if ((stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 stmt.declarationList.declarations.length !== 1) return false;
             const declaration = stmt.declarationList.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+            if (!ts.isIdentifier(declaration.name) ||
+                (!declaration.initializer && (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0)) return false;
+            if (!declaration.initializer) return true;
         } else if (!ts.isExpressionStatement(stmt)) {
             return this.asyncAwaitLoopBodyControlPreludeSupported(stmt);
         }
