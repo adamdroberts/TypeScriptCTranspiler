@@ -414,6 +414,8 @@ await-while-escaping-var-continue-try-catch-finally-try while-catch-finally-esca
 await-while-escaping-var-continue-try-catch-finally-catch while-catch-finally-escaping-continue-catch-finally
 await-while-escaping-var-continue-switch-true while-switch-escaping-continue-switch-yes
 await-while-escaping-var-continue-switch-false while-switch-escaping-continue-switch-no
+await-while-escaping-var-continue-nested-true while-nested-escaping-continue-nested
+await-while-escaping-var-continue-nested-false while-nested-escaping-continue
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-while-five-logical-true five-logical-yes
