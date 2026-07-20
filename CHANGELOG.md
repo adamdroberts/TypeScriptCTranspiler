@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Terminal throw expressions now support five-or-more left-associated non-conditional awaited operands through the generic sequence adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_five_await_expression`.
 - Terminal throw expressions now support four left-associated non-conditional awaited operands through the staged expression adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_four_await_expression`.
 - Terminal throw expressions now support three left-associated non-conditional awaited operands through the staged expression adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_three_await_expression`.
 - Terminal throw expressions now support two left-associated non-conditional awaited operands through the staged expression adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_two_await_expression`.
