@@ -32973,7 +32973,7 @@ class Emitter {
         fallthroughExpr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
-        loopInitializer: ts.Expression | null,
+        loopInitializer: ts.Expression | ts.VariableStatement | null,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
@@ -33384,8 +33384,12 @@ class Emitter {
             continuation.bodyRejectResult,
         );
         if (loopInitializer) {
-            const initializer = this.emitExpr(loopInitializer);
-            buf.line(`${initializer.c};`);
+            if (ts.isVariableStatement(loopInitializer)) {
+                this.emitStmt(buf, loopInitializer);
+            } else {
+                const initializer = this.emitExpr(loopInitializer);
+                buf.line(`${initializer.c};`);
+            }
         }
         const source = this.emitExpr(conditionAwaitExpr.expression);
         const sourcePromise = this.freshTemp("_await_source");
@@ -33578,20 +33582,58 @@ class Emitter {
         const loopBody = ts.isBlock(loopStatement)
             ? loopStatement.statements
             : [loopStatement];
-        const loopInitializer = ts.isForStatement(loop) && loop.initializer && ts.isExpression(loop.initializer)
-            ? loop.initializer
+        const loopInitializer = ts.isForStatement(loop) && loop.initializer
+            ? ts.isExpression(loop.initializer)
+                ? loop.initializer
+                : ts.factory.createVariableStatement(undefined, loop.initializer)
             : null;
         if (loopInitializer) {
             let supported = true;
+            const initializerSymbols: ts.Symbol[] = [];
             const visitInitializer = (node: ts.Node): void => {
                 if (!supported) return;
                 if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
                     supported = false;
                     return;
                 }
+                if (ts.isVariableDeclaration(node)) {
+                    if (!ts.isIdentifier(node.name) || !node.initializer) {
+                        supported = false;
+                        return;
+                    }
+                    const symbol = this.symbolForIdentifier(node.name);
+                    if (!symbol) {
+                        supported = false;
+                        return;
+                    }
+                    initializerSymbols.push(symbol);
+                }
                 ts.forEachChild(node, visitInitializer);
             };
             visitInitializer(loopInitializer);
+            if (ts.isVariableStatement(loopInitializer) &&
+                (loopInitializer.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
+                supported = false;
+            }
+            if (supported && initializerSymbols.length > 0) {
+                const visitContinuation = (node: ts.Node): void => {
+                    if (!supported) return;
+                    if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                    if (ts.isIdentifier(node)) {
+                        const symbol = this.symbolForIdentifier(node);
+                        if (symbol && initializerSymbols.includes(symbol)) {
+                            supported = false;
+                            return;
+                        }
+                    }
+                    ts.forEachChild(node, visitContinuation);
+                };
+                visitContinuation(condition);
+                if (supported) {
+                    for (const statement of loopBody) visitContinuation(statement);
+                }
+                if (supported) visitContinuation(fallthroughExpression);
+            }
             if (!supported) return false;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
@@ -33789,8 +33831,11 @@ class Emitter {
                             shortCircuitOperator: operator,
                     };
                     if (loopInitializer) {
-                        const initializer = this.emitExpr(loopInitializer);
-                        buf.line(`${initializer.c};`);
+                        if (ts.isVariableStatement(loopInitializer)) this.emitStmt(buf, loopInitializer);
+                        else {
+                            const initializer = this.emitExpr(loopInitializer);
+                            buf.line(`${initializer.c};`);
+                        }
                     }
                     return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation);
                 }
@@ -33802,8 +33847,11 @@ class Emitter {
                         shortCircuitOperator: operator,
                     };
                     if (loopInitializer) {
-                        const initializer = this.emitExpr(loopInitializer);
-                        buf.line(`${initializer.c};`);
+                        if (ts.isVariableStatement(loopInitializer)) this.emitStmt(buf, loopInitializer);
+                        else {
+                            const initializer = this.emitExpr(loopInitializer);
+                            buf.line(`${initializer.c};`);
+                        }
                     }
                     return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, continuation);
                 }
@@ -33817,8 +33865,11 @@ class Emitter {
             thisValue: continuationThisValue,
         };
         if (loopInitializer) {
-            const initializer = this.emitExpr(loopInitializer);
-            buf.line(`${initializer.c};`);
+            if (ts.isVariableStatement(loopInitializer)) this.emitStmt(buf, loopInitializer);
+            else {
+                const initializer = this.emitExpr(loopInitializer);
+                buf.line(`${initializer.c};`);
+            }
         }
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }

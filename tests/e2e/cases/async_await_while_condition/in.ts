@@ -1008,6 +1008,13 @@ async function chooseForExpressionlessReturn(flag: boolean): Promise<void> {
     return;
 }
 
+async function chooseForDeclarationInitializer(flag: boolean): Promise<string> {
+    for (let ignored = (console.log("for-declaration-initializer"), 1); await Promise.resolve(flag);) {
+        return "for-declaration-body";
+    }
+    return "for-declaration-fallthrough";
+}
+
 async function chooseLoopSynchronousThrowPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         void "sync-throw-prelude";
@@ -1299,6 +1306,13 @@ class LoopChooser {
         return;
     }
 
+    async pickForDeclarationInitializer(flag: boolean): Promise<string> {
+        for (let ignored = (console.log("method-for-declaration-initializer"), 1); await Promise.resolve(flag);) {
+            return "method-for-declaration-body";
+        }
+        return "method-for-declaration-fallthrough";
+    }
+
     async pickSynchronousThrowPrelude(flag: boolean): Promise<string> {
         while (await Promise.resolve(flag)) {
             const reason = "method-sync-throw";
@@ -1541,6 +1555,13 @@ const chooseForExpressionlessReturnValue = async (flag: boolean): Promise<void> 
     }
     console.log("await-value-for-expressionless-return-false");
     return;
+};
+
+const chooseForDeclarationInitializerValue = async (flag: boolean): Promise<string> => {
+    for (let ignored = (console.log("value-for-declaration-initializer"), 1); await Promise.resolve(flag);) {
+        return "value-for-declaration-body";
+    }
+    return "value-for-declaration-fallthrough";
 };
 
 const chooseLoopSynchronousThrowPreludeValue = async (flag: boolean): Promise<string> => {
@@ -1963,6 +1984,12 @@ new LoopChooser("method-").pickForExpressionlessReturn(true);
 new LoopChooser("method-").pickForExpressionlessReturn(false);
 chooseForExpressionlessReturnValue(true);
 chooseForExpressionlessReturnValue(false);
+chooseForDeclarationInitializer(true).then((value) => console.log("await-for-declaration-initializer-true", value));
+chooseForDeclarationInitializer(false).then((value) => console.log("await-for-declaration-initializer-false", value));
+new LoopChooser("method-").pickForDeclarationInitializer(true).then((value) => console.log("await-method-for-declaration-initializer-true", value));
+new LoopChooser("method-").pickForDeclarationInitializer(false).then((value) => console.log("await-method-for-declaration-initializer-false", value));
+chooseForDeclarationInitializerValue(true).then((value) => console.log("await-value-for-declaration-initializer-true", value));
+chooseForDeclarationInitializerValue(false).then((value) => console.log("await-value-for-declaration-initializer-false", value));
 chooseLoopSynchronousThrowPrelude(true).catch((reason) => console.log("await-while-sync-throw-prelude-true", reason));
 chooseLoopSynchronousThrowPrelude(false).then((value) => console.log("await-while-sync-throw-prelude-false", value));
 new LoopChooser("method-").pickSynchronousThrowPrelude(true).catch((reason) => console.log("await-method-sync-throw-prelude-true", reason));

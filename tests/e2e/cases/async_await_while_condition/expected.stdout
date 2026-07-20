@@ -16,6 +16,12 @@ await-method-for-expressionless-return-true
 await-method-for-expressionless-return-false
 await-value-for-expressionless-return-true
 await-value-for-expressionless-return-false
+for-declaration-initializer
+for-declaration-initializer
+method-for-declaration-initializer
+method-for-declaration-initializer
+value-for-declaration-initializer
+value-for-declaration-initializer
 await-while-sync-body-true sync-body
 await-while-sync-body-false sync-fallthrough
 await-for-sync-body-true for-sync-body
@@ -52,6 +58,12 @@ await-method-sync-initializer-true method-for-initializer-body
 await-method-sync-initializer-false method-for-initializer-fallthrough
 await-value-sync-initializer-true value-for-initializer-body
 await-value-sync-initializer-false value-for-initializer-fallthrough
+await-for-declaration-initializer-true for-declaration-body
+await-for-declaration-initializer-false for-declaration-fallthrough
+await-method-for-declaration-initializer-true method-for-declaration-body
+await-method-for-declaration-initializer-false method-for-declaration-fallthrough
+await-value-for-declaration-initializer-true value-for-declaration-body
+await-value-for-declaration-initializer-false value-for-declaration-fallthrough
 await-while-sync-throw-prelude-true sync-throw
 await-while-sync-throw-prelude-false sync-throw-prelude-fallthrough
 await-method-sync-throw-prelude-true method-sync-throw
