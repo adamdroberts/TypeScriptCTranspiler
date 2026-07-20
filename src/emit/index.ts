@@ -22026,14 +22026,22 @@ class Emitter {
             }
             if (ts.isExpressionStatement(stmt)) {
                 const assignment = this.unwrapTransparentExpression(stmt.expression);
-                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
-                const symbol = this.symbolForIdentifier(assignment.left);
-                const capture = symbol ? declared.get(symbol) : undefined;
-                if (!symbol || !capture || initialized.has(symbol)) return null;
-                visitNoAwaitOrNestedScope(assignment.right);
+                if (ts.isBinaryExpression(assignment) && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(assignment.left)) {
+                    const symbol = this.symbolForIdentifier(assignment.left);
+                    const capture = symbol ? declared.get(symbol) : undefined;
+                    if (symbol && capture) {
+                        if (initialized.has(symbol)) return null;
+                        visitNoAwaitOrNestedScope(assignment.right);
+                        if (!ok) return null;
+                        initialized.add(symbol);
+                        captures.push(capture);
+                        preludeStatements.push(stmt);
+                        index++;
+                        continue;
+                    }
+                }
+                visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
-                initialized.add(symbol);
-                captures.push(capture);
                 preludeStatements.push(stmt);
                 index++;
                 continue;

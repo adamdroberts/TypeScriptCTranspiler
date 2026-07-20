@@ -1,3 +1,6 @@
+try-prelude: declaration
+try-prelude: method
+try-prelude: arrow
 declaration: fn-try-suffix-caught
 method: -trymethod-suffix-caught
 value: arrow-try-suffix-caught
