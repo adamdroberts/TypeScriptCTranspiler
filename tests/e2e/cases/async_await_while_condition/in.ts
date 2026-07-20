@@ -6,6 +6,10 @@ function laterFalse(): Promise<boolean> {
     return new Promise<boolean>((resolve) => setImmediate(() => resolve(false)));
 }
 
+function laterCondition(value: boolean): Promise<boolean> {
+    return new Promise<boolean>((resolve) => setImmediate(() => resolve(value)));
+}
+
 function laterNull(): Promise<boolean | null> {
     return new Promise<boolean | null>((resolve) => setImmediate(() => resolve(null)));
 }
@@ -118,6 +122,14 @@ async function chooseLoopInitializerMultipleCapture(): Promise<string> {
         return await laterBodyValue(value);
     }
     return "loop-capture-multiple-fallthrough";
+}
+
+async function chooseLoopInitializerConditionCapture(): Promise<string> {
+    for (let value = "loop-condition-captured"; await laterCondition(value.length > 0);) {
+        value += "-updated";
+        return await laterBodyValue(value);
+    }
+    return "loop-capture-condition-fallthrough";
 }
 
 async function chooseLoopExpression(flag: boolean, prefix: string): Promise<string> {
@@ -2124,6 +2136,7 @@ chooseMultipleAwaitDeclarators("multiple-await").then((value) => console.log("aw
 chooseLoopInitializerCapture().then((value) => console.log("await-loop-initializer-capture", value));
 chooseLoopInitializerCaptureThrow().catch((reason) => console.log("await-loop-initializer-capture-throw", reason));
 chooseLoopInitializerMultipleCapture().then((value) => console.log("await-loop-initializer-multiple-capture", value));
+chooseLoopInitializerConditionCapture().then((value) => console.log("await-loop-initializer-condition-capture", value));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
 new LoopChooser("method-").multipleAwaitDeclarators().then((value) => console.log("await-method-multiple-declarators", value));
 chooseArrowThrowWithLocals("arrow").catch((reason) => console.log("await-arrow-throw-multiple-locals", reason));
