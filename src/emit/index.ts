@@ -32440,23 +32440,23 @@ class Emitter {
                 : null;
         if (!loopCondition) return false;
         const condition = this.unwrapTransparentExpression(loopCondition);
-        let awaitExpression: ts.AwaitExpression | null = null;
+        const awaitExpressions: ts.AwaitExpression[] = [];
         let conditionAwaitsAreValid = true;
         const findAwait = (node: ts.Node): void => {
             if (!conditionAwaitsAreValid) return;
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             if (ts.isAwaitExpression(node)) {
-                if (awaitExpression) {
+                if (awaitExpressions.length >= 2) {
                     conditionAwaitsAreValid = false;
                 } else {
-                    awaitExpression = node;
+                    awaitExpressions.push(node);
                 }
                 return;
             }
             ts.forEachChild(node, findAwait);
         };
         findAwait(condition);
-        if (!conditionAwaitsAreValid || !awaitExpression) return false;
+        if (!conditionAwaitsAreValid || awaitExpressions.length === 0) return false;
         const loopStatement = ts.isWhileStatement(loop)
             ? loop.statement
             : ts.isForStatement(loop)
@@ -32497,12 +32497,14 @@ class Emitter {
         } else {
             return false;
         }
-        const awaitedType = this.prepareType(mapTsType(
-            awaitExpression,
-            this.checker.getTypeAtLocation(awaitExpression),
-            this.checker,
-        ));
-        if (awaitedType.kind !== "boolean") return false;
+        if (awaitExpressions.some((awaitExpression) => {
+            const awaitedType = this.prepareType(mapTsType(
+                awaitExpression,
+                this.checker.getTypeAtLocation(awaitExpression),
+                this.checker,
+            ));
+            return awaitedType.kind !== "boolean";
+        })) return false;
         const continuationParams = this.asyncAwaitContinuationParameters(parameters);
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const parameter of continuationParams) paramsBySymbol.set(parameter.symbol, parameter);
@@ -32511,7 +32513,10 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === awaitExpression) return;
+            if (awaitExpressions.includes(node as ts.AwaitExpression)) {
+                ts.forEachChild(node, visitReferences);
+                return;
+            }
             if (ts.isAwaitExpression(node)) {
                 ok = false;
                 return;
@@ -32548,11 +32553,33 @@ class Emitter {
             ts.factory.createToken(ts.SyntaxKind.ColonToken),
             fallthrough.expression,
         );
+        const capturedParams = [...referenced.values()];
+        const continuationThisValue = usesThis ? thisValue : null;
+        if (
+            awaitExpressions.length === 2 &&
+            ts.isBinaryExpression(condition) &&
+            (condition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+                condition.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+                condition.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) &&
+            ts.isAwaitExpression(this.unwrapTransparentExpression(condition.left)) &&
+            ts.isAwaitExpression(this.unwrapTransparentExpression(condition.right))
+        ) {
+            const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
+                firstAwaitExpr: this.unwrapTransparentExpression(condition.left) as ts.AwaitExpression,
+                secondAwaitExpr: this.unwrapTransparentExpression(condition.right) as ts.AwaitExpression,
+                returnExpr,
+                params: capturedParams,
+                thisValue: continuationThisValue,
+                shortCircuitOperator: condition.operatorToken.kind,
+            };
+            return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation);
+        }
+        if (awaitExpressions.length !== 1) return false;
         const continuation: AsyncAwaitExpressionReturnContinuation = {
-            awaitExpr: awaitExpression,
+            awaitExpr: awaitExpressions[0]!,
             returnExpr,
-            params: [...referenced.values()],
-            thisValue: usesThis ? thisValue : null,
+            params: capturedParams,
+            thisValue: continuationThisValue,
         };
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }

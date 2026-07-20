@@ -14,3 +14,5 @@ await-while-method-true method-loop-yes
 await-while-method-false method-loop-no
 await-while-value-true value-loop-yes
 await-while-value-false value-loop-no
+await-while-two-logical-true two-logical-yes
+await-while-two-logical-false two-logical-no
