@@ -1,0 +1,6 @@
+declaration-true: "declaration-second"
+declaration-false: "declaration-right"
+method-true: "method-right"
+method-false: "method-second"
+value-true: "arrow-second"
+value-false: "arrow-right"

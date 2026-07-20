@@ -30305,7 +30305,7 @@ class Emitter {
                 structuralSequence = true;
                 const receiver = this.unwrapTransparentExpression(current.expression);
                 if (!ts.isAwaitExpression(receiver)) {
-                    ok = false;
+                    flatten(receiver);
                     return;
                 }
                 let sourceOk = true;
@@ -30327,7 +30327,7 @@ class Emitter {
             }
             if (ts.isElementAccessExpression(current)) {
                 structuralSequence = true;
-                for (const component of [current.expression, current.argumentExpression]) {
+                for (const [index, component] of [current.expression, current.argumentExpression].entries()) {
                     const componentExpression = this.unwrapTransparentExpression(component);
                     if (ts.isAwaitExpression(componentExpression)) {
                         let sourceOk = true;
@@ -30346,19 +30346,29 @@ class Emitter {
                         }
                         awaitExprs.push(componentExpression);
                     } else {
-                        let componentOk = true;
-                        const visitComponent = (source: ts.Node): void => {
-                            if (!componentOk) return;
-                            if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
-                                componentOk = false;
+                        if (index === 0 &&
+                            (ts.isArrayLiteralExpression(componentExpression) ||
+                                ts.isObjectLiteralExpression(componentExpression) ||
+                                ts.isNewExpression(componentExpression) ||
+                                ts.isCallExpression(componentExpression) ||
+                                ts.isPropertyAccessExpression(componentExpression) ||
+                                ts.isElementAccessExpression(componentExpression))) {
+                            flatten(componentExpression);
+                        } else {
+                            let componentOk = true;
+                            const visitComponent = (source: ts.Node): void => {
+                                if (!componentOk) return;
+                                if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
+                                    componentOk = false;
+                                    return;
+                                }
+                                ts.forEachChild(source, visitComponent);
+                            };
+                            visitComponent(componentExpression);
+                            if (!componentOk) {
+                                ok = false;
                                 return;
                             }
-                            ts.forEachChild(source, visitComponent);
-                        };
-                        visitComponent(componentExpression);
-                        if (!componentOk) {
-                            ok = false;
-                            return;
                         }
                     }
                 }
