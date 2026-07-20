@@ -24,6 +24,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite lazy multi-yield returns now preserve outer captured local identifiers through closure-cell pointers. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve non-computed property reads from stable receivers across suspension points. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve literal-key element reads from stable receivers across suspension points. Regression: `generator_lazy_multi_yield_return`.
+- Finite lazy multi-yield returns now preserve computed element reads when receiver and index are supported staged expressions. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve unshadowed `NaN` and `Infinity` global leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now accept bounded prefix-unary leaves (`!`, unary `+`/`-`, and `~`) around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Direct-prelude `return await` now preserves an uninitialized `var` local assigned synchronously before the awaited source across declarations, class methods, and async arrows; unassigned or escaping `var` state remains rejected. Regression: `async_await_while_condition`.

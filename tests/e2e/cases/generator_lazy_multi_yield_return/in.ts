@@ -120,6 +120,10 @@ class ThisLeaves {
     *elementValues(): Generator<number, number, number> {
         return this.items[1] + (yield 48) + (yield 49);
     }
+
+    *computedElementValues(): Generator<number, number, number> {
+        return this.items[yield 50] + (yield 51) + (yield 52);
+    }
 }
 
 const iter = sum();
@@ -266,3 +270,9 @@ const elementFirst: any = elementIter.next();
 const elementSecond: any = elementIter.next(4);
 const elementDone: any = elementIter.next(5);
 console.log("element", elementFirst.value, elementSecond.value, elementDone.done, elementDone.value);
+const computedElementIter = thisLeaves.computedElementValues();
+const computedElementFirst: any = computedElementIter.next();
+const computedElementSecond: any = computedElementIter.next(1);
+const computedElementThird: any = computedElementIter.next(4);
+const computedElementDone: any = computedElementIter.next(5);
+console.log("computed-element", computedElementFirst.value, computedElementSecond.value, computedElementThird.value, computedElementDone.done, computedElementDone.value);

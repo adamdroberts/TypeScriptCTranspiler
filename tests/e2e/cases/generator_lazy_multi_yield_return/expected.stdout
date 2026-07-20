@@ -24,3 +24,4 @@ captured-mutable 44 45 true 29
 this 26 27 true 9
 property 46 47 true 18
 element 48 49 true 17
+computed-element 50 51 52 true 17
