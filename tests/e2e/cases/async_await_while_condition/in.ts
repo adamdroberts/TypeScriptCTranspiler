@@ -1094,6 +1094,20 @@ async function chooseLoopSynchronousCaughtThrowPrelude(flag: boolean): Promise<s
     return "sync-caught-fallthrough";
 }
 
+async function chooseLoopSynchronousCaughtFinallyPrelude(flag: boolean): Promise<string> {
+    while (await Promise.resolve(flag)) {
+        try {
+            throw "sync-caught-finally";
+        } catch (reason) {
+            void reason;
+        } finally {
+            void "sync-caught-finally-cleanup";
+        }
+        return "sync-caught-finally-body";
+    }
+    return "sync-caught-finally-fallthrough";
+}
+
 async function chooseLoopSynchronousKeyControlPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         let total = 0;
@@ -1262,6 +1276,20 @@ class LoopChooser {
         }
         return "method-sync-caught-fallthrough";
     }
+
+    async pickSynchronousCaughtFinallyPrelude(flag: boolean): Promise<string> {
+        while (await Promise.resolve(flag)) {
+            try {
+                throw "method-sync-caught-finally";
+            } catch (reason) {
+                void reason;
+            } finally {
+                void "method-sync-caught-finally-cleanup";
+            }
+            return "method-sync-caught-finally-body";
+        }
+        return "method-sync-caught-finally-fallthrough";
+    }
 }
 
 const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
@@ -1391,6 +1419,20 @@ const chooseLoopSynchronousCaughtThrowPreludeValue = async (flag: boolean): Prom
         return "value-sync-caught-body";
     }
     return "value-sync-caught-fallthrough";
+};
+
+const chooseLoopSynchronousCaughtFinallyPreludeValue = async (flag: boolean): Promise<string> => {
+    while (await Promise.resolve(flag)) {
+        try {
+            throw "value-sync-caught-finally";
+        } catch (reason) {
+            void reason;
+        } finally {
+            void "value-sync-caught-finally-cleanup";
+        }
+        return "value-sync-caught-finally-body";
+    }
+    return "value-sync-caught-finally-fallthrough";
 };
 
 const chooseArrowThrowWithLocals = async (prefix: string): Promise<string> => {
@@ -1670,6 +1712,12 @@ new LoopChooser("method-").pickSynchronousCaughtThrowPrelude(true).then((value) 
 new LoopChooser("method-").pickSynchronousCaughtThrowPrelude(false).then((value) => console.log("await-method-sync-caught-prelude-false", value));
 chooseLoopSynchronousCaughtThrowPreludeValue(true).then((value) => console.log("await-value-sync-caught-prelude-true", value));
 chooseLoopSynchronousCaughtThrowPreludeValue(false).then((value) => console.log("await-value-sync-caught-prelude-false", value));
+chooseLoopSynchronousCaughtFinallyPrelude(true).then((value) => console.log("await-while-sync-caught-finally-prelude-true", value));
+chooseLoopSynchronousCaughtFinallyPrelude(false).then((value) => console.log("await-while-sync-caught-finally-prelude-false", value));
+new LoopChooser("method-").pickSynchronousCaughtFinallyPrelude(true).then((value) => console.log("await-method-sync-caught-finally-prelude-true", value));
+new LoopChooser("method-").pickSynchronousCaughtFinallyPrelude(false).then((value) => console.log("await-method-sync-caught-finally-prelude-false", value));
+chooseLoopSynchronousCaughtFinallyPreludeValue(true).then((value) => console.log("await-value-sync-caught-finally-prelude-true", value));
+chooseLoopSynchronousCaughtFinallyPreludeValue(false).then((value) => console.log("await-value-sync-caught-finally-prelude-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
 chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => console.log("await-direct-multiple-control-prelude", value));
 chooseDirectAwaitMultipleVarPrelude("direct-var").then((value) => console.log("await-direct-multiple-var-prelude", value));

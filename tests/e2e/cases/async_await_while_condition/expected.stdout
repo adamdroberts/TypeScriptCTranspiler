@@ -86,6 +86,12 @@ await-method-sync-caught-prelude-true method-sync-caught-body
 await-method-sync-caught-prelude-false method-sync-caught-fallthrough
 await-value-sync-caught-prelude-true value-sync-caught-body
 await-value-sync-caught-prelude-false value-sync-caught-fallthrough
+await-while-sync-caught-finally-prelude-true sync-caught-finally-body
+await-while-sync-caught-finally-prelude-false sync-caught-finally-fallthrough
+await-method-sync-caught-finally-prelude-true method-sync-caught-finally-body
+await-method-sync-caught-finally-prelude-false method-sync-caught-finally-fallthrough
+await-value-sync-caught-finally-prelude-true value-sync-caught-finally-body
+await-value-sync-caught-finally-prelude-false value-sync-caught-finally-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes
