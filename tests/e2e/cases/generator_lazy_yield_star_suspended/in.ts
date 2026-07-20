@@ -55,6 +55,25 @@ function* throwingOuter(): Generator<string, string, string> {
     return "throwing-outer-done";
 }
 
+function* recoveringInner(): Generator<string, string, string> {
+    try {
+        events.push("recovering-inner-start");
+        yield "recover-me";
+    } catch (error: any) {
+        events.push("recovering-inner-catch:" + error);
+        return "recovering-inner-done";
+    } finally {
+        events.push("recovering-inner-finally");
+    }
+    return "recovering-inner-normal";
+}
+
+function* recoveringOuter(): Generator<string, string, string> {
+    const delegated = yield* recoveringInner();
+    events.push("recovering-outer-after:" + delegated);
+    return "recovering-outer-done";
+}
+
 const iter = outer();
 console.log("created", events.join("|"));
 const first: any = iter.next("ignored");
@@ -74,3 +93,7 @@ try {
 } catch {
     console.log("throw", throwFirst.done, throwFirst.value, events.join("|"));
 }
+const recovering = recoveringOuter();
+const recoveringFirst: any = recovering.next();
+const recoveringResult: any = recovering.throw("recover-error");
+console.log("recover", recoveringFirst.done, recoveringFirst.value, recoveringResult.done, recoveringResult.value, events.join("|"));

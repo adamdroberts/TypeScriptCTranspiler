@@ -37607,9 +37607,29 @@ class Emitter {
             closeBuf.open(`static bool ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
             const closeEnv = this.freshTemp("_lazy_close_env");
             closeBuf.line(`${envType}* const ${closeEnv} = (${envType}*)env;`);
+            if (yieldStarCount > 0) {
+                closeBuf.line("bool _delegated_throw_unhandled = is_throw;");
+            }
             for (let i = 0; i < yieldStarCount; i++) {
                 closeBuf.open(`if (${closeEnv}->yield_star_arr_${i} && ${closeEnv}->yield_star_arr_${i}->is_lazy_generator && ${closeEnv}->yield_star_arr_${i}->lazy_close)`);
-                closeBuf.line(`${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
+                if (yieldStarCount > 0) {
+                    const delegatedResult = this.freshTemp("_delegated_throw_unhandled");
+                    closeBuf.line(`bool ${delegatedResult} = ${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
+                    closeBuf.open(`if (is_throw && !${delegatedResult})`);
+                    closeBuf.line("_delegated_throw_unhandled = false;");
+                    closeBuf.close();
+                } else {
+                    closeBuf.line(`${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
+                }
+                closeBuf.close();
+            }
+            if (yieldStarCount > 0) {
+                closeBuf.open("if (is_throw && !_delegated_throw_unhandled)");
+                closeBuf.open("if (a->state >= 0 && a->lazy_next)");
+                closeBuf.line("bool _delegated_close_done = false;");
+                closeBuf.line("a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_delegated_close_done);");
+                closeBuf.close();
+                closeBuf.line("return false;");
                 closeBuf.close();
             }
             closeBuf.line(`${closeEnv}->lazy_close_handled = false;`);
