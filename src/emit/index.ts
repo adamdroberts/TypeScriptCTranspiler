@@ -42074,7 +42074,7 @@ class Emitter {
                 c: this.identifierRead(expr),
                 ty: effectiveTy,
                 lazyGeneratorFactory: ty.kind === "function"
-                    ? this.isLazyGeneratorFunctionValue(expr)
+                    ? this.isLazyGeneratorFunctionValue(expr) || this.isLazyGeneratorPassthroughFunctionValue(expr)
                     : undefined,
             };
         }
@@ -45666,8 +45666,29 @@ class Emitter {
                 `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; } ` +
                 `&${staticName}; })`,
             ty: type,
-            lazyGeneratorFactory: this.isLazyGeneratorFunctionValue(id),
+            lazyGeneratorFactory: this.isLazyGeneratorFunctionValue(id) || this.isLazyGeneratorPassthroughFunctionValue(id),
         };
+    }
+
+    private isLazyGeneratorPassthroughFunctionValue(id: ts.Identifier, seen = new Set<ts.Symbol>()): boolean {
+        const symbol = this.symbolForIdentifier(id);
+        if (!symbol || seen.has(symbol)) return false;
+        seen.add(symbol);
+        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        if (!declaration) return false;
+        if (ts.isFunctionDeclaration(declaration) || ts.isFunctionExpression(declaration) ||
+            ts.isArrowFunction(declaration) || ts.isMethodDeclaration(declaration)) {
+            return this.isLazyGeneratorPassthroughFunction(declaration);
+        }
+        if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+            if (ts.isFunctionExpression(declaration.initializer) || ts.isArrowFunction(declaration.initializer)) {
+                return this.isLazyGeneratorPassthroughFunction(declaration.initializer);
+            }
+            if (ts.isIdentifier(declaration.initializer)) {
+                return this.isLazyGeneratorPassthroughFunctionValue(declaration.initializer, seen);
+            }
+        }
+        return false;
     }
 
     private isLazyGeneratorFunctionValue(id: ts.Identifier, seen = new Set<ts.Symbol>()): boolean {

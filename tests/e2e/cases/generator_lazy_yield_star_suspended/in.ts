@@ -85,9 +85,10 @@ function* recoveringConvertedOuter(): Generator<string, string, string> {
 }
 
 const convertRecoveringArrow = (iter: Generator<string, string, string>): Generator<any, string, string> => iter;
+const convertRecoveringArrowAlias = convertRecoveringArrow;
 
 function* recoveringArrowConvertedOuter(): Generator<string, string, string> {
-    const delegated = yield* convertRecoveringArrow(recoveringInner());
+    const delegated = yield* convertRecoveringArrowAlias(recoveringInner());
     events.push("recovering-arrow-converted-outer-after:" + delegated);
     return "recovering-arrow-converted-outer-done";
 }
