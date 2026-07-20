@@ -2731,6 +2731,7 @@ chooseLoopInitializerEscapingVarNestedForInControlBreakAwait().then((value) => c
 chooseLoopInitializerEscapingVarContinueAwait().then((value) => console.log("await-loop-initializer-escaping-var-continue", value));
 chooseLoopInitializerEscapingVarContinueThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-continue-throw", reason));
 chooseWhileContinueAwait("while-escaping-continue", true).then((value) => console.log("await-while-escaping-var-continue", value));
+chooseWhileContinueAwait("while-escaping-continue-false", false).then((value) => console.log("await-while-escaping-var-continue-false", value));
 chooseWhileContinueThrowAwait("while-escaping-continue-throw", true).catch((reason) => console.log("await-while-escaping-var-continue-throw", reason));
 new WhileContinueChooser("-method-").choose("while-escaping-continue", true).then((value) => console.log("await-method-escaping-var-continue", value));
 chooseWhileContinueValue("while-value-escaping-continue", true).then((value) => console.log("await-value-escaping-var-continue", value));
