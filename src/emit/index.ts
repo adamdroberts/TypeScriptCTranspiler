@@ -33605,10 +33605,10 @@ class Emitter {
                 }
                 if (ts.isVariableDeclaration(node)) {
                     const declarationList = node.parent;
-                    const isVar = ts.isVariableDeclarationList(declarationList) &&
-                        (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0;
+                    const isVarOrLet = ts.isVariableDeclarationList(declarationList) &&
+                        (declarationList.flags & ts.NodeFlags.Const) === 0;
                     if (!ts.isIdentifier(node.name) ||
-                        (!node.initializer && !isVar)) {
+                        (!node.initializer && !isVarOrLet)) {
                         supported = false;
                         return;
                     }
