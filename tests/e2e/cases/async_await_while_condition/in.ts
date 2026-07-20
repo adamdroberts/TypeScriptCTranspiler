@@ -210,6 +210,14 @@ class EscapingVarLoopChooser {
         }
         return await laterBodyValue(this.prefix + value);
     }
+
+    static async chooseStatic(): Promise<string> {
+        for (var value = "loop-static-escaping-var"; await laterTrue();) {
+            value += "-updated";
+            break;
+        }
+        return await laterBodyValue(value);
+    }
 }
 
 const chooseEscapingVarLoopValue = async (): Promise<string> => {
@@ -2354,6 +2362,7 @@ chooseLoopInitializerEscapingVarBreakThrowAwait().catch((reason) => console.log(
 chooseLoopInitializerEscapingVarFalseBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-false-break-await", value));
 chooseLoopInitializerEscapingVarFalseBreakThrowAwait().catch((reason) => console.log("await-loop-initializer-escaping-var-false-break-throw-await", reason));
 new EscapingVarLoopChooser("method-").choose().then((value) => console.log("await-method-loop-initializer-escaping-var-break-await", value));
+EscapingVarLoopChooser.chooseStatic().then((value) => console.log("await-static-method-loop-initializer-escaping-var-break-await", value));
 chooseEscapingVarLoopValue().then((value) => console.log("await-value-loop-initializer-escaping-var-false-break-await", value));
 chooseLoopInitializerUninitializedEscapingVarBreakAwait().then((value) => console.log("await-loop-initializer-uninitialized-escaping-var-break-await", value));
 chooseLoopInitializerUninitializedEscapingVarFalseAwait().then((value) => console.log("await-loop-initializer-uninitialized-escaping-var-false-await", value));

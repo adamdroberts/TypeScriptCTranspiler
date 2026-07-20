@@ -356,6 +356,7 @@ await-loop-initializer-escaping-var-break-throw-await loop-escaping-var-throw-aw
 await-loop-initializer-escaping-var-false-break-await loop-escaping-var-false-await
 await-loop-initializer-escaping-var-false-break-throw-await loop-escaping-var-false-throw-await
 await-method-loop-initializer-escaping-var-break-await method-method-loop-escaping-var-updated
+await-static-method-loop-initializer-escaping-var-break-await loop-static-escaping-var-updated
 await-value-loop-initializer-escaping-var-false-break-await loop-value-escaping-var
 await-loop-initializer-uninitialized-escaping-var-break-await loop-uninitialized-escaping-var
 await-loop-initializer-uninitialized-escaping-var-false-await undefined
