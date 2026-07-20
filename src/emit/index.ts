@@ -33625,10 +33625,6 @@ class Emitter {
                 ts.forEachChild(node, visitInitializer);
             };
             visitInitializer(loopInitializer);
-            if (ts.isVariableStatement(loopInitializer) &&
-                (loopInitializer.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
-                supported = false;
-            }
             if (supported && initializerSymbols.length > 0) {
                 const visitContinuation = (node: ts.Node): void => {
                     if (!supported) return;
