@@ -3370,6 +3370,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | awaited loop conditions repeat once through an outer continue while preserving escaped var state on false fallthrough |
 | `async_await_while_condition` | direct outer continue executes an await-free for incrementor before re-entering the awaited condition |
 | `async_await_while_condition` | outer continue false fallthrough can route through a second direct return-await |
+| `async_await_while_condition` | outer continue false fallthrough can route through a second direct throw-await |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
 | `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations remain scoped around the first conditional await source |
 | `async_await_conditional_branch_assigned_prelude` | branch-local let declarations are assigned before the first conditional await source |
