@@ -33031,17 +33031,38 @@ class Emitter {
             if (!assignmentStatement || !declarationStatement || !ts.isExpressionStatement(assignmentStatement) ||
                 !ts.isVariableStatement(declarationStatement) ||
                 (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
-                declarationStatement.declarationList.declarations.length !== 1) return false;
-            const declaration = declarationStatement.declarationList.declarations[0]!;
+                declarationStatement.declarationList.declarations.length === 0) return false;
             const assignment = assignmentStatement.expression;
+            if (!ts.isBinaryExpression(assignment) ||
+                assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return false;
+            const assignmentSymbol = this.symbolForIdentifier(assignment.left);
+            const declarationIndex = declarationStatement.declarationList.declarations.findIndex((candidate) =>
+                ts.isIdentifier(candidate.name) && this.symbolForIdentifier(candidate.name) === assignmentSymbol);
+            if (!assignmentSymbol || declarationIndex < 0 ||
+                declarationIndex !== declarationStatement.declarationList.declarations.length - 1) return false;
+            const declaration = declarationStatement.declarationList.declarations[declarationIndex]!;
             const declarationSymbol = ts.isIdentifier(declaration.name)
                 ? this.symbolForIdentifier(declaration.name)
                 : undefined;
-            if (!ts.isIdentifier(declaration.name) || !declarationSymbol || declaration.initializer || !ts.isBinaryExpression(assignment) ||
-                assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left) ||
-                declarationSymbol !== this.symbolForIdentifier(assignment.left) ||
+            if (!ts.isIdentifier(declaration.name) || !declarationSymbol || declaration.initializer ||
+                declarationSymbol !== assignmentSymbol ||
                 (!bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol) &&
                     !bodySynchronousExpressionSupported(bodyAction.expression))) return false;
+            const precedingDeclarations = declarationStatement.declarationList.declarations.slice(0, declarationIndex);
+            let precedingInitializersSupported = true;
+            const visitPrecedingInitializer = (node: ts.Node): void => {
+                if (!precedingInitializersSupported) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    precedingInitializersSupported = false;
+                    return;
+                }
+                ts.forEachChild(node, visitPrecedingInitializer);
+            };
+            for (const preceding of precedingDeclarations) {
+                if (!ts.isIdentifier(preceding.name) || !preceding.initializer) return false;
+                visitPrecedingInitializer(preceding.initializer);
+            }
+            if (!precedingInitializersSupported) return false;
             const assignmentAwait = this.unwrapTransparentExpression(assignment.right);
             if (!ts.isAwaitExpression(assignmentAwait)) return false;
             const nestedAssignmentAwait = this.unwrapTransparentExpression(assignmentAwait.expression);
@@ -33051,7 +33072,19 @@ class Emitter {
             bodyReturnExpr = bodyAction.expression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
             bodyPostAwaitStatements = loopBody.slice(assignmentStatementIndex + 1, -1);
-            bodyPreludeStatements = loopBody.slice(0, assignmentStatementIndex - 1);
+            bodyPreludeStatements = [
+                ...loopBody.slice(0, assignmentStatementIndex - 1),
+                ...(precedingDeclarations.length > 0
+                    ? [ts.factory.updateVariableStatement(
+                        declarationStatement,
+                        declarationStatement.modifiers,
+                        ts.factory.createVariableDeclarationList(
+                            precedingDeclarations,
+                            declarationStatement.declarationList.flags,
+                        ),
+                    )]
+                    : []),
+            ];
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else {
             return false;

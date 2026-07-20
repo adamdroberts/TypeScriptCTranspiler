@@ -224,8 +224,8 @@ async function chooseLoopThrowAwaitAlias(condition: boolean): Promise<string> {
 
 async function chooseLoopReturnAwaitAssignedAlias(condition: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
-        let value: string;
-        value = await laterBodyValue(prefix + "-assigned-alias");
+        let source = prefix + "-assigned-alias", value: string;
+        value = await laterBodyValue(source);
         return value;
     }
     return prefix + "-assigned-alias-fallthrough";
@@ -233,8 +233,8 @@ async function chooseLoopReturnAwaitAssignedAlias(condition: boolean, prefix: st
 
 async function chooseLoopThrowAwaitAssignedAlias(condition: boolean): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
-        let reason: string;
-        reason = await laterBodyValue("body-throw-assigned-alias");
+        let source = "body-throw-assigned-alias", reason: string;
+        reason = await laterBodyValue(source);
         throw reason;
     }
     return "body-throw-assigned-alias-fallthrough";
