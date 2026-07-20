@@ -58,6 +58,27 @@ async function chooseLoopMultipleExpressionsLocal(flag: boolean, prefix: string)
     return prefix + "-no";
 }
 
+async function chooseLoopIf(flag: boolean, prefix: string): Promise<string> {
+    while (await laterTrue()) {
+        if (flag) return prefix + "-if-yes";
+        return prefix + "-if-no";
+    }
+    return prefix + "-outer-no";
+}
+
+async function chooseLoopIfElse(flag: boolean, prefix: string): Promise<string> {
+    while (await laterTrue()) {
+        if (flag) {
+            prefix += "-then";
+            return prefix;
+        } else {
+            prefix += "-else";
+            return prefix;
+        }
+    }
+    return prefix + "-outer-no";
+}
+
 async function chooseLoopLocal(flag: boolean, prefix: string): Promise<string> {
     while (await (flag ? laterTrue() : laterFalse())) {
         const result = prefix + "-local-yes";
@@ -191,6 +212,10 @@ chooseLoopMultipleExpressions(true, "multiple-expression-loop").then((value) => 
 chooseLoopMultipleExpressions(false, "multiple-expression-loop").then((value) => console.log("await-while-multiple-expression-false", value));
 chooseLoopMultipleExpressionsLocal(true, "multiple-expression-local-loop").then((value) => console.log("await-while-multiple-expression-local-true", value));
 chooseLoopMultipleExpressionsLocal(false, "multiple-expression-local-loop").then((value) => console.log("await-while-multiple-expression-local-false", value));
+chooseLoopIf(true, "if-loop").then((value) => console.log("await-while-if-true", value));
+chooseLoopIf(false, "if-loop").then((value) => console.log("await-while-if-false", value));
+chooseLoopIfElse(true, "if-else-loop").then((value) => console.log("await-while-if-else-true", value));
+chooseLoopIfElse(false, "if-else-loop").then((value) => console.log("await-while-if-else-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
 chooseLoopLocal(false, "local-loop").then((value) => console.log("await-while-local-false", value));
 chooseForCondition(true).then((value) => console.log("await-for-condition-true", value));

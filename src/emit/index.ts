@@ -32462,11 +32462,6 @@ class Emitter {
         const loopBody = ts.isBlock(loopStatement)
             ? loopStatement.statements
             : [loopStatement];
-        let loopReturnExpression: ts.Expression | null = null;
-        const loopReturn = loopBody[loopBody.length - 1];
-        if (!ts.isReturnStatement(loopReturn) || !loopReturn.expression) return false;
-        const returnExpression = loopReturn.expression;
-        const loopPrelude = loopBody.slice(0, -1);
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
             return expressions.slice(1).reduce(
                 (expression, next) => ts.factory.createBinaryExpression(
@@ -32477,34 +32472,79 @@ class Emitter {
                 expressions[0]!,
             );
         };
-        if (loopPrelude.length === 0) {
-            loopReturnExpression = returnExpression;
-        } else if (loopPrelude.every(ts.isExpressionStatement)) {
-            loopReturnExpression = commaExpressions([...loopPrelude.map((statement) => statement.expression), returnExpression]);
-        } else if (
-            loopPrelude.length >= 1 &&
-            loopPrelude.slice(0, -1).every(ts.isExpressionStatement)
-        ) {
+        const loopBodyReturnExpression = (statements: readonly ts.Statement[]): ts.Expression | null => {
+            if (statements.length === 1 && ts.isIfStatement(statements[0]!)) {
+                const ifStatement = statements[0]!;
+                if (!ifStatement.elseStatement) return null;
+                const thenStatements = ts.isBlock(ifStatement.thenStatement)
+                    ? ifStatement.thenStatement.statements
+                    : [ifStatement.thenStatement];
+                const elseStatements = ts.isBlock(ifStatement.elseStatement)
+                    ? ifStatement.elseStatement.statements
+                    : [ifStatement.elseStatement];
+                const thenExpression = loopBodyReturnExpression(thenStatements);
+                const elseExpression = loopBodyReturnExpression(elseStatements);
+                if (!thenExpression || !elseExpression) return null;
+                return ts.factory.createConditionalExpression(
+                    ifStatement.expression,
+                    ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+                    thenExpression,
+                    ts.factory.createToken(ts.SyntaxKind.ColonToken),
+                    elseExpression,
+                );
+            }
+            const loopReturn = statements[statements.length - 1];
+            if (!ts.isReturnStatement(loopReturn) || !loopReturn.expression) {
+                if (statements.length !== 1 || !ts.isIfStatement(statements[0]!)) return null;
+                return null;
+            }
+            const returnExpression = loopReturn.expression;
+            const loopPrelude = statements.slice(0, -1);
+            if (loopPrelude.length === 0) {
+                return returnExpression;
+            }
+            if (loopPrelude.every(ts.isExpressionStatement)) {
+                return commaExpressions([...loopPrelude.map((statement) => statement.expression), returnExpression]);
+            }
+            if (!loopPrelude.slice(0, -1).every(ts.isExpressionStatement)) return null;
             const localStatement = loopPrelude[loopPrelude.length - 1]!;
-            if (!ts.isVariableStatement(localStatement)) return false;
+            if (!ts.isVariableStatement(localStatement)) return null;
             if (
                 (localStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 localStatement.declarationList.declarations.length !== 1
-            ) return false;
+            ) return null;
             const declaration = localStatement.declarationList.declarations[0]!;
             if (
                 !ts.isIdentifier(declaration.name) ||
                 !declaration.initializer ||
                 !ts.isIdentifier(returnExpression) ||
                 this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(returnExpression)
-            ) return false;
-            loopReturnExpression = commaExpressions([
+            ) return null;
+            return commaExpressions([
                 ...loopPrelude.slice(0, -1).map((statement) => (statement as ts.ExpressionStatement).expression),
                 declaration.initializer,
             ]);
-        } else {
-            return false;
-        }
+        };
+        const loopBodyReturn = (statements: readonly ts.Statement[]): ts.Expression | null => {
+            if (statements.length >= 2 && ts.isIfStatement(statements[0]!) && !statements[0]!.elseStatement) {
+                const ifStatement = statements[0]!;
+                const thenStatements = ts.isBlock(ifStatement.thenStatement)
+                    ? ifStatement.thenStatement.statements
+                    : [ifStatement.thenStatement];
+                const thenExpression = loopBodyReturnExpression(thenStatements);
+                const elseExpression = loopBodyReturnExpression(statements.slice(1));
+                if (!thenExpression || !elseExpression) return null;
+                return ts.factory.createConditionalExpression(
+                    ifStatement.expression,
+                    ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+                    thenExpression,
+                    ts.factory.createToken(ts.SyntaxKind.ColonToken),
+                    elseExpression,
+                );
+            }
+            return loopBodyReturnExpression(statements);
+        };
+        const loopReturnExpression = loopBodyReturn(loopBody);
         if (!loopReturnExpression) return false;
         let hasNullishOperator = false;
         const findNullishOperator = (node: ts.Node): void => {
