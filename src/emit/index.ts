@@ -33678,8 +33678,7 @@ class Emitter {
         }
         if (
             loopBody.length > 0 &&
-            loopBody[loopBody.length - 1]!.kind === ts.SyntaxKind.BreakStatement &&
-            loopBody.slice(0, -1).every(ts.isExpressionStatement)
+            loopBody[loopBody.length - 1]!.kind === ts.SyntaxKind.BreakStatement
         ) {
             const breakBody = [
                 ...loopBody.slice(0, -1),
