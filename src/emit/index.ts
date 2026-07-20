@@ -37661,6 +37661,7 @@ class Emitter {
             closeBuf.line(`${envType}* const ${closeEnv} = (${envType}*)env;`);
             if (yieldStarCount > 0) {
                 closeBuf.line("bool _delegated_throw_unhandled = is_throw;");
+                closeBuf.line("bool _delegated_return_handled = false;");
             }
             for (let i = 0; i < yieldStarCount; i++) {
                 closeBuf.open(`if (${closeEnv}->yield_star_arr_${i} && ${closeEnv}->yield_star_arr_${i}->is_lazy_generator && ${closeEnv}->yield_star_arr_${i}->lazy_close)`);
@@ -37669,6 +37670,9 @@ class Emitter {
                     closeBuf.line(`bool ${delegatedResult} = ${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
                     closeBuf.open(`if (is_throw && !${delegatedResult})`);
                     closeBuf.line("_delegated_throw_unhandled = false;");
+                    closeBuf.close();
+                    closeBuf.open(`if (!is_throw && ${delegatedResult})`);
+                    closeBuf.line("_delegated_return_handled = true;");
                     closeBuf.close();
                 } else {
                     closeBuf.line(`${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
@@ -37682,6 +37686,13 @@ class Emitter {
                 closeBuf.line("a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_delegated_close_done);");
                 closeBuf.close();
                 closeBuf.line("return false;");
+                closeBuf.close();
+                closeBuf.open("if (!is_throw && _delegated_return_handled)");
+                closeBuf.open("if (a->state >= 0 && a->lazy_next)");
+                closeBuf.line("bool _delegated_close_done = false;");
+                closeBuf.line("a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_delegated_close_done);");
+                closeBuf.close();
+                closeBuf.line("return true;");
                 closeBuf.close();
             }
             closeBuf.line(`${closeEnv}->lazy_close_handled = false;`);
@@ -40294,6 +40305,8 @@ class Emitter {
         if (doneType.kind !== "boolean") unsupported(next, "iterator next().done must be boolean");
         const valueType = this.objectFieldType(next, stepTsType, "value", next.name);
         if (valueType.kind === "void") unsupported(next, "iterator next().value cannot be void");
+        const returnMethod = this.findNamedClassMethod(iteratorDecl, "return");
+        const throwMethod = this.findNamedClassMethod(iteratorDecl, "throw");
 
         const recv = this.freshTemp("_yield_iter_recv");
         const iterVar = this.freshTemp("_yield_iter");
@@ -40318,6 +40331,7 @@ class Emitter {
         if (lazy) {
             const envType = `_gen_lazy_custom_iter_env_${this.freshTemp("")}`;
             const nextName = `_gen_lazy_custom_iter_next_${this.freshTemp("")}`;
+            const closeName = returnMethod || throwMethod ? `_gen_lazy_custom_iter_close_${this.freshTemp("")}` : null;
             const env = this.freshTemp("_lazy_custom_iter_env");
             const stepValue = this.freshTemp("_lazy_custom_iter_value");
             this.structDecls.open(`typedef struct ${envType}`);
@@ -40325,6 +40339,7 @@ class Emitter {
             this.structDecls.close(`${envType};`);
             this.structDecls.line();
             this.protos.line(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
+            if (closeName) this.protos.line(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw);`);
             const nextBuf = new CBuf();
             nextBuf.open(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
             nextBuf.line("(void)next_arg;");
@@ -40344,8 +40359,66 @@ class Emitter {
             nextBuf.close();
             nextBuf.line();
             this.closureDefs.write(nextBuf.toString());
+            if (closeName) {
+                const closeBuf = new CBuf();
+                closeBuf.open(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
+                closeBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
+                closeBuf.open("if (is_throw)");
+                if (throwMethod) {
+                    const throwSig = this.checker.getSignatureFromDeclaration(throwMethod.method);
+                    if (!throwSig) unsupported(throwMethod.method, "could not resolve iterator throw() signature");
+                    const throwParams = throwSig.getParameters();
+                    if (throwParams.length !== 1) unsupported(throwMethod.method, "lazy custom iterator throw() requires one argument");
+                    const throwParam = throwParams[0]!.valueDeclaration ?? throwMethod.method;
+                    const throwType = this.prepareType(mapTsType(throwParam, this.checker.getTypeOfSymbolAtLocation(throwParams[0]!, throwParam), this.checker));
+                    const throwArg = this.coerce({ c: "arg", ty: T_VALUE }, throwType, throwParam);
+                    const throwStep = this.freshTemp("_lazy_custom_throw_step");
+                    const throwSelf = throwMethod.owner.name!.text === iteratorType.className ? `${env}->iterator` : `((${throwMethod.owner.name!.text}_t*)${env}->iterator)`;
+                    const throwName = this.classMethodCName(throwMethod.method.name);
+                    if (!throwName) unsupported(throwMethod.method, "could not resolve iterator throw() name");
+                    closeBuf.line(`${stepType.c} const ${throwStep} = ${throwMethod.owner.name!.text}_${throwName}(${throwSelf}, ${throwArg});`);
+                    closeBuf.open(`if (${throwStep}->done)`);
+                    closeBuf.line(`a->iter_return = ${this.coerce({ c: `${throwStep}->value`, ty: valueType }, T_VALUE, throwMethod.method)};`);
+                    closeBuf.line("a->iter_has_return = true;");
+                    closeBuf.line("a->iter_return_consumed = false;");
+                    closeBuf.line("a->state = -1;");
+                    closeBuf.line("a->is_lazy_generator = false;");
+                    closeBuf.line("return false;");
+                    closeBuf.close();
+                }
+                closeBuf.line("return true;");
+                closeBuf.close();
+                closeBuf.open("if (!is_throw)");
+                if (returnMethod) {
+                    const returnSig = this.checker.getSignatureFromDeclaration(returnMethod.method);
+                    if (!returnSig) unsupported(returnMethod.method, "could not resolve iterator return() signature");
+                    const returnParams = returnSig.getParameters();
+                    if (returnParams.length !== 1) unsupported(returnMethod.method, "lazy custom iterator return() requires one argument");
+                    const returnParam = returnParams[0]!.valueDeclaration ?? returnMethod.method;
+                    const returnType = this.prepareType(mapTsType(returnParam, this.checker.getTypeOfSymbolAtLocation(returnParams[0]!, returnParam), this.checker));
+                    const returnArg = this.coerce({ c: "arg", ty: T_VALUE }, returnType, returnParam);
+                    const returnStep = this.freshTemp("_lazy_custom_return_step");
+                    const returnSelf = returnMethod.owner.name!.text === iteratorType.className ? `${env}->iterator` : `((${returnMethod.owner.name!.text}_t*)${env}->iterator)`;
+                    const returnName = this.classMethodCName(returnMethod.method.name);
+                    if (!returnName) unsupported(returnMethod.method, "could not resolve iterator return() name");
+                    closeBuf.line(`${stepType.c} const ${returnStep} = ${returnMethod.owner.name!.text}_${returnName}(${returnSelf}, ${returnArg});`);
+                    closeBuf.open(`if (${returnStep}->done)`);
+                    closeBuf.line(`a->iter_return = ${this.coerce({ c: `${returnStep}->value`, ty: valueType }, T_VALUE, returnMethod.method)};`);
+                    closeBuf.line("a->iter_has_return = true;");
+                    closeBuf.line("a->iter_return_consumed = false;");
+                    closeBuf.line("a->state = -1;");
+                    closeBuf.line("a->is_lazy_generator = false;");
+                    closeBuf.line("return true;");
+                    closeBuf.close();
+                }
+                closeBuf.line("return false;");
+                closeBuf.close();
+                closeBuf.close();
+                closeBuf.line();
+                this.closureDefs.write(closeBuf.toString());
+            }
             return {
-                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; ${out}; })`,
+                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName};${closeName ? ` ${out}->lazy_close = (void*)${closeName};` : ""} ${out}; })`,
                 ty: arrayType(valueType),
                 lazyGenerator: true,
             };

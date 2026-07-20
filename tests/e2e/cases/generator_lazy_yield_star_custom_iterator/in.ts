@@ -19,6 +19,16 @@ class CounterIterator {
         this.current++;
         return { done: false, value };
     }
+
+    return(value: string): Step {
+        events.push("return:" + value);
+        return { done: true, value: 7 };
+    }
+
+    throw(error: string): Step {
+        events.push("throw:" + error);
+        return { done: true, value: 9 };
+    }
 }
 
 class Counter {
@@ -33,8 +43,30 @@ function* outer(): Generator<number, string, undefined> {
     return "outer-done";
 }
 
+function* outerThrow(): Generator<number, string, string> {
+    const delegated: any = yield* new Counter();
+    events.push("throw-outer-after:" + delegated);
+    return "throw-outer-done";
+}
+
+function* outerReturn(): Generator<number, string, string> {
+    const delegated: any = yield* new Counter();
+    events.push("return-outer-after:" + delegated);
+    return "return-outer-done";
+}
+
 const iter = outer();
 const first: any = iter.next();
 const second: any = iter.next();
 const done: any = iter.next();
 console.log("custom-iterator", first.done, first.value, second.done, second.value, done.done, done.value, events.join("|"));
+
+const throwing = outerThrow();
+const throwingFirst: any = throwing.next();
+const throwingDone: any = throwing.throw("custom-error");
+console.log("custom-iterator-throw", throwingFirst.done, throwingFirst.value, throwingDone.done, throwingDone.value, events.join("|"));
+
+const returning = outerReturn();
+const returningFirst: any = returning.next();
+const returningDone: any = returning.return("custom-return");
+console.log("custom-iterator-return", returningFirst.done, returningFirst.value, returningDone.done, returningDone.value, events.join("|"));
