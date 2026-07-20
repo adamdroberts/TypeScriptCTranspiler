@@ -999,6 +999,15 @@ async function chooseLoopExpressionlessReturn(flag: boolean): Promise<void> {
     return;
 }
 
+async function chooseForExpressionlessReturn(flag: boolean): Promise<void> {
+    for (; await Promise.resolve(flag);) {
+        console.log("await-for-expressionless-return-true");
+        return;
+    }
+    console.log("await-for-expressionless-return-false");
+    return;
+}
+
 async function chooseLoopSynchronousThrowPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         void "sync-throw-prelude";
@@ -1281,6 +1290,15 @@ class LoopChooser {
         return;
     }
 
+    async pickForExpressionlessReturn(flag: boolean): Promise<void> {
+        for (; await Promise.resolve(flag);) {
+            console.log("await-method-for-expressionless-return-true");
+            return;
+        }
+        console.log("await-method-for-expressionless-return-false");
+        return;
+    }
+
     async pickSynchronousThrowPrelude(flag: boolean): Promise<string> {
         while (await Promise.resolve(flag)) {
             const reason = "method-sync-throw";
@@ -1513,6 +1531,15 @@ const chooseExpressionlessReturnValue = async (flag: boolean): Promise<void> => 
         return;
     }
     console.log("await-value-expressionless-return-false");
+    return;
+};
+
+const chooseForExpressionlessReturnValue = async (flag: boolean): Promise<void> => {
+    for (; await Promise.resolve(flag);) {
+        console.log("await-value-for-expressionless-return-true");
+        return;
+    }
+    console.log("await-value-for-expressionless-return-false");
     return;
 };
 
@@ -1930,6 +1957,12 @@ new LoopChooser("method-").pickExpressionlessReturn(true);
 new LoopChooser("method-").pickExpressionlessReturn(false);
 chooseExpressionlessReturnValue(true);
 chooseExpressionlessReturnValue(false);
+chooseForExpressionlessReturn(true);
+chooseForExpressionlessReturn(false);
+new LoopChooser("method-").pickForExpressionlessReturn(true);
+new LoopChooser("method-").pickForExpressionlessReturn(false);
+chooseForExpressionlessReturnValue(true);
+chooseForExpressionlessReturnValue(false);
 chooseLoopSynchronousThrowPrelude(true).catch((reason) => console.log("await-while-sync-throw-prelude-true", reason));
 chooseLoopSynchronousThrowPrelude(false).then((value) => console.log("await-while-sync-throw-prelude-false", value));
 new LoopChooser("method-").pickSynchronousThrowPrelude(true).catch((reason) => console.log("await-method-sync-throw-prelude-true", reason));

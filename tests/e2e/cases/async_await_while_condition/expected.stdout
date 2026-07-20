@@ -10,6 +10,12 @@ await-method-expressionless-return-true
 await-method-expressionless-return-false
 await-value-expressionless-return-true
 await-value-expressionless-return-false
+await-for-expressionless-return-true
+await-for-expressionless-return-false
+await-method-for-expressionless-return-true
+await-method-for-expressionless-return-false
+await-value-for-expressionless-return-true
+await-value-for-expressionless-return-false
 await-while-sync-body-true sync-body
 await-while-sync-body-false sync-fallthrough
 await-for-sync-body-true for-sync-body
