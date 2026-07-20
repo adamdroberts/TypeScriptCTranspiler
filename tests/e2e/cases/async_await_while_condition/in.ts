@@ -158,6 +158,14 @@ async function chooseLoopThrowAwait(condition: boolean): Promise<string> {
     return "body-throw-await-fallthrough";
 }
 
+async function chooseLoopReturnAwaitControlPrelude(condition: boolean, flag: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        if (flag) prefix += "-control";
+        return await laterBodyValue(prefix);
+    }
+    return prefix + "-control-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -321,6 +329,9 @@ chooseLoopReturnAwaitAssignedLocal(true, "body-await-assigned").then((value) => 
 chooseLoopReturnAwaitAssignedLocal(false, "body-await-assigned").then((value) => console.log("await-while-return-await-assigned-false", value));
 chooseLoopThrowAwait(true).catch((reason) => console.log("await-while-throw-await-true", reason));
 chooseLoopThrowAwait(false).then((value) => console.log("await-while-throw-await-false", value));
+chooseLoopReturnAwaitControlPrelude(true, true, "body-await-control").then((value) => console.log("await-while-return-await-control-true", value));
+chooseLoopReturnAwaitControlPrelude(true, false, "body-await-control").then((value) => console.log("await-while-return-await-control-false", value));
+chooseLoopReturnAwaitControlPrelude(false, true, "body-await-control").then((value) => console.log("await-while-return-await-control-fallthrough", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
