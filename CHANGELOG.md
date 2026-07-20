@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Terminal throw expressions now support two left-associated non-conditional awaited operands through the staged expression adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_two_await_expression`.
 - Awaited terminal throw expressions now preserve bounded await-free captured local preludes before the suspension across async declarations, methods, and async-arrow function values. Test: `async_await_throw_await_expression_prelude`.
 - Terminal throw expressions now support one bounded non-conditional awaited operand, rejecting with the transformed expression value across async declarations, methods, and async-arrow function values. Test: `async_await_throw_await_expression`.
 - Unequal conditional leading await branches now join a bounded common terminal `throw await promise` after divergent sequencing lengths across declarations, methods, and async-arrow function values. Test: `async_await_conditional_unequal_throw_await_tail`.

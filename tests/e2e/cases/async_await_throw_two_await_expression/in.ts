@@ -1,0 +1,20 @@
+import { setTimeout as delay } from "node:timers/promises";
+
+async function declaration(prefix: string): Promise<string> {
+    throw (await delay(1, prefix + "left")) + (await delay(2, "-right"));
+}
+
+class Worker {
+    prefix(value: string): string { return value + "method"; }
+    async run(): Promise<string> {
+        throw (await delay(3, this.prefix("-left"))) + (await delay(4, "-right"));
+    }
+}
+
+const value = async (prefix: string): Promise<string> => {
+    throw (await delay(5, prefix + "left")) + (await delay(6, "-right"));
+};
+
+declaration("fn-").catch((reason) => console.log("declaration:", reason));
+new Worker().run().catch((reason) => console.log("method:", reason));
+value("arrow-").catch((reason) => console.log("value:", reason));
