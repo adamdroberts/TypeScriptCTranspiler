@@ -34,6 +34,12 @@ await-method-sync-control-prelude-true method-sync-control-body
 await-method-sync-control-prelude-false method-sync-control-fallthrough
 await-value-sync-control-prelude-true value-sync-control-body
 await-value-sync-control-prelude-false value-sync-control-fallthrough
+await-while-sync-try-prelude-true sync-try-body
+await-while-sync-try-prelude-false sync-try-fallthrough
+await-method-sync-try-prelude-true method-sync-try-body
+await-method-sync-try-prelude-false method-sync-try-fallthrough
+await-value-sync-try-prelude-true value-sync-try-body
+await-value-sync-try-prelude-false value-sync-try-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes

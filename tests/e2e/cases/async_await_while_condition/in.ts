@@ -997,6 +997,18 @@ async function chooseLoopSynchronousControlPrelude(flag: boolean): Promise<strin
     return "sync-control-fallthrough";
 }
 
+async function chooseLoopSynchronousTryPrelude(flag: boolean): Promise<string> {
+    while (await Promise.resolve(flag)) {
+        try {
+            void "sync-try";
+        } finally {
+            void "sync-finally";
+        }
+        return "sync-try-body";
+    }
+    return "sync-try-fallthrough";
+}
+
 class LoopChooser {
     private readonly prefix: string;
 
@@ -1062,6 +1074,18 @@ class LoopChooser {
         }
         return "method-sync-control-fallthrough";
     }
+
+    async pickSynchronousTryPrelude(flag: boolean): Promise<string> {
+        while (await Promise.resolve(flag)) {
+            try {
+                void "method-sync-try";
+            } finally {
+                void "method-sync-finally";
+            }
+            return "method-sync-try-body";
+        }
+        return "method-sync-try-fallthrough";
+    }
 }
 
 const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
@@ -1103,6 +1127,18 @@ const chooseLoopSynchronousControlPreludeValue = async (flag: boolean): Promise<
         return "value-sync-control-body";
     }
     return "value-sync-control-fallthrough";
+};
+
+const chooseLoopSynchronousTryPreludeValue = async (flag: boolean): Promise<string> => {
+    while (await Promise.resolve(flag)) {
+        try {
+            void "value-sync-try";
+        } finally {
+            void "value-sync-finally";
+        }
+        return "value-sync-try-body";
+    }
+    return "value-sync-try-fallthrough";
 };
 
 const chooseArrowThrowWithLocals = async (prefix: string): Promise<string> => {
@@ -1330,6 +1366,12 @@ new LoopChooser("method-").pickSynchronousControlPrelude(true).then((value) => c
 new LoopChooser("method-").pickSynchronousControlPrelude(false).then((value) => console.log("await-method-sync-control-prelude-false", value));
 chooseLoopSynchronousControlPreludeValue(true).then((value) => console.log("await-value-sync-control-prelude-true", value));
 chooseLoopSynchronousControlPreludeValue(false).then((value) => console.log("await-value-sync-control-prelude-false", value));
+chooseLoopSynchronousTryPrelude(true).then((value) => console.log("await-while-sync-try-prelude-true", value));
+chooseLoopSynchronousTryPrelude(false).then((value) => console.log("await-while-sync-try-prelude-false", value));
+new LoopChooser("method-").pickSynchronousTryPrelude(true).then((value) => console.log("await-method-sync-try-prelude-true", value));
+new LoopChooser("method-").pickSynchronousTryPrelude(false).then((value) => console.log("await-method-sync-try-prelude-false", value));
+chooseLoopSynchronousTryPreludeValue(true).then((value) => console.log("await-value-sync-try-prelude-true", value));
+chooseLoopSynchronousTryPreludeValue(false).then((value) => console.log("await-value-sync-try-prelude-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
 chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => console.log("await-direct-multiple-control-prelude", value));
 chooseDirectAwaitMultipleVarPrelude("direct-var").then((value) => console.log("await-direct-multiple-var-prelude", value));
