@@ -1,6 +1,8 @@
 // TypeScriptC minimal global/type shim.
 // Declarations here are ambient globals because this file has no imports/exports.
 
+type Extract<T, U> = T extends U ? T : never;
+
 // --- iterator protocol (minimal, for for-of on arrays) ---
 interface Symbol {
     readonly description: string | undefined;
