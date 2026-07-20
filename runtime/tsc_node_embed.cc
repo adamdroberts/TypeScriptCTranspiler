@@ -29,6 +29,7 @@ typedef struct tsc_array {
     int state;
     void* env;
     void (*lazy_next)(struct tsc_array* a, int* state, void* env, tsc_value_t next_arg, bool* done);
+    void (*lazy_close)(struct tsc_array* a, void* env, tsc_value_t arg, bool is_throw);
     tsc_object_t* props;
     tsc_object_t* holes;
     void* data;
@@ -318,6 +319,7 @@ void aotFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
     args.state = -1;
     args.env = nullptr;
     args.lazy_next = nullptr;
+    args.lazy_close = nullptr;
     args.data = argc > 0 ? argsData.data() : nullptr;
 
     tsc_value_t result = info.IsConstructCall()

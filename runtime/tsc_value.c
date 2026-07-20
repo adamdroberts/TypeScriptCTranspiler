@@ -376,11 +376,14 @@ static tsc_value_t tsc_value_generator_next(void* env, tsc_value_t this_arg, tsc
 
 static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_array_t* av = (tsc_array_t*)env;
+    tsc_value_t valueArg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (av->is_lazy_generator && av->lazy_close) {
+        av->lazy_close(av, av->env, valueArg, false);
+    }
     av->iter_pos = av->len;
     av->is_lazy_generator = false;
     av->state = -1;
     av->iter_return_consumed = true;
-    tsc_value_t valueArg = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_object_t* out = tsc_object_new();
     tsc_object_set(out, tsc_str_from_lit("done", 4), tsc_value_bool(true));
     tsc_object_set(out, tsc_str_from_lit("value", 5), valueArg);
@@ -389,11 +392,14 @@ static tsc_value_t tsc_value_generator_return(void* env, tsc_value_t this_arg, t
 
 static tsc_value_t tsc_value_generator_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_array_t* av = (tsc_array_t*)env;
+    tsc_value_t err = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (av->is_lazy_generator && av->lazy_close) {
+        av->lazy_close(av, av->env, err, true);
+    }
     av->iter_pos = av->len;
     av->is_lazy_generator = false;
     av->state = -1;
     av->iter_return_consumed = true;
-    tsc_value_t err = args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_str_t* errStr = tsc_value_to_string(err);
     tsc_throw_str(errStr);
     return tsc_value_undefined();

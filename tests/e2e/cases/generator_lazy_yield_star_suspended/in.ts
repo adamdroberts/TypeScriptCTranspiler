@@ -16,6 +16,22 @@ function* outer(): Generator<string, string, string> {
     return "outer-done";
 }
 
+function* closableInner(): Generator<string, string, string> {
+    try {
+        events.push("closable-inner-start");
+        yield "close-me";
+    } finally {
+        events.push("closable-inner-finally");
+    }
+    return "closable-inner-done";
+}
+
+function* closableOuter(): Generator<string, string, string> {
+    yield* closableInner();
+    events.push("closable-outer-after");
+    return "closable-outer-done";
+}
+
 const iter = outer();
 console.log("created", events.join("|"));
 const first: any = iter.next("ignored");
@@ -24,3 +40,7 @@ const second: any = iter.next("alpha");
 console.log("second", second.done, second.value, events.join("|"));
 const third: any = iter.next("beta");
 console.log("third", third.done, third.value, events.join("|"));
+const closable = closableOuter();
+const closeFirst: any = closable.next();
+const closeResult: any = closable.return("closed");
+console.log("close", closeFirst.done, closeFirst.value, closeResult.done, closeResult.value, events.join("|"));

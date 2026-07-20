@@ -597,6 +597,8 @@ class Emitter {
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
+    private activeLazyGeneratorFinalizers: ts.Statement[][] = [];
+    private activeLazyGeneratorCloseEnabled = false;
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
@@ -35784,6 +35786,21 @@ class Emitter {
             !this.nodeContainsYield(child) && this.isValidLazyGeneratorStatement(child));
     }
 
+    private lazyGeneratorHasFinalizer(node: ts.Node): boolean {
+        let found = false;
+        const visit = (current: ts.Node): void => {
+            if (found) return;
+            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+            if (ts.isTryStatement(current) && this.isSimpleLazyGeneratorTryFinally(current)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return found;
+    }
+
     private lazyGeneratorContainsAbruptControlFlow(node: ts.Node): boolean {
         let found = false;
         const visit = (current: ts.Node): void => {
@@ -36335,6 +36352,30 @@ class Emitter {
         buf.close();
     }
 
+    private emitLazyGeneratorCloseGuard(
+        buf: CBuf,
+        envLocalName: string,
+        elemType: CType,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+    ): void {
+        if (!envLocalName || !this.activeLazyGeneratorCloseEnabled) return;
+        buf.open(`if (${envLocalName}->lazy_close_requested)`);
+        buf.line(`${envLocalName}->lazy_close_requested = false;`);
+        for (const finalizer of [...this.activeLazyGeneratorFinalizers].reverse()) {
+            for (const child of finalizer) {
+                this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+        }
+        buf.line("*state = -1;");
+        buf.line("*done = true;");
+        buf.open(`if (${envLocalName}->lazy_close_throw)`);
+        buf.line(`tsc_throw_str(tsc_value_to_string(${envLocalName}->lazy_close_arg));`);
+        buf.close();
+        buf.line("return;");
+        buf.close();
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -36438,9 +36479,11 @@ class Emitter {
 
         if (ts.isTryStatement(stmt) && this.isSimpleLazyGeneratorTryFinally(stmt)) {
             buf.open("");
+            this.activeLazyGeneratorFinalizers.push(stmt.finallyBlock!.statements.slice());
             for (const child of stmt.tryBlock.statements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
+            this.activeLazyGeneratorFinalizers.pop();
             for (const child of stmt.finallyBlock!.statements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
@@ -36487,6 +36530,7 @@ class Emitter {
                 yieldStarSlot = nextYieldStarSlot();
                 buf.line(`*state = ${yieldState};`);
                 buf.line(`case ${yieldState}:;`);
+                this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
                 this.emitLazyGeneratorYieldStar(buf, yieldExpr, elemType, envLocalName, yieldStarSlot, nextState);
                 buf.line(`case ${nextState}:;`);
             } else {
@@ -36507,6 +36551,7 @@ class Emitter {
                 buf.line("*done = false;");
                 buf.line("return;");
                 buf.line(`case ${nextState}:;`);
+                this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
                 if (this.simpleLazyYieldNeedsResume(stmt)) {
                     if (ts.isThrowStatement(stmt)) {
                         buf.line("*state = -1;");
@@ -36723,13 +36768,15 @@ class Emitter {
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
         const yieldStarCount = this.countSimpleLazyYieldStars(fn.body);
         const hasYieldStar = yieldStarCount > 0;
+        const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
+        const hasLazyClose = hasYieldStar || hasLazyFinalizer;
         const needsEnv = runtimeParamInfos.length > 0 ||
             localVarInfos.length > 0 ||
             compoundResumeInfos.length > 0 ||
             forOfInfos.length > 0 ||
             forInInfos.length > 0 ||
             !!implicitThisParam ||
-            hasYieldStar;
+            hasLazyClose;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
         const thisField = implicitThisParam ? "this_arg" : null;
         if (envType) {
@@ -36754,6 +36801,11 @@ class Emitter {
                 this.structDecls.line(`tsc_array_t* ${info.keysField};`);
                 this.structDecls.line(`size_t ${info.indexField};`);
             }
+            if (hasLazyClose) {
+                this.structDecls.line("bool lazy_close_requested;");
+                this.structDecls.line("bool lazy_close_throw;");
+                this.structDecls.line("tsc_value_t lazy_close_arg;");
+            }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {
                     this.structDecls.line(`tsc_array_t* yield_star_arr_${i};`);
@@ -36765,12 +36817,17 @@ class Emitter {
             this.structDecls.line();
         }
         this.protos.line(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
+        const lazyCloseFuncName = hasLazyClose ? `_gen_lazy_close_${baseName}_${this.freshTemp("")}` : null;
+        if (lazyCloseFuncName) {
+            this.protos.line(`static void ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw);`);
+        }
         const nextBuf = new CBuf();
         nextBuf.open(`static void ${lazyNextFuncName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
 
         this.returnStack.push(ret);
         this.cellScopes.push(capturedCells);
         this.generatorStack.push({ arrayVar: "a", elemType: elemType });
+        this.activeLazyGeneratorCloseEnabled = hasLazyClose;
         nextBuf.line("(void)next_arg;");
         const envBindings = new Map<ts.Symbol, ClosureEnvBinding>();
         let envLocalName = "";
@@ -36829,6 +36886,7 @@ class Emitter {
             nextBuf.close();
             nextBuf.close();
         } finally {
+            this.activeLazyGeneratorCloseEnabled = false;
             if (lazyThisParam) this.functionThisStack.pop();
             this.closureEnvScopes.pop();
             this.generatorStack.pop();
@@ -36839,6 +36897,27 @@ class Emitter {
         nextBuf.close();
         nextBuf.line();
         this.closureDefs.write(nextBuf.toString());
+        if (lazyCloseFuncName && envType) {
+            const closeBuf = new CBuf();
+            closeBuf.open(`static void ${lazyCloseFuncName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
+            const closeEnv = this.freshTemp("_lazy_close_env");
+            closeBuf.line(`${envType}* const ${closeEnv} = (${envType}*)env;`);
+            for (let i = 0; i < yieldStarCount; i++) {
+                closeBuf.open(`if (${closeEnv}->yield_star_arr_${i} && ${closeEnv}->yield_star_arr_${i}->is_lazy_generator && ${closeEnv}->yield_star_arr_${i}->lazy_close)`);
+                closeBuf.line(`${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
+                closeBuf.close();
+            }
+            closeBuf.line(`${closeEnv}->lazy_close_requested = true;`);
+            closeBuf.line(`${closeEnv}->lazy_close_throw = is_throw;`);
+            closeBuf.line(`${closeEnv}->lazy_close_arg = arg;`);
+            closeBuf.open(`if (a->state >= 0 && a->lazy_next)`);
+            closeBuf.line("bool _lazy_close_done = false;");
+            closeBuf.line(`a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_lazy_close_done);`);
+            closeBuf.close();
+            closeBuf.close();
+            closeBuf.line();
+            this.closureDefs.write(closeBuf.toString());
+        }
 
         const arrayVar = this.freshTemp("_gen");
         buf.line(`tsc_array_t* ${arrayVar} = tsc_array_new(sizeof(${elemType.c}), 4);`);
@@ -36865,6 +36944,11 @@ class Emitter {
                 buf.line(`${envVar}->${info.keysField} = NULL;`);
                 buf.line(`${envVar}->${info.indexField} = 0;`);
             }
+            if (hasLazyClose) {
+                buf.line(`${envVar}->lazy_close_requested = false;`);
+                buf.line(`${envVar}->lazy_close_throw = false;`);
+                buf.line(`${envVar}->lazy_close_arg = tsc_value_undefined();`);
+            }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {
                     buf.line(`${envVar}->yield_star_arr_${i} = NULL;`);
@@ -36877,6 +36961,9 @@ class Emitter {
         buf.line(`${arrayVar}->is_lazy_generator = true;`);
         buf.line(`${arrayVar}->state = 0;`);
         buf.line(`${arrayVar}->lazy_next = (void*)${lazyNextFuncName};`);
+        if (lazyCloseFuncName) {
+            buf.line(`${arrayVar}->lazy_close = (void*)${lazyCloseFuncName};`);
+        }
         buf.line(`return ${arrayVar};`);
     }
 
@@ -54585,7 +54672,9 @@ class Emitter {
                     T_VALUE,
                     specs,
                     ([arr, valueArg]) =>
-                        `({ tsc_array_t* const ${av} = ${arr!}; ${av}->iter_pos = ${av}->len; ` +
+                        `({ tsc_array_t* const ${av} = ${arr!}; ` +
+                        `if (${av}->is_lazy_generator && ${av}->lazy_close) ${av}->lazy_close(${av}, ${av}->env, ${valueArg ?? "tsc_value_undefined()"}, false); ` +
+                        `${av}->iter_pos = ${av}->len; ` +
                         `${av}->is_lazy_generator = false; ${av}->state = -1; ` +
                         `${av}->iter_return_consumed = true; ` +
                         `tsc_object_t* ${out} = tsc_object_new(); ` +
@@ -54607,6 +54696,7 @@ class Emitter {
                     ([arr, errArg]) => {
                         const av = this.freshTemp("_iter");
                         return `({ tsc_array_t* const ${av} = ${arr!}; ` +
+                            `if (${av}->is_lazy_generator && ${av}->lazy_close) ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true); ` +
                             `${av}->iter_pos = ${av}->len; ` +
                             `${av}->is_lazy_generator = false; ` +
                             `${av}->state = -1; ` +
