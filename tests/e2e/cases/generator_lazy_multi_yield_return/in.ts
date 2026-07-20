@@ -14,6 +14,10 @@ function* longChain(): Generator<number, number, number> {
     return (yield 1) + (yield 2) + (yield 3) + (yield 4) + (yield 5) + (yield 6) + (yield 7) + (yield 8) + (yield 9) + (yield 10);
 }
 
+function* mixedLeaves(): Generator<number, number, number> {
+    return 100 + (yield 1) + (yield 2) * 10;
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -45,3 +49,8 @@ longValues.push(longIter.next(8));
 longValues.push(longIter.next(9));
 longValues.push(longIter.next(10));
 console.log("long", longValues.map((step: any) => step.value).join(","), longValues[10].done, longValues[10].value);
+const mixedIter = mixedLeaves();
+const mixedFirst: any = mixedIter.next();
+const mixedSecond: any = mixedIter.next(3);
+const mixedDone: any = mixedIter.next(4);
+console.log("mixed", mixedFirst.value, mixedSecond.value, mixedDone.done, mixedDone.value);

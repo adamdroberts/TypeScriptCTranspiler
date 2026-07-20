@@ -2,3 +2,4 @@ steps false 10 false 20 true 7
 bits 8 3 true 2
 chain 1 2 3 4 true 10
 long 1,2,3,4,5,6,7,8,9,10,55 true 55
+mixed 1 2 true 143

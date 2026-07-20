@@ -35920,6 +35920,7 @@ class Emitter {
                 yields.push(unwrapped);
                 return true;
             }
+            if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return true;
             if (!ts.isBinaryExpression(unwrapped)) return false;
             const op = unwrapped.operatorToken.kind;
             if (![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
@@ -35931,6 +35932,16 @@ class Emitter {
         };
         if (!visit(stmt.expression) || yields.length < 2) return null;
         return { expression: stmt.expression, yields };
+    }
+
+    private isSimpleLazyMultiYieldLiteral(expr: ts.Expression): boolean {
+        return ts.isNumericLiteral(expr) ||
+            ts.isStringLiteral(expr) ||
+            ts.isNoSubstitutionTemplateLiteral(expr) ||
+            ts.isBigIntLiteral(expr) ||
+            expr.kind === ts.SyntaxKind.TrueKeyword ||
+            expr.kind === ts.SyntaxKind.FalseKeyword ||
+            expr.kind === ts.SyntaxKind.NullKeyword;
     }
 
     private lazyGeneratorMaxMultiYieldReturn(node: ts.Node): number {
@@ -36700,6 +36711,7 @@ class Emitter {
                     ty: type,
                 };
             }
+            if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return this.emitExpr(unwrapped);
             if (!ts.isBinaryExpression(unwrapped)) unsupported(node, "lazy multi-yield return contains an unsupported expression leaf");
             return this.emitSimpleLazyResumeBinary(unwrapped, build(unwrapped.left), build(unwrapped.right));
         };
