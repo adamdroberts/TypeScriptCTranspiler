@@ -32500,7 +32500,8 @@ class Emitter {
                 ? nestedBodyAwait
                 : directBodyAwait;
             bodyPreludeStatements = loopBody.slice(0, -1);
-        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && ts.isIdentifier(bodyAction.expression)) {
+        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && ts.isIdentifier(bodyAction.expression) &&
+            ts.isVariableStatement(loopBody[loopBody.length - 2])) {
             const bodyAwaitStatement = loopBody[loopBody.length - 2];
             if (!bodyAwaitStatement || !ts.isVariableStatement(bodyAwaitStatement) ||
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
@@ -32511,8 +32512,32 @@ class Emitter {
                 : null;
             if (!ts.isIdentifier(declaration.name) || !declarationAwait || !ts.isAwaitExpression(declarationAwait) ||
                 this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(bodyAction.expression)) return false;
-            bodyAwaitExpr = declarationAwait;
+            const nestedDeclarationAwait = this.unwrapTransparentExpression(declarationAwait.expression);
+            bodyAwaitExpr = ts.isAwaitExpression(nestedDeclarationAwait)
+                ? nestedDeclarationAwait
+                : declarationAwait;
             bodyPreludeStatements = loopBody.slice(0, -2);
+            bodyRejectResult = ts.isThrowStatement(bodyAction);
+        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && ts.isIdentifier(bodyAction.expression)) {
+            const assignmentStatement = loopBody[loopBody.length - 2];
+            const declarationStatement = loopBody[loopBody.length - 3];
+            if (!assignmentStatement || !declarationStatement || !ts.isExpressionStatement(assignmentStatement) ||
+                !ts.isVariableStatement(declarationStatement) ||
+                (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                declarationStatement.declarationList.declarations.length !== 1) return false;
+            const declaration = declarationStatement.declarationList.declarations[0]!;
+            const assignment = assignmentStatement.expression;
+            if (!ts.isIdentifier(declaration.name) || declaration.initializer || !ts.isBinaryExpression(assignment) ||
+                assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left) ||
+                this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(assignment.left) ||
+                this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(bodyAction.expression)) return false;
+            const assignmentAwait = this.unwrapTransparentExpression(assignment.right);
+            if (!ts.isAwaitExpression(assignmentAwait)) return false;
+            const nestedAssignmentAwait = this.unwrapTransparentExpression(assignmentAwait.expression);
+            bodyAwaitExpr = ts.isAwaitExpression(nestedAssignmentAwait)
+                ? nestedAssignmentAwait
+                : assignmentAwait;
+            bodyPreludeStatements = loopBody.slice(0, -3);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else {
             return false;
