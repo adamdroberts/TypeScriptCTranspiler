@@ -290,6 +290,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyPostAwaitStatements: readonly ts.Statement[];
     bodyPreludeStatements: readonly ts.Statement[];
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
+    bodyContinue: boolean;
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     fallthroughAwaitExpr?: ts.AwaitExpression;
@@ -32979,10 +32980,13 @@ class Emitter {
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
-        if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction)) return false;
-        const bodyExpression = bodyAction.expression ?? (ts.isReturnStatement(bodyAction) ? ts.factory.createVoidZero() : null);
+        const bodyContinue = ts.isContinueStatement(bodyAction);
+        if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction) && !bodyContinue) return false;
+        const bodyExpression = bodyContinue
+            ? ts.factory.createVoidZero()
+            : bodyAction.expression ?? (ts.isReturnStatement(bodyAction) ? ts.factory.createVoidZero() : null);
         if (!bodyExpression) return false;
-        const bodyLeadingContinuation = loopBody.length > 1
+        const bodyLeadingContinuation = !bodyContinue && loopBody.length > 1
             ? this.asyncAwaitLeadingReturnContinuation(
                 loopBodyBlock ?? ts.factory.createBlock([...loopBody], true),
                 parameters,
@@ -33051,7 +33055,11 @@ class Emitter {
             return found;
         };
         const directBodyAwait = this.unwrapTransparentExpression(bodyExpression);
-        if (bodyLeadingChain) {
+        if (bodyContinue) {
+            bodyReturnExpr = bodyExpression;
+            bodyPreludeStatements = loopBody.slice(0, -1);
+            bodyRejectResult = false;
+        } else if (bodyLeadingChain) {
             bodyAwaitExpr = bodyLeadingChain.steps[0]!.awaitExpr;
             bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = bodyLeadingChain.preludeStatements;
@@ -33338,6 +33346,7 @@ class Emitter {
             bodyPostAwaitStatements,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
+            bodyContinue,
             bodyRejectResult,
             fallthroughExpr,
             fallthroughAwaitExpr,
@@ -33482,7 +33491,26 @@ class Emitter {
             const conditionTruth = this.truthyC(emittedCondition, continuation.conditionExpr);
             buf.open(`if (${conditionTruth})`);
             for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
-            if (continuation.bodyAwaitExpr && bodyPromiseType && bodyAdapter) {
+            if (continuation.bodyContinue) {
+                const continueSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
+                const continueSourceVar = this.freshTemp("_await_continue_source");
+                const continueEnvVar = this.freshTemp("_await_continue_env");
+                const continueEnvType = `${name}_env_t`;
+                buf.line(`tsc_promise_t* const ${continueSourceVar} = ${this.coerce(continueSource, conditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
+                buf.line(`${continueEnvType}* const ${continueEnvVar} = (${continueEnvType}*)TSC_GC_MALLOC(sizeof(${continueEnvType}));`);
+                buf.line(`${continueEnvVar}->receiver = ${continueSourceVar};`);
+                buf.line(`${continueEnvVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${continueEnvVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${continueEnvVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${continueSourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${continueSourceVar}, ${name}, ${continueEnvVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${name}(${continueEnvVar});`);
+                buf.close();
+                buf.line("tsc_try_pop();");
+                buf.line("return;");
+            } else if (continuation.bodyAwaitExpr && bodyPromiseType && bodyAdapter) {
                 const bodySource = this.emitExpr(continuation.bodyAwaitExpr.expression);
                 const bodySourceVar = this.freshTemp("_await_body_source");
                 const bodyEnvVar = this.freshTemp("_await_body_env");
