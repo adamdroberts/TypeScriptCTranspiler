@@ -35806,6 +35806,8 @@ class Emitter {
             sourceTy.kind === "string" ||
             sourceTy.kind === "map" ||
             sourceTy.kind === "set" ||
+            sourceTy.kind === "urlsearchparams" ||
+            sourceTy.kind === "buffer" ||
             sourceTy.kind === "class" ||
             sourceTy.kind === "value";
     }
@@ -36009,6 +36011,12 @@ class Emitter {
         } else if (source.ty.kind === "set" && source.ty.elem) {
             arrayExpr = `tsc_set_values(${source.c})`;
             sourceElemType = source.ty.elem;
+        } else if (source.ty.kind === "urlsearchparams") {
+            arrayExpr = `tsc_url_search_params_entries(${source.c})`;
+            sourceElemType = entryType(T_STRING, T_STRING);
+        } else if (source.ty.kind === "buffer") {
+            arrayExpr = `({ tsc_buffer_t* const _lazy_yield_star_buffer = ${source.c}; tsc_array_t* _lazy_yield_star_values = tsc_array_new(sizeof(double), _lazy_yield_star_buffer->len ? _lazy_yield_star_buffer->len : 1); for (size_t _lazy_yield_star_i = 0; _lazy_yield_star_i < _lazy_yield_star_buffer->len; _lazy_yield_star_i++) { double _lazy_yield_star_byte = (double)_lazy_yield_star_buffer->data[_lazy_yield_star_i]; tsc_array_push_raw(_lazy_yield_star_values, &_lazy_yield_star_byte); } _lazy_yield_star_values; })`;
+            sourceElemType = T_NUMBER;
         } else if (source.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${source.c})`;
             sourceElemType = T_STRING;

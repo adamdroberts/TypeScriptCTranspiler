@@ -19,4 +19,12 @@ Yielding custom iterable
 Yielded value: 300
 Yielded value: 400
 Yielded custom iterable
+Yielding URLSearchParams
+Yielded value: a,1
+Yielded value: b,two
+Yielded URLSearchParams
+Yielding Buffer
+Yielded value: 13
+Yielded value: 14
+Yielded Buffer
 Generator done. Return value: lazyDone

@@ -31,6 +31,16 @@ function* lazyYieldStarGen(): Generator<any, string, undefined> {
     yield* bag;
     console.log("Yielded custom iterable");
 
+    console.log("Yielding URLSearchParams");
+    const params = new URLSearchParams("a=1&b=two");
+    yield* params;
+    console.log("Yielded URLSearchParams");
+
+    console.log("Yielding Buffer");
+    const bytes = Buffer.from([13, 14]);
+    yield* bytes as any;
+    console.log("Yielded Buffer");
+
     return "lazyDone";
 }
 
