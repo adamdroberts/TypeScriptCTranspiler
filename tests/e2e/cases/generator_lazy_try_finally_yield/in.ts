@@ -78,3 +78,17 @@ const caughtBound = caughtBoundThrow();
 const caughtBoundFirst: any = caughtBound.next();
 const caughtBoundDone: any = caughtBound.throw("handled-bound");
 console.log("caught-bound:", caughtBoundFirst.done, caughtBoundFirst.value, caughtBoundDone.done, caughtBoundDone.value);
+
+function* caughtUsedBoundThrow(): Generator<string, string, string> {
+    try {
+        yield "used-catch-pause";
+    } catch (error: any) {
+        return error;
+    }
+    return "normal";
+}
+
+const caughtUsedBound = caughtUsedBoundThrow();
+const caughtUsedBoundFirst: any = caughtUsedBound.next();
+const caughtUsedBoundDone: any = caughtUsedBound.throw("handled-used-bound");
+console.log("caught-used-bound:", caughtUsedBoundFirst.done, caughtUsedBoundFirst.value, caughtUsedBoundDone.done, caughtUsedBoundDone.value);
