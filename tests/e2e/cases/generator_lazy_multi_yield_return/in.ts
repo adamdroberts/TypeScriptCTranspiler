@@ -111,6 +111,10 @@ class ThisLeaves {
     *values(): Generator<number, ThisLeaves, number> {
         return (yield 26), (yield 27), this;
     }
+
+    *propertyValues(): Generator<number, number, number> {
+        return this.marker + (yield 46) + (yield 47);
+    }
 }
 
 const iter = sum();
@@ -247,3 +251,8 @@ const thisFirst: any = thisIter.next();
 const thisSecond: any = thisIter.next(6);
 const thisDone: any = thisIter.next(7);
 console.log("this", thisFirst.value, thisSecond.value, thisDone.done, thisDone.value.marker);
+const propertyIter = thisLeaves.propertyValues();
+const propertyFirst: any = propertyIter.next();
+const propertySecond: any = propertyIter.next(4);
+const propertyDone: any = propertyIter.next(5);
+console.log("property", propertyFirst.value, propertySecond.value, propertyDone.done, propertyDone.value);
