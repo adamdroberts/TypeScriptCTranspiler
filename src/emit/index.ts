@@ -45793,7 +45793,7 @@ class Emitter {
         return {
             c: `({ ${pieces.join("; ")}; })`,
             ty: type,
-            lazyGeneratorFactory: this.isGeneratorDeclaration(fn),
+            lazyGeneratorFactory: this.isGeneratorDeclaration(fn) || this.isLazyGeneratorPassthroughFunction(fn),
         };
     }
 

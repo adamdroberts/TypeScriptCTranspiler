@@ -84,6 +84,14 @@ function* recoveringConvertedOuter(): Generator<string, string, string> {
     return "recovering-converted-outer-done";
 }
 
+const convertRecoveringArrow = (iter: Generator<string, string, string>): Generator<any, string, string> => iter;
+
+function* recoveringArrowConvertedOuter(): Generator<string, string, string> {
+    const delegated = yield* convertRecoveringArrow(recoveringInner());
+    events.push("recovering-arrow-converted-outer-after:" + delegated);
+    return "recovering-arrow-converted-outer-done";
+}
+
 const iter = outer();
 console.log("created", events.join("|"));
 const first: any = iter.next("ignored");
@@ -111,3 +119,7 @@ const recoveringConverted = recoveringConvertedOuter();
 const recoveringConvertedFirst: any = recoveringConverted.next();
 const recoveringConvertedResult: any = recoveringConverted.throw("converted-recover-error");
 console.log("recover-converted", recoveringConvertedFirst.done, recoveringConvertedFirst.value, recoveringConvertedResult.done, recoveringConvertedResult.value, events.join("|"));
+const recoveringArrowConverted = recoveringArrowConvertedOuter();
+const recoveringArrowConvertedFirst: any = recoveringArrowConverted.next();
+const recoveringArrowConvertedResult: any = recoveringArrowConverted.throw("arrow-converted-recover-error");
+console.log("recover-arrow-converted", recoveringArrowConvertedFirst.done, recoveringArrowConvertedFirst.value, recoveringArrowConvertedResult.done, recoveringArrowConvertedResult.value, events.join("|"));
