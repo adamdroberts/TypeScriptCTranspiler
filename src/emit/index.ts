@@ -280,7 +280,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     conditionExpr: ts.Expression;
     conditionAwaitExpr: ts.AwaitExpression;
     bodyAwaitExpr: ts.AwaitExpression;
-    bodyPreludeStatements: readonly ts.ExpressionStatement[];
+    bodyPreludeStatements: readonly ts.Statement[];
     fallthroughExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
@@ -32446,7 +32446,15 @@ class Emitter {
         const bodyReturn = loopBody[loopBody.length - 1];
         if (!ts.isReturnStatement(bodyReturn) || !bodyReturn.expression) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
-        if (!bodyPreludeStatements.every(ts.isExpressionStatement)) return false;
+        if (!bodyPreludeStatements.every(ts.isExpressionStatement)) {
+            if (bodyPreludeStatements.length < 1 || !bodyPreludeStatements.slice(0, -1).every(ts.isExpressionStatement)) return false;
+            const localStatement = bodyPreludeStatements[bodyPreludeStatements.length - 1]!;
+            if (!ts.isVariableStatement(localStatement)) return false;
+            if ((localStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) return false;
+            if (localStatement.declarationList.declarations.length !== 1) return false;
+            const declaration = localStatement.declarationList.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+        }
         const bodyAwaitExpr = this.unwrapTransparentExpression(bodyReturn.expression);
         if (!ts.isAwaitExpression(bodyAwaitExpr)) return false;
         const conditionAwaitExpr = awaitExpressions[0]!;

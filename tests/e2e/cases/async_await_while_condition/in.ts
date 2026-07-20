@@ -123,6 +123,15 @@ async function chooseLoopReturnAwaitPrelude(condition: boolean, prefix: string):
     return prefix + "-fallthrough";
 }
 
+async function chooseLoopReturnAwaitLocal(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        prefix += "-before-local";
+        const bodyPromise = laterBodyValue(prefix);
+        return await bodyPromise;
+    }
+    return prefix + "-local-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -278,6 +287,8 @@ chooseLoopReturnAwaitNullish(true).then((value) => console.log("await-while-retu
 chooseLoopReturnAwaitNullish(false).then((value) => console.log("await-while-return-await-nullish-false", value));
 chooseLoopReturnAwaitPrelude(true, "body-await-prelude").then((value) => console.log("await-while-return-await-prelude-true", value));
 chooseLoopReturnAwaitPrelude(false, "body-await-prelude").then((value) => console.log("await-while-return-await-prelude-false", value));
+chooseLoopReturnAwaitLocal(true, "body-await-local").then((value) => console.log("await-while-return-await-local-true", value));
+chooseLoopReturnAwaitLocal(false, "body-await-local").then((value) => console.log("await-while-return-await-local-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));

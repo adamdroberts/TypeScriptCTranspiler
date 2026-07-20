@@ -14,6 +14,7 @@ await-while-return-await-fallthrough body-await-fallthrough
 await-while-return-await-logical-false body-await-logical-fallthrough
 await-while-return-await-nullish-false body-await-nullish-fallthrough
 await-while-return-await-prelude-false body-await-prelude-fallthrough
+await-while-return-await-local-false body-await-local-local-fallthrough
 await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
@@ -36,6 +37,7 @@ await-while-return-await-reject body-rejected
 await-while-return-await-logical-true body-await-logical
 await-while-return-await-nullish-true body-await-nullish
 await-while-return-await-prelude-true body-await-prelude-prelude
+await-while-return-await-local-true body-await-local-before-local
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
 await-while-or-true or-yes
