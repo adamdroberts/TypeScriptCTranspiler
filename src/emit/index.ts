@@ -35588,7 +35588,9 @@ class Emitter {
             return this.isLazyGeneratorFunctionValue(unwrapped.expression) ||
                 this.isLazyGeneratorPassthroughFunctionValue(unwrapped.expression);
         }
-        if (ts.isBinaryExpression(unwrapped) && unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+        if (ts.isBinaryExpression(unwrapped) &&
+            (unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+                unwrapped.operatorToken.kind === ts.SyntaxKind.BarBarToken)) {
             return this.isLazyGeneratorPassthroughExpression(unwrapped.left) ||
                 this.isLazyGeneratorPassthroughExpression(unwrapped.right);
         }
@@ -43084,6 +43086,15 @@ class Emitter {
                 return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
             }
             case ts.SyntaxKind.BarBarToken: {
+                if (left.ty.kind === "array" && right.ty.kind === "array" && sameCType(left.ty, right.ty)) {
+                    const tv = this.freshTemp("_orarr");
+                    const rc = this.coerce(right, left.ty, bin.right);
+                    return {
+                        c: `({ ${left.ty.c} ${tv} = ${left.c}; ${tv} != NULL ? ${tv} : ${rc}; })`,
+                        ty: left.ty,
+                        lazyGenerator: left.lazyGenerator || right.lazyGenerator,
+                    };
+                }
                 if (left.ty.kind === "string" && right.ty.kind === "string") {
                     const tmp = this.freshTemp("_orstr");
                     return {
