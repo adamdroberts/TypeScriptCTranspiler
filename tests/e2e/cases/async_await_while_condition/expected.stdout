@@ -30,6 +30,7 @@ await-while-return-await-alias-postlude-false body-return-alias-post-fallthrough
 await-while-throw-await-alias-postlude-false body-throw-alias-post-fallthrough
 await-while-return-await-assigned-alias-postlude-false body-return-assigned-post-fallthrough
 await-while-throw-await-assigned-alias-postlude-false body-throw-assigned-post-fallthrough
+await-while-return-await-assigned-alias-post-multiple-false body-return-assigned-post-multiple-fallthrough
 await-while-return-await-alias-post-local-false body-return-post-local-fallthrough
 await-while-throw-await-alias-post-local-false body-throw-post-local-fallthrough
 await-while-return-await-alias-post-multiple-false body-return-post-multiple-fallthrough
@@ -103,6 +104,7 @@ await-while-return-await-alias-postlude-true body-return-alias-postbody-return-u
 await-while-throw-await-alias-postlude-true body-throw-alias-post-updated
 await-while-return-await-assigned-alias-postlude-true body-return-assigned-postbody-return-updated
 await-while-throw-await-assigned-alias-postlude-true body-throw-assigned-post-updated
+await-while-return-await-assigned-alias-post-multiple-true body-return-assigned-post-multiplebody-return-first-second
 await-while-return-await-alias-post-local-true body-return-post-local-suffix
 await-while-throw-await-alias-post-local-true body-throw-post-local-suffix
 await-while-return-await-alias-post-multiple-true body-return-post-multiplebody-return-updated-suffix

@@ -271,6 +271,17 @@ async function chooseLoopThrowAwaitAssignedAliasPostlude(condition: boolean): Pr
     return "body-throw-assigned-post-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAssignedAliasPostMultiple(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        let value: string;
+        value = await laterBodyValue(prefix + "-assigned-post-multiple");
+        prefix += "-first";
+        prefix += "-second";
+        return value + prefix;
+    }
+    return prefix + "-assigned-post-multiple-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAliasPostLocal(condition: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-local");
@@ -906,6 +917,8 @@ chooseLoopReturnAwaitAssignedAliasPostlude(true, "body-return").then((value) => 
 chooseLoopReturnAwaitAssignedAliasPostlude(false, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-postlude-false", value));
 chooseLoopThrowAwaitAssignedAliasPostlude(true).catch((reason) => console.log("await-while-throw-await-assigned-alias-postlude-true", reason));
 chooseLoopThrowAwaitAssignedAliasPostlude(false).then((value) => console.log("await-while-throw-await-assigned-alias-postlude-false", value));
+chooseLoopReturnAwaitAssignedAliasPostMultiple(true, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-post-multiple-true", value));
+chooseLoopReturnAwaitAssignedAliasPostMultiple(false, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-post-multiple-false", value));
 chooseLoopReturnAwaitAliasPostLocal(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-local-true", value));
 chooseLoopReturnAwaitAliasPostLocal(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-local-false", value));
 chooseLoopThrowAwaitAliasPostLocal(true).catch((reason) => console.log("await-while-throw-await-alias-post-local-true", reason));
