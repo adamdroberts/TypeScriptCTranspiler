@@ -506,10 +506,16 @@ async function chooseLoopReturnAwaitAliasPostSwitch(condition: boolean, flag: bo
         const value = await laterBodyValue(prefix + "-post-switch");
         switch (flag) {
             case true:
-                prefix += "-switch";
+                {
+                    const suffix = "-switch";
+                    prefix += suffix;
+                }
                 break;
             case false:
-                prefix += "";
+                {
+                    let suffix = "";
+                    prefix += suffix;
+                }
                 break;
         }
         return value + prefix;
@@ -522,10 +528,16 @@ async function chooseLoopThrowAwaitAliasPostSwitch(condition: boolean, flag: boo
         let reason = await laterBodyValue("body-throw-post-switch");
         switch (flag) {
             case true:
-                reason += "-switch";
+                {
+                    const suffix = "-switch";
+                    reason += suffix;
+                }
                 break;
             case false:
-                reason += "";
+                {
+                    let suffix = "";
+                    reason += suffix;
+                }
                 break;
         }
         throw reason;
