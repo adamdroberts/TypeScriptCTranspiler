@@ -25877,34 +25877,52 @@ class Emitter {
         const result = body.statements[2];
         if (!ts.isVariableStatement(declaration) || !ts.isExpressionStatement(assignmentStmt) || !ts.isReturnStatement(result)) return null;
         if (!(declaration.declarationList.flags & ts.NodeFlags.Let)) return null;
-        if (declaration.declarationList.declarations.length !== 1) return null;
-        const variable = declaration.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(variable.name)) return null;
+        const declarations = declaration.declarationList.declarations;
+        if (declarations.length === 0) return null;
         const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
         if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const assignment = this.unwrapTransparentExpression(assignmentStmt.expression);
         if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) return null;
         const rhs = this.unwrapTransparentExpression(assignment.right);
         if (!ts.isAwaitExpression(rhs)) return null;
-        const variableSymbol = this.symbolForIdentifier(variable.name);
         const assignedSymbol = this.symbolForIdentifier(assignment.left);
         const resultSymbol = this.symbolForIdentifier(resultExpression);
-        if (!variableSymbol || variableSymbol !== assignedSymbol || variableSymbol !== resultSymbol) return null;
+        if (!assignedSymbol || assignedSymbol !== resultSymbol) return null;
+        const variableIndex = declarations.findIndex((candidate) =>
+            ts.isIdentifier(candidate.name) && this.symbolForIdentifier(candidate.name) === assignedSymbol);
+        if (variableIndex < 0 || variableIndex !== declarations.length - 1) return null;
+        const variable = declarations[variableIndex]!;
+        if (!ts.isIdentifier(variable.name)) return null;
+        const variableSymbol = this.symbolForIdentifier(variable.name);
+        if (!variableSymbol || variableSymbol !== assignedSymbol) return null;
         const preludeStatements: ts.Statement[] = [];
+        let synchronous = true;
+        const visitSynchronousInitializer = (node: ts.Node): void => {
+            if (!synchronous) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                synchronous = false;
+                return;
+            }
+            ts.forEachChild(node, visitSynchronousInitializer);
+        };
+        for (const candidate of declarations.slice(0, variableIndex)) {
+            if (!ts.isIdentifier(candidate.name) || !candidate.initializer) return null;
+            visitSynchronousInitializer(candidate.initializer);
+        }
         if (variable.initializer) {
             if (this.currentFunctionCellForSymbol(variableSymbol)) return null;
-            let initializerOk = true;
-            const visitInitializer = (node: ts.Node): void => {
-                if (!initializerOk) return;
-                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
-                    initializerOk = false;
-                    return;
-                }
-                ts.forEachChild(node, visitInitializer);
-            };
-            visitInitializer(variable.initializer);
-            if (!initializerOk) return null;
-            preludeStatements.push(declaration);
+            visitSynchronousInitializer(variable.initializer);
+        }
+        if (!synchronous) return null;
+        const preludeDeclarations = variable.initializer
+            ? declarations
+            : declarations.slice(0, variableIndex);
+        if (preludeDeclarations.length > 0) {
+            preludeStatements.push(ts.factory.updateVariableStatement(
+                declaration,
+                declaration.modifiers,
+                ts.factory.createVariableDeclarationList(preludeDeclarations, declaration.declarationList.flags),
+            ));
         }
         return { preludeStatements, awaitExpr: rhs };
     }

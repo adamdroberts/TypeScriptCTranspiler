@@ -31,6 +31,12 @@ async function chooseDirectAwaitMultipleLocals(prefix: string): Promise<string> 
     return value;
 }
 
+async function chooseDirectAwaitAssignedMultipleLocals(prefix: string): Promise<string> {
+    let source = prefix + "-assigned-source", value: string;
+    value = await laterBodyValue(source);
+    return value;
+}
+
 async function chooseLoopTrue(): Promise<string> {
     while (await laterTrue()) {
         return "loop-yes";
@@ -1044,3 +1050,4 @@ new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-w
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
 chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
+chooseDirectAwaitAssignedMultipleLocals("direct-assigned-multiple").then((value) => console.log("await-direct-assigned-multiple-locals", value));
