@@ -230,6 +230,22 @@ async function chooseLoopInitializerUninitializedEscapingVarFalseAwait(): Promis
     return await laterBodyValue(value);
 }
 
+async function chooseLoopInitializerUninitializedEscapingVarBreakThrowAwait(): Promise<string> {
+    for (var reason: any; await laterTrue();) {
+        reason = "loop-uninitialized-escaping-var-throw";
+        break;
+    }
+    throw await laterBodyValue(reason);
+}
+
+async function chooseLoopInitializerUninitializedEscapingVarFalseThrowAwait(): Promise<string> {
+    for (var reason: any; await laterFalse();) {
+        reason = "loop-uninitialized-escaping-var-false-throw-unexpected";
+        break;
+    }
+    throw await laterBodyValue(reason);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2335,6 +2351,8 @@ new EscapingVarLoopChooser().choose().then((value) => console.log("await-method-
 chooseEscapingVarLoopValue().then((value) => console.log("await-value-loop-initializer-escaping-var-false-break-await", value));
 chooseLoopInitializerUninitializedEscapingVarBreakAwait().then((value) => console.log("await-loop-initializer-uninitialized-escaping-var-break-await", value));
 chooseLoopInitializerUninitializedEscapingVarFalseAwait().then((value) => console.log("await-loop-initializer-uninitialized-escaping-var-false-await", value));
+chooseLoopInitializerUninitializedEscapingVarBreakThrowAwait().catch((reason) => console.log("await-loop-initializer-uninitialized-escaping-var-break-throw-await", reason));
+chooseLoopInitializerUninitializedEscapingVarFalseThrowAwait().catch((reason) => console.log("await-loop-initializer-uninitialized-escaping-var-false-throw-await", reason));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
