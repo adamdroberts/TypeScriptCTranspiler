@@ -27702,6 +27702,7 @@ class Emitter {
         const finallyInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
+        let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
@@ -27709,8 +27710,20 @@ class Emitter {
         if (!awaited && remainingTryStatements === 1) {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
             if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
-                const expressionContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                    this.unwrapTransparentExpression(tryStatement.expression),
+                const expression = this.unwrapTransparentExpression(tryStatement.expression);
+                const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                    expression,
+                    parameters,
+                    thisValue,
+                    [...prelude.captures, ...tryPrelude.captures],
+                );
+                if (sequenceContinuation) {
+                    awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
+                    successThrowExpr = sequenceContinuation.returnExpr;
+                    successSequenceContinuation = sequenceContinuation;
+                }
+                const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
+                    expression,
                     parameters,
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
@@ -27747,7 +27760,12 @@ class Emitter {
             : null;
         if (catchDecl && !catchSymbol) return null;
 
-        const params = [...this.asyncAwaitContinuationParameters(parameters), ...prelude.captures, ...tryPrelude.captures];
+        const params = [
+            ...this.asyncAwaitContinuationParameters(parameters),
+            ...prelude.captures,
+            ...tryPrelude.captures,
+            ...(successSequenceContinuation?.params ?? []),
+        ];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const param of params) paramsBySymbol.set(param.symbol, param);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -27961,6 +27979,7 @@ class Emitter {
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
             successThrowExpr,
+            successSequenceContinuation,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
             catchPreludeStatements,
@@ -27992,6 +28011,15 @@ class Emitter {
         buf: CBuf,
         continuation: AsyncAwaitTryCatchFinallyReturnContinuation,
     ): boolean {
+        if (continuation.successSequenceContinuation) {
+            return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
+                buf,
+                continuation.successSequenceContinuation,
+                false,
+                continuation,
+                continuation,
+            );
+        }
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -31142,6 +31170,7 @@ class Emitter {
         continuation: AsyncAwaitExpressionSequenceReturnContinuation,
         rejectResult = false,
         tryCatchContinuation?: AsyncAwaitTryCatchReturnContinuation,
+        tryCatchFinallyContinuation?: AsyncAwaitTryCatchFinallyReturnContinuation,
     ): boolean {
         const firstSource = this.emitExpr(continuation.awaitExprs[0]!.expression);
         const promiseTypes = continuation.awaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
@@ -31170,6 +31199,7 @@ class Emitter {
             continuation.shortCircuitOperator,
             rejectResult,
             tryCatchContinuation,
+            tryCatchFinallyContinuation,
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
@@ -31201,6 +31231,7 @@ class Emitter {
         shortCircuitOperator?: ts.SyntaxKind,
         rejectResult = false,
         tryCatchContinuation?: AsyncAwaitTryCatchReturnContinuation,
+        tryCatchFinallyContinuation?: AsyncAwaitTryCatchFinallyReturnContinuation,
     ): string {
         const stageNames = awaitExprs.map((_, index) =>
             `tsc_async_await_expression_sequence_${index}_${this.asyncAwaitReturnContinuationAdapters++}`);
@@ -31273,7 +31304,9 @@ class Emitter {
                         ? truthy
                         : `!(${nullish})`;
                 stageBuf.open(`if (${shortCircuit})`);
-                if (rejectResult) {
+                if (tryCatchContinuation) {
+                    stageBuf.line(`tsc_throw_str(${this.coerceToString(currentResult, returnExpr)});`);
+                } else if (rejectResult) {
                     stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${this.coerceToString(currentResult, returnExpr)}));`);
                 } else {
                     stageBuf.line(`${resolvedVar} = ${this.promiseResolveResult(currentResult, returnExpr)};`);
@@ -31388,24 +31421,65 @@ class Emitter {
                 } else if (!catchReturned || this.prepareType(catchReturned.ty).kind === "void" || this.prepareType(catchReturned.ty).kind === "never") {
                     if (catchReturned) stageBuf.line(`${catchReturned.c};`);
                     stageBuf.line("tsc_try_pop();");
-                    stageBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
+                    if (tryCatchFinallyContinuation) {
+                        stageBuf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                    } else {
+                        stageBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
+                    }
                 } else {
                     const catchType = this.prepareType(catchReturned.ty);
                     const catchReturn = this.freshTemp("_await_catch_return");
                     stageBuf.line(`${catchType.c} ${catchReturn} = ${catchReturned.c};`);
                     stageBuf.line("tsc_try_pop();");
-                    stageBuf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveResult({ c: catchReturn, ty: catchType }, tryCatchContinuation.catchReturnExpr!)});`);
+                    const catchResolved = this.promiseResolveResult({ c: catchReturn, ty: catchType }, tryCatchContinuation.catchReturnExpr!);
+                    if (tryCatchFinallyContinuation) {
+                        stageBuf.line(`${resolvedVar} = ${catchResolved};`);
+                    } else {
+                        stageBuf.line(`tsc_promise_adopt_into(_ret, ${catchResolved});`);
+                    }
                 }
                 stageBuf.close();
                 stageBuf.open("else");
                 stageBuf.line("tsc_try_pop();");
-                stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+                if (tryCatchFinallyContinuation) {
+                    stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+                } else {
+                    stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+                }
                 stageBuf.close();
             } else {
                 stageBuf.line("tsc_try_pop();");
                 stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
             }
             stageBuf.close();
+            if (tryCatchFinallyContinuation) {
+                stageBuf.line("tsc_try_frame_t _await_finally_eh;");
+                stageBuf.line("tsc_try_push(&_await_finally_eh);");
+                stageBuf.open("if (setjmp(_await_finally_eh.jb) == 0)");
+                const finallyScope = new Map<ts.Symbol, string>();
+                for (const param of tryCatchFinallyContinuation.params) {
+                    finallyScope.set(param.symbol, `state->${param.field}`);
+                }
+                this.argumentValueScopes.push(finallyScope);
+                if (tryCatchFinallyContinuation.thisValue) {
+                    this.functionThisStack.push({ c: "state->this_arg", ty: tryCatchFinallyContinuation.thisValue.ty });
+                }
+                this.asyncAwaitContinuationAdapterDepth++;
+                try {
+                    for (const statement of tryCatchFinallyContinuation.finallyStatements) this.emitStmt(stageBuf, statement);
+                } finally {
+                    this.asyncAwaitContinuationAdapterDepth--;
+                    if (tryCatchFinallyContinuation.thisValue) this.functionThisStack.pop();
+                    this.argumentValueScopes.pop();
+                }
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.close();
+                stageBuf.open("else");
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+                stageBuf.close();
+                stageBuf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+            }
             stageBuf.close();
             stageBuf.line();
             this.closureDefs.write(stageBuf.toString());

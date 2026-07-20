@@ -1,0 +1,8 @@
+finally: rejected
+rejected: caught:source-rejection
+finally: declaration
+declaration: caught:onetwothreefourfive
+finally: method
+method: caught:method-onemethod-twomethod-threemethod-fourmethod-five
+finally: arrow
+value: caught:arrow-onearrow-twoarrow-threearrow-fourarrow-five
