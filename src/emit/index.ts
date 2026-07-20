@@ -32451,6 +32451,7 @@ class Emitter {
             if (declaration.initializer) visitInitializer(declaration.initializer);
             return supported;
         };
+        let switchDepth = 0;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (
@@ -32459,7 +32460,8 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 ts.isThrowStatement(node) ||
-                ((ts.isBreakStatement(node) || ts.isContinueStatement(node)) && (!allowLoopControl || loopDepth === 0))
+                (ts.isBreakStatement(node) && (!allowLoopControl || (loopDepth === 0 && switchDepth === 0))) ||
+                (ts.isContinueStatement(node) && (!allowLoopControl || loopDepth === 0))
             ) {
                 ok = false;
                 return;
@@ -32491,6 +32493,12 @@ class Emitter {
                 loopDepth++;
                 ts.forEachChild(node, visit);
                 loopDepth--;
+                return;
+            }
+            if (ts.isSwitchStatement(node)) {
+                switchDepth++;
+                ts.forEachChild(node, visit);
+                switchDepth--;
                 return;
             }
             ts.forEachChild(node, visit);
@@ -32558,6 +32566,7 @@ class Emitter {
             if (declaration.initializer) visitInitializer(declaration.initializer);
             return supported;
         };
+        let switchDepth = 0;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (
@@ -32566,7 +32575,8 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 ts.isThrowStatement(node) ||
-                ((ts.isBreakStatement(node) || ts.isContinueStatement(node)) && loopDepth === 0) ||
+                (ts.isBreakStatement(node) && loopDepth === 0 && switchDepth === 0) ||
+                (ts.isContinueStatement(node) && loopDepth === 0) ||
                 (ts.isVariableDeclarationList(node) && !nestedLoopDeclarationSupported(node))
             ) {
                 ok = false;
@@ -32592,6 +32602,12 @@ class Emitter {
                 loopDepth++;
                 ts.forEachChild(node, visit);
                 loopDepth--;
+                return;
+            }
+            if (ts.isSwitchStatement(node)) {
+                switchDepth++;
+                ts.forEachChild(node, visit);
+                switchDepth--;
                 return;
             }
             ts.forEachChild(node, visit);

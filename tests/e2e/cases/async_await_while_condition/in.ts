@@ -507,8 +507,10 @@ async function chooseLoopReturnAwaitAliasPostSwitch(condition: boolean, flag: bo
         switch (flag) {
             case true:
                 prefix += "-switch";
+                break;
             case false:
                 prefix += "";
+                break;
         }
         return value + prefix;
     }
@@ -521,8 +523,10 @@ async function chooseLoopThrowAwaitAliasPostSwitch(condition: boolean, flag: boo
         switch (flag) {
             case true:
                 reason += "-switch";
+                break;
             case false:
                 reason += "";
+                break;
         }
         throw reason;
     }
