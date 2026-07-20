@@ -104,6 +104,12 @@ await-method-sync-finally-throw-prelude-true method-sync-finally-override
 await-method-sync-finally-throw-prelude-false method-sync-finally-fallthrough
 await-value-sync-finally-throw-prelude-true value-sync-finally-override
 await-value-sync-finally-throw-prelude-false value-sync-finally-fallthrough
+await-while-sync-uncaught-finally-throw-prelude-true sync-uncaught-finally-override
+await-while-sync-uncaught-finally-throw-prelude-false sync-uncaught-finally-fallthrough
+await-method-sync-uncaught-finally-throw-prelude-true method-sync-uncaught-finally-override
+await-method-sync-uncaught-finally-throw-prelude-false method-sync-uncaught-finally-fallthrough
+await-value-sync-uncaught-finally-throw-prelude-true value-sync-uncaught-finally-override
+await-value-sync-uncaught-finally-throw-prelude-false value-sync-uncaught-finally-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes

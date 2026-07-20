@@ -32710,10 +32710,10 @@ class Emitter {
                     ifBranchDeclarationSupported(node);
                 return;
             }
-            if (ts.isTryStatement(node) && allowCaughtThrows && node.catchClause) {
-                caughtThrowDepth++;
+            if (ts.isTryStatement(node) && allowCaughtThrows) {
+                if (node.catchClause) caughtThrowDepth++;
                 visit(node.tryBlock);
-                caughtThrowDepth--;
+                if (node.catchClause) caughtThrowDepth--;
                 if (node.catchClause) {
                     catchThrowDepth++;
                     visit(node.catchClause);
