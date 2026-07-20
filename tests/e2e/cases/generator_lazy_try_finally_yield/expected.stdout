@@ -5,3 +5,4 @@ throw: false throw-pause start|try-before|resumed:answer|finally|return-finally|
 caught: false catch-pause true caught
 caught-bound: false bound-catch-pause true bound-caught
 caught-used-bound: false used-catch-pause true handled-used-bound
+caught-composed-bound: false composed-catch-pause true caught:handled-composed-bound

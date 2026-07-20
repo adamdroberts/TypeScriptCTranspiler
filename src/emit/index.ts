@@ -35814,10 +35814,23 @@ class Emitter {
             return { returnStatement: last, catchClause: stmt.catchClause };
         }
         const catchDecl = stmt.catchClause.variableDeclaration;
-        if (!catchDecl || !ts.isIdentifier(catchDecl.name) || !ts.isIdentifier(expression)) return null;
+        if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
         const catchSymbol = this.symbolForIdentifier(catchDecl.name);
-        if (!catchSymbol || this.symbolForIdentifier(expression) !== catchSymbol) return null;
+        if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol)) return null;
         return { returnStatement: last, catchClause: stmt.catchClause };
+    }
+
+    private isSimpleLazyCatchReturnExpression(expr: ts.Expression, catchSymbol: ts.Symbol): boolean {
+        const expression = this.unwrapTransparentExpression(expr);
+        if (ts.isIdentifier(expression)) return this.symbolForIdentifier(expression) === catchSymbol;
+        if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) return false;
+        const left = this.unwrapTransparentExpression(expression.left);
+        const right = this.unwrapTransparentExpression(expression.right);
+        const isStringLiteral = (node: ts.Expression): boolean =>
+            ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
+        const isCatch = (node: ts.Expression): boolean =>
+            ts.isIdentifier(node) && this.symbolForIdentifier(node) === catchSymbol;
+        return (isCatch(left) && isStringLiteral(right)) || (isStringLiteral(left) && isCatch(right));
     }
 
     private lazyGeneratorTryTerminalReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {

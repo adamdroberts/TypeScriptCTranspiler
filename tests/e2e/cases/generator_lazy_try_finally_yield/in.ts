@@ -92,3 +92,17 @@ const caughtUsedBound = caughtUsedBoundThrow();
 const caughtUsedBoundFirst: any = caughtUsedBound.next();
 const caughtUsedBoundDone: any = caughtUsedBound.throw("handled-used-bound");
 console.log("caught-used-bound:", caughtUsedBoundFirst.done, caughtUsedBoundFirst.value, caughtUsedBoundDone.done, caughtUsedBoundDone.value);
+
+function* caughtComposedBoundThrow(): Generator<string, string, string> {
+    try {
+        yield "composed-catch-pause";
+    } catch (error: any) {
+        return "caught:" + error;
+    }
+    return "normal";
+}
+
+const caughtComposedBound = caughtComposedBoundThrow();
+const caughtComposedBoundFirst: any = caughtComposedBound.next();
+const caughtComposedBoundDone: any = caughtComposedBound.throw("handled-composed-bound");
+console.log("caught-composed-bound:", caughtComposedBoundFirst.done, caughtComposedBoundFirst.value, caughtComposedBoundDone.done, caughtComposedBoundDone.value);
