@@ -46,6 +46,14 @@ await-method-sync-switch-prelude-true method-sync-switch-body
 await-method-sync-switch-prelude-false method-sync-switch-fallthrough
 await-value-sync-switch-prelude-true value-sync-switch-body
 await-value-sync-switch-prelude-false value-sync-switch-fallthrough
+await-while-sync-iterator-prelude-true sync-iterator-body
+await-while-sync-iterator-prelude-false sync-iterator-fallthrough
+await-while-sync-key-prelude-true sync-key-body
+await-while-sync-key-prelude-false sync-key-fallthrough
+await-method-sync-iterator-prelude-true method-sync-iterator-body
+await-method-sync-iterator-prelude-false method-sync-iterator-fallthrough
+await-value-sync-iterator-prelude-true value-sync-iterator-body
+await-value-sync-iterator-prelude-false value-sync-iterator-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes

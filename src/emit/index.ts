@@ -32579,11 +32579,15 @@ class Emitter {
         return safe;
     }
 
-    private asyncAwaitLoopBodyControlPreludeSupported(stmt: ts.Statement, allowLoopControl = false): boolean {
+    private asyncAwaitLoopBodyControlPreludeSupported(
+        stmt: ts.Statement,
+        allowLoopControl = false,
+        allowTopLevelIteratorDeclaration = false,
+    ): boolean {
         let ok = true;
         let loopDepth = 0;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
-            if (loopDepth <= 1) return false;
+            if (loopDepth <= 1 && !allowTopLevelIteratorDeclaration) return false;
             if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
                 if (node.declarations.length !== 1 || !ts.isIdentifier(node.declarations[0]!.name)) return false;
                 const declaration = node.declarations[0]!;
@@ -33195,7 +33199,7 @@ class Emitter {
                     (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Const) === 0)
                 );
             }
-            return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
+            return this.asyncAwaitLoopBodyControlPreludeSupported(statement, false, true);
         });
         if (!bodyPreludeSupported) return false;
         if (!bodyReturnExpr) return false;
