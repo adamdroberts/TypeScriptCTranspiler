@@ -31,6 +31,17 @@ async function chooseDirectAwaitMultipleLocals(prefix: string): Promise<string> 
     return value;
 }
 
+async function chooseDirectAwaitMultipleControlPrelude(prefix: string): Promise<string> {
+    if (prefix.length > 0) prefix += "-if";
+    try {
+        prefix += "-try";
+    } finally {
+        prefix += "-finally";
+    }
+    const first = await laterBodyValue(prefix + "-first"), second = await laterBodyValue(first + "-second");
+    return second;
+}
+
 async function chooseDirectAwaitAssignedMultipleLocals(prefix: string): Promise<string> {
     let source = prefix + "-assigned-source", value: string;
     value = await laterBodyValue(source);
@@ -1132,6 +1143,7 @@ new LoopChooser("method-loop-").pickMultiple(false).then((value) => console.log(
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
 chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
+chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => console.log("await-direct-multiple-control-prelude", value));
 chooseDirectAwaitAssignedMultipleLocals("direct-assigned-multiple").then((value) => console.log("await-direct-assigned-multiple-locals", value));
 chooseDirectThrowAwaitMultipleLocals("direct-throw-multiple").catch((reason) => console.log("await-direct-throw-multiple-locals", reason));
 chooseMultipleAwaitDeclarators("multiple-await").then((value) => console.log("await-multiple-declarators", value));
