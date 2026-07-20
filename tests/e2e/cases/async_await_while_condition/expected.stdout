@@ -370,6 +370,8 @@ await-loop-initializer-escaping-var-switch-break-true loop-escaping-var-switch-y
 await-loop-initializer-escaping-var-switch-break-false loop-escaping-var-switch-no
 await-loop-initializer-escaping-var-nested-while-true loop-escaping-var-nested-while-nested
 await-loop-initializer-escaping-var-nested-while-false loop-escaping-var-nested-while
+await-loop-initializer-escaping-var-nested-do-true loop-escaping-var-nested-do-nested
+await-loop-initializer-escaping-var-nested-do-false loop-escaping-var-nested-do-nested
 await-loop-initializer-uninitialized-var-capture loop-uninitialized-var-captured
 await-loop-initializer-typed-uninitialized-var-capture loop-typed-uninitialized-var-captured
 await-loop-initializer-uninitialized-let-capture loop-uninitialized-let-captured
