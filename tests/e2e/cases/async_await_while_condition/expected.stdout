@@ -378,6 +378,7 @@ await-loop-initializer-escaping-var-try-catch-finally-try loop-escaping-var-catc
 await-loop-initializer-escaping-var-try-catch-finally-catch loop-escaping-var-catch-finally-catch-finally
 await-loop-initializer-escaping-var-nested-for-of loop-escaping-var-nested-for-of-first-second
 await-loop-initializer-escaping-var-nested-for-in loop-escaping-var-nested-for-in-first-second
+await-loop-initializer-escaping-var-nested-for loop-escaping-var-nested-for-0-1
 await-loop-initializer-uninitialized-var-capture loop-uninitialized-var-captured
 await-loop-initializer-typed-uninitialized-var-capture loop-typed-uninitialized-var-captured
 await-loop-initializer-uninitialized-let-capture loop-uninitialized-let-captured

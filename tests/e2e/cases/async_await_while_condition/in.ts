@@ -376,6 +376,16 @@ async function chooseLoopInitializerEscapingVarNestedForInBreakAwait(): Promise<
     return await laterBodyValue(value);
 }
 
+async function chooseLoopInitializerEscapingVarNestedForBreakAwait(): Promise<string> {
+    for (var value = "loop-escaping-var-nested-for"; await laterTrue();) {
+        for (let index = 0; index < 2; index++) {
+            value += "-" + index;
+        }
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2500,6 +2510,7 @@ chooseLoopInitializerEscapingVarTryCatchFinallyBreakAwait(false).then((value) =>
 chooseLoopInitializerEscapingVarTryCatchFinallyBreakAwait(true).then((value) => console.log("await-loop-initializer-escaping-var-try-catch-finally-catch", value));
 chooseLoopInitializerEscapingVarNestedForOfBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for-of", value));
 chooseLoopInitializerEscapingVarNestedForInBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for-in", value));
+chooseLoopInitializerEscapingVarNestedForBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
