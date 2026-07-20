@@ -32571,8 +32571,17 @@ class Emitter {
             bodyPreludeStatements = loopBody.slice(0, -2 - postCount);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else if (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) {
-            const assignmentStatement = loopBody[loopBody.length - 2];
-            const declarationStatement = loopBody[loopBody.length - 3];
+            const possibleAssignment = loopBody[loopBody.length - 3];
+            const assignmentPostCount = loopBody.length >= 4 &&
+                ts.isExpressionStatement(loopBody[loopBody.length - 2]) &&
+                ts.isExpressionStatement(possibleAssignment) &&
+                ts.isBinaryExpression(possibleAssignment.expression) &&
+                possibleAssignment.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken
+                ? 1
+                : 0;
+            const assignmentStatementIndex = loopBody.length - 2 - assignmentPostCount;
+            const assignmentStatement = loopBody[assignmentStatementIndex];
+            const declarationStatement = loopBody[assignmentStatementIndex - 1];
             if (!assignmentStatement || !declarationStatement || !ts.isExpressionStatement(assignmentStatement) ||
                 !ts.isVariableStatement(declarationStatement) ||
                 (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
@@ -32594,7 +32603,8 @@ class Emitter {
                 : assignmentAwait;
             bodyReturnExpr = bodyAction.expression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
-            bodyPreludeStatements = loopBody.slice(0, -3);
+            bodyPostAwaitStatements = assignmentPostCount === 1 ? [loopBody[loopBody.length - 2]!] : [];
+            bodyPreludeStatements = loopBody.slice(0, assignmentStatementIndex - 1);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else {
             return false;
