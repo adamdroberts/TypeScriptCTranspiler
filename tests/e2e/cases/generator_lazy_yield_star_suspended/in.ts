@@ -82,8 +82,12 @@ function convertRecoveringWrapper(iter: Generator<string, string, string>): Gene
     return (convertRecoveringSource(iter));
 }
 
+function convertRecoveringConditional(useFirst: boolean, iter: Generator<string, string, string>): Generator<any, string, string> {
+    return useFirst ? convertRecoveringSource(iter) : convertRecoveringSource(iter);
+}
+
 function* recoveringConvertedOuter(): Generator<string, string, string> {
-    const delegated = yield* convertRecoveringWrapper(recoveringInner());
+    const delegated = yield* convertRecoveringConditional(false, recoveringInner());
     events.push("recovering-converted-outer-after:" + delegated);
     return "recovering-converted-outer-done";
 }

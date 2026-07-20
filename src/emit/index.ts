@@ -35575,9 +35575,24 @@ class Emitter {
             return !!returnedSymbol && node.parameters.some((parameter) =>
                 ts.isIdentifier(parameter.name) && this.symbolForIdentifier(parameter.name) === returnedSymbol);
         }
-        return ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) &&
-            (this.isLazyGeneratorFunctionValue(expression.expression) ||
-                this.isLazyGeneratorPassthroughFunctionValue(expression.expression));
+        if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
+            return this.isLazyGeneratorFunctionValue(expression.expression) ||
+                this.isLazyGeneratorPassthroughFunctionValue(expression.expression);
+        }
+        return ts.isConditionalExpression(expression) &&
+            this.isLazyGeneratorPassthroughExpression(expression.whenTrue) &&
+            this.isLazyGeneratorPassthroughExpression(expression.whenFalse);
+    }
+
+    private isLazyGeneratorPassthroughExpression(expression: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expression);
+        if (ts.isCallExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
+            return this.isLazyGeneratorFunctionValue(unwrapped.expression) ||
+                this.isLazyGeneratorPassthroughFunctionValue(unwrapped.expression);
+        }
+        return ts.isConditionalExpression(unwrapped) &&
+            this.isLazyGeneratorPassthroughExpression(unwrapped.whenTrue) &&
+            this.isLazyGeneratorPassthroughExpression(unwrapped.whenFalse);
     }
 
     private isLazyGeneratorPassthroughParameter(node: ts.Node): boolean {
@@ -44266,7 +44281,12 @@ class Emitter {
                 `ternary branches have different types (${whenT.ty.c} vs ${whenF.ty.c})`,
             );
         }
-        return { c: `(${cond} ? ${whenT.c} : ${whenF.c})`, ty: whenT.ty };
+        return {
+            c: `(${cond} ? ${whenT.c} : ${whenF.c})`,
+            ty: whenT.ty,
+            lazyGenerator: whenT.lazyGenerator && whenF.lazyGenerator,
+            lazyGeneratorFactory: whenT.lazyGeneratorFactory && whenF.lazyGeneratorFactory,
+        };
     }
 
     private emitSequencedExpr(
