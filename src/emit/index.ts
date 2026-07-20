@@ -32540,6 +32540,19 @@ class Emitter {
             visit(expression);
             return supported && foundAlias;
         };
+        const bodySynchronousExpressionSupported = (expression: ts.Expression): boolean => {
+            let supported = true;
+            const visit = (node: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(expression);
+            return supported;
+        };
         const directBodyAwait = this.unwrapTransparentExpression(bodyAction.expression);
         if (ts.isAwaitExpression(directBodyAwait)) {
             const nestedBodyAwait = this.unwrapTransparentExpression(directBodyAwait.expression);
@@ -32581,7 +32594,9 @@ class Emitter {
                 ? this.unwrapTransparentExpression(declaration.initializer)
                 : null;
             if (!ts.isIdentifier(declaration.name) || !declarationAwait || !ts.isAwaitExpression(declarationAwait) ||
-                !declarationSymbol || !bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol)) return false;
+                !declarationSymbol ||
+                (!bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol) &&
+                    !bodySynchronousExpressionSupported(bodyAction.expression))) return false;
             const nestedDeclarationAwait = this.unwrapTransparentExpression(declarationAwait.expression);
             bodyAwaitExpr = ts.isAwaitExpression(nestedDeclarationAwait)
                 ? nestedDeclarationAwait
@@ -32615,7 +32630,8 @@ class Emitter {
             if (!ts.isIdentifier(declaration.name) || !declarationSymbol || declaration.initializer || !ts.isBinaryExpression(assignment) ||
                 assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left) ||
                 declarationSymbol !== this.symbolForIdentifier(assignment.left) ||
-                !bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol)) return false;
+                (!bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol) &&
+                    !bodySynchronousExpressionSupported(bodyAction.expression))) return false;
             const assignmentAwait = this.unwrapTransparentExpression(assignment.right);
             if (!ts.isAwaitExpression(assignmentAwait)) return false;
             const nestedAssignmentAwait = this.unwrapTransparentExpression(assignmentAwait.expression);
