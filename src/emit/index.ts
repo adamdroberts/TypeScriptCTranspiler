@@ -30317,7 +30317,7 @@ class Emitter {
             return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result, !!match.rejectResult);
         }
         this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, this.asyncAwaitIfExpressionReturnBranchParams(match.result));
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result);
+        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result, !!match.rejectResult);
     }
 
     private emitAsyncAwaitPreludeExpressionReturnContinuation(

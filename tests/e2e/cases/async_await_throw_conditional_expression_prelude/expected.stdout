@@ -1,0 +1,6 @@
+declaration-true: fn-true
+declaration-false: fn-false
+method-true: -methodtrue
+method-false: -methodfalse
+value-true: arrow-true
+value-false: arrow-false
