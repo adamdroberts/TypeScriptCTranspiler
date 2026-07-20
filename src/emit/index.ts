@@ -21999,6 +21999,15 @@ class Emitter {
         const declared = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         const initialized = new Set<ts.Symbol>();
         let index = 0;
+        let ok = true;
+        const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visitNoAwaitOrNestedScope);
+        };
         while (index < block.statements.length) {
             const stmt = block.statements[index]!;
             if (this.awaitedContinuationStep(stmt) || this.awaitedReturnContinuationStep(stmt)) break;
@@ -22021,7 +22030,8 @@ class Emitter {
                 const symbol = this.symbolForIdentifier(assignment.left);
                 const capture = symbol ? declared.get(symbol) : undefined;
                 if (!symbol || !capture || initialized.has(symbol)) return null;
-                if (!this.isSideEffectFreeTopLevelConstInitializer(assignment.right)) return null;
+                visitNoAwaitOrNestedScope(assignment.right);
+                if (!ok) return null;
                 initialized.add(symbol);
                 captures.push(capture);
                 preludeStatements.push(stmt);
@@ -22049,7 +22059,8 @@ class Emitter {
                         declared.set(symbol, capture);
                         continue;
                     }
-                    if (!this.isSideEffectFreeTopLevelConstInitializer(decl.initializer)) return null;
+                    visitNoAwaitOrNestedScope(decl.initializer);
+                    if (!ok) return null;
                     initialized.add(symbol);
                     captures.push(capture);
                 }

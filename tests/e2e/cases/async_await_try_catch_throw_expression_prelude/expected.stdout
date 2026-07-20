@@ -1,0 +1,3 @@
+declaration: fn-try-suffix-caught
+method: -trymethod-suffix-caught
+value: arrow-try-suffix-caught
