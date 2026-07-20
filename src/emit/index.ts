@@ -68543,10 +68543,17 @@ class Emitter {
 
         const closeBuf = new CBuf();
         closeBuf.open(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw)`);
-        closeBuf.line("(void)a;");
         closeBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
         closeBuf.open(`if (${env}->source->is_lazy_generator && ${env}->source->lazy_close)`);
-        closeBuf.line(`return ${env}->source->lazy_close(${env}->source, ${env}->source->env, arg, is_throw);`);
+        closeBuf.line(`bool _source_throw_unhandled = ${env}->source->lazy_close(${env}->source, ${env}->source->env, arg, is_throw);`);
+        closeBuf.open("if (is_throw && !_source_throw_unhandled)");
+        closeBuf.open("if (a->state >= 0 && a->lazy_next)");
+        closeBuf.line("bool _conversion_close_done = false;");
+        closeBuf.line("a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_conversion_close_done);");
+        closeBuf.close();
+        closeBuf.line("return false;");
+        closeBuf.close();
+        closeBuf.line("return _source_throw_unhandled;");
         closeBuf.close();
         closeBuf.line("return is_throw;");
         closeBuf.close();

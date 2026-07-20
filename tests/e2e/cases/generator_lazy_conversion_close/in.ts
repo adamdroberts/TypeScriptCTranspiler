@@ -10,6 +10,19 @@ function* source(): Generator<string, string, string> {
     return "inner-done";
 }
 
+function* recoveringSource(): Generator<string, string, string> {
+    try {
+        events.push("recovering-start");
+        yield "recovering-pause";
+    } catch (error: any) {
+        events.push("recovering-catch:" + error);
+        return "recovering-done";
+    } finally {
+        events.push("recovering-finally");
+    }
+    return "recovering-normal";
+}
+
 function closeThroughConversion(iter: Generator<any, string, string>): void {
     const first: any = iter.next();
     const result: any = iter.return("closed");
@@ -25,5 +38,12 @@ function throwThroughConversion(iter: Generator<any, string, string>): void {
     }
 }
 
+function recoverThroughConversion(iter: Generator<any, string, string>): void {
+    const first: any = iter.next();
+    const result: any = iter.throw("recover");
+    console.log("recover", first.done, first.value, result.done, result.value, events.join("|"));
+}
+
 closeThroughConversion(source());
 throwThroughConversion(source());
+recoverThroughConversion(recoveringSource());
