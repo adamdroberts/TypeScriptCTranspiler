@@ -32973,6 +32973,7 @@ class Emitter {
         fallthroughExpr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        loopInitializer: ts.Expression | null,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
@@ -33380,6 +33381,10 @@ class Emitter {
             bodyAdapter,
             continuation.bodyRejectResult,
         );
+        if (loopInitializer) {
+            const initializer = this.emitExpr(loopInitializer);
+            buf.line(`${initializer.c};`);
+        }
         const source = this.emitExpr(conditionAwaitExpr.expression);
         const sourcePromise = this.freshTemp("_await_source");
         const resultPromise = this.freshTemp("_await_result");
@@ -33570,6 +33575,22 @@ class Emitter {
         const loopBody = ts.isBlock(loopStatement)
             ? loopStatement.statements
             : [loopStatement];
+        const loopInitializer = ts.isForStatement(loop) && loop.initializer && ts.isExpression(loop.initializer)
+            ? loop.initializer
+            : null;
+        if (loopInitializer) {
+            let supported = true;
+            const visitInitializer = (node: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(node, visitInitializer);
+            };
+            visitInitializer(loopInitializer);
+            if (!supported) return false;
+        }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
             buf,
             condition,
@@ -33579,6 +33600,7 @@ class Emitter {
             fallthrough.expression,
             parameters,
             thisValue,
+            loopInitializer,
         )) return true;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
             return expressions.slice(1).reduce(
@@ -33755,16 +33777,20 @@ class Emitter {
                 flatten(condition);
                 if (flattenValid && flattened.length === awaitExpressions.length) {
                     if (flattened.length === 2) {
-                        const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
+                    const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
                             firstAwaitExpr: flattened[0]!,
                             secondAwaitExpr: flattened[1]!,
                             returnExpr,
                             params: capturedParams,
                             thisValue: continuationThisValue,
                             shortCircuitOperator: operator,
-                        };
-                        return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation);
+                    };
+                    if (loopInitializer) {
+                        const initializer = this.emitExpr(loopInitializer);
+                        buf.line(`${initializer.c};`);
                     }
+                    return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation);
+                }
                     const continuation: AsyncAwaitExpressionSequenceReturnContinuation = {
                         awaitExprs: flattened,
                         returnExpr,
@@ -33772,6 +33798,10 @@ class Emitter {
                         thisValue: continuationThisValue,
                         shortCircuitOperator: operator,
                     };
+                    if (loopInitializer) {
+                        const initializer = this.emitExpr(loopInitializer);
+                        buf.line(`${initializer.c};`);
+                    }
                     return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, continuation);
                 }
             }
@@ -33783,6 +33813,10 @@ class Emitter {
             params: capturedParams,
             thisValue: continuationThisValue,
         };
+        if (loopInitializer) {
+            const initializer = this.emitExpr(loopInitializer);
+            buf.line(`${initializer.c};`);
+        }
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
 

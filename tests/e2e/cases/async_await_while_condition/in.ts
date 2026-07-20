@@ -983,6 +983,13 @@ async function chooseForSynchronousIncrementor(flag: boolean): Promise<string> {
     return "for-incrementor-fallthrough";
 }
 
+async function chooseForSynchronousInitializer(flag: boolean): Promise<string> {
+    for (console.log("for-initializer"); await Promise.resolve(flag);) {
+        return "for-initializer-body";
+    }
+    return "for-initializer-fallthrough";
+}
+
 async function chooseLoopSynchronousThrowPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         void "sync-throw-prelude";
@@ -1249,6 +1256,13 @@ class LoopChooser {
         return "method-for-incrementor-fallthrough";
     }
 
+    async pickSynchronousInitializer(flag: boolean): Promise<string> {
+        for (console.log("method-for-initializer"); await Promise.resolve(flag);) {
+            return "method-for-initializer-body";
+        }
+        return "method-for-initializer-fallthrough";
+    }
+
     async pickSynchronousThrowPrelude(flag: boolean): Promise<string> {
         while (await Promise.resolve(flag)) {
             const reason = "method-sync-throw";
@@ -1466,6 +1480,13 @@ const chooseForSynchronousIncrementorValue = async (flag: boolean): Promise<stri
         return "value-for-incrementor-body";
     }
     return "value-for-incrementor-fallthrough";
+};
+
+const chooseForSynchronousInitializerValue = async (flag: boolean): Promise<string> => {
+    for (console.log("value-for-initializer"); await Promise.resolve(flag);) {
+        return "value-for-initializer-body";
+    }
+    return "value-for-initializer-fallthrough";
 };
 
 const chooseLoopSynchronousThrowPreludeValue = async (flag: boolean): Promise<string> => {
@@ -1870,6 +1891,12 @@ new LoopChooser("method-").pickSynchronousIncrementor(true).then((value) => cons
 new LoopChooser("method-").pickSynchronousIncrementor(false).then((value) => console.log("await-method-sync-incrementor-false", value));
 chooseForSynchronousIncrementorValue(true).then((value) => console.log("await-value-sync-incrementor-true", value));
 chooseForSynchronousIncrementorValue(false).then((value) => console.log("await-value-sync-incrementor-false", value));
+chooseForSynchronousInitializer(true).then((value) => console.log("await-for-sync-initializer-true", value));
+chooseForSynchronousInitializer(false).then((value) => console.log("await-for-sync-initializer-false", value));
+new LoopChooser("method-").pickSynchronousInitializer(true).then((value) => console.log("await-method-sync-initializer-true", value));
+new LoopChooser("method-").pickSynchronousInitializer(false).then((value) => console.log("await-method-sync-initializer-false", value));
+chooseForSynchronousInitializerValue(true).then((value) => console.log("await-value-sync-initializer-true", value));
+chooseForSynchronousInitializerValue(false).then((value) => console.log("await-value-sync-initializer-false", value));
 chooseLoopSynchronousThrowPrelude(true).catch((reason) => console.log("await-while-sync-throw-prelude-true", reason));
 chooseLoopSynchronousThrowPrelude(false).then((value) => console.log("await-while-sync-throw-prelude-false", value));
 new LoopChooser("method-").pickSynchronousThrowPrelude(true).catch((reason) => console.log("await-method-sync-throw-prelude-true", reason));

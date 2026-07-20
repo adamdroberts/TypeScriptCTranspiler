@@ -1,3 +1,9 @@
+for-initializer
+for-initializer
+method-for-initializer
+method-for-initializer
+value-for-initializer
+value-for-initializer
 await-while-sync-body-true sync-body
 await-while-sync-body-false sync-fallthrough
 await-for-sync-body-true for-sync-body
@@ -28,6 +34,12 @@ await-method-sync-incrementor-true method-for-incrementor-body
 await-method-sync-incrementor-false method-for-incrementor-fallthrough
 await-value-sync-incrementor-true value-for-incrementor-body
 await-value-sync-incrementor-false value-for-incrementor-fallthrough
+await-for-sync-initializer-true for-initializer-body
+await-for-sync-initializer-false for-initializer-fallthrough
+await-method-sync-initializer-true method-for-initializer-body
+await-method-sync-initializer-false method-for-initializer-fallthrough
+await-value-sync-initializer-true value-for-initializer-body
+await-value-sync-initializer-false value-for-initializer-fallthrough
 await-while-sync-throw-prelude-true sync-throw
 await-while-sync-throw-prelude-false sync-throw-prelude-fallthrough
 await-method-sync-throw-prelude-true method-sync-throw
