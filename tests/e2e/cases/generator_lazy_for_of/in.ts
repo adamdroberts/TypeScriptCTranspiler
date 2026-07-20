@@ -28,6 +28,17 @@ function* setValues(): Generator<number, string, number> {
     return "set-done";
 }
 
+function* mapValues(): Generator<number, string, number> {
+    const values: Map<string, number> = new Map<string, number>();
+    values.set("x", 9);
+    values.set("y", 10);
+    for (const entry of values) {
+        events.push("map:" + entry[0] + ":" + entry[1]);
+        yield entry[1];
+    }
+    return "map-done";
+}
+
 const n = numbers();
 console.log("n-created", events.join("|"));
 const n1: any = n.next(0);
@@ -48,3 +59,7 @@ const set1: any = set.next(0);
 console.log("set1", set1.done, set1.value, events.join("|"));
 const set2: any = set.next(0);
 console.log("set2", set2.done, set2.value, events.join("|"));
+
+const map = mapValues();
+const map1: any = map.next(0);
+console.log("map1", map1.done, map1.value, events.join("|"));

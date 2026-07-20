@@ -35688,9 +35688,11 @@ class Emitter {
                 ? sourceType.elem
                 : sourceType.kind === "string"
                     ? T_STRING
-                    : sourceType.kind === "set"
-                        ? sourceType.elem
-                    : null;
+                : sourceType.kind === "set"
+                    ? sourceType.elem
+                    : sourceType.kind === "map" && sourceType.key && sourceType.elem
+                        ? entryType(sourceType.elem, sourceType.key)
+                        : null;
             if (!elemType) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -36228,6 +36230,8 @@ class Emitter {
             ? `tsc_str_chars(${source.c})`
             : source.ty.kind === "set"
                 ? `tsc_set_values(${source.c})`
+                : source.ty.kind === "map"
+                    ? this.mapEntriesArrayExpr(stmt.expression, source.c, source.ty, "lazy generator Map for-of").c
                 : source.c;
         buf.open(`if (${envLocalName}->${info.arrayField} == NULL)`);
         buf.line(`${envLocalName}->${info.arrayField} = ${sourceArray};`);
@@ -36630,9 +36634,11 @@ class Emitter {
                         ? sourceType.elem
                         : sourceType.kind === "string"
                             ? T_STRING
-                            : sourceType.kind === "set"
-                                ? sourceType.elem
-                            : null;
+                        : sourceType.kind === "set"
+                            ? sourceType.elem
+                            : sourceType.kind === "map" && sourceType.key && sourceType.elem
+                                ? entryType(sourceType.elem, sourceType.key)
+                                : null;
                     if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays and strings");
                     const index = forOfInfos.length;
                     const info: LazyForOfInfo = {
