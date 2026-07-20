@@ -155,3 +155,24 @@ try {
 } catch (error: any) {
     console.log("caught-finally-normal-override:", caughtFinallyOverrideNormalFirst.done, caughtFinallyOverrideNormalFirst.value, error, caughtFinallyEvents.join("|"));
 }
+
+function* caughtFinallyReturnOverride(): Generator<string, string, string> {
+    try {
+        yield "return-override-pause";
+    } catch {
+        return "caught";
+    } finally {
+        caughtFinallyEvents.push("return-override-finally");
+        return "finally-return";
+    }
+}
+
+const caughtFinallyReturnOverrideThrow = caughtFinallyReturnOverride();
+const caughtFinallyReturnOverrideThrowFirst: any = caughtFinallyReturnOverrideThrow.next();
+const caughtFinallyReturnOverrideThrowDone: any = caughtFinallyReturnOverrideThrow.throw("handled-return-override");
+console.log("caught-finally-return-override:", caughtFinallyReturnOverrideThrowFirst.done, caughtFinallyReturnOverrideThrowFirst.value, caughtFinallyReturnOverrideThrowDone.done, caughtFinallyReturnOverrideThrowDone.value, caughtFinallyEvents.join("|"));
+
+const caughtFinallyReturnOverrideNormal = caughtFinallyReturnOverride();
+const caughtFinallyReturnOverrideNormalFirst: any = caughtFinallyReturnOverrideNormal.next();
+const caughtFinallyReturnOverrideNormalDone: any = caughtFinallyReturnOverrideNormal.next("resume");
+console.log("caught-finally-normal-return-override:", caughtFinallyReturnOverrideNormalFirst.done, caughtFinallyReturnOverrideNormalFirst.value, caughtFinallyReturnOverrideNormalDone.done, caughtFinallyReturnOverrideNormalDone.value, caughtFinallyEvents.join("|"));

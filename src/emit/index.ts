@@ -115,6 +115,7 @@ interface LazyGeneratorCatchHandler {
     catchClause: ts.CatchClause;
     finallyStatements: readonly ts.Statement[];
     finallyThrow: ts.ThrowStatement | null;
+    finallyReturn: ts.ReturnStatement | null;
 }
 
 interface LazyForOfInfo {
@@ -35808,7 +35809,11 @@ class Emitter {
             this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(finallyTail.expression))
             ? finallyTail
             : null;
-        const finallyBody = finallyThrow ? finallyStatements.slice(0, -1) : finallyStatements;
+        const finallyReturn = !finallyThrow && finallyTail && ts.isReturnStatement(finallyTail) && finallyTail.expression &&
+            this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(finallyTail.expression))
+            ? finallyTail
+            : null;
+        const finallyBody = finallyThrow || finallyReturn ? finallyStatements.slice(0, -1) : finallyStatements;
         if (
             finallyBody.some((child) => this.nodeContainsYield(child)) ||
             finallyBody.some((child) => this.lazyGeneratorContainsAbruptControlFlow(child)) ||
@@ -35825,13 +35830,13 @@ class Emitter {
         if (catchStatements.length !== 1) return null;
         const expression = this.unwrapTransparentExpression(last.expression);
         if (this.isSimpleLazyMultiYieldLiteral(expression)) {
-            return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow };
+            return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
         }
         const catchDecl = stmt.catchClause.variableDeclaration;
         if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
         const catchSymbol = this.symbolForIdentifier(catchDecl.name);
         if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol)) return null;
-        return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow };
+        return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
     }
 
     private isSimpleLazyCatchReturnExpression(expr: ts.Expression, catchSymbol: ts.Symbol): boolean {
@@ -36559,6 +36564,20 @@ class Emitter {
             buf.close();
             return;
         }
+        const finallyReturn = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .map((handler) => handler.finallyReturn)
+            .find((returnStatement): returnStatement is ts.ReturnStatement => !!returnStatement);
+        if (finallyReturn) {
+            const returned = this.emitExpr(finallyReturn.expression!);
+            buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, finallyReturn.expression!)};`);
+            buf.line("a->iter_has_return = true;");
+            buf.line("a->iter_return_consumed = false;");
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            buf.line("return;");
+            buf.close();
+            return;
+        }
         buf.line("*state = -1;");
     buf.line("*done = true;");
         buf.line("return;");
@@ -36690,6 +36709,14 @@ class Emitter {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");
                 this.emitThrow(buf, catchReturn.finallyThrow);
+                buf.line("return;");
+            } else if (catchReturn.finallyReturn) {
+                const returned = this.emitExpr(catchReturn.finallyReturn.expression!);
+                buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, catchReturn.finallyReturn.expression!)};`);
+                buf.line("a->iter_has_return = true;");
+                buf.line("a->iter_return_consumed = false;");
+                buf.line("*state = -1;");
+                buf.line("*done = true;");
                 buf.line("return;");
             }
             buf.close();
