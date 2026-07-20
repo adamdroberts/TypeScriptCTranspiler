@@ -26,6 +26,10 @@ function* booleanUnaryLeaves(): Generator<any, any, any> {
     return !(yield 0) + (yield 2);
 }
 
+function* typeofLeaves(): Generator<number, string, number> {
+    return typeof (yield 7) + (yield 8);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -72,3 +76,8 @@ const booleanUnaryFirst: any = booleanUnaryIter.next();
 const booleanUnarySecond: any = booleanUnaryIter.next(0);
 const booleanUnaryDone: any = booleanUnaryIter.next(2);
 console.log("boolean-unary", booleanUnaryFirst.value, booleanUnarySecond.value, booleanUnaryDone.done, booleanUnaryDone.value);
+const typeofIter = typeofLeaves();
+const typeofFirst: any = typeofIter.next();
+const typeofSecond: any = typeofIter.next(1);
+const typeofDone: any = typeofIter.next(2);
+console.log("typeof", typeofFirst.value, typeofSecond.value, typeofDone.done, typeofDone.value);

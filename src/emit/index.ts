@@ -37580,6 +37580,7 @@ class Emitter {
                 return true;
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return true;
+            if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isPrefixUnaryExpression(unwrapped)) {
                 if (![ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) return false;
                 return visit(unwrapped.operand);
@@ -38654,6 +38655,9 @@ class Emitter {
                 };
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return this.emitExpr(unwrapped);
+            if (ts.isTypeOfExpression(unwrapped)) {
+                return this.emitSimpleLazyResumeTypeOf(unwrapped, build(unwrapped.expression));
+            }
             if (ts.isPrefixUnaryExpression(unwrapped)) {
                 return this.emitSimpleLazyResumePrefixUnary(unwrapped, build(unwrapped.operand));
             }
@@ -38697,6 +38701,25 @@ class Emitter {
             default:
                 unsupported(expr, "lazy multi-yield return contains an unsupported prefix operator");
         }
+    }
+
+    private emitSimpleLazyResumeTypeOf(
+        expr: ts.TypeOfExpression,
+        inner: EmitResult,
+    ): EmitResult {
+        const result = this.typeofName(expr.expression, inner.ty);
+        const nullishResult = this.nullishTypeofName(expr.expression);
+        if (inner.ty.kind === "value") {
+            return { c: `tsc_value_typeof(${inner.c})`, ty: T_STRING };
+        }
+        if (nullishResult && isPointerKind(inner.ty) && nullishResult !== result) {
+            const temp = this.freshTemp("_typeof");
+            return {
+                c: `({ ${inner.ty.c} ${temp} = ${inner.c}; ${temp} != NULL ? ${this.stringLit(result)} : ${this.stringLit(nullishResult)}; })`,
+                ty: T_STRING,
+            };
+        }
+        return { c: `({ (void)(${inner.c}); ${this.stringLit(result)}; })`, ty: T_STRING };
     }
 
     private emitSimpleLazyGeneratorLike(

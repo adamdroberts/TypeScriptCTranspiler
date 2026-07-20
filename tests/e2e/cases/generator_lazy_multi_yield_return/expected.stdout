@@ -5,3 +5,4 @@ long 1,2,3,4,5,6,7,8,9,10,55 true 55
 mixed 1 2 true 143
 unary 5 2 true -5
 boolean-unary 0 2 true 3
+typeof 7 8 true number2
