@@ -30882,10 +30882,18 @@ class Emitter {
                 parameters,
                 thisValue,
             );
-            if (!sequenceContinuation || !this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {
-                return false;
+            if (sequenceContinuation && this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {
+                return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, sequenceContinuation);
             }
-            return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, sequenceContinuation);
+            const singleContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                nestedExpression,
+                parameters,
+                thisValue,
+            );
+            if (singleContinuation && this.asyncAwaitExpressionReturnContinuationSupported(singleContinuation)) {
+                return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, singleContinuation);
+            }
+            return false;
         }
         const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
             expression,
