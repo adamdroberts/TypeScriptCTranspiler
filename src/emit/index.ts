@@ -32643,9 +32643,7 @@ class Emitter {
         };
         const switchClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                node.declarations.length !== 1) return false;
-            const declaration = node.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name)) return false;
+                node.declarations.length === 0) return false;
             const variableStatement = node.parent;
             if (!ts.isVariableStatement(variableStatement)) return false;
             const clauseParent = variableStatement.parent;
@@ -32654,7 +32652,7 @@ class Emitter {
                 : ts.isBlock(clauseParent) && (ts.isCaseClause(clauseParent.parent) || ts.isDefaultClause(clauseParent.parent))
                     ? clauseParent.parent
                     : null;
-            if (!clause || (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+            if (!clause) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
@@ -32664,19 +32662,20 @@ class Emitter {
                 }
                 ts.forEachChild(child, visitInitializer);
             };
-            if (declaration.initializer) visitInitializer(declaration.initializer);
+            for (const declaration of node.declarations) {
+                if (!ts.isIdentifier(declaration.name) ||
+                    (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+                if (declaration.initializer) visitInitializer(declaration.initializer);
+            }
             return supported;
         };
         const tryClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                node.declarations.length !== 1) return false;
-            const declaration = node.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name)) return false;
+                node.declarations.length === 0) return false;
             const variableStatement = node.parent;
             if (!ts.isVariableStatement(variableStatement) || !ts.isBlock(variableStatement.parent)) return false;
             const owner = variableStatement.parent.parent;
             if (!owner || (!ts.isTryStatement(owner) && !ts.isCatchClause(owner))) return false;
-            if (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
@@ -32686,18 +32685,19 @@ class Emitter {
                 }
                 ts.forEachChild(child, visitInitializer);
             };
-            if (declaration.initializer) visitInitializer(declaration.initializer);
+            for (const declaration of node.declarations) {
+                if (!ts.isIdentifier(declaration.name) ||
+                    (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+                if (declaration.initializer) visitInitializer(declaration.initializer);
+            }
             return supported;
         };
         const ifBranchDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                node.declarations.length !== 1) return false;
-            const declaration = node.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name)) return false;
+                node.declarations.length === 0) return false;
             const variableStatement = node.parent;
             if (!ts.isVariableStatement(variableStatement) || !ts.isBlock(variableStatement.parent) ||
                 !ts.isIfStatement(variableStatement.parent.parent)) return false;
-            if (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
@@ -32707,7 +32707,11 @@ class Emitter {
                 }
                 ts.forEachChild(child, visitInitializer);
             };
-            if (declaration.initializer) visitInitializer(declaration.initializer);
+            for (const declaration of node.declarations) {
+                if (!ts.isIdentifier(declaration.name) ||
+                    (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+                if (declaration.initializer) visitInitializer(declaration.initializer);
+            }
             return supported;
         };
         let switchDepth = 0;

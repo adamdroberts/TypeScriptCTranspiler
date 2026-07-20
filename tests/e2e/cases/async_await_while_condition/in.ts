@@ -683,7 +683,10 @@ async function chooseLoopReturnAwaitAliasPostForOfLocal(condition: boolean, pref
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-for-of-local");
         for (const item of ["-item"]) {
-            prefix += item;
+            if (item) {
+                const suffix = item, extra = "";
+                prefix += suffix + extra;
+            }
         }
         return value + prefix;
     }
@@ -694,7 +697,13 @@ async function chooseLoopReturnAwaitAliasPostForInLocal(condition: boolean, pref
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-for-in-local");
         for (const item in ["item"]) {
-            prefix += item;
+            switch (item) {
+                case "0": {
+                    const suffix = item, extra = "";
+                    prefix += suffix + extra;
+                    break;
+                }
+            }
         }
         return value + prefix;
     }
