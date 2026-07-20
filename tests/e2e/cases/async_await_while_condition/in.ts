@@ -481,6 +481,34 @@ async function chooseLoopThrowAwaitAliasPostDo(condition: boolean, flag: boolean
     return "body-throw-post-do-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostSwitch(condition: boolean, flag: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-post-switch");
+        switch (flag) {
+            case true:
+                prefix += "-switch";
+            case false:
+                prefix += "";
+        }
+        return value + prefix;
+    }
+    return prefix + "-post-switch-fallthrough";
+}
+
+async function chooseLoopThrowAwaitAliasPostSwitch(condition: boolean, flag: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        let reason = await laterBodyValue("body-throw-post-switch");
+        switch (flag) {
+            case true:
+                reason += "-switch";
+            case false:
+                reason += "";
+        }
+        throw reason;
+    }
+    return "body-throw-post-switch-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -719,6 +747,12 @@ chooseLoopReturnAwaitAliasPostDo(false, true, "body-return").then((value) => con
 chooseLoopThrowAwaitAliasPostDo(true, true).catch((reason) => console.log("await-while-throw-await-alias-post-do-true", reason));
 chooseLoopThrowAwaitAliasPostDo(true, false).catch((reason) => console.log("await-while-throw-await-alias-post-do-false", reason));
 chooseLoopThrowAwaitAliasPostDo(false, true).then((value) => console.log("await-while-throw-await-alias-post-do-fallthrough", value));
+chooseLoopReturnAwaitAliasPostSwitch(true, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-switch-true", value));
+chooseLoopReturnAwaitAliasPostSwitch(true, false, "body-return").then((value) => console.log("await-while-return-await-alias-post-switch-false", value));
+chooseLoopReturnAwaitAliasPostSwitch(false, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-switch-fallthrough", value));
+chooseLoopThrowAwaitAliasPostSwitch(true, true).catch((reason) => console.log("await-while-throw-await-alias-post-switch-true", reason));
+chooseLoopThrowAwaitAliasPostSwitch(true, false).catch((reason) => console.log("await-while-throw-await-alias-post-switch-false", reason));
+chooseLoopThrowAwaitAliasPostSwitch(false, true).then((value) => console.log("await-while-throw-await-alias-post-switch-fallthrough", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
