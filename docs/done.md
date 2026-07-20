@@ -3375,6 +3375,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | while conditions without initializers preserve parameter-backed state through outer continue and a second throw-await |
 | `async_await_while_condition` | while outer-continue state-machine coverage includes async instance methods and arrow function values |
 | `async_await_while_condition` | while outer-continue continuations preserve async method receiver capture through the second await |
+| `async_await_while_condition` | while outer-continue bodies preserve await-free if preludes before repeated condition and final await |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
 | `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations remain scoped around the first conditional await source |
 | `async_await_conditional_branch_assigned_prelude` | branch-local let declarations are assigned before the first conditional await source |
