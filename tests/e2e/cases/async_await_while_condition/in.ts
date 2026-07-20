@@ -186,6 +186,13 @@ async function chooseLoopInitializerUninitializedLetConditionCapture(): Promise<
     return "loop-uninitialized-let-condition-fallthrough";
 }
 
+async function chooseLoopInitializerUninitializedLetConditionFallthrough(): Promise<string> {
+    for (let value: any; await laterCondition(value !== undefined);) {
+        return "loop-uninitialized-let-condition-unexpected-body";
+    }
+    return "loop-uninitialized-let-condition-fallthrough";
+}
+
 class LoopInitializerCaptureChooser {
     async choose(): Promise<string> {
         for (let value = "loop-method-condition-captured"; await laterCondition(value.length > 0);) {
@@ -2216,6 +2223,7 @@ chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log(
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
 chooseLoopInitializerUninitializedLetCapture().then((value) => console.log("await-loop-initializer-uninitialized-let-capture", value));
 chooseLoopInitializerUninitializedLetConditionCapture().then((value) => console.log("await-loop-initializer-uninitialized-let-condition-capture", value));
+chooseLoopInitializerUninitializedLetConditionFallthrough().then((value) => console.log("await-loop-initializer-uninitialized-let-condition-fallthrough", value));
 new LoopInitializerCaptureChooser().choose().then((value) => console.log("await-method-loop-initializer-condition-capture", value));
 chooseLoopInitializerConditionCaptureValue().then((value) => console.log("await-value-loop-initializer-condition-capture", value));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
