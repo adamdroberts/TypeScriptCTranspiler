@@ -1,0 +1,3 @@
+declaration: ["left","right"]
+method: {"first":"method-left","second":"method-right"}
+value: ["arrow-left","arrow-right"]
