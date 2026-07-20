@@ -35752,6 +35752,7 @@ class Emitter {
                     if (!ts.isIdentifier(decl.name)) return false;
                 }
             }
+            if (this.simpleLazyTwoYieldReturn(stmt)) return true;
             const yieldExpr = this.simpleLazyYieldExpression(stmt);
             if (yieldExpr) {
                 if (yieldExpr.asteriskToken && (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression))) {
@@ -35904,6 +35905,41 @@ class Emitter {
             return stmt.expression ? this.singleYieldExpressionInExpression(stmt.expression) : null;
         }
         return null;
+    }
+
+    private simpleLazyTwoYieldReturn(stmt: ts.Statement): {
+        expression: ts.BinaryExpression;
+        left: ts.YieldExpression;
+        right: ts.YieldExpression;
+    } | null {
+        if (!ts.isReturnStatement(stmt) || !stmt.expression || !ts.isBinaryExpression(stmt.expression)) return null;
+        const op = stmt.expression.operatorToken.kind;
+        if (![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
+            ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
+            ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
+            ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken,
+            ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken].includes(op)) return null;
+        const left = this.unwrapTransparentExpression(stmt.expression.left);
+        const right = this.unwrapTransparentExpression(stmt.expression.right);
+        if (!ts.isYieldExpression(left) || !ts.isYieldExpression(right) || left.asteriskToken || right.asteriskToken) return null;
+        if ((left.expression && this.nodeContainsYield(left.expression)) ||
+            (right.expression && this.nodeContainsYield(right.expression))) return null;
+        return { expression: stmt.expression, left, right };
+    }
+
+    private lazyGeneratorHasTwoYieldReturn(node: ts.Node): boolean {
+        let found = false;
+        const visit = (current: ts.Node): void => {
+            if (found) return;
+            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+            if (this.simpleLazyTwoYieldReturn(current as ts.Statement)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return found;
     }
 
     private endsWithUnconditionalBreak(stmt: ts.Statement): boolean {
@@ -36511,6 +36547,20 @@ class Emitter {
             return;
         }
 
+        const twoYieldReturn = this.simpleLazyTwoYieldReturn(stmt);
+        if (twoYieldReturn) {
+            if (!envLocalName) unsupported(stmt, "lazy generator multi-yield return requires an environment");
+            this.emitLazyGeneratorTwoYieldReturn(
+                buf,
+                twoYieldReturn,
+                elemType,
+                envLocalName,
+                nextStateId,
+                nextYieldStarSlot,
+            );
+            return;
+        }
+
         if (ts.isThrowStatement(stmt) && !this.simpleLazyYieldExpression(stmt)) {
             buf.line("*state = -1;");
             buf.line("*done = true;");
@@ -36603,6 +36653,62 @@ class Emitter {
         }
 
         this.emitStmt(buf, stmt);
+    }
+
+    private emitLazyGeneratorTwoYieldReturn(
+        buf: CBuf,
+        info: { expression: ts.BinaryExpression; left: ts.YieldExpression; right: ts.YieldExpression },
+        elemType: CType,
+        envLocalName: string,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+    ): void {
+        const firstState = nextStateId();
+        const secondState = nextStateId();
+        const firstValue = info.left.expression
+            ? this.emitExpr(info.left.expression)
+            : { c: "NULL", ty: T_VOID };
+        const firstNode = info.left.expression ?? info.left;
+        const firstYield = this.freshTemp("_yield");
+        buf.line(`${elemType.c} ${firstYield} = ${this.coerce(firstValue, elemType, firstNode)};`);
+        buf.line(`tsc_array_push_raw(a, &${firstYield});`);
+        buf.line(`*state = ${firstState};`);
+        buf.line("*done = false;");
+        buf.line("return;");
+        buf.line(`case ${firstState}:;`);
+        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+        buf.line(`${envLocalName}->multi_yield_left = next_arg;`);
+
+        const secondValue = info.right.expression
+            ? this.emitExpr(info.right.expression)
+            : { c: "NULL", ty: T_VOID };
+        const secondNode = info.right.expression ?? info.right;
+        const secondYield = this.freshTemp("_yield");
+        buf.line(`${elemType.c} ${secondYield} = ${this.coerce(secondValue, elemType, secondNode)};`);
+        buf.line(`tsc_array_push_raw(a, &${secondYield});`);
+        buf.line(`*state = ${secondState};`);
+        buf.line("*done = false;");
+        buf.line("return;");
+        buf.line(`case ${secondState}:;`);
+        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+
+        const leftType = this.prepareType(mapTsType(info.left, this.checker.getTypeAtLocation(info.left), this.checker));
+        const rightType = this.prepareType(mapTsType(info.right, this.checker.getTypeAtLocation(info.right), this.checker));
+        const left = {
+            c: this.coerce({ c: `${envLocalName}->multi_yield_left`, ty: T_VALUE }, leftType, info.left),
+            ty: leftType,
+        };
+        const right = {
+            c: this.coerce({ c: "next_arg", ty: T_VALUE }, rightType, info.right),
+            ty: rightType,
+        };
+        const result = this.emitSimpleLazyResumeBinary(info.expression, left, right);
+        buf.line(`a->iter_return = ${this.coerce(result, T_VALUE, info.expression)};`);
+        buf.line("a->iter_has_return = true;");
+        buf.line("a->iter_return_consumed = false;");
+        buf.line("*state = -1;");
+        buf.line("*done = true;");
+        buf.line("return;");
     }
 
     private emitSimpleLazyGeneratorLike(
@@ -36765,6 +36871,7 @@ class Emitter {
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
         const yieldStarCount = this.countSimpleLazyYieldStars(fn.body);
         const hasYieldStar = yieldStarCount > 0;
+        const hasTwoYieldReturn = this.lazyGeneratorHasTwoYieldReturn(fn.body);
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
         const hasLazyClose = hasYieldStar || hasLazyFinalizer;
         const needsEnv = runtimeParamInfos.length > 0 ||
@@ -36773,6 +36880,7 @@ class Emitter {
             forOfInfos.length > 0 ||
             forInInfos.length > 0 ||
             !!implicitThisParam ||
+            hasTwoYieldReturn ||
             hasLazyClose;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
         const thisField = implicitThisParam ? "this_arg" : null;
@@ -36789,6 +36897,9 @@ class Emitter {
             }
             for (const info of compoundResumeInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            if (hasTwoYieldReturn) {
+                this.structDecls.line("tsc_value_t multi_yield_left;");
             }
             for (const { info } of forOfInfos) {
                 this.structDecls.line(`tsc_array_t* ${info.arrayField};`);
@@ -36933,6 +37044,9 @@ class Emitter {
             }
             for (const info of compoundResumeInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
+            }
+            if (hasTwoYieldReturn) {
+                buf.line(`${envVar}->multi_yield_left = tsc_value_undefined();`);
             }
             for (const { info } of forOfInfos) {
                 buf.line(`${envVar}->${info.arrayField} = NULL;`);
