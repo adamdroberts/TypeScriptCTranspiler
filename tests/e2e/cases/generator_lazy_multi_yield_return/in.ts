@@ -30,6 +30,14 @@ function* typeofLeaves(): Generator<number, string, number> {
     return typeof (yield 7) + (yield 8);
 }
 
+function* comparisonLeaves(): Generator<number, boolean, number> {
+    return (yield 9) < (yield 10);
+}
+
+function* equalityLeaves(): Generator<number, boolean, number> {
+    return (yield 11) === (yield 12);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -81,3 +89,13 @@ const typeofFirst: any = typeofIter.next();
 const typeofSecond: any = typeofIter.next(1);
 const typeofDone: any = typeofIter.next(2);
 console.log("typeof", typeofFirst.value, typeofSecond.value, typeofDone.done, typeofDone.value);
+const comparisonIter = comparisonLeaves();
+const comparisonFirst: any = comparisonIter.next();
+const comparisonSecond: any = comparisonIter.next(1);
+const comparisonDone: any = comparisonIter.next(3);
+console.log("comparison", comparisonFirst.value, comparisonSecond.value, comparisonDone.done, comparisonDone.value);
+const equalityIter = equalityLeaves();
+const equalityFirst: any = equalityIter.next();
+const equalitySecond: any = equalityIter.next(4);
+const equalityDone: any = equalityIter.next(4);
+console.log("equality", equalityFirst.value, equalitySecond.value, equalityDone.done, equalityDone.value);
