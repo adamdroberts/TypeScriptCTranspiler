@@ -280,6 +280,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     conditionExpr: ts.Expression;
     conditionAwaitExpr: ts.AwaitExpression;
     bodyAwaitExpr: ts.AwaitExpression;
+    bodyPreludeStatements: readonly ts.ExpressionStatement[];
     fallthroughExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
@@ -32442,8 +32443,11 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
-        if (loopBody.length !== 1 || !ts.isReturnStatement(loopBody[0]!) || !loopBody[0]!.expression) return false;
-        const bodyAwaitExpr = this.unwrapTransparentExpression(loopBody[0]!.expression);
+        const bodyReturn = loopBody[loopBody.length - 1];
+        if (!ts.isReturnStatement(bodyReturn) || !bodyReturn.expression) return false;
+        const bodyPreludeStatements = loopBody.slice(0, -1);
+        if (!bodyPreludeStatements.every(ts.isExpressionStatement)) return false;
+        const bodyAwaitExpr = this.unwrapTransparentExpression(bodyReturn.expression);
         if (!ts.isAwaitExpression(bodyAwaitExpr)) return false;
         const conditionAwaitExpr = awaitExpressions[0]!;
         const conditionPromiseType = this.prepareType(mapTsType(
@@ -32518,6 +32522,7 @@ class Emitter {
             ts.forEachChild(node, visitReferences);
         };
         visitReferences(condition);
+        for (const statement of bodyPreludeStatements) visitReferences(statement);
         visitReferences(bodyAwaitExpr);
         visitReferences(fallthroughExpr);
         if (!ok) return false;
@@ -32527,6 +32532,7 @@ class Emitter {
             conditionExpr: condition,
             conditionAwaitExpr,
             bodyAwaitExpr,
+            bodyPreludeStatements,
             fallthroughExpr,
             params: capturedParams,
             thisValue: usesThis ? thisValue : null,
@@ -32623,6 +32629,7 @@ class Emitter {
             const emittedCondition = this.emitExpr(continuation.conditionExpr);
             const conditionTruth = this.truthyC(emittedCondition, continuation.conditionExpr);
             buf.open(`if (${conditionTruth})`);
+            for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
             const bodySource = this.emitExpr(continuation.bodyAwaitExpr.expression);
             const bodySourceVar = this.freshTemp("_await_body_source");
             const bodyEnvVar = this.freshTemp("_await_body_env");
