@@ -164,6 +164,14 @@ async function chooseLoopInitializerEscapingVarMultipleBreak(): Promise<string> 
     return value;
 }
 
+async function chooseLoopInitializerEscapingVarBreakAwait(): Promise<string> {
+    for (var value = "loop-escaping-var-await"; await laterTrue();) {
+        value += "-updated";
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2261,6 +2269,7 @@ chooseLoopInitializerVarCapture().then((value) => console.log("await-loop-initia
 chooseLoopInitializerVarFallthroughCapture().then((value) => console.log("await-loop-initializer-var-fallthrough", value));
 chooseLoopInitializerEscapingVarBreak().then((value) => console.log("await-loop-initializer-escaping-var-break", value));
 chooseLoopInitializerEscapingVarMultipleBreak().then((value) => console.log("await-loop-initializer-escaping-var-multiple-break", value));
+chooseLoopInitializerEscapingVarBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-break-await", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));

@@ -292,6 +292,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
+    fallthroughAwaitExpr?: ts.AwaitExpression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
 }
@@ -33253,6 +33254,11 @@ class Emitter {
                 this.checker,
             ))
             : null;
+        const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
+        const fallthroughAwaitExpr = ts.isAwaitExpression(fallthroughAwait) &&
+            bodyAwaitExpr
+            ? fallthroughAwait
+            : undefined;
         let hasNullishOperator = false;
         const findNullishOperator = (node: ts.Node): void => {
             if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
@@ -33284,7 +33290,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -33334,6 +33340,7 @@ class Emitter {
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyRejectResult,
             fallthroughExpr,
+            fallthroughAwaitExpr,
             params: capturedParams,
             thisValue: usesThis ? thisValue : null,
         };
@@ -33517,19 +33524,40 @@ class Emitter {
                 buf.line("return;");
             }
             buf.close();
-            const returned = this.emitExpr(continuation.fallthroughExpr);
-            const returnedType = this.prepareType(returned.ty);
-            if (returnedType.kind === "void" || returnedType.kind === "never") {
-                buf.line(`${returned.c};`);
+            if (continuation.fallthroughAwaitExpr && bodyPromiseType && bodyAdapter) {
+                const fallthroughSource = this.emitExpr(continuation.fallthroughAwaitExpr.expression);
+                const fallthroughSourceVar = this.freshTemp("_await_fallthrough_source");
+                const fallthroughEnvVar = this.freshTemp("_await_fallthrough_env");
+                const fallthroughEnvType = `${bodyAdapter}_env_t`;
+                buf.line(`tsc_promise_t* const ${fallthroughSourceVar} = ${this.coerce(fallthroughSource, bodyPromiseType, continuation.fallthroughAwaitExpr.expression)};`);
+                buf.line(`${fallthroughEnvType}* const ${fallthroughEnvVar} = (${fallthroughEnvType}*)TSC_GC_MALLOC(sizeof(${fallthroughEnvType}));`);
+                buf.line(`${fallthroughEnvVar}->receiver = ${fallthroughSourceVar};`);
+                buf.line(`${fallthroughEnvVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${fallthroughEnvVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${fallthroughEnvVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${fallthroughSourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${fallthroughSourceVar}, ${bodyAdapter}, ${fallthroughEnvVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${bodyAdapter}(${fallthroughEnvVar});`);
+                buf.close();
                 buf.line("tsc_try_pop();");
-                buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                buf.line("return;");
             } else {
-                const returnVar = this.freshTemp("_await_fallthrough");
-                buf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
-                buf.line("tsc_try_pop();");
-                buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, continuation.fallthroughExpr)};`);
+                const returned = this.emitExpr(continuation.fallthroughExpr);
+                const returnedType = this.prepareType(returned.ty);
+                if (returnedType.kind === "void" || returnedType.kind === "never") {
+                    buf.line(`${returned.c};`);
+                    buf.line("tsc_try_pop();");
+                    buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                } else {
+                    const returnVar = this.freshTemp("_await_fallthrough");
+                    buf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
+                    buf.line("tsc_try_pop();");
+                    buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, continuation.fallthroughExpr)};`);
+                }
+                buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
             }
-            buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();
@@ -33647,6 +33675,28 @@ class Emitter {
             }
             if (!supported) return false;
             loopInitializerCaptures = initializerCaptures;
+        }
+        if (
+            loopBody.length > 0 &&
+            loopBody[loopBody.length - 1]!.kind === ts.SyntaxKind.BreakStatement &&
+            loopBody.slice(0, -1).every(ts.isExpressionStatement)
+        ) {
+            const breakBody = [
+                ...loopBody.slice(0, -1),
+                ts.factory.createReturnStatement(fallthroughExpression),
+            ];
+            if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
+                buf,
+                condition,
+                awaitExpressions,
+                breakBody,
+                ts.factory.createBlock(breakBody, true),
+                fallthroughExpression,
+                parameters,
+                thisValue,
+                loopInitializer,
+                loopInitializerCaptures,
+            )) return true;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
             buf,
