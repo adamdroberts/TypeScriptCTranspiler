@@ -176,3 +176,20 @@ const caughtFinallyReturnOverrideNormal = caughtFinallyReturnOverride();
 const caughtFinallyReturnOverrideNormalFirst: any = caughtFinallyReturnOverrideNormal.next();
 const caughtFinallyReturnOverrideNormalDone: any = caughtFinallyReturnOverrideNormal.next("resume");
 console.log("caught-finally-normal-return-override:", caughtFinallyReturnOverrideNormalFirst.done, caughtFinallyReturnOverrideNormalFirst.value, caughtFinallyReturnOverrideNormalDone.done, caughtFinallyReturnOverrideNormalDone.value, caughtFinallyEvents.join("|"));
+
+const catchPreludeEvents: string[] = [];
+function* caughtPrelude(): Generator<string, string, string> {
+    try {
+        yield "catch-prelude-pause";
+    } catch (error: any) {
+        catchPreludeEvents.push("before");
+        catchPreludeEvents.push("error:" + error);
+        return "prelude-caught";
+    }
+    return "normal";
+}
+
+const caughtPreludeResult = caughtPrelude();
+const caughtPreludeFirst: any = caughtPreludeResult.next();
+const caughtPreludeDone: any = caughtPreludeResult.throw("handled-prelude");
+console.log("caught-prelude:", caughtPreludeFirst.done, caughtPreludeFirst.value, caughtPreludeDone.done, caughtPreludeDone.value, catchPreludeEvents.join("|"));

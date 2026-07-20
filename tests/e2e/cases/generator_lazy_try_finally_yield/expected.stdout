@@ -12,3 +12,4 @@ caught-finally-throw-override: false override-pause finally-override finally|fin
 caught-finally-normal-override: false override-pause finally-override finally|finally|override-finally|override-finally
 caught-finally-return-override: false return-override-pause true finally-return finally|finally|override-finally|override-finally|return-override-finally
 caught-finally-normal-return-override: false return-override-pause true finally-return finally|finally|override-finally|override-finally|return-override-finally|return-override-finally
+caught-prelude: false catch-prelude-pause true prelude-caught before|error:handled-prelude

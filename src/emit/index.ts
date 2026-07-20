@@ -111,6 +111,7 @@ interface LazyCompoundResumeSlot {
 }
 
 interface LazyGeneratorCatchHandler {
+    catchPreludeStatements: readonly ts.Statement[];
     returnStatement: ts.ReturnStatement;
     catchClause: ts.CatchClause;
     finallyStatements: readonly ts.Statement[];
@@ -35827,16 +35828,22 @@ class Emitter {
         const last = catchStatements[catchStatements.length - 1];
         if (!last || !ts.isReturnStatement(last) || !last.expression ||
             this.nodeContainsYield(last.expression)) return null;
-        if (catchStatements.length !== 1) return null;
+        const catchPreludeStatements = catchStatements.slice(0, -1);
+        if (
+            catchPreludeStatements.some((child) =>
+                this.nodeContainsYield(child) ||
+                this.lazyGeneratorContainsAbruptControlFlow(child) ||
+                !this.isValidLazyGeneratorStatement(child))
+        ) return null;
         const expression = this.unwrapTransparentExpression(last.expression);
         if (this.isSimpleLazyMultiYieldLiteral(expression)) {
-            return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+            return { catchPreludeStatements, returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
         }
         const catchDecl = stmt.catchClause.variableDeclaration;
         if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
         const catchSymbol = this.symbolForIdentifier(catchDecl.name);
         if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol)) return null;
-        return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+        return { catchPreludeStatements, returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
     }
 
     private isSimpleLazyCatchReturnExpression(expr: ts.Expression, catchSymbol: ts.Symbol): boolean {
@@ -36527,6 +36534,9 @@ class Emitter {
                     buf.line(`tsc_str_t* ${mangleIdent(catchDecl.name.text)} = tsc_value_to_string(${envLocalName}->lazy_close_arg);`);
                 }
                 try {
+                    for (const child of handler.catchPreludeStatements) {
+                        this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                    }
                     if (handler.finallyStatements.length > 0) {
                         const returned = this.emitExpr(handler.returnStatement.expression!);
                         buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
