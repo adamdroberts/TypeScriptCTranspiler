@@ -296,6 +296,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression | null;
     successThrowExpr?: ts.Expression | null;
+    successSequenceContinuation?: AsyncAwaitExpressionSequenceReturnContinuation;
     successReturnsAwaited: boolean;
     catchClause: ts.CatchClause;
     catchPreludeStatements: readonly ts.Statement[];
@@ -25921,6 +25922,7 @@ class Emitter {
         const catchPreludeInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
+        let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
@@ -25928,8 +25930,20 @@ class Emitter {
         if (!awaited && remainingTryStatements === 1) {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
             if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
-                const expressionContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
-                    this.unwrapTransparentExpression(tryStatement.expression),
+                const expression = this.unwrapTransparentExpression(tryStatement.expression);
+                const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                    expression,
+                    parameters,
+                    thisValue,
+                    [...prelude.captures, ...tryPrelude.captures],
+                );
+                if (sequenceContinuation) {
+                    awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
+                    successThrowExpr = sequenceContinuation.returnExpr;
+                    successSequenceContinuation = sequenceContinuation;
+                }
+                const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
+                    expression,
                     parameters,
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
@@ -25971,7 +25985,9 @@ class Emitter {
             : null;
         if (catchDecl && !catchSymbol) return null;
 
-        const expressionParams = successThrowExpr
+        const expressionParams = successSequenceContinuation
+            ? successSequenceContinuation.params
+            : successThrowExpr
             ? this.asyncAwaitExpressionReturnContinuationForExpression(
                 successThrowExpr,
                 parameters,
@@ -26105,6 +26121,7 @@ class Emitter {
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
             successThrowExpr,
+            successSequenceContinuation,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
             catchPreludeStatements,
@@ -26372,6 +26389,14 @@ class Emitter {
         buf: CBuf,
         continuation: AsyncAwaitTryCatchReturnContinuation,
     ): boolean {
+        if (continuation.successSequenceContinuation) {
+            return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
+                buf,
+                continuation.successSequenceContinuation,
+                false,
+                continuation,
+            );
+        }
         const source = this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
@@ -31116,6 +31141,7 @@ class Emitter {
         buf: CBuf,
         continuation: AsyncAwaitExpressionSequenceReturnContinuation,
         rejectResult = false,
+        tryCatchContinuation?: AsyncAwaitTryCatchReturnContinuation,
     ): boolean {
         const firstSource = this.emitExpr(continuation.awaitExprs[0]!.expression);
         const promiseTypes = continuation.awaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
@@ -31143,6 +31169,7 @@ class Emitter {
             continuation.returnContextType,
             continuation.shortCircuitOperator,
             rejectResult,
+            tryCatchContinuation,
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
@@ -31173,6 +31200,7 @@ class Emitter {
         returnContextType?: ts.Type,
         shortCircuitOperator?: ts.SyntaxKind,
         rejectResult = false,
+        tryCatchContinuation?: AsyncAwaitTryCatchReturnContinuation,
     ): string {
         const stageNames = awaitExprs.map((_, index) =>
             `tsc_async_await_expression_sequence_${index}_${this.asyncAwaitReturnContinuationAdapters++}`);
@@ -31222,17 +31250,16 @@ class Emitter {
             stageBuf.line(`${stageEnvTypes[stage]}* state = (${stageEnvTypes[stage]}*)env;`);
             stageBuf.line("tsc_promise_t* _p = state->receiver;");
             stageBuf.line("tsc_promise_t* _ret = state->result_promise;");
-            stageBuf.open("if (tsc_promise_is_rejected(_p))");
-            stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
-            stageBuf.line("return;");
-            stageBuf.close();
-            stageBuf.open("if (!tsc_promise_is_fulfilled(_p))");
-            stageBuf.line("return;");
-            stageBuf.close();
             stageBuf.line(`tsc_try_frame_t ${eh};`);
             stageBuf.line(`tsc_promise_t* ${resolvedVar};`);
             stageBuf.line(`tsc_try_push(&${eh});`);
             stageBuf.open(`if (setjmp(${eh}.jb) == 0)`);
+            stageBuf.open("if (tsc_promise_is_rejected(_p))");
+            stageBuf.line("tsc_throw_str(tsc_value_to_string(tsc_promise_reason(_p)));" );
+            stageBuf.close();
+            stageBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+            stageBuf.line("return;");
+            stageBuf.close();
             if (currentValueResult) stageBuf.line(`${awaitedTypes[stage]!.c} ${currentValue} = ${currentValueResult};`);
             if (shortCircuitOperator !== undefined && stage + 1 < stageNames.length) {
                 const currentResult: EmitResult = awaitedTypes[stage]!.kind === "void"
@@ -31307,7 +31334,9 @@ class Emitter {
                     this.argumentValueScopes.pop();
                 }
                 const returnedType = this.prepareType(returned.ty);
-                if (rejectResult) {
+                if (tryCatchContinuation) {
+                    stageBuf.line(`tsc_throw_str(${this.coerceToString(returned, returnExpr)});`);
+                } else if (rejectResult) {
                     const rejected = this.coerceToString(returned, returnExpr);
                     stageBuf.line("tsc_try_pop();");
                     stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${rejected}));`);
@@ -31324,8 +31353,58 @@ class Emitter {
             }
             stageBuf.close();
             stageBuf.open("else");
-            stageBuf.line("tsc_try_pop();");
-            stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+            if (tryCatchContinuation) {
+                stageBuf.line("tsc_str_t* _await_catch_reason = tsc_current_error();");
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line("tsc_try_frame_t _await_catch_eh;");
+                stageBuf.line("tsc_try_push(&_await_catch_eh);");
+                stageBuf.open("if (setjmp(_await_catch_eh.jb) == 0)");
+                const catchDecl = tryCatchContinuation.catchClause.variableDeclaration;
+                const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
+                    ? this.symbolForIdentifier(catchDecl.name)
+                    : null;
+                if (catchDecl) {
+                    if (!ts.isIdentifier(catchDecl.name)) unsupported(catchDecl, "catch binding must be simple identifier");
+                    if (catchSymbol) this.catchStringSymbols.add(catchSymbol);
+                    stageBuf.line(`tsc_str_t* ${mangleIdent(catchDecl.name.text)} = _await_catch_reason;`);
+                }
+                const catchScope = new Map<ts.Symbol, string>();
+                for (const param of tryCatchContinuation.params) catchScope.set(param.symbol, `state->${param.field}`);
+                this.argumentValueScopes.push(catchScope);
+                let catchReturned: EmitResult | null = null;
+                let catchThrown: EmitResult | null = null;
+                this.asyncAwaitContinuationAdapterDepth++;
+                try {
+                    for (const stmt of tryCatchContinuation.catchPreludeStatements) this.emitStmt(stageBuf, stmt);
+                    if (tryCatchContinuation.catchThrowExpr) catchThrown = this.emitExpr(tryCatchContinuation.catchThrowExpr);
+                    else if (tryCatchContinuation.catchReturnExpr) catchReturned = this.emitExpr(tryCatchContinuation.catchReturnExpr);
+                } finally {
+                    this.asyncAwaitContinuationAdapterDepth--;
+                    this.argumentValueScopes.pop();
+                    if (catchSymbol) this.catchStringSymbols.delete(catchSymbol);
+                }
+                if (catchThrown) {
+                    stageBuf.line(`tsc_throw_str(${this.coerceToString(catchThrown, tryCatchContinuation.catchThrowExpr!)});`);
+                } else if (!catchReturned || this.prepareType(catchReturned.ty).kind === "void" || this.prepareType(catchReturned.ty).kind === "never") {
+                    if (catchReturned) stageBuf.line(`${catchReturned.c};`);
+                    stageBuf.line("tsc_try_pop();");
+                    stageBuf.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
+                } else {
+                    const catchType = this.prepareType(catchReturned.ty);
+                    const catchReturn = this.freshTemp("_await_catch_return");
+                    stageBuf.line(`${catchType.c} ${catchReturn} = ${catchReturned.c};`);
+                    stageBuf.line("tsc_try_pop();");
+                    stageBuf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveResult({ c: catchReturn, ty: catchType }, tryCatchContinuation.catchReturnExpr!)});`);
+                }
+                stageBuf.close();
+                stageBuf.open("else");
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+                stageBuf.close();
+            } else {
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+            }
             stageBuf.close();
             stageBuf.close();
             stageBuf.line();

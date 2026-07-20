@@ -1,0 +1,4 @@
+source: caught:source-failure
+declaration: caught:three
+method: caught:method-three
+value: caught:arrow-three
