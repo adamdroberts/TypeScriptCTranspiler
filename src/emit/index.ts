@@ -634,6 +634,7 @@ class Emitter {
     private activeLazyGeneratorFinalizers: ts.Statement[][] = [];
     private activeLazyGeneratorCatchHandlers: LazyGeneratorCatchHandler[] = [];
     private activeLazyGeneratorCloseEnabled = false;
+    private activeLazyGeneratorOuterCaptureSymbols: ReadonlySet<ts.Symbol> = new Set();
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
@@ -38703,8 +38704,13 @@ class Emitter {
                 ) {
                     return this.emitExpr(unwrapped);
                 }
-                if (!symbol || !declaration || (!ts.isParameter(declaration) && !stableLocals.has(symbol)) || !this.closureEnvBindingForSymbol(symbol)) {
-                    unsupported(unwrapped, "lazy multi-yield return identifiers must be stable generator parameters or direct const locals");
+                if (
+                    !symbol ||
+                    !declaration ||
+                    (!ts.isParameter(declaration) && !stableLocals.has(symbol) && !this.activeLazyGeneratorOuterCaptureSymbols.has(symbol)) ||
+                    !this.closureEnvBindingForSymbol(symbol)
+                ) {
+                    unsupported(unwrapped, "lazy multi-yield return identifiers must be stable parameters, locals, or outer captures");
                 }
                 return this.emitExpr(unwrapped);
             }
@@ -38978,6 +38984,8 @@ class Emitter {
             hasMultiYieldReturn ||
             hasLazyClose;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
+        const previousOuterCaptureSymbols = this.activeLazyGeneratorOuterCaptureSymbols;
+        this.activeLazyGeneratorOuterCaptureSymbols = new Set(outerCaptureBindings.keys());
         const thisField = implicitThisParam ? "this_arg" : null;
         if (envType) {
             this.structDecls.open(`typedef struct ${envType}`);
@@ -39099,6 +39107,7 @@ class Emitter {
             nextBuf.close();
             nextBuf.close();
         } finally {
+            this.activeLazyGeneratorOuterCaptureSymbols = previousOuterCaptureSymbols;
             this.activeLazyGeneratorCloseEnabled = false;
             if (lazyThisParam) this.functionThisStack.pop();
             this.closureEnvScopes.pop();
