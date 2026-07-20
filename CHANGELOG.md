@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Lazy generator lowering now preserves a bounded normal-resume `try` / `finally` around a suspended `yield` when there is no catch or abrupt control flow. Exceptional, return, and throw paths across the suspension remain deferred. Test: `generator_lazy_try_finally_yield`.
 - Generic nested `return await` sequence lowering now accepts a final stable synchronous identifier/property leaf after the awaited stages, preserving closure captures in expression-bodied async arrows. Test: `async_await_nested_return_await_closure`.
 - Expression-bodied async arrows now lower the exact nested `return await (await promise)` form by adopting the inner promise, matching declaration and method coverage. Test: `async_await_nested_exact_return_await`.
 - Direct `return await` now supports one embedded inner await in a non-Promise outer expression for expression-bodied async arrows, reusing the single-expression continuation adapter. Test: `async_await_nested_single_return_await`.

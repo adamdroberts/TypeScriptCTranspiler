@@ -35680,7 +35680,7 @@ class Emitter {
         }
 
         if (ts.isTryStatement(stmt)) {
-            return !this.nodeContainsYield(stmt);
+            return this.isSimpleLazyGeneratorTryFinally(stmt) || !this.nodeContainsYield(stmt);
         }
 
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt)) {
@@ -35709,6 +35709,34 @@ class Emitter {
         }
 
         return false;
+    }
+
+    private isSimpleLazyGeneratorTryFinally(stmt: ts.TryStatement): boolean {
+        if (stmt.catchClause || !stmt.finallyBlock) return false;
+        if (this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock) ||
+            this.lazyGeneratorContainsAbruptControlFlow(stmt.finallyBlock)) {
+            return false;
+        }
+        if (!stmt.tryBlock.statements.some((child) => this.nodeContainsYield(child))) return false;
+        if (!stmt.tryBlock.statements.every((child) => this.isValidLazyGeneratorStatement(child))) return false;
+        return stmt.finallyBlock.statements.every((child) =>
+            !this.nodeContainsYield(child) && this.isValidLazyGeneratorStatement(child));
+    }
+
+    private lazyGeneratorContainsAbruptControlFlow(node: ts.Node): boolean {
+        let found = false;
+        const visit = (current: ts.Node): void => {
+            if (found) return;
+            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+            if (ts.isReturnStatement(current) || ts.isThrowStatement(current) ||
+                ts.isBreakStatement(current) || ts.isContinueStatement(current)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return found;
     }
 
     private isSimpleLazyYieldStarSource(expr: ts.Expression): boolean {
@@ -36202,6 +36230,18 @@ class Emitter {
 
         if (ts.isSwitchStatement(stmt)) {
             this.emitLazyGeneratorSwitch(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            return;
+        }
+
+        if (ts.isTryStatement(stmt) && this.isSimpleLazyGeneratorTryFinally(stmt)) {
+            buf.open("");
+            for (const child of stmt.tryBlock.statements) {
+                this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+            for (const child of stmt.finallyBlock!.statements) {
+                this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+            buf.close();
             return;
         }
 
