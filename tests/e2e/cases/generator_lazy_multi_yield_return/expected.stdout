@@ -18,4 +18,5 @@ local 30 31 true 19
 immutable-let 32 33 true 20
 global 34 35 true NaN
 infinity 36 37 true Infinity
+captured 40 41 true 21
 this 26 27 true 9

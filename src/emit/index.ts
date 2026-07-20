@@ -38952,11 +38952,28 @@ class Emitter {
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
         const hasLazyCatch = this.lazyGeneratorHasCatchReturn(fn.body);
         const hasLazyClose = hasYieldStar || hasLazyFinalizer || hasLazyCatch;
+        const outerCaptureBindings = new Map<ts.Symbol, ClosureEnvBinding>();
+        const collectOuterCaptures = (node: ts.Node): void => {
+            if (node !== fn && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                const binding = this.closureEnvBindingForSymbol(symbol);
+                if (symbol && binding) outerCaptureBindings.set(symbol, binding);
+            }
+            ts.forEachChild(node, collectOuterCaptures);
+        };
+        collectOuterCaptures(fn.body);
+        const outerCaptureFieldInfos = Array.from(outerCaptureBindings.entries()).map(([symbol, binding], index) => ({
+            symbol,
+            binding,
+            field: `capture_${mangleIdent(symbol.getName())}_${index}`,
+        }));
         const needsEnv = runtimeParamInfos.length > 0 ||
             localVarInfos.length > 0 ||
             compoundResumeInfos.length > 0 ||
             forOfInfos.length > 0 ||
             forInInfos.length > 0 ||
+            outerCaptureFieldInfos.length > 0 ||
             !!implicitThisParam ||
             hasMultiYieldReturn ||
             hasLazyClose;
@@ -38972,6 +38989,9 @@ class Emitter {
             }
             for (const info of localVarInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            for (const info of outerCaptureFieldInfos) {
+                this.structDecls.line(`${info.binding.type.c}* ${info.field};`);
             }
             for (const info of compoundResumeInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
@@ -39035,6 +39055,12 @@ class Emitter {
                 envBindings.set(info.symbol, {
                     type: info.type,
                     ptr: `&${envLocal}->${info.field}`,
+                });
+            }
+            for (const info of outerCaptureFieldInfos) {
+                envBindings.set(info.symbol, {
+                    type: info.binding.type,
+                    ptr: `${envLocal}->${info.field}`,
                 });
             }
         } else {
@@ -39166,6 +39192,9 @@ class Emitter {
             }
             for (const info of localVarInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
+            }
+            for (const info of outerCaptureFieldInfos) {
+                buf.line(`${envVar}->${info.field} = ${info.binding.ptr};`);
             }
             for (const info of compoundResumeInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);

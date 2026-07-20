@@ -82,6 +82,12 @@ function* infinityLeaves(): Generator<number, number, number> {
     return (yield 36) + Infinity + (yield 37);
 }
 
+function makeCapturedGenerator(offset: number): () => Generator<number, number, number> {
+    return function* capturedLeaves(): Generator<number, number, number> {
+        return offset + (yield 40) + (yield 41);
+    };
+}
+
 class ThisLeaves {
     marker = 9;
 
@@ -201,6 +207,11 @@ const infinityFirst: any = infinityIter.next();
 const infinitySecond: any = infinityIter.next(6);
 const infinityDone: any = infinityIter.next(7);
 console.log("infinity", infinityFirst.value, infinitySecond.value, infinityDone.done, infinityDone.value);
+const capturedIter = makeCapturedGenerator(12)();
+const capturedFirst: any = capturedIter.next();
+const capturedSecond: any = capturedIter.next(4);
+const capturedDone: any = capturedIter.next(5);
+console.log("captured", capturedFirst.value, capturedSecond.value, capturedDone.done, capturedDone.value);
 const thisLeaves = new ThisLeaves();
 const thisIter = thisLeaves.values();
 const thisFirst: any = thisIter.next();
