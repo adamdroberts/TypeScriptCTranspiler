@@ -1,7 +1,13 @@
 import { setTimeout as delay } from "node:timers/promises";
 
+class Box {
+    constructor(left: string, right: string) {
+        console.log("box:", left + ":" + right);
+    }
+}
+
 function factory(): Promise<any> {
-    return Promise.resolve(Array);
+    return Promise.resolve(Box);
 }
 
 async function declaration(): Promise<any> {
@@ -26,6 +32,6 @@ const value = async (): Promise<any> =>
         await delay(1, "arrow-right"),
     );
 
-declaration().then((result) => console.log("declaration:", JSON.stringify(result)));
-new Worker().run().then((result) => console.log("method:", JSON.stringify(result)));
-value().then((result) => console.log("value:", JSON.stringify(result)));
+declaration().then((result) => console.log("declaration: constructed", !!result));
+new Worker().run().then((result) => console.log("method: constructed", !!result));
+value().then((result) => console.log("value: constructed", !!result));

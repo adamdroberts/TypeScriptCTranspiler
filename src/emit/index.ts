@@ -622,6 +622,7 @@ class Emitter {
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
     private valueFunctionAdapters = new Map<string, string>();
+    private classConstructorValueAdapters = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
@@ -24816,6 +24817,44 @@ class Emitter {
         return `({ ${pieces.join("; ")}; })`;
     }
 
+    private classConstructorValue(cd: ts.ClassDeclaration): EmitResult {
+        if (!cd.name) unsupported(cd, "class constructor value requires a named class");
+        const className = cd.name.text;
+        const ctor = cd.members.find(ts.isConstructorDeclaration);
+        const params = ctor?.parameters ?? [];
+        const paramTypes = params.map((param) => this.prepareType(mapTsType(
+            param,
+            this.checker.getTypeAtLocation(param),
+            this.checker,
+        )));
+        let adapter = this.classConstructorValueAdapters.get(className);
+        if (!adapter) {
+            adapter = `tsc_${className}_constructor_value`;
+            this.classConstructorValueAdapters.set(className, adapter);
+            const signature = `static tsc_value_t ${adapter}(void* env, tsc_value_t this_arg, tsc_array_t* args)`;
+            this.protos.line(signature + ";");
+            const buf = new CBuf();
+            buf.open(signature);
+            buf.line("(void)env;");
+            buf.line("(void)this_arg;");
+            buf.line("if (!args) args = tsc_array_new(sizeof(tsc_value_t), 0);");
+            const callArgs: string[] = [];
+            for (let index = 0; index < paramTypes.length; index++) {
+                const raw = `(${index} < args->len ? TSC_ARR(tsc_value_t, args, ${index}) : tsc_value_undefined())`;
+                callArgs.push(this.coerce({ c: raw, ty: T_VALUE }, paramTypes[index]!, ctor ?? cd));
+            }
+            buf.line(`${className}_t* result = ${className}_new(${callArgs.join(", ")});`);
+            buf.line(`return ${this.classValueBoxExpression({ c: "result", ty: classType(className) }, ctor ?? cd)};`);
+            buf.close();
+            buf.line();
+            this.closureDefs.write(buf.toString());
+        }
+        return {
+            c: `tsc_value_function_generic_named(${adapter}, NULL, ${paramTypes.length}.0, tsc_str_from_lit("${escapeCString(className)}", ${utf8ByteLen(className)}))`,
+            ty: T_VALUE,
+        };
+    }
+
     private classStaticGetterDecoratorValue(
         cd: ts.ClassDeclaration,
         member: ts.GetAccessorDeclaration,
@@ -40671,6 +40710,9 @@ class Emitter {
                 (ts.getDecorators(classDecl) ?? []).length > 0
             ) {
                 return this.classDecoratorValue(classDecl);
+            }
+            if (classDecl) {
+                return this.classConstructorValue(classDecl);
             }
             const requireDefault = this.requireBindingModuleExportsCName(expr);
             if (requireDefault) {

@@ -1,3 +1,6 @@
-declaration: ["declaration-left","declaration-right"]
-method: ["method-left","method-right"]
-value: ["arrow-left","arrow-right"]
+box: declaration-left:declaration-right
+declaration: constructed true
+box: method-left:method-right
+method: constructed true
+box: arrow-left:arrow-right
+value: constructed true
