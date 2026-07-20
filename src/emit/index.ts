@@ -621,6 +621,7 @@ class Emitter {
     private timersPromisesSchedulerYieldAdapters = 0;
     private nodeFunctionAdapters = new Set<string>();
     private dynamicFunctionAdapters = new Map<string, string>();
+    private valueFunctionAdapters = new Map<string, string>();
     private classInstanceMethodValueAdapters = new Map<string, string>();
     private classInstanceFieldGetterAdapters = new Map<string, string>();
     private classInstanceFieldSetterAdapters = new Map<string, string>();
@@ -67286,6 +67287,12 @@ class Emitter {
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
                 case "promise":
                     return `tsc_promise_resolve_thenable(${r.c})`;
+                case "function": {
+                    if (target.thisParam) {
+                        unsupported(node, "value-to-function coercion with an explicit this parameter");
+                    }
+                    return this.emitValueFunctionAdapter(r, target, node);
+                }
             }
         }
         if (target.kind === "promise") {
@@ -67478,6 +67485,51 @@ class Emitter {
         buf.line();
         this.closureDefs.write(buf.toString());
         return name;
+    }
+
+    private emitValueFunctionAdapter(r: EmitResult, type: CType, node: ts.Node): string {
+        if (type.kind !== "function" || !type.closureName || !type.ret) {
+            unsupported(node, "value-to-function coercion requires a function value");
+        }
+        this.prepareType(type);
+        const key = this.typeKey(type);
+        const existing = this.valueFunctionAdapters.get(key);
+        if (existing) {
+            return `({ ${type.closureName}_value_env_t* _env = (${type.closureName}_value_env_t*)TSC_GC_MALLOC(sizeof(${type.closureName}_value_env_t)); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _fn->fn = ${existing}; _fn->env = _env; _fn; })`;
+        }
+        const adapter = `tsc_value_function_adapter_${this.valueFunctionAdapters.size}`;
+        this.valueFunctionAdapters.set(key, adapter);
+        const envType = `${type.closureName}_value_env_t`;
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_value_t value;");
+        this.structDecls.close(` ${envType};`);
+        const params = type.params ?? [];
+        const paramNames = params.map((_, index) => `_arg${index}`);
+        const signature = `static ${type.ret.c} ${adapter}(void* env${params.length ? `, ${params.map((param, index) => `${param.c} ${paramNames[index]}`).join(", ")}` : ""})`;
+        this.protos.line(signature + ";");
+        const buf = new CBuf();
+        buf.open(signature);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        const args = this.freshTemp("_value_fn_args");
+        buf.line(`tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, params.length)});`);
+        for (let index = 0; index < params.length; index++) {
+            const boxed = this.coerce({ c: paramNames[index]!, ty: params[index]! }, T_VALUE, node);
+            buf.line(`tsc_value_t _boxed${index} = ${boxed};`);
+            buf.line(`tsc_array_push_value(${args}, _boxed${index});`);
+        }
+        const result = `tsc_value_apply_function(state->value, tsc_value_undefined(), tsc_value_array(${args}))`;
+        const ret = this.prepareType(type.ret);
+        if (ret.kind === "void" || ret.kind === "never") {
+            buf.line(`(void)${result};`);
+            buf.line("return;");
+        } else {
+            buf.line(`tsc_value_t _result = ${result};`);
+            buf.line(`return ${this.coerce({ c: "_result", ty: T_VALUE }, ret, node)};`);
+        }
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return `({ ${envType}* _env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${type.c} _fn = (${type.c})TSC_GC_MALLOC(sizeof(*_fn)); _env->value = ${r.c}; _fn->fn = ${adapter}; _fn->env = _env; _fn; })`;
     }
 }
 
