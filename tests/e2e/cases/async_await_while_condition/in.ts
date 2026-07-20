@@ -386,6 +386,30 @@ async function chooseLoopInitializerEscapingVarNestedForBreakAwait(): Promise<st
     return await laterBodyValue(value);
 }
 
+async function chooseLoopInitializerEscapingVarNestedForOfControlBreakAwait(): Promise<string> {
+    for (var value = "loop-escaping-var-nested-for-of-control"; await laterTrue();) {
+        for (const item of ["skip", "keep"]) {
+            if (item === "skip") continue;
+            value += "-" + item;
+            break;
+        }
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopInitializerEscapingVarNestedForInControlBreakAwait(): Promise<string> {
+    for (var value = "loop-escaping-var-nested-for-in-control"; await laterTrue();) {
+        for (const key in { skip: 1, keep: 2 }) {
+            if (key === "skip") continue;
+            value += "-" + key;
+            break;
+        }
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2511,6 +2535,8 @@ chooseLoopInitializerEscapingVarTryCatchFinallyBreakAwait(true).then((value) => 
 chooseLoopInitializerEscapingVarNestedForOfBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for-of", value));
 chooseLoopInitializerEscapingVarNestedForInBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for-in", value));
 chooseLoopInitializerEscapingVarNestedForBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for", value));
+chooseLoopInitializerEscapingVarNestedForOfControlBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for-of-control", value));
+chooseLoopInitializerEscapingVarNestedForInControlBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-nested-for-in-control", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
