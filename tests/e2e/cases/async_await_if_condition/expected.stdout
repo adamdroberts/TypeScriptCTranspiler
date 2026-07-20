@@ -1,2 +1,6 @@
 await-if-true yes
 await-if-false no
+await-if-method-true method-yes
+await-if-method-false method-no
+await-if-value-true value-yes
+await-if-value-false value-no
