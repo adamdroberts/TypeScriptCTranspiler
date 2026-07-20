@@ -990,6 +990,15 @@ async function chooseForSynchronousInitializer(flag: boolean): Promise<string> {
     return "for-initializer-fallthrough";
 }
 
+async function chooseLoopExpressionlessReturn(flag: boolean): Promise<void> {
+    while (await Promise.resolve(flag)) {
+        console.log("await-while-expressionless-return-true");
+        return;
+    }
+    console.log("await-while-expressionless-return-false");
+    return;
+}
+
 async function chooseLoopSynchronousThrowPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         void "sync-throw-prelude";
@@ -1263,6 +1272,15 @@ class LoopChooser {
         return "method-for-initializer-fallthrough";
     }
 
+    async pickExpressionlessReturn(flag: boolean): Promise<void> {
+        while (await Promise.resolve(flag)) {
+            console.log("await-method-expressionless-return-true");
+            return;
+        }
+        console.log("await-method-expressionless-return-false");
+        return;
+    }
+
     async pickSynchronousThrowPrelude(flag: boolean): Promise<string> {
         while (await Promise.resolve(flag)) {
             const reason = "method-sync-throw";
@@ -1487,6 +1505,15 @@ const chooseForSynchronousInitializerValue = async (flag: boolean): Promise<stri
         return "value-for-initializer-body";
     }
     return "value-for-initializer-fallthrough";
+};
+
+const chooseExpressionlessReturnValue = async (flag: boolean): Promise<void> => {
+    while (await Promise.resolve(flag)) {
+        console.log("await-value-expressionless-return-true");
+        return;
+    }
+    console.log("await-value-expressionless-return-false");
+    return;
 };
 
 const chooseLoopSynchronousThrowPreludeValue = async (flag: boolean): Promise<string> => {
@@ -1897,6 +1924,12 @@ new LoopChooser("method-").pickSynchronousInitializer(true).then((value) => cons
 new LoopChooser("method-").pickSynchronousInitializer(false).then((value) => console.log("await-method-sync-initializer-false", value));
 chooseForSynchronousInitializerValue(true).then((value) => console.log("await-value-sync-initializer-true", value));
 chooseForSynchronousInitializerValue(false).then((value) => console.log("await-value-sync-initializer-false", value));
+chooseLoopExpressionlessReturn(true);
+chooseLoopExpressionlessReturn(false);
+new LoopChooser("method-").pickExpressionlessReturn(true);
+new LoopChooser("method-").pickExpressionlessReturn(false);
+chooseExpressionlessReturnValue(true);
+chooseExpressionlessReturnValue(false);
 chooseLoopSynchronousThrowPrelude(true).catch((reason) => console.log("await-while-sync-throw-prelude-true", reason));
 chooseLoopSynchronousThrowPrelude(false).then((value) => console.log("await-while-sync-throw-prelude-false", value));
 new LoopChooser("method-").pickSynchronousThrowPrelude(true).catch((reason) => console.log("await-method-sync-throw-prelude-true", reason));

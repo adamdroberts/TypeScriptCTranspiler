@@ -32977,7 +32977,9 @@ class Emitter {
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
-        if ((!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction)) || !bodyAction.expression) return false;
+        if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction)) return false;
+        const bodyExpression = bodyAction.expression ?? (ts.isReturnStatement(bodyAction) ? ts.factory.createVoidZero() : null);
+        if (!bodyExpression) return false;
         const bodyLeadingContinuation = loopBody.length > 1
             ? this.asyncAwaitLeadingReturnContinuation(
                 loopBodyBlock ?? ts.factory.createBlock([...loopBody], true),
@@ -33046,10 +33048,10 @@ class Emitter {
             }
             return found;
         };
-        const directBodyAwait = this.unwrapTransparentExpression(bodyAction.expression);
+        const directBodyAwait = this.unwrapTransparentExpression(bodyExpression);
         if (bodyLeadingChain) {
             bodyAwaitExpr = bodyLeadingChain.steps[0]!.awaitExpr;
-            bodyReturnExpr = bodyAction.expression;
+            bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = bodyLeadingChain.preludeStatements;
             bodyRejectResult = !!bodyLeadingChain.terminalThrowStatement;
         } else if (ts.isAwaitExpression(directBodyAwait)) {
@@ -33059,15 +33061,15 @@ class Emitter {
                 : directBodyAwait;
             bodyReturnExpr = bodyAwaitExpr;
             bodyPreludeStatements = loopBody.slice(0, -1);
-        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && bodyAction.expression &&
-            bodySynchronousExpressionSupported(bodyAction.expression) &&
+        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
+            bodySynchronousExpressionSupported(bodyExpression) &&
             loopBody.slice(0, -1).every(bodySynchronousStatementSupported) &&
             !loopBody.slice(0, -1).some((statement) => awaitedDeclarationIndex(statement) >= 0)) {
-            bodyReturnExpr = bodyAction.expression;
+            bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = loopBody.slice(0, -1);
         } else if (loopBody.length === 1 &&
-            (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && bodyAction.expression) {
-            bodyReturnExpr = bodyAction.expression;
+            (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction))) {
+            bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = [];
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
             (() => {
@@ -33100,8 +33102,8 @@ class Emitter {
                 : null;
             if (!ts.isIdentifier(declaration.name) || !declarationAwait || !ts.isAwaitExpression(declarationAwait) ||
                 !declarationSymbol ||
-                (!bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol) &&
-                    !bodySynchronousExpressionSupported(bodyAction.expression))) return false;
+                (!bodyAliasExpressionSupported(bodyExpression, declarationSymbol) &&
+                    !bodySynchronousExpressionSupported(bodyExpression))) return false;
             const precedingDeclarations = bodyAwaitStatement.declarationList.declarations.slice(0, declarationIndex);
             let precedingInitializersSupported = true;
             const visitPrecedingInitializer = (node: ts.Node): void => {
@@ -33121,7 +33123,7 @@ class Emitter {
             bodyAwaitExpr = ts.isAwaitExpression(nestedDeclarationAwait)
                 ? nestedDeclarationAwait
                 : declarationAwait;
-            bodyReturnExpr = bodyAction.expression;
+            bodyReturnExpr = bodyExpression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
             bodyPostAwaitStatements = loopBody.slice(bodyAwaitStatementIndex + 1, -1);
             bodyPreludeStatements = [
@@ -33168,8 +33170,8 @@ class Emitter {
                 : undefined;
             if (!ts.isIdentifier(declaration.name) || !declarationSymbol || declaration.initializer ||
                 declarationSymbol !== assignmentSymbol ||
-                (!bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol) &&
-                    !bodySynchronousExpressionSupported(bodyAction.expression))) return false;
+                (!bodyAliasExpressionSupported(bodyExpression, declarationSymbol) &&
+                    !bodySynchronousExpressionSupported(bodyExpression))) return false;
             const precedingDeclarations = declarationStatement.declarationList.declarations.slice(0, declarationIndex);
             let precedingInitializersSupported = true;
             const visitPrecedingInitializer = (node: ts.Node): void => {
@@ -33191,7 +33193,7 @@ class Emitter {
             bodyAwaitExpr = ts.isAwaitExpression(nestedAssignmentAwait)
                 ? nestedAssignmentAwait
                 : assignmentAwait;
-            bodyReturnExpr = bodyAction.expression;
+            bodyReturnExpr = bodyExpression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
             bodyPostAwaitStatements = loopBody.slice(assignmentStatementIndex + 1, -1);
             bodyPreludeStatements = [
@@ -33545,7 +33547,8 @@ class Emitter {
         if (body.statements.length !== 2) return false;
         const loop = body.statements[0]!;
         const fallthrough = body.statements[1]!;
-        if (!ts.isReturnStatement(fallthrough) || !fallthrough.expression) return false;
+        if (!ts.isReturnStatement(fallthrough)) return false;
+        const fallthroughExpression = fallthrough.expression ?? ts.factory.createVoidZero();
         const loopCondition = ts.isWhileStatement(loop)
             ? loop.expression
             : ts.isForStatement(loop) && !loop.initializer && loop.condition
@@ -33597,7 +33600,7 @@ class Emitter {
             awaitExpressions,
             loopBody,
             ts.isBlock(loopStatement) ? loopStatement : null,
-            fallthrough.expression,
+            fallthroughExpression,
             parameters,
             thisValue,
             loopInitializer,
@@ -33743,14 +33746,14 @@ class Emitter {
         };
         visitReferences(condition);
         visitReferences(loopReturnExpression);
-        visitReferences(fallthrough.expression);
+        visitReferences(fallthroughExpression);
         if (!ok) return false;
         const returnExpr = ts.factory.createConditionalExpression(
             condition,
             ts.factory.createToken(ts.SyntaxKind.QuestionToken),
             loopReturnExpression,
             ts.factory.createToken(ts.SyntaxKind.ColonToken),
-            fallthrough.expression,
+            fallthroughExpression,
         );
         const capturedParams = [...referenced.values()];
         const continuationThisValue = usesThis ? thisValue : null;

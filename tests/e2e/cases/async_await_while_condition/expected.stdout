@@ -4,6 +4,12 @@ method-for-initializer
 method-for-initializer
 value-for-initializer
 value-for-initializer
+await-while-expressionless-return-true
+await-while-expressionless-return-false
+await-method-expressionless-return-true
+await-method-expressionless-return-false
+await-value-expressionless-return-true
+await-value-expressionless-return-false
 await-while-sync-body-true sync-body
 await-while-sync-body-false sync-fallthrough
 await-for-sync-body-true for-sync-body
