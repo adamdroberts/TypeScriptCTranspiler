@@ -32963,6 +32963,17 @@ class Emitter {
             visit(expression);
             return supported;
         };
+        const awaitedDeclarationIndex = (statement: ts.Statement): number => {
+            if (!ts.isVariableStatement(statement)) return -1;
+            let found = -1;
+            for (let index = 0; index < statement.declarationList.declarations.length; index++) {
+                const initializer = statement.declarationList.declarations[index]!.initializer;
+                if (!initializer || !ts.isAwaitExpression(this.unwrapTransparentExpression(initializer))) continue;
+                if (found !== -1) return -2;
+                found = index;
+            }
+            return found;
+        };
         const directBodyAwait = this.unwrapTransparentExpression(bodyAction.expression);
         if (ts.isAwaitExpression(directBodyAwait)) {
             const nestedBodyAwait = this.unwrapTransparentExpression(directBodyAwait.expression);
@@ -32975,19 +32986,14 @@ class Emitter {
             (() => {
                 for (let index = loopBody.length - 2; index >= 0; index--) {
                     const statement = loopBody[index]!;
-                    if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) continue;
-                    const initializer = statement.declarationList.declarations[0]!.initializer;
-                    if (!initializer || !ts.isAwaitExpression(this.unwrapTransparentExpression(initializer))) continue;
-                    return true;
+                    if (awaitedDeclarationIndex(statement) >= 0) return true;
                 }
                 return false;
             })()) {
             let bodyAwaitStatementIndex = -1;
             for (let index = loopBody.length - 2; index >= 0; index--) {
                 const statement = loopBody[index]!;
-                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) continue;
-                const initializer = statement.declarationList.declarations[0]!.initializer;
-                if (initializer && ts.isAwaitExpression(this.unwrapTransparentExpression(initializer))) {
+                if (awaitedDeclarationIndex(statement) >= 0) {
                     bodyAwaitStatementIndex = index;
                     break;
                 }
@@ -32995,8 +33001,10 @@ class Emitter {
             const bodyAwaitStatement = loopBody[bodyAwaitStatementIndex];
             if (!bodyAwaitStatement || !ts.isVariableStatement(bodyAwaitStatement) ||
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                bodyAwaitStatement.declarationList.declarations.length !== 1) return false;
-            const declaration = bodyAwaitStatement.declarationList.declarations[0]!;
+                bodyAwaitStatement.declarationList.declarations.length === 0) return false;
+            const declarationIndex = awaitedDeclarationIndex(bodyAwaitStatement);
+            if (declarationIndex < 0 || declarationIndex !== bodyAwaitStatement.declarationList.declarations.length - 1) return false;
+            const declaration = bodyAwaitStatement.declarationList.declarations[declarationIndex]!;
             const declarationSymbol = ts.isIdentifier(declaration.name)
                 ? this.symbolForIdentifier(declaration.name)
                 : undefined;
@@ -33007,6 +33015,21 @@ class Emitter {
                 !declarationSymbol ||
                 (!bodyAliasExpressionSupported(bodyAction.expression, declarationSymbol) &&
                     !bodySynchronousExpressionSupported(bodyAction.expression))) return false;
+            const precedingDeclarations = bodyAwaitStatement.declarationList.declarations.slice(0, declarationIndex);
+            let precedingInitializersSupported = true;
+            const visitPrecedingInitializer = (node: ts.Node): void => {
+                if (!precedingInitializersSupported) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    precedingInitializersSupported = false;
+                    return;
+                }
+                ts.forEachChild(node, visitPrecedingInitializer);
+            };
+            for (const preceding of precedingDeclarations) {
+                if (!ts.isIdentifier(preceding.name) || !preceding.initializer) return false;
+                visitPrecedingInitializer(preceding.initializer);
+            }
+            if (!precedingInitializersSupported) return false;
             const nestedDeclarationAwait = this.unwrapTransparentExpression(declarationAwait.expression);
             bodyAwaitExpr = ts.isAwaitExpression(nestedDeclarationAwait)
                 ? nestedDeclarationAwait
@@ -33014,7 +33037,19 @@ class Emitter {
             bodyReturnExpr = bodyAction.expression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
             bodyPostAwaitStatements = loopBody.slice(bodyAwaitStatementIndex + 1, -1);
-            bodyPreludeStatements = loopBody.slice(0, bodyAwaitStatementIndex);
+            bodyPreludeStatements = [
+                ...loopBody.slice(0, bodyAwaitStatementIndex),
+                ...(precedingDeclarations.length > 0
+                    ? [ts.factory.updateVariableStatement(
+                        bodyAwaitStatement,
+                        bodyAwaitStatement.modifiers,
+                        ts.factory.createVariableDeclarationList(
+                            precedingDeclarations,
+                            bodyAwaitStatement.declarationList.flags,
+                        ),
+                    )]
+                    : []),
+            ];
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else if (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) {
             let assignmentStatementIndex = -1;

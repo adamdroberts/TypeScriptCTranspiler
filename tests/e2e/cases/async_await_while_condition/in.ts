@@ -208,7 +208,7 @@ async function chooseLoopReturnAwaitNested(condition: boolean): Promise<string> 
 async function chooseLoopReturnAwaitAlias(condition: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         prefix += "-alias";
-        const value = await laterBodyValue(prefix);
+        const source = prefix, value = await laterBodyValue(source);
         return value;
     }
     return prefix + "-alias-fallthrough";
@@ -216,7 +216,7 @@ async function chooseLoopReturnAwaitAlias(condition: boolean, prefix: string): P
 
 async function chooseLoopThrowAwaitAlias(condition: boolean): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
-        const reason = await laterBodyValue("body-throw-await-alias");
+        const source = "body-throw-await-alias", reason = await laterBodyValue(source);
         throw reason;
     }
     return "body-throw-await-alias-fallthrough";
