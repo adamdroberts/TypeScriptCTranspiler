@@ -260,6 +260,7 @@ interface AsyncAwaitExpressionSequenceReturnContinuation {
     awaitExprs: readonly ts.AwaitExpression[];
     returnExpr: ts.Expression;
     returnContextType?: ts.Type;
+    shortCircuitOperator?: ts.SyntaxKind;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
 }
@@ -29890,6 +29891,60 @@ class Emitter {
         };
     }
 
+    private asyncAwaitShortCircuitExpressionSequenceReturnContinuationForExpression(
+        returnExpr: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[] = [],
+    ): AsyncAwaitExpressionSequenceReturnContinuation | null {
+        const expression = this.unwrapTransparentExpression(returnExpr);
+        if (!ts.isBinaryExpression(expression)) return null;
+        const operator = expression.operatorToken.kind;
+        if (
+            operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
+            operator !== ts.SyntaxKind.BarBarToken &&
+            operator !== ts.SyntaxKind.QuestionQuestionToken
+        ) return null;
+        const awaitExprs: ts.AwaitExpression[] = [];
+        let ok = true;
+        const flatten = (node: ts.Expression): void => {
+            const current = this.unwrapTransparentExpression(node);
+            if (ts.isBinaryExpression(current) && current.operatorToken.kind === operator) {
+                flatten(current.left);
+                flatten(current.right);
+                return;
+            }
+            if (!ts.isAwaitExpression(current)) {
+                ok = false;
+                return;
+            }
+            let sourceOk = true;
+            const visitSource = (source: ts.Node): void => {
+                if (!sourceOk) return;
+                if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
+                    sourceOk = false;
+                    return;
+                }
+                ts.forEachChild(source, visitSource);
+            };
+            visitSource(current.expression);
+            if (!sourceOk) {
+                ok = false;
+                return;
+            }
+            awaitExprs.push(current);
+        };
+        flatten(expression);
+        if (!ok || awaitExprs.length < 3) return null;
+        return {
+            awaitExprs,
+            returnExpr: expression,
+            shortCircuitOperator: operator,
+            params: [...this.asyncAwaitContinuationParameters(parameters), ...captures],
+            thisValue,
+        };
+    }
+
     private asyncAwaitExpressionSequenceReturnContinuationForExpression(
         returnExpr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
@@ -29898,6 +29953,13 @@ class Emitter {
         returnContextType?: ts.Type,
     ): AsyncAwaitExpressionSequenceReturnContinuation | null {
         const expression = this.unwrapTransparentExpression(returnExpr);
+        const shortCircuitContinuation = this.asyncAwaitShortCircuitExpressionSequenceReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (shortCircuitContinuation) return shortCircuitContinuation;
         const awaitExprs: ts.AwaitExpression[] = [];
         let structuralSequence = false;
         let ok = true;
@@ -31079,6 +31141,7 @@ class Emitter {
             continuation.params,
             continuation.thisValue,
             continuation.returnContextType,
+            continuation.shortCircuitOperator,
             rejectResult,
         );
         const envType = `${adapter}_env_t`;
@@ -31108,6 +31171,7 @@ class Emitter {
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
         returnContextType?: ts.Type,
+        shortCircuitOperator?: ts.SyntaxKind,
         rejectResult = false,
     ): string {
         const stageNames = awaitExprs.map((_, index) =>
@@ -31170,6 +31234,28 @@ class Emitter {
             stageBuf.line(`tsc_try_push(&${eh});`);
             stageBuf.open(`if (setjmp(${eh}.jb) == 0)`);
             if (currentValueResult) stageBuf.line(`${awaitedTypes[stage]!.c} ${currentValue} = ${currentValueResult};`);
+            if (shortCircuitOperator !== undefined && stage + 1 < stageNames.length) {
+                const currentResult: EmitResult = awaitedTypes[stage]!.kind === "void"
+                    ? { c: "tsc_value_undefined()", ty: T_VALUE }
+                    : { c: currentValue, ty: awaitedTypes[stage]! };
+                const truthy = this.truthyExprFromEmitResult(currentResult, awaitExprs[stage]!);
+                const nullish = this.nullishExprFromEmitResult(currentResult, awaitExprs[stage]!);
+                const shortCircuit = shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
+                    ? `!(${truthy})`
+                    : shortCircuitOperator === ts.SyntaxKind.BarBarToken
+                        ? truthy
+                        : `!(${nullish})`;
+                stageBuf.open(`if (${shortCircuit})`);
+                if (rejectResult) {
+                    stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${this.coerceToString(currentResult, returnExpr)}));`);
+                } else {
+                    stageBuf.line(`${resolvedVar} = ${this.promiseResolveResult(currentResult, returnExpr)};`);
+                }
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                stageBuf.line("return;");
+                stageBuf.close();
+            }
             this.argumentValueScopes.push(scope);
             this.awaitExpressionValueScopes.push(awaitScope);
             if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -31533,6 +31619,15 @@ class Emitter {
             op !== ts.SyntaxKind.BarBarToken &&
             op !== ts.SyntaxKind.QuestionQuestionToken
         ) return null;
+        const sequenceContinuation = this.asyncAwaitShortCircuitExpressionSequenceReturnContinuationForExpression(
+            expr,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (sequenceContinuation) {
+            return { kind: "sequenceReturn", continuation: sequenceContinuation };
+        }
         const leftExpression = this.unwrapTransparentExpression(expr.left);
         if (ts.isAwaitExpression(leftExpression)) {
             if (ts.isAwaitExpression(this.unwrapTransparentExpression(expr.right))) {
