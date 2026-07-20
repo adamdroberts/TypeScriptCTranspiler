@@ -117,6 +117,12 @@ interface LazyForOfInfo {
     elemType: CType;
 }
 
+interface LazyForInInfo {
+    keysField: string;
+    indexField: string;
+    sourceType: CType;
+}
+
 interface AsyncFunctionContext {
     promiseType: CType;
 }
@@ -594,6 +600,7 @@ class Emitter {
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
+    private lazyGeneratorForInInfos = new WeakMap<ts.ForInStatement, LazyForInInfo>();
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -35686,6 +35693,19 @@ class Emitter {
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
+        if (ts.isForInStatement(stmt)) {
+            if (!ts.isVariableDeclarationList(stmt.initializer) || stmt.initializer.declarations.length !== 1) return false;
+            const decl = stmt.initializer.declarations[0]!;
+            if (!ts.isIdentifier(decl.name) || this.nodeContainsYield(stmt.expression)) return false;
+            const sourceType = this.prepareType(mapTsType(
+                stmt.expression,
+                this.checker.getTypeAtLocation(stmt.expression),
+                this.checker,
+            ));
+            if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "value") return false;
+            return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
+        }
+
         if (ts.isSwitchStatement(stmt)) {
             if (this.nodeContainsYield(stmt.expression)) return false;
             for (const clause of stmt.caseBlock.clauses) {
@@ -36233,6 +36253,48 @@ class Emitter {
         buf.close();
     }
 
+    private emitLazyGeneratorForIn(
+        buf: CBuf,
+        stmt: ts.ForInStatement,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        const info = this.lazyGeneratorForInInfos.get(stmt);
+        if (!info || !ts.isVariableDeclarationList(stmt.initializer)) {
+            unsupported(stmt, "lazy generator for-in metadata is unavailable");
+        }
+        const decl = stmt.initializer.declarations[0]!;
+        const source = this.emitExpr(stmt.expression);
+        const keys = source.ty.kind === "array"
+            ? `value_array_keys(${source.c}, false)`
+            : source.ty.kind === "string"
+                ? `value_string_keys(${source.c}, false)`
+                : `tsc_value_object_keys(${this.coerce(source, T_VALUE, stmt.expression)})`;
+        buf.open(`if (${envLocalName}->${info.keysField} == NULL)`);
+        buf.line(`${envLocalName}->${info.keysField} = ${keys};`);
+        buf.line(`${envLocalName}->${info.indexField} = 0;`);
+        buf.close();
+        const continueLabel = this.freshTemp("_for_in_continue");
+        buf.open(`while (${envLocalName}->${info.indexField} < ${envLocalName}->${info.keysField}->len)`);
+        this.activeLazyGeneratorBreakTargets.push("loop");
+        this.activeLazyGeneratorContinueTargets.push(continueLabel);
+        try {
+            const symbol = this.symbolForIdentifier(decl.name as ts.Identifier);
+            const binding = this.closureEnvBindingForSymbol(symbol);
+            if (!binding) unsupported(decl.name, "lazy generator for-in binding is unavailable");
+            buf.line(`*${binding.ptr} = TSC_ARR(tsc_str_t*, ${envLocalName}->${info.keysField}, ${envLocalName}->${info.indexField});`);
+            this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            buf.line(`${continueLabel}:;`);
+            buf.line(`${envLocalName}->${info.indexField}++;`);
+        } finally {
+            this.activeLazyGeneratorContinueTargets.pop();
+            this.activeLazyGeneratorBreakTargets.pop();
+        }
+        buf.close();
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -36321,6 +36383,11 @@ class Emitter {
 
         if (ts.isForOfStatement(stmt)) {
             this.emitLazyGeneratorForOf(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            return;
+        }
+
+        if (ts.isForInStatement(stmt)) {
+            this.emitLazyGeneratorForIn(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             return;
         }
 
@@ -36501,6 +36568,10 @@ class Emitter {
             statement: ts.ForOfStatement;
             info: LazyForOfInfo;
         }> = [];
+        const forInInfos: Array<{
+            statement: ts.ForInStatement;
+            info: LazyForInInfo;
+        }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
@@ -36571,6 +36642,30 @@ class Emitter {
                 ts.forEachChild(node, collectForOfInfos);
             };
             ts.forEachChild(fn.body, collectForOfInfos);
+
+            const collectForInInfos = (node: ts.Node) => {
+                if (ts.isForInStatement(node)) {
+                    const sourceType = this.prepareType(mapTsType(
+                        node.expression,
+                        this.checker.getTypeAtLocation(node.expression),
+                        this.checker,
+                    ));
+                    if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "value") {
+                        unsupported(node.expression, "lazy generator for-in currently supports arrays, strings, and dynamic values");
+                    }
+                    const index = forInInfos.length;
+                    const info: LazyForInInfo = {
+                        keysField: `for_in_keys_${index}`,
+                        indexField: `for_in_idx_${index}`,
+                        sourceType,
+                    };
+                    forInInfos.push({ statement: node, info });
+                    this.lazyGeneratorForInInfos.set(node, info);
+                }
+                if (node !== fn.body && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collectForInInfos);
+            };
+            ts.forEachChild(fn.body, collectForInInfos);
         }
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
@@ -36580,6 +36675,7 @@ class Emitter {
             localVarInfos.length > 0 ||
             compoundResumeInfos.length > 0 ||
             forOfInfos.length > 0 ||
+            forInInfos.length > 0 ||
             !!implicitThisParam ||
             hasYieldStar;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
@@ -36600,6 +36696,10 @@ class Emitter {
             }
             for (const { info } of forOfInfos) {
                 this.structDecls.line(`tsc_array_t* ${info.arrayField};`);
+                this.structDecls.line(`size_t ${info.indexField};`);
+            }
+            for (const { info } of forInInfos) {
+                this.structDecls.line(`tsc_array_t* ${info.keysField};`);
                 this.structDecls.line(`size_t ${info.indexField};`);
             }
             if (hasYieldStar) {
@@ -36707,6 +36807,10 @@ class Emitter {
             }
             for (const { info } of forOfInfos) {
                 buf.line(`${envVar}->${info.arrayField} = NULL;`);
+                buf.line(`${envVar}->${info.indexField} = 0;`);
+            }
+            for (const { info } of forInInfos) {
+                buf.line(`${envVar}->${info.keysField} = NULL;`);
                 buf.line(`${envVar}->${info.indexField} = 0;`);
             }
             if (hasYieldStar) {
