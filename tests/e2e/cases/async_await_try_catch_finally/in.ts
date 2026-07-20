@@ -36,6 +36,7 @@ const liftedCombinedTryCatchFinallyPrelude = async (): Promise<string> => {
         return "lifted-combined-prelude:" + value;
     } catch (e) {
         const label = "lifted-combined-prelude-caught:";
+        if (String(e).length > 0) console.log("combined-catch-control: lifted");
         let suffix: string;
         suffix = ":done";
         return label + e + suffix;
@@ -67,6 +68,7 @@ function makeNestedCombinedTryCatchFinallyPrelude(prefix: string): () => Promise
             return prefix + "nested-combined-prelude:" + value;
         } catch (e) {
             const label = prefix + "nested-combined-prelude-caught:";
+            if (String(e).length > 0) console.log("combined-catch-control: nested");
             let suffix: string;
             suffix = ":done";
             return label + e + suffix;
@@ -103,6 +105,7 @@ class CombinedTryWorker {
             return this.prefix + "method-combined-prelude:" + value;
         } catch (e) {
             const label = this.prefix + "method-combined-prelude-caught:";
+            if (String(e).length > 0) console.log("combined-catch-control: method");
             let suffix: string;
             suffix = ":done";
             return label + e + suffix;

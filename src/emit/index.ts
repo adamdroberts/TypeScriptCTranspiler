@@ -27706,6 +27706,15 @@ class Emitter {
                 visitCatchExpr(stmt.expression, { allowAwaited: false, allowCatch: !!catchSymbol });
                 return;
             }
+            if (
+                (ts.isIfStatement(stmt) || ts.isSwitchStatement(stmt) || ts.isWhileStatement(stmt) ||
+                    ts.isDoStatement(stmt) || ts.isForStatement(stmt) || ts.isForInStatement(stmt) ||
+                    ts.isForOfStatement(stmt) || ts.isTryStatement(stmt)) &&
+                this.asyncAwaitNonAbruptControlFlowPreludeSupported(stmt)
+            ) {
+                visitCatchExpr(stmt, { allowAwaited: false, allowCatch: !!catchSymbol });
+                return;
+            }
             if (!ts.isVariableStatement(stmt)) {
                 ok = false;
                 return;

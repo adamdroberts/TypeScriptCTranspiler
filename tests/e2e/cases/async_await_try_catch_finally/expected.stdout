@@ -8,6 +8,9 @@ method-combined-try-catch-finally-fulfilled: class-method:method-ok FFLlNnM
 method-combined-try-catch-finally-rejected: class-method-catch:method-bad FFLlNnMm
 combined-try-catch-finally-throw-fulfilled: combined-finally-throw-fulfilled:FFLlNnMmX FFLlNnMmX
 combined-try-catch-finally-throw-rejected: combined-finally-throw-rejected:FFLlNnMmXx FFLlNnMmXx
+combined-catch-control: lifted
 lifted-combined-try-catch-finally-prelude: lifted-combined-prelude-caught:lifted-combined-prelude-bad:done FFLlNnMmXxY!
+combined-catch-control: nested
 nested-combined-try-catch-finally-prelude: closure-nested-combined-prelude-caught:nested-combined-prelude-bad:done FFLlNnMmXxY!y!
+combined-catch-control: method
 method-combined-try-catch-finally-prelude: class-method-combined-prelude-caught:method-combined-prelude-bad:done FFLlNnMmXxY!y!Z!
