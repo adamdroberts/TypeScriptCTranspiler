@@ -32503,8 +32503,12 @@ class Emitter {
             return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
         });
         if (!bodyPreludeSupported) return false;
-        const bodyAwaitExpr = this.unwrapTransparentExpression(bodyAction.expression);
-        if (!ts.isAwaitExpression(bodyAwaitExpr)) return false;
+        const bodyAwaitExpression = this.unwrapTransparentExpression(bodyAction.expression);
+        if (!ts.isAwaitExpression(bodyAwaitExpression)) return false;
+        const nestedBodyAwait = this.unwrapTransparentExpression(bodyAwaitExpression.expression);
+        const bodyAwaitExpr = ts.isAwaitExpression(nestedBodyAwait)
+            ? nestedBodyAwait
+            : bodyAwaitExpression;
         const conditionAwaitExpr = awaitExpressions[0]!;
         const conditionPromiseType = this.prepareType(mapTsType(
             conditionAwaitExpr.expression,

@@ -177,6 +177,13 @@ async function chooseLoopReturnAwaitControlLocal(condition: boolean, flag: boole
     return prefix + "-control-local-fallthrough";
 }
 
+async function chooseLoopReturnAwaitNested(condition: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        return await (await laterBodyValue("body-await-nested"));
+    }
+    return "body-await-nested-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -345,6 +352,8 @@ chooseLoopReturnAwaitControlPrelude(true, false, "body-await-control").then((val
 chooseLoopReturnAwaitControlPrelude(false, true, "body-await-control").then((value) => console.log("await-while-return-await-control-fallthrough", value));
 chooseLoopReturnAwaitControlLocal(true, true, "body-await-control-local").then((value) => console.log("await-while-return-await-control-local-true", value));
 chooseLoopReturnAwaitControlLocal(true, false, "body-await-control-local").then((value) => console.log("await-while-return-await-control-local-false", value));
+chooseLoopReturnAwaitNested(true).then((value) => console.log("await-while-return-await-nested-true", value));
+chooseLoopReturnAwaitNested(false).then((value) => console.log("await-while-return-await-nested-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));

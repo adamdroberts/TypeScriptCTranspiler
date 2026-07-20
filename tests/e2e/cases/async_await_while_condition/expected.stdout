@@ -19,6 +19,7 @@ await-while-return-await-locals-false body-await-locals-locals-fallthrough
 await-while-return-await-assigned-false body-await-assigned-assigned-fallthrough
 await-while-throw-await-false body-throw-await-fallthrough
 await-while-return-await-control-fallthrough body-await-control-control-fallthrough
+await-while-return-await-nested-false body-await-nested-fallthrough
 await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
@@ -46,6 +47,7 @@ await-while-return-await-control-true body-await-control-control
 await-while-return-await-control-false body-await-control
 await-while-return-await-control-local-true body-await-control-local-branch-local
 await-while-return-await-control-local-false body-await-control-local
+await-while-return-await-nested-true body-await-nested
 await-for-condition-true for-yes
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
