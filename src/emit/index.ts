@@ -32476,7 +32476,7 @@ class Emitter {
             const declaration = stmt.declarationList.declarations[0]!;
             if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
         } else if (!ts.isExpressionStatement(stmt)) {
-            return false;
+            return this.asyncAwaitLoopBodyControlPreludeSupported(stmt);
         }
         let ok = true;
         const visit = (node: ts.Node): void => {

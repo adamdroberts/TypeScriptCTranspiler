@@ -308,6 +308,24 @@ async function chooseLoopThrowAwaitAliasPostMultiple(condition: boolean): Promis
     return "body-throw-post-multiple-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-post-control");
+        if (flag) prefix += "-updated";
+        return value + prefix;
+    }
+    return prefix + "-post-control-fallthrough";
+}
+
+async function chooseLoopThrowAwaitAliasPostControl(condition: boolean, flag: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        let reason = await laterBodyValue("body-throw-post-control");
+        if (flag) reason += "-updated";
+        throw reason;
+    }
+    return "body-throw-post-control-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -506,6 +524,12 @@ chooseLoopReturnAwaitAliasPostMultiple(true, "body-return").then((value) => cons
 chooseLoopReturnAwaitAliasPostMultiple(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-multiple-false", value));
 chooseLoopThrowAwaitAliasPostMultiple(true).catch((reason) => console.log("await-while-throw-await-alias-post-multiple-true", reason));
 chooseLoopThrowAwaitAliasPostMultiple(false).then((value) => console.log("await-while-throw-await-alias-post-multiple-false", value));
+chooseLoopReturnAwaitAliasPostControl(true, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-true", value));
+chooseLoopReturnAwaitAliasPostControl(true, false, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-false", value));
+chooseLoopReturnAwaitAliasPostControl(false, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-fallthrough", value));
+chooseLoopThrowAwaitAliasPostControl(true, true).catch((reason) => console.log("await-while-throw-await-alias-post-control-true", reason));
+chooseLoopThrowAwaitAliasPostControl(true, false).catch((reason) => console.log("await-while-throw-await-alias-post-control-false", reason));
+chooseLoopThrowAwaitAliasPostControl(false, true).then((value) => console.log("await-while-throw-await-alias-post-control-fallthrough", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
