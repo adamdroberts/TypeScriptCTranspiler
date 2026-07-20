@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Unequal conditional leading await branches now join a bounded common terminal `throw await promise` after divergent sequencing lengths across declarations, methods, and async-arrow function values. Test: `async_await_conditional_unequal_throw_await_tail`.
 - Conditional leading await branches now join a bounded common terminal `throw await promise`, preserving both branch selections before the final rejection across declarations, methods, and async-arrow function values. Test: `async_await_conditional_throw_await_tail`.
 - Terminal `throw await promise` continuations now preserve bounded await-free captured local preludes before the first suspension across declarations, methods, and async-arrow function values. Test: `async_await_throw_await_prelude`.
 - Leading async/await chains now support a terminal `throw await promise` after an earlier awaited local, including declaration, method, async-arrow, and branch-block coverage. Tests: `async_await_throw_await_tail`, `async_await_branch_throw_await_tail`.

@@ -1,0 +1,6 @@
+declaration-false: fn-tail
+declaration-true: fn-tail
+method-false: -tailmethod
+method-true: -tailmethod
+value-false: arrow-tail
+value-true: arrow-tail
