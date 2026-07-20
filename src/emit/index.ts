@@ -81,6 +81,7 @@ interface EmitResult {
     c: string;
     ty: CType;
     lazyGenerator?: boolean;
+    lazyGeneratorFactory?: boolean;
 }
 
 interface SequencedCallArg {
@@ -40938,7 +40939,13 @@ class Emitter {
                 declaredTy && declaredTy.c === "int64_t" && ty.kind === "number"
                     ? declaredTy
                     : ty;
-            return { c: this.identifierRead(expr), ty: effectiveTy };
+            return {
+                c: this.identifierRead(expr),
+                ty: effectiveTy,
+                lazyGeneratorFactory: ty.kind === "function"
+                    ? this.isLazyGeneratorFunctionValue(expr)
+                    : undefined,
+            };
         }
         if (ts.isParenthesizedExpression(expr)) {
             const inner = this.emitExpr(expr.expression);
@@ -44412,7 +44419,7 @@ class Emitter {
         if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
             const argList = this.emitSpreadCallArgumentList(call.arguments);
             const ret = this.prepareType(callee.ty.ret);
-            return this.emitSequencedExpr(ret, [
+            const result = this.emitSequencedExpr(ret, [
                 { value: callee, target: callee.ty, node: call.expression },
                 { value: argList, node: call },
             ], (vals) => {
@@ -44424,6 +44431,8 @@ class Emitter {
                 }
                 return `({ if (${list}->len != ${params.length}) tsc_throw_str(tsc_str_from_cstr("function value argument length mismatch")); ${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")}); })`;
             });
+            if (callee.lazyGeneratorFactory) result.lazyGenerator = true;
+            return result;
         }
         if (call.arguments.length > params.length) {
             unsupported(
@@ -44443,11 +44452,13 @@ class Emitter {
                     : this.callSpecsFromSignature(call, call.arguments, sigParams)),
         ];
         const ret = this.prepareType(callee.ty.ret);
-        return this.emitSequencedExpr(ret, specs, (vals) => {
+        const result = this.emitSequencedExpr(ret, specs, (vals) => {
             const fn = vals[0]!;
             const args = vals.slice(1);
             return `${fn}->fn(${[`${fn}->env`, ...(callee.ty.thisParam ? ["tsc_value_undefined()"] : []), ...args].join(", ")})`;
         });
+        if (callee.lazyGeneratorFactory) result.lazyGenerator = true;
+        return result;
     }
 
     private callSpecsFromFunctionType(
@@ -44520,7 +44531,26 @@ class Emitter {
                 `({ if (!${staticName}_initialized) { ${staticName}.fn = ${adapter}; ${staticName}.env = NULL; ${staticName}_initialized = true; } ` +
                 `&${staticName}; })`,
             ty: type,
+            lazyGeneratorFactory: this.isLazyGeneratorFunctionValue(id),
         };
+    }
+
+    private isLazyGeneratorFunctionValue(id: ts.Identifier, seen = new Set<ts.Symbol>()): boolean {
+        const symbol = this.symbolForIdentifier(id);
+        if (!symbol || seen.has(symbol)) return false;
+        seen.add(symbol);
+        const declaration = symbol.valueDeclaration ?? symbol.declarations?.[0];
+        if (!declaration) return false;
+        if (ts.isFunctionLike(declaration)) return this.isGeneratorDeclaration(declaration);
+        if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+            if (ts.isFunctionLike(declaration.initializer)) {
+                return this.isGeneratorDeclaration(declaration.initializer);
+            }
+            if (ts.isIdentifier(declaration.initializer)) {
+                return this.isLazyGeneratorFunctionValue(declaration.initializer, seen);
+            }
+        }
+        return false;
     }
 
     private ensureFunctionReferenceAdapter(id: ts.Identifier, type: CType): string {
@@ -44625,7 +44655,11 @@ class Emitter {
             pieces.push(`${tmp}->env = NULL`);
         }
         pieces.push(tmp);
-        return { c: `({ ${pieces.join("; ")}; })`, ty: type };
+        return {
+            c: `({ ${pieces.join("; ")}; })`,
+            ty: type,
+            lazyGeneratorFactory: this.isGeneratorDeclaration(fn),
+        };
     }
 
     private emitClosureImplementation(
