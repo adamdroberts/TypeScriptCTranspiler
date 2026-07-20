@@ -258,6 +258,7 @@ await-direct-assigned-multiple-locals direct-assigned-multiple-assigned-source
 await-direct-throw-multiple-locals direct-throw-multiple-throw-source
 await-loop-initializer-var-fallthrough loop-var-fallthrough-after
 await-loop-initializer-escaping-var-break loop-escaping-var-updated
+await-loop-initializer-escaping-var-multiple-break loop-escaping-var-multiple-first-second
 await-loop-initializer-uninitialized-var-fallthrough undefined
 await-loop-initializer-uninitialized-let-condition-fallthrough loop-uninitialized-let-condition-fallthrough
 await-method-throw-multiple-locals method-throw-source
