@@ -5,3 +5,4 @@ value-branch: arrow-branch
 method-fall: {"prefix":"method-","first":"one","second":"two"}
 value-fall: value-arrow-one-two
 typed-array: ["typed","fall-one","fall-two"]
+call-fall: call-one-call-two
