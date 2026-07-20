@@ -105,6 +105,13 @@ async function chooseLoopInitializerCapture(): Promise<string> {
     return "loop-capture-fallthrough";
 }
 
+async function chooseLoopInitializerCaptureThrow(): Promise<string> {
+    for (let reason = "loop-captured-throw"; await laterTrue();) {
+        throw await laterBodyValue(reason);
+    }
+    return "loop-capture-throw-fallthrough";
+}
+
 async function chooseLoopExpression(flag: boolean, prefix: string): Promise<string> {
     while (await (flag ? laterTrue() : laterFalse())) {
         prefix += "-yes";
@@ -2107,6 +2114,7 @@ chooseDirectAwaitAssignedMultipleLocals("direct-assigned-multiple").then((value)
 chooseDirectThrowAwaitMultipleLocals("direct-throw-multiple").catch((reason) => console.log("await-direct-throw-multiple-locals", reason));
 chooseMultipleAwaitDeclarators("multiple-await").then((value) => console.log("await-multiple-declarators", value));
 chooseLoopInitializerCapture().then((value) => console.log("await-loop-initializer-capture", value));
+chooseLoopInitializerCaptureThrow().catch((reason) => console.log("await-loop-initializer-capture-throw", reason));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
 new LoopChooser("method-").multipleAwaitDeclarators().then((value) => console.log("await-method-multiple-declarators", value));
 chooseArrowThrowWithLocals("arrow").catch((reason) => console.log("await-arrow-throw-multiple-locals", reason));
