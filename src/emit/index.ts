@@ -281,6 +281,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     conditionAwaitExpr: ts.AwaitExpression;
     bodyAwaitExpr: ts.AwaitExpression;
     bodyPreludeStatements: readonly ts.Statement[];
+    bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
@@ -32443,8 +32444,8 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
-        const bodyReturn = loopBody[loopBody.length - 1];
-        if (!ts.isReturnStatement(bodyReturn) || !bodyReturn.expression) return false;
+        const bodyAction = loopBody[loopBody.length - 1];
+        if ((!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction)) || !bodyAction.expression) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         const bodyPreludeSupported = bodyPreludeStatements.every((statement) => {
             if (ts.isExpressionStatement(statement)) return true;
@@ -32456,7 +32457,7 @@ class Emitter {
                 (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Let) !== 0);
         });
         if (!bodyPreludeSupported) return false;
-        const bodyAwaitExpr = this.unwrapTransparentExpression(bodyReturn.expression);
+        const bodyAwaitExpr = this.unwrapTransparentExpression(bodyAction.expression);
         if (!ts.isAwaitExpression(bodyAwaitExpr)) return false;
         const conditionAwaitExpr = awaitExpressions[0]!;
         const conditionPromiseType = this.prepareType(mapTsType(
@@ -32542,6 +32543,7 @@ class Emitter {
             conditionAwaitExpr,
             bodyAwaitExpr,
             bodyPreludeStatements,
+            bodyRejectResult: ts.isThrowStatement(bodyAction),
             fallthroughExpr,
             params: capturedParams,
             thisValue: usesThis ? thisValue : null,
@@ -32553,6 +32555,7 @@ class Emitter {
             bodyAwaitExpr,
             continuation.params,
             continuation.thisValue,
+            continuation.bodyRejectResult,
         );
         const adapter = this.ensureAsyncAwaitLoopConditionReturnAwaitContinuationAdapter(
             conditionPromiseType,
@@ -32560,6 +32563,7 @@ class Emitter {
             continuation,
             bodyPromiseType,
             bodyAdapter,
+            continuation.bodyRejectResult,
         );
         const source = this.emitExpr(conditionAwaitExpr.expression);
         const sourcePromise = this.freshTemp("_await_source");
@@ -32589,6 +32593,7 @@ class Emitter {
         continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
         bodyPromiseType: CType,
         bodyAdapter: string,
+        bodyRejectResult: boolean,
     ): string {
         const name = `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
