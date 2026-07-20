@@ -363,6 +363,24 @@ async function chooseLoopThrowAwaitSequence(condition: boolean): Promise<string>
     return "body-throw-sequence-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasMutation(condition: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        let value = await laterBodyValue("body-return-mutation");
+        value += "-updated";
+        return value;
+    }
+    return "body-return-mutation-fallthrough";
+}
+
+async function chooseLoopThrowAwaitAliasMutation(condition: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        let reason = await laterBodyValue("body-throw-mutation");
+        reason += "-updated";
+        throw reason;
+    }
+    return "body-throw-mutation-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -575,6 +593,10 @@ chooseLoopReturnAwaitSequence(true, "body-return").then((value) => console.log("
 chooseLoopReturnAwaitSequence(false, "body-return").then((value) => console.log("await-while-return-await-sequence-false", value));
 chooseLoopThrowAwaitSequence(true).catch((reason) => console.log("await-while-throw-await-sequence-true", reason));
 chooseLoopThrowAwaitSequence(false).then((value) => console.log("await-while-throw-await-sequence-false", value));
+chooseLoopReturnAwaitAliasMutation(true).then((value) => console.log("await-while-return-await-alias-mutation-true", value));
+chooseLoopReturnAwaitAliasMutation(false).then((value) => console.log("await-while-return-await-alias-mutation-false", value));
+chooseLoopThrowAwaitAliasMutation(true).catch((reason) => console.log("await-while-throw-await-alias-mutation-true", reason));
+chooseLoopThrowAwaitAliasMutation(false).then((value) => console.log("await-while-throw-await-alias-mutation-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));

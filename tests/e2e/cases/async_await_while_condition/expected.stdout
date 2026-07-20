@@ -40,6 +40,8 @@ await-while-return-await-alias-post-assigned-local-false body-return-post-assign
 await-while-throw-await-alias-post-assigned-local-false body-throw-post-assigned-local-fallthrough
 await-while-return-await-sequence-false body-return-sequence-fallthrough
 await-while-throw-await-sequence-false body-throw-sequence-fallthrough
+await-while-return-await-alias-mutation-false body-return-mutation-fallthrough
+await-while-throw-await-alias-mutation-false body-throw-mutation-fallthrough
 await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
@@ -90,6 +92,8 @@ await-while-return-await-alias-post-assigned-local-true body-return-post-assigne
 await-while-throw-await-alias-post-assigned-local-true body-throw-post-assigned-local-suffix
 await-while-return-await-sequence-true body-return-updated
 await-while-throw-await-sequence-true body-throw-sequence-thrown
+await-while-return-await-alias-mutation-true body-return-mutation-updated
+await-while-throw-await-alias-mutation-true body-throw-mutation-updated
 await-for-condition-true for-yes
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
