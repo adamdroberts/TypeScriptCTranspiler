@@ -407,7 +407,9 @@ await-while-method-multiple-true method-loop-first-second
 await-loop-initializer-escaping-var-continue loop-escaping-var-continue-continued-increment
 await-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-continued-increment
 await-method-loop-initializer-escaping-var-continue loop-escaping-var-continue-body-method-increment
+await-method-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-body-method-throw-increment
 await-value-loop-initializer-escaping-var-continue loop-escaping-var-continue-value-body-value-increment
+await-value-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-value-body-value-increment
 await-while-escaping-var-continue while-escaping-continue-continued
 await-while-escaping-var-continue-throw while-escaping-continue-throw-continued
 await-method-escaping-var-continue while-escaping-continue-method-continued
