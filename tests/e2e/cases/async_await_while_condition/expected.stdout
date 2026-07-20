@@ -10,6 +10,7 @@ await-while-if-true if-loop-if-yes
 await-while-if-false if-loop-if-no
 await-while-if-else-true if-else-loop-then
 await-while-if-else-false if-else-loop-else
+await-while-return-await-fallthrough body-await-fallthrough
 await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
@@ -26,6 +27,9 @@ await-while-method-true method-loop-yes
 await-while-method-false method-loop-no
 await-while-value-true value-loop-yes
 await-while-value-false value-loop-no
+await-while-return-await-true body-await-yes
+await-while-return-await-false body-await-no
+await-while-return-await-reject body-rejected
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
 await-while-or-true or-yes

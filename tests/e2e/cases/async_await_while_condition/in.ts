@@ -18,6 +18,14 @@ function laterNullableFalse(): Promise<boolean | null> {
     return new Promise<boolean | null>((resolve) => setImmediate(() => resolve(false)));
 }
 
+function laterBodyValue(value: string): Promise<string> {
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
+}
+
+function laterBodyReject(): Promise<string> {
+    return new Promise<string>((_resolve, reject) => setImmediate(() => reject("body-rejected")));
+}
+
 async function chooseLoopTrue(): Promise<string> {
     while (await laterTrue()) {
         return "loop-yes";
@@ -77,6 +85,20 @@ async function chooseLoopIfElse(flag: boolean, prefix: string): Promise<string> 
         }
     }
     return prefix + "-outer-no";
+}
+
+async function chooseLoopReturnAwait(condition: boolean, body: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        return await laterBodyValue(body ? "body-await-yes" : "body-await-no");
+    }
+    return "body-await-fallthrough";
+}
+
+async function chooseLoopReturnAwaitReject(): Promise<string> {
+    while (await laterTrue()) {
+        return await laterBodyReject();
+    }
+    return "body-await-reject-fallthrough";
 }
 
 async function chooseForIf(flag: boolean): Promise<string> {
@@ -224,6 +246,10 @@ chooseLoopIf(true, "if-loop").then((value) => console.log("await-while-if-true",
 chooseLoopIf(false, "if-loop").then((value) => console.log("await-while-if-false", value));
 chooseLoopIfElse(true, "if-else-loop").then((value) => console.log("await-while-if-else-true", value));
 chooseLoopIfElse(false, "if-else-loop").then((value) => console.log("await-while-if-else-false", value));
+chooseLoopReturnAwait(true, true).then((value) => console.log("await-while-return-await-true", value));
+chooseLoopReturnAwait(true, false).then((value) => console.log("await-while-return-await-false", value));
+chooseLoopReturnAwait(false, true).then((value) => console.log("await-while-return-await-fallthrough", value));
+chooseLoopReturnAwaitReject().catch((reason) => console.log("await-while-return-await-reject", reason));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
