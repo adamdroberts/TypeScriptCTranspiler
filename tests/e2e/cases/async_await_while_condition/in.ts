@@ -411,7 +411,7 @@ async function chooseLoopInitializerEscapingVarNestedForInControlBreakAwait(): P
 }
 
 async function chooseLoopInitializerEscapingVarContinueAwait(): Promise<string> {
-    for (var count = 1, value = "loop-escaping-var-continue"; await laterCondition(count-- > 0);) {
+    for (var count = 1, value = "loop-escaping-var-continue"; await laterCondition(count-- > 0); value += "-increment") {
         value += "-continued";
         continue;
     }

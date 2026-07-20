@@ -284,6 +284,7 @@ interface AsyncAwaitExpressionReturnContinuation {
 interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     conditionExpr: ts.Expression;
     conditionAwaitExpr: ts.AwaitExpression;
+    loopIncrementor?: ts.Expression;
     bodyAwaitExpr: ts.AwaitExpression | null;
     bodyReturnExpr: ts.Expression;
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
@@ -32977,6 +32978,7 @@ class Emitter {
         thisValue: EmitResult | null,
         loopInitializer: ts.Expression | ts.VariableStatement | null,
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
+        loopIncrementor: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
@@ -33056,6 +33058,7 @@ class Emitter {
         };
         const directBodyAwait = this.unwrapTransparentExpression(bodyExpression);
         if (bodyContinue) {
+            if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = loopBody.slice(0, -1);
             bodyRejectResult = false;
@@ -33334,12 +33337,14 @@ class Emitter {
             if (bodyLeadingChain.thisValue) usesThis = true;
         }
         visitReferences(fallthroughExpr);
+        if (loopIncrementor) visitReferences(loopIncrementor);
         if (!ok) return false;
 
         const capturedParams = [...referenced.values()];
         const continuation: AsyncAwaitLoopConditionReturnAwaitContinuation = {
             conditionExpr: condition,
             conditionAwaitExpr,
+            loopIncrementor: loopIncrementor ?? undefined,
             bodyAwaitExpr,
             bodyReturnExpr,
             bodyAwaitedAliasSymbols,
@@ -33492,6 +33497,10 @@ class Emitter {
             buf.open(`if (${conditionTruth})`);
             for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
             if (continuation.bodyContinue) {
+                if (continuation.loopIncrementor) {
+                    const incrementor = this.emitExpr(continuation.loopIncrementor);
+                    buf.line(`${incrementor.c};`);
+                }
                 const continueSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
                 const continueSourceVar = this.freshTemp("_await_continue_source");
                 const continueEnvVar = this.freshTemp("_await_continue_env");
@@ -33648,6 +33657,9 @@ class Emitter {
                 ? loop.initializer
                 : ts.factory.createVariableStatement(undefined, loop.initializer)
             : null;
+        const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
+            ? loop.incrementor
+            : null;
         let loopInitializerCaptures: AsyncAwaitContinuationParam[] = [];
         if (loopInitializer) {
             let supported = true;
@@ -33700,6 +33712,7 @@ class Emitter {
                     for (const statement of loopBody) visitContinuation(statement);
                 }
                 if (supported) visitContinuation(fallthroughExpression);
+                if (supported && loopIncrementor) visitContinuation(loopIncrementor);
             }
             if (!supported) return false;
             loopInitializerCaptures = initializerCaptures;
@@ -33725,6 +33738,7 @@ class Emitter {
                 thisValue,
                 loopInitializer,
                 loopInitializerCaptures,
+                loopIncrementor,
             )) return true;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
@@ -33738,6 +33752,7 @@ class Emitter {
             thisValue,
             loopInitializer,
             loopInitializerCaptures,
+            loopIncrementor,
         )) return true;
         if (ts.isThrowStatement(fallthrough)) return false;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
