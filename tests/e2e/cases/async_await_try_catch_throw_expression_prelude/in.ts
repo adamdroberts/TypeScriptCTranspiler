@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 async function declaration(prefix: string): Promise<string> {
     try {
         console.log("try-prelude: declaration");
+        if (prefix.length > 0) console.log("try-control: declaration");
         const label = prefix + "-try";
         throw (await delay(1, label)) + "-suffix";
     } catch (reason) {
@@ -14,8 +15,9 @@ class Worker {
     prefix(value: string): string { return value + "method"; }
     async run(): Promise<string> {
         try {
-            console.log("try-prelude: method");
-            const label = this.prefix("-try");
+        console.log("try-prelude: method");
+        if (this.prefix("").length > 0) console.log("try-control: method");
+        const label = this.prefix("-try");
             throw (await delay(2, label)) + "-suffix";
         } catch (reason) {
             return reason + "-caught";
@@ -26,6 +28,7 @@ class Worker {
 const value = async (prefix: string): Promise<string> => {
     try {
         console.log("try-prelude: arrow");
+        if (prefix.length > 0) console.log("try-control: arrow");
         const label = prefix + "-try";
         throw (await delay(3, label)) + "-suffix";
     } catch (reason) {

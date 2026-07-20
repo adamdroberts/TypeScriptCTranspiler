@@ -22008,6 +22008,28 @@ class Emitter {
             }
             ts.forEachChild(node, visitNoAwaitOrNestedScope);
         };
+        const isNonAbruptControlFlowPrelude = (stmt: ts.Statement): boolean => {
+            let safe = true;
+            const visit = (node: ts.Node): void => {
+                if (!safe) return;
+                if (
+                    ts.isAwaitExpression(node) ||
+                    ts.isFunctionLike(node) ||
+                    ts.isClassLike(node) ||
+                    ts.isVariableDeclaration(node) ||
+                    ts.isReturnStatement(node) ||
+                    ts.isThrowStatement(node) ||
+                    ts.isBreakStatement(node) ||
+                    ts.isContinueStatement(node)
+                ) {
+                    safe = false;
+                    return;
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(stmt);
+            return safe;
+        };
         while (index < block.statements.length) {
             const stmt = block.statements[index]!;
             if (this.awaitedContinuationStep(stmt) || this.awaitedReturnContinuationStep(stmt)) break;
@@ -22042,6 +22064,16 @@ class Emitter {
                 }
                 visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
+                preludeStatements.push(stmt);
+                index++;
+                continue;
+            }
+            if (
+                (ts.isIfStatement(stmt) || ts.isSwitchStatement(stmt) || ts.isWhileStatement(stmt) ||
+                    ts.isDoStatement(stmt) || ts.isForStatement(stmt) || ts.isForInStatement(stmt) ||
+                    ts.isForOfStatement(stmt) || ts.isTryStatement(stmt)) &&
+                isNonAbruptControlFlowPrelude(stmt)
+            ) {
                 preludeStatements.push(stmt);
                 index++;
                 continue;

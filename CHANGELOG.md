@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Source `try` / `catch` awaited throw expressions now preserve bounded await-free non-abrupt `if` / `switch` / loop / `try` control-flow preludes inside the try block across async declarations, methods, and async-arrow function values. Test: `async_await_try_catch_throw_expression_prelude`.
 - Source `try` / `catch` awaited throw expressions now preserve bounded await-free expression-statement preludes inside the try block across async declarations, methods, and async-arrow function values. Test: `async_await_try_catch_throw_expression_prelude`.
 - Source `try` / `catch` awaited throw expressions now preserve bounded initialized local preludes inside the try block across async declarations, methods, and async-arrow function values. Test: `async_await_try_catch_throw_expression_prelude`.
 - Source `try` / `catch` now catches a bounded single-awaited throw expression and returns the transformed catch value across async declarations, methods, and async-arrow function values. Test: `async_await_try_catch_throw_expression`.
