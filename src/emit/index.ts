@@ -25605,6 +25605,7 @@ class Emitter {
                 !this.emitAsyncAwaitIfExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLogicalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitConditionalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitWhileConditionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitPreludeExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitConditionalExpressionThrowContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionSequenceThrowContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -32414,6 +32415,41 @@ class Emitter {
         if (!continuation) return false;
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
         return this.emitAsyncAwaitIfExpressionReturnBranchWithReturnContext(buf, body, continuation);
+    }
+
+    private emitAsyncAwaitWhileConditionReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        if (body.statements.length !== 2 || thisValue || parameters.some((parameter) =>
+            !this.isThisParameter(parameter) && ts.isIdentifier(parameter.name))) return false;
+        const loop = body.statements[0]!;
+        const fallthrough = body.statements[1]!;
+        if (!ts.isWhileStatement(loop) || !ts.isReturnStatement(fallthrough) || !fallthrough.expression) return false;
+        const condition = this.unwrapTransparentExpression(loop.expression);
+        if (!ts.isAwaitExpression(condition)) return false;
+        const loopBody = ts.isBlock(loop.statement)
+            ? loop.statement.statements
+            : [loop.statement];
+        if (loopBody.length !== 1 || !ts.isReturnStatement(loopBody[0]!) || !loopBody[0]!.expression) return false;
+        const awaitedType = this.prepareType(mapTsType(condition, this.checker.getTypeAtLocation(condition), this.checker));
+        if (awaitedType.kind !== "boolean") return false;
+        const returnExpr = ts.factory.createConditionalExpression(
+            condition,
+            ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+            loopBody[0]!.expression,
+            ts.factory.createToken(ts.SyntaxKind.ColonToken),
+            fallthrough.expression,
+        );
+        const continuation: AsyncAwaitExpressionReturnContinuation = {
+            awaitExpr: condition,
+            returnExpr,
+            params: [],
+            thisValue: null,
+        };
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
 
     private asyncAwaitIfExpressionReturnContinuation(
