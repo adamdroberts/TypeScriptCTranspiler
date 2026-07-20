@@ -1,0 +1,6 @@
+declaration-true: declaration-left:declaration-right
+declaration-false: declaration-first:declaration-second
+method-true: method-left:method-right
+method-false: method-first:method-second
+value-true: arrow-left:arrow-right
+value-false: arrow-first:arrow-second
