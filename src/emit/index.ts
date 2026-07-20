@@ -110,6 +110,13 @@ interface LazyCompoundResumeSlot {
     type: CType;
 }
 
+interface LazyForOfInfo {
+    arrayField: string;
+    indexField: string;
+    sourceType: CType;
+    elemType: CType;
+}
+
 interface AsyncFunctionContext {
     promiseType: CType;
 }
@@ -586,6 +593,7 @@ class Emitter {
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
+    private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -35659,6 +35667,25 @@ class Emitter {
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
+        if (ts.isForOfStatement(stmt)) {
+            if (stmt.awaitModifier || !ts.isVariableDeclarationList(stmt.initializer)) return false;
+            if (stmt.initializer.declarations.length !== 1) return false;
+            const decl = stmt.initializer.declarations[0]!;
+            if (!ts.isIdentifier(decl.name) || this.nodeContainsYield(stmt.expression)) return false;
+            const sourceType = this.prepareType(mapTsType(
+                stmt.expression,
+                this.checker.getTypeAtLocation(stmt.expression),
+                this.checker,
+            ));
+            const elemType = sourceType.kind === "array"
+                ? sourceType.elem
+                : sourceType.kind === "string"
+                    ? T_STRING
+                    : null;
+            if (!elemType) return false;
+            return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
+        }
+
         if (ts.isSwitchStatement(stmt)) {
             if (this.nodeContainsYield(stmt.expression)) return false;
             for (const clause of stmt.caseBlock.clauses) {
@@ -36161,6 +36188,51 @@ class Emitter {
         buf.line(`${endLabel}:;`);
     }
 
+    private emitLazyGeneratorForOf(
+        buf: CBuf,
+        stmt: ts.ForOfStatement,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        const info = this.lazyGeneratorForOfInfos.get(stmt);
+        if (!info || !ts.isVariableDeclarationList(stmt.initializer)) {
+            unsupported(stmt, "lazy generator for-of metadata is unavailable");
+        }
+        const decl = stmt.initializer.declarations[0]!;
+        const source = this.emitExpr(stmt.expression);
+        const sourceArray = source.ty.kind === "string"
+            ? `tsc_str_chars(${source.c})`
+            : source.c;
+        buf.open(`if (${envLocalName}->${info.arrayField} == NULL)`);
+        buf.line(`${envLocalName}->${info.arrayField} = ${sourceArray};`);
+        buf.line(`${envLocalName}->${info.indexField} = 0;`);
+        buf.close();
+        const continueLabel = this.freshTemp("_for_of_continue");
+        buf.open(`while (${envLocalName}->${info.indexField} < ${envLocalName}->${info.arrayField}->len)`);
+        this.activeLazyGeneratorBreakTargets.push("loop");
+        this.activeLazyGeneratorContinueTargets.push(continueLabel);
+        try {
+            const symbol = this.symbolForIdentifier(decl.name as ts.Identifier);
+            const binding = this.closureEnvBindingForSymbol(symbol);
+            if (!binding) unsupported(decl.name, "lazy generator for-of binding is unavailable");
+            const targetType = binding.type;
+            const present = `tsc_array_index_present(${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField})`;
+            const current = info.elemType.kind === "value"
+                ? `( ${present} ? TSC_ARR(${info.elemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : tsc_value_undefined() )`
+                : `${present} ? TSC_ARR(${info.elemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : ${this.zeroValue(info.elemType)}`;
+            buf.line(`*${binding.ptr} = ${this.coerce({ c: current, ty: info.elemType }, targetType, stmt.expression)};`);
+            this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            buf.line(`${continueLabel}:;`);
+            buf.line(`${envLocalName}->${info.indexField}++;`);
+        } finally {
+            this.activeLazyGeneratorContinueTargets.pop();
+            this.activeLazyGeneratorBreakTargets.pop();
+        }
+        buf.close();
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -36244,6 +36316,11 @@ class Emitter {
             }
             buf.close();
             buf.close();
+            return;
+        }
+
+        if (ts.isForOfStatement(stmt)) {
+            this.emitLazyGeneratorForOf(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             return;
         }
 
@@ -36420,6 +36497,10 @@ class Emitter {
             field: string;
             type: CType;
         }> = [];
+        const forOfInfos: Array<{
+            statement: ts.ForOfStatement;
+            info: LazyForOfInfo;
+        }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
@@ -36462,6 +36543,34 @@ class Emitter {
                 ts.forEachChild(node, collectCompoundResumeSlots);
             };
             ts.forEachChild(fn.body, collectCompoundResumeSlots);
+
+            const collectForOfInfos = (node: ts.Node) => {
+                if (ts.isForOfStatement(node)) {
+                    const sourceType = this.prepareType(mapTsType(
+                        node.expression,
+                        this.checker.getTypeAtLocation(node.expression),
+                        this.checker,
+                    ));
+                    const elemType = sourceType.kind === "array"
+                        ? sourceType.elem
+                        : sourceType.kind === "string"
+                            ? T_STRING
+                            : null;
+                    if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays and strings");
+                    const index = forOfInfos.length;
+                    const info: LazyForOfInfo = {
+                        arrayField: `for_of_arr_${index}`,
+                        indexField: `for_of_idx_${index}`,
+                        sourceType,
+                        elemType,
+                    };
+                    forOfInfos.push({ statement: node, info });
+                    this.lazyGeneratorForOfInfos.set(node, info);
+                }
+                if (node !== fn.body && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collectForOfInfos);
+            };
+            ts.forEachChild(fn.body, collectForOfInfos);
         }
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
@@ -36470,6 +36579,7 @@ class Emitter {
         const needsEnv = runtimeParamInfos.length > 0 ||
             localVarInfos.length > 0 ||
             compoundResumeInfos.length > 0 ||
+            forOfInfos.length > 0 ||
             !!implicitThisParam ||
             hasYieldStar;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
@@ -36487,6 +36597,10 @@ class Emitter {
             }
             for (const info of compoundResumeInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
+            }
+            for (const { info } of forOfInfos) {
+                this.structDecls.line(`tsc_array_t* ${info.arrayField};`);
+                this.structDecls.line(`size_t ${info.indexField};`);
             }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {
@@ -36590,6 +36704,10 @@ class Emitter {
             }
             for (const info of compoundResumeInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
+            }
+            for (const { info } of forOfInfos) {
+                buf.line(`${envVar}->${info.arrayField} = NULL;`);
+                buf.line(`${envVar}->${info.indexField} = 0;`);
             }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {
