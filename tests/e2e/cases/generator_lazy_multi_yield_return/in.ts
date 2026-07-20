@@ -46,6 +46,10 @@ function* commaLeaves(): Generator<number, number, number> {
     return (yield 18), (yield 19);
 }
 
+function* inLeaves(): Generator<any, boolean, any> {
+    return (yield "x") in (yield { x: 1 });
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -117,3 +121,8 @@ const commaFirst: any = commaIter.next();
 const commaSecond: any = commaIter.next(4);
 const commaDone: any = commaIter.next(4);
 console.log("comma", commaFirst.value, commaSecond.value, commaDone.done, commaDone.value);
+const inIter = inLeaves();
+const inFirst: any = inIter.next();
+const inSecond: any = inIter.next("x");
+const inDone: any = inIter.next({ x: 1 });
+console.log("in", inFirst.value, inSecond.value.x, inDone.done, inDone.value);

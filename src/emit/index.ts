@@ -37596,6 +37596,7 @@ class Emitter {
                 ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
                 ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
                 ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
+                ts.SyntaxKind.InKeyword,
                 ts.SyntaxKind.AsteriskAsteriskToken].includes(op)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
