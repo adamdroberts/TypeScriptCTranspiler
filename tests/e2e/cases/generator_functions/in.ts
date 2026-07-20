@@ -12,6 +12,18 @@ function* labels(): Generator<string, string, undefined> {
     return "done";
 }
 
+function* nodeSources(): Generator<any, string, undefined> {
+    try {
+        const params = new URLSearchParams("a=1&b=two");
+        yield* params;
+        const bytes = Buffer.from([13, 14]);
+        yield* bytes as any;
+    } catch (error) {
+        yield "fallback";
+    }
+    return "node-sources-done";
+}
+
 const nums: number[] = [];
 for (const n of range(2, 5)) {
     nums.push(n);
@@ -24,6 +36,12 @@ for (const label of labels()) {
 
 console.log("range:", nums.join(","));
 console.log("labels:", words.join("|"));
+
+const nodeValues: any[] = [];
+for (const value of nodeSources()) {
+    nodeValues.push(value);
+}
+console.log("node sources:", nodeValues.map((value: any) => Array.isArray(value) ? value.join(",") : value).join("|"));
 
 const manual = range(7, 8);
 const first: any = manual.next();

@@ -37939,6 +37939,12 @@ class Emitter {
         } else if (source.ty.kind === "set" && source.ty.elem) {
             arrayExpr = `tsc_set_values(${source.c})`;
             elemType = source.ty.elem;
+        } else if (source.ty.kind === "urlsearchparams") {
+            arrayExpr = `tsc_url_search_params_entries(${source.c})`;
+            elemType = entryType(T_STRING, T_STRING);
+        } else if (source.ty.kind === "buffer") {
+            arrayExpr = `({ tsc_buffer_t* const _yield_star_buffer = ${source.c}; tsc_array_t* _yield_star_values = tsc_array_new(sizeof(double), _yield_star_buffer->len ? _yield_star_buffer->len : 1); for (size_t _yield_star_i = 0; _yield_star_i < _yield_star_buffer->len; _yield_star_i++) { double _yield_star_byte = (double)_yield_star_buffer->data[_yield_star_i]; tsc_array_push_raw(_yield_star_values, &_yield_star_byte); } _yield_star_values; })`;
+            elemType = T_NUMBER;
         } else if (source.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${source.c})`;
             elemType = T_STRING;
@@ -37957,7 +37963,7 @@ class Emitter {
             arrayExpr = custom.c;
             elemType = custom.ty.elem!;
         } else {
-            unsupported(y.expression, "yield* currently supports arrays, strings, and dynamic iterable values");
+            unsupported(y.expression, "yield* currently supports arrays, strings, maps, sets, custom iterables, URLSearchParams, Buffers, and dynamic iterable values");
         }
         const arr = this.freshTemp("_yield_star");
         const idx = this.freshTemp("_ysi");

@@ -1,5 +1,6 @@
 range: 2,3,4,5
 labels: alpha|beta|!
+node sources: a,1|b,two|13|14
 next: false 7 false 8 true done
 close first: 1
 return: true stop true undefined
