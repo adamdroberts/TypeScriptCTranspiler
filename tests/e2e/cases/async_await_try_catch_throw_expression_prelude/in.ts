@@ -7,6 +7,7 @@ async function declaration(prefix: string): Promise<string> {
         const label = prefix + "-try";
         throw (await delay(1, label)) + "-suffix";
     } catch (reason) {
+        if (String(reason).length > 0) console.log("catch-control: declaration");
         return reason + "-caught";
     }
 }
@@ -20,6 +21,7 @@ class Worker {
         const label = this.prefix("-try");
             throw (await delay(2, label)) + "-suffix";
         } catch (reason) {
+            if (String(reason).length > 0) console.log("catch-control: method");
             return reason + "-caught";
         }
     }
@@ -32,6 +34,7 @@ const value = async (prefix: string): Promise<string> => {
         const label = prefix + "-try";
         throw (await delay(3, label)) + "-suffix";
     } catch (reason) {
+        if (String(reason).length > 0) console.log("catch-control: arrow");
         return reason + "-caught";
     }
 };

@@ -4,6 +4,9 @@ try-prelude: method
 try-control: method
 try-prelude: arrow
 try-control: arrow
+catch-control: declaration
 declaration: fn-try-suffix-caught
+catch-control: method
 method: -trymethod-suffix-caught
+catch-control: arrow
 value: arrow-try-suffix-caught
