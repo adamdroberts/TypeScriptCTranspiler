@@ -32438,7 +32438,23 @@ class Emitter {
         const loopBody = ts.isBlock(loop.statement)
             ? loop.statement.statements
             : [loop.statement];
-        if (loopBody.length !== 1 || !ts.isReturnStatement(loopBody[0]!) || !loopBody[0]!.expression) return false;
+        let loopReturnExpression: ts.Expression | null = null;
+        if (loopBody.length === 1 && ts.isReturnStatement(loopBody[0]!) && loopBody[0]!.expression) {
+            loopReturnExpression = loopBody[0]!.expression;
+        } else if (
+            loopBody.length === 2 &&
+            ts.isExpressionStatement(loopBody[0]!) &&
+            ts.isReturnStatement(loopBody[1]!) &&
+            loopBody[1]!.expression
+        ) {
+            loopReturnExpression = ts.factory.createBinaryExpression(
+                loopBody[0]!.expression,
+                ts.factory.createToken(ts.SyntaxKind.CommaToken),
+                loopBody[1]!.expression,
+            );
+        } else {
+            return false;
+        }
         const awaitedType = this.prepareType(mapTsType(condition, this.checker.getTypeAtLocation(condition), this.checker));
         if (awaitedType.kind !== "boolean") return false;
         const continuationParams = this.asyncAwaitContinuationParameters(parameters);
@@ -32475,13 +32491,13 @@ class Emitter {
             ts.forEachChild(node, visitReferences);
         };
         visitReferences(condition.expression);
-        visitReferences(loopBody[0]!.expression);
+        visitReferences(loopReturnExpression);
         visitReferences(fallthrough.expression);
         if (!ok) return false;
         const returnExpr = ts.factory.createConditionalExpression(
             condition,
             ts.factory.createToken(ts.SyntaxKind.QuestionToken),
-            loopBody[0]!.expression,
+            loopReturnExpression,
             ts.factory.createToken(ts.SyntaxKind.ColonToken),
             fallthrough.expression,
         );
