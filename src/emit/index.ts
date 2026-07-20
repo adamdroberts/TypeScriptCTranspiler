@@ -33692,6 +33692,15 @@ class Emitter {
                 );
             }
             const loopReturn = statements[statements.length - 1];
+            if (loopReturn?.kind === ts.SyntaxKind.BreakStatement) {
+                const loopPrelude = statements.slice(0, -1);
+                if (loopPrelude.length === 0) return fallthroughExpression;
+                if (!loopPrelude.every(ts.isExpressionStatement)) return null;
+                return commaExpressions([
+                    ...loopPrelude.map((statement) => (statement as ts.ExpressionStatement).expression),
+                    fallthroughExpression,
+                ]);
+            }
             if (!ts.isReturnStatement(loopReturn) || !loopReturn.expression) {
                 if (statements.length !== 1 || !ts.isIfStatement(statements[0]!)) return null;
                 return null;
@@ -33762,7 +33771,10 @@ class Emitter {
             ));
             return awaitedType.kind !== "boolean" && !(hasNullishOperator && awaitedType.kind === "value");
         })) return false;
-        const continuationParams = this.asyncAwaitContinuationParameters(parameters);
+        const continuationParams = [
+            ...this.asyncAwaitContinuationParameters(parameters),
+            ...loopInitializerCaptures,
+        ];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const parameter of continuationParams) paramsBySymbol.set(parameter.symbol, parameter);
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -41648,7 +41660,9 @@ class Emitter {
     }
 
     private emitFor(buf: CBuf, fs: ts.ForStatement): void {
-        buf.open("");
+        const varInitializer = !!fs.initializer && ts.isVariableDeclarationList(fs.initializer) &&
+            (fs.initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0;
+        if (!varInitializer) buf.open("");
         if (fs.initializer) {
             if (ts.isVariableDeclarationList(fs.initializer)) {
                 const isConst =
@@ -41693,7 +41707,7 @@ class Emitter {
             }
         }
         if (fs.condition && this.staticBooleanValue(fs.condition) === false) {
-            buf.close();
+            if (!varInitializer) buf.close();
             return;
         }
         const cond = fs.condition ? this.emitBoolExpr(fs.condition) : "1";
@@ -41704,7 +41718,7 @@ class Emitter {
         if (continueLabel) buf.line(`${continueLabel}:;`);
         if (upd) buf.line(`(void)(${upd});`);
         buf.close();
-        buf.close();
+        if (!varInitializer) buf.close();
     }
 
     private emitForIn(buf: CBuf, fis: ts.ForInStatement): void {

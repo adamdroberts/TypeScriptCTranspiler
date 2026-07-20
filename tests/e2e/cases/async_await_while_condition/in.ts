@@ -147,6 +147,14 @@ async function chooseLoopInitializerVarFallthroughCapture(): Promise<string> {
     return value + "-after";
 }
 
+async function chooseLoopInitializerEscapingVarBreak(): Promise<string> {
+    for (var value = "loop-escaping-var"; await laterTrue();) {
+        value += "-updated";
+        break;
+    }
+    return value;
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2242,6 +2250,7 @@ chooseLoopInitializerMultipleCapture().then((value) => console.log("await-loop-i
 chooseLoopInitializerConditionCapture().then((value) => console.log("await-loop-initializer-condition-capture", value));
 chooseLoopInitializerVarCapture().then((value) => console.log("await-loop-initializer-var-capture", value));
 chooseLoopInitializerVarFallthroughCapture().then((value) => console.log("await-loop-initializer-var-fallthrough", value));
+chooseLoopInitializerEscapingVarBreak().then((value) => console.log("await-loop-initializer-escaping-var-break", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
