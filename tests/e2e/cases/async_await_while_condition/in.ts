@@ -132,6 +132,24 @@ async function chooseLoopInitializerConditionCapture(): Promise<string> {
     return "loop-capture-condition-fallthrough";
 }
 
+class LoopInitializerCaptureChooser {
+    async choose(): Promise<string> {
+        for (let value = "loop-method-condition-captured"; await laterCondition(value.length > 0);) {
+            value += "-updated";
+            return await laterBodyValue(value);
+        }
+        return "loop-method-condition-fallthrough";
+    }
+}
+
+const chooseLoopInitializerConditionCaptureValue = async (): Promise<string> => {
+    for (let value = "loop-value-condition-captured"; await laterCondition(value.length > 0);) {
+        value += "-updated";
+        return await laterBodyValue(value);
+    }
+    return "loop-value-condition-fallthrough";
+};
+
 async function chooseLoopExpression(flag: boolean, prefix: string): Promise<string> {
     while (await (flag ? laterTrue() : laterFalse())) {
         prefix += "-yes";
@@ -2137,6 +2155,8 @@ chooseLoopInitializerCapture().then((value) => console.log("await-loop-initializ
 chooseLoopInitializerCaptureThrow().catch((reason) => console.log("await-loop-initializer-capture-throw", reason));
 chooseLoopInitializerMultipleCapture().then((value) => console.log("await-loop-initializer-multiple-capture", value));
 chooseLoopInitializerConditionCapture().then((value) => console.log("await-loop-initializer-condition-capture", value));
+new LoopInitializerCaptureChooser().choose().then((value) => console.log("await-method-loop-initializer-condition-capture", value));
+chooseLoopInitializerConditionCaptureValue().then((value) => console.log("await-value-loop-initializer-condition-capture", value));
 new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
 new LoopChooser("method-").multipleAwaitDeclarators().then((value) => console.log("await-method-multiple-declarators", value));
 chooseArrowThrowWithLocals("arrow").catch((reason) => console.log("await-arrow-throw-multiple-locals", reason));
