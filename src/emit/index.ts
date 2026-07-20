@@ -32974,6 +32974,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         loopInitializer: ts.Expression | ts.VariableStatement | null,
+        loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
@@ -33269,7 +33270,10 @@ class Emitter {
             (bodyAwaitedType && bodyAwaitedType.kind === "never")
         ) return false;
 
-        const continuationParams = this.asyncAwaitContinuationParameters(parameters);
+        const continuationParams = [
+            ...this.asyncAwaitContinuationParameters(parameters),
+            ...loopInitializerCaptures,
+        ];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const parameter of continuationParams) paramsBySymbol.set(parameter.symbol, parameter);
         if (bodyLeadingChain) {
@@ -33310,6 +33314,7 @@ class Emitter {
         for (const statement of bodyPreludeStatements) visitReferences(statement);
         for (const statement of bodyPostAwaitStatements) visitReferences(statement);
         if (bodyAwaitExpr) visitReferences(bodyAwaitExpr);
+        visitReferences(bodyReturnExpr);
         if (bodyLeadingChain) {
             for (const parameter of bodyLeadingChain.params) referenced.set(parameter.symbol, parameter);
             if (bodyLeadingChain.thisValue) usesThis = true;
@@ -33555,7 +33560,7 @@ class Emitter {
         const fallthroughExpression = fallthrough.expression ?? ts.factory.createVoidZero();
         const loopCondition = ts.isWhileStatement(loop)
             ? loop.expression
-            : ts.isForStatement(loop) && !loop.initializer && loop.condition
+            : ts.isForStatement(loop) && loop.condition
                 ? loop.condition
                 : null;
         if (!loopCondition) return false;
@@ -33587,9 +33592,11 @@ class Emitter {
                 ? loop.initializer
                 : ts.factory.createVariableStatement(undefined, loop.initializer)
             : null;
+        let loopInitializerCaptures: AsyncAwaitContinuationParam[] = [];
         if (loopInitializer) {
             let supported = true;
             const initializerSymbols: ts.Symbol[] = [];
+            const initializerCaptures: AsyncAwaitContinuationParam[] = [];
             const visitInitializer = (node: ts.Node): void => {
                 if (!supported) return;
                 if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
@@ -33607,6 +33614,13 @@ class Emitter {
                         return;
                     }
                     initializerSymbols.push(symbol);
+                    const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
+                    initializerCaptures.push({
+                        symbol,
+                        name: mangleIdent(node.name.text),
+                        type,
+                        field: `loop_${mangleIdent(node.name.text)}`,
+                    });
                 }
                 ts.forEachChild(node, visitInitializer);
             };
@@ -33621,10 +33635,7 @@ class Emitter {
                     if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
                     if (ts.isIdentifier(node)) {
                         const symbol = this.symbolForIdentifier(node);
-                        if (symbol && initializerSymbols.includes(symbol)) {
-                            supported = false;
-                            return;
-                        }
+                        if (symbol && initializerSymbols.includes(symbol)) return;
                     }
                     ts.forEachChild(node, visitContinuation);
                 };
@@ -33635,6 +33646,7 @@ class Emitter {
                 if (supported) visitContinuation(fallthroughExpression);
             }
             if (!supported) return false;
+            loopInitializerCaptures = initializerCaptures;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
             buf,
@@ -33646,6 +33658,7 @@ class Emitter {
             parameters,
             thisValue,
             loopInitializer,
+            loopInitializerCaptures,
         )) return true;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
             return expressions.slice(1).reduce(
