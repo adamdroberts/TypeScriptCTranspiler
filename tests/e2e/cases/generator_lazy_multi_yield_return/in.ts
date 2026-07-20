@@ -95,6 +95,16 @@ function makeCapturedLocalGenerator(): () => Generator<number, number, number> {
     };
 }
 
+function makeCapturedMutableGenerator(): [() => Generator<number, number, number>, () => void] {
+    let base = 13;
+    return [
+        function* capturedMutableLeaves(): Generator<number, number, number> {
+            return base + (yield 44) + (yield 45);
+        },
+        () => { base = 20; },
+    ];
+}
+
 class ThisLeaves {
     marker = 9;
 
@@ -224,6 +234,13 @@ const capturedLocalFirst: any = capturedLocalIter.next();
 const capturedLocalSecond: any = capturedLocalIter.next(4);
 const capturedLocalDone: any = capturedLocalIter.next(5);
 console.log("captured-local", capturedLocalFirst.value, capturedLocalSecond.value, capturedLocalDone.done, capturedLocalDone.value);
+const capturedMutable = makeCapturedMutableGenerator();
+const capturedMutableIter = capturedMutable[0]();
+capturedMutable[1]();
+const capturedMutableFirst: any = capturedMutableIter.next();
+const capturedMutableSecond: any = capturedMutableIter.next(4);
+const capturedMutableDone: any = capturedMutableIter.next(5);
+console.log("captured-mutable", capturedMutableFirst.value, capturedMutableSecond.value, capturedMutableDone.done, capturedMutableDone.value);
 const thisLeaves = new ThisLeaves();
 const thisIter = thisLeaves.values();
 const thisFirst: any = thisIter.next();
