@@ -32440,7 +32440,23 @@ class Emitter {
                 : null;
         if (!loopCondition) return false;
         const condition = this.unwrapTransparentExpression(loopCondition);
-        if (!ts.isAwaitExpression(condition)) return false;
+        let awaitExpression: ts.AwaitExpression | null = null;
+        let conditionAwaitsAreValid = true;
+        const findAwait = (node: ts.Node): void => {
+            if (!conditionAwaitsAreValid) return;
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            if (ts.isAwaitExpression(node)) {
+                if (awaitExpression) {
+                    conditionAwaitsAreValid = false;
+                } else {
+                    awaitExpression = node;
+                }
+                return;
+            }
+            ts.forEachChild(node, findAwait);
+        };
+        findAwait(condition);
+        if (!conditionAwaitsAreValid || !awaitExpression) return false;
         const loopStatement = ts.isWhileStatement(loop)
             ? loop.statement
             : ts.isForStatement(loop)
@@ -32481,7 +32497,11 @@ class Emitter {
         } else {
             return false;
         }
-        const awaitedType = this.prepareType(mapTsType(condition, this.checker.getTypeAtLocation(condition), this.checker));
+        const awaitedType = this.prepareType(mapTsType(
+            awaitExpression,
+            this.checker.getTypeAtLocation(awaitExpression),
+            this.checker,
+        ));
         if (awaitedType.kind !== "boolean") return false;
         const continuationParams = this.asyncAwaitContinuationParameters(parameters);
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -32491,6 +32511,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
+            if (node === awaitExpression) return;
             if (ts.isAwaitExpression(node)) {
                 ok = false;
                 return;
@@ -32516,7 +32537,7 @@ class Emitter {
             }
             ts.forEachChild(node, visitReferences);
         };
-        visitReferences(condition.expression);
+        visitReferences(condition);
         visitReferences(loopReturnExpression);
         visitReferences(fallthrough.expression);
         if (!ok) return false;
@@ -32528,7 +32549,7 @@ class Emitter {
             fallthrough.expression,
         );
         const continuation: AsyncAwaitExpressionReturnContinuation = {
-            awaitExpr: condition,
+            awaitExpr: awaitExpression,
             returnExpr,
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,

@@ -43,6 +43,13 @@ async function chooseForCondition(flag: boolean): Promise<string> {
     return "for-no";
 }
 
+async function chooseLoopLogical(flag: boolean): Promise<string> {
+    while (await laterTrue() && flag) {
+        return "logical-yes";
+    }
+    return "logical-no";
+}
+
 class LoopChooser {
     private readonly prefix: string;
 
@@ -73,6 +80,8 @@ chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-loc
 chooseLoopLocal(false, "local-loop").then((value) => console.log("await-while-local-false", value));
 chooseForCondition(true).then((value) => console.log("await-for-condition-true", value));
 chooseForCondition(false).then((value) => console.log("await-for-condition-false", value));
+chooseLoopLogical(true).then((value) => console.log("await-while-logical-true", value));
+chooseLoopLogical(false).then((value) => console.log("await-while-logical-false", value));
 new LoopChooser("method-loop-").pick(true).then((value) => console.log("await-while-method-true", value));
 new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-while-method-false", value));
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
