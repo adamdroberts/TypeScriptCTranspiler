@@ -9,7 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
-- Bounded async declarations, methods, and function values now await a boolean `if` condition before selecting synchronous return arms. Regression: `async_await_if_condition`.
+- Bounded async declarations, methods, and function values now await a boolean `if` condition before selecting synchronous return arms, including one await-free outer `if`. Regression: `async_await_if_condition`.
 - Regular `for...of` lowering now accepts typed Buffer sources and yields numeric bytes, with the core shim exposing Buffer’s standard iterator declaration. Regression: `buffer_for_of`.
 - Typed Buffer `for...in` lowering now enumerates numeric own keys in the regular statement emitter. Regression: `for_in`.
 - Lazy generator `for...in` lowering now accepts typed Buffer sources with suspension-safe numeric keys. Regression: `generator_lazy_for_in`.

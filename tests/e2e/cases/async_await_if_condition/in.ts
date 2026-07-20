@@ -3,8 +3,18 @@ async function choose(flag: boolean): Promise<string> {
     return "no";
 }
 
+async function chooseNested(flag: boolean): Promise<string> {
+    if (true) {
+        if (await Promise.resolve(flag)) return "nested-yes";
+        return "nested-no";
+    }
+    return "unreachable";
+}
+
 choose(true).then((value) => console.log("await-if-true", value));
 choose(false).then((value) => console.log("await-if-false", value));
+chooseNested(true).then((value) => console.log("await-if-nested-true", value));
+chooseNested(false).then((value) => console.log("await-if-nested-false", value));
 
 class Chooser {
     async pick(flag: boolean): Promise<string> {
