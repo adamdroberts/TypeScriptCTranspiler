@@ -7,3 +7,4 @@ l2 true letters-done number:1|number:2|number:3|letter:a
 set1 false 7 number:1|number:2|number:3|letter:a|set:7
 set2 false 8 number:1|number:2|number:3|letter:a|set:7|set:8
 map1 false 9 number:1|number:2|number:3|letter:a|set:7|set:8|map:x:9
+custom1 false 11 number:1|number:2|number:3|letter:a|set:7|set:8|map:x:9|custom:11

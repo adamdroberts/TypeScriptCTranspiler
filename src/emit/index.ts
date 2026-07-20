@@ -35692,6 +35692,8 @@ class Emitter {
                     ? sourceType.elem
                     : sourceType.kind === "map" && sourceType.key && sourceType.elem
                         ? entryType(sourceType.elem, sourceType.key)
+                        : sourceType.kind === "class"
+                            ? T_VALUE
                         : null;
             if (!elemType) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
@@ -36226,13 +36228,23 @@ class Emitter {
         }
         const decl = stmt.initializer.declarations[0]!;
         const source = this.emitExpr(stmt.expression);
-        const sourceArray = source.ty.kind === "string"
+        let sourceElemType = info.elemType;
+        let sourceArray = source.ty.kind === "string"
             ? `tsc_str_chars(${source.c})`
             : source.ty.kind === "set"
                 ? `tsc_set_values(${source.c})`
                 : source.ty.kind === "map"
                     ? this.mapEntriesArrayExpr(stmt.expression, source.c, source.ty, "lazy generator Map for-of").c
                 : source.c;
+        if (source.ty.kind === "class") {
+            const custom = this.emitCustomIterableArray(stmt.expression, source) ??
+                this.emitCustomIteratorArray(stmt.expression, source);
+            if (!custom || !custom.ty.elem) {
+                unsupported(stmt.expression, "lazy generator for-of custom class needs a supported typed iterator");
+            }
+            sourceArray = custom.c;
+            sourceElemType = custom.ty.elem;
+        }
         buf.open(`if (${envLocalName}->${info.arrayField} == NULL)`);
         buf.line(`${envLocalName}->${info.arrayField} = ${sourceArray};`);
         buf.line(`${envLocalName}->${info.indexField} = 0;`);
@@ -36247,10 +36259,10 @@ class Emitter {
             if (!binding) unsupported(decl.name, "lazy generator for-of binding is unavailable");
             const targetType = binding.type;
             const present = `tsc_array_index_present(${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField})`;
-            const current = info.elemType.kind === "value"
-                ? `( ${present} ? TSC_ARR(${info.elemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : tsc_value_undefined() )`
-                : `${present} ? TSC_ARR(${info.elemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : ${this.zeroValue(info.elemType)}`;
-            buf.line(`*${binding.ptr} = ${this.coerce({ c: current, ty: info.elemType }, targetType, stmt.expression)};`);
+            const current = sourceElemType.kind === "value"
+                ? `( ${present} ? TSC_ARR(${sourceElemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : tsc_value_undefined() )`
+                : `${present} ? TSC_ARR(${sourceElemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : ${this.zeroValue(sourceElemType)}`;
+            buf.line(`*${binding.ptr} = ${this.coerce({ c: current, ty: sourceElemType }, targetType, stmt.expression)};`);
             this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             buf.line(`${continueLabel}:;`);
             buf.line(`${envLocalName}->${info.indexField}++;`);
@@ -36636,9 +36648,11 @@ class Emitter {
                             ? T_STRING
                         : sourceType.kind === "set"
                             ? sourceType.elem
-                            : sourceType.kind === "map" && sourceType.key && sourceType.elem
-                                ? entryType(sourceType.elem, sourceType.key)
-                                : null;
+                    : sourceType.kind === "map" && sourceType.key && sourceType.elem
+                        ? entryType(sourceType.elem, sourceType.key)
+                        : sourceType.kind === "class"
+                            ? T_VALUE
+                        : null;
                     if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays and strings");
                     const index = forOfInfos.length;
                     const info: LazyForOfInfo = {

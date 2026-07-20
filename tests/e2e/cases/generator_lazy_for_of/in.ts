@@ -39,6 +39,26 @@ function* mapValues(): Generator<number, string, number> {
     return "map-done";
 }
 
+class NumberBag {
+    items: number[];
+
+    constructor(items: number[]) {
+        this.items = items;
+    }
+
+    [Symbol.iterator](): IterableIterator<number> {
+        return this.items as unknown as IterableIterator<number>;
+    }
+}
+
+function* customValues(): Generator<number, string, number> {
+    for (const value of new NumberBag([11, 12])) {
+        events.push("custom:" + value);
+        yield value;
+    }
+    return "custom-done";
+}
+
 const n = numbers();
 console.log("n-created", events.join("|"));
 const n1: any = n.next(0);
@@ -63,3 +83,7 @@ console.log("set2", set2.done, set2.value, events.join("|"));
 const map = mapValues();
 const map1: any = map.next(0);
 console.log("map1", map1.done, map1.value, events.join("|"));
+
+const custom = customValues();
+const custom1: any = custom.next(0);
+console.log("custom1", custom1.done, custom1.value, events.join("|"));

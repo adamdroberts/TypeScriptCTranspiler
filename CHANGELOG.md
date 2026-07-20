@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Lazy generator `for...of` lowering now accepts supported typed custom iterable/iterator classes, preserving suspension across each custom iterator value. Regression: `generator_lazy_for_of`.
 - Lazy generator `for...of` lowering now also accepts typed `Map` sources, yielding typed key/value entry pairs one at a time across suspension. Regression: `generator_lazy_for_of`.
 - Lazy generator `for...of` lowering now also accepts typed `Set` sources, preserving one-value-at-a-time suspension alongside the existing array/string subset. Regression: `generator_lazy_for_of`.
 - Lazy generators now lower bounded `for...in` loops over typed arrays, strings, and dynamic values with suspension-safe key positions and loop control. Test: `generator_lazy_for_in`.
