@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Terminal `throw await promise` continuations now preserve bounded await-free captured local preludes before the first suspension across declarations, methods, and async-arrow function values. Test: `async_await_throw_await_prelude`.
 - Leading async/await chains now support a terminal `throw await promise` after an earlier awaited local, including declaration, method, async-arrow, and branch-block coverage. Tests: `async_await_throw_await_tail`, `async_await_branch_throw_await_tail`.
 - Async declarations, methods, and function values now lower single-statement `throw await promise` bodies through the continuation adapter, preserving the awaited rejection value. Test: `async_await_direct_throw_await`.
 - Combined source `try` / `catch` / `finally` leading chains now preserve initialized local catch preludes before catch recovery and finally routing. Test: `async_await_pending_return_expr`.

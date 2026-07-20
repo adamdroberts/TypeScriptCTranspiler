@@ -28943,10 +28943,6 @@ class Emitter {
             }
             break;
         }
-        if (body.statements.length - firstAwaitIndex < 2) return null;
-        const steps: AsyncAwaitLeadingStep[] = [];
-        const betweenStatements: ts.Statement[][] = [];
-        const chainStatements = body.statements.slice(firstAwaitIndex, -1);
         const finalReturnExpression = ts.isReturnStatement(result) && result.expression
             ? this.unwrapTransparentExpression(result.expression)
             : null;
@@ -28960,6 +28956,10 @@ class Emitter {
         const finalThrowAwait = finalThrowExpression && ts.isAwaitExpression(finalThrowExpression)
             ? finalThrowExpression
             : null;
+        if (body.statements.length - firstAwaitIndex < 2 && !finalThrowAwait && !finalReturnAwait) return null;
+        const steps: AsyncAwaitLeadingStep[] = [];
+        const betweenStatements: ts.Statement[][] = [];
+        const chainStatements = body.statements.slice(firstAwaitIndex, -1);
         let pendingBetween: ts.Statement[] = [];
         for (const stmt of chainStatements) {
             const conditionalSteps = this.asyncAwaitConditionalLeadingSteps(stmt);
@@ -29018,13 +29018,13 @@ class Emitter {
             pendingBetween = [];
         }
         if (finalThrowAwait) {
-            if (steps.length === 0) return null;
+            const hasPreviousStep = steps.length > 0;
             steps.push({ variable: null, awaitExpr: finalThrowAwait });
-            betweenStatements.push(pendingBetween);
+            if (hasPreviousStep) betweenStatements.push(pendingBetween);
             pendingBetween = [];
         }
         if (pendingBetween.length > 0) return null;
-        if (steps.length < 2) return null;
+        if (steps.length < 2 && !finalThrowAwait) return null;
         for (const statements of betweenStatements) {
             if (!this.asyncAwaitInterstitialCaptures(statements)) return null;
         }
