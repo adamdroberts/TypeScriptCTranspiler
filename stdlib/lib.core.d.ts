@@ -1968,6 +1968,7 @@ declare module "node:crypto" {
 type BufferEncoding = "utf8" | "utf-8" | "hex" | "base64" | "latin1" | "binary" | "ascii";
 interface Buffer {
     readonly length: number;
+    [Symbol.iterator](): IterableIterator<number>;
     toLocaleString(...ignored: any[]): string;
     toJSON(...ignored: any[]): any;
     toString(encoding?: BufferEncoding, ...ignored: any[]): string;

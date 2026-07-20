@@ -39271,6 +39271,9 @@ class Emitter {
         } else if (iter.ty.kind === "string") {
             arrayExpr = `tsc_str_chars(${iter.c})`;
             elemType = T_STRING;
+        } else if (iter.ty.kind === "buffer") {
+            arrayExpr = `({ tsc_buffer_t* const _for_of_buffer = ${iter.c}; tsc_array_t* _for_of_values = tsc_array_new(sizeof(double), _for_of_buffer->len ? _for_of_buffer->len : 1); for (size_t _for_of_i = 0; _for_of_i < _for_of_buffer->len; _for_of_i++) { double _for_of_byte = (double)_for_of_buffer->data[_for_of_i]; tsc_array_push_raw(_for_of_values, &_for_of_byte); } _for_of_values; })`;
+            elemType = T_NUMBER;
         } else if (iter.ty.kind === "value") {
             arrayExpr = `tsc_value_iter_values(${iter.c})`;
             elemType = T_VALUE;
@@ -39288,7 +39291,7 @@ class Emitter {
         } else if (iter.ty.kind !== "array") {
             unsupported(
                 fos.expression,
-                `for-of over ${iter.ty.c} (supports arrays, strings, dynamic values, Map, Set, and typed custom iterables)`,
+                `for-of over ${iter.ty.c} (supports arrays, strings, Buffers, dynamic values, Map, Set, and typed custom iterables)`,
             );
         }
         elemType ??= iter.ty.elem;
