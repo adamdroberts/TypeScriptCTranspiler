@@ -19,12 +19,22 @@ async function chooseBranchMultipleAwaitDeclarators(flag: boolean): Promise<stri
     return "branch-no";
 }
 
+async function chooseTryMultipleAwaitDeclarators(): Promise<string> {
+    try {
+        const first = await Promise.resolve("try-first"), second = await Promise.resolve(first + "-second");
+        return second;
+    } catch {
+        return "try-caught";
+    }
+}
+
 choose(true).then((value) => console.log("await-if-true", value));
 choose(false).then((value) => console.log("await-if-false", value));
 chooseNested(true).then((value) => console.log("await-if-nested-true", value));
 chooseNested(false).then((value) => console.log("await-if-nested-false", value));
 chooseBranchMultipleAwaitDeclarators(true).then((value) => console.log("await-if-branch-multiple-true", value));
 chooseBranchMultipleAwaitDeclarators(false).then((value) => console.log("await-if-branch-multiple-false", value));
+chooseTryMultipleAwaitDeclarators().then((value) => console.log("await-try-multiple-declarators", value));
 
 class Chooser {
     async pick(flag: boolean): Promise<string> {
