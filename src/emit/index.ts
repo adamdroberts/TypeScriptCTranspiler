@@ -67288,9 +67288,6 @@ class Emitter {
                 case "promise":
                     return `tsc_promise_resolve_thenable(${r.c})`;
                 case "function": {
-                    if (target.thisParam) {
-                        unsupported(node, "value-to-function coercion with an explicit this parameter");
-                    }
                     return this.emitValueFunctionAdapter(r, target, node);
                 }
             }
@@ -67505,7 +67502,12 @@ class Emitter {
         this.structDecls.close(` ${envType};`);
         const params = type.params ?? [];
         const paramNames = params.map((_, index) => `_arg${index}`);
-        const signature = `static ${type.ret.c} ${adapter}(void* env${params.length ? `, ${params.map((param, index) => `${param.c} ${paramNames[index]}`).join(", ")}` : ""})`;
+        const thisParamName = type.thisParam ? "_this" : null;
+        const signatureParams = [
+            ...(thisParamName ? [`${type.thisParam!.c} ${thisParamName}`] : []),
+            ...params.map((param, index) => `${param.c} ${paramNames[index]}`),
+        ];
+        const signature = `static ${type.ret.c} ${adapter}(void* env${signatureParams.length ? `, ${signatureParams.join(", ")}` : ""})`;
         this.protos.line(signature + ";");
         const buf = new CBuf();
         buf.open(signature);
@@ -67517,7 +67519,10 @@ class Emitter {
             buf.line(`tsc_value_t _boxed${index} = ${boxed};`);
             buf.line(`tsc_array_push_value(${args}, _boxed${index});`);
         }
-        const result = `tsc_value_apply_function(state->value, tsc_value_undefined(), tsc_value_array(${args}))`;
+        const thisArg = thisParamName
+            ? this.coerce({ c: thisParamName, ty: type.thisParam! }, T_VALUE, node)
+            : "tsc_value_undefined()";
+        const result = `tsc_value_apply_function(state->value, ${thisArg}, tsc_value_array(${args}))`;
         const ret = this.prepareType(type.ret);
         if (ret.kind === "void" || ret.kind === "never") {
             buf.line(`(void)${result};`);
