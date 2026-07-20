@@ -1,0 +1,4 @@
+lifted-true: ["lifted-first","lifted-second"]
+lifted-false: {"first":"lifted-left","second":"lifted-right"}
+named-true: {"first":"named-first","second":"named-second"}
+named-false: ["named-left","named-right"]
