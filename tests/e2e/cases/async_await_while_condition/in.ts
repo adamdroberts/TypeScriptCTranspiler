@@ -291,6 +291,21 @@ async function chooseLoopInitializerEscapingVarTryFinallyBreakAwait(): Promise<s
     return await laterBodyValue(value);
 }
 
+async function chooseLoopInitializerEscapingVarSwitchBreakAwait(flag: boolean): Promise<string> {
+    for (var value = "loop-escaping-var-switch"; await laterTrue();) {
+        switch (flag) {
+            case true:
+                value += "-yes";
+                break;
+            default:
+                value += "-no";
+                break;
+        }
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2403,6 +2418,8 @@ chooseLoopInitializerUninitializedEscapingVarFalseThrowAwait().catch((reason) =>
 chooseLoopInitializerEscapingVarIfBreakAwait(true).then((value) => console.log("await-loop-initializer-escaping-var-if-break-true", value));
 chooseLoopInitializerEscapingVarIfBreakAwait(false).then((value) => console.log("await-loop-initializer-escaping-var-if-break-false", value));
 chooseLoopInitializerEscapingVarTryFinallyBreakAwait().then((value) => console.log("await-loop-initializer-escaping-var-try-finally-break-await", value));
+chooseLoopInitializerEscapingVarSwitchBreakAwait(true).then((value) => console.log("await-loop-initializer-escaping-var-switch-break-true", value));
+chooseLoopInitializerEscapingVarSwitchBreakAwait(false).then((value) => console.log("await-loop-initializer-escaping-var-switch-break-false", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
