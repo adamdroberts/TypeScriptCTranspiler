@@ -58,6 +58,17 @@ async function chooseConditionalMultipleAwaitDeclarators(flag: boolean): Promise
     }
 }
 
+async function chooseSwitchMultipleAwaitDeclarators(flag: boolean): Promise<string> {
+    switch (flag ? 1 : 0) {
+        case 1: {
+            const first = await Promise.resolve("switch-first"), second = await Promise.resolve(first + "-second");
+            return second;
+        }
+        default:
+            return "switch-default";
+    }
+}
+
 choose(true).then((value) => console.log("await-if-true", value));
 choose(false).then((value) => console.log("await-if-false", value));
 chooseNested(true).then((value) => console.log("await-if-nested-true", value));
@@ -69,6 +80,8 @@ chooseTryFinallyMultipleAwaitDeclarators().then((value) => console.log("await-tr
 chooseTryCatchFinallyMultipleAwaitDeclarators().then((value) => console.log("await-try-catch-finally-multiple-declarators", value));
 chooseConditionalMultipleAwaitDeclarators(true).then((value) => console.log("await-conditional-multiple-true", value));
 chooseConditionalMultipleAwaitDeclarators(false).then((value) => console.log("await-conditional-multiple-false", value));
+chooseSwitchMultipleAwaitDeclarators(true).then((value) => console.log("await-switch-multiple-true", value));
+chooseSwitchMultipleAwaitDeclarators(false).then((value) => console.log("await-switch-multiple-false", value));
 
 class Chooser {
     async pick(flag: boolean): Promise<string> {

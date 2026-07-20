@@ -6,6 +6,8 @@ await-if-branch-multiple-true branch-first-second
 await-if-branch-multiple-false branch-no
 await-conditional-multiple-true conditional-true-second
 await-conditional-multiple-false conditional-false-second
+await-switch-multiple-true switch-first-second
+await-switch-multiple-false switch-default
 await-if-method-true method-yes
 await-if-method-false method-no
 await-if-value-true value-yes
