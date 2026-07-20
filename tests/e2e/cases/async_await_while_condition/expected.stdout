@@ -47,6 +47,8 @@ await-while-return-await-assigned-true body-await-assigned-assigned
 await-while-throw-await-true body-throw-await
 await-while-return-await-control-true body-await-control-control
 await-while-return-await-control-false body-await-control
+await-while-return-await-control-local-true body-await-control-local-branch-local
+await-while-return-await-control-local-false body-await-control-local
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
 await-while-or-true or-yes

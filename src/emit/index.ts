@@ -32422,6 +32422,50 @@ class Emitter {
         return safe;
     }
 
+    private asyncAwaitLoopBodyControlPreludeSupported(stmt: ts.Statement): boolean {
+        let ok = true;
+        const visit = (node: ts.Node): void => {
+            if (!ok) return;
+            if (
+                ts.isAwaitExpression(node) ||
+                ts.isFunctionLike(node) ||
+                ts.isClassLike(node) ||
+                ts.isReturnStatement(node) ||
+                ts.isThrowStatement(node) ||
+                ts.isBreakStatement(node) ||
+                ts.isContinueStatement(node)
+            ) {
+                ok = false;
+                return;
+            }
+            if (ts.isVariableDeclarationList(node)) {
+                ok = false;
+                return;
+            }
+            if (ts.isVariableStatement(node)) {
+                if ((node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
+                    ok = false;
+                    return;
+                }
+                for (const declaration of node.declarationList.declarations) {
+                    if (
+                        !ts.isIdentifier(declaration.name) ||
+                        (!declaration.initializer && (node.declarationList.flags & ts.NodeFlags.Let) === 0)
+                    ) {
+                        ok = false;
+                        return;
+                    }
+                    if (declaration.initializer) visit(declaration.initializer);
+                    if (!ok) return;
+                }
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(stmt);
+        return ok;
+    }
+
     private emitAsyncAwaitConditionalExpressionReturnContinuation(
         buf: CBuf,
         body: ts.Block,
@@ -32456,7 +32500,7 @@ class Emitter {
                 return ts.isIdentifier(declaration.name) &&
                     (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Let) !== 0);
             }
-            return this.asyncAwaitNonAbruptControlFlowPreludeSupported(statement);
+            return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
         });
         if (!bodyPreludeSupported) return false;
         const bodyAwaitExpr = this.unwrapTransparentExpression(bodyAction.expression);
