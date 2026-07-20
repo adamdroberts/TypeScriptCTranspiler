@@ -14,6 +14,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite lazy multi-yield returns now accept bounded exponentiation leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now accept bounded comma-sequencing leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now accept bounded `in` membership leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
+- Finite lazy multi-yield returns now accept bounded `void` leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now accept bounded prefix-unary leaves (`!`, unary `+`/`-`, and `~`) around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Direct-prelude `return await` now preserves an uninitialized `var` local assigned synchronously before the awaited source across declarations, class methods, and async arrows; unassigned or escaping `var` state remains rejected. Regression: `async_await_while_condition`.
 - Leading async/await chains now preserve initialized `var` locals before multiple awaited declarations, with captured value flow into later suspension sources. Regression: `async_await_while_condition`.

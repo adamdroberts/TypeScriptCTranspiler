@@ -50,6 +50,10 @@ function* inLeaves(): Generator<any, boolean, any> {
     return (yield "x") in (yield { x: 1 });
 }
 
+function* voidLeaves(): Generator<number, number, number> {
+    return (void (yield 20)), (yield 21);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -126,3 +130,8 @@ const inFirst: any = inIter.next();
 const inSecond: any = inIter.next("x");
 const inDone: any = inIter.next({ x: 1 });
 console.log("in", inFirst.value, inSecond.value.x, inDone.done, inDone.value);
+const voidIter = voidLeaves();
+const voidFirst: any = voidIter.next();
+const voidSecond: any = voidIter.next(4);
+const voidDone: any = voidIter.next(5);
+console.log("void", voidFirst.value, voidSecond.value, voidDone.done, voidDone.value);

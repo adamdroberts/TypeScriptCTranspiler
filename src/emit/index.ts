@@ -37581,6 +37581,7 @@ class Emitter {
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return true;
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
+            if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isPrefixUnaryExpression(unwrapped)) {
                 if (![ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) return false;
                 return visit(unwrapped.operand);
@@ -38663,6 +38664,10 @@ class Emitter {
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return this.emitExpr(unwrapped);
             if (ts.isTypeOfExpression(unwrapped)) {
                 return this.emitSimpleLazyResumeTypeOf(unwrapped, build(unwrapped.expression));
+            }
+            if (ts.isVoidExpression(unwrapped)) {
+                const inner = build(unwrapped.expression);
+                return { c: `({ (void)(${inner.c}); NULL; })`, ty: T_VOID };
             }
             if (ts.isPrefixUnaryExpression(unwrapped)) {
                 return this.emitSimpleLazyResumePrefixUnary(unwrapped, build(unwrapped.operand));
