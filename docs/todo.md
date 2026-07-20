@@ -134,6 +134,7 @@ This is the next item that most directly expands what programs can be written ag
   - The bounded lazy `for...of` subset now also covers typed Buffer byte iteration; async iteration and broader iterator-source lowering remain deferred.
   - Lazy `yield*` now covers typed `URLSearchParams` key/value entries and Buffer byte sources while preserving one-source-item suspension; broader iterator protocol and async-iterable lowering remain deferred.
   - Materialized generator `yield*` now covers typed `URLSearchParams` key/value entries and Buffer byte sources; broader iterator protocol and async-iterable lowering remain deferred.
+  - Regular `for...of` and `for...in` lowering now covers typed Buffer byte values and numeric own keys; broader iterator protocol and async-iterable lowering remain deferred.
   - Lazy generators now cover bounded `for...in` loops over typed arrays, strings, Buffers, and dynamic values with suspension-safe key positions; async iteration and broader enumerable-source lowering remain deferred.
 
 - **Phase 9 — `Proxy` + `Reflect`**
