@@ -32,6 +32,21 @@ function* closableOuter(): Generator<string, string, string> {
     return "closable-outer-done";
 }
 
+function* throwingInner(): Generator<string, string, string> {
+    try {
+        events.push("throwing-inner-start");
+        yield "throw-me";
+    } finally {
+        events.push("throwing-inner-finally");
+    }
+    return "throwing-inner-done";
+}
+
+function* throwingOuter(): Generator<string, string, string> {
+    yield* throwingInner();
+    return "throwing-outer-done";
+}
+
 const iter = outer();
 console.log("created", events.join("|"));
 const first: any = iter.next("ignored");
@@ -44,3 +59,10 @@ const closable = closableOuter();
 const closeFirst: any = closable.next();
 const closeResult: any = closable.return("closed");
 console.log("close", closeFirst.done, closeFirst.value, closeResult.done, closeResult.value, events.join("|"));
+const throwing = throwingOuter();
+const throwFirst: any = throwing.next();
+try {
+    throwing.throw("boom");
+} catch {
+    console.log("throw", throwFirst.done, throwFirst.value, events.join("|"));
+}
