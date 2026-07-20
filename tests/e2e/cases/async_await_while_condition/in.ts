@@ -297,7 +297,7 @@ class LoopChooser {
 
     async pick(flag: boolean): Promise<string> {
         while (await (flag ? laterTrue() : laterFalse())) {
-            return this.prefix + "yes";
+            return await laterBodyValue(this.prefix + "yes");
         }
         return this.prefix + "no";
     }
@@ -305,7 +305,7 @@ class LoopChooser {
 
 const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
     while (await (flag ? laterTrue() : laterFalse())) {
-        return prefix + "yes";
+        return await laterBodyValue(prefix + "yes");
     }
     return prefix + "no";
 };

@@ -31,9 +31,7 @@ await-while-conditional-true conditional-yes
 await-while-conditional-false conditional-no
 await-while-nullish-true nullish-yes
 await-while-nullish-false nullish-no
-await-while-method-true method-loop-yes
 await-while-method-false method-loop-no
-await-while-value-true value-loop-yes
 await-while-value-false value-loop-no
 await-while-return-await-true body-await-yes
 await-while-return-await-false body-await-no
@@ -55,6 +53,8 @@ await-while-or-true or-yes
 await-while-or-false or-no
 await-while-nullable-nullish-true nullable-nullish-yes
 await-while-nullable-nullish-false nullable-nullish-no
+await-while-method-true method-loop-yes
+await-while-value-true value-loop-yes
 await-while-three-logical-true three-logical-yes
 await-while-three-logical-false three-logical-no
 await-while-four-logical-true four-logical-yes
