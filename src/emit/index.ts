@@ -35929,7 +35929,7 @@ class Emitter {
                 ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken].includes(op)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
-        if (!visit(stmt.expression) || yields.length < 2 || yields.length > 4) return null;
+        if (!visit(stmt.expression) || yields.length < 2 || yields.length > 8) return null;
         return { expression: stmt.expression, yields };
     }
 
@@ -36903,7 +36903,7 @@ class Emitter {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
             if (hasMultiYieldReturn) {
-                this.structDecls.line("tsc_value_t multi_yield_values[4];");
+                this.structDecls.line("tsc_value_t multi_yield_values[8];");
             }
             for (const { info } of forOfInfos) {
                 this.structDecls.line(`tsc_array_t* ${info.arrayField};`);
@@ -37050,7 +37050,7 @@ class Emitter {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
             }
             if (hasMultiYieldReturn) {
-                for (let i = 0; i < 4; i++) {
+                for (let i = 0; i < 8; i++) {
                     buf.line(`${envVar}->multi_yield_values[${i}] = tsc_value_undefined();`);
                 }
             }
