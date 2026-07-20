@@ -35829,8 +35829,19 @@ class Emitter {
         const last = catchStatements[catchStatements.length - 1];
         if (!last) return null;
         const returnStatement = ts.isReturnStatement(last) && last.expression ? last : null;
-        const throwStatement = ts.isThrowStatement(last) && last.expression &&
-            this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(last.expression)) ? last : null;
+        let throwStatement: ts.ThrowStatement | null = null;
+        if (ts.isThrowStatement(last) && last.expression) {
+            const expression = this.unwrapTransparentExpression(last.expression);
+            if (this.isSimpleLazyMultiYieldLiteral(expression)) {
+                throwStatement = last;
+            } else if (!stmt.finallyBlock && ts.isIdentifier(expression)) {
+                const catchDecl = stmt.catchClause.variableDeclaration;
+                const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
+                    ? this.symbolForIdentifier(catchDecl.name)
+                    : null;
+                if (catchSymbol && this.symbolForIdentifier(expression) === catchSymbol) throwStatement = last;
+            }
+        }
         if (!returnStatement && !throwStatement) return null;
         if (returnStatement && this.nodeContainsYield(returnStatement.expression!)) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
@@ -36632,6 +36643,7 @@ class Emitter {
             return;
         }
         const catchThrow = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .filter((handler) => handler.finallyStatements.length > 0)
             .map((handler) => handler.throwStatement)
             .find((throwStatement): throwStatement is ts.ThrowStatement => !!throwStatement);
         if (catchThrow) {

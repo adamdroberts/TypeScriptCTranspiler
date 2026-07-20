@@ -228,3 +228,20 @@ try {
 } catch (error: any) {
     console.log("caught-rethrow:", caughtRethrowFirst.done, caughtRethrowFirst.value, error, catchPreludeEvents.join("|"));
 }
+
+function* caughtDirectRethrow(): Generator<string, string, string> {
+    try {
+        yield "direct-rethrow-pause";
+    } catch (error: any) {
+        throw error;
+    }
+    return "normal";
+}
+
+const caughtDirectRethrowResult = caughtDirectRethrow();
+const caughtDirectRethrowFirst: any = caughtDirectRethrowResult.next();
+try {
+    caughtDirectRethrowResult.throw("original-direct-rethrow");
+} catch (error: any) {
+    console.log("caught-direct-rethrow:", caughtDirectRethrowFirst.done, caughtDirectRethrowFirst.value, error);
+}

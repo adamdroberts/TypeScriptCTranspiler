@@ -15,3 +15,4 @@ caught-finally-normal-return-override: false return-override-pause true finally-
 caught-prelude: false catch-prelude-pause true prelude-caught before|error:handled-prelude
 caught-prelude-alias: false catch-alias-pause true alias:handled-alias
 caught-rethrow: false rethrow-pause catch-rethrow before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally
+caught-direct-rethrow: false direct-rethrow-pause original-direct-rethrow
