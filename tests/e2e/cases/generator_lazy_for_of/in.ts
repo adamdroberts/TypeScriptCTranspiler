@@ -68,6 +68,15 @@ function* paramsValues(): Generator<string, string, string> {
     return "params-done";
 }
 
+function* bufferValues(): Generator<number, string, number> {
+    const bytes = Buffer.from([13, 14]);
+    for (const byte of bytes as any) {
+        events.push("buffer:" + byte);
+        yield byte;
+    }
+    return "buffer-done";
+}
+
 const n = numbers();
 console.log("n-created", events.join("|"));
 const n1: any = n.next(0);
@@ -100,3 +109,7 @@ console.log("custom1", custom1.done, custom1.value, events.join("|"));
 const params = paramsValues();
 const params1: any = params.next("");
 console.log("params1", params1.done, params1.value, events.join("|"));
+
+const buffer = bufferValues();
+const buffer1: any = buffer.next(0);
+console.log("buffer1", buffer1.done, buffer1.value, events.join("|"));

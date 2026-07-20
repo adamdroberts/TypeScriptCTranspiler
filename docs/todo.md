@@ -131,6 +131,7 @@ This is the next item that most directly expands what programs can be written ag
   - The bounded lazy `for...of` subset now also covers typed `Map` sources as key/value entry pairs; custom iterator objects, async iteration, and broader iterator-source lowering remain deferred.
   - The bounded lazy `for...of` subset now also covers supported typed custom iterable/iterator classes; async iteration and broader iterator-source lowering remain deferred.
   - The bounded lazy `for...of` subset now also covers `URLSearchParams` key/value entries; async iteration and broader iterator-source lowering remain deferred.
+  - The bounded lazy `for...of` subset now also covers typed Buffer byte iteration; async iteration and broader iterator-source lowering remain deferred.
   - Lazy generators now cover bounded `for...in` loops over typed arrays, strings, and dynamic values with suspension-safe key positions; async iteration and broader enumerable-source lowering remain deferred.
 
 - **Phase 9 — `Proxy` + `Reflect`**

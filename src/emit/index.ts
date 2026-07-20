@@ -35694,6 +35694,10 @@ class Emitter {
                         ? entryType(sourceType.elem, sourceType.key)
                         : sourceType.kind === "urlsearchparams"
                             ? entryType(T_STRING, T_STRING)
+                        : sourceType.kind === "buffer"
+                            ? T_NUMBER
+                        : sourceType.kind === "value"
+                            ? T_VALUE
                         : sourceType.kind === "class"
                             ? T_VALUE
                         : null;
@@ -36239,6 +36243,8 @@ class Emitter {
                     ? this.mapEntriesArrayExpr(stmt.expression, source.c, source.ty, "lazy generator Map for-of").c
                 : source.ty.kind === "urlsearchparams"
                     ? `tsc_url_search_params_entries(${source.c})`
+                : source.ty.kind === "buffer"
+                    ? `({ tsc_buffer_t* const _lazy_for_of_buffer = ${source.c}; tsc_array_t* _lazy_for_of_values = tsc_array_new(sizeof(double), _lazy_for_of_buffer->len ? _lazy_for_of_buffer->len : 1); for (size_t _lazy_for_of_i = 0; _lazy_for_of_i < _lazy_for_of_buffer->len; _lazy_for_of_i++) { double _lazy_for_of_byte = (double)_lazy_for_of_buffer->data[_lazy_for_of_i]; tsc_array_push_raw(_lazy_for_of_values, &_lazy_for_of_byte); } _lazy_for_of_values; })`
                 : source.c;
         if (source.ty.kind === "class") {
             const custom = this.emitCustomIterableArray(stmt.expression, source) ??
@@ -36656,7 +36662,11 @@ class Emitter {
                             ? entryType(sourceType.elem, sourceType.key)
                             : sourceType.kind === "urlsearchparams"
                                 ? entryType(T_STRING, T_STRING)
-                        : sourceType.kind === "class"
+                            : sourceType.kind === "buffer"
+                                ? T_NUMBER
+                            : sourceType.kind === "value"
+                                ? T_VALUE
+                            : sourceType.kind === "class"
                             ? T_VALUE
                         : null;
                     if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays and strings");
