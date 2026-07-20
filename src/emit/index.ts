@@ -32470,7 +32470,7 @@ class Emitter {
     }
 
     private asyncAwaitLoopPostStatementSupported(stmt: ts.Statement): boolean {
-        if (ts.isForOfStatement(stmt) && ts.isVariableDeclarationList(stmt.initializer)) {
+        if ((ts.isForOfStatement(stmt) || ts.isForInStatement(stmt)) && ts.isVariableDeclarationList(stmt.initializer)) {
             return this.asyncAwaitLoopForOfPostludeSupported(stmt);
         }
         if (ts.isVariableStatement(stmt)) {
@@ -32498,7 +32498,7 @@ class Emitter {
         return ok;
     }
 
-    private asyncAwaitLoopForOfPostludeSupported(stmt: ts.ForOfStatement): boolean {
+    private asyncAwaitLoopForOfPostludeSupported(stmt: ts.ForOfStatement | ts.ForInStatement): boolean {
         if (!ts.isVariableDeclarationList(stmt.initializer) ||
             (stmt.initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
             stmt.initializer.declarations.length !== 1 ||
