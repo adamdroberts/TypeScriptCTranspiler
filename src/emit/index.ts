@@ -277,6 +277,7 @@ interface AsyncAwaitExpressionReturnContinuation {
 }
 
 interface AsyncAwaitLoopConditionReturnAwaitContinuation {
+    conditionExpr: ts.Expression;
     conditionAwaitExpr: ts.AwaitExpression;
     bodyAwaitExpr: ts.AwaitExpression;
     fallthroughExpr: ts.Expression;
@@ -32440,7 +32441,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
-        if (awaitExpressions.length !== 1 || awaitExpressions[0] !== condition) return false;
+        if (awaitExpressions.length !== 1) return false;
         if (loopBody.length !== 1 || !ts.isReturnStatement(loopBody[0]!) || !loopBody[0]!.expression) return false;
         const bodyAwaitExpr = this.unwrapTransparentExpression(loopBody[0]!.expression);
         if (!ts.isAwaitExpression(bodyAwaitExpr)) return false;
@@ -32465,9 +32466,19 @@ class Emitter {
             this.checker.getTypeAtLocation(bodyAwaitExpr),
             this.checker,
         ));
+        let hasNullishOperator = false;
+        const findNullishOperator = (node: ts.Node): void => {
+            if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+                hasNullishOperator = true;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            ts.forEachChild(node, findNullishOperator);
+        };
+        findNullishOperator(condition);
         if (
             conditionPromiseType.kind !== "promise" ||
-            conditionAwaitedType.kind !== "boolean" ||
+            (conditionAwaitedType.kind !== "boolean" && !(hasNullishOperator && conditionAwaitedType.kind === "value")) ||
             bodyPromiseType.kind !== "promise" ||
             bodyAwaitedType.kind === "never"
         ) return false;
@@ -32513,6 +32524,7 @@ class Emitter {
 
         const capturedParams = [...referenced.values()];
         const continuation: AsyncAwaitLoopConditionReturnAwaitContinuation = {
+            conditionExpr: condition,
             conditionAwaitExpr,
             bodyAwaitExpr,
             fallthroughExpr,
@@ -32608,7 +32620,8 @@ class Emitter {
         if (continuation.thisValue) this.functionThisStack.push({ c: `state->this_arg`, ty: continuation.thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            const conditionTruth = this.truthyC({ c: conditionValueVar, ty: conditionAwaitedType }, continuation.conditionAwaitExpr);
+            const emittedCondition = this.emitExpr(continuation.conditionExpr);
+            const conditionTruth = this.truthyC(emittedCondition, continuation.conditionExpr);
             buf.open(`if (${conditionTruth})`);
             const bodySource = this.emitExpr(continuation.bodyAwaitExpr.expression);
             const bodySourceVar = this.freshTemp("_await_body_source");

@@ -101,6 +101,20 @@ async function chooseLoopReturnAwaitReject(): Promise<string> {
     return "body-await-reject-fallthrough";
 }
 
+async function chooseLoopReturnAwaitLogical(flag: boolean): Promise<string> {
+    while (await laterTrue() && flag) {
+        return await laterBodyValue("body-await-logical");
+    }
+    return "body-await-logical-fallthrough";
+}
+
+async function chooseLoopReturnAwaitNullish(flag: boolean): Promise<string> {
+    while ((await laterNull()) ?? flag) {
+        return await laterBodyValue("body-await-nullish");
+    }
+    return "body-await-nullish-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -250,6 +264,10 @@ chooseLoopReturnAwait(true, true).then((value) => console.log("await-while-retur
 chooseLoopReturnAwait(true, false).then((value) => console.log("await-while-return-await-false", value));
 chooseLoopReturnAwait(false, true).then((value) => console.log("await-while-return-await-fallthrough", value));
 chooseLoopReturnAwaitReject().catch((reason) => console.log("await-while-return-await-reject", reason));
+chooseLoopReturnAwaitLogical(true).then((value) => console.log("await-while-return-await-logical-true", value));
+chooseLoopReturnAwaitLogical(false).then((value) => console.log("await-while-return-await-logical-false", value));
+chooseLoopReturnAwaitNullish(true).then((value) => console.log("await-while-return-await-nullish-true", value));
+chooseLoopReturnAwaitNullish(false).then((value) => console.log("await-while-return-await-nullish-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
