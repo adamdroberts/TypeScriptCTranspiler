@@ -29386,6 +29386,32 @@ class Emitter {
         thisValue: EmitResult | null,
         outerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitLeadingReturnContinuation | null {
+        if (body.statements.length === 2 && ts.isVariableStatement(body.statements[0]!)) {
+            const declaration = body.statements[0]!;
+            if (declaration.declarationList.declarations.length > 1) {
+                const splitStatements: ts.Statement[] = [];
+                for (const variable of declaration.declarationList.declarations) {
+                    if (!ts.isIdentifier(variable.name) || !variable.initializer) return null;
+                    const initializer = this.unwrapTransparentExpression(variable.initializer);
+                    if (!ts.isAwaitExpression(initializer)) return null;
+                    splitStatements.push(ts.factory.updateVariableStatement(
+                        declaration,
+                        declaration.modifiers,
+                        ts.factory.createVariableDeclarationList([variable], declaration.declarationList.flags),
+                    ));
+                }
+                const normalizedBody = ts.factory.updateBlock(body, [
+                    ...splitStatements,
+                    body.statements[1]!,
+                ]);
+                return this.asyncAwaitLeadingReturnContinuation(
+                    normalizedBody,
+                    parameters,
+                    thisValue,
+                    outerCaptures,
+                );
+            }
+        }
         if (body.statements.length === 1 && ts.isThrowStatement(body.statements[0]!)) {
             const terminalThrow = body.statements[0]!;
             const expression = this.unwrapTransparentExpression(terminalThrow.expression);

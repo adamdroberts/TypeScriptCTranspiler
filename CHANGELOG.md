@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Leading async/await chains now support multiple simple all-awaited declarators in one `const`/`let` statement as sequential suspension steps. Regression: `async_await_while_condition`.
 - Direct `throw await` aliases now preserve preceding simple await-free locals declared in the same `const`/`let` statement. Regression: `async_await_while_condition`.
 - Direct assignment-awaited aliases now preserve preceding simple await-free locals in the same `let` statement before the awaited target. Regression: `async_await_while_condition`.
 - Direct `return await` aliases now preserve preceding simple await-free locals declared in the same `const`/`let` statement. Regression: `async_await_while_condition`.
