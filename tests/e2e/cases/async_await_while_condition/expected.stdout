@@ -48,6 +48,8 @@ await-while-return-await-alias-post-loop-fallthrough body-return-post-loop-fallt
 await-while-throw-await-alias-post-loop-fallthrough body-throw-post-loop-fallthrough
 await-while-return-await-alias-post-for-fallthrough body-return-post-for-fallthrough
 await-while-throw-await-alias-post-for-fallthrough body-throw-post-for-fallthrough
+await-while-return-await-alias-post-do-fallthrough body-return-post-do-fallthrough
+await-while-throw-await-alias-post-do-fallthrough body-throw-post-do-fallthrough
 await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
@@ -110,6 +112,10 @@ await-while-return-await-alias-post-for-true body-return-post-forbody-return-for
 await-while-return-await-alias-post-for-false body-return-post-forbody-return
 await-while-throw-await-alias-post-for-true body-throw-post-for-for
 await-while-throw-await-alias-post-for-false body-throw-post-for
+await-while-return-await-alias-post-do-true body-return-post-dobody-return-do
+await-while-return-await-alias-post-do-false body-return-post-dobody-return-do
+await-while-throw-await-alias-post-do-true body-throw-post-do-do
+await-while-throw-await-alias-post-do-false body-throw-post-do-do
 await-for-condition-true for-yes
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
