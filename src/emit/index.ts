@@ -35992,6 +35992,13 @@ class Emitter {
         buf.line("return;");
         buf.close();
         buf.open("else");
+        buf.open(`if (${envLocalName}->yield_star_arr_${slot}->iter_has_return && !${envLocalName}->yield_star_arr_${slot}->iter_return_consumed)`);
+        buf.line(`${envLocalName}->yield_star_return_${slot} = ${envLocalName}->yield_star_arr_${slot}->iter_return;`);
+        buf.line(`${envLocalName}->yield_star_arr_${slot}->iter_return_consumed = true;`);
+        buf.close();
+        buf.open("else");
+        buf.line(`${envLocalName}->yield_star_return_${slot} = tsc_value_undefined();`);
+        buf.close();
         buf.line(`${envLocalName}->yield_star_arr_${slot} = NULL;`);
         buf.line(`*state = ${nextState};`);
         buf.line("continue;");
@@ -36288,13 +36295,14 @@ class Emitter {
 
         const yieldExpr = this.simpleLazyYieldExpression(stmt);
         if (yieldExpr) {
+            let yieldStarSlot = -1;
             if (yieldExpr.asteriskToken) {
                 const yieldState = nextStateId();
                 const nextState = nextStateId();
-                const slot = nextYieldStarSlot();
+                yieldStarSlot = nextYieldStarSlot();
                 buf.line(`*state = ${yieldState};`);
                 buf.line(`case ${yieldState}:;`);
-                this.emitLazyGeneratorYieldStar(buf, yieldExpr, elemType, envLocalName, slot, nextState);
+                this.emitLazyGeneratorYieldStar(buf, yieldExpr, elemType, envLocalName, yieldStarSlot, nextState);
                 buf.line(`case ${nextState}:;`);
             } else {
                 const nextState = nextStateId();
@@ -36330,7 +36338,21 @@ class Emitter {
                     buf.line("*state = -1;");
                     buf.line("*done = true;");
                 }
-                this.emitSimpleLazyYieldResume(buf, stmt, "next_arg", envLocalName);
+                const previous = this.lazyGeneratorResumeOverride;
+                if (yieldExpr.asteriskToken) {
+                    this.lazyGeneratorResumeOverride = {
+                        expr: yieldExpr,
+                        result: {
+                            c: `${envLocalName}->yield_star_return_${yieldStarSlot}`,
+                            ty: T_VALUE,
+                        },
+                    };
+                }
+                try {
+                    this.emitSimpleLazyYieldResume(buf, stmt, "next_arg", envLocalName);
+                } finally {
+                    this.lazyGeneratorResumeOverride = previous;
+                }
             }
             if (ts.isReturnStatement(stmt)) {
                 buf.line("*state = -1;");
@@ -36469,6 +36491,7 @@ class Emitter {
                 for (let i = 0; i < yieldStarCount; i++) {
                     this.structDecls.line(`tsc_array_t* yield_star_arr_${i};`);
                     this.structDecls.line(`size_t yield_star_idx_${i};`);
+                    this.structDecls.line(`tsc_value_t yield_star_return_${i};`);
                 }
             }
             this.structDecls.close(`${envType};`);
@@ -36571,6 +36594,7 @@ class Emitter {
                 for (let i = 0; i < yieldStarCount; i++) {
                     buf.line(`${envVar}->yield_star_arr_${i} = NULL;`);
                     buf.line(`${envVar}->yield_star_idx_${i} = 0;`);
+                    buf.line(`${envVar}->yield_star_return_${i} = tsc_value_undefined();`);
                 }
             }
             buf.line(`${arrayVar}->env = ${envVar};`);
@@ -36717,6 +36741,9 @@ class Emitter {
 
     private emitSimpleLazyResumeExpression(expr: ts.Expression, nextArg: string): EmitResult {
         if (ts.isYieldExpression(expr)) {
+            if (this.lazyGeneratorResumeOverride?.expr === expr) {
+                return this.lazyGeneratorResumeOverride.result;
+            }
             return { c: nextArg, ty: T_VALUE };
         }
         if (ts.isParenthesizedExpression(expr)) {
