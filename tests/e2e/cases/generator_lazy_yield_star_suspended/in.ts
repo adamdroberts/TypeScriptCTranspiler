@@ -79,7 +79,7 @@ function convertRecoveringSource(iter: Generator<string, string, string>): Gener
 }
 
 function convertRecoveringWrapper(iter: Generator<string, string, string>): Generator<any, string, string> {
-    return convertRecoveringSource(iter);
+    return (convertRecoveringSource(iter));
 }
 
 function* recoveringConvertedOuter(): Generator<string, string, string> {

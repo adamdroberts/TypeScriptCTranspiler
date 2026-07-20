@@ -35562,12 +35562,13 @@ class Emitter {
     private isLazyGeneratorPassthroughFunction(node: ts.Node): boolean {
         if (!ts.isFunctionDeclaration(node) && !ts.isFunctionExpression(node) &&
             !ts.isArrowFunction(node) && !ts.isMethodDeclaration(node)) return false;
-        const expression = node.body && !ts.isBlock(node.body)
+        const rawExpression = node.body && !ts.isBlock(node.body)
             ? node.body
             : node.body && ts.isBlock(node.body) && node.body.statements.length === 1 &&
                 ts.isReturnStatement(node.body.statements[0])
                 ? node.body.statements[0].expression
                 : undefined;
+        const expression = rawExpression ? this.unwrapTransparentExpression(rawExpression) : undefined;
         if (!expression) return false;
         if (ts.isIdentifier(expression)) {
             const returnedSymbol = this.symbolForIdentifier(expression);
@@ -42086,7 +42087,12 @@ class Emitter {
         }
         if (ts.isParenthesizedExpression(expr)) {
             const inner = this.emitExpr(expr.expression);
-            return { c: `(${inner.c})`, ty: inner.ty };
+            return {
+                c: `(${inner.c})`,
+                ty: inner.ty,
+                lazyGenerator: inner.lazyGenerator,
+                lazyGeneratorFactory: inner.lazyGeneratorFactory,
+            };
         }
         if (ts.isTypeOfExpression(expr)) return this.emitTypeOf(expr);
         if (ts.isDeleteExpression(expr)) return this.emitDelete(expr);
