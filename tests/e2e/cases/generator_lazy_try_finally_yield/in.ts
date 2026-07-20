@@ -106,3 +106,25 @@ const caughtComposedBound = caughtComposedBoundThrow();
 const caughtComposedBoundFirst: any = caughtComposedBound.next();
 const caughtComposedBoundDone: any = caughtComposedBound.throw("handled-composed-bound");
 console.log("caught-composed-bound:", caughtComposedBoundFirst.done, caughtComposedBoundFirst.value, caughtComposedBoundDone.done, caughtComposedBoundDone.value);
+
+const caughtFinallyEvents: string[] = [];
+function* caughtFinallyThrow(): Generator<string, string, string> {
+    try {
+        yield "catch-finally-pause";
+    } catch (error: any) {
+        return "finally-caught:" + error;
+    } finally {
+        caughtFinallyEvents.push("finally");
+    }
+    return "normal";
+}
+
+const caughtFinally = caughtFinallyThrow();
+const caughtFinallyFirst: any = caughtFinally.next();
+const caughtFinallyDone: any = caughtFinally.throw("handled-finally");
+console.log("caught-finally:", caughtFinallyFirst.done, caughtFinallyFirst.value, caughtFinallyDone.done, caughtFinallyDone.value, caughtFinallyEvents.join("|"));
+
+const caughtFinallyNormal = caughtFinallyThrow();
+const caughtFinallyNormalFirst: any = caughtFinallyNormal.next();
+const caughtFinallyNormalDone: any = caughtFinallyNormal.next("resume");
+console.log("caught-finally-normal:", caughtFinallyNormalFirst.done, caughtFinallyNormalFirst.value, caughtFinallyNormalDone.done, caughtFinallyNormalDone.value, caughtFinallyEvents.join("|"));

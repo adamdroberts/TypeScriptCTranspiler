@@ -113,6 +113,7 @@ interface LazyCompoundResumeSlot {
 interface LazyGeneratorCatchHandler {
     returnStatement: ts.ReturnStatement;
     catchClause: ts.CatchClause;
+    finallyStatements: readonly ts.Statement[];
 }
 
 interface LazyForOfInfo {
@@ -35798,8 +35799,14 @@ class Emitter {
     }
 
     private lazyGeneratorTryCatchReturn(stmt: ts.TryStatement): LazyGeneratorCatchHandler | null {
-        if (!stmt.catchClause || stmt.finallyBlock) return null;
+        if (!stmt.catchClause) return null;
         if (stmt.catchClause.variableDeclaration && !ts.isIdentifier(stmt.catchClause.variableDeclaration.name)) return null;
+        const finallyStatements = stmt.finallyBlock?.statements ?? [];
+        if (
+            finallyStatements.some((child) => this.nodeContainsYield(child)) ||
+            (!!stmt.finallyBlock && this.lazyGeneratorContainsAbruptControlFlow(stmt.finallyBlock)) ||
+            !finallyStatements.every((child) => this.isValidLazyGeneratorStatement(child))
+        ) return null;
         const tryStatements = stmt.tryBlock.statements;
         if (!tryStatements.some((child) => this.nodeContainsYield(child)) ||
             this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock) ||
@@ -35811,13 +35818,13 @@ class Emitter {
         if (catchStatements.length !== 1) return null;
         const expression = this.unwrapTransparentExpression(last.expression);
         if (this.isSimpleLazyMultiYieldLiteral(expression)) {
-            return { returnStatement: last, catchClause: stmt.catchClause };
+            return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements };
         }
         const catchDecl = stmt.catchClause.variableDeclaration;
         if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
         const catchSymbol = this.symbolForIdentifier(catchDecl.name);
         if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol)) return null;
-        return { returnStatement: last, catchClause: stmt.catchClause };
+        return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements };
     }
 
     private isSimpleLazyCatchReturnExpression(expr: ts.Expression, catchSymbol: ts.Symbol): boolean {
@@ -36508,14 +36515,21 @@ class Emitter {
                     buf.line(`tsc_str_t* ${mangleIdent(catchDecl.name.text)} = tsc_value_to_string(${envLocalName}->lazy_close_arg);`);
                 }
                 try {
-                    this.emitLazyGeneratorStmt(
-                        buf,
-                        handler.returnStatement,
-                        nextStateId,
-                        nextYieldStarSlot,
-                        elemType,
-                        envLocalName,
-                    );
+                    if (handler.finallyStatements.length > 0) {
+                        const returned = this.emitExpr(handler.returnStatement.expression!);
+                        buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
+                        buf.line("a->iter_has_return = true;");
+                        buf.line("a->iter_return_consumed = false;");
+                    } else {
+                        this.emitLazyGeneratorStmt(
+                            buf,
+                            handler.returnStatement,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        );
+                    }
                 } finally {
                     if (catchSymbol) this.catchStringSymbols.delete(catchSymbol);
                 }
@@ -36638,12 +36652,21 @@ class Emitter {
         if (ts.isTryStatement(stmt) && catchReturn) {
             buf.open("");
             this.activeLazyGeneratorCatchHandlers.push(catchReturn);
+            if (catchReturn.finallyStatements.length > 0) {
+                this.activeLazyGeneratorFinalizers.push([...catchReturn.finallyStatements]);
+            }
             try {
                 for (const child of stmt.tryBlock.statements) {
                     this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                 }
             } finally {
+                if (catchReturn.finallyStatements.length > 0) {
+                    this.activeLazyGeneratorFinalizers.pop();
+                }
                 this.activeLazyGeneratorCatchHandlers.pop();
+            }
+            for (const child of catchReturn.finallyStatements) {
+                this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
             buf.close();
             return;
