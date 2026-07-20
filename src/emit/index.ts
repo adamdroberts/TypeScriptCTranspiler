@@ -32996,6 +32996,19 @@ class Emitter {
             visit(expression);
             return supported;
         };
+        const bodySynchronousStatementSupported = (statement: ts.Statement): boolean => {
+            let supported = true;
+            const visit = (node: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(statement);
+            return supported;
+        };
         const awaitedDeclarationIndex = (statement: ts.Statement): number => {
             if (!ts.isVariableStatement(statement)) return -1;
             let found = -1;
@@ -33019,6 +33032,12 @@ class Emitter {
                 ? nestedBodyAwait
                 : directBodyAwait;
             bodyReturnExpr = bodyAwaitExpr;
+            bodyPreludeStatements = loopBody.slice(0, -1);
+        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && bodyAction.expression &&
+            bodySynchronousExpressionSupported(bodyAction.expression) &&
+            loopBody.slice(0, -1).every(bodySynchronousStatementSupported) &&
+            !loopBody.slice(0, -1).some((statement) => awaitedDeclarationIndex(statement) >= 0)) {
+            bodyReturnExpr = bodyAction.expression;
             bodyPreludeStatements = loopBody.slice(0, -1);
         } else if (loopBody.length === 1 &&
             (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && bodyAction.expression) {

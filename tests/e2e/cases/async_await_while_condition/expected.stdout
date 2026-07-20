@@ -14,6 +14,12 @@ await-method-sync-throw-true method-sync-throw
 await-method-sync-throw-false method-sync-throw-fallthrough
 await-value-sync-throw-true value-sync-throw
 await-value-sync-throw-false value-sync-throw-fallthrough
+await-while-sync-prelude-true sync-body-suffix
+await-while-sync-prelude-false sync-prelude-fallthrough
+await-method-sync-prelude-true method-sync-body-method-suffix
+await-method-sync-prelude-false method-sync-prelude-fallthrough
+await-value-sync-prelude-true value-sync-body-value-suffix
+await-value-sync-prelude-false value-sync-prelude-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes
