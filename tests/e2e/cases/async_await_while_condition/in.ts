@@ -551,6 +551,18 @@ async function chooseWhileContinueNestedWhileAwait(value: string, repeat: boolea
     return await laterBodyValue(value);
 }
 
+async function chooseWhileContinueNestedDoAwait(value: string, repeat: boolean, innerRepeat: boolean): Promise<string> {
+    while (await laterCondition(repeat)) {
+        do {
+            value += "-nested";
+            innerRepeat = false;
+        } while (innerRepeat);
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2695,6 +2707,8 @@ chooseWhileContinueSwitchAwait("while-switch-escaping-continue", true, true).the
 chooseWhileContinueSwitchAwait("while-switch-escaping-continue", true, false).then((value) => console.log("await-while-escaping-var-continue-switch-false", value));
 chooseWhileContinueNestedWhileAwait("while-nested-escaping-continue", true, true).then((value) => console.log("await-while-escaping-var-continue-nested-true", value));
 chooseWhileContinueNestedWhileAwait("while-nested-escaping-continue", true, false).then((value) => console.log("await-while-escaping-var-continue-nested-false", value));
+chooseWhileContinueNestedDoAwait("while-do-escaping-continue", true, true).then((value) => console.log("await-while-escaping-var-continue-do-true", value));
+chooseWhileContinueNestedDoAwait("while-do-escaping-continue", true, false).then((value) => console.log("await-while-escaping-var-continue-do-false", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
