@@ -976,6 +976,13 @@ async function chooseForSynchronousPrelude(flag: boolean): Promise<string> {
     return "for-sync-prelude-fallthrough";
 }
 
+async function chooseForSynchronousIncrementor(flag: boolean): Promise<string> {
+    for (; await Promise.resolve(flag); console.log("unexpected-for-incrementor")) {
+        return "for-incrementor-body";
+    }
+    return "for-incrementor-fallthrough";
+}
+
 async function chooseLoopSynchronousThrowPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         void "sync-throw-prelude";
@@ -1209,6 +1216,13 @@ class LoopChooser {
         return "method-sync-prelude-fallthrough";
     }
 
+    async pickSynchronousIncrementor(flag: boolean): Promise<string> {
+        for (; await Promise.resolve(flag); console.log("unexpected-method-for-incrementor")) {
+            return "method-for-incrementor-body";
+        }
+        return "method-for-incrementor-fallthrough";
+    }
+
     async pickSynchronousThrowPrelude(flag: boolean): Promise<string> {
         while (await Promise.resolve(flag)) {
             const reason = "method-sync-throw";
@@ -1393,6 +1407,13 @@ const chooseLoopSynchronousPreludeValue = async (flag: boolean): Promise<string>
         return "value-sync-body" + suffix;
     }
     return "value-sync-prelude-fallthrough";
+};
+
+const chooseForSynchronousIncrementorValue = async (flag: boolean): Promise<string> => {
+    for (; await Promise.resolve(flag); console.log("unexpected-value-for-incrementor")) {
+        return "value-for-incrementor-body";
+    }
+    return "value-for-incrementor-fallthrough";
 };
 
 const chooseLoopSynchronousThrowPreludeValue = async (flag: boolean): Promise<string> => {
@@ -1765,6 +1786,12 @@ chooseLoopSynchronousPreludeValue(true).then((value) => console.log("await-value
 chooseLoopSynchronousPreludeValue(false).then((value) => console.log("await-value-sync-prelude-false", value));
 chooseForSynchronousPrelude(true).then((value) => console.log("await-for-sync-prelude-true", value));
 chooseForSynchronousPrelude(false).then((value) => console.log("await-for-sync-prelude-false", value));
+chooseForSynchronousIncrementor(true).then((value) => console.log("await-for-sync-incrementor-true", value));
+chooseForSynchronousIncrementor(false).then((value) => console.log("await-for-sync-incrementor-false", value));
+new LoopChooser("method-").pickSynchronousIncrementor(true).then((value) => console.log("await-method-sync-incrementor-true", value));
+new LoopChooser("method-").pickSynchronousIncrementor(false).then((value) => console.log("await-method-sync-incrementor-false", value));
+chooseForSynchronousIncrementorValue(true).then((value) => console.log("await-value-sync-incrementor-true", value));
+chooseForSynchronousIncrementorValue(false).then((value) => console.log("await-value-sync-incrementor-false", value));
 chooseLoopSynchronousThrowPrelude(true).catch((reason) => console.log("await-while-sync-throw-prelude-true", reason));
 chooseLoopSynchronousThrowPrelude(false).then((value) => console.log("await-while-sync-throw-prelude-false", value));
 new LoopChooser("method-").pickSynchronousThrowPrelude(true).catch((reason) => console.log("await-method-sync-throw-prelude-true", reason));

@@ -22,6 +22,12 @@ await-value-sync-prelude-true value-sync-body-value-suffix
 await-value-sync-prelude-false value-sync-prelude-fallthrough
 await-for-sync-prelude-true for-sync-body-for-suffix
 await-for-sync-prelude-false for-sync-prelude-fallthrough
+await-for-sync-incrementor-true for-incrementor-body
+await-for-sync-incrementor-false for-incrementor-fallthrough
+await-method-sync-incrementor-true method-for-incrementor-body
+await-method-sync-incrementor-false method-for-incrementor-fallthrough
+await-value-sync-incrementor-true value-for-incrementor-body
+await-value-sync-incrementor-false value-for-incrementor-fallthrough
 await-while-sync-throw-prelude-true sync-throw
 await-while-sync-throw-prelude-false sync-throw-prelude-fallthrough
 await-method-sync-throw-prelude-true method-sync-throw

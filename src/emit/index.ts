@@ -33543,7 +33543,7 @@ class Emitter {
         if (!ts.isReturnStatement(fallthrough) || !fallthrough.expression) return false;
         const loopCondition = ts.isWhileStatement(loop)
             ? loop.expression
-            : ts.isForStatement(loop) && !loop.initializer && !loop.incrementor && loop.condition
+            : ts.isForStatement(loop) && !loop.initializer && loop.condition
                 ? loop.condition
                 : null;
         if (!loopCondition) return false;
