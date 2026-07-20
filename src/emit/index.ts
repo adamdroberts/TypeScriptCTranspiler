@@ -32588,6 +32588,7 @@ class Emitter {
         let ok = true;
         let loopDepth = 0;
         let caughtThrowDepth = 0;
+        let catchThrowDepth = 0;
         let finalizerDepth = 0;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if (loopDepth <= 1 && !allowTopLevelLoopDeclaration) return false;
@@ -32695,7 +32696,7 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 (ts.isThrowStatement(node) &&
-                    !(allowCaughtThrows && (caughtThrowDepth > 0 || finalizerDepth > 0))) ||
+                    !(allowCaughtThrows && (caughtThrowDepth > 0 || catchThrowDepth > 0 || finalizerDepth > 0))) ||
                 (ts.isBreakStatement(node) && (!allowLoopControl || (loopDepth === 0 && switchDepth === 0))) ||
                 (ts.isContinueStatement(node) && (!allowLoopControl || loopDepth === 0))
             ) {
@@ -32713,7 +32714,11 @@ class Emitter {
                 caughtThrowDepth++;
                 visit(node.tryBlock);
                 caughtThrowDepth--;
-                if (node.catchClause) visit(node.catchClause);
+                if (node.catchClause) {
+                    catchThrowDepth++;
+                    visit(node.catchClause);
+                    catchThrowDepth--;
+                }
                 if (node.finallyBlock) {
                     finalizerDepth++;
                     visit(node.finallyBlock);
