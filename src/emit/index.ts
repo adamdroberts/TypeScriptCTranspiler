@@ -36035,7 +36035,7 @@ class Emitter {
             arrayExpr = `tsc_value_iter_values(${source.c})`;
             sourceElemType = T_VALUE;
         } else {
-            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, maps, sets, custom iterables, and dynamic iterable values");
+            unsupported(yieldExpr.expression, "yield* currently supports arrays, strings, maps, sets, custom iterables, URLSearchParams, Buffers, and dynamic iterable values");
         }
         buf.line(`${envLocalName}->yield_star_arr_${slot} = ${arrayExpr};`);
         buf.line(`${envLocalName}->yield_star_idx_${slot} = 0;`);
@@ -36679,7 +36679,7 @@ class Emitter {
                             : sourceType.kind === "class"
                             ? T_VALUE
                         : null;
-                    if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays and strings");
+                    if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays, strings, Maps, Sets, custom iterables, URLSearchParams, Buffers, and dynamic values");
                     const index = forOfInfos.length;
                     const info: LazyForOfInfo = {
                         arrayField: `for_of_arr_${index}`,
