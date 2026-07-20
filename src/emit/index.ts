@@ -80,6 +80,7 @@ import type { ModuleGraph, ModuleInfo } from "../resolve";
 interface EmitResult {
     c: string;
     ty: CType;
+    lazyGenerator?: boolean;
 }
 
 interface SequencedCallArg {
@@ -43700,10 +43701,16 @@ class Emitter {
             call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
             !this.signatureHasRestParameter(params)
         ) {
-            return this.emitStaticSpreadCall(call, fnName, retType, params, fixedArgs);
+            const result = this.emitStaticSpreadCall(call, fnName, retType, params, fixedArgs);
+            const declaration = sig.getDeclaration();
+            if (declaration && this.isGeneratorDeclaration(declaration)) result.lazyGenerator = true;
+            return result;
         }
         const specs = this.callSpecsFromSignature(call, call.arguments, params);
-        return this.emitSequencedCall(fnName, retType, specs, fixedArgs);
+        const result = this.emitSequencedCall(fnName, retType, specs, fixedArgs);
+        const declaration = sig.getDeclaration();
+        if (declaration && this.isGeneratorDeclaration(declaration)) result.lazyGenerator = true;
+        return result;
     }
 
     private emitObjectPrototypeCall(call: ts.CallExpression): EmitResult | null {
@@ -44874,10 +44881,14 @@ class Emitter {
             call.arguments.some((arg) => ts.isSpreadElement(arg)) &&
             !this.signatureHasRestParameter(params)
         ) {
-            return this.emitStaticSpreadCall(call, name, retType, params);
+            const result = this.emitStaticSpreadCall(call, name, retType, params);
+            if (this.isGeneratorDeclaration(fd)) result.lazyGenerator = true;
+            return result;
         }
         const specs = this.callSpecsFromSignature(call, call.arguments, params);
-        return this.emitSequencedCall(name, retType, specs);
+        const result = this.emitSequencedCall(name, retType, specs);
+        if (this.isGeneratorDeclaration(fd)) result.lazyGenerator = true;
+        return result;
     }
 
     private genericBindingsForCall(
@@ -67290,6 +67301,58 @@ class Emitter {
 
     // ---------------- coercion helpers ----------------
 
+    private coerceLazyGeneratorArray(r: EmitResult, target: CType, node: ts.Node): string {
+        if (r.ty.kind !== "array" || !r.ty.elem || target.kind !== "array" || !target.elem) {
+            unsupported(node, "lazy generator array conversion needs element types");
+        }
+        const envType = `_gen_lazy_coerce_env_${this.freshTemp("")}`;
+        const nextName = `_gen_lazy_coerce_next_${this.freshTemp("")}`;
+        const source = this.freshTemp("_lazy_source");
+        const out = this.freshTemp("_lazy_coerced");
+        const env = this.freshTemp("_lazy_coerce_env");
+        const sourceElem = this.freshTemp("_lazy_elem");
+        const converted = this.freshTemp("_lazy_converted");
+        const convertedExpr = this.coerce({ c: sourceElem, ty: r.ty.elem }, target.elem, node);
+
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line(`tsc_array_t* source;`);
+        this.structDecls.close(`${envType};`);
+        this.structDecls.line();
+        this.protos.line(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
+
+        const nextBuf = new CBuf();
+        nextBuf.open(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
+        nextBuf.line("(void)state;");
+        nextBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
+        nextBuf.line(`tsc_array_t* const ${source} = ${env}->source;`);
+        nextBuf.open(`if (${source}->iter_pos >= ${source}->len && ${source}->is_lazy_generator && ${source}->lazy_next)`);
+        nextBuf.line("bool _source_done = false;");
+        nextBuf.line(`${source}->lazy_next(${source}, &${source}->state, ${source}->env, next_arg, &_source_done);`);
+        nextBuf.line(`if (_source_done) ${source}->is_lazy_generator = false;`);
+        nextBuf.close();
+        nextBuf.open(`if (${source}->iter_pos < ${source}->len)`);
+        nextBuf.line(`${r.ty.elem.c} ${sourceElem} = TSC_ARR(${r.ty.elem.c}, ${source}, ${source}->iter_pos++);`);
+        nextBuf.line(`${target.elem.c} ${converted} = ${convertedExpr};`);
+        nextBuf.line(`tsc_array_push_raw(a, &${converted});`);
+        nextBuf.line("*done = false;");
+        nextBuf.line("return;");
+        nextBuf.close();
+        nextBuf.open(`if (${source}->iter_has_return && !${source}->iter_return_consumed)`);
+        nextBuf.line(`a->iter_return = ${source}->iter_return;`);
+        nextBuf.line("a->iter_has_return = true;");
+        nextBuf.line("a->iter_return_consumed = false;");
+        nextBuf.line(`${source}->iter_return_consumed = true;`);
+        nextBuf.close();
+        nextBuf.line("*state = -1;");
+        nextBuf.line("*done = true;");
+        nextBuf.line("return;");
+        nextBuf.close();
+        nextBuf.line();
+        this.closureDefs.write(nextBuf.toString());
+
+        return `({ tsc_array_t* ${source} = ${r.c}; ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->source = ${source}; tsc_array_t* ${out} = tsc_array_new(sizeof(${target.elem.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; ${out}; })`;
+    }
+
     private coerceToString(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind === "string") return r.c;
         if (r.ty.kind === "number") {
@@ -67343,6 +67406,7 @@ class Emitter {
                 target.elem &&
                 !sameCType(r.ty.elem, target.elem)
             ) {
+                if (r.lazyGenerator) return this.coerceLazyGeneratorArray(r, target, node);
                 const tmpIn = this.freshTemp("_arrIn");
                 const tmpOut = this.freshTemp("_arrOut");
                 const idx = this.freshTemp("_idx");

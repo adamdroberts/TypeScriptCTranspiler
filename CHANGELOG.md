@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Typed lazy generators passed through a different `Generator<...>` element type now stay lazy during conversion, preserving per-yield element boxing/conversion and `.next(value)` delivery instead of materializing at the call site. Regression: `generator_lazy_yield_logical`.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
