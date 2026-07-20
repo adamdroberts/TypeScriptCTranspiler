@@ -3,3 +3,5 @@ a1 false 0 array:0
 a2 false 1 array:0|array:1
 a3 true array-done array:0|array:1
 s1 false 0 array:0|array:1|string:0
+b1 false 0 array:0|array:1|string:0|buffer:0
+b2 false 1 array:0|array:1|string:0|buffer:0|buffer:1

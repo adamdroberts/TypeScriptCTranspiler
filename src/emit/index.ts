@@ -35714,7 +35714,7 @@ class Emitter {
                 this.checker.getTypeAtLocation(stmt.expression),
                 this.checker,
             ));
-            if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "value") return false;
+            if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value") return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -36309,7 +36309,9 @@ class Emitter {
             ? `value_array_keys(${source.c}, false)`
             : source.ty.kind === "string"
                 ? `value_string_keys(${source.c}, false)`
-                : `tsc_value_object_keys(${this.coerce(source, T_VALUE, stmt.expression)})`;
+                : source.ty.kind === "buffer"
+                    ? `({ tsc_buffer_t* const _lazy_for_in_buffer = ${source.c}; tsc_array_t* _lazy_for_in_keys = tsc_array_new(sizeof(tsc_str_t*), _lazy_for_in_buffer->len ? _lazy_for_in_buffer->len : 1); for (size_t _lazy_for_in_i = 0; _lazy_for_in_i < _lazy_for_in_buffer->len; _lazy_for_in_i++) { tsc_str_t* _lazy_for_in_key = tsc_str_from_int((int64_t)_lazy_for_in_i); tsc_array_push_raw(_lazy_for_in_keys, &_lazy_for_in_key); } _lazy_for_in_keys; })`
+                    : `tsc_value_object_keys(${this.coerce(source, T_VALUE, stmt.expression)})`;
         buf.open(`if (${envLocalName}->${info.keysField} == NULL)`);
         buf.line(`${envLocalName}->${info.keysField} = ${keys};`);
         buf.line(`${envLocalName}->${info.indexField} = 0;`);
@@ -36700,8 +36702,8 @@ class Emitter {
                         this.checker.getTypeAtLocation(node.expression),
                         this.checker,
                     ));
-                    if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "value") {
-                        unsupported(node.expression, "lazy generator for-in currently supports arrays, strings, and dynamic values");
+                    if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value") {
+                        unsupported(node.expression, "lazy generator for-in currently supports arrays, strings, Buffers, and dynamic values");
                     }
                     const index = forInInfos.length;
                     const info: LazyForInInfo = {

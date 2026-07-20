@@ -19,6 +19,15 @@ function* stringKeys(): Generator<string, string, string> {
     return "string-done";
 }
 
+function* bufferKeys(): Generator<string, string, string> {
+    const bytes = Buffer.from([13, 14]);
+    for (const key in bytes) {
+        events.push("buffer:" + key);
+        yield key;
+    }
+    return "buffer-done";
+}
+
 const a = arrayKeys();
 console.log("created", events.join("|"));
 const a1: any = a.next("ignored");
@@ -31,3 +40,9 @@ console.log("a3", a3.done, a3.value, events.join("|"));
 const s = stringKeys();
 const s1: any = s.next("ignored");
 console.log("s1", s1.done, s1.value, events.join("|"));
+
+const b = bufferKeys();
+const b1: any = b.next("ignored");
+console.log("b1", b1.done, b1.value, events.join("|"));
+const b2: any = b.next("resume");
+console.log("b2", b2.done, b2.value, events.join("|"));
