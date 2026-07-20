@@ -32584,8 +32584,7 @@ class Emitter {
             return this.asyncAwaitLoopForOfPostludeSupported(stmt);
         }
         if (ts.isVariableStatement(stmt)) {
-            if ((stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                stmt.declarationList.declarations.length === 0) return false;
+            if (stmt.declarationList.declarations.length === 0) return false;
         } else if (!ts.isExpressionStatement(stmt)) {
             return this.asyncAwaitLoopBodyControlPreludeSupported(stmt, true);
         }
@@ -32603,7 +32602,8 @@ class Emitter {
         } else {
             for (const declaration of stmt.declarationList.declarations) {
                 if (!ts.isIdentifier(declaration.name) ||
-                    (!declaration.initializer && (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0)) return false;
+                    (!declaration.initializer &&
+                        (stmt.declarationList.flags & ts.NodeFlags.Let) === 0)) return false;
                 if (declaration.initializer) visit(declaration.initializer);
             }
         }

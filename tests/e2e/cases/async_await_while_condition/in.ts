@@ -317,6 +317,15 @@ async function chooseLoopReturnAwaitAliasPostMultipleLocals(condition: boolean, 
     return prefix + "-post-multiple-locals-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostVar(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-post-var");
+        var suffix = "-var";
+        return value + prefix + suffix;
+    }
+    return prefix + "-post-var-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-control");
@@ -855,6 +864,8 @@ chooseLoopThrowAwaitAliasPostMultiple(true).catch((reason) => console.log("await
 chooseLoopThrowAwaitAliasPostMultiple(false).then((value) => console.log("await-while-throw-await-alias-post-multiple-false", value));
 chooseLoopReturnAwaitAliasPostMultipleLocals(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-multiple-locals-true", value));
 chooseLoopReturnAwaitAliasPostMultipleLocals(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-multiple-locals-false", value));
+chooseLoopReturnAwaitAliasPostVar(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-var-true", value));
+chooseLoopReturnAwaitAliasPostVar(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-var-false", value));
 chooseLoopReturnAwaitAliasPostControl(true, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-true", value));
 chooseLoopReturnAwaitAliasPostControl(true, false, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-false", value));
 chooseLoopReturnAwaitAliasPostControl(false, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-fallthrough", value));
