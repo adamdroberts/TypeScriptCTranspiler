@@ -65,6 +65,22 @@ class NoArgIterable {
     }
 }
 
+class ForwardIterator {
+    current: number = 1;
+
+    next(input?: string): Step {
+        events.push("forward-next:" + input);
+        if (this.current > 1) return { done: true, value: 0 };
+        return { done: false, value: this.current++ };
+    }
+}
+
+class ForwardIterable {
+    [Symbol.iterator](): ForwardIterator {
+        return new ForwardIterator();
+    }
+}
+
 function* outer(): Generator<number, string, undefined> {
     const delegated: any = yield* new Counter();
     events.push("outer-after:" + delegated);
@@ -107,6 +123,12 @@ function* outerNoArgThrow(): Generator<number, string, string> {
     return "noarg-throw-outer-done";
 }
 
+function* outerNextArgument(): Generator<number, string, string> {
+    const delegated: any = yield* new ForwardIterable();
+    events.push("forward-outer-after:" + delegated);
+    return "forward-outer-done";
+}
+
 const iter = outer();
 const first: any = iter.next();
 const second: any = iter.next();
@@ -146,3 +168,9 @@ const noArgThrowing = outerNoArgThrow();
 const noArgThrowingFirst: any = noArgThrowing.next();
 const noArgThrowingDone: any = noArgThrowing.throw("ignored");
 console.log("custom-iterator-noarg-throw", noArgThrowingFirst.done, noArgThrowingFirst.value, noArgThrowingDone.done, noArgThrowingDone.value, events.join("|"));
+
+const forwarding = outerNextArgument();
+const forwardingFirst: any = forwarding.next();
+const forwardingSecond: any = forwarding.next("forwarded");
+const forwardingDone: any = forwarding.next();
+console.log("custom-iterator-next-argument", forwardingFirst.done, forwardingFirst.value, forwardingSecond.done, forwardingSecond.value, forwardingDone.done, forwardingDone.value, events.join("|"));

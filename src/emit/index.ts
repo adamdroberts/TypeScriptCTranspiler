@@ -40312,6 +40312,26 @@ class Emitter {
         const { owner: nextOwner, method: next } = foundNext;
         const nextSig = this.checker.getSignatureFromDeclaration(next);
         if (!nextSig) unsupported(next, "could not resolve iterator next() signature");
+        const nextParams = nextSig.getParameters();
+        if (nextParams.length > 1) unsupported(next, "lazy custom iterator next() accepts zero or one argument");
+        const nextParam = nextParams.length === 1 ? (nextParams[0]!.valueDeclaration ?? next) : null;
+        const nextParamType = nextParam
+            ? this.prepareType(mapTsType(
+                nextParam,
+                this.checker.getTypeOfSymbolAtLocation(nextParams[0]!, nextParam),
+                this.checker,
+            ))
+            : null;
+        const nextArg = nextParams.length === 1
+            ? this.coerce(
+                { c: "next_arg", ty: T_VALUE },
+                nextParamType!,
+                nextParam!,
+            )
+            : null;
+        const eagerNextArg = nextParamType
+            ? this.coerce({ c: "tsc_value_undefined()", ty: T_VALUE }, nextParamType, nextParam!)
+            : null;
         const stepTsType = nextSig.getReturnType();
         const stepType = this.prepareType(mapTsType(next, stepTsType, this.checker));
         if (stepType.kind !== "class") return null;
@@ -40338,7 +40358,7 @@ class Emitter {
             `({ ${iter.ty.c} ${recv} = ${iter.c}; ` +
             `${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ` +
             `tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ` +
-            `while (true) { ${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg}); ` +
+            `while (true) { ${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg}${eagerNextArg ? `, ${eagerNextArg}` : ""}); ` +
             `if (${step}->done) break; ${valueType.c} ${value} = ${step}->value; ` +
             `tsc_array_push_raw(${out}, &${value}); } ${out}; })`
         );
@@ -40356,9 +40376,9 @@ class Emitter {
             if (closeName) this.protos.line(`static bool ${closeName}(tsc_array_t* a, void* env, tsc_value_t arg, bool is_throw);`);
             const nextBuf = new CBuf();
             nextBuf.open(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
-            nextBuf.line("(void)next_arg;");
+            if (!nextArg) nextBuf.line("(void)next_arg;");
             nextBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
-            nextBuf.line(`${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg.replace(iterVar, `${env}->iterator`)});`);
+            nextBuf.line(`${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg.replace(iterVar, `${env}->iterator`)}${nextArg ? `, ${nextArg}` : ""});`);
             nextBuf.open(`if (${step}->done)`);
             nextBuf.line(`a->iter_return = ${this.coerce({ c: `${step}->value`, ty: valueType }, T_VALUE, next)};`);
             nextBuf.line("a->iter_has_return = true;");
