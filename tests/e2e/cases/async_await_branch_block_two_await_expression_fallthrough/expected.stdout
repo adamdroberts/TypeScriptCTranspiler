@@ -1,0 +1,9 @@
+declaration-branch: fn-branch
+declaration-first: fn-fall-first-second
+method-branch: branch-method
+declaration-other: fn-fall-other-tail
+value-branch: arrow-branch
+method-first: fall-methodfirst-second
+method-other: fall-methodother-tail
+value-first: arrow-fall-first-second
+value-other: arrow-fall-other-tail

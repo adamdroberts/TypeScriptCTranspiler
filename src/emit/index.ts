@@ -31647,6 +31647,13 @@ class Emitter {
                 captures,
             );
         }
+        const twoExpressionContinuation = this.asyncAwaitTwoExpressionReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (twoExpressionContinuation) return { kind: "twoReturn", continuation: twoExpressionContinuation };
         const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
             expression,
             parameters,
