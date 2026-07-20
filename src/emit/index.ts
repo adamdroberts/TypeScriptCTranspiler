@@ -36439,7 +36439,7 @@ class Emitter {
             sourceElemType = T_STRING;
         } else if (source.ty.kind === "class") {
             const custom = this.emitCustomIterableArray(yieldExpr.expression, source) ??
-                this.emitCustomIteratorArray(yieldExpr.expression, source);
+                this.emitCustomIteratorArray(yieldExpr.expression, source, true);
             if (!custom) {
                 unsupported(
                     yieldExpr.expression,
@@ -40269,6 +40269,7 @@ class Emitter {
     private emitCustomIteratorArray(
         expr: ts.Expression,
         iter: EmitResult,
+        lazy = false,
     ): EmitResult | null {
         const cd = this.classDeclForExpression(expr);
         if (!cd) return null;
@@ -40314,6 +40315,41 @@ class Emitter {
             `if (${step}->done) break; ${valueType.c} ${value} = ${step}->value; ` +
             `tsc_array_push_raw(${out}, &${value}); } ${out}; })`
         );
+        if (lazy) {
+            const envType = `_gen_lazy_custom_iter_env_${this.freshTemp("")}`;
+            const nextName = `_gen_lazy_custom_iter_next_${this.freshTemp("")}`;
+            const env = this.freshTemp("_lazy_custom_iter_env");
+            const stepValue = this.freshTemp("_lazy_custom_iter_value");
+            this.structDecls.open(`typedef struct ${envType}`);
+            this.structDecls.line(`${iteratorType.c} iterator;`);
+            this.structDecls.close(`${envType};`);
+            this.structDecls.line();
+            this.protos.line(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done);`);
+            const nextBuf = new CBuf();
+            nextBuf.open(`static void ${nextName}(tsc_array_t* a, int* state, void* env, tsc_value_t next_arg, bool* done)`);
+            nextBuf.line("(void)next_arg;");
+            nextBuf.line(`${envType}* const ${env} = (${envType}*)env;`);
+            nextBuf.line(`${stepType.c} const ${step} = ${nextOwnerName}_next(${nextSelfArg.replace(iterVar, `${env}->iterator`)});`);
+            nextBuf.open(`if (${step}->done)`);
+            nextBuf.line(`a->iter_return = ${this.coerce({ c: `${step}->value`, ty: valueType }, T_VALUE, next)};`);
+            nextBuf.line("a->iter_has_return = true;");
+            nextBuf.line("a->iter_return_consumed = false;");
+            nextBuf.line("*state = -1;");
+            nextBuf.line("*done = true;");
+            nextBuf.line("return;");
+            nextBuf.close();
+            nextBuf.line(`${valueType.c} ${stepValue} = ${step}->value;`);
+            nextBuf.line(`tsc_array_push_raw(a, &${stepValue});`);
+            nextBuf.line("*done = false;");
+            nextBuf.close();
+            nextBuf.line();
+            this.closureDefs.write(nextBuf.toString());
+            return {
+                c: `({ ${iter.ty.c} ${recv} = ${iter.c}; ${iteratorType.c} ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg}); ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->iterator = ${iterVar}; tsc_array_t* ${out} = tsc_array_new(sizeof(${valueType.c}), 4); ${out}->env = ${env}; ${out}->is_lazy_generator = true; ${out}->state = 0; ${out}->lazy_next = (void*)${nextName}; ${out}; })`,
+                ty: arrayType(valueType),
+                lazyGenerator: true,
+            };
+        }
         return { c, ty: arrayType(valueType) };
     }
 
