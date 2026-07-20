@@ -461,6 +461,12 @@ async function chooseLoopReturnAwaitAliasPostLoop(condition: boolean, flag: bool
             for (let key in ["nested"]) {
                 if (key) continue;
             }
+            for (var nestedValue of ["nested-var"]) {
+                continue;
+            }
+            for (var nestedKey in ["nested-var"]) {
+                continue;
+            }
             break;
         }
         return value + prefix;

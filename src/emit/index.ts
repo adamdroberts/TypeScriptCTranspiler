@@ -32430,7 +32430,6 @@ class Emitter {
         let loopDepth = 0;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if (loopDepth <= 1 ||
-                (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 node.declarations.length !== 1) return false;
             const declaration = node.declarations[0]!;
             if (!ts.isIdentifier(declaration.name)) return false;
@@ -32438,7 +32437,7 @@ class Emitter {
                 return !declaration.initializer;
             }
             if (!ts.isForStatement(node.parent) ||
-                (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+                (!declaration.initializer && (node.flags & ts.NodeFlags.Let) === 0)) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
@@ -32618,7 +32617,6 @@ class Emitter {
         let loopDepth = 1;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if (loopDepth <= 1 ||
-                (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 node.declarations.length !== 1) return false;
             const declaration = node.declarations[0]!;
             if (!ts.isIdentifier(declaration.name)) return false;
@@ -32626,7 +32624,7 @@ class Emitter {
                 return !declaration.initializer;
             }
             if (!ts.isForStatement(node.parent) ||
-                (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+                (!declaration.initializer && (node.flags & ts.NodeFlags.Let) === 0)) return false;
             let supported = true;
             const visitInitializer = (child: ts.Node): void => {
                 if (!supported) return;
