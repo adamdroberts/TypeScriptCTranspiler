@@ -29118,6 +29118,24 @@ class Emitter {
         return steps;
     }
 
+    private asyncAwaitSplitAllAwaitedDeclaration(
+        declaration: ts.VariableStatement,
+    ): ts.Statement[] | null {
+        if (declaration.declarationList.declarations.length <= 1) return null;
+        const splitStatements: ts.Statement[] = [];
+        for (const variable of declaration.declarationList.declarations) {
+            if (!ts.isIdentifier(variable.name) || !variable.initializer) return null;
+            const initializer = this.unwrapTransparentExpression(variable.initializer);
+            if (!ts.isAwaitExpression(initializer)) return null;
+            splitStatements.push(ts.factory.updateVariableStatement(
+                declaration,
+                declaration.modifiers,
+                ts.factory.createVariableDeclarationList([variable], declaration.declarationList.flags),
+            ));
+        }
+        return splitStatements;
+    }
+
     private asyncAwaitTwoStepContinuationReferences(
         firstName: ts.Identifier,
         secondName: ts.Identifier,
@@ -29389,17 +29407,8 @@ class Emitter {
         if (body.statements.length === 2 && ts.isVariableStatement(body.statements[0]!)) {
             const declaration = body.statements[0]!;
             if (declaration.declarationList.declarations.length > 1) {
-                const splitStatements: ts.Statement[] = [];
-                for (const variable of declaration.declarationList.declarations) {
-                    if (!ts.isIdentifier(variable.name) || !variable.initializer) return null;
-                    const initializer = this.unwrapTransparentExpression(variable.initializer);
-                    if (!ts.isAwaitExpression(initializer)) return null;
-                    splitStatements.push(ts.factory.updateVariableStatement(
-                        declaration,
-                        declaration.modifiers,
-                        ts.factory.createVariableDeclarationList([variable], declaration.declarationList.flags),
-                    ));
-                }
+                const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(declaration);
+                if (!splitStatements) return null;
                 const normalizedBody = ts.factory.updateBlock(body, [
                     ...splitStatements,
                     body.statements[1]!,
@@ -33560,6 +33569,17 @@ class Emitter {
         thisValue: EmitResult | null,
         captures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitIfExpressionReturnNode | null {
+        if (statements.length === 2 && ts.isVariableStatement(statements[0]!) &&
+            statements[0]!.declarationList.declarations.length > 1) {
+            const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(statements[0]!);
+            if (!splitStatements) return null;
+            return this.asyncAwaitIfExpressionReturnBranchFromStatements(
+                [...splitStatements, statements[1]!],
+                parameters,
+                thisValue,
+                captures,
+            );
+        }
         if (statements.length === 1) {
             return this.asyncAwaitIfExpressionReturnBranchFromStatement(statements[0]!, parameters, thisValue, captures);
         }

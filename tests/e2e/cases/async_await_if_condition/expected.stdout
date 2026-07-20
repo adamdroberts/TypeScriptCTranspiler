@@ -2,6 +2,8 @@ await-if-true yes
 await-if-false no
 await-if-nested-true nested-yes
 await-if-nested-false nested-no
+await-if-branch-multiple-true branch-first-second
+await-if-branch-multiple-false branch-no
 await-if-method-true method-yes
 await-if-method-false method-no
 await-if-value-true value-yes

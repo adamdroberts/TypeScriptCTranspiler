@@ -11,10 +11,20 @@ async function chooseNested(flag: boolean): Promise<string> {
     return "unreachable";
 }
 
+async function chooseBranchMultipleAwaitDeclarators(flag: boolean): Promise<string> {
+    if (flag) {
+        const first = await Promise.resolve("branch-first"), second = await Promise.resolve(first + "-second");
+        return second;
+    }
+    return "branch-no";
+}
+
 choose(true).then((value) => console.log("await-if-true", value));
 choose(false).then((value) => console.log("await-if-false", value));
 chooseNested(true).then((value) => console.log("await-if-nested-true", value));
 chooseNested(false).then((value) => console.log("await-if-nested-false", value));
+chooseBranchMultipleAwaitDeclarators(true).then((value) => console.log("await-if-branch-multiple-true", value));
+chooseBranchMultipleAwaitDeclarators(false).then((value) => console.log("await-if-branch-multiple-false", value));
 
 class Chooser {
     async pick(flag: boolean): Promise<string> {
