@@ -419,6 +419,7 @@ await-while-escaping-var-continue-nested-false while-nested-escaping-continue
 await-while-escaping-var-continue-do-true while-do-escaping-continue-nested
 await-while-escaping-var-continue-do-false while-do-escaping-continue-nested
 await-while-escaping-var-continue-iterators while-iterators-escaping-continue-one-two-first-second
+await-while-escaping-var-continue-for while-for-escaping-continue-0-1
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-while-five-logical-true five-logical-yes
