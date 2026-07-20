@@ -80,6 +80,12 @@ await-method-sync-control-throw-prelude-true method-sync-control-throw-reason
 await-method-sync-control-throw-prelude-false method-sync-control-throw-fallthrough
 await-value-sync-control-throw-prelude-true value-sync-control-throw-reason
 await-value-sync-control-throw-prelude-false value-sync-control-throw-fallthrough
+await-while-sync-caught-prelude-true sync-caught-body
+await-while-sync-caught-prelude-false sync-caught-fallthrough
+await-method-sync-caught-prelude-true method-sync-caught-body
+await-method-sync-caught-prelude-false method-sync-caught-fallthrough
+await-value-sync-caught-prelude-true value-sync-caught-body
+await-value-sync-caught-prelude-false value-sync-caught-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes

@@ -32583,9 +32583,11 @@ class Emitter {
         stmt: ts.Statement,
         allowLoopControl = false,
         allowTopLevelLoopDeclaration = false,
+        allowCaughtThrows = false,
     ): boolean {
         let ok = true;
         let loopDepth = 0;
+        let caughtThrowDepth = 0;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
             if (loopDepth <= 1 && !allowTopLevelLoopDeclaration) return false;
             if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
@@ -32691,7 +32693,7 @@ class Emitter {
                 ts.isFunctionLike(node) ||
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
-                ts.isThrowStatement(node) ||
+                (ts.isThrowStatement(node) && !(allowCaughtThrows && caughtThrowDepth > 0)) ||
                 (ts.isBreakStatement(node) && (!allowLoopControl || (loopDepth === 0 && switchDepth === 0))) ||
                 (ts.isContinueStatement(node) && (!allowLoopControl || loopDepth === 0))
             ) {
@@ -32703,6 +32705,14 @@ class Emitter {
                     (switchDepth > 0 && switchClauseDeclarationSupported(node)) ||
                     tryClauseDeclarationSupported(node) ||
                     ifBranchDeclarationSupported(node);
+                return;
+            }
+            if (ts.isTryStatement(node) && allowCaughtThrows && node.catchClause) {
+                caughtThrowDepth++;
+                visit(node.tryBlock);
+                caughtThrowDepth--;
+                if (node.catchClause) visit(node.catchClause);
+                if (node.finallyBlock) visit(node.finallyBlock);
                 return;
             }
             if (ts.isVariableStatement(node)) {
@@ -33199,7 +33209,7 @@ class Emitter {
                     (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Const) === 0)
                 );
             }
-            return this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true);
+            return this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true);
         });
         if (!bodyPreludeSupported) return false;
         if (!bodyReturnExpr) return false;
