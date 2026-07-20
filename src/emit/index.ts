@@ -29415,22 +29415,22 @@ class Emitter {
         thisValue: EmitResult | null,
         outerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): AsyncAwaitLeadingReturnContinuation | null {
-        if (body.statements.length === 2 && ts.isVariableStatement(body.statements[0]!)) {
-            const declaration = body.statements[0]!;
-            if (declaration.declarationList.declarations.length > 1) {
-                const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(declaration);
-                if (!splitStatements) return null;
-                const normalizedBody = ts.factory.updateBlock(body, [
-                    ...splitStatements,
-                    body.statements[1]!,
-                ]);
-                return this.asyncAwaitLeadingReturnContinuation(
-                    normalizedBody,
-                    parameters,
-                    thisValue,
-                    outerCaptures,
-                );
-            }
+        for (let index = 0; index < body.statements.length - 1; index++) {
+            const declaration = body.statements[index]!;
+            if (!ts.isVariableStatement(declaration) || declaration.declarationList.declarations.length <= 1) continue;
+            const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(declaration);
+            if (!splitStatements) continue;
+            const normalizedBody = ts.factory.updateBlock(body, [
+                ...body.statements.slice(0, index),
+                ...splitStatements,
+                ...body.statements.slice(index + 1),
+            ]);
+            return this.asyncAwaitLeadingReturnContinuation(
+                normalizedBody,
+                parameters,
+                thisValue,
+                outerCaptures,
+            );
         }
         if (body.statements.length === 1 && ts.isThrowStatement(body.statements[0]!)) {
             const terminalThrow = body.statements[0]!;

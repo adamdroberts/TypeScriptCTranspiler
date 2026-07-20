@@ -246,6 +246,15 @@ async function chooseForReturnAwaitMultiple(condition: boolean, prefix: string):
     return prefix + "-for-multiple-fallthrough";
 }
 
+async function chooseLoopReturnAwaitMultiplePrelude(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const source = prefix + "-prelude";
+        const first = await laterBodyValue(source + "-first"), second = await laterBodyValue(first + "-second");
+        return second;
+    }
+    return prefix + "-multiple-prelude-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAssignedAlias(condition: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         let source = prefix + "-assigned-alias", value: string;
@@ -989,6 +998,8 @@ chooseLoopThrowAwaitMultiple(true).catch((reason) => console.log("await-while-th
 chooseLoopThrowAwaitMultiple(false).then((value) => console.log("await-while-throw-await-multiple-false", value));
 chooseForReturnAwaitMultiple(true, "body-for-multiple").then((value) => console.log("await-for-return-await-multiple-true", value));
 chooseForReturnAwaitMultiple(false, "body-for-multiple").then((value) => console.log("await-for-return-await-multiple-false", value));
+chooseLoopReturnAwaitMultiplePrelude(true, "body-loop-multiple").then((value) => console.log("await-while-return-await-multiple-prelude-true", value));
+chooseLoopReturnAwaitMultiplePrelude(false, "body-loop-multiple").then((value) => console.log("await-while-return-await-multiple-prelude-false", value));
 chooseLoopReturnAwaitAssignedAlias(true, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-true", value));
 chooseLoopReturnAwaitAssignedAlias(false, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-false", value));
 chooseLoopThrowAwaitAssignedAlias(true).catch((reason) => console.log("await-while-throw-await-assigned-alias-true", reason));
