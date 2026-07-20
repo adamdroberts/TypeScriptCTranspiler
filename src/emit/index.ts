@@ -23993,6 +23993,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitThreeExpressionThrowContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitTwoExpressionThrowContinuation(
                                     this.defs,
                                     m.body,
@@ -25448,6 +25454,7 @@ class Emitter {
                 !this.emitAsyncAwaitLogicalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitConditionalExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitPreludeExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
+                !this.emitAsyncAwaitThreeExpressionThrowContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitTwoExpressionThrowContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionThrowContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitExpressionReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -30350,6 +30357,23 @@ class Emitter {
         return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, continuation, true);
     }
 
+    private emitAsyncAwaitThreeExpressionThrowContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        if (body.statements.length !== 1 || !ts.isThrowStatement(body.statements[0]!)) return false;
+        const expression = this.unwrapTransparentExpression(body.statements[0]!.expression);
+        const continuation = this.asyncAwaitThreeExpressionReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+        );
+        if (!continuation || !this.asyncAwaitThreeExpressionReturnContinuationSupported(continuation)) return false;
+        return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, continuation, true);
+    }
+
     private emitAsyncAwaitExpressionBodyReturn(
         buf: CBuf,
         expressionBody: ts.Expression,
@@ -30733,6 +30757,7 @@ class Emitter {
     private emitAsyncAwaitThreeExpressionReturnContinuationResult(
         buf: CBuf,
         continuation: AsyncAwaitExpressionSequenceReturnContinuation,
+        rejectResult = false,
     ): boolean {
         const firstSource = this.emitExpr(continuation.awaitExprs[0]!.expression);
         const promiseTypes = continuation.awaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
@@ -30758,6 +30783,7 @@ class Emitter {
             continuation.params,
             continuation.thisValue,
             continuation.returnContextType,
+            rejectResult,
         );
         const envType = `${adapter}_env_t`;
         const env = this.freshTemp("_await_env");
@@ -30786,6 +30812,7 @@ class Emitter {
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
         returnContextType?: ts.Type,
+        rejectResult = false,
     ): string {
         const stageNames = awaitExprs.map((_, index) =>
             `tsc_async_await_expression_sequence_${index}_${this.asyncAwaitReturnContinuationAdapters++}`);
@@ -30898,7 +30925,11 @@ class Emitter {
                     this.argumentValueScopes.pop();
                 }
                 const returnedType = this.prepareType(returned.ty);
-                if (returnedType.kind === "void" || returnedType.kind === "never") {
+                if (rejectResult) {
+                    const rejected = this.coerceToString(returned, returnExpr);
+                    stageBuf.line("tsc_try_pop();");
+                    stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${rejected}));`);
+                } else if (returnedType.kind === "void" || returnedType.kind === "never") {
                     stageBuf.line(`${returned.c};`);
                     stageBuf.line("tsc_try_pop();");
                     stageBuf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
@@ -43580,6 +43611,12 @@ class Emitter {
                                     runtimeParams,
                                     type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
                                 ) ||
+                                this.emitAsyncAwaitThreeExpressionThrowContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitTwoExpressionThrowContinuation(
                                     body,
                                     fnBody,
@@ -54053,6 +54090,12 @@ class Emitter {
                             thisType ? { c: "__tsc_this", ty: thisType } : null,
                         ) ||
                         this.emitAsyncAwaitPreludeExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
+                        this.emitAsyncAwaitThreeExpressionThrowContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,
