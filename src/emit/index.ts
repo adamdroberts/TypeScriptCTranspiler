@@ -32446,7 +32446,7 @@ class Emitter {
             if (!conditionAwaitsAreValid) return;
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             if (ts.isAwaitExpression(node)) {
-                if (awaitExpressions.length >= 3) {
+                if (awaitExpressions.length >= 4) {
                     conditionAwaitsAreValid = false;
                 } else {
                     awaitExpressions.push(node);
@@ -32576,7 +32576,7 @@ class Emitter {
                     }
                 };
                 flatten(condition);
-                if (flattenValid && flattened.length === awaitExpressions.length && flattened.length <= 3) {
+                if (flattenValid && flattened.length === awaitExpressions.length && flattened.length <= 4) {
                     if (flattened.length === 2) {
                         const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
                             firstAwaitExpr: flattened[0]!,
