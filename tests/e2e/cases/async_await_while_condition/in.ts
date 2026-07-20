@@ -553,6 +553,17 @@ async function chooseLoopThrowAwaitAliasPostForIn(condition: boolean, prefix: st
     return "body-throw-post-for-in-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostForOfLocal(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-post-for-of-local");
+        for (const item of ["-item"]) {
+            prefix += item;
+        }
+        return value + prefix;
+    }
+    return prefix + "-post-for-of-local-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -805,6 +816,8 @@ chooseLoopReturnAwaitAliasPostForIn(true, "body-return").then((value) => console
 chooseLoopReturnAwaitAliasPostForIn(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-for-in-false", value));
 chooseLoopThrowAwaitAliasPostForIn(true, "body-throw").catch((reason) => console.log("await-while-throw-await-alias-post-for-in-true", reason));
 chooseLoopThrowAwaitAliasPostForIn(false, "body-throw").then((value) => console.log("await-while-throw-await-alias-post-for-in-false", value));
+chooseLoopReturnAwaitAliasPostForOfLocal(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-for-of-local-true", value));
+chooseLoopReturnAwaitAliasPostForOfLocal(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-for-of-local-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));

@@ -32470,6 +32470,9 @@ class Emitter {
     }
 
     private asyncAwaitLoopPostStatementSupported(stmt: ts.Statement): boolean {
+        if (ts.isForOfStatement(stmt) && ts.isVariableDeclarationList(stmt.initializer)) {
+            return this.asyncAwaitLoopForOfPostludeSupported(stmt);
+        }
         if (ts.isVariableStatement(stmt)) {
             if ((stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 stmt.declarationList.declarations.length !== 1) return false;
@@ -32492,6 +32495,49 @@ class Emitter {
         visit(ts.isExpressionStatement(stmt)
             ? stmt.expression
             : stmt.declarationList.declarations[0]!.initializer!);
+        return ok;
+    }
+
+    private asyncAwaitLoopForOfPostludeSupported(stmt: ts.ForOfStatement): boolean {
+        if (!ts.isVariableDeclarationList(stmt.initializer) ||
+            (stmt.initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+            stmt.initializer.declarations.length !== 1 ||
+            !ts.isIdentifier(stmt.initializer.declarations[0]!.name)) return false;
+        let ok = true;
+        const visit = (node: ts.Node): void => {
+            if (!ok) return;
+            if (
+                ts.isAwaitExpression(node) ||
+                ts.isFunctionLike(node) ||
+                ts.isClassLike(node) ||
+                ts.isReturnStatement(node) ||
+                ts.isThrowStatement(node) ||
+                ts.isBreakStatement(node) ||
+                ts.isContinueStatement(node) ||
+                ts.isVariableDeclarationList(node)
+            ) {
+                ok = false;
+                return;
+            }
+            if (ts.isVariableStatement(node)) {
+                if ((node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
+                    ok = false;
+                    return;
+                }
+                for (const declaration of node.declarationList.declarations) {
+                    if (!ts.isIdentifier(declaration.name) ||
+                        (!declaration.initializer && (node.declarationList.flags & ts.NodeFlags.Let) === 0)) {
+                        ok = false;
+                        return;
+                    }
+                    if (declaration.initializer) visit(declaration.initializer);
+                }
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(stmt.expression);
+        visit(stmt.statement);
         return ok;
     }
 
