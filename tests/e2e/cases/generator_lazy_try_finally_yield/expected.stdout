@@ -20,3 +20,4 @@ caught-direct-rethrow-finally: false direct-rethrow-finally-pause original-direc
 caught-composed-rethrow: false composed-rethrow-pause recovered:original-composed-rethrow before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally
 caught-conditional-special: false conditional-catch-pause true special-recovered
 caught-conditional-fallback: false conditional-catch-pause true fallback-recovered
+caught-conditional-finally: false conditional-finally-pause true special-finally-recovered before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally|conditional-finally

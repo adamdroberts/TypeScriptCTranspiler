@@ -303,3 +303,20 @@ const caughtConditionalFallback = caughtConditional();
 const caughtConditionalFallbackFirst: any = caughtConditionalFallback.next();
 const caughtConditionalFallbackDone: any = caughtConditionalFallback.throw("other");
 console.log("caught-conditional-fallback:", caughtConditionalFallbackFirst.done, caughtConditionalFallbackFirst.value, caughtConditionalFallbackDone.done, caughtConditionalFallbackDone.value);
+
+function* caughtConditionalFinally(): Generator<string, string, string> {
+    try {
+        yield "conditional-finally-pause";
+    } catch (error: any) {
+        if (error === "special") return "special-finally-recovered";
+        else return "fallback-finally-recovered";
+    } finally {
+        catchPreludeEvents.push("conditional-finally");
+    }
+    return "normal";
+}
+
+const caughtConditionalFinallyResult = caughtConditionalFinally();
+const caughtConditionalFinallyFirst: any = caughtConditionalFinallyResult.next();
+const caughtConditionalFinallyDone: any = caughtConditionalFinallyResult.throw("special");
+console.log("caught-conditional-finally:", caughtConditionalFinallyFirst.done, caughtConditionalFinallyFirst.value, caughtConditionalFinallyDone.done, caughtConditionalFinallyDone.value, catchPreludeEvents.join("|"));
