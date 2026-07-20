@@ -38834,7 +38834,12 @@ class Emitter {
                     "yield* over a class currently needs [Symbol.iterator]() returning a typed array-backed IterableIterator<T> or class iterator object",
                 );
             }
-            arrayExpr = custom.c;
+            if (custom.lazyGenerator) {
+                const tmp = this.freshTemp("_yield_star_custom_source");
+                arrayExpr = `({ tsc_array_t* ${tmp} = ${custom.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`;
+            } else {
+                arrayExpr = custom.c;
+            }
             elemType = custom.ty.elem!;
         } else {
             unsupported(y.expression, "yield* currently supports arrays, strings, maps, sets, custom iterables, URLSearchParams, Buffers, and dynamic iterable values");
@@ -40245,7 +40250,7 @@ class Emitter {
                 "[Symbol.iterator]() must return a typed array-backed IterableIterator<T>",
             );
         }
-        return this.emitSequencedCall(
+        const result = this.emitSequencedCall(
             `${owner.name!.text}___tsc_iterator`,
             ret,
             [
@@ -40257,6 +40262,8 @@ class Emitter {
                 },
             ],
         );
+        if (this.isGeneratorDeclaration(method)) result.lazyGenerator = true;
+        return result;
     }
 
     private emitCustomIteratorArray(
