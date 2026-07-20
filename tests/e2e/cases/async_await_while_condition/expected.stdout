@@ -98,6 +98,12 @@ await-method-sync-catch-rethrow-prelude-true method-sync-catch-rethrow
 await-method-sync-catch-rethrow-prelude-false method-sync-catch-fallthrough
 await-value-sync-catch-rethrow-prelude-true value-sync-catch-rethrow
 await-value-sync-catch-rethrow-prelude-false value-sync-catch-fallthrough
+await-while-sync-caught-before-throw-true sync-caught-before-throw-body
+await-while-sync-caught-before-throw-false sync-caught-before-throw-fallthrough
+await-method-sync-caught-before-throw-true method-sync-caught-before-throw-body
+await-method-sync-caught-before-throw-false method-sync-caught-before-throw-fallthrough
+await-value-sync-caught-before-throw-true value-sync-caught-before-throw-body
+await-value-sync-caught-before-throw-false value-sync-caught-before-throw-fallthrough
 await-while-sync-caught-finally-prelude-true sync-caught-finally-body
 await-while-sync-caught-finally-prelude-false sync-caught-finally-fallthrough
 await-method-sync-caught-finally-prelude-true method-sync-caught-finally-body
