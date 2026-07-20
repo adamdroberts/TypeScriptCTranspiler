@@ -3247,6 +3247,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | leading multi-await declarations may follow supported synchronous prelude locals |
 | `async_await_while_condition` | loop-body leading chains preserve bounded await-free control-flow preludes |
 | `async_await_while_condition` | shared leading-chain coverage includes await-free `if` and `try` / `finally` preludes |
+| `async_await_while_condition` | leading multi-await chains preserve initialized `var` prelude locals |
 | `async_await_while_condition` | multiple all-awaited declarators are covered through async class methods and arrow function values |
 | `async_await_while_condition` | direct awaited-local body aliases are thrown after awaited while/for conditions |
 | `async_await_while_condition` | assigned awaited-local body aliases are returned or thrown after awaited while/for conditions |

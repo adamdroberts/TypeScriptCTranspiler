@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Leading async/await chains now preserve initialized `var` locals before multiple awaited declarations, with captured value flow into later suspension sources. Regression: `async_await_while_condition`.
 - Shared leading-chain coverage now exercises await-free `if` and `try` / `finally` preludes before multiple awaited locals in async declarations. Regression: `async_await_while_condition`.
 - Leading loop-body await chains now preserve bounded await-free, non-abrupt control-flow preludes before the first suspension. Regression: `async_await_while_condition`.
 - Leading async/await chains now split supported all-awaited declaration statements after synchronous prelude locals, preserving prelude capture flow into later awaited values. Regression: `async_await_while_condition`.

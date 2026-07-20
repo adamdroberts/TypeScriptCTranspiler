@@ -29479,10 +29479,10 @@ class Emitter {
             if (ts.isVariableStatement(stmt)) {
                 if (this.awaitedLocalDeclaration(stmt)) break;
                 preludeStatements.push(stmt);
-                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+                const isConstOrLet = (stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name)) return null;
-                    if (!decl.initializer && (stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
+                    if (!decl.initializer && (!isConstOrLet || (stmt.declarationList.flags & ts.NodeFlags.Const))) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
