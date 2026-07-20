@@ -256,7 +256,6 @@ await-method-assigned-var-return direct-assigned-var-method-assigned-var-method-
 await-arrow-assigned-var-return direct-assigned-var-arrow-assigned-var-arrow-return
 await-direct-assigned-multiple-locals direct-assigned-multiple-assigned-source
 await-direct-throw-multiple-locals direct-throw-multiple-throw-source
-await-loop-initializer-capture loop-captured
 await-method-throw-multiple-locals method-throw-source
 await-arrow-throw-multiple-locals arrow-throw-source
 await-while-return-await-true body-await-yes
@@ -342,6 +341,7 @@ await-while-value-true value-loop-yes
 await-direct-multiple-control-prelude direct-control-if-try-finally-first-second
 await-direct-multiple-var-prelude direct-var-var-first-second
 await-multiple-declarators multiple-await-first-second
+await-loop-initializer-capture loop-captured
 await-method-multiple-declarators method-first-second
 await-arrow-multiple-declarators arrow-first-second
 await-while-return-await-multiple-true body-loop-multiple-first-second

@@ -100,7 +100,7 @@ async function chooseLoopFalse(): Promise<string> {
 
 async function chooseLoopInitializerCapture(): Promise<string> {
     for (let value = "loop-captured"; await laterTrue();) {
-        return value;
+        return await laterBodyValue(value);
     }
     return "loop-capture-fallthrough";
 }
