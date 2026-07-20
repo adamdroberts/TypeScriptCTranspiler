@@ -1,0 +1,8 @@
+finally: rejected
+rejected: source-rejection
+finally: method
+method: method-two
+finally: arrow
+value: arrow-two
+finally: declaration
+declaration: three
