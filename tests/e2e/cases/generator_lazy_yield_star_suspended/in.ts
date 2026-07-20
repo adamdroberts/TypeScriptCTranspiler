@@ -74,6 +74,16 @@ function* recoveringOuter(): Generator<string, string, string> {
     return "recovering-outer-done";
 }
 
+function convertRecoveringSource(iter: Generator<string, string, string>): Generator<any, string, string> {
+    return iter;
+}
+
+function* recoveringConvertedOuter(): Generator<string, string, string> {
+    const delegated = yield* convertRecoveringSource(recoveringInner());
+    events.push("recovering-converted-outer-after:" + delegated);
+    return "recovering-converted-outer-done";
+}
+
 const iter = outer();
 console.log("created", events.join("|"));
 const first: any = iter.next("ignored");
@@ -97,3 +107,7 @@ const recovering = recoveringOuter();
 const recoveringFirst: any = recovering.next();
 const recoveringResult: any = recovering.throw("recover-error");
 console.log("recover", recoveringFirst.done, recoveringFirst.value, recoveringResult.done, recoveringResult.value, events.join("|"));
+const recoveringConverted = recoveringConvertedOuter();
+const recoveringConvertedFirst: any = recoveringConverted.next();
+const recoveringConvertedResult: any = recoveringConverted.throw("converted-recover-error");
+console.log("recover-converted", recoveringConvertedFirst.done, recoveringConvertedFirst.value, recoveringConvertedResult.done, recoveringConvertedResult.value, events.join("|"));

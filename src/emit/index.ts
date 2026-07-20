@@ -35559,6 +35559,28 @@ class Emitter {
         return !!(node as { asteriskToken?: ts.AsteriskToken }).asteriskToken;
     }
 
+    private isLazyGeneratorPassthroughFunction(node: ts.Node): boolean {
+        if (!ts.isFunctionDeclaration(node) && !ts.isFunctionExpression(node) &&
+            !ts.isArrowFunction(node) && !ts.isMethodDeclaration(node)) return false;
+        if (node.body && !ts.isBlock(node.body)) return ts.isIdentifier(node.body);
+        if (!node.body || !ts.isBlock(node.body) || node.body.statements.length !== 1) return false;
+        const statement = node.body.statements[0];
+        if (!ts.isReturnStatement(statement) || !statement.expression || !ts.isIdentifier(statement.expression)) {
+            return false;
+        }
+        const returnedSymbol = this.symbolForIdentifier(statement.expression);
+        return !!returnedSymbol && node.parameters.some((parameter) =>
+            ts.isIdentifier(parameter.name) && this.symbolForIdentifier(parameter.name) === returnedSymbol);
+    }
+
+    private isLazyGeneratorPassthroughParameter(node: ts.Node): boolean {
+        if (!ts.isIdentifier(node)) return false;
+        const declaration = this.symbolForIdentifier(node)?.valueDeclaration;
+        const parent = declaration?.parent;
+        return !!declaration && ts.isParameter(declaration) && !!parent &&
+            this.isLazyGeneratorPassthroughFunction(parent);
+    }
+
     private emitGeneratorFunctionBody(fd: ts.FunctionDeclaration): void {
         if (this.isAsyncDeclaration(fd)) {
             unsupported(fd, "async generator functions require Phase 6 async lowering");
@@ -41486,7 +41508,7 @@ class Emitter {
         }
         if (this.emitTailCallReturn(buf, r.expression)) return;
         const expr = this.emitExpr(r.expression);
-        const coerced = this.coerce(expr, ret, r);
+        const coerced = this.coerce(expr, ret, r.expression);
         buf.line(`return ${coerced};`);
     }
 
@@ -44864,7 +44886,9 @@ class Emitter {
         const specs = this.callSpecsFromSignature(call, call.arguments, params);
         const result = this.emitSequencedCall(fnName, retType, specs, fixedArgs);
         const declaration = sig.getDeclaration();
-        if (declaration && this.isGeneratorDeclaration(declaration)) result.lazyGenerator = true;
+        if (declaration && (this.isGeneratorDeclaration(declaration) || this.isLazyGeneratorPassthroughFunction(declaration))) {
+            result.lazyGenerator = true;
+        }
         return result;
     }
 
@@ -68616,7 +68640,9 @@ class Emitter {
                 target.elem &&
                 !sameCType(r.ty.elem, target.elem)
             ) {
-                if (r.lazyGenerator) return this.coerceLazyGeneratorArray(r, target, node);
+                if (r.lazyGenerator || this.isLazyGeneratorPassthroughParameter(node)) {
+                    return this.coerceLazyGeneratorArray(r, target, node);
+                }
                 const tmpIn = this.freshTemp("_arrIn");
                 const tmpOut = this.freshTemp("_arrOut");
                 const idx = this.freshTemp("_idx");
