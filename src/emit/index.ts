@@ -31440,6 +31440,8 @@ class Emitter {
         tryCatchFinallyContinuation?: AsyncAwaitTryCatchFinallyReturnContinuation,
         tryFinallyContinuation?: AsyncAwaitTryFinallyReturnContinuation,
     ): string {
+        const storageTypes = awaitedTypes.map((type, index) =>
+            this.asyncAwaitContinuationStorageType(awaitExprs[index]!, type));
         const stageNames = awaitExprs.map((_, index) =>
             `tsc_async_await_expression_sequence_${index}_${this.asyncAwaitReturnContinuationAdapters++}`);
         const stageEnvTypes = stageNames.map((name) => `${name}_env_t`);
@@ -31448,8 +31450,8 @@ class Emitter {
             this.structDecls.line("tsc_promise_t* receiver;");
             this.structDecls.line("tsc_promise_t* result_promise;");
             for (let prior = 0; prior < stage; prior++) {
-                if (awaitedTypes[prior]!.kind !== "void") {
-                    this.structDecls.line(`${awaitedTypes[prior]!.c} value_${prior};`);
+                if (storageTypes[prior]!.kind !== "void") {
+                    this.structDecls.line(`${storageTypes[prior]!.c} value_${prior};`);
                 }
             }
             for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
@@ -31464,24 +31466,23 @@ class Emitter {
             const returnVar = this.freshTemp("_await_return");
             const resolvedVar = this.freshTemp("_await_resolved");
             const eh = this.freshTemp("_await_eh");
-            const currentValueResult = awaitedTypes[stage]!.kind === "void"
+            const fulfilledValue = this.promiseFulfilledValue(promiseTypes[stage]!.elem, "_p");
+            const currentValueResult = storageTypes[stage]!.kind === "void"
                 ? null
-                : this.coerce(
-                    this.promiseFulfilledValue(promiseTypes[stage]!.elem, "_p"),
-                    awaitedTypes[stage]!,
-                    awaitExprs[stage]!,
-                );
+                : storageTypes[stage]!.kind === "value"
+                    ? fulfilledValue.c
+                    : this.coerce(fulfilledValue, storageTypes[stage]!, awaitExprs[stage]!);
             const scope = new Map<ts.Symbol, string>();
             for (const param of params) scope.set(param.symbol, `state->${param.field}`);
             const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
             for (let prior = 0; prior <= stage; prior++) {
                 awaitScope.set(awaitExprs[prior]!, prior === stage
-                    ? (awaitedTypes[prior]!.kind === "void"
+                    ? (storageTypes[prior]!.kind === "void"
                         ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                        : { c: currentValue, ty: awaitedTypes[prior]! })
-                    : (awaitedTypes[prior]!.kind === "void"
+                        : { c: currentValue, ty: storageTypes[prior]! })
+                    : (storageTypes[prior]!.kind === "void"
                         ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                        : { c: `state->value_${prior}`, ty: awaitedTypes[prior]! }));
+                        : { c: `state->value_${prior}`, ty: storageTypes[prior]! }));
             }
             const stageBuf = new CBuf();
             stageBuf.open(`void ${stageNames[stage]}(void* env)`);
@@ -31498,13 +31499,13 @@ class Emitter {
             stageBuf.open("if (!tsc_promise_is_fulfilled(_p))");
             stageBuf.line("return;");
             stageBuf.close();
-            if (currentValueResult) stageBuf.line(`${awaitedTypes[stage]!.c} ${currentValue} = ${currentValueResult};`);
+            if (currentValueResult) stageBuf.line(`${storageTypes[stage]!.c} ${currentValue} = ${currentValueResult};`);
             if (shortCircuitOperator !== undefined && stage + 1 < stageNames.length) {
-                const currentResult: EmitResult = awaitedTypes[stage]!.kind === "void"
+                const currentResult: EmitResult = storageTypes[stage]!.kind === "void"
                     ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                    : { c: currentValue, ty: awaitedTypes[stage]! };
+                    : { c: currentValue, ty: storageTypes[stage]! };
                 const truthy = this.truthyExprFromEmitResult(currentResult, awaitExprs[stage]!);
-                const nullish = this.nullishExprFromEmitResult(currentResult, awaitExprs[stage]!);
+                const nullish = this.nullishExprFromEmitResult(currentResult, awaitExprs[stage]!, fulfilledValue);
                 const shortCircuit = shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
                     ? `!(${truthy})`
                     : shortCircuitOperator === ts.SyntaxKind.BarBarToken
@@ -31544,7 +31545,7 @@ class Emitter {
                 stageBuf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
                 stageBuf.line(`${nextEnvVar}->result_promise = _ret;`);
                 for (let prior = 0; prior <= stage; prior++) {
-                    if (awaitedTypes[prior]!.kind !== "void") {
+                    if (storageTypes[prior]!.kind !== "void") {
                         stageBuf.line(`${nextEnvVar}->value_${prior} = ${prior === stage ? currentValue : `state->value_${prior}`};`);
                     }
                 }
@@ -31790,12 +31791,14 @@ class Emitter {
         shortCircuitOperator: ts.SyntaxKind | undefined = undefined,
         rejectResult = false,
     ): string {
+        const firstStorageType = this.asyncAwaitContinuationStorageType(firstAwaitExpr, firstAwaitedType);
+        const secondStorageType = this.asyncAwaitContinuationStorageType(secondAwaitExpr, secondAwaitedType);
         const secondName = `tsc_async_await_two_expression_second_${this.asyncAwaitReturnContinuationAdapters++}`;
         const secondEnvType = `${secondName}_env_t`;
         this.structDecls.open(`typedef struct ${secondEnvType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
-        if (firstAwaitedType.kind !== "void") this.structDecls.line(`${firstAwaitedType.c} first_value;`);
+        if (firstStorageType.kind !== "void") this.structDecls.line(`${firstStorageType.c} first_value;`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${secondEnvType};`);
@@ -31806,18 +31809,21 @@ class Emitter {
         const secondReturn = this.freshTemp("_await_return");
         const secondResolved = this.freshTemp("_await_resolved");
         const secondEh = this.freshTemp("_await_eh");
-        const secondValueResult = secondAwaitedType.kind === "void"
+        const secondFulfilledValue = this.promiseFulfilledValue(secondPromiseType.elem, "_p");
+        const secondValueResult = secondStorageType.kind === "void"
             ? null
-            : this.coerce(this.promiseFulfilledValue(secondPromiseType.elem, "_p"), secondAwaitedType, secondAwaitExpr);
+            : secondStorageType.kind === "value"
+                ? secondFulfilledValue.c
+                : this.coerce(secondFulfilledValue, secondStorageType, secondAwaitExpr);
         const secondScope = new Map<ts.Symbol, string>();
         for (const param of params) secondScope.set(param.symbol, `state->${param.field}`);
         const secondAwaitScope = new Map<ts.AwaitExpression, EmitResult>();
-        secondAwaitScope.set(firstAwaitExpr, firstAwaitedType.kind === "void"
+        secondAwaitScope.set(firstAwaitExpr, firstStorageType.kind === "void"
             ? { c: "tsc_value_undefined()", ty: T_VALUE }
-            : { c: "state->first_value", ty: firstAwaitedType });
-        secondAwaitScope.set(secondAwaitExpr, secondAwaitedType.kind === "void"
+            : { c: "state->first_value", ty: firstStorageType });
+        secondAwaitScope.set(secondAwaitExpr, secondStorageType.kind === "void"
             ? { c: "tsc_value_undefined()", ty: T_VALUE }
-            : { c: secondValue, ty: secondAwaitedType });
+            : { c: secondValue, ty: secondStorageType });
         const secondBuf = new CBuf();
         secondBuf.open(`void ${secondName}(void* env)`);
         secondBuf.line(`${secondEnvType}* state = (${secondEnvType}*)env;`);
@@ -31834,7 +31840,7 @@ class Emitter {
         secondBuf.line(`tsc_promise_t* ${secondResolved};`);
         secondBuf.line(`tsc_try_push(&${secondEh});`);
         secondBuf.open(`if (setjmp(${secondEh}.jb) == 0)`);
-        if (secondValueResult) secondBuf.line(`${secondAwaitedType.c} ${secondValue} = ${secondValueResult};`);
+        if (secondValueResult) secondBuf.line(`${secondStorageType.c} ${secondValue} = ${secondValueResult};`);
         this.argumentValueScopes.push(secondScope);
         this.awaitExpressionValueScopes.push(secondAwaitScope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -31887,15 +31893,18 @@ class Emitter {
         const nextSource = this.freshTemp("_await_next_source");
         const nextEnv = this.freshTemp("_await_next_env");
         const firstEh = this.freshTemp("_await_eh");
-        const firstValueResult = firstAwaitedType.kind === "void"
+        const firstFulfilledValue = this.promiseFulfilledValue(firstPromiseType.elem, "_p");
+        const firstStorageValueResult = firstStorageType.kind === "void"
             ? null
-            : this.coerce(this.promiseFulfilledValue(firstPromiseType.elem, "_p"), firstAwaitedType, firstAwaitExpr);
+            : firstStorageType.kind === "value"
+                ? firstFulfilledValue.c
+                : this.coerce(firstFulfilledValue, firstStorageType, firstAwaitExpr);
         const firstScope = new Map<ts.Symbol, string>();
         for (const param of params) firstScope.set(param.symbol, `state->${param.field}`);
         const firstAwaitScope = new Map<ts.AwaitExpression, EmitResult>();
-        firstAwaitScope.set(firstAwaitExpr, firstAwaitedType.kind === "void"
+        firstAwaitScope.set(firstAwaitExpr, firstStorageType.kind === "void"
             ? { c: "tsc_value_undefined()", ty: T_VALUE }
-            : { c: firstValue, ty: firstAwaitedType });
+            : { c: firstValue, ty: firstStorageType });
         const firstBuf = new CBuf();
         firstBuf.open(`void ${firstName}(void* env)`);
         firstBuf.line(`${firstEnvType}* state = (${firstEnvType}*)env;`);
@@ -31911,13 +31920,13 @@ class Emitter {
         firstBuf.line(`tsc_try_frame_t ${firstEh};`);
         firstBuf.line(`tsc_try_push(&${firstEh});`);
         firstBuf.open(`if (setjmp(${firstEh}.jb) == 0)`);
-        if (firstValueResult) firstBuf.line(`${firstAwaitedType.c} ${firstValue} = ${firstValueResult};`);
+        if (firstStorageValueResult) firstBuf.line(`${firstStorageType.c} ${firstValue} = ${firstStorageValueResult};`);
         if (shortCircuitOperator !== undefined) {
-            const firstResult: EmitResult = firstAwaitedType.kind === "void"
+            const firstResult: EmitResult = firstStorageType.kind === "void"
                 ? { c: "tsc_value_undefined()", ty: T_VALUE }
-                : { c: firstValue, ty: firstAwaitedType };
+                : { c: firstValue, ty: firstStorageType };
             const truthy = this.truthyExprFromEmitResult(firstResult, firstAwaitExpr);
-            const nullish = this.nullishExprFromEmitResult(firstResult, firstAwaitExpr);
+            const nullish = this.nullishExprFromEmitResult(firstResult, firstAwaitExpr, firstFulfilledValue);
             const shortCircuit = shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
                 ? `!(${truthy})`
                 : shortCircuitOperator === ts.SyntaxKind.BarBarToken
@@ -31950,7 +31959,7 @@ class Emitter {
         firstBuf.line(`${secondEnvType}* const ${nextEnv} = (${secondEnvType}*)TSC_GC_MALLOC(sizeof(${secondEnvType}));`);
         firstBuf.line(`${nextEnv}->receiver = ${nextSource};`);
         firstBuf.line(`${nextEnv}->result_promise = _ret;`);
-        if (firstAwaitedType.kind !== "void") firstBuf.line(`${nextEnv}->first_value = ${firstValue};`);
+        if (firstStorageType.kind !== "void") firstBuf.line(`${nextEnv}->first_value = ${firstValue};`);
         for (const param of params) firstBuf.line(`${nextEnv}->${param.field} = state->${param.field};`);
         if (thisValue) firstBuf.line(`${nextEnv}->this_arg = state->this_arg;`);
         firstBuf.line("tsc_try_pop();");
@@ -36528,12 +36537,25 @@ class Emitter {
         buf.line(`${envLocalName}->${slot.field} = ${this.coerce(current, slot.type, expr.left)};`);
     }
 
-    private nullishExprFromEmitResult(value: EmitResult, node: ts.Expression): string {
+    private nullishExprFromEmitResult(value: EmitResult, node: ts.Expression, originalValue?: EmitResult): string {
+        if (originalValue?.ty.kind === "value") return `tsc_value_is_nullish(${originalValue.c})`;
         if (value.ty.kind === "value") return `tsc_value_is_nullish(${value.c})`;
         if (value.ty.kind === "void") return "true";
         if (isPointerKind(value.ty)) return `(${value.c} == NULL)`;
         this.coerce(value, T_BOOLEAN, node);
         return "false";
+    }
+
+    private asyncAwaitContinuationStorageType(awaitExpr: ts.AwaitExpression, awaitedType: CType): CType {
+        if (awaitedType.kind === "value" || awaitedType.kind === "void" || awaitedType.kind === "never") {
+            return awaitedType;
+        }
+        const type = this.checker.getTypeAtLocation(awaitExpr);
+        const parts = type.isUnion() ? type.types : [type];
+        if (parts.some((part) => part.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void))) {
+            return T_VALUE;
+        }
+        return awaitedType;
     }
 
     private simpleLazyLogicalCompoundShouldSuspend(
