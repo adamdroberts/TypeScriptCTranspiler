@@ -320,3 +320,23 @@ const caughtConditionalFinallyResult = caughtConditionalFinally();
 const caughtConditionalFinallyFirst: any = caughtConditionalFinallyResult.next();
 const caughtConditionalFinallyDone: any = caughtConditionalFinallyResult.throw("special");
 console.log("caught-conditional-finally:", caughtConditionalFinallyFirst.done, caughtConditionalFinallyFirst.value, caughtConditionalFinallyDone.done, caughtConditionalFinallyDone.value, catchPreludeEvents.join("|"));
+
+function* caughtConditionalFinallyThrow(): Generator<string, string, string> {
+    try {
+        yield "conditional-finally-throw-pause";
+    } catch (error: any) {
+        if (error === "special") throw "special-finally-throw";
+        else throw "fallback-finally-throw";
+    } finally {
+        catchPreludeEvents.push("conditional-finally-throw");
+    }
+    return "normal";
+}
+
+const caughtConditionalFinallyThrowResult = caughtConditionalFinallyThrow();
+const caughtConditionalFinallyThrowFirst: any = caughtConditionalFinallyThrowResult.next();
+try {
+    caughtConditionalFinallyThrowResult.throw("special");
+} catch (error: any) {
+    console.log("caught-conditional-finally-throw:", caughtConditionalFinallyThrowFirst.done, caughtConditionalFinallyThrowFirst.value, error, catchPreludeEvents.join("|"));
+}

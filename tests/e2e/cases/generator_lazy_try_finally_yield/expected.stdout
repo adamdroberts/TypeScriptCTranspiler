@@ -21,3 +21,4 @@ caught-composed-rethrow: false composed-rethrow-pause recovered:original-compose
 caught-conditional-special: false conditional-catch-pause true special-recovered
 caught-conditional-fallback: false conditional-catch-pause true fallback-recovered
 caught-conditional-finally: false conditional-finally-pause true special-finally-recovered before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally|conditional-finally
+caught-conditional-finally-throw: false conditional-finally-throw-pause special-finally-throw before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally|conditional-finally|conditional-finally-throw

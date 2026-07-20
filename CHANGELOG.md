@@ -33,6 +33,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Lazy generators now compose bounded suspended catch recovery with a non-suspending `finally` on handled `.throw(error)` and normal completion. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now honor a terminal literal `throw` in that non-suspending `finally` as the override for both handled `.throw(error)` and normal completion. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now honor a terminal literal `return` in that non-suspending `finally` as the override for both handled `.throw(error)` and normal completion. Regression: `generator_lazy_try_finally_yield`.
+- Lazy generators now preserve bounded conditional catch `throw` arms through a non-suspending `finally`, including finalizer ordering and thrown-value propagation. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now execute bounded yield-free, non-abrupt catch expression-statement preludes before terminal recovery. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now preserve simple string-literal `const` / `let` aliases in those bounded catch preludes. Regression: `generator_lazy_try_finally_yield`.
 - Lazy generators now support terminal literal catch rethrows after suspended yields, preserving bounded catch-prelude and non-suspending `finally` ordering. Regression: `generator_lazy_try_finally_yield`.
