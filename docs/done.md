@@ -389,6 +389,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Unequal complete nested conditional await trees now join a bounded common awaited-local tail before return across async declarations, class methods, and async function values. Test: `async_await_nested_conditional_unequal_async_tail`
 - Unequal complete nested conditional await trees now join a bounded common terminal `throw` across async declarations, class methods, and async function values. Test: `async_await_nested_conditional_unequal_terminal_throw`
 - Unequal complete nested conditional await trees now preserve captured outer-state updates before a common return across async declarations, class methods, and async function values. Test: `async_await_nested_conditional_unequal_outer_state`
+- Unequal complete nested conditional await trees now join a bounded common direct `return await` expression across async declarations, class methods, and async function values. Test: `async_await_nested_conditional_unequal_return_await`
 - Branch-local source `try` / `catch` routes direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try`
 - Branch-local source `try` / `finally` runs finally bodies on direct `return await` fulfillment and rejection paths across async declarations, class methods, and async function values. Test: `async_await_branch_return_await_try_finally`
 - Branch-local source `try` / `catch` / `finally` composes direct `return await` fulfillment, catch recovery, finally routing, and bounded finally-throw overrides across async declarations, class methods, and async function values. Tests: `async_await_branch_return_await_try_catch_finally`, `async_await_branch_return_await_finally_throw`
@@ -3099,6 +3100,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_nested_conditional_unequal_async_tail` | nested unequal conditional await trees join a common awaited tail |
 | `async_await_nested_conditional_unequal_terminal_throw` | nested unequal conditional await trees join a common terminal throw |
 | `async_await_nested_conditional_unequal_outer_state` | nested unequal conditional await trees preserve outer state |
+| `async_await_nested_conditional_unequal_return_await` | nested unequal conditional await trees join a common return-await expression |
 | `async_await_branch_return_await_try` | branch try/catch routes direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_try_finally` | branch try/finally runs on direct return-await fulfillment and rejection |
 | `async_await_branch_return_await_try_catch_finally` | branch try/catch/finally routes direct return-await fulfillment and rejection |

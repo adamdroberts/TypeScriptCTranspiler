@@ -1,0 +1,9 @@
+declaration-one: declaration-one
+declaration-two: declaration-two
+declaration-fallback: declaration-fallback
+method-one: method-one
+method-fallback: method-fallback
+method-two: method-two
+value-one: value-one
+value-fallback: value-fallback
+value-two: value-two
