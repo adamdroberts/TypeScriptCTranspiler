@@ -308,6 +308,15 @@ async function chooseLoopThrowAwaitAliasPostMultiple(condition: boolean): Promis
     return "body-throw-post-multiple-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostMultipleLocals(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-post-multiple-locals");
+        const first = "-first", second = "-second";
+        return value + prefix + first + second;
+    }
+    return prefix + "-post-multiple-locals-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-control");
@@ -844,6 +853,8 @@ chooseLoopReturnAwaitAliasPostMultiple(true, "body-return").then((value) => cons
 chooseLoopReturnAwaitAliasPostMultiple(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-multiple-false", value));
 chooseLoopThrowAwaitAliasPostMultiple(true).catch((reason) => console.log("await-while-throw-await-alias-post-multiple-true", reason));
 chooseLoopThrowAwaitAliasPostMultiple(false).then((value) => console.log("await-while-throw-await-alias-post-multiple-false", value));
+chooseLoopReturnAwaitAliasPostMultipleLocals(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-multiple-locals-true", value));
+chooseLoopReturnAwaitAliasPostMultipleLocals(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-multiple-locals-false", value));
 chooseLoopReturnAwaitAliasPostControl(true, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-true", value));
 chooseLoopReturnAwaitAliasPostControl(true, false, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-false", value));
 chooseLoopReturnAwaitAliasPostControl(false, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-fallthrough", value));
