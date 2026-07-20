@@ -1,0 +1,6 @@
+declaration-true: declaration-receiver-value
+method-false: method-receiver-value
+value-true: arrow-receiver-value
+declaration-false: declaration-index
+method-true: method-index
+value-false: arrow-index
