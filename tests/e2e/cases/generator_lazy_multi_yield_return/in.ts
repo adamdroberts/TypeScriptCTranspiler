@@ -11,7 +11,7 @@ function* chain(): Generator<number, number, number> {
 }
 
 function* longChain(): Generator<number, number, number> {
-    return (yield 1) + (yield 2) + (yield 3) + (yield 4) + (yield 5) + (yield 6) + (yield 7) + (yield 8);
+    return (yield 1) + (yield 2) + (yield 3) + (yield 4) + (yield 5) + (yield 6) + (yield 7) + (yield 8) + (yield 9) + (yield 10);
 }
 
 const iter = sum();
@@ -42,4 +42,6 @@ longValues.push(longIter.next(5));
 longValues.push(longIter.next(6));
 longValues.push(longIter.next(7));
 longValues.push(longIter.next(8));
-console.log("long", longValues.map((step: any) => step.value).join(","), longValues[8].done, longValues[8].value);
+longValues.push(longIter.next(9));
+longValues.push(longIter.next(10));
+console.log("long", longValues.map((step: any) => step.value).join(","), longValues[10].done, longValues[10].value);

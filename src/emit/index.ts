@@ -35929,23 +35929,20 @@ class Emitter {
                 ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken].includes(op)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
-        if (!visit(stmt.expression) || yields.length < 2 || yields.length > 8) return null;
+        if (!visit(stmt.expression) || yields.length < 2) return null;
         return { expression: stmt.expression, yields };
     }
 
-    private lazyGeneratorHasMultiYieldReturn(node: ts.Node): boolean {
-        let found = false;
+    private lazyGeneratorMaxMultiYieldReturn(node: ts.Node): number {
+        let max = 0;
         const visit = (current: ts.Node): void => {
-            if (found) return;
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
-            if (this.simpleLazyMultiYieldReturn(current as ts.Statement)) {
-                found = true;
-                return;
-            }
+            const info = this.simpleLazyMultiYieldReturn(current as ts.Statement);
+            if (info) max = Math.max(max, info.yields.length);
             ts.forEachChild(current, visit);
         };
         visit(node);
-        return found;
+        return max;
     }
 
     private endsWithUnconditionalBreak(stmt: ts.Statement): boolean {
@@ -36875,7 +36872,8 @@ class Emitter {
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
         const yieldStarCount = this.countSimpleLazyYieldStars(fn.body);
         const hasYieldStar = yieldStarCount > 0;
-        const hasMultiYieldReturn = this.lazyGeneratorHasMultiYieldReturn(fn.body);
+        const multiYieldCount = this.lazyGeneratorMaxMultiYieldReturn(fn.body);
+        const hasMultiYieldReturn = multiYieldCount > 0;
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
         const hasLazyClose = hasYieldStar || hasLazyFinalizer;
         const needsEnv = runtimeParamInfos.length > 0 ||
@@ -36903,7 +36901,7 @@ class Emitter {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
             if (hasMultiYieldReturn) {
-                this.structDecls.line("tsc_value_t multi_yield_values[8];");
+                this.structDecls.line(`tsc_value_t multi_yield_values[${multiYieldCount}];`);
             }
             for (const { info } of forOfInfos) {
                 this.structDecls.line(`tsc_array_t* ${info.arrayField};`);
@@ -37050,7 +37048,7 @@ class Emitter {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
             }
             if (hasMultiYieldReturn) {
-                for (let i = 0; i < 8; i++) {
+                for (let i = 0; i < multiYieldCount; i++) {
                     buf.line(`${envVar}->multi_yield_values[${i}] = tsc_value_undefined();`);
                 }
             }
