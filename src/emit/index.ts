@@ -37588,6 +37588,7 @@ class Emitter {
             }
             if (!ts.isBinaryExpression(unwrapped)) return false;
             const op = unwrapped.operatorToken.kind;
+            if (op === ts.SyntaxKind.InstanceOfKeyword) return visit(unwrapped.left);
             if (![ts.SyntaxKind.CommaToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
                 ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
                 ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
@@ -38673,6 +38674,9 @@ class Emitter {
                 return this.emitSimpleLazyResumePrefixUnary(unwrapped, build(unwrapped.operand));
             }
             if (!ts.isBinaryExpression(unwrapped)) unsupported(node, "lazy multi-yield return contains an unsupported expression leaf");
+            if (unwrapped.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
+                return this.emitInstanceOfWithLeft(unwrapped, build(unwrapped.left));
+            }
             return this.emitSimpleLazyResumeBinary(unwrapped, build(unwrapped.left), build(unwrapped.right));
         };
         const result = build(info.expression);

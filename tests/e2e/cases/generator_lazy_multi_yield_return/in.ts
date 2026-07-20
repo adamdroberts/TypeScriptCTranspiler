@@ -54,6 +54,12 @@ function* voidLeaves(): Generator<number, number, number> {
     return (void (yield 20)), (yield 21);
 }
 
+class InstanceMarker {}
+
+function* instanceLeaves(): Generator<any, boolean, any> {
+    return (yield new InstanceMarker()), (yield new InstanceMarker()) instanceof InstanceMarker;
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -135,3 +141,8 @@ const voidFirst: any = voidIter.next();
 const voidSecond: any = voidIter.next(4);
 const voidDone: any = voidIter.next(5);
 console.log("void", voidFirst.value, voidSecond.value, voidDone.done, voidDone.value);
+const instanceIter = instanceLeaves();
+const instanceFirst: any = instanceIter.next();
+const instanceSecond: any = instanceIter.next(new InstanceMarker());
+const instanceDone: any = instanceIter.next(new InstanceMarker());
+console.log("instanceof", instanceFirst.done, instanceSecond.done, instanceDone.done, instanceDone.value);
