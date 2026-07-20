@@ -38524,6 +38524,7 @@ class Emitter {
                 envLocalName,
                 nextStateId,
                 nextYieldStarSlot,
+                this.stableLazyGeneratorPreReturnLocals(stmt),
             );
             return;
         }
@@ -38622,6 +38623,29 @@ class Emitter {
         this.emitStmt(buf, stmt);
     }
 
+    private stableLazyGeneratorPreReturnLocals(stmt: ts.Statement): Set<ts.Symbol> {
+        const stable = new Set<ts.Symbol>();
+        let body: ts.Block | null = null;
+        for (let parent: ts.Node | undefined = stmt.parent; parent; parent = parent.parent) {
+            const candidate = ts.isFunctionLike(parent) ? parent as ts.FunctionLikeDeclaration : null;
+            if (candidate?.body && ts.isBlock(candidate.body)) {
+                body = candidate.body;
+                break;
+            }
+        }
+        if (!body) return stable;
+        for (const statement of body.statements) {
+            if (statement.getStart() >= stmt.getStart()) continue;
+            if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer || this.nodeContainsYield(declaration.initializer)) continue;
+                const symbol = this.symbolForIdentifier(declaration.name);
+                if (symbol) stable.add(symbol);
+            }
+        }
+        return stable;
+    }
+
     private emitLazyGeneratorMultiYieldReturn(
         buf: CBuf,
         info: { expression: ts.BinaryExpression; yields: ts.YieldExpression[] },
@@ -38629,6 +38653,7 @@ class Emitter {
         envLocalName: string,
         nextStateId: () => number,
         nextYieldStarSlot: () => number,
+        stableLocals: ReadonlySet<ts.Symbol>,
     ): void {
         const states = info.yields.map(() => nextStateId());
         for (let i = 0; i < info.yields.length; i++) {
@@ -38668,8 +38693,8 @@ class Emitter {
             if (ts.isIdentifier(unwrapped)) {
                 const symbol = this.symbolForIdentifier(unwrapped);
                 const declaration = symbol?.valueDeclaration;
-                if (!symbol || !declaration || !ts.isParameter(declaration) || !this.closureEnvBindingForSymbol(symbol)) {
-                    unsupported(unwrapped, "lazy multi-yield return identifiers must be stable generator parameters");
+                if (!symbol || !declaration || (!ts.isParameter(declaration) && !stableLocals.has(symbol)) || !this.closureEnvBindingForSymbol(symbol)) {
+                    unsupported(unwrapped, "lazy multi-yield return identifiers must be stable generator parameters or direct const locals");
                 }
                 return this.emitExpr(unwrapped);
             }

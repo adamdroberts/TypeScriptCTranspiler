@@ -64,6 +64,11 @@ function* parameterLeaves(offset: number): Generator<number, number, number> {
     return offset + (yield 22) + (yield 23);
 }
 
+function* localLeaves(): Generator<number, number, number> {
+    const base = 10;
+    return base + (yield 30) + (yield 31);
+}
+
 class ThisLeaves {
     marker = 9;
 
@@ -163,6 +168,11 @@ const parameterFirst: any = parameterIter.next();
 const parameterSecond: any = parameterIter.next(2);
 const parameterDone: any = parameterIter.next(3);
 console.log("parameter", parameterFirst.value, parameterSecond.value, parameterDone.done, parameterDone.value);
+const localIter = localLeaves();
+const localFirst: any = localIter.next();
+const localSecond: any = localIter.next(4);
+const localDone: any = localIter.next(5);
+console.log("local", localFirst.value, localSecond.value, localDone.done, localDone.value);
 const thisLeaves = new ThisLeaves();
 const thisIter = thisLeaves.values();
 const thisFirst: any = thisIter.next();
