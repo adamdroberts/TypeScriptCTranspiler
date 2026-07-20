@@ -79,6 +79,14 @@ async function chooseLoopIfElse(flag: boolean, prefix: string): Promise<string> 
     return prefix + "-outer-no";
 }
 
+async function chooseForIf(flag: boolean): Promise<string> {
+    for (; await laterTrue();) {
+        if (flag) return "for-if-yes";
+        return "for-if-no";
+    }
+    return "for-outer-no";
+}
+
 async function chooseLoopLocal(flag: boolean, prefix: string): Promise<string> {
     while (await (flag ? laterTrue() : laterFalse())) {
         const result = prefix + "-local-yes";
@@ -216,6 +224,8 @@ chooseLoopIf(true, "if-loop").then((value) => console.log("await-while-if-true",
 chooseLoopIf(false, "if-loop").then((value) => console.log("await-while-if-false", value));
 chooseLoopIfElse(true, "if-else-loop").then((value) => console.log("await-while-if-else-true", value));
 chooseLoopIfElse(false, "if-else-loop").then((value) => console.log("await-while-if-else-false", value));
+chooseForIf(true).then((value) => console.log("await-for-if-true", value));
+chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
 chooseLoopLocal(false, "local-loop").then((value) => console.log("await-while-local-false", value));
 chooseForCondition(true).then((value) => console.log("await-for-condition-true", value));

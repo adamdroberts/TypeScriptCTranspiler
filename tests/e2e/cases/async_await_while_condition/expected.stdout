@@ -10,6 +10,8 @@ await-while-if-true if-loop-if-yes
 await-while-if-false if-loop-if-no
 await-while-if-else-true if-else-loop-then
 await-while-if-else-false if-else-loop-else
+await-for-if-true for-if-yes
+await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
 await-while-local-false local-loop-local-no
 await-for-condition-true for-yes
