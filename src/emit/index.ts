@@ -32011,12 +32011,19 @@ class Emitter {
     ): boolean {
         if (body.statements.length !== 1 || !ts.isThrowStatement(body.statements[0]!)) return false;
         const expression = this.unwrapTransparentExpression(body.statements[0]!.expression);
-        if (!ts.isConditionalExpression(expression)) return false;
-        const continuation = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
-            expression,
-            parameters,
-            thisValue,
-        );
+        const continuation = ts.isConditionalExpression(expression)
+            ? this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+                expression,
+                parameters,
+                thisValue,
+            )
+            : this.isAsyncAwaitShortCircuitBinary(expression)
+                ? this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
+                    expression,
+                    parameters,
+                    thisValue,
+                )
+                : null;
         if (!continuation || !this.asyncAwaitIfExpressionReturnBranchHasAwait(continuation)) return false;
         if (!this.asyncAwaitIfExpressionReturnBranchSupported(continuation)) return false;
         return this.emitAsyncAwaitIfExpressionReturnBranch(buf, continuation, true);

@@ -1,0 +1,6 @@
+declaration-false: false
+method-true: true
+value-string: arrow-value
+declaration-true: fn-and
+method-false: -ormethod
+value-null: arrow-nullish

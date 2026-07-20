@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Terminal throw expressions now support bounded `&&`, `||`, and `??` short-circuit branches with synchronous and awaited outcomes across async declarations, methods, and async-arrow function values. Test: `async_await_throw_short_circuit_expression`.
 - Terminal throw expressions now support bounded two-arm conditional awaited values across async declarations, methods, and async-arrow function values, rejecting the selected branch result. Test: `async_await_throw_conditional_expression`.
 - Terminal throw expressions now support five-or-more left-associated non-conditional awaited operands through the generic sequence adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_five_await_expression`.
 - Terminal throw expressions now support four left-associated non-conditional awaited operands through the staged expression adapter across async declarations, methods, and async-arrow function values. Test: `async_await_throw_four_await_expression`.
