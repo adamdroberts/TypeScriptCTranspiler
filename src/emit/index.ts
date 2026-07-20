@@ -32477,6 +32477,28 @@ class Emitter {
             if (declaration.initializer) visitInitializer(declaration.initializer);
             return supported;
         };
+        const tryClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
+            if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                node.declarations.length !== 1) return false;
+            const declaration = node.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name)) return false;
+            const variableStatement = node.parent;
+            if (!ts.isVariableStatement(variableStatement) || !ts.isBlock(variableStatement.parent)) return false;
+            const owner = variableStatement.parent.parent;
+            if (!owner || (!ts.isTryStatement(owner) && !ts.isCatchClause(owner))) return false;
+            if (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0) return false;
+            let supported = true;
+            const visitInitializer = (child: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(child) || ts.isFunctionLike(child) || ts.isClassLike(child)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(child, visitInitializer);
+            };
+            if (declaration.initializer) visitInitializer(declaration.initializer);
+            return supported;
+        };
         let switchDepth = 0;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
@@ -32493,7 +32515,9 @@ class Emitter {
                 return;
             }
             if (ts.isVariableDeclarationList(node)) {
-                ok = nestedLoopDeclarationSupported(node) || (switchDepth > 0 && switchClauseDeclarationSupported(node));
+                ok = nestedLoopDeclarationSupported(node) ||
+                    (switchDepth > 0 && switchClauseDeclarationSupported(node)) ||
+                    tryClauseDeclarationSupported(node);
                 return;
             }
             if (ts.isVariableStatement(node)) {
@@ -32618,6 +32642,28 @@ class Emitter {
             if (declaration.initializer) visitInitializer(declaration.initializer);
             return supported;
         };
+        const tryClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
+            if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                node.declarations.length !== 1) return false;
+            const declaration = node.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name)) return false;
+            const variableStatement = node.parent;
+            if (!ts.isVariableStatement(variableStatement) || !ts.isBlock(variableStatement.parent)) return false;
+            const owner = variableStatement.parent.parent;
+            if (!owner || (!ts.isTryStatement(owner) && !ts.isCatchClause(owner))) return false;
+            if (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0) return false;
+            let supported = true;
+            const visitInitializer = (child: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(child) || ts.isFunctionLike(child) || ts.isClassLike(child)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(child, visitInitializer);
+            };
+            if (declaration.initializer) visitInitializer(declaration.initializer);
+            return supported;
+        };
         let switchDepth = 0;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
@@ -32631,7 +32677,8 @@ class Emitter {
                 (ts.isContinueStatement(node) && loopDepth === 0) ||
                 (ts.isVariableDeclarationList(node) &&
                     !nestedLoopDeclarationSupported(node) &&
-                    !(switchDepth > 0 && switchClauseDeclarationSupported(node)))
+                    !(switchDepth > 0 && switchClauseDeclarationSupported(node)) &&
+                    !tryClauseDeclarationSupported(node))
             ) {
                 ok = false;
                 return;

@@ -385,11 +385,14 @@ async function chooseLoopReturnAwaitAliasPostTry(condition: boolean, prefix: str
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-try");
         try {
-            prefix += "-try";
+            const suffix = "-try";
+            prefix += suffix;
         } catch {
-            prefix += "-catch";
+            let suffix = "-catch";
+            prefix += suffix;
         } finally {
-            prefix += "-finally";
+            const suffix = "-finally";
+            prefix += suffix;
         }
         return value + prefix;
     }
@@ -400,9 +403,11 @@ async function chooseLoopThrowAwaitAliasPostTry(condition: boolean): Promise<str
     while (await (condition ? laterTrue() : laterFalse())) {
         let reason = await laterBodyValue("body-throw-post-try");
         try {
-            reason += "-try";
+            const suffix = "-try";
+            reason += suffix;
         } finally {
-            reason += "-finally";
+            let suffix = "-finally";
+            reason += suffix;
         }
         throw reason;
     }
