@@ -381,6 +381,8 @@ await-loop-initializer-escaping-var-nested-for-in loop-escaping-var-nested-for-i
 await-loop-initializer-escaping-var-nested-for loop-escaping-var-nested-for-0-1
 await-loop-initializer-escaping-var-nested-for-of-control loop-escaping-var-nested-for-of-control-keep
 await-loop-initializer-escaping-var-nested-for-in-control loop-escaping-var-nested-for-in-control-keep
+await-loop-initializer-escaping-var-continue-false loop-escaping-var-continue-false
+await-loop-initializer-escaping-var-continue-false-throw loop-escaping-var-continue-false-throw
 await-while-escaping-var-continue-false while-escaping-continue-false
 await-loop-initializer-uninitialized-var-capture loop-uninitialized-var-captured
 await-loop-initializer-typed-uninitialized-var-capture loop-typed-uninitialized-var-captured
