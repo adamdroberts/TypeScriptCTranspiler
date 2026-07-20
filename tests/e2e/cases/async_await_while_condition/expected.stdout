@@ -23,7 +23,6 @@ await-for-if-true for-if-yes
 await-for-if-false for-if-no
 await-while-local-true local-loop-local-yes
 await-while-local-false local-loop-local-no
-await-for-condition-true for-yes
 await-for-condition-false for-no
 await-while-logical-true logical-yes
 await-while-logical-false logical-no
@@ -47,6 +46,7 @@ await-while-return-await-control-true body-await-control-control
 await-while-return-await-control-false body-await-control
 await-while-return-await-control-local-true body-await-control-local-branch-local
 await-while-return-await-control-local-false body-await-control-local
+await-for-condition-true for-yes
 await-while-two-logical-true two-logical-yes
 await-while-two-logical-false two-logical-no
 await-while-or-true or-yes

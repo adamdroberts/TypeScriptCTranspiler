@@ -195,7 +195,7 @@ async function chooseLoopLocal(flag: boolean, prefix: string): Promise<string> {
 
 async function chooseForCondition(flag: boolean): Promise<string> {
     for (; await (flag ? laterTrue() : laterFalse());) {
-        return flag ? "for-yes" : "for-unexpected";
+        return await laterBodyValue(flag ? "for-yes" : "for-unexpected");
     }
     return "for-no";
 }
