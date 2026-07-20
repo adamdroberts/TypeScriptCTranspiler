@@ -31436,6 +31436,22 @@ class Emitter {
             op !== ts.SyntaxKind.BarBarToken &&
             op !== ts.SyntaxKind.QuestionQuestionToken
         ) return null;
+        const leftExpression = this.unwrapTransparentExpression(expr.left);
+        if (ts.isAwaitExpression(leftExpression)) {
+            if (!this.asyncAwaitSyncReturnExpressionSupported(expr.right)) return null;
+            return {
+                kind: "return",
+                continuation: {
+                    awaitExpr: leftExpression,
+                    returnExpr: expr,
+                    params: [
+                        ...this.asyncAwaitContinuationParameters(parameters),
+                        ...captures,
+                    ],
+                    thisValue,
+                },
+            };
+        }
         if (!this.asyncAwaitShortCircuitLeftExpressionSupported(expr.left)) return null;
         const rightBranch = this.asyncAwaitConditionalExpressionReturnBranchFromArm(expr.right, parameters, thisValue, captures);
         if (!rightBranch || !this.asyncAwaitIfExpressionReturnBranchHasAwait(rightBranch)) return null;
