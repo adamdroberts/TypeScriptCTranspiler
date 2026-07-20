@@ -336,6 +336,15 @@ async function chooseLoopReturnAwaitAliasPostAssignedVar(condition: boolean, pre
     return prefix + "-post-assigned-var-fallthrough";
 }
 
+async function chooseLoopReturnAwaitVarPrelude(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        var suffix = "-var-prelude";
+        const value = await laterBodyValue(prefix + suffix);
+        return value + prefix;
+    }
+    return prefix + "-var-prelude-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAliasPostControl(condition: boolean, flag: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         const value = await laterBodyValue(prefix + "-post-control");
@@ -892,6 +901,8 @@ chooseLoopReturnAwaitAliasPostVar(true, "body-return").then((value) => console.l
 chooseLoopReturnAwaitAliasPostVar(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-var-false", value));
 chooseLoopReturnAwaitAliasPostAssignedVar(true, "body-return").then((value) => console.log("await-while-return-await-alias-post-assigned-var-true", value));
 chooseLoopReturnAwaitAliasPostAssignedVar(false, "body-return").then((value) => console.log("await-while-return-await-alias-post-assigned-var-false", value));
+chooseLoopReturnAwaitVarPrelude(true, "body-return").then((value) => console.log("await-while-return-await-var-prelude-true", value));
+chooseLoopReturnAwaitVarPrelude(false, "body-return").then((value) => console.log("await-while-return-await-var-prelude-false", value));
 chooseLoopReturnAwaitAliasPostControl(true, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-true", value));
 chooseLoopReturnAwaitAliasPostControl(true, false, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-false", value));
 chooseLoopReturnAwaitAliasPostControl(false, true, "body-return").then((value) => console.log("await-while-return-await-alias-post-control-fallthrough", value));

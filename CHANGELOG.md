@@ -40,6 +40,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Bounded awaited-loop direct declaration postludes now accept multiple simple `const`/`let` locals in source order. Regression: `async_await_while_condition`.
 - Bounded awaited-loop direct declaration postludes now accept initialized `var` locals while retaining the bounded no-await boundary. Regression: `async_await_while_condition`.
 - Bounded awaited-loop direct declaration postludes now accept uninitialized `var` locals assigned synchronously before the final return. Regression: `async_await_while_condition`.
+- Bounded awaited-loop bodies now accept an initialized `var` prelude before the body’s awaited alias. Regression: `async_await_while_condition`.
 - Bounded awaited-loop `for…of`/`for…in` postludes now accept one simple `var` iterator binding alongside `const`/`let`. Regression: `async_await_while_condition`.
 - Bounded nested await-free loop postludes now accept simple `var` declarations in addition to `const`/`let`. Regression: `async_await_while_condition`.
 - Bounded async declarations, methods, and function values now await a boolean `if` condition before selecting synchronous return arms, including one await-free outer `if`. Regression: `async_await_if_condition`.

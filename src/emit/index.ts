@@ -32916,7 +32916,6 @@ class Emitter {
         const bodyPreludeSupported = bodyPreludeStatements.every((statement) => {
             if (ts.isExpressionStatement(statement)) return true;
             if (ts.isVariableStatement(statement)) {
-                if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) return false;
                 if (statement.declarationList.declarations.length !== 1) return false;
                 const declaration = statement.declarationList.declarations[0]!;
                 return ts.isIdentifier(declaration.name) &&
