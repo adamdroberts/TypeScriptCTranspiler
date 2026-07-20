@@ -33020,7 +33020,8 @@ class Emitter {
                 : directBodyAwait;
             bodyReturnExpr = bodyAwaitExpr;
             bodyPreludeStatements = loopBody.slice(0, -1);
-        } else if (loopBody.length === 1 && ts.isReturnStatement(bodyAction) && bodyAction.expression) {
+        } else if (loopBody.length === 1 &&
+            (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && bodyAction.expression) {
             bodyReturnExpr = bodyAction.expression;
             bodyPreludeStatements = [];
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
@@ -33435,18 +33436,24 @@ class Emitter {
                 buf.line("return;");
             } else {
                 const returned = this.emitExpr(continuation.bodyReturnExpr);
-                const returnedType = this.prepareType(returned.ty);
-                if (returnedType.kind === "void" || returnedType.kind === "never") {
-                    buf.line(`${returned.c};`);
+                if (continuation.bodyRejectResult) {
+                    const rejected = this.coerceToString(returned, continuation.bodyReturnExpr);
                     buf.line("tsc_try_pop();");
-                    buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                    buf.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
                 } else {
-                    const returnVar = this.freshTemp("_await_body_return");
-                    buf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
-                    buf.line("tsc_try_pop();");
-                    buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, continuation.bodyReturnExpr)};`);
+                    const returnedType = this.prepareType(returned.ty);
+                    if (returnedType.kind === "void" || returnedType.kind === "never") {
+                        buf.line(`${returned.c};`);
+                        buf.line("tsc_try_pop();");
+                        buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                    } else {
+                        const returnVar = this.freshTemp("_await_body_return");
+                        buf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
+                        buf.line("tsc_try_pop();");
+                        buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, continuation.bodyReturnExpr)};`);
+                    }
+                    buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
                 }
-                buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
                 buf.line("return;");
             }
             buf.close();
