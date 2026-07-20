@@ -35579,9 +35579,7 @@ class Emitter {
             return this.isLazyGeneratorFunctionValue(expression.expression) ||
                 this.isLazyGeneratorPassthroughFunctionValue(expression.expression);
         }
-        return ts.isConditionalExpression(expression) &&
-            this.isLazyGeneratorPassthroughExpression(expression.whenTrue) &&
-            this.isLazyGeneratorPassthroughExpression(expression.whenFalse);
+        return this.isLazyGeneratorPassthroughExpression(expression);
     }
 
     private isLazyGeneratorPassthroughExpression(expression: ts.Expression): boolean {
@@ -35589,6 +35587,10 @@ class Emitter {
         if (ts.isCallExpression(unwrapped) && ts.isIdentifier(unwrapped.expression)) {
             return this.isLazyGeneratorFunctionValue(unwrapped.expression) ||
                 this.isLazyGeneratorPassthroughFunctionValue(unwrapped.expression);
+        }
+        if (ts.isBinaryExpression(unwrapped) && unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+            return this.isLazyGeneratorPassthroughExpression(unwrapped.left) ||
+                this.isLazyGeneratorPassthroughExpression(unwrapped.right);
         }
         return ts.isConditionalExpression(unwrapped) &&
             this.isLazyGeneratorPassthroughExpression(unwrapped.whenTrue) &&
@@ -43119,6 +43121,8 @@ class Emitter {
                     return {
                         c: `({ ${left.ty.c} ${tv} = ${left.c}; ${tv} != NULL ? ${tv} : ${rc}; })`,
                         ty: left.ty,
+                        lazyGenerator: left.ty.kind === "array" &&
+                            (left.lazyGenerator || right.lazyGenerator),
                     };
                 }
                 // Primitive left: never nullish in typed code — just use left.

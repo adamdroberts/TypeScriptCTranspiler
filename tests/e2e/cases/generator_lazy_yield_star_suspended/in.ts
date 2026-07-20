@@ -86,8 +86,12 @@ function convertRecoveringConditional(useFirst: boolean, iter: Generator<string,
     return useFirst ? convertRecoveringSource(iter) : convertRecoveringSource(iter);
 }
 
+function convertRecoveringNullish(fallback: Generator<any, string, string> | null, iter: Generator<string, string, string>): Generator<any, string, string> {
+    return fallback ?? convertRecoveringSource(iter);
+}
+
 function* recoveringConvertedOuter(): Generator<string, string, string> {
-    const delegated = yield* convertRecoveringConditional(false, recoveringInner());
+    const delegated = yield* convertRecoveringNullish(null, recoveringInner());
     events.push("recovering-converted-outer-after:" + delegated);
     return "recovering-converted-outer-done";
 }
