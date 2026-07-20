@@ -55612,6 +55612,7 @@ class Emitter {
             case "return": {
                 const av = this.freshTemp("_iter");
                 const out = this.freshTemp("_step");
+                const closeHandled = this.freshTemp("_close_handled");
                 const specs: SequencedCallArg[] = [{ value: recv }];
                 if (args[0]) specs.push({ value: this.emitExpr(args[0]), target: T_VALUE, node: args[0] });
                 specs.push(...this.ignoredArgumentSpecs(args, 1));
@@ -55619,15 +55620,15 @@ class Emitter {
                     T_VALUE,
                     specs,
                     ([arr, valueArg]) =>
-                        `({ tsc_array_t* const ${av} = ${arr!}; ` +
-                        `if (${av}->is_lazy_generator && ${av}->lazy_close) (void)${av}->lazy_close(${av}, ${av}->env, ${valueArg ?? "tsc_value_undefined()"}, false); ` +
-                        `${av}->iter_pos = ${av}->len; ` +
-                        `${av}->is_lazy_generator = false; ${av}->state = -1; ` +
-                        `${av}->iter_return_consumed = true; ` +
-                        `tsc_object_t* ${out} = tsc_object_new(); ` +
+                        `({ tsc_array_t* const ${av} = ${arr!}; bool ${closeHandled} = false; ` +
+                        `if (${av}->is_lazy_generator && ${av}->lazy_close) ${closeHandled} = ${av}->lazy_close(${av}, ${av}->env, ${valueArg ?? "tsc_value_undefined()"}, false); ` +
+                        `tsc_object_t* ${out} = NULL; if (${closeHandled}) { ${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ${av}->iter_return_consumed = true; ` +
+                        `${out} = tsc_object_new(); tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->iter_has_return ? ${av}->iter_return : tsc_value_undefined()); ` +
+                        `} else { ${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ` +
+                        `${av}->iter_return_consumed = true; ${out} = tsc_object_new(); ` +
                         `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
-                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${valueArg ?? "tsc_value_undefined()"}); ` +
-                        `tsc_value_object(${out}); })`,
+                        `tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${valueArg ?? "tsc_value_undefined()"}); } tsc_value_object(${out}); })`,
                 );
             }
             case "throw": {

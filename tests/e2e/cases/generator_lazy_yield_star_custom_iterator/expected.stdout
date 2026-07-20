@@ -1,3 +1,3 @@
 custom-iterator false 1 false 2 true outer-done next:1|next:2|next:3|outer-after:0
 custom-iterator-throw false 1 true throw-outer-done next:1|next:2|next:3|outer-after:0|next:1|throw:custom-error|throw-outer-after:9
-custom-iterator-return false 1 true custom-return next:1|next:2|next:3|outer-after:0|next:1|throw:custom-error|throw-outer-after:9|next:1|return:custom-return|return-outer-after:7
+custom-iterator-return false 1 true return-outer-done next:1|next:2|next:3|outer-after:0|next:1|throw:custom-error|throw-outer-after:9|next:1|return:custom-return|return-outer-after:7
