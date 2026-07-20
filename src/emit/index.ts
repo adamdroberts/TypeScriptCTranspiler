@@ -32463,36 +32463,49 @@ class Emitter {
             ? loopStatement.statements
             : [loopStatement];
         let loopReturnExpression: ts.Expression | null = null;
-        if (loopBody.length === 1 && ts.isReturnStatement(loopBody[0]!) && loopBody[0]!.expression) {
-            loopReturnExpression = loopBody[0]!.expression;
-        } else if (
-            loopBody.length === 2 &&
-            ts.isExpressionStatement(loopBody[0]!) &&
-            ts.isReturnStatement(loopBody[1]!) &&
-            loopBody[1]!.expression
-        ) {
-            loopReturnExpression = ts.factory.createBinaryExpression(
-                loopBody[0]!.expression,
-                ts.factory.createToken(ts.SyntaxKind.CommaToken),
-                loopBody[1]!.expression,
+        const loopReturn = loopBody[loopBody.length - 1];
+        if (!ts.isReturnStatement(loopReturn) || !loopReturn.expression) return false;
+        const returnExpression = loopReturn.expression;
+        const loopPrelude = loopBody.slice(0, -1);
+        const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
+            return expressions.slice(1).reduce(
+                (expression, next) => ts.factory.createBinaryExpression(
+                    expression,
+                    ts.factory.createToken(ts.SyntaxKind.CommaToken),
+                    next,
+                ),
+                expressions[0]!,
             );
+        };
+        if (loopPrelude.length === 0) {
+            loopReturnExpression = returnExpression;
+        } else if (loopPrelude.every(ts.isExpressionStatement)) {
+            loopReturnExpression = commaExpressions([...loopPrelude.map((statement) => statement.expression), returnExpression]);
         } else if (
-            loopBody.length === 2 &&
-            ts.isVariableStatement(loopBody[0]!) &&
-            (loopBody[0]!.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 &&
-            loopBody[0]!.declarationList.declarations.length === 1 &&
-            ts.isIdentifier(loopBody[0]!.declarationList.declarations[0]!.name) &&
-            loopBody[0]!.declarationList.declarations[0]!.initializer &&
-            ts.isReturnStatement(loopBody[1]!) &&
-            loopBody[1]!.expression &&
-            ts.isIdentifier(loopBody[1]!.expression) &&
-            this.symbolForIdentifier(loopBody[0]!.declarationList.declarations[0]!.name) ===
-                this.symbolForIdentifier(loopBody[1]!.expression)
+            loopPrelude.length >= 1 &&
+            loopPrelude.slice(0, -1).every(ts.isExpressionStatement)
         ) {
-            loopReturnExpression = loopBody[0]!.declarationList.declarations[0]!.initializer!;
+            const localStatement = loopPrelude[loopPrelude.length - 1]!;
+            if (!ts.isVariableStatement(localStatement)) return false;
+            if (
+                (localStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                localStatement.declarationList.declarations.length !== 1
+            ) return false;
+            const declaration = localStatement.declarationList.declarations[0]!;
+            if (
+                !ts.isIdentifier(declaration.name) ||
+                !declaration.initializer ||
+                !ts.isIdentifier(returnExpression) ||
+                this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(returnExpression)
+            ) return false;
+            loopReturnExpression = commaExpressions([
+                ...loopPrelude.slice(0, -1).map((statement) => (statement as ts.ExpressionStatement).expression),
+                declaration.initializer,
+            ]);
         } else {
             return false;
         }
+        if (!loopReturnExpression) return false;
         let hasNullishOperator = false;
         const findNullishOperator = (node: ts.Node): void => {
             if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {

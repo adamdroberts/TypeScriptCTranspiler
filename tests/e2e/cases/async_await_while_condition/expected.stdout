@@ -2,6 +2,10 @@ await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes
 await-while-expression-false expression-loop-no
+await-while-multiple-expression-true multiple-expression-loop-first-second
+await-while-multiple-expression-false multiple-expression-loop-no
+await-while-multiple-expression-local-true multiple-expression-local-loop-first-local
+await-while-multiple-expression-local-false multiple-expression-local-loop-no
 await-while-local-true local-loop-local-yes
 await-while-local-false local-loop-local-no
 await-for-condition-true for-yes
