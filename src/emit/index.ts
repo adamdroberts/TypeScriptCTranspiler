@@ -35562,15 +35562,21 @@ class Emitter {
     private isLazyGeneratorPassthroughFunction(node: ts.Node): boolean {
         if (!ts.isFunctionDeclaration(node) && !ts.isFunctionExpression(node) &&
             !ts.isArrowFunction(node) && !ts.isMethodDeclaration(node)) return false;
-        if (node.body && !ts.isBlock(node.body)) return ts.isIdentifier(node.body);
-        if (!node.body || !ts.isBlock(node.body) || node.body.statements.length !== 1) return false;
-        const statement = node.body.statements[0];
-        if (!ts.isReturnStatement(statement) || !statement.expression || !ts.isIdentifier(statement.expression)) {
-            return false;
+        const expression = node.body && !ts.isBlock(node.body)
+            ? node.body
+            : node.body && ts.isBlock(node.body) && node.body.statements.length === 1 &&
+                ts.isReturnStatement(node.body.statements[0])
+                ? node.body.statements[0].expression
+                : undefined;
+        if (!expression) return false;
+        if (ts.isIdentifier(expression)) {
+            const returnedSymbol = this.symbolForIdentifier(expression);
+            return !!returnedSymbol && node.parameters.some((parameter) =>
+                ts.isIdentifier(parameter.name) && this.symbolForIdentifier(parameter.name) === returnedSymbol);
         }
-        const returnedSymbol = this.symbolForIdentifier(statement.expression);
-        return !!returnedSymbol && node.parameters.some((parameter) =>
-            ts.isIdentifier(parameter.name) && this.symbolForIdentifier(parameter.name) === returnedSymbol);
+        return ts.isCallExpression(expression) && ts.isIdentifier(expression.expression) &&
+            (this.isLazyGeneratorFunctionValue(expression.expression) ||
+                this.isLazyGeneratorPassthroughFunctionValue(expression.expression));
     }
 
     private isLazyGeneratorPassthroughParameter(node: ts.Node): boolean {

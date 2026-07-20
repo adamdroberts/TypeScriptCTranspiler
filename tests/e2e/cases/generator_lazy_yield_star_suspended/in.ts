@@ -78,8 +78,12 @@ function convertRecoveringSource(iter: Generator<string, string, string>): Gener
     return iter;
 }
 
+function convertRecoveringWrapper(iter: Generator<string, string, string>): Generator<any, string, string> {
+    return convertRecoveringSource(iter);
+}
+
 function* recoveringConvertedOuter(): Generator<string, string, string> {
-    const delegated = yield* convertRecoveringSource(recoveringInner());
+    const delegated = yield* convertRecoveringWrapper(recoveringInner());
     events.push("recovering-converted-outer-after:" + delegated);
     return "recovering-converted-outer-done";
 }
