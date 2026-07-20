@@ -30832,6 +30832,17 @@ class Emitter {
                 buf.line(`return tsc_promise_adopt(${source.c});`);
                 return true;
             }
+            const nestedExpression = this.unwrapTransparentExpression(expression.expression);
+            if (this.isAsyncAwaitShortCircuitBinary(nestedExpression)) {
+                const logicalContinuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
+                    nestedExpression,
+                    parameters,
+                    thisValue,
+                );
+                if (logicalContinuation && this.asyncAwaitIfExpressionReturnBranchSupported(logicalContinuation)) {
+                    return this.emitAsyncAwaitIfExpressionReturnBranch(buf, logicalContinuation);
+                }
+            }
             const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                 expression.expression,
                 parameters,
