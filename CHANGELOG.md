@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Source `try` / `finally` now preserves a bounded single-awaited throw expression, executing finally before rejecting with the transformed value or the original awaited rejection across async declarations, methods, and async-arrow function values. Test: `async_await_try_finally_throw_expression`.
 - Combined source `try` / `catch` / `finally` now catches a bounded single-awaited throw expression, routes the transformed throw value through catch recovery, and still executes finally on fulfillment and source rejection across async declarations, methods, and async-arrow function values. Test: `async_await_try_catch_finally_throw_expression`.
 - Combined source `try` / `catch` / `finally` awaited-return chains now preserve bounded await-free non-abrupt control-flow preludes before catch recovery across async function values, closures, and methods. Test: `async_await_try_catch_finally`.
 - Source `try` / `catch` awaited throw expressions now preserve bounded await-free non-abrupt `if` / `switch` / loop / `try` control-flow preludes before catch recovery across async declarations, methods, and async-arrow function values. Test: `async_await_try_catch_throw_expression_prelude`.

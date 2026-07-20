@@ -310,6 +310,7 @@ interface AsyncAwaitTryFinallyReturnContinuation {
     variable: ts.Identifier | null;
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression | null;
+    successThrowExpr?: ts.Expression | null;
     successReturnsAwaited: boolean;
     successReturnAfterFinally: boolean;
     finallyStatements: readonly ts.Statement[];
@@ -27098,13 +27099,31 @@ class Emitter {
         const remainingTryStatements = tryStmt.tryBlock.statements.length - tryPrelude.nextIndex;
         let awaited = this.awaitedContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
         let successReturnsAwaited = false;
+        let successThrowExpr: ts.Expression | null = null;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
             successReturnsAwaited = !!awaited;
         }
+        if (!awaited && remainingTryStatements === 1) {
+            const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
+            if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
+                const expressionContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                    this.unwrapTransparentExpression(tryStatement.expression),
+                    parameters,
+                    thisValue,
+                    [...prelude.captures, ...tryPrelude.captures],
+                );
+                if (expressionContinuation) {
+                    awaited = { variable: null, awaitExpr: expressionContinuation.awaitExpr };
+                    successThrowExpr = expressionContinuation.returnExpr;
+                }
+            }
+        }
         if (!awaited) return null;
         let successReturnExpr: ts.Expression | null = null;
-        if (successReturnsAwaited) {
+        if (successThrowExpr) {
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
+        } else if (successReturnsAwaited) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else if (remainingStatements === 1) {
             if (remainingTryStatements !== 2) return null;
@@ -27223,6 +27242,7 @@ class Emitter {
             variable: awaited.variable,
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
+            successThrowExpr,
             successReturnsAwaited,
             successReturnAfterFinally: remainingStatements === 2,
             finallyStatements: tryStmt.finallyBlock.statements,
@@ -27318,12 +27338,13 @@ class Emitter {
         const rejectedReason = this.freshTemp("_await_rejected_reason");
         const eh = this.freshTemp("_await_eh");
         const variableSymbol = continuation.variable ? this.symbolForIdentifier(continuation.variable) : null;
-        const awaitedValue = awaitedType.kind === "void" || (!variableSymbol && !continuation.successReturnsAwaited)
+        const awaitedValue = awaitedType.kind === "void" ||
+            (!variableSymbol && !continuation.successReturnsAwaited && !continuation.successThrowExpr)
             ? null
             : this.coerce(
                 this.promiseFulfilledValue(promiseType.elem, "_p"),
                 awaitedType,
-                continuation.successReturnExpr ?? continuation.variable ?? continuation.awaitExpr,
+                continuation.successReturnExpr ?? continuation.successThrowExpr ?? continuation.variable ?? continuation.awaitExpr,
             );
         const fulfilledScope = new Map<ts.Symbol, string>();
         const rejectedScope = new Map<ts.Symbol, string>();
@@ -27331,6 +27352,10 @@ class Emitter {
         for (const param of continuation.params) {
             fulfilledScope.set(param.symbol, `state->${param.field}`);
             rejectedScope.set(param.symbol, `state->${param.field}`);
+        }
+        const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        if (continuation.successThrowExpr) {
+            awaitScope.set(continuation.awaitExpr, { c: valueVar, ty: awaitedType });
         }
 
         const emitFinallyStatements = (target: CBuf, scope: Map<ts.Symbol, string>): void => {
@@ -27372,11 +27397,15 @@ class Emitter {
             emitFinallyStatements(buf, fulfilledScope);
         }
         this.argumentValueScopes.push(fulfilledScope);
+        this.awaitExpressionValueScopes.push(awaitScope);
         if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
         let returned: EmitResult | null = null;
+        let thrown: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            if (continuation.successReturnsAwaited) {
+            if (continuation.successThrowExpr) {
+                thrown = this.emitExpr(continuation.successThrowExpr);
+            } else if (continuation.successReturnsAwaited) {
                 if (awaitedType.kind !== "void") returned = { c: valueVar, ty: awaitedType };
             } else if (continuation.successReturnExpr) {
                 returned = this.emitExpr(continuation.successReturnExpr);
@@ -27384,7 +27413,29 @@ class Emitter {
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();
+            this.awaitExpressionValueScopes.pop();
             this.argumentValueScopes.pop();
+        }
+        if (thrown) {
+            const throwHandled = this.freshTemp("_await_throw_handled");
+            const throwReason = this.freshTemp("_await_throw_reason");
+            const throwEh = this.freshTemp("_await_throw_eh");
+            buf.line(`bool ${throwHandled} = false;`);
+            buf.line(`tsc_str_t* ${throwReason} = NULL;`);
+            buf.line(`tsc_try_frame_t ${throwEh};`);
+            buf.line(`tsc_try_push(&${throwEh});`);
+            buf.open(`if (setjmp(${throwEh}.jb) == 0)`);
+            buf.line(`tsc_throw_str(${this.coerceToString(thrown, continuation.successThrowExpr!)});`);
+            buf.close();
+            buf.open("else");
+            buf.line(`${throwReason} = tsc_current_error();`);
+            buf.line(`tsc_try_pop();`);
+            emitFinallyStatements(buf, fulfilledScope);
+            buf.line("tsc_try_pop();");
+            buf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${throwReason}));`);
+            buf.line(`${throwHandled} = true;`);
+            buf.close();
+            buf.open(`if (!${throwHandled})`);
         }
         const returnType = returned ? this.prepareType(returned.ty) : T_VOID;
         if (!returned || returnType.kind === "void" || returnType.kind === "never") {
@@ -27401,6 +27452,9 @@ class Emitter {
             }
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnType }, continuation.successReturnExpr!)};`);
+        }
+        if (thrown) {
+            buf.close();
         }
         buf.close();
         buf.close();

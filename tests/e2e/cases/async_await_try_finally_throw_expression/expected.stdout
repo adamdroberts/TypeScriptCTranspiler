@@ -1,0 +1,8 @@
+finally: declaration
+declaration: fn-throw-suffix
+finally: method
+method: -throwmethod-suffix
+finally: arrow
+value: arrow-throw-suffix
+finally: rejected
+rejected: rejected
