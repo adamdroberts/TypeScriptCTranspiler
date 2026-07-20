@@ -32582,12 +32582,12 @@ class Emitter {
     private asyncAwaitLoopBodyControlPreludeSupported(
         stmt: ts.Statement,
         allowLoopControl = false,
-        allowTopLevelIteratorDeclaration = false,
+        allowTopLevelLoopDeclaration = false,
     ): boolean {
         let ok = true;
         let loopDepth = 0;
         const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
-            if (loopDepth <= 1 && !allowTopLevelIteratorDeclaration) return false;
+            if (loopDepth <= 1 && !allowTopLevelLoopDeclaration) return false;
             if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
                 if (node.declarations.length !== 1 || !ts.isIdentifier(node.declarations[0]!.name)) return false;
                 const declaration = node.declarations[0]!;
