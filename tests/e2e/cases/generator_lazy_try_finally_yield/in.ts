@@ -248,6 +248,24 @@ try {
     console.log("caught-binding-alias-throw:", caughtBindingAliasThrowFirst.done, caughtBindingAliasThrowFirst.value, error, catchPreludeEvents.join("|"));
 }
 
+function* caughtBindingAliasAssignment(): Generator<string, string, string> {
+    try {
+        yield "binding-alias-assignment-pause";
+    } catch (error: any) {
+        let captured = error;
+        captured = "assigned:" + captured;
+        return captured;
+    } finally {
+        catchPreludeEvents.push("binding-alias-assignment-finally");
+    }
+    return "normal";
+}
+
+const caughtBindingAliasAssignmentResult = caughtBindingAliasAssignment();
+const caughtBindingAliasAssignmentFirst: any = caughtBindingAliasAssignmentResult.next();
+const caughtBindingAliasAssignmentDone: any = caughtBindingAliasAssignmentResult.throw("binding-alias");
+console.log("caught-binding-alias-assignment:", caughtBindingAliasAssignmentFirst.done, caughtBindingAliasAssignmentFirst.value, caughtBindingAliasAssignmentDone.done, caughtBindingAliasAssignmentDone.value, catchPreludeEvents.join("|"));
+
 function* caughtRethrow(): Generator<string, string, string> {
     try {
         yield "rethrow-pause";
