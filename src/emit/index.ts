@@ -32500,7 +32500,7 @@ class Emitter {
                 ? nestedBodyAwait
                 : directBodyAwait;
             bodyPreludeStatements = loopBody.slice(0, -1);
-        } else if (ts.isReturnStatement(bodyAction) && ts.isIdentifier(bodyAction.expression)) {
+        } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) && ts.isIdentifier(bodyAction.expression)) {
             const bodyAwaitStatement = loopBody[loopBody.length - 2];
             if (!bodyAwaitStatement || !ts.isVariableStatement(bodyAwaitStatement) ||
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
@@ -32513,7 +32513,7 @@ class Emitter {
                 this.symbolForIdentifier(declaration.name) !== this.symbolForIdentifier(bodyAction.expression)) return false;
             bodyAwaitExpr = declarationAwait;
             bodyPreludeStatements = loopBody.slice(0, -2);
-            bodyRejectResult = false;
+            bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else {
             return false;
         }
