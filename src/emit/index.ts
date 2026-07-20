@@ -35692,6 +35692,8 @@ class Emitter {
                     ? sourceType.elem
                     : sourceType.kind === "map" && sourceType.key && sourceType.elem
                         ? entryType(sourceType.elem, sourceType.key)
+                        : sourceType.kind === "urlsearchparams"
+                            ? entryType(T_STRING, T_STRING)
                         : sourceType.kind === "class"
                             ? T_VALUE
                         : null;
@@ -36235,6 +36237,8 @@ class Emitter {
                 ? `tsc_set_values(${source.c})`
                 : source.ty.kind === "map"
                     ? this.mapEntriesArrayExpr(stmt.expression, source.c, source.ty, "lazy generator Map for-of").c
+                : source.ty.kind === "urlsearchparams"
+                    ? `tsc_url_search_params_entries(${source.c})`
                 : source.c;
         if (source.ty.kind === "class") {
             const custom = this.emitCustomIterableArray(stmt.expression, source) ??
@@ -36648,8 +36652,10 @@ class Emitter {
                             ? T_STRING
                         : sourceType.kind === "set"
                             ? sourceType.elem
-                    : sourceType.kind === "map" && sourceType.key && sourceType.elem
-                        ? entryType(sourceType.elem, sourceType.key)
+                        : sourceType.kind === "map" && sourceType.key && sourceType.elem
+                            ? entryType(sourceType.elem, sourceType.key)
+                            : sourceType.kind === "urlsearchparams"
+                                ? entryType(T_STRING, T_STRING)
                         : sourceType.kind === "class"
                             ? T_VALUE
                         : null;

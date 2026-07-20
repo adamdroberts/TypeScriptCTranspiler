@@ -59,6 +59,15 @@ function* customValues(): Generator<number, string, number> {
     return "custom-done";
 }
 
+function* paramsValues(): Generator<string, string, string> {
+    const params = new URLSearchParams("a=1&b=two");
+    for (const entry of params) {
+        events.push("params:" + entry[0] + ":" + entry[1]);
+        yield entry[0];
+    }
+    return "params-done";
+}
+
 const n = numbers();
 console.log("n-created", events.join("|"));
 const n1: any = n.next(0);
@@ -87,3 +96,7 @@ console.log("map1", map1.done, map1.value, events.join("|"));
 const custom = customValues();
 const custom1: any = custom.next(0);
 console.log("custom1", custom1.done, custom1.value, events.join("|"));
+
+const params = paramsValues();
+const params1: any = params.next("");
+console.log("params1", params1.done, params1.value, events.join("|"));
