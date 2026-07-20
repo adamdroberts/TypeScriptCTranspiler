@@ -35688,6 +35688,8 @@ class Emitter {
                 ? sourceType.elem
                 : sourceType.kind === "string"
                     ? T_STRING
+                    : sourceType.kind === "set"
+                        ? sourceType.elem
                     : null;
             if (!elemType) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
@@ -36224,7 +36226,9 @@ class Emitter {
         const source = this.emitExpr(stmt.expression);
         const sourceArray = source.ty.kind === "string"
             ? `tsc_str_chars(${source.c})`
-            : source.c;
+            : source.ty.kind === "set"
+                ? `tsc_set_values(${source.c})`
+                : source.c;
         buf.open(`if (${envLocalName}->${info.arrayField} == NULL)`);
         buf.line(`${envLocalName}->${info.arrayField} = ${sourceArray};`);
         buf.line(`${envLocalName}->${info.indexField} = 0;`);
@@ -36626,6 +36630,8 @@ class Emitter {
                         ? sourceType.elem
                         : sourceType.kind === "string"
                             ? T_STRING
+                            : sourceType.kind === "set"
+                                ? sourceType.elem
                             : null;
                     if (!elemType) unsupported(node.expression, "lazy generator for-of currently supports arrays and strings");
                     const index = forOfInfos.length;

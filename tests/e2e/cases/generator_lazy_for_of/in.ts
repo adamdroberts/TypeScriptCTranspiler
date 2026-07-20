@@ -19,6 +19,15 @@ function* letters(): Generator<string, string, string> {
     return "letters-done";
 }
 
+function* setValues(): Generator<number, string, number> {
+    const values: Set<number> = new Set<number>([7, 8]);
+    for (const value of values) {
+        events.push("set:" + value);
+        yield value;
+    }
+    return "set-done";
+}
+
 const n = numbers();
 console.log("n-created", events.join("|"));
 const n1: any = n.next(0);
@@ -33,3 +42,9 @@ const l1: any = l.next("ignored");
 console.log("l1", l1.done, l1.value, events.join("|"));
 const l2: any = l.next("resume");
 console.log("l2", l2.done, l2.value, events.join("|"));
+
+const set = setValues();
+const set1: any = set.next(0);
+console.log("set1", set1.done, set1.value, events.join("|"));
+const set2: any = set.next(0);
+console.log("set2", set2.done, set2.value, events.join("|"));

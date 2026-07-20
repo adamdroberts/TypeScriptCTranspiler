@@ -127,6 +127,7 @@ This is the next item that most directly expands what programs can be written ag
   - Lazy generator `yield*` now carries the delegated iterator return value into bounded assignment and return expressions; delegated `throw`/`return` protocol overrides and broader result-flow graphs remain deferred.
   - Lazy generator suspension now survives direct and aliased generator function-value calls through closure adapters; broader iterator-object adaptation and dynamic callable generator discovery remain deferred.
   - Lazy generators now cover bounded array- and string-backed `for...of` loops with suspension-safe iterator positions plus `break`/`continue`; `for...in`, async iteration, and broader iterator-source lowering remain deferred.
+  - The bounded lazy `for...of` subset now also covers typed `Set` sources; typed `Map`, custom iterator objects, async iteration, and broader iterator-source lowering remain deferred.
   - Lazy generators now cover bounded `for...in` loops over typed arrays, strings, and dynamic values with suspension-safe key positions; async iteration and broader enumerable-source lowering remain deferred.
 
 - **Phase 9 — `Proxy` + `Reflect`**

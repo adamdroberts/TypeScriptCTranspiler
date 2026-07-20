@@ -4,3 +4,5 @@ n2 false 3 number:1|number:2|number:3
 n3 true numbers-done number:1|number:2|number:3
 l1 false a number:1|number:2|number:3|letter:a
 l2 true letters-done number:1|number:2|number:3|letter:a
+set1 false 7 number:1|number:2|number:3|letter:a|set:7
+set2 false 8 number:1|number:2|number:3|letter:a|set:7|set:8
