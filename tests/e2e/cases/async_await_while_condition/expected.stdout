@@ -22,6 +22,8 @@ await-while-return-await-control-fallthrough body-await-control-control-fallthro
 await-while-return-await-nested-false body-await-nested-fallthrough
 await-while-return-await-alias-false body-await-alias-alias-fallthrough
 await-while-throw-await-alias-false body-throw-await-alias-fallthrough
+await-while-return-await-multiple-false body-loop-multiple-multiple-fallthrough
+await-while-throw-await-multiple-false body-loop-multiple-fallthrough
 await-while-return-await-assigned-alias-false body-return-assigned-alias-fallthrough
 await-while-throw-await-assigned-alias-false body-throw-assigned-alias-fallthrough
 await-while-return-await-alias-expression-false body-return-alias-expression-fallthrough
@@ -78,6 +80,7 @@ await-while-conditional-false conditional-no
 await-while-nullish-true nullish-yes
 await-while-nullish-false nullish-no
 await-while-method-false method-loop-no
+await-while-method-multiple-false method-loop-multiple-no
 await-while-value-false value-loop-no
 await-direct-multiple-locals direct-multiple-source
 await-direct-assigned-multiple-locals direct-assigned-multiple-assigned-source
@@ -167,8 +170,11 @@ await-while-value-true value-loop-yes
 await-multiple-declarators multiple-await-first-second
 await-method-multiple-declarators method-first-second
 await-arrow-multiple-declarators arrow-first-second
+await-while-return-await-multiple-true body-loop-multiple-first-second
+await-while-throw-await-multiple-true body-loop-multiple-first-second
 await-while-three-logical-true three-logical-yes
 await-while-three-logical-false three-logical-no
+await-while-method-multiple-true method-loop-first-second
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-while-five-logical-true five-logical-yes

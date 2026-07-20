@@ -222,6 +222,22 @@ async function chooseLoopThrowAwaitAlias(condition: boolean): Promise<string> {
     return "body-throw-await-alias-fallthrough";
 }
 
+async function chooseLoopReturnAwaitMultiple(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const first = await laterBodyValue(prefix + "-first"), second = await laterBodyValue(first + "-second");
+        return second;
+    }
+    return prefix + "-multiple-fallthrough";
+}
+
+async function chooseLoopThrowAwaitMultiple(condition: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const first = await laterBodyValue("body-loop-multiple-first"), reason = await laterBodyValue(first + "-second");
+        throw reason;
+    }
+    return "body-loop-multiple-fallthrough";
+}
+
 async function chooseLoopReturnAwaitAssignedAlias(condition: boolean, prefix: string): Promise<string> {
     while (await (condition ? laterTrue() : laterFalse())) {
         let source = prefix + "-assigned-alias", value: string;
@@ -882,6 +898,14 @@ class LoopChooser {
         return this.prefix + "no";
     }
 
+    async pickMultiple(flag: boolean): Promise<string> {
+        while (await (flag ? laterTrue() : laterFalse())) {
+            const first = await laterBodyValue(this.prefix + "first"), second = await laterBodyValue(first + "-second");
+            return second;
+        }
+        return this.prefix + "multiple-no";
+    }
+
     async throwWithLocals(): Promise<string> {
         const source = this.prefix + "throw-source", reason = await laterBodyValue(source);
         throw reason;
@@ -951,6 +975,10 @@ chooseLoopReturnAwaitAlias(true, "body-await-alias").then((value) => console.log
 chooseLoopReturnAwaitAlias(false, "body-await-alias").then((value) => console.log("await-while-return-await-alias-false", value));
 chooseLoopThrowAwaitAlias(true).catch((reason) => console.log("await-while-throw-await-alias-true", reason));
 chooseLoopThrowAwaitAlias(false).then((value) => console.log("await-while-throw-await-alias-false", value));
+chooseLoopReturnAwaitMultiple(true, "body-loop-multiple").then((value) => console.log("await-while-return-await-multiple-true", value));
+chooseLoopReturnAwaitMultiple(false, "body-loop-multiple").then((value) => console.log("await-while-return-await-multiple-false", value));
+chooseLoopThrowAwaitMultiple(true).catch((reason) => console.log("await-while-throw-await-multiple-true", reason));
+chooseLoopThrowAwaitMultiple(false).then((value) => console.log("await-while-throw-await-multiple-false", value));
 chooseLoopReturnAwaitAssignedAlias(true, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-true", value));
 chooseLoopReturnAwaitAssignedAlias(false, "body-return").then((value) => console.log("await-while-return-await-assigned-alias-false", value));
 chooseLoopThrowAwaitAssignedAlias(true).catch((reason) => console.log("await-while-throw-await-assigned-alias-true", reason));
@@ -1077,6 +1105,8 @@ chooseLoopNullableNullish(true).then((value) => console.log("await-while-nullabl
 chooseLoopNullableNullish(false).then((value) => console.log("await-while-nullable-nullish-false", value));
 new LoopChooser("method-loop-").pick(true).then((value) => console.log("await-while-method-true", value));
 new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-while-method-false", value));
+new LoopChooser("method-loop-").pickMultiple(true).then((value) => console.log("await-while-method-multiple-true", value));
+new LoopChooser("method-loop-").pickMultiple(false).then((value) => console.log("await-while-method-multiple-false", value));
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
 chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));

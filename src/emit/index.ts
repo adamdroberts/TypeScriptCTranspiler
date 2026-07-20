@@ -289,6 +289,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
     bodyPostAwaitStatements: readonly ts.Statement[];
     bodyPreludeStatements: readonly ts.Statement[];
+    bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     params: AsyncAwaitContinuationParam[];
@@ -32922,6 +32923,7 @@ class Emitter {
         condition: ts.Expression,
         awaitExpressions: readonly ts.AwaitExpression[],
         loopBody: readonly ts.Statement[],
+        loopBodyBlock: ts.Block | null,
         fallthroughExpr: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
@@ -32929,6 +32931,16 @@ class Emitter {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
         if ((!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction)) || !bodyAction.expression) return false;
+        const bodyLeadingContinuation = loopBody.length > 1
+            ? this.asyncAwaitLeadingReturnContinuation(
+                loopBodyBlock ?? ts.factory.createBlock([...loopBody], true),
+                parameters,
+                thisValue,
+            )
+            : null;
+        const bodyLeadingChain = bodyLeadingContinuation && bodyLeadingContinuation.steps.length > 1
+            ? bodyLeadingContinuation
+            : null;
         let bodyAwaitExpr: ts.AwaitExpression | null = null;
         let bodyReturnExpr: ts.Expression | null = null;
         let bodyAwaitedAliasSymbols: readonly ts.Symbol[] = [];
@@ -32975,7 +32987,12 @@ class Emitter {
             return found;
         };
         const directBodyAwait = this.unwrapTransparentExpression(bodyAction.expression);
-        if (ts.isAwaitExpression(directBodyAwait)) {
+        if (bodyLeadingChain) {
+            bodyAwaitExpr = bodyLeadingChain.steps[0]!.awaitExpr;
+            bodyReturnExpr = bodyAction.expression;
+            bodyPreludeStatements = bodyLeadingChain.preludeStatements;
+            bodyRejectResult = !!bodyLeadingChain.terminalThrowStatement;
+        } else if (ts.isAwaitExpression(directBodyAwait)) {
             const nestedBodyAwait = this.unwrapTransparentExpression(directBodyAwait.expression);
             bodyAwaitExpr = ts.isAwaitExpression(nestedBodyAwait)
                 ? nestedBodyAwait
@@ -33179,6 +33196,9 @@ class Emitter {
         const continuationParams = this.asyncAwaitContinuationParameters(parameters);
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         for (const parameter of continuationParams) paramsBySymbol.set(parameter.symbol, parameter);
+        if (bodyLeadingChain) {
+            for (const parameter of bodyLeadingChain.params) paramsBySymbol.set(parameter.symbol, parameter);
+        }
         const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         let usesThis = false;
         let ok = true;
@@ -33214,6 +33234,10 @@ class Emitter {
         for (const statement of bodyPreludeStatements) visitReferences(statement);
         for (const statement of bodyPostAwaitStatements) visitReferences(statement);
         visitReferences(bodyAwaitExpr);
+        if (bodyLeadingChain) {
+            for (const parameter of bodyLeadingChain.params) referenced.set(parameter.symbol, parameter);
+            if (bodyLeadingChain.thisValue) usesThis = true;
+        }
         visitReferences(fallthroughExpr);
         if (!ok) return false;
 
@@ -33226,22 +33250,55 @@ class Emitter {
             bodyAwaitedAliasSymbols,
             bodyPostAwaitStatements,
             bodyPreludeStatements,
+            bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyRejectResult,
             fallthroughExpr,
             params: capturedParams,
             thisValue: usesThis ? thisValue : null,
         };
-        const bodyAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
-            bodyPromiseType,
-            bodyAwaitedType,
-            bodyAwaitExpr,
-            continuation.bodyReturnExpr,
-            continuation.params,
-            continuation.thisValue,
-            continuation.bodyRejectResult,
-            continuation.bodyAwaitedAliasSymbols,
-            continuation.bodyPostAwaitStatements,
-        );
+        let bodyAdapter: string;
+        if (continuation.bodyLeadingContinuation) {
+            const bodyPromiseTypes = continuation.bodyLeadingContinuation.steps.map((step) => this.prepareType(mapTsType(
+                step.awaitExpr.expression,
+                this.checker.getTypeAtLocation(step.awaitExpr.expression),
+                this.checker,
+            )));
+            const bodyAwaitedTypes = continuation.bodyLeadingContinuation.steps.map((step) => this.prepareType(mapTsType(
+                step.awaitExpr,
+                this.checker.getTypeAtLocation(step.awaitExpr),
+                this.checker,
+            )));
+            if (bodyPromiseTypes.some((type) => type.kind !== "promise") ||
+                bodyAwaitedTypes.some((type, index) =>
+                    type.kind === "never" || (type.kind === "void" && continuation.bodyLeadingContinuation!.usesAwaitedLocals[index]))) {
+                return false;
+            }
+            bodyAdapter = this.ensureAsyncAwaitLeadingReturnContinuationAdapter(
+                continuation.bodyLeadingContinuation.steps,
+                continuation.bodyLeadingContinuation.betweenStatements,
+                bodyPromiseTypes,
+                bodyPromiseTypes.map(() => []),
+                bodyAwaitedTypes,
+                continuation.bodyLeadingContinuation.returnExpr,
+                continuation.bodyLeadingContinuation.terminalThrowExpr,
+                continuation.bodyLeadingContinuation.terminalThrowStatement,
+                continuation.bodyLeadingContinuation.returnAwaited,
+                continuation.params,
+                continuation.thisValue,
+            );
+        } else {
+            bodyAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                bodyPromiseType,
+                bodyAwaitedType,
+                bodyAwaitExpr,
+                continuation.bodyReturnExpr,
+                continuation.params,
+                continuation.thisValue,
+                continuation.bodyRejectResult,
+                continuation.bodyAwaitedAliasSymbols,
+                continuation.bodyPostAwaitStatements,
+            );
+        }
         const adapter = this.ensureAsyncAwaitLoopConditionReturnAwaitContinuationAdapter(
             conditionPromiseType,
             conditionAwaitedType,
@@ -33422,6 +33479,7 @@ class Emitter {
             condition,
             awaitExpressions,
             loopBody,
+            ts.isBlock(loopStatement) ? loopStatement : null,
             fallthrough.expression,
             parameters,
             thisValue,
