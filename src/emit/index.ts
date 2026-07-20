@@ -112,6 +112,7 @@ interface LazyCompoundResumeSlot {
 
 interface LazyGeneratorCatchHandler {
     catchPreludeStatements: readonly ts.Statement[];
+    catchStatement: ts.Statement | null;
     returnStatement: ts.ReturnStatement | null;
     throwStatement: ts.ThrowStatement | null;
     catchClause: ts.CatchClause;
@@ -35830,6 +35831,8 @@ class Emitter {
         if (!last) return null;
         const returnStatement = ts.isReturnStatement(last) && last.expression ? last : null;
         const throwCandidate = ts.isThrowStatement(last) && last.expression ? last : null;
+        const conditionalCandidate = !stmt.finallyBlock && !returnStatement && !throwCandidate &&
+            ts.isIfStatement(last) && last.elseStatement ? last : null;
         let throwStatement: ts.ThrowStatement | null = null;
         if (throwCandidate) {
             const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
@@ -35858,7 +35861,15 @@ class Emitter {
                     })
                 )))
         ) return null;
-        if (returnStatement) {
+        let catchStatement: ts.Statement | null = null;
+        if (conditionalCandidate) {
+            const catchDecl = stmt.catchClause.variableDeclaration;
+            const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
+                ? this.symbolForIdentifier(catchDecl.name)
+                : null;
+            if (!this.isSimpleLazyCatchTerminalStatement(conditionalCandidate, catchSymbol ?? null, catchPreludeSymbols)) return null;
+            catchStatement = conditionalCandidate;
+        } else if (returnStatement) {
             const expression = this.unwrapTransparentExpression(returnStatement.expression!);
             if (!this.isSimpleLazyMultiYieldLiteral(expression)) {
                 const catchDecl = stmt.catchClause.variableDeclaration;
@@ -35875,8 +35886,29 @@ class Emitter {
             if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             throwStatement = throwCandidate;
         }
-        if (!returnStatement && !throwStatement) return null;
-        return { catchPreludeStatements, returnStatement, throwStatement, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+        if (!returnStatement && !throwStatement && !catchStatement) return null;
+        return { catchPreludeStatements, catchStatement, returnStatement, throwStatement, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+    }
+
+    private isSimpleLazyCatchTerminalStatement(
+        stmt: ts.Statement,
+        catchSymbol: ts.Symbol | null,
+        catchPreludeSymbols: ReadonlySet<ts.Symbol>,
+    ): boolean {
+        if (ts.isIfStatement(stmt)) {
+            if (!stmt.elseStatement || this.nodeContainsYield(stmt.expression)) return false;
+            return this.isSimpleLazyCatchTerminalStatement(stmt.thenStatement, catchSymbol, catchPreludeSymbols) &&
+                this.isSimpleLazyCatchTerminalStatement(stmt.elseStatement, catchSymbol, catchPreludeSymbols);
+        }
+        if (ts.isBlock(stmt)) {
+            return stmt.statements.length === 1 &&
+                this.isSimpleLazyCatchTerminalStatement(stmt.statements[0]!, catchSymbol, catchPreludeSymbols);
+        }
+        const expression = ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt) ? stmt.expression : null;
+        if (!expression || this.nodeContainsYield(expression)) return false;
+        const unwrapped = this.unwrapTransparentExpression(expression);
+        return this.isSimpleLazyMultiYieldLiteral(unwrapped) ||
+            (!!catchSymbol && this.isSimpleLazyCatchReturnExpression(unwrapped, catchSymbol, catchPreludeSymbols));
     }
 
     private isSimpleLazyCatchReturnExpression(
@@ -36585,7 +36617,9 @@ class Emitter {
                     for (const child of handler.catchPreludeStatements) {
                         this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                     }
-                    if (handler.finallyStatements.length > 0) {
+                    if (handler.catchStatement) {
+                        this.emitLazyGeneratorStmt(buf, handler.catchStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                    } else if (handler.finallyStatements.length > 0) {
                         if (handler.returnStatement) {
                             const returned = this.emitExpr(handler.returnStatement.expression!);
                             buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);

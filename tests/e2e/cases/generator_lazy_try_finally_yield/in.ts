@@ -283,3 +283,23 @@ try {
 } catch (error: any) {
     console.log("caught-composed-rethrow:", caughtComposedRethrowFirst.done, caughtComposedRethrowFirst.value, error, catchPreludeEvents.join("|"));
 }
+
+function* caughtConditional(): Generator<string, string, string> {
+    try {
+        yield "conditional-catch-pause";
+    } catch (error: any) {
+        if (error === "special") return "special-recovered";
+        else return "fallback-recovered";
+    }
+    return "normal";
+}
+
+const caughtConditionalSpecial = caughtConditional();
+const caughtConditionalSpecialFirst: any = caughtConditionalSpecial.next();
+const caughtConditionalSpecialDone: any = caughtConditionalSpecial.throw("special");
+console.log("caught-conditional-special:", caughtConditionalSpecialFirst.done, caughtConditionalSpecialFirst.value, caughtConditionalSpecialDone.done, caughtConditionalSpecialDone.value);
+
+const caughtConditionalFallback = caughtConditional();
+const caughtConditionalFallbackFirst: any = caughtConditionalFallback.next();
+const caughtConditionalFallbackDone: any = caughtConditionalFallback.throw("other");
+console.log("caught-conditional-fallback:", caughtConditionalFallbackFirst.done, caughtConditionalFallbackFirst.value, caughtConditionalFallbackDone.done, caughtConditionalFallbackDone.value);

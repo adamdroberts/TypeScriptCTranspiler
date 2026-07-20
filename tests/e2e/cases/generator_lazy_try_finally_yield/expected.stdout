@@ -18,3 +18,5 @@ caught-rethrow: false rethrow-pause catch-rethrow before|error:handled-prelude|r
 caught-direct-rethrow: false direct-rethrow-pause original-direct-rethrow
 caught-direct-rethrow-finally: false direct-rethrow-finally-pause original-direct-rethrow-finally before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally
 caught-composed-rethrow: false composed-rethrow-pause recovered:original-composed-rethrow before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally|composed-rethrow-finally
+caught-conditional-special: false conditional-catch-pause true special-recovered
+caught-conditional-fallback: false conditional-catch-pause true fallback-recovered
