@@ -74,6 +74,12 @@ await-method-sync-iterator-control-prelude-true method-sync-iterator-control-0
 await-method-sync-iterator-control-prelude-false method-sync-iterator-control-fallthrough
 await-value-sync-iterator-control-prelude-true value-sync-iterator-control-0
 await-value-sync-iterator-control-prelude-false value-sync-iterator-control-fallthrough
+await-while-sync-control-throw-prelude-true sync-control-throw-reason
+await-while-sync-control-throw-prelude-false sync-control-throw-fallthrough
+await-method-sync-control-throw-prelude-true method-sync-control-throw-reason
+await-method-sync-control-throw-prelude-false method-sync-control-throw-fallthrough
+await-value-sync-control-throw-prelude-true value-sync-control-throw-reason
+await-value-sync-control-throw-prelude-false value-sync-control-throw-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes
