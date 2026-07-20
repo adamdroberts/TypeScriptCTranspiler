@@ -1126,6 +1126,20 @@ async function chooseLoopSynchronousCaughtPreludeBeforeThrow(flag: boolean): Pro
     return "sync-caught-before-throw-fallthrough";
 }
 
+async function chooseLoopSynchronousCaughtFinallyBeforeThrow(flag: boolean): Promise<string> {
+    while (await Promise.resolve(flag)) {
+        try {
+            throw "sync-caught-finally-before-throw-source";
+        } catch (reason) {
+            void reason;
+        } finally {
+            void "sync-caught-finally-before-throw-cleanup";
+        }
+        throw "sync-caught-finally-before-throw-body";
+    }
+    return "sync-caught-finally-before-throw-fallthrough";
+}
+
 async function chooseLoopSynchronousCaughtFinallyPrelude(flag: boolean): Promise<string> {
     while (await Promise.resolve(flag)) {
         try {
@@ -1367,6 +1381,20 @@ class LoopChooser {
         return "method-sync-caught-before-throw-fallthrough";
     }
 
+    async pickSynchronousCaughtFinallyBeforeThrow(flag: boolean): Promise<string> {
+        while (await Promise.resolve(flag)) {
+            try {
+                throw "method-sync-caught-finally-before-throw-source";
+            } catch (reason) {
+                void reason;
+            } finally {
+                void "method-sync-caught-finally-before-throw-cleanup";
+            }
+            throw "method-sync-caught-finally-before-throw-body";
+        }
+        return "method-sync-caught-finally-before-throw-fallthrough";
+    }
+
     async pickSynchronousCaughtFinallyPrelude(flag: boolean): Promise<string> {
         while (await Promise.resolve(flag)) {
             try {
@@ -1567,6 +1595,20 @@ const chooseLoopSynchronousCaughtPreludeBeforeThrowValue = async (flag: boolean)
         throw "value-sync-caught-before-throw-body";
     }
     return "value-sync-caught-before-throw-fallthrough";
+};
+
+const chooseLoopSynchronousCaughtFinallyBeforeThrowValue = async (flag: boolean): Promise<string> => {
+    while (await Promise.resolve(flag)) {
+        try {
+            throw "value-sync-caught-finally-before-throw-source";
+        } catch (reason) {
+            void reason;
+        } finally {
+            void "value-sync-caught-finally-before-throw-cleanup";
+        }
+        throw "value-sync-caught-finally-before-throw-body";
+    }
+    return "value-sync-caught-finally-before-throw-fallthrough";
 };
 
 const chooseLoopSynchronousCaughtFinallyPreludeValue = async (flag: boolean): Promise<string> => {
@@ -1904,6 +1946,12 @@ new LoopChooser("method-").pickSynchronousCaughtPreludeBeforeThrow(true).catch((
 new LoopChooser("method-").pickSynchronousCaughtPreludeBeforeThrow(false).then((value) => console.log("await-method-sync-caught-before-throw-false", value));
 chooseLoopSynchronousCaughtPreludeBeforeThrowValue(true).catch((reason) => console.log("await-value-sync-caught-before-throw-true", reason));
 chooseLoopSynchronousCaughtPreludeBeforeThrowValue(false).then((value) => console.log("await-value-sync-caught-before-throw-false", value));
+chooseLoopSynchronousCaughtFinallyBeforeThrow(true).catch((reason) => console.log("await-while-sync-caught-finally-before-throw-true", reason));
+chooseLoopSynchronousCaughtFinallyBeforeThrow(false).then((value) => console.log("await-while-sync-caught-finally-before-throw-false", value));
+new LoopChooser("method-").pickSynchronousCaughtFinallyBeforeThrow(true).catch((reason) => console.log("await-method-sync-caught-finally-before-throw-true", reason));
+new LoopChooser("method-").pickSynchronousCaughtFinallyBeforeThrow(false).then((value) => console.log("await-method-sync-caught-finally-before-throw-false", value));
+chooseLoopSynchronousCaughtFinallyBeforeThrowValue(true).catch((reason) => console.log("await-value-sync-caught-finally-before-throw-true", reason));
+chooseLoopSynchronousCaughtFinallyBeforeThrowValue(false).then((value) => console.log("await-value-sync-caught-finally-before-throw-false", value));
 chooseLoopSynchronousCaughtFinallyPrelude(true).then((value) => console.log("await-while-sync-caught-finally-prelude-true", value));
 chooseLoopSynchronousCaughtFinallyPrelude(false).then((value) => console.log("await-while-sync-caught-finally-prelude-false", value));
 new LoopChooser("method-").pickSynchronousCaughtFinallyPrelude(true).then((value) => console.log("await-method-sync-caught-finally-prelude-true", value));
