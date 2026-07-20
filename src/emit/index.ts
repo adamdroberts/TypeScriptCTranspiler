@@ -35829,11 +35829,24 @@ class Emitter {
         if (!last || !ts.isReturnStatement(last) || !last.expression ||
             this.nodeContainsYield(last.expression)) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
+        const catchPreludeSymbols = new Set<ts.Symbol>();
         if (
             catchPreludeStatements.some((child) =>
                 this.nodeContainsYield(child) ||
                 this.lazyGeneratorContainsAbruptControlFlow(child) ||
-                !this.isValidLazyGeneratorStatement(child))
+                !this.isValidLazyGeneratorStatement(child) ||
+                (ts.isVariableStatement(child) && (
+                    !(child.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) ||
+                    child.declarationList.declarations.some((declaration) => {
+                        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return true;
+                        const initializer = this.unwrapTransparentExpression(declaration.initializer);
+                        const isLiteral = ts.isStringLiteral(initializer) || ts.isNoSubstitutionTemplateLiteral(initializer);
+                        const symbol = this.symbolForIdentifier(declaration.name);
+                        if (!isLiteral || !symbol) return true;
+                        catchPreludeSymbols.add(symbol);
+                        return false;
+                    })
+                )))
         ) return null;
         const expression = this.unwrapTransparentExpression(last.expression);
         if (this.isSimpleLazyMultiYieldLiteral(expression)) {
@@ -35842,13 +35855,20 @@ class Emitter {
         const catchDecl = stmt.catchClause.variableDeclaration;
         if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
         const catchSymbol = this.symbolForIdentifier(catchDecl.name);
-        if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol)) return null;
+        if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
         return { catchPreludeStatements, returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
     }
 
-    private isSimpleLazyCatchReturnExpression(expr: ts.Expression, catchSymbol: ts.Symbol): boolean {
+    private isSimpleLazyCatchReturnExpression(
+        expr: ts.Expression,
+        catchSymbol: ts.Symbol,
+        catchPreludeSymbols: ReadonlySet<ts.Symbol> = new Set(),
+    ): boolean {
         const expression = this.unwrapTransparentExpression(expr);
-        if (ts.isIdentifier(expression)) return this.symbolForIdentifier(expression) === catchSymbol;
+        if (ts.isIdentifier(expression)) {
+            const symbol = this.symbolForIdentifier(expression);
+            return symbol === catchSymbol || (!!symbol && catchPreludeSymbols.has(symbol));
+        }
         if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.PlusToken) return false;
         const left = this.unwrapTransparentExpression(expression.left);
         const right = this.unwrapTransparentExpression(expression.right);
@@ -35856,7 +35876,11 @@ class Emitter {
             ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
         const isCatch = (node: ts.Expression): boolean =>
             ts.isIdentifier(node) && this.symbolForIdentifier(node) === catchSymbol;
-        return (isCatch(left) && isStringLiteral(right)) || (isStringLiteral(left) && isCatch(right));
+        const isPrelude = (node: ts.Expression): boolean =>
+            ts.isIdentifier(node) && !!this.symbolForIdentifier(node) && catchPreludeSymbols.has(this.symbolForIdentifier(node)!);
+        return (isCatch(left) && (isStringLiteral(right) || isPrelude(right))) ||
+            (isStringLiteral(left) && isCatch(right)) ||
+            (isPrelude(left) && isCatch(right));
     }
 
     private lazyGeneratorTryTerminalReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {
@@ -37009,7 +37033,10 @@ class Emitter {
         if (fn.body && ts.isBlock(fn.body)) {
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
-                    if (ts.isCatchClause(node.parent)) return;
+                    for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent) {
+                        if (ts.isCatchClause(parent)) return;
+                        if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) break;
+                    }
                     if (!ts.isIdentifier(node.name)) unsupported(node, "lazy generator locals must be identifiers");
                     const symbol = this.symbolForIdentifier(node.name);
                     if (!symbol) unsupported(node.name, "could not resolve lazy generator local symbol");

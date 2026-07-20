@@ -193,3 +193,18 @@ const caughtPreludeResult = caughtPrelude();
 const caughtPreludeFirst: any = caughtPreludeResult.next();
 const caughtPreludeDone: any = caughtPreludeResult.throw("handled-prelude");
 console.log("caught-prelude:", caughtPreludeFirst.done, caughtPreludeFirst.value, caughtPreludeDone.done, caughtPreludeDone.value, catchPreludeEvents.join("|"));
+
+function* caughtPreludeAlias(): Generator<string, string, string> {
+    try {
+        yield "catch-alias-pause";
+    } catch (error: any) {
+        const prefix = "alias:";
+        return prefix + error;
+    }
+    return "normal";
+}
+
+const caughtPreludeAliasResult = caughtPreludeAlias();
+const caughtPreludeAliasFirst: any = caughtPreludeAliasResult.next();
+const caughtPreludeAliasDone: any = caughtPreludeAliasResult.throw("handled-alias");
+console.log("caught-prelude-alias:", caughtPreludeAliasFirst.done, caughtPreludeAliasFirst.value, caughtPreludeAliasDone.done, caughtPreludeAliasDone.value);
