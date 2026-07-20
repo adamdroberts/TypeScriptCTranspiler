@@ -3378,6 +3378,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | while outer-continue bodies preserve await-free if preludes before repeated condition and final await |
 | `async_await_while_condition` | while outer-continue bodies preserve await-free try/finally cleanup before repeated condition and final await |
 | `async_await_while_condition` | while outer-continue bodies preserve await-free try/catch mutations before repeated condition and final await |
+| `async_await_while_condition` | while outer-continue bodies preserve await-free try/catch/finally routing before repeated condition and final await |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
 | `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations remain scoped around the first conditional await source |
 | `async_await_conditional_branch_assigned_prelude` | branch-local let declarations are assigned before the first conditional await source |
