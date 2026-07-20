@@ -38,6 +38,10 @@ function* equalityLeaves(): Generator<number, boolean, number> {
     return (yield 11) === (yield 12);
 }
 
+function* exponentLeaves(): Generator<number, number, number> {
+    return (yield 13) ** (yield 14);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -99,3 +103,8 @@ const equalityFirst: any = equalityIter.next();
 const equalitySecond: any = equalityIter.next(4);
 const equalityDone: any = equalityIter.next(4);
 console.log("equality", equalityFirst.value, equalitySecond.value, equalityDone.done, equalityDone.value);
+const exponentIter = exponentLeaves();
+const exponentFirst: any = exponentIter.next();
+const exponentSecond: any = exponentIter.next(2);
+const exponentDone: any = exponentIter.next(3);
+console.log("exponent", exponentFirst.value, exponentSecond.value, exponentDone.done, exponentDone.value);
