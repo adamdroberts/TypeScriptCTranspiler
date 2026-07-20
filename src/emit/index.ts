@@ -114,6 +114,7 @@ interface LazyGeneratorCatchHandler {
     returnStatement: ts.ReturnStatement;
     catchClause: ts.CatchClause;
     finallyStatements: readonly ts.Statement[];
+    finallyThrow: ts.ThrowStatement | null;
 }
 
 interface LazyForOfInfo {
@@ -35802,10 +35803,16 @@ class Emitter {
         if (!stmt.catchClause) return null;
         if (stmt.catchClause.variableDeclaration && !ts.isIdentifier(stmt.catchClause.variableDeclaration.name)) return null;
         const finallyStatements = stmt.finallyBlock?.statements ?? [];
+        const finallyTail = finallyStatements[finallyStatements.length - 1];
+        const finallyThrow = finallyTail && ts.isThrowStatement(finallyTail) && finallyTail.expression &&
+            this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(finallyTail.expression))
+            ? finallyTail
+            : null;
+        const finallyBody = finallyThrow ? finallyStatements.slice(0, -1) : finallyStatements;
         if (
-            finallyStatements.some((child) => this.nodeContainsYield(child)) ||
-            (!!stmt.finallyBlock && this.lazyGeneratorContainsAbruptControlFlow(stmt.finallyBlock)) ||
-            !finallyStatements.every((child) => this.isValidLazyGeneratorStatement(child))
+            finallyBody.some((child) => this.nodeContainsYield(child)) ||
+            finallyBody.some((child) => this.lazyGeneratorContainsAbruptControlFlow(child)) ||
+            !finallyBody.every((child) => this.isValidLazyGeneratorStatement(child))
         ) return null;
         const tryStatements = stmt.tryBlock.statements;
         if (!tryStatements.some((child) => this.nodeContainsYield(child)) ||
@@ -35818,13 +35825,13 @@ class Emitter {
         if (catchStatements.length !== 1) return null;
         const expression = this.unwrapTransparentExpression(last.expression);
         if (this.isSimpleLazyMultiYieldLiteral(expression)) {
-            return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements };
+            return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow };
         }
         const catchDecl = stmt.catchClause.variableDeclaration;
         if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
         const catchSymbol = this.symbolForIdentifier(catchDecl.name);
         if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol)) return null;
-        return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements };
+        return { returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow };
     }
 
     private isSimpleLazyCatchReturnExpression(expr: ts.Expression, catchSymbol: ts.Symbol): boolean {
@@ -36541,6 +36548,17 @@ class Emitter {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
         }
+        const finallyThrow = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .map((handler) => handler.finallyThrow)
+            .find((throwStatement): throwStatement is ts.ThrowStatement => !!throwStatement);
+        if (finallyThrow) {
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            this.emitThrow(buf, finallyThrow);
+            buf.line("return;");
+            buf.close();
+            return;
+        }
         buf.line("*state = -1;");
     buf.line("*done = true;");
         buf.line("return;");
@@ -36667,6 +36685,12 @@ class Emitter {
             }
             for (const child of catchReturn.finallyStatements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+            if (catchReturn.finallyThrow) {
+                buf.line("*state = -1;");
+                buf.line("*done = true;");
+                this.emitThrow(buf, catchReturn.finallyThrow);
+                buf.line("return;");
             }
             buf.close();
             return;

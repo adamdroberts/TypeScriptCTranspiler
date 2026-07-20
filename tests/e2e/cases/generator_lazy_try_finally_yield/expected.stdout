@@ -8,3 +8,5 @@ caught-used-bound: false used-catch-pause true handled-used-bound
 caught-composed-bound: false composed-catch-pause true caught:handled-composed-bound
 caught-finally: false catch-finally-pause true finally-caught:handled-finally finally
 caught-finally-normal: false catch-finally-pause true normal finally|finally
+caught-finally-throw-override: false override-pause finally-override finally|finally|override-finally
+caught-finally-normal-override: false override-pause finally-override finally|finally|override-finally|override-finally

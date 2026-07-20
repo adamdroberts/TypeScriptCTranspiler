@@ -128,3 +128,30 @@ const caughtFinallyNormal = caughtFinallyThrow();
 const caughtFinallyNormalFirst: any = caughtFinallyNormal.next();
 const caughtFinallyNormalDone: any = caughtFinallyNormal.next("resume");
 console.log("caught-finally-normal:", caughtFinallyNormalFirst.done, caughtFinallyNormalFirst.value, caughtFinallyNormalDone.done, caughtFinallyNormalDone.value, caughtFinallyEvents.join("|"));
+
+function* caughtFinallyOverride(): Generator<string, string, string> {
+    try {
+        yield "override-pause";
+    } catch {
+        return "caught";
+    } finally {
+        caughtFinallyEvents.push("override-finally");
+        throw "finally-override";
+    }
+}
+
+const caughtFinallyOverrideThrow = caughtFinallyOverride();
+const caughtFinallyOverrideThrowFirst: any = caughtFinallyOverrideThrow.next();
+try {
+    caughtFinallyOverrideThrow.throw("handled-override");
+} catch (error: any) {
+    console.log("caught-finally-throw-override:", caughtFinallyOverrideThrowFirst.done, caughtFinallyOverrideThrowFirst.value, error, caughtFinallyEvents.join("|"));
+}
+
+const caughtFinallyOverrideNormal = caughtFinallyOverride();
+const caughtFinallyOverrideNormalFirst: any = caughtFinallyOverrideNormal.next();
+try {
+    caughtFinallyOverrideNormal.next("resume");
+} catch (error: any) {
+    console.log("caught-finally-normal-override:", caughtFinallyOverrideNormalFirst.done, caughtFinallyOverrideNormalFirst.value, error, caughtFinallyEvents.join("|"));
+}
