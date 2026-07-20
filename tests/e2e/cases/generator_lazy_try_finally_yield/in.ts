@@ -264,3 +264,22 @@ try {
 } catch (error: any) {
     console.log("caught-direct-rethrow-finally:", caughtDirectRethrowFinallyFirst.done, caughtDirectRethrowFinallyFirst.value, error, catchPreludeEvents.join("|"));
 }
+
+function* caughtComposedRethrow(): Generator<string, string, string> {
+    try {
+        yield "composed-rethrow-pause";
+    } catch (error: any) {
+        throw "recovered:" + error;
+    } finally {
+        catchPreludeEvents.push("composed-rethrow-finally");
+    }
+    return "normal";
+}
+
+const caughtComposedRethrowResult = caughtComposedRethrow();
+const caughtComposedRethrowFirst: any = caughtComposedRethrowResult.next();
+try {
+    caughtComposedRethrowResult.throw("original-composed-rethrow");
+} catch (error: any) {
+    console.log("caught-composed-rethrow:", caughtComposedRethrowFirst.done, caughtComposedRethrowFirst.value, error, catchPreludeEvents.join("|"));
+}

@@ -35829,20 +35829,14 @@ class Emitter {
         const last = catchStatements[catchStatements.length - 1];
         if (!last) return null;
         const returnStatement = ts.isReturnStatement(last) && last.expression ? last : null;
+        const throwCandidate = ts.isThrowStatement(last) && last.expression ? last : null;
         let throwStatement: ts.ThrowStatement | null = null;
-        if (ts.isThrowStatement(last) && last.expression) {
-            const expression = this.unwrapTransparentExpression(last.expression);
+        if (throwCandidate) {
+            const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
             if (this.isSimpleLazyMultiYieldLiteral(expression)) {
-                throwStatement = last;
-            } else if (ts.isIdentifier(expression)) {
-                const catchDecl = stmt.catchClause.variableDeclaration;
-                const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
-                    ? this.symbolForIdentifier(catchDecl.name)
-                    : null;
-                if (catchSymbol && this.symbolForIdentifier(expression) === catchSymbol) throwStatement = last;
+                throwStatement = throwCandidate;
             }
         }
-        if (!returnStatement && !throwStatement) return null;
         if (returnStatement && this.nodeContainsYield(returnStatement.expression!)) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
         const catchPreludeSymbols = new Set<ts.Symbol>();
@@ -35873,6 +35867,15 @@ class Emitter {
                 if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             }
         }
+        if (throwCandidate && !throwStatement) {
+            const catchDecl = stmt.catchClause.variableDeclaration;
+            if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
+            const catchSymbol = this.symbolForIdentifier(catchDecl.name);
+            const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
+            if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
+            throwStatement = throwCandidate;
+        }
+        if (!returnStatement && !throwStatement) return null;
         return { catchPreludeStatements, returnStatement, throwStatement, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
     }
 
