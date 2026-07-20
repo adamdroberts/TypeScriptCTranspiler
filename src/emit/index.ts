@@ -32428,6 +32428,29 @@ class Emitter {
     private asyncAwaitLoopBodyControlPreludeSupported(stmt: ts.Statement, allowLoopControl = false): boolean {
         let ok = true;
         let loopDepth = 0;
+        const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
+            if (loopDepth <= 1 ||
+                (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                node.declarations.length !== 1) return false;
+            const declaration = node.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name)) return false;
+            if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
+                return !declaration.initializer;
+            }
+            if (!ts.isForStatement(node.parent) ||
+                (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+            let supported = true;
+            const visitInitializer = (child: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(child) || ts.isFunctionLike(child) || ts.isClassLike(child)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(child, visitInitializer);
+            };
+            if (declaration.initializer) visitInitializer(declaration.initializer);
+            return supported;
+        };
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (
@@ -32442,7 +32465,7 @@ class Emitter {
                 return;
             }
             if (ts.isVariableDeclarationList(node)) {
-                ok = false;
+                ok = nestedLoopDeclarationSupported(node);
                 return;
             }
             if (ts.isVariableStatement(node)) {
@@ -32512,6 +32535,29 @@ class Emitter {
             !ts.isIdentifier(stmt.initializer.declarations[0]!.name)) return false;
         let ok = true;
         let loopDepth = 1;
+        const nestedLoopDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
+            if (loopDepth <= 1 ||
+                (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                node.declarations.length !== 1) return false;
+            const declaration = node.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name)) return false;
+            if (ts.isForOfStatement(node.parent) || ts.isForInStatement(node.parent)) {
+                return !declaration.initializer;
+            }
+            if (!ts.isForStatement(node.parent) ||
+                (!declaration.initializer && (node.flags & ts.NodeFlags.Const) !== 0)) return false;
+            let supported = true;
+            const visitInitializer = (child: ts.Node): void => {
+                if (!supported) return;
+                if (ts.isAwaitExpression(child) || ts.isFunctionLike(child) || ts.isClassLike(child)) {
+                    supported = false;
+                    return;
+                }
+                ts.forEachChild(child, visitInitializer);
+            };
+            if (declaration.initializer) visitInitializer(declaration.initializer);
+            return supported;
+        };
         const visit = (node: ts.Node): void => {
             if (!ok) return;
             if (
@@ -32521,7 +32567,7 @@ class Emitter {
                 ts.isReturnStatement(node) ||
                 ts.isThrowStatement(node) ||
                 ((ts.isBreakStatement(node) || ts.isContinueStatement(node)) && loopDepth === 0) ||
-                ts.isVariableDeclarationList(node)
+                (ts.isVariableDeclarationList(node) && !nestedLoopDeclarationSupported(node))
             ) {
                 ok = false;
                 return;

@@ -417,6 +417,15 @@ async function chooseLoopReturnAwaitAliasPostLoop(condition: boolean, flag: bool
             count += 1;
             if (count === 1) continue;
             prefix += "-loop";
+            for (let index = 0; index < 1; index += 1) {
+                continue;
+            }
+            for (const item of ["nested"]) {
+                if (item) continue;
+            }
+            for (let key in ["nested"]) {
+                if (key) continue;
+            }
             break;
         }
         return value + prefix;
