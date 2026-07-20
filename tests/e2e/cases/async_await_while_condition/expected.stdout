@@ -256,6 +256,7 @@ await-method-assigned-var-return direct-assigned-var-method-assigned-var-method-
 await-arrow-assigned-var-return direct-assigned-var-arrow-assigned-var-arrow-return
 await-direct-assigned-multiple-locals direct-assigned-multiple-assigned-source
 await-direct-throw-multiple-locals direct-throw-multiple-throw-source
+await-loop-initializer-var-fallthrough loop-var-fallthrough-after
 await-method-throw-multiple-locals method-throw-source
 await-arrow-throw-multiple-locals arrow-throw-source
 await-while-return-await-true body-await-yes
