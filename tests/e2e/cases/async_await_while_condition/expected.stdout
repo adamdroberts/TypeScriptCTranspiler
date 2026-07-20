@@ -24,6 +24,7 @@ await-while-return-await-alias-false body-await-alias-alias-fallthrough
 await-while-throw-await-alias-false body-throw-await-alias-fallthrough
 await-while-return-await-multiple-false body-loop-multiple-multiple-fallthrough
 await-while-throw-await-multiple-false body-loop-multiple-fallthrough
+await-for-return-await-multiple-false body-for-multiple-for-multiple-fallthrough
 await-while-return-await-assigned-alias-false body-return-assigned-alias-fallthrough
 await-while-throw-await-assigned-alias-false body-throw-assigned-alias-fallthrough
 await-while-return-await-alias-expression-false body-return-alias-expression-fallthrough
@@ -172,6 +173,7 @@ await-method-multiple-declarators method-first-second
 await-arrow-multiple-declarators arrow-first-second
 await-while-return-await-multiple-true body-loop-multiple-first-second
 await-while-throw-await-multiple-true body-loop-multiple-first-second
+await-for-return-await-multiple-true body-for-multiple-first-second
 await-while-three-logical-true three-logical-yes
 await-while-three-logical-false three-logical-no
 await-while-method-multiple-true method-loop-first-second
