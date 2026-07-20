@@ -1,0 +1,6 @@
+declaration-false: declaration-fallthrough
+method-false: method-fallthrough
+value-false: arrow-fallthrough
+method-true: caught:method-rejection
+declaration-true: caught:onetwothreefourfive
+value-true: caught:arrow-onearrow-twoarrow-threearrow-fourarrow-five
