@@ -28953,7 +28953,17 @@ class Emitter {
                 if (!collect(branch.thenStatement, combineConditions(condition, branch.expression, true))) return false;
                 return collect(branch.elseStatement, combineConditions(condition, branch.expression, false));
             }
-            const statements = ts.isBlock(branch) ? branch.statements : [branch];
+            const sourceStatements = ts.isBlock(branch) ? branch.statements : [branch];
+            const statements: ts.Statement[] = [];
+            for (const statement of sourceStatements) {
+                if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length > 1) {
+                    const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(statement);
+                    if (!splitStatements) return false;
+                    statements.push(...splitStatements);
+                } else {
+                    statements.push(statement);
+                }
+            }
             leaves.push({ condition, statements });
             return true;
         };

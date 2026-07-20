@@ -48,6 +48,16 @@ async function chooseTryCatchFinallyMultipleAwaitDeclarators(): Promise<string> 
     }
 }
 
+async function chooseConditionalMultipleAwaitDeclarators(flag: boolean): Promise<string> {
+    if (flag) {
+        const first = await Promise.resolve("conditional-true"), second = await Promise.resolve(first + "-second");
+        return second;
+    } else {
+        const first = await Promise.resolve("conditional-false"), second = await Promise.resolve(first + "-second");
+        return second;
+    }
+}
+
 choose(true).then((value) => console.log("await-if-true", value));
 choose(false).then((value) => console.log("await-if-false", value));
 chooseNested(true).then((value) => console.log("await-if-nested-true", value));
@@ -57,6 +67,8 @@ chooseBranchMultipleAwaitDeclarators(false).then((value) => console.log("await-i
 chooseTryMultipleAwaitDeclarators().then((value) => console.log("await-try-multiple-declarators", value));
 chooseTryFinallyMultipleAwaitDeclarators().then((value) => console.log("await-try-finally-multiple-declarators", value));
 chooseTryCatchFinallyMultipleAwaitDeclarators().then((value) => console.log("await-try-catch-finally-multiple-declarators", value));
+chooseConditionalMultipleAwaitDeclarators(true).then((value) => console.log("await-conditional-multiple-true", value));
+chooseConditionalMultipleAwaitDeclarators(false).then((value) => console.log("await-conditional-multiple-false", value));
 
 class Chooser {
     async pick(flag: boolean): Promise<string> {
