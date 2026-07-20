@@ -365,6 +365,7 @@ await-loop-initializer-uninitialized-escaping-var-break-throw-await loop-uniniti
 await-loop-initializer-uninitialized-escaping-var-false-throw-await undefined
 await-loop-initializer-escaping-var-if-break-true loop-escaping-var-if-yes
 await-loop-initializer-escaping-var-if-break-false loop-escaping-var-if-no
+await-loop-initializer-escaping-var-try-finally-break-await loop-escaping-var-try-try-finally
 await-loop-initializer-uninitialized-var-capture loop-uninitialized-var-captured
 await-loop-initializer-typed-uninitialized-var-capture loop-typed-uninitialized-var-captured
 await-loop-initializer-uninitialized-let-capture loop-uninitialized-let-captured
