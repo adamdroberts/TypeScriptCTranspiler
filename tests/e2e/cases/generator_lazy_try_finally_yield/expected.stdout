@@ -14,3 +14,4 @@ caught-finally-return-override: false return-override-pause true finally-return 
 caught-finally-normal-return-override: false return-override-pause true finally-return finally|finally|override-finally|override-finally|return-override-finally|return-override-finally
 caught-prelude: false catch-prelude-pause true prelude-caught before|error:handled-prelude
 caught-prelude-alias: false catch-alias-pause true alias:handled-alias
+caught-rethrow: false rethrow-pause catch-rethrow before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally

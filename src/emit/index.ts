@@ -112,7 +112,8 @@ interface LazyCompoundResumeSlot {
 
 interface LazyGeneratorCatchHandler {
     catchPreludeStatements: readonly ts.Statement[];
-    returnStatement: ts.ReturnStatement;
+    returnStatement: ts.ReturnStatement | null;
+    throwStatement: ts.ThrowStatement | null;
     catchClause: ts.CatchClause;
     finallyStatements: readonly ts.Statement[];
     finallyThrow: ts.ThrowStatement | null;
@@ -35826,8 +35827,12 @@ class Emitter {
             !tryStatements.every((child) => this.isValidLazyGeneratorStatement(child))) return null;
         const catchStatements = stmt.catchClause.block.statements;
         const last = catchStatements[catchStatements.length - 1];
-        if (!last || !ts.isReturnStatement(last) || !last.expression ||
-            this.nodeContainsYield(last.expression)) return null;
+        if (!last) return null;
+        const returnStatement = ts.isReturnStatement(last) && last.expression ? last : null;
+        const throwStatement = ts.isThrowStatement(last) && last.expression &&
+            this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(last.expression)) ? last : null;
+        if (!returnStatement && !throwStatement) return null;
+        if (returnStatement && this.nodeContainsYield(returnStatement.expression!)) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
         const catchPreludeSymbols = new Set<ts.Symbol>();
         if (
@@ -35848,15 +35853,16 @@ class Emitter {
                     })
                 )))
         ) return null;
-        const expression = this.unwrapTransparentExpression(last.expression);
-        if (this.isSimpleLazyMultiYieldLiteral(expression)) {
-            return { catchPreludeStatements, returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+        if (returnStatement) {
+            const expression = this.unwrapTransparentExpression(returnStatement.expression!);
+            if (!this.isSimpleLazyMultiYieldLiteral(expression)) {
+                const catchDecl = stmt.catchClause.variableDeclaration;
+                if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
+                const catchSymbol = this.symbolForIdentifier(catchDecl.name);
+                if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
+            }
         }
-        const catchDecl = stmt.catchClause.variableDeclaration;
-        if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
-        const catchSymbol = this.symbolForIdentifier(catchDecl.name);
-        if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
-        return { catchPreludeStatements, returnStatement: last, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
+        return { catchPreludeStatements, returnStatement, throwStatement, catchClause: stmt.catchClause, finallyStatements: finallyBody, finallyThrow, finallyReturn };
     }
 
     private isSimpleLazyCatchReturnExpression(
@@ -36562,19 +36568,32 @@ class Emitter {
                         this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                     }
                     if (handler.finallyStatements.length > 0) {
-                        const returned = this.emitExpr(handler.returnStatement.expression!);
-                        buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
-                        buf.line("a->iter_has_return = true;");
-                        buf.line("a->iter_return_consumed = false;");
+                        if (handler.returnStatement) {
+                            const returned = this.emitExpr(handler.returnStatement.expression!);
+                            buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
+                            buf.line("a->iter_has_return = true;");
+                            buf.line("a->iter_return_consumed = false;");
+                        }
                     } else {
-                        this.emitLazyGeneratorStmt(
-                            buf,
-                            handler.returnStatement,
-                            nextStateId,
-                            nextYieldStarSlot,
-                            elemType,
-                            envLocalName,
-                        );
+                        if (handler.returnStatement) {
+                            this.emitLazyGeneratorStmt(
+                                buf,
+                                handler.returnStatement,
+                                nextStateId,
+                                nextYieldStarSlot,
+                                elemType,
+                                envLocalName,
+                            );
+                        } else {
+                            this.emitLazyGeneratorStmt(
+                                buf,
+                                handler.throwStatement!,
+                                nextStateId,
+                                nextYieldStarSlot,
+                                elemType,
+                                envLocalName,
+                            );
+                        }
                     }
                 } finally {
                     if (catchSymbol) this.catchStringSymbols.delete(catchSymbol);
@@ -36608,6 +36627,17 @@ class Emitter {
             buf.line("a->iter_return_consumed = false;");
             buf.line("*state = -1;");
             buf.line("*done = true;");
+            buf.line("return;");
+            buf.close();
+            return;
+        }
+        const catchThrow = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .map((handler) => handler.throwStatement)
+            .find((throwStatement): throwStatement is ts.ThrowStatement => !!throwStatement);
+        if (catchThrow) {
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            this.emitThrow(buf, catchThrow);
             buf.line("return;");
             buf.close();
             return;

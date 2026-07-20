@@ -208,3 +208,23 @@ const caughtPreludeAliasResult = caughtPreludeAlias();
 const caughtPreludeAliasFirst: any = caughtPreludeAliasResult.next();
 const caughtPreludeAliasDone: any = caughtPreludeAliasResult.throw("handled-alias");
 console.log("caught-prelude-alias:", caughtPreludeAliasFirst.done, caughtPreludeAliasFirst.value, caughtPreludeAliasDone.done, caughtPreludeAliasDone.value);
+
+function* caughtRethrow(): Generator<string, string, string> {
+    try {
+        yield "rethrow-pause";
+    } catch (error: any) {
+        catchPreludeEvents.push("rethrow:" + error);
+        throw "catch-rethrow";
+    } finally {
+        catchPreludeEvents.push("rethrow-finally");
+    }
+    return "normal";
+}
+
+const caughtRethrowResult = caughtRethrow();
+const caughtRethrowFirst: any = caughtRethrowResult.next();
+try {
+    caughtRethrowResult.throw("original-rethrow");
+} catch (error: any) {
+    console.log("caught-rethrow:", caughtRethrowFirst.done, caughtRethrowFirst.value, error, catchPreludeEvents.join("|"));
+}
