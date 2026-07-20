@@ -36,6 +36,7 @@ await-while-return-await-alias-post-multiple-false body-return-post-multiple-fal
 await-while-throw-await-alias-post-multiple-false body-throw-post-multiple-fallthrough
 await-while-return-await-alias-post-multiple-locals-false body-return-post-multiple-locals-fallthrough
 await-while-return-await-alias-post-var-false body-return-post-var-fallthrough
+await-while-return-await-alias-post-assigned-var-false body-return-post-assigned-var-fallthrough
 await-while-return-await-alias-post-control-fallthrough body-return-post-control-fallthrough
 await-while-throw-await-alias-post-control-fallthrough body-throw-post-control-fallthrough
 await-while-return-await-alias-post-assigned-local-false body-return-post-assigned-local-fallthrough
@@ -105,6 +106,7 @@ await-while-return-await-alias-post-multiple-true body-return-post-multiplebody-
 await-while-throw-await-alias-post-multiple-true body-throw-post-multiple-suffix
 await-while-return-await-alias-post-multiple-locals-true body-return-post-multiple-localsbody-return-first-second
 await-while-return-await-alias-post-var-true body-return-post-varbody-return-var
+await-while-return-await-alias-post-assigned-var-true body-return-post-assigned-varbody-return-assigned-var
 await-while-return-await-alias-post-control-true body-return-post-controlbody-return-updated
 await-while-return-await-alias-post-control-false body-return-post-controlbody-return
 await-while-throw-await-alias-post-control-true body-throw-post-control-updated

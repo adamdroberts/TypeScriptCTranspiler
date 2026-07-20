@@ -32602,7 +32602,7 @@ class Emitter {
             for (const declaration of stmt.declarationList.declarations) {
                 if (!ts.isIdentifier(declaration.name) ||
                     (!declaration.initializer &&
-                        (stmt.declarationList.flags & ts.NodeFlags.Let) === 0)) return false;
+                        (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0)) return false;
                 if (declaration.initializer) visit(declaration.initializer);
             }
         }
