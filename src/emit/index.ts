@@ -38636,11 +38636,14 @@ class Emitter {
         if (!body) return stable;
         for (const statement of body.statements) {
             if (statement.getStart() >= stmt.getStart()) continue;
-            if (!ts.isVariableStatement(statement) || (statement.declarationList.flags & ts.NodeFlags.Const) === 0) continue;
+            if (!ts.isVariableStatement(statement)) continue;
             for (const declaration of statement.declarationList.declarations) {
                 if (!ts.isIdentifier(declaration.name) || !declaration.initializer || this.nodeContainsYield(declaration.initializer)) continue;
                 const symbol = this.symbolForIdentifier(declaration.name);
-                if (symbol) stable.add(symbol);
+                if (!symbol) continue;
+                const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+                const isLet = (statement.declarationList.flags & ts.NodeFlags.Let) !== 0;
+                if (isConst || (isLet && !this.forLoopBodyMutatesSymbol(body, symbol))) stable.add(symbol);
             }
         }
         return stable;

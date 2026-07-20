@@ -69,6 +69,11 @@ function* localLeaves(): Generator<number, number, number> {
     return base + (yield 30) + (yield 31);
 }
 
+function* immutableLetLeaves(): Generator<number, number, number> {
+    let base = 11;
+    return base + (yield 32) + (yield 33);
+}
+
 class ThisLeaves {
     marker = 9;
 
@@ -173,6 +178,11 @@ const localFirst: any = localIter.next();
 const localSecond: any = localIter.next(4);
 const localDone: any = localIter.next(5);
 console.log("local", localFirst.value, localSecond.value, localDone.done, localDone.value);
+const immutableLetIter = immutableLetLeaves();
+const immutableLetFirst: any = immutableLetIter.next();
+const immutableLetSecond: any = immutableLetIter.next(4);
+const immutableLetDone: any = immutableLetIter.next(5);
+console.log("immutable-let", immutableLetFirst.value, immutableLetSecond.value, immutableLetDone.done, immutableLetDone.value);
 const thisLeaves = new ThisLeaves();
 const thisIter = thisLeaves.values();
 const thisFirst: any = thisIter.next();
