@@ -415,7 +415,7 @@ async function chooseLoopInitializerEscapingVarContinueAwait(): Promise<string> 
         value += "-continued";
         continue;
     }
-    return value;
+    return await laterBodyValue(value);
 }
 
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {

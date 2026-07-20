@@ -32979,6 +32979,7 @@ class Emitter {
         loopInitializer: ts.Expression | ts.VariableStatement | null,
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
         loopIncrementor: ts.Expression | null = null,
+        fallthroughRejectResult = false,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
@@ -33266,10 +33267,23 @@ class Emitter {
             ))
             : null;
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
-        const fallthroughAwaitExpr = ts.isAwaitExpression(fallthroughAwait) &&
-            bodyAwaitExpr
+        const fallthroughAwaitExpr = ts.isAwaitExpression(fallthroughAwait)
             ? fallthroughAwait
             : undefined;
+        const fallthroughPromiseType = fallthroughAwaitExpr
+            ? this.prepareType(mapTsType(
+                fallthroughAwaitExpr.expression,
+                this.checker.getTypeAtLocation(fallthroughAwaitExpr.expression),
+                this.checker,
+            ))
+            : null;
+        const fallthroughAwaitedType = fallthroughAwaitExpr
+            ? this.prepareType(mapTsType(
+                fallthroughAwaitExpr,
+                this.checker.getTypeAtLocation(fallthroughAwaitExpr),
+                this.checker,
+            ))
+            : null;
         let hasNullishOperator = false;
         const findNullishOperator = (node: ts.Node): void => {
             if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
@@ -33284,7 +33298,9 @@ class Emitter {
             conditionPromiseType.kind !== "promise" ||
             (conditionAwaitedType.kind !== "boolean" && !(hasNullishOperator && conditionAwaitedType.kind === "value")) ||
             (bodyPromiseType && bodyPromiseType.kind !== "promise") ||
-            (bodyAwaitedType && bodyAwaitedType.kind === "never")
+            (bodyAwaitedType && bodyAwaitedType.kind === "never") ||
+            (fallthroughAwaitExpr && (!fallthroughPromiseType || fallthroughPromiseType.kind !== "promise")) ||
+            (fallthroughAwaitedType && fallthroughAwaitedType.kind === "never")
         ) return false;
 
         const continuationParams = [
@@ -33401,12 +33417,26 @@ class Emitter {
                 continuation.bodyPostAwaitStatements,
             );
         }
+        let fallthroughAdapter: string | null = null;
+        if (fallthroughAwaitExpr && fallthroughPromiseType && fallthroughAwaitedType) {
+            fallthroughAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                fallthroughPromiseType,
+                fallthroughAwaitedType,
+                fallthroughAwaitExpr,
+                fallthroughAwaitExpr,
+                continuation.params,
+                continuation.thisValue,
+                fallthroughRejectResult,
+            );
+        }
         const adapter = this.ensureAsyncAwaitLoopConditionReturnAwaitContinuationAdapter(
             conditionPromiseType,
             conditionAwaitedType,
             continuation,
             bodyPromiseType,
             bodyAdapter,
+            fallthroughPromiseType,
+            fallthroughAdapter,
             continuation.bodyRejectResult,
         );
         if (loopInitializer) {
@@ -33445,6 +33475,8 @@ class Emitter {
         continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
         bodyPromiseType: CType | null,
         bodyAdapter: string | null,
+        fallthroughPromiseType: CType | null,
+        fallthroughAdapter: string | null,
         bodyRejectResult: boolean,
     ): string {
         const name = `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
@@ -33561,22 +33593,22 @@ class Emitter {
                 buf.line("return;");
             }
             buf.close();
-            if (continuation.fallthroughAwaitExpr && bodyPromiseType && bodyAdapter) {
+            if (continuation.fallthroughAwaitExpr && fallthroughPromiseType && fallthroughAdapter) {
                 const fallthroughSource = this.emitExpr(continuation.fallthroughAwaitExpr.expression);
                 const fallthroughSourceVar = this.freshTemp("_await_fallthrough_source");
                 const fallthroughEnvVar = this.freshTemp("_await_fallthrough_env");
-                const fallthroughEnvType = `${bodyAdapter}_env_t`;
-                buf.line(`tsc_promise_t* const ${fallthroughSourceVar} = ${this.coerce(fallthroughSource, bodyPromiseType, continuation.fallthroughAwaitExpr.expression)};`);
+                const fallthroughEnvType = `${fallthroughAdapter}_env_t`;
+                buf.line(`tsc_promise_t* const ${fallthroughSourceVar} = ${this.coerce(fallthroughSource, fallthroughPromiseType, continuation.fallthroughAwaitExpr.expression)};`);
                 buf.line(`${fallthroughEnvType}* const ${fallthroughEnvVar} = (${fallthroughEnvType}*)TSC_GC_MALLOC(sizeof(${fallthroughEnvType}));`);
                 buf.line(`${fallthroughEnvVar}->receiver = ${fallthroughSourceVar};`);
                 buf.line(`${fallthroughEnvVar}->result_promise = _ret;`);
                 for (const param of continuation.params) buf.line(`${fallthroughEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${fallthroughEnvVar}->this_arg = state->this_arg;`);
                 buf.open(`if (tsc_promise_is_pending(${fallthroughSourceVar}))`);
-                buf.line(`tsc_promise_add_callback(${fallthroughSourceVar}, ${bodyAdapter}, ${fallthroughEnvVar});`);
+                buf.line(`tsc_promise_add_callback(${fallthroughSourceVar}, ${fallthroughAdapter}, ${fallthroughEnvVar});`);
                 buf.close();
                 buf.open("else");
-                buf.line(`${bodyAdapter}(${fallthroughEnvVar});`);
+                buf.line(`${fallthroughAdapter}(${fallthroughEnvVar});`);
                 buf.close();
                 buf.line("tsc_try_pop();");
                 buf.line("return;");
@@ -33739,6 +33771,7 @@ class Emitter {
                 loopInitializer,
                 loopInitializerCaptures,
                 loopIncrementor,
+                ts.isThrowStatement(fallthrough),
             )) return true;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
@@ -33753,6 +33786,7 @@ class Emitter {
             loopInitializer,
             loopInitializerCaptures,
             loopIncrementor,
+            ts.isThrowStatement(fallthrough),
         )) return true;
         if (ts.isThrowStatement(fallthrough)) return false;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
