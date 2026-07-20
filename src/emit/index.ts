@@ -32547,27 +32547,27 @@ class Emitter {
             bodyReturnExpr = bodyAwaitExpr;
             bodyPreludeStatements = loopBody.slice(0, -1);
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
-            loopBody.length >= 2 &&
-            (ts.isVariableStatement(loopBody[loopBody.length - 2]) ||
-                (loopBody.length >= 3 &&
-                    (ts.isExpressionStatement(loopBody[loopBody.length - 2]) ||
-                        ts.isVariableStatement(loopBody[loopBody.length - 2])) &&
-                    (() => {
-                        const declarationStatement = loopBody[loopBody.length - 3];
-                        return ts.isVariableStatement(declarationStatement) &&
-                            declarationStatement.declarationList.declarations.length === 1 &&
-                            !!declarationStatement.declarationList.declarations[0]!.initializer;
-                    })()))) {
-            const postCount = loopBody.length >= 3 &&
-                (ts.isExpressionStatement(loopBody[loopBody.length - 2]) ||
-                    (ts.isVariableStatement(loopBody[loopBody.length - 2]) && (() => {
-                        const declarationStatement = loopBody[loopBody.length - 3];
-                        return ts.isVariableStatement(declarationStatement) &&
-                            !!declarationStatement.declarationList.declarations[0]?.initializer;
-                    })()))
-                ? 1
-                : 0;
-            const bodyAwaitStatement = loopBody[loopBody.length - 2 - postCount];
+            (() => {
+                for (let index = loopBody.length - 2; index >= 0; index--) {
+                    const statement = loopBody[index]!;
+                    if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) continue;
+                    const initializer = statement.declarationList.declarations[0]!.initializer;
+                    if (!initializer || !ts.isAwaitExpression(this.unwrapTransparentExpression(initializer))) continue;
+                    return true;
+                }
+                return false;
+            })()) {
+            let bodyAwaitStatementIndex = -1;
+            for (let index = loopBody.length - 2; index >= 0; index--) {
+                const statement = loopBody[index]!;
+                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) continue;
+                const initializer = statement.declarationList.declarations[0]!.initializer;
+                if (initializer && ts.isAwaitExpression(this.unwrapTransparentExpression(initializer))) {
+                    bodyAwaitStatementIndex = index;
+                    break;
+                }
+            }
+            const bodyAwaitStatement = loopBody[bodyAwaitStatementIndex];
             if (!bodyAwaitStatement || !ts.isVariableStatement(bodyAwaitStatement) ||
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 bodyAwaitStatement.declarationList.declarations.length !== 1) return false;
@@ -32586,8 +32586,8 @@ class Emitter {
                 : declarationAwait;
             bodyReturnExpr = bodyAction.expression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
-            bodyPostAwaitStatements = postCount === 1 ? [loopBody[loopBody.length - 2]!] : [];
-            bodyPreludeStatements = loopBody.slice(0, -2 - postCount);
+            bodyPostAwaitStatements = loopBody.slice(bodyAwaitStatementIndex + 1, -1);
+            bodyPreludeStatements = loopBody.slice(0, bodyAwaitStatementIndex);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else if (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) {
             const possibleAssignment = loopBody[loopBody.length - 3];
