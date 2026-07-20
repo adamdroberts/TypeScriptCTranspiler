@@ -598,6 +598,7 @@ class Emitter {
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
     private activeLazyGeneratorFinalizers: ts.Statement[][] = [];
+    private activeLazyGeneratorCatchHandlers: ts.Statement[][] = [];
     private activeLazyGeneratorCloseEnabled = false;
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
@@ -35743,7 +35744,9 @@ class Emitter {
         }
 
         if (ts.isTryStatement(stmt)) {
-            return this.isSimpleLazyGeneratorTryFinally(stmt) || !this.nodeContainsYield(stmt);
+            return this.isSimpleLazyGeneratorTryFinally(stmt) ||
+                !!this.lazyGeneratorTryCatchReturn(stmt) ||
+                !this.nodeContainsYield(stmt);
         }
 
         if (ts.isExpressionStatement(stmt) || ts.isVariableStatement(stmt) || ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt)) {
@@ -35789,6 +35792,21 @@ class Emitter {
             !this.nodeContainsYield(child) && this.isValidLazyGeneratorStatement(child));
     }
 
+    private lazyGeneratorTryCatchReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {
+        if (!stmt.catchClause || stmt.finallyBlock || stmt.catchClause.variableDeclaration) return null;
+        const tryStatements = stmt.tryBlock.statements;
+        if (!tryStatements.some((child) => this.nodeContainsYield(child)) ||
+            this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock) ||
+            !tryStatements.every((child) => this.isValidLazyGeneratorStatement(child))) return null;
+        const catchStatements = stmt.catchClause.block.statements;
+        const last = catchStatements[catchStatements.length - 1];
+        if (!last || !ts.isReturnStatement(last) || !last.expression ||
+            this.nodeContainsYield(last.expression) ||
+            !this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(last.expression))) return null;
+        if (catchStatements.length !== 1) return null;
+        return last;
+    }
+
     private lazyGeneratorTryTerminalReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {
         const statements = stmt.tryBlock.statements;
         const last = statements[statements.length - 1];
@@ -35817,6 +35835,21 @@ class Emitter {
             if (found) return;
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
             if (ts.isTryStatement(current) && this.isSimpleLazyGeneratorTryFinally(current)) {
+                found = true;
+                return;
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return found;
+    }
+
+    private lazyGeneratorHasCatchReturn(node: ts.Node): boolean {
+        let found = false;
+        const visit = (current: ts.Node): void => {
+            if (found) return;
+            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+            if (ts.isTryStatement(current) && this.lazyGeneratorTryCatchReturn(current)) {
                 found = true;
                 return;
             }
@@ -36436,6 +36469,16 @@ class Emitter {
         if (!envLocalName || !this.activeLazyGeneratorCloseEnabled) return;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
         buf.line(`${envLocalName}->lazy_close_requested = false;`);
+        if (this.activeLazyGeneratorCatchHandlers.length > 0) {
+            buf.open(`if (${envLocalName}->lazy_close_throw)`);
+            buf.line(`${envLocalName}->lazy_close_handled = true;`);
+            for (const handler of [...this.activeLazyGeneratorCatchHandlers].reverse()) {
+                for (const child of handler) {
+                    this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                }
+            }
+            buf.close();
+        }
         for (const finalizer of [...this.activeLazyGeneratorFinalizers].reverse()) {
             for (const child of finalizer) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
@@ -36545,6 +36588,21 @@ class Emitter {
 
         if (ts.isSwitchStatement(stmt)) {
             this.emitLazyGeneratorSwitch(buf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            return;
+        }
+
+        const catchReturn = ts.isTryStatement(stmt) ? this.lazyGeneratorTryCatchReturn(stmt) : null;
+        if (ts.isTryStatement(stmt) && catchReturn) {
+            buf.open("");
+            this.activeLazyGeneratorCatchHandlers.push([catchReturn]);
+            try {
+                for (const child of stmt.tryBlock.statements) {
+                    this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                }
+            } finally {
+                this.activeLazyGeneratorCatchHandlers.pop();
+            }
+            buf.close();
             return;
         }
 
@@ -36935,7 +36993,8 @@ class Emitter {
         const multiYieldCount = this.lazyGeneratorMaxMultiYieldReturn(fn.body);
         const hasMultiYieldReturn = multiYieldCount > 0;
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
-        const hasLazyClose = hasYieldStar || hasLazyFinalizer;
+        const hasLazyCatch = this.lazyGeneratorHasCatchReturn(fn.body);
+        const hasLazyClose = hasYieldStar || hasLazyFinalizer || hasLazyCatch;
         const needsEnv = runtimeParamInfos.length > 0 ||
             localVarInfos.length > 0 ||
             compoundResumeInfos.length > 0 ||
@@ -36974,6 +37033,7 @@ class Emitter {
             if (hasLazyClose) {
                 this.structDecls.line("bool lazy_close_requested;");
                 this.structDecls.line("bool lazy_close_throw;");
+                this.structDecls.line("bool lazy_close_handled;");
                 this.structDecls.line("tsc_value_t lazy_close_arg;");
             }
             if (hasYieldStar) {
@@ -37077,6 +37137,7 @@ class Emitter {
                 closeBuf.line(`${closeEnv}->yield_star_arr_${i}->lazy_close(${closeEnv}->yield_star_arr_${i}, ${closeEnv}->yield_star_arr_${i}->env, arg, is_throw);`);
                 closeBuf.close();
             }
+            closeBuf.line(`${closeEnv}->lazy_close_handled = false;`);
             closeBuf.line(`${closeEnv}->lazy_close_requested = true;`);
             closeBuf.line(`${closeEnv}->lazy_close_throw = is_throw;`);
             closeBuf.line(`${closeEnv}->lazy_close_arg = arg;`);
@@ -37084,7 +37145,7 @@ class Emitter {
             closeBuf.line("bool _lazy_close_done = false;");
             closeBuf.line(`a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_lazy_close_done);`);
             closeBuf.close();
-            closeBuf.line("return is_throw;");
+            closeBuf.line(`return is_throw && !${closeEnv}->lazy_close_handled;`);
             closeBuf.close();
             closeBuf.line();
             this.closureDefs.write(closeBuf.toString());
@@ -37123,6 +37184,7 @@ class Emitter {
             if (hasLazyClose) {
                 buf.line(`${envVar}->lazy_close_requested = false;`);
                 buf.line(`${envVar}->lazy_close_throw = false;`);
+                buf.line(`${envVar}->lazy_close_handled = false;`);
                 buf.line(`${envVar}->lazy_close_arg = tsc_value_undefined();`);
             }
             if (hasYieldStar) {
@@ -54871,13 +54933,17 @@ class Emitter {
                     ],
                     ([arr, errArg]) => {
                         const av = this.freshTemp("_iter");
+                        const out = this.freshTemp("_step");
                         return `({ tsc_array_t* const ${av} = ${arr!}; ` +
-                            `if (${av}->is_lazy_generator && ${av}->lazy_close && ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true)) tsc_throw_str(${errArg!}); ` +
-                            `${av}->iter_pos = ${av}->len; ` +
-                            `${av}->is_lazy_generator = false; ` +
-                            `${av}->state = -1; ` +
-                            `${av}->iter_return_consumed = true; ` +
-                            `tsc_throw_str(${errArg!}); tsc_value_undefined(); })`;
+                            `if (!((${av}->is_lazy_generator && ${av}->lazy_close)) || ${av}->lazy_close(${av}, ${av}->env, tsc_value_string(${errArg!}), true)) { ` +
+                            `${av}->iter_pos = ${av}->len; ${av}->is_lazy_generator = false; ${av}->state = -1; ` +
+                            `${av}->iter_return_consumed = true; tsc_throw_str(${errArg!}); } ` +
+                            `${av}->is_lazy_generator = false; ${av}->iter_pos = ${av}->len; ${av}->state = -1; ` +
+                            `tsc_object_t* ${out} = tsc_object_new(); ` +
+                            `tsc_object_set(${out}, tsc_str_from_lit("done", 4), tsc_value_bool(true)); ` +
+                            `if (${av}->iter_has_return && !${av}->iter_return_consumed) { tsc_object_set(${out}, tsc_str_from_lit("value", 5), ${av}->iter_return); ${av}->iter_return_consumed = true; } ` +
+                            `else { tsc_object_set(${out}, tsc_str_from_lit("value", 5), tsc_value_undefined()); } ` +
+                            `tsc_value_object(${out}); })`;
                     },
                 );
             }

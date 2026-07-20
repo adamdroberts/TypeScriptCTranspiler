@@ -50,3 +50,17 @@ try {
 } catch {
     console.log("throw:", throwFirst.done, throwFirst.value, events.join("|"));
 }
+
+function* caughtThrow(): Generator<string, string, string> {
+    try {
+        yield "catch-pause";
+    } catch {
+        return "caught";
+    }
+    return "normal";
+}
+
+const caught = caughtThrow();
+const caughtFirst: any = caught.next();
+const caughtDone: any = caught.throw("handled");
+console.log("caught:", caughtFirst.done, caughtFirst.value, caughtDone.done, caughtDone.value);
