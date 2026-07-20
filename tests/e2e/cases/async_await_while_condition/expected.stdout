@@ -20,6 +20,14 @@ await-method-sync-prelude-true method-sync-body-method-suffix
 await-method-sync-prelude-false method-sync-prelude-fallthrough
 await-value-sync-prelude-true value-sync-body-value-suffix
 await-value-sync-prelude-false value-sync-prelude-fallthrough
+await-for-sync-prelude-true for-sync-body-for-suffix
+await-for-sync-prelude-false for-sync-prelude-fallthrough
+await-while-sync-throw-prelude-true sync-throw
+await-while-sync-throw-prelude-false sync-throw-prelude-fallthrough
+await-method-sync-throw-prelude-true method-sync-throw
+await-method-sync-throw-prelude-false method-sync-throw-prelude-fallthrough
+await-value-sync-throw-prelude-true value-sync-throw
+await-value-sync-throw-prelude-false value-sync-throw-prelude-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes
