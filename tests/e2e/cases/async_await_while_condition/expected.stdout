@@ -81,6 +81,9 @@ await-while-method-false method-loop-no
 await-while-value-false value-loop-no
 await-direct-multiple-locals direct-multiple-source
 await-direct-assigned-multiple-locals direct-assigned-multiple-assigned-source
+await-direct-throw-multiple-locals direct-throw-multiple-throw-source
+await-method-throw-multiple-locals method-throw-source
+await-arrow-throw-multiple-locals arrow-throw-source
 await-while-return-await-true body-await-yes
 await-while-return-await-false body-await-no
 await-while-return-await-reject body-rejected

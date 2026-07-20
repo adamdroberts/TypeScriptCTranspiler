@@ -37,6 +37,11 @@ async function chooseDirectAwaitAssignedMultipleLocals(prefix: string): Promise<
     return value;
 }
 
+async function chooseDirectThrowAwaitMultipleLocals(prefix: string): Promise<string> {
+    const source = prefix + "-throw-source", reason = await laterBodyValue(source);
+    throw reason;
+}
+
 async function chooseLoopTrue(): Promise<string> {
     while (await laterTrue()) {
         return "loop-yes";
@@ -871,6 +876,11 @@ class LoopChooser {
         }
         return this.prefix + "no";
     }
+
+    async throwWithLocals(): Promise<string> {
+        const source = this.prefix + "throw-source", reason = await laterBodyValue(source);
+        throw reason;
+    }
 }
 
 const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
@@ -878,6 +888,11 @@ const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> =
         return await laterBodyValue(prefix + "yes");
     }
     return prefix + "no";
+};
+
+const chooseArrowThrowWithLocals = async (prefix: string): Promise<string> => {
+    const source = prefix + "-throw-source", reason = await laterBodyValue(source);
+    throw reason;
 };
 
 chooseLoopTrue().then((value) => console.log("await-while-true", value));
@@ -1051,3 +1066,6 @@ chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-va
 chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
 chooseDirectAwaitAssignedMultipleLocals("direct-assigned-multiple").then((value) => console.log("await-direct-assigned-multiple-locals", value));
+chooseDirectThrowAwaitMultipleLocals("direct-throw-multiple").catch((reason) => console.log("await-direct-throw-multiple-locals", reason));
+new LoopChooser("method-").throwWithLocals().catch((reason) => console.log("await-method-throw-multiple-locals", reason));
+chooseArrowThrowWithLocals("arrow").catch((reason) => console.log("await-arrow-throw-multiple-locals", reason));

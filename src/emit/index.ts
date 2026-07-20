@@ -24049,6 +24049,7 @@ class Emitter {
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, m.body) ||
+                                this.emitDirectAsyncAwaitThrowAlias(this.defs, m.body) ||
                                 this.emitAsyncAwaitDirectReturnAwaitPrelude(
                                     this.defs,
                                     m.body,
@@ -25622,6 +25623,7 @@ class Emitter {
             if (!fd.body) unsupported(fd, "function without body");
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
                 !this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, fd.body) &&
+                !this.emitDirectAsyncAwaitThrowAlias(this.defs, fd.body) &&
                 !this.emitAsyncAwaitDirectReturnAwaitPrelude(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitInitializerReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitAssignmentReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25663,6 +25665,21 @@ class Emitter {
         const declaration = body.statements[0];
         const result = body.statements[1];
         if (!ts.isVariableStatement(declaration) || !ts.isReturnStatement(result)) return null;
+        return this.directAsyncAwaitAliasFromDeclaration(declaration, result.expression);
+    }
+
+    private directAsyncAwaitThrowAlias(body: ts.Block): DirectAsyncAwaitReturnAlias | null {
+        if (body.statements.length !== 2) return null;
+        const declaration = body.statements[0];
+        const result = body.statements[1];
+        if (!ts.isVariableStatement(declaration) || !ts.isThrowStatement(result)) return null;
+        return this.directAsyncAwaitAliasFromDeclaration(declaration, result.expression);
+    }
+
+    private directAsyncAwaitAliasFromDeclaration(
+        declaration: ts.VariableStatement,
+        resultExpressionNode: ts.Expression | undefined,
+    ): DirectAsyncAwaitReturnAlias | null {
         if (!(declaration.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
         const declarations = declaration.declarationList.declarations;
         if (declarations.length === 0) return null;
@@ -25691,7 +25708,7 @@ class Emitter {
         if (awaitedIndex < 0 || !awaitedExpression) return null;
         const variable = declarations[awaitedIndex]!;
         if (!ts.isIdentifier(variable.name)) return null;
-        const resultExpression = result.expression ? this.unwrapTransparentExpression(result.expression) : null;
+        const resultExpression = resultExpressionNode ? this.unwrapTransparentExpression(resultExpressionNode) : null;
         if (!resultExpression || !ts.isIdentifier(resultExpression)) return null;
         const variableSymbol = this.symbolForIdentifier(variable.name);
         const resultSymbol = this.symbolForIdentifier(resultExpression);
@@ -25720,6 +25737,20 @@ class Emitter {
             buf.line(`return ${this.promiseResolveResult(source, directAwaitAlias.awaitExpr.expression)};`);
         }
         return true;
+    }
+
+    private emitDirectAsyncAwaitThrowAlias(buf: CBuf, body: ts.Block): boolean {
+        const directAwaitAlias = this.directAsyncAwaitThrowAlias(body);
+        if (!directAwaitAlias) return false;
+        const continuation: AsyncAwaitExpressionReturnContinuation = {
+            awaitExpr: directAwaitAlias.awaitExpr,
+            returnExpr: directAwaitAlias.awaitExpr,
+            params: [],
+            thisValue: null,
+        };
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(continuation)) return false;
+        this.emitAsyncAwaitPreludeStatements(buf, directAwaitAlias.preludeStatements, []);
+        return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation, true);
     }
 
     private emitAsyncAwaitDirectReturnAwaitPrelude(
@@ -47191,6 +47222,7 @@ class Emitter {
                             isAsync &&
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(body, fnBody) ||
+                                this.emitDirectAsyncAwaitThrowAlias(body, fnBody) ||
                                 this.emitAsyncAwaitDirectReturnAwaitPrelude(
                                     body,
                                     fnBody,
@@ -57719,6 +57751,7 @@ class Emitter {
                     isAsync &&
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, info.fn.body) ||
+                        this.emitDirectAsyncAwaitThrowAlias(this.defs, info.fn.body) ||
                         this.emitAsyncAwaitDirectReturnAwaitPrelude(
                             this.defs,
                             info.fn.body,
