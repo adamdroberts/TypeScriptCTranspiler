@@ -35834,7 +35834,7 @@ class Emitter {
             const expression = this.unwrapTransparentExpression(last.expression);
             if (this.isSimpleLazyMultiYieldLiteral(expression)) {
                 throwStatement = last;
-            } else if (!stmt.finallyBlock && ts.isIdentifier(expression)) {
+            } else if (ts.isIdentifier(expression)) {
                 const catchDecl = stmt.catchClause.variableDeclaration;
                 const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
                     ? this.symbolForIdentifier(catchDecl.name)
@@ -36560,8 +36560,12 @@ class Emitter {
         nextYieldStarSlot: () => number,
     ): void {
         if (!envLocalName || !this.activeLazyGeneratorCloseEnabled) return;
+        const deferredCatchThrowHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .find((handler) => handler.finallyStatements.length > 0 && !!handler.throwStatement);
+        const deferredCatchThrow = deferredCatchThrowHandler ? this.freshTemp("_lazy_catch_throw") : null;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
         buf.line(`${envLocalName}->lazy_close_requested = false;`);
+        if (deferredCatchThrow) buf.line(`tsc_str_t* ${deferredCatchThrow} = NULL;`);
         if (this.activeLazyGeneratorCatchHandlers.length > 0) {
             buf.open(`if (${envLocalName}->lazy_close_throw)`);
             buf.line(`${envLocalName}->lazy_close_handled = true;`);
@@ -36584,6 +36588,9 @@ class Emitter {
                             buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
                             buf.line("a->iter_has_return = true;");
                             buf.line("a->iter_return_consumed = false;");
+                        } else if (deferredCatchThrow && handler.throwStatement) {
+                            const thrown = this.emitExpr(handler.throwStatement.expression!);
+                            buf.line(`${deferredCatchThrow} = ${this.coerceToString(thrown, handler.throwStatement.expression!)};`);
                         }
                     } else {
                         if (handler.returnStatement) {
@@ -36642,17 +36649,13 @@ class Emitter {
             buf.close();
             return;
         }
-        const catchThrow = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .filter((handler) => handler.finallyStatements.length > 0)
-            .map((handler) => handler.throwStatement)
-            .find((throwStatement): throwStatement is ts.ThrowStatement => !!throwStatement);
-        if (catchThrow) {
+        if (deferredCatchThrow) {
+            buf.open(`if (${deferredCatchThrow} != NULL)`);
             buf.line("*state = -1;");
             buf.line("*done = true;");
-            this.emitThrow(buf, catchThrow);
+            buf.line(`tsc_throw_str(${deferredCatchThrow});`);
             buf.line("return;");
             buf.close();
-            return;
         }
         buf.line("*state = -1;");
     buf.line("*done = true;");

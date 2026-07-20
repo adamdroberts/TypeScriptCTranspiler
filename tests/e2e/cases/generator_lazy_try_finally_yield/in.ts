@@ -245,3 +245,22 @@ try {
 } catch (error: any) {
     console.log("caught-direct-rethrow:", caughtDirectRethrowFirst.done, caughtDirectRethrowFirst.value, error);
 }
+
+function* caughtDirectRethrowFinally(): Generator<string, string, string> {
+    try {
+        yield "direct-rethrow-finally-pause";
+    } catch (error: any) {
+        throw error;
+    } finally {
+        catchPreludeEvents.push("direct-rethrow-finally");
+    }
+    return "normal";
+}
+
+const caughtDirectRethrowFinallyResult = caughtDirectRethrowFinally();
+const caughtDirectRethrowFinallyFirst: any = caughtDirectRethrowFinallyResult.next();
+try {
+    caughtDirectRethrowFinallyResult.throw("original-direct-rethrow-finally");
+} catch (error: any) {
+    console.log("caught-direct-rethrow-finally:", caughtDirectRethrowFinallyFirst.done, caughtDirectRethrowFinallyFirst.value, error, catchPreludeEvents.join("|"));
+}

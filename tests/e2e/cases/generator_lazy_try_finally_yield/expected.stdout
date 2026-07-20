@@ -16,3 +16,4 @@ caught-prelude: false catch-prelude-pause true prelude-caught before|error:handl
 caught-prelude-alias: false catch-alias-pause true alias:handled-alias
 caught-rethrow: false rethrow-pause catch-rethrow before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally
 caught-direct-rethrow: false direct-rethrow-pause original-direct-rethrow
+caught-direct-rethrow-finally: false direct-rethrow-finally-pause original-direct-rethrow-finally before|error:handled-prelude|rethrow:original-rethrow|rethrow-finally|direct-rethrow-finally
