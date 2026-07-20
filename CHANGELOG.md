@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Direct `return await` now reuses the staged two-, three-, and four-await adapters for non-Promise inner expressions in expression-bodied async arrows. Test: `async_await_nested_staged_return_await`.
 - Direct `return await` now routes bounded conditional inner await branches through the branch continuation adapter for expression-bodied async arrows, alongside declarations and methods. Test: `async_await_nested_conditional_return_await`.
 - Direct `return await` now supports bounded two-await `&&` / `||` / `??` inner expressions through the staged/logical adapters across async declarations, methods, and expression-bodied async-arrow functions. Test: `async_await_nested_short_circuit_return_await`.
 - Direct `return await` now supports flat five-await non-Promise inner expressions through the staged sequence adapter across async declarations, methods, and expression-bodied async-arrow functions. Test: `async_await_nested_five_return_await`.

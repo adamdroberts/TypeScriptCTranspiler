@@ -30853,6 +30853,30 @@ class Emitter {
                     return this.emitAsyncAwaitIfExpressionReturnBranch(buf, conditionalContinuation);
                 }
             }
+            const twoExpressionContinuation = this.asyncAwaitTwoExpressionReturnContinuationForExpression(
+                nestedExpression,
+                parameters,
+                thisValue,
+            );
+            if (twoExpressionContinuation && this.asyncAwaitTwoExpressionReturnContinuationSupported(twoExpressionContinuation)) {
+                return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, twoExpressionContinuation);
+            }
+            const fourExpressionContinuation = this.asyncAwaitFourExpressionReturnContinuationForExpression(
+                nestedExpression,
+                parameters,
+                thisValue,
+            );
+            if (fourExpressionContinuation && this.asyncAwaitThreeExpressionReturnContinuationSupported(fourExpressionContinuation)) {
+                return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, fourExpressionContinuation);
+            }
+            const threeExpressionContinuation = this.asyncAwaitThreeExpressionReturnContinuationForExpression(
+                nestedExpression,
+                parameters,
+                thisValue,
+            );
+            if (threeExpressionContinuation && this.asyncAwaitThreeExpressionReturnContinuationSupported(threeExpressionContinuation)) {
+                return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, threeExpressionContinuation);
+            }
             const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                 expression.expression,
                 parameters,
