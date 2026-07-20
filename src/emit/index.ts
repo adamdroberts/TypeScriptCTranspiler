@@ -364,6 +364,11 @@ interface AsyncAwaitIfTwoExpressionReturnLeaf {
     continuation: AsyncAwaitTwoExpressionReturnContinuation;
 }
 
+interface AsyncAwaitIfExpressionSequenceReturnLeaf {
+    kind: "sequenceReturn";
+    continuation: AsyncAwaitExpressionSequenceReturnContinuation;
+}
+
 interface AsyncAwaitIfLocalReturnLeaf {
     kind: "localReturn";
     continuation: AsyncAwaitReturnContinuation;
@@ -422,6 +427,7 @@ interface AsyncAwaitSwitchExpressionReturnBranch {
 type AsyncAwaitIfExpressionReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
     | AsyncAwaitIfTwoExpressionReturnLeaf
+    | AsyncAwaitIfExpressionSequenceReturnLeaf
     | AsyncAwaitIfLocalReturnLeaf
     | AsyncAwaitIfLocalTryCatchReturnLeaf
     | AsyncAwaitIfLocalTryFinallyReturnLeaf
@@ -31654,6 +31660,36 @@ class Emitter {
             captures,
         );
         if (twoExpressionContinuation) return { kind: "twoReturn", continuation: twoExpressionContinuation };
+        const fourExpressionContinuation = this.asyncAwaitFourExpressionReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (fourExpressionContinuation &&
+            this.asyncAwaitThreeExpressionReturnContinuationSupported(fourExpressionContinuation)) {
+            return { kind: "sequenceReturn", continuation: fourExpressionContinuation };
+        }
+        const threeExpressionContinuation = this.asyncAwaitThreeExpressionReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (threeExpressionContinuation &&
+            this.asyncAwaitThreeExpressionReturnContinuationSupported(threeExpressionContinuation)) {
+            return { kind: "sequenceReturn", continuation: threeExpressionContinuation };
+        }
+        const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+            expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (sequenceContinuation &&
+            this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {
+            return { kind: "sequenceReturn", continuation: sequenceContinuation };
+        }
         const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
             expression,
             parameters,
@@ -31995,6 +32031,43 @@ class Emitter {
                     captures,
                 );
             }
+            const twoExpressionContinuation = this.asyncAwaitTwoExpressionReturnContinuationForExpression(
+                expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+            if (twoExpressionContinuation) return { kind: "twoReturn", continuation: twoExpressionContinuation };
+            const fourExpressionContinuation = this.asyncAwaitFourExpressionReturnContinuationForExpression(
+                expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+            if (fourExpressionContinuation &&
+                this.asyncAwaitThreeExpressionReturnContinuationSupported(fourExpressionContinuation)) {
+                return { kind: "sequenceReturn", continuation: fourExpressionContinuation };
+            }
+            const threeExpressionContinuation = this.asyncAwaitThreeExpressionReturnContinuationForExpression(
+                expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+            if (threeExpressionContinuation &&
+                this.asyncAwaitThreeExpressionReturnContinuationSupported(threeExpressionContinuation)) {
+                return { kind: "sequenceReturn", continuation: threeExpressionContinuation };
+            }
+            const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                expression,
+                parameters,
+                thisValue,
+                captures,
+            );
+            if (sequenceContinuation &&
+                this.asyncAwaitThreeExpressionReturnContinuationSupported(sequenceContinuation)) {
+                return { kind: "sequenceReturn", continuation: sequenceContinuation };
+            }
             const continuation = this.asyncAwaitExpressionReturnContinuationForExpression(
                 expression,
                 parameters,
@@ -32128,6 +32201,7 @@ class Emitter {
         if (
             branch.kind === "return" ||
             branch.kind === "twoReturn" ||
+            branch.kind === "sequenceReturn" ||
             branch.kind === "localReturn" ||
             branch.kind === "localTryCatchReturn" ||
             branch.kind === "localTryFinallyReturn" ||
@@ -32152,6 +32226,7 @@ class Emitter {
             if (
                 node.kind === "return" ||
                 node.kind === "twoReturn" ||
+                node.kind === "sequenceReturn" ||
                 node.kind === "localReturn" ||
                 node.kind === "localTryCatchReturn" ||
                 node.kind === "localTryFinallyReturn" ||
@@ -32197,6 +32272,9 @@ class Emitter {
         if (branch.kind === "twoReturn") {
             return this.asyncAwaitTwoExpressionReturnContinuationSupported(branch.continuation);
         }
+        if (branch.kind === "sequenceReturn") {
+            return this.asyncAwaitThreeExpressionReturnContinuationSupported(branch.continuation);
+        }
         if (branch.kind === "localReturn") {
             return this.asyncAwaitReturnContinuationSupported(branch.continuation);
         }
@@ -32234,6 +32312,9 @@ class Emitter {
         }
         if (branch.kind === "twoReturn") {
             return this.emitAsyncAwaitTwoExpressionReturnContinuationResult(buf, branch.continuation, rejectResult);
+        }
+        if (branch.kind === "sequenceReturn") {
+            return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(buf, branch.continuation, rejectResult);
         }
         if (branch.kind === "localReturn") {
             this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);

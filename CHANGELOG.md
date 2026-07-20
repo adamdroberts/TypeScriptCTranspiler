@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Branch-block fallthrough returns now extend the bounded non-short-circuit expression subset from two to three direct awaited operands in conditional arms across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_three_await_expression_fallthrough`.
 - Branch-block fallthrough returns now support bounded two-await non-short-circuit expressions in conditional arms across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_two_await_expression_fallthrough`.
 - Terminal throw expressions now support bounded short-circuit `&&` / `||` / `??` trees with direct awaits on both operands, short-circuiting after the first fulfillment or rejecting with the second awaited result across async declarations, methods, and async-arrow function values. Test: `async_await_throw_short_circuit_two_await`.
 - Branch-block fallthrough returns now support bounded short-circuit `&&` / `||` / `??` expressions with direct awaits on both operands, short-circuiting after the first fulfillment or sequencing the second await across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_short_circuit_two_await_fallthrough`.
