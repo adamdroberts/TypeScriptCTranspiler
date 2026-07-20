@@ -284,6 +284,23 @@ const caughtBindingAliasCompoundAssignmentFirst: any = caughtBindingAliasCompoun
 const caughtBindingAliasCompoundAssignmentDone: any = caughtBindingAliasCompoundAssignmentResult.throw("binding-alias");
 console.log("caught-binding-alias-compound:", caughtBindingAliasCompoundAssignmentFirst.done, caughtBindingAliasCompoundAssignmentFirst.value, caughtBindingAliasCompoundAssignmentDone.done, caughtBindingAliasCompoundAssignmentDone.value, catchPreludeEvents.join("|"));
 
+function* caughtDirectBindingAssignment(): Generator<string, string, string> {
+    try {
+        yield "direct-binding-assignment-pause";
+    } catch (error: any) {
+        error += ":direct";
+        return error;
+    } finally {
+        catchPreludeEvents.push("direct-binding-assignment-finally");
+    }
+    return "normal";
+}
+
+const caughtDirectBindingAssignmentResult = caughtDirectBindingAssignment();
+const caughtDirectBindingAssignmentFirst: any = caughtDirectBindingAssignmentResult.next();
+const caughtDirectBindingAssignmentDone: any = caughtDirectBindingAssignmentResult.throw("binding");
+console.log("caught-direct-binding-assignment:", caughtDirectBindingAssignmentFirst.done, caughtDirectBindingAssignmentFirst.value, caughtDirectBindingAssignmentDone.done, caughtDirectBindingAssignmentDone.value, catchPreludeEvents.join("|"));
+
 function* caughtRethrow(): Generator<string, string, string> {
     try {
         yield "rethrow-pause";

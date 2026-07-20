@@ -44031,6 +44031,8 @@ class Emitter {
 
     private storageType(expr: ts.Expression): CType {
         if (ts.isIdentifier(expr)) {
+            const symbol = this.symbolForIdentifier(expr);
+            if (symbol && this.catchStringSymbols.has(symbol)) return T_STRING;
             return this.identifierDeclaredType(expr) ?? this.prepareType(mapType(expr, this.checker));
         }
         return this.prepareType(mapType(expr, this.checker));

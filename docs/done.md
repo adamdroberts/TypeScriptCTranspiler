@@ -214,6 +214,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Lazy generators preserve direct assignments to bounded catch-binding aliases before terminal catch recovery. Test: `generator_lazy_try_finally_yield`
 - Lazy generators preserve simple string compound assignments to bounded catch-binding aliases before terminal catch recovery. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support a terminal literal catch `throw` after a suspended yield, including bounded catch preludes and non-suspending `finally` ordering. Test: `generator_lazy_try_finally_yield`
+- Lazy generators preserve direct assignment and simple string compound assignment to the catch binding before terminal recovery. Test: `generator_lazy_try_finally_yield`
 - Lazy generators rethrow a simple catch identifier directly after a suspended yield when no `finally` must carry the binding. Test: `generator_lazy_try_finally_yield`
 - Lazy generators carry a simple catch-identifier rethrow through a non-suspending `finally`, preserving finalizer `throw` / `return` overrides. Test: `generator_lazy_try_finally_yield`
 - Lazy generators support two-leaf string composition in catch rethrows, including through a non-suspending `finally`. Test: `generator_lazy_try_finally_yield`
