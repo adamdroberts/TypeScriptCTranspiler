@@ -32446,11 +32446,7 @@ class Emitter {
             if (!conditionAwaitsAreValid) return;
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             if (ts.isAwaitExpression(node)) {
-                if (awaitExpressions.length >= 5) {
-                    conditionAwaitsAreValid = false;
-                } else {
-                    awaitExpressions.push(node);
-                }
+                awaitExpressions.push(node);
                 return;
             }
             ts.forEachChild(node, findAwait);
@@ -32576,7 +32572,7 @@ class Emitter {
                     }
                 };
                 flatten(condition);
-                if (flattenValid && flattened.length === awaitExpressions.length && flattened.length <= 5) {
+                if (flattenValid && flattened.length === awaitExpressions.length) {
                     if (flattened.length === 2) {
                         const continuation: AsyncAwaitTwoExpressionReturnContinuation = {
                             firstAwaitExpr: flattened[0]!,

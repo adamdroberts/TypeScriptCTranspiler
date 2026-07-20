@@ -22,3 +22,5 @@ await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
+await-while-six-logical-true six-logical-yes
+await-while-six-logical-false six-logical-no
