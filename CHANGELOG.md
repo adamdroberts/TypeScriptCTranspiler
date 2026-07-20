@@ -8,6 +8,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Branch-block fallthrough returns now cover supported structural multi-await expressions through the generic sequence adapter, including object-literal properties and multi-await template expressions, across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_structural_expression_fallthrough`.
 - Branch-block fallthrough returns now support flat non-short-circuit expression sequences with five or more direct awaited operands through the generic sequence adapter across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_five_await_expression_fallthrough`.
 - Branch-block fallthrough returns now extend the bounded non-short-circuit expression subset from two to three direct awaited operands in conditional arms across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_three_await_expression_fallthrough`.
 - Branch-block fallthrough returns now support bounded two-await non-short-circuit expressions in conditional arms across async declarations, methods, and async-arrow function values. Test: `async_await_branch_block_two_await_expression_fallthrough`.

@@ -1,0 +1,6 @@
+declaration-branch: fn-branch
+method-branch: method-branch
+declaration-fall: {"prefix":"fn-","first":"one","second":"two"}
+value-branch: arrow-branch
+method-fall: {"prefix":"method-","first":"one","second":"two"}
+value-fall: value-arrow-one-two
