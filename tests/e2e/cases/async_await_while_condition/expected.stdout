@@ -1,3 +1,11 @@
+await-while-sync-body-true sync-body
+await-while-sync-body-false sync-fallthrough
+await-for-sync-body-true for-sync-body
+await-for-sync-body-false for-sync-fallthrough
+await-method-sync-body-true method-sync-body
+await-method-sync-body-false method-sync-fallthrough
+await-value-sync-body-true value-sync-body
+await-value-sync-body-false value-sync-fallthrough
 await-while-true loop-yes
 await-while-false loop-no
 await-while-expression-true expression-loop-yes

@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Bounded awaited loop conditions now resolve synchronous direct `return` bodies before false fallthrough in `while` and initializer-free `for` forms across async declarations, class methods, and function values. Regression: `async_await_while_condition`.
 - Finite lazy multi-yield returns now accept bounded `typeof` leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now accept bounded equality and relational comparison leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now accept bounded exponentiation leaves around yielded operands. Regression: `generator_lazy_multi_yield_return`.

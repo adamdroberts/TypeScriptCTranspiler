@@ -939,6 +939,16 @@ async function chooseLoopNullableNullish(flag: boolean): Promise<string> {
     return "nullable-nullish-no";
 }
 
+async function chooseLoopSynchronousBody(flag: boolean): Promise<string> {
+    while (await Promise.resolve(flag)) return "sync-body";
+    return "sync-fallthrough";
+}
+
+async function chooseForSynchronousBody(flag: boolean): Promise<string> {
+    for (; await Promise.resolve(flag);) return "for-sync-body";
+    return "for-sync-fallthrough";
+}
+
 class LoopChooser {
     private readonly prefix: string;
 
@@ -970,6 +980,11 @@ class LoopChooser {
         const first = await laterBodyValue(this.prefix + "first"), second = await laterBodyValue(first + "-second");
         return second;
     }
+
+    async pickSynchronousBody(flag: boolean): Promise<string> {
+        while (await Promise.resolve(flag)) return "method-sync-body";
+        return "method-sync-fallthrough";
+    }
 }
 
 const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
@@ -977,6 +992,11 @@ const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> =
         return await laterBodyValue(prefix + "yes");
     }
     return prefix + "no";
+};
+
+const chooseLoopSynchronousBodyValue = async (flag: boolean): Promise<string> => {
+    while (await Promise.resolve(flag)) return "value-sync-body";
+    return "value-sync-fallthrough";
 };
 
 const chooseArrowThrowWithLocals = async (prefix: string): Promise<string> => {
@@ -1168,6 +1188,14 @@ new LoopChooser("method-loop-").pickMultiple(true).then((value) => console.log("
 new LoopChooser("method-loop-").pickMultiple(false).then((value) => console.log("await-while-method-multiple-false", value));
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
 chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));
+chooseLoopSynchronousBody(true).then((value) => console.log("await-while-sync-body-true", value));
+chooseLoopSynchronousBody(false).then((value) => console.log("await-while-sync-body-false", value));
+chooseForSynchronousBody(true).then((value) => console.log("await-for-sync-body-true", value));
+chooseForSynchronousBody(false).then((value) => console.log("await-for-sync-body-false", value));
+new LoopChooser("method-").pickSynchronousBody(true).then((value) => console.log("await-method-sync-body-true", value));
+new LoopChooser("method-").pickSynchronousBody(false).then((value) => console.log("await-method-sync-body-false", value));
+chooseLoopSynchronousBodyValue(true).then((value) => console.log("await-value-sync-body-true", value));
+chooseLoopSynchronousBodyValue(false).then((value) => console.log("await-value-sync-body-false", value));
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
 chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => console.log("await-direct-multiple-control-prelude", value));
 chooseDirectAwaitMultipleVarPrelude("direct-var").then((value) => console.log("await-direct-multiple-var-prelude", value));

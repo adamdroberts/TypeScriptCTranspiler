@@ -284,7 +284,7 @@ interface AsyncAwaitExpressionReturnContinuation {
 interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     conditionExpr: ts.Expression;
     conditionAwaitExpr: ts.AwaitExpression;
-    bodyAwaitExpr: ts.AwaitExpression;
+    bodyAwaitExpr: ts.AwaitExpression | null;
     bodyReturnExpr: ts.Expression;
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
     bodyPostAwaitStatements: readonly ts.Statement[];
@@ -33020,6 +33020,9 @@ class Emitter {
                 : directBodyAwait;
             bodyReturnExpr = bodyAwaitExpr;
             bodyPreludeStatements = loopBody.slice(0, -1);
+        } else if (loopBody.length === 1 && ts.isReturnStatement(bodyAction) && bodyAction.expression) {
+            bodyReturnExpr = bodyAction.expression;
+            bodyPreludeStatements = [];
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
             (() => {
                 for (let index = loopBody.length - 2; index >= 0; index--) {
@@ -33175,7 +33178,7 @@ class Emitter {
             return this.asyncAwaitLoopBodyControlPreludeSupported(statement);
         });
         if (!bodyPreludeSupported) return false;
-        if (!bodyAwaitExpr || !bodyReturnExpr) return false;
+        if (!bodyReturnExpr) return false;
         const conditionAwaitExpr = awaitExpressions[0]!;
         const conditionPromiseType = this.prepareType(mapTsType(
             conditionAwaitExpr.expression,
@@ -33187,16 +33190,20 @@ class Emitter {
             this.checker.getTypeAtLocation(conditionAwaitExpr),
             this.checker,
         ));
-        const bodyPromiseType = this.prepareType(mapTsType(
-            bodyAwaitExpr.expression,
-            this.checker.getTypeAtLocation(bodyAwaitExpr.expression),
-            this.checker,
-        ));
-        const bodyAwaitedType = this.prepareType(mapTsType(
-            bodyAwaitExpr,
-            this.checker.getTypeAtLocation(bodyAwaitExpr),
-            this.checker,
-        ));
+        const bodyPromiseType = bodyAwaitExpr
+            ? this.prepareType(mapTsType(
+                bodyAwaitExpr.expression,
+                this.checker.getTypeAtLocation(bodyAwaitExpr.expression),
+                this.checker,
+            ))
+            : null;
+        const bodyAwaitedType = bodyAwaitExpr
+            ? this.prepareType(mapTsType(
+                bodyAwaitExpr,
+                this.checker.getTypeAtLocation(bodyAwaitExpr),
+                this.checker,
+            ))
+            : null;
         let hasNullishOperator = false;
         const findNullishOperator = (node: ts.Node): void => {
             if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
@@ -33210,8 +33217,8 @@ class Emitter {
         if (
             conditionPromiseType.kind !== "promise" ||
             (conditionAwaitedType.kind !== "boolean" && !(hasNullishOperator && conditionAwaitedType.kind === "value")) ||
-            bodyPromiseType.kind !== "promise" ||
-            bodyAwaitedType.kind === "never"
+            (bodyPromiseType && bodyPromiseType.kind !== "promise") ||
+            (bodyAwaitedType && bodyAwaitedType.kind === "never")
         ) return false;
 
         const continuationParams = this.asyncAwaitContinuationParameters(parameters);
@@ -33254,7 +33261,7 @@ class Emitter {
         visitReferences(condition);
         for (const statement of bodyPreludeStatements) visitReferences(statement);
         for (const statement of bodyPostAwaitStatements) visitReferences(statement);
-        visitReferences(bodyAwaitExpr);
+        if (bodyAwaitExpr) visitReferences(bodyAwaitExpr);
         if (bodyLeadingChain) {
             for (const parameter of bodyLeadingChain.params) referenced.set(parameter.symbol, parameter);
             if (bodyLeadingChain.thisValue) usesThis = true;
@@ -33277,7 +33284,7 @@ class Emitter {
             params: capturedParams,
             thisValue: usesThis ? thisValue : null,
         };
-        let bodyAdapter: string;
+        let bodyAdapter: string | null = null;
         if (continuation.bodyLeadingContinuation) {
             const bodyPromiseTypes = continuation.bodyLeadingContinuation.steps.map((step) => this.prepareType(mapTsType(
                 step.awaitExpr.expression,
@@ -33307,7 +33314,7 @@ class Emitter {
                 continuation.params,
                 continuation.thisValue,
             );
-        } else {
+        } else if (bodyAwaitExpr && bodyPromiseType && bodyAwaitedType) {
             bodyAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
                 bodyPromiseType,
                 bodyAwaitedType,
@@ -33354,8 +33361,8 @@ class Emitter {
         conditionPromiseType: CType,
         conditionAwaitedType: CType,
         continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
-        bodyPromiseType: CType,
-        bodyAdapter: string,
+        bodyPromiseType: CType | null,
+        bodyAdapter: string | null,
         bodyRejectResult: boolean,
     ): string {
         const name = `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
@@ -33407,24 +33414,41 @@ class Emitter {
             const conditionTruth = this.truthyC(emittedCondition, continuation.conditionExpr);
             buf.open(`if (${conditionTruth})`);
             for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
-            const bodySource = this.emitExpr(continuation.bodyAwaitExpr.expression);
-            const bodySourceVar = this.freshTemp("_await_body_source");
-            const bodyEnvVar = this.freshTemp("_await_body_env");
-            const bodyEnvType = `${bodyAdapter}_env_t`;
-            buf.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyPromiseType, continuation.bodyAwaitExpr.expression)};`);
-            buf.line(`${bodyEnvType}* const ${bodyEnvVar} = (${bodyEnvType}*)TSC_GC_MALLOC(sizeof(${bodyEnvType}));`);
-            buf.line(`${bodyEnvVar}->receiver = ${bodySourceVar};`);
-            buf.line(`${bodyEnvVar}->result_promise = _ret;`);
-            for (const param of continuation.params) buf.line(`${bodyEnvVar}->${param.field} = state->${param.field};`);
-            if (continuation.thisValue) buf.line(`${bodyEnvVar}->this_arg = state->this_arg;`);
-            buf.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
-            buf.line(`tsc_promise_add_callback(${bodySourceVar}, ${bodyAdapter}, ${bodyEnvVar});`);
-            buf.close();
-            buf.open("else");
-            buf.line(`${bodyAdapter}(${bodyEnvVar});`);
-            buf.close();
-            buf.line("tsc_try_pop();");
-            buf.line("return;");
+            if (continuation.bodyAwaitExpr && bodyPromiseType && bodyAdapter) {
+                const bodySource = this.emitExpr(continuation.bodyAwaitExpr.expression);
+                const bodySourceVar = this.freshTemp("_await_body_source");
+                const bodyEnvVar = this.freshTemp("_await_body_env");
+                const bodyEnvType = `${bodyAdapter}_env_t`;
+                buf.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyPromiseType, continuation.bodyAwaitExpr.expression)};`);
+                buf.line(`${bodyEnvType}* const ${bodyEnvVar} = (${bodyEnvType}*)TSC_GC_MALLOC(sizeof(${bodyEnvType}));`);
+                buf.line(`${bodyEnvVar}->receiver = ${bodySourceVar};`);
+                buf.line(`${bodyEnvVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${bodyEnvVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${bodyEnvVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${bodySourceVar}, ${bodyAdapter}, ${bodyEnvVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${bodyAdapter}(${bodyEnvVar});`);
+                buf.close();
+                buf.line("tsc_try_pop();");
+                buf.line("return;");
+            } else {
+                const returned = this.emitExpr(continuation.bodyReturnExpr);
+                const returnedType = this.prepareType(returned.ty);
+                if (returnedType.kind === "void" || returnedType.kind === "never") {
+                    buf.line(`${returned.c};`);
+                    buf.line("tsc_try_pop();");
+                    buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                } else {
+                    const returnVar = this.freshTemp("_await_body_return");
+                    buf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
+                    buf.line("tsc_try_pop();");
+                    buf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, continuation.bodyReturnExpr)};`);
+                }
+                buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                buf.line("return;");
+            }
             buf.close();
             const returned = this.emitExpr(continuation.fallthroughExpr);
             const returnedType = this.prepareType(returned.ty);
