@@ -32452,6 +32452,20 @@ class Emitter {
                 ts.factory.createToken(ts.SyntaxKind.CommaToken),
                 loopBody[1]!.expression,
             );
+        } else if (
+            loopBody.length === 2 &&
+            ts.isVariableStatement(loopBody[0]!) &&
+            (loopBody[0]!.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 &&
+            loopBody[0]!.declarationList.declarations.length === 1 &&
+            ts.isIdentifier(loopBody[0]!.declarationList.declarations[0]!.name) &&
+            loopBody[0]!.declarationList.declarations[0]!.initializer &&
+            ts.isReturnStatement(loopBody[1]!) &&
+            loopBody[1]!.expression &&
+            ts.isIdentifier(loopBody[1]!.expression) &&
+            this.symbolForIdentifier(loopBody[0]!.declarationList.declarations[0]!.name) ===
+                this.symbolForIdentifier(loopBody[1]!.expression)
+        ) {
+            loopReturnExpression = loopBody[0]!.declarationList.declarations[0]!.initializer!;
         } else {
             return false;
         }

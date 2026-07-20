@@ -28,6 +28,14 @@ async function chooseLoopExpression(flag: boolean, prefix: string): Promise<stri
     return prefix + "-no";
 }
 
+async function chooseLoopLocal(flag: boolean, prefix: string): Promise<string> {
+    while (await (flag ? laterTrue() : laterFalse())) {
+        const result = prefix + "-local-yes";
+        return result;
+    }
+    return prefix + "-local-no";
+}
+
 class LoopChooser {
     private readonly prefix: string;
 
@@ -54,6 +62,8 @@ chooseLoopTrue().then((value) => console.log("await-while-true", value));
 chooseLoopFalse().then((value) => console.log("await-while-false", value));
 chooseLoopExpression(true, "expression-loop").then((value) => console.log("await-while-expression-true", value));
 chooseLoopExpression(false, "expression-loop").then((value) => console.log("await-while-expression-false", value));
+chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));
+chooseLoopLocal(false, "local-loop").then((value) => console.log("await-while-local-false", value));
 new LoopChooser("method-loop-").pick(true).then((value) => console.log("await-while-method-true", value));
 new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-while-method-false", value));
 chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
