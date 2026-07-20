@@ -37580,6 +37580,10 @@ class Emitter {
                 return true;
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return true;
+            if (ts.isPrefixUnaryExpression(unwrapped)) {
+                if (![ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) return false;
+                return visit(unwrapped.operand);
+            }
             if (!ts.isBinaryExpression(unwrapped)) return false;
             const op = unwrapped.operatorToken.kind;
             if (![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
@@ -38650,6 +38654,9 @@ class Emitter {
                 };
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return this.emitExpr(unwrapped);
+            if (ts.isPrefixUnaryExpression(unwrapped)) {
+                return this.emitSimpleLazyResumePrefixUnary(unwrapped, build(unwrapped.operand));
+            }
             if (!ts.isBinaryExpression(unwrapped)) unsupported(node, "lazy multi-yield return contains an unsupported expression leaf");
             return this.emitSimpleLazyResumeBinary(unwrapped, build(unwrapped.left), build(unwrapped.right));
         };
@@ -38660,6 +38667,36 @@ class Emitter {
         buf.line("*state = -1;");
         buf.line("*done = true;");
         buf.line("return;");
+    }
+
+    private emitSimpleLazyResumePrefixUnary(
+        expr: ts.PrefixUnaryExpression,
+        inner: EmitResult,
+    ): EmitResult {
+        switch (expr.operator) {
+            case ts.SyntaxKind.ExclamationToken:
+                return {
+                    c: inner.ty.kind === "value"
+                        ? `(!tsc_value_is_truthy(${this.coerce(inner, T_VALUE, expr.operand)}))`
+                        : `(!${this.truthyExprFromEmitResult(inner, expr.operand)})`,
+                    ty: T_BOOLEAN,
+                };
+            case ts.SyntaxKind.MinusToken:
+                if (inner.ty.kind === "value") return { c: `tsc_value_neg(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                if (inner.ty.kind === "bigint") return { c: `tsc_bigint_neg(${inner.c})`, ty: T_BIGINT };
+                requireNumber(expr, inner.ty);
+                return { c: `(-${inner.c})`, ty: T_NUMBER };
+            case ts.SyntaxKind.PlusToken:
+                if (inner.ty.kind === "value") return { c: `tsc_value_pos(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                requireNumber(expr, inner.ty);
+                return { c: `(+${inner.c})`, ty: T_NUMBER };
+            case ts.SyntaxKind.TildeToken:
+                if (inner.ty.kind === "value") return { c: `tsc_value_bit_not(${this.coerce(inner, T_VALUE, expr.operand)})`, ty: T_VALUE };
+                requireNumber(expr, inner.ty);
+                return { c: `((double)(~(int32_t)(${inner.c})))`, ty: T_NUMBER };
+            default:
+                unsupported(expr, "lazy multi-yield return contains an unsupported prefix operator");
+        }
     }
 
     private emitSimpleLazyGeneratorLike(

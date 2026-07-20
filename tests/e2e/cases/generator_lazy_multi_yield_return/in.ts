@@ -18,6 +18,14 @@ function* mixedLeaves(): Generator<number, number, number> {
     return 100 + (yield 1) + (yield 2) * 10;
 }
 
+function* unaryLeaves(): Generator<number, number, number> {
+    return -(yield 5) + ~(yield 2);
+}
+
+function* booleanUnaryLeaves(): Generator<any, any, any> {
+    return !(yield 0) + (yield 2);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -54,3 +62,13 @@ const mixedFirst: any = mixedIter.next();
 const mixedSecond: any = mixedIter.next(3);
 const mixedDone: any = mixedIter.next(4);
 console.log("mixed", mixedFirst.value, mixedSecond.value, mixedDone.done, mixedDone.value);
+const unaryIter = unaryLeaves();
+const unaryFirst: any = unaryIter.next();
+const unarySecond: any = unaryIter.next(3);
+const unaryDone: any = unaryIter.next(1);
+console.log("unary", unaryFirst.value, unarySecond.value, unaryDone.done, unaryDone.value);
+const booleanUnaryIter = booleanUnaryLeaves();
+const booleanUnaryFirst: any = booleanUnaryIter.next();
+const booleanUnarySecond: any = booleanUnaryIter.next(0);
+const booleanUnaryDone: any = booleanUnaryIter.next(2);
+console.log("boolean-unary", booleanUnaryFirst.value, booleanUnarySecond.value, booleanUnaryDone.done, booleanUnaryDone.value);
