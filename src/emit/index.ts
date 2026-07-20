@@ -27602,9 +27602,25 @@ class Emitter {
         const finallyDeclaredLocals = new Set<ts.Symbol>();
         const finallyInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
+        let successThrowExpr: ts.Expression | null = null;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(tryStmt.tryBlock.statements[tryPrelude.nextIndex]!);
             successReturnsAwaited = !!awaited;
+        }
+        if (!awaited && remainingTryStatements === 1) {
+            const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
+            if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
+                const expressionContinuation = this.asyncAwaitExpressionReturnContinuationForExpression(
+                    this.unwrapTransparentExpression(tryStatement.expression),
+                    parameters,
+                    thisValue,
+                    [...prelude.captures, ...tryPrelude.captures],
+                );
+                if (expressionContinuation) {
+                    awaited = { variable: null, awaitExpr: expressionContinuation.awaitExpr };
+                    successThrowExpr = expressionContinuation.returnExpr;
+                }
+            }
         }
         if (!awaited) return null;
         if (!ts.isReturnStatement(catchStmt) && !ts.isThrowStatement(catchStmt)) return null;
@@ -27613,7 +27629,9 @@ class Emitter {
             : null;
         const catchThrowExpr = ts.isThrowStatement(catchStmt) ? catchStmt.expression : null;
         let successReturnExpr: ts.Expression | null = null;
-        if (successReturnsAwaited) {
+        if (successThrowExpr) {
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
+        } else if (successReturnsAwaited) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else {
             if (remainingTryStatements !== 2) return null;
@@ -27843,6 +27861,7 @@ class Emitter {
             variable: awaited.variable,
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
+            successThrowExpr,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
             catchPreludeStatements,
@@ -27944,21 +27963,27 @@ class Emitter {
         const finallyEh = this.freshTemp("_await_finally_eh");
         const catchReason = this.freshTemp("_await_catch_reason");
         const variableSymbol = continuation.variable ? this.symbolForIdentifier(continuation.variable) : null;
-        const awaitedValue = awaitedType.kind === "void" || (!variableSymbol && !continuation.successReturnsAwaited)
+        const awaitedValue = awaitedType.kind === "void" ||
+            (!variableSymbol && !continuation.successReturnsAwaited && !continuation.successThrowExpr)
             ? null
             : this.coerce(
                 this.promiseFulfilledValue(promiseType.elem, "_p"),
                 awaitedType,
-                continuation.successReturnExpr ?? continuation.variable ?? continuation.awaitExpr,
+                continuation.successReturnExpr ?? continuation.successThrowExpr ?? continuation.variable ?? continuation.awaitExpr,
             );
         const scope = new Map<ts.Symbol, string>();
         if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
         for (const param of continuation.params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
+        const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        if (continuation.successThrowExpr) {
+            awaitScope.set(continuation.awaitExpr, { c: valueVar, ty: awaitedType });
+        }
 
         const emitWithScope = (target: CBuf, emit: () => void): void => {
             this.argumentValueScopes.push(scope);
+            this.awaitExpressionValueScopes.push(awaitScope);
             if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
             this.asyncAwaitContinuationAdapterDepth++;
             try {
@@ -27966,6 +27991,7 @@ class Emitter {
             } finally {
                 this.asyncAwaitContinuationAdapterDepth--;
                 if (continuation.thisValue) this.functionThisStack.pop();
+                this.awaitExpressionValueScopes.pop();
                 this.argumentValueScopes.pop();
             }
         };
@@ -27993,15 +28019,20 @@ class Emitter {
             buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
         }
         let tryReturned = null as unknown as EmitResult | null;
+        let tryThrown = null as unknown as EmitResult | null;
         emitWithScope(buf, () => {
-            if (continuation.successReturnsAwaited) {
+            if (continuation.successThrowExpr) {
+                tryThrown = this.emitExpr(continuation.successThrowExpr);
+            } else if (continuation.successReturnsAwaited) {
                 if (awaitedType.kind !== "void") tryReturned = { c: valueVar, ty: awaitedType };
             } else if (continuation.successReturnExpr) {
                 tryReturned = this.emitExpr(continuation.successReturnExpr);
             }
         });
         const tryReturnType = tryReturned ? this.prepareType(tryReturned.ty) : T_VOID;
-        if (!tryReturned || tryReturnType.kind === "void" || tryReturnType.kind === "never") {
+        if (tryThrown) {
+            buf.line(`tsc_throw_str(${this.coerceToString(tryThrown, continuation.successThrowExpr!)});`);
+        } else if (!tryReturned || tryReturnType.kind === "void" || tryReturnType.kind === "never") {
             if (tryReturned) buf.line(`${tryReturned.c};`);
             buf.line("tsc_try_pop();");
             buf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);

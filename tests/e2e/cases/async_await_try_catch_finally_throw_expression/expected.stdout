@@ -1,0 +1,8 @@
+finally: declaration
+declaration: fn-throw-suffix-caught
+finally: method
+method: -throwmethod-suffix-caught
+finally: arrow
+value: arrow-throw-suffix-caught
+finally: rejected
+rejected: rejected-caught
