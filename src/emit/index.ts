@@ -24083,6 +24083,12 @@ class Emitter {
                                     m.parameters,
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
+                                this.emitAsyncAwaitWhileConditionReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                                     this.defs,
                                     m.body,
@@ -32423,7 +32429,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
-        if (body.statements.length !== 2 || thisValue || parameters.some((parameter) =>
+        if (body.statements.length !== 2 || parameters.some((parameter) =>
             !this.isThisParameter(parameter) && ts.isIdentifier(parameter.name))) return false;
         const loop = body.statements[0]!;
         const fallthrough = body.statements[1]!;
@@ -46205,6 +46211,12 @@ class Emitter {
                                     runtimeParams,
                                     type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
                                 ) ||
+                                this.emitAsyncAwaitWhileConditionReturnContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                                     body,
                                     fnBody,
@@ -56722,6 +56734,12 @@ class Emitter {
                             thisType ? { c: "__tsc_this", ty: thisType } : null,
                         ) ||
                         this.emitAsyncAwaitConditionalExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
+                        this.emitAsyncAwaitWhileConditionReturnContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,

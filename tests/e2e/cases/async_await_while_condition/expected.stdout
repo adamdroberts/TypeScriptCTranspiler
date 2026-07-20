@@ -1,2 +1,4 @@
 await-while-true loop-yes
 await-while-false loop-no
+await-while-method method-loop-yes
+await-while-value value-loop-no
