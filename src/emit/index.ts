@@ -28954,6 +28954,12 @@ class Emitter {
         const finalReturnAwait = finalReturnExpression && ts.isAwaitExpression(finalReturnExpression)
             ? finalReturnExpression
             : null;
+        const finalThrowExpression = terminalThrow
+            ? this.unwrapTransparentExpression(terminalThrow.expression)
+            : null;
+        const finalThrowAwait = finalThrowExpression && ts.isAwaitExpression(finalThrowExpression)
+            ? finalThrowExpression
+            : null;
         let pendingBetween: ts.Statement[] = [];
         for (const stmt of chainStatements) {
             const conditionalSteps = this.asyncAwaitConditionalLeadingSteps(stmt);
@@ -29011,6 +29017,12 @@ class Emitter {
             betweenStatements.push(pendingBetween);
             pendingBetween = [];
         }
+        if (finalThrowAwait) {
+            if (steps.length === 0) return null;
+            steps.push({ variable: null, awaitExpr: finalThrowAwait });
+            betweenStatements.push(pendingBetween);
+            pendingBetween = [];
+        }
         if (pendingBetween.length > 0) return null;
         if (steps.length < 2) return null;
         for (const statements of betweenStatements) {
@@ -29040,7 +29052,13 @@ class Emitter {
         const referenced = this.asyncAwaitLeadingContinuationReferences(
             steps,
             betweenStatements,
-            finalReturnAwait ? finalReturnAwait.expression : terminalThrow ? terminalThrow.expression : finalReturnExpr,
+            finalReturnAwait
+                ? finalReturnAwait.expression
+                : finalThrowAwait
+                    ? null
+                    : terminalThrow
+                        ? terminalThrow.expression
+                        : finalReturnExpr,
             params,
             thisValue,
         );
