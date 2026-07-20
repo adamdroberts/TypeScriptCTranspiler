@@ -1,0 +1,6 @@
+declaration-and: fn-and
+declaration-or: fn-or
+method-and: and-method
+method-or: or-method
+value-and: arrow-and
+value-or: arrow-or
