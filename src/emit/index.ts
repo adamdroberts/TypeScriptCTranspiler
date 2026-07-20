@@ -32470,7 +32470,14 @@ class Emitter {
     }
 
     private asyncAwaitLoopPostStatementSupported(stmt: ts.Statement): boolean {
-        if (!ts.isExpressionStatement(stmt)) return false;
+        if (ts.isVariableStatement(stmt)) {
+            if ((stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                stmt.declarationList.declarations.length !== 1) return false;
+            const declaration = stmt.declarationList.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+        } else if (!ts.isExpressionStatement(stmt)) {
+            return false;
+        }
         let ok = true;
         const visit = (node: ts.Node): void => {
             if (!ok) return;
@@ -32480,7 +32487,9 @@ class Emitter {
             }
             ts.forEachChild(node, visit);
         };
-        visit(stmt.expression);
+        visit(ts.isExpressionStatement(stmt)
+            ? stmt.expression
+            : stmt.declarationList.declarations[0]!.initializer!);
         return ok;
     }
 
@@ -32540,14 +32549,24 @@ class Emitter {
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
             loopBody.length >= 2 &&
             (ts.isVariableStatement(loopBody[loopBody.length - 2]) ||
-                (loopBody.length >= 3 && ts.isExpressionStatement(loopBody[loopBody.length - 2]) &&
+                (loopBody.length >= 3 &&
+                    (ts.isExpressionStatement(loopBody[loopBody.length - 2]) ||
+                        ts.isVariableStatement(loopBody[loopBody.length - 2])) &&
                     (() => {
                         const declarationStatement = loopBody[loopBody.length - 3];
                         return ts.isVariableStatement(declarationStatement) &&
                             declarationStatement.declarationList.declarations.length === 1 &&
                             !!declarationStatement.declarationList.declarations[0]!.initializer;
                     })()))) {
-            const postCount = ts.isExpressionStatement(loopBody[loopBody.length - 2]) ? 1 : 0;
+            const postCount = loopBody.length >= 3 &&
+                (ts.isExpressionStatement(loopBody[loopBody.length - 2]) ||
+                    (ts.isVariableStatement(loopBody[loopBody.length - 2]) && (() => {
+                        const declarationStatement = loopBody[loopBody.length - 3];
+                        return ts.isVariableStatement(declarationStatement) &&
+                            !!declarationStatement.declarationList.declarations[0]?.initializer;
+                    })()))
+                ? 1
+                : 0;
             const bodyAwaitStatement = loopBody[loopBody.length - 2 - postCount];
             if (!bodyAwaitStatement || !ts.isVariableStatement(bodyAwaitStatement) ||
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
