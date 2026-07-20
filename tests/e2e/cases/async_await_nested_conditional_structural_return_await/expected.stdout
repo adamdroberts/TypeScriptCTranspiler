@@ -1,0 +1,6 @@
+declaration-true: declaration-left:declaration-right
+declaration-false: {"first":"declaration-first","second":"declaration-second"}
+method-true: method-left:method-right
+method-false: method-method-first-method-second
+value-true: arrow-arrow-left-arrow-right
+value-false: {"first":"arrow-first","second":"arrow-second"}
