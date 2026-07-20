@@ -48,6 +48,12 @@ async function chooseDirectAwaitMultipleVarPrelude(prefix: string): Promise<stri
     return second;
 }
 
+async function chooseDirectAwaitAssignedVarReturn(prefix: string): Promise<string> {
+    var source: string;
+    source = prefix + "-assigned-var-return";
+    return await laterBodyValue(source);
+}
+
 async function chooseDirectAwaitAssignedMultipleLocals(prefix: string): Promise<string> {
     let source = prefix + "-assigned-source", value: string;
     value = await laterBodyValue(source);
@@ -1151,6 +1157,7 @@ chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-v
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
 chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => console.log("await-direct-multiple-control-prelude", value));
 chooseDirectAwaitMultipleVarPrelude("direct-var").then((value) => console.log("await-direct-multiple-var-prelude", value));
+chooseDirectAwaitAssignedVarReturn("direct-assigned-var-return").then((value) => console.log("await-direct-assigned-var-return", value));
 chooseDirectAwaitAssignedMultipleLocals("direct-assigned-multiple").then((value) => console.log("await-direct-assigned-multiple-locals", value));
 chooseDirectThrowAwaitMultipleLocals("direct-throw-multiple").catch((reason) => console.log("await-direct-throw-multiple-locals", reason));
 chooseMultipleAwaitDeclarators("multiple-await").then((value) => console.log("await-multiple-declarators", value));

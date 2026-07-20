@@ -22038,10 +22038,10 @@ class Emitter {
                         declared.set(symbol, capture);
                         continue;
                     }
-                    if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
+                    if (decl.initializer && !this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
                         visitNoAwaitOrNestedScope(decl.initializer);
                         if (!ok) return null;
-                    } else if (type.kind !== "function") {
+                    } else if (decl.initializer && type.kind !== "function") {
                         return null;
                     }
                     initialized.add(symbol);
@@ -30834,6 +30834,7 @@ class Emitter {
         const preludeStatements: ts.Statement[] = [];
         const localCaptures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
+        const uninitializedPreludeSymbols = new Set<ts.Symbol>();
         let ok = true;
         const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
             if (!ok) return;
@@ -30847,6 +30848,17 @@ class Emitter {
         while (tailStart < body.statements.length) {
             const stmt = body.statements[tailStart]!;
             if (ts.isExpressionStatement(stmt)) {
+                const assignment = this.unwrapTransparentExpression(stmt.expression);
+                if (ts.isBinaryExpression(assignment) &&
+                    assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    ts.isIdentifier(assignment.left)) {
+                    const symbol = this.symbolForIdentifier(assignment.left);
+                    if (symbol && uninitializedPreludeSymbols.has(symbol)) {
+                        visitNoAwaitOrNestedScope(assignment.right);
+                        if (!ok) return null;
+                        uninitializedPreludeSymbols.delete(symbol);
+                    }
+                }
                 visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
                 preludeStatements.push(stmt);
@@ -30855,16 +30867,18 @@ class Emitter {
             }
             if (ts.isVariableStatement(stmt)) {
                 preludeStatements.push(stmt);
-                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+                const isConstOrLet = (stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
                 for (const decl of stmt.declarationList.declarations) {
-                    if (!ts.isIdentifier(decl.name) || !decl.initializer) return null;
+                    if (!ts.isIdentifier(decl.name)) return null;
+                    if (!decl.initializer && (!isConstOrLet || (stmt.declarationList.flags & ts.NodeFlags.Const))) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
-                    if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                    if (!symbol || captureSymbols.has(symbol) || (this.currentFunctionCellForSymbol(symbol) && (decl.initializer || isConstOrLet))) return null;
+                    if (!decl.initializer && !isConstOrLet) uninitializedPreludeSymbols.add(symbol);
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                    if (!this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
+                    if (decl.initializer && !this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
                         visitNoAwaitOrNestedScope(decl.initializer);
                         if (!ok) return null;
-                    } else if (type.kind !== "function") {
+                    } else if (decl.initializer && type.kind !== "function") {
                         return null;
                     }
                     if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
@@ -30887,6 +30901,7 @@ class Emitter {
             }
             break;
         }
+        if (uninitializedPreludeSymbols.size > 0) return null;
         if (preludeStatements.length === 0) return null;
         const tailStatements = body.statements.slice(tailStart);
         if (tailStatements.length === 0) return null;
