@@ -114,6 +114,7 @@ async function chooseLoopInitializerCaptureThrow(): Promise<string> {
 
 async function chooseLoopInitializerMultipleCapture(): Promise<string> {
     for (let prefix = "loop-", value = prefix + "multiple-captured"; await laterTrue();) {
+        value += "-updated";
         return await laterBodyValue(value);
     }
     return "loop-capture-multiple-fallthrough";

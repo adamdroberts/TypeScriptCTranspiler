@@ -343,7 +343,7 @@ await-direct-multiple-var-prelude direct-var-var-first-second
 await-multiple-declarators multiple-await-first-second
 await-loop-initializer-capture loop-captured
 await-loop-initializer-capture-throw loop-captured-throw
-await-loop-initializer-multiple-capture loop-multiple-captured
+await-loop-initializer-multiple-capture loop-multiple-captured-updated
 await-method-multiple-declarators method-first-second
 await-arrow-multiple-declarators arrow-first-second
 await-while-return-await-multiple-true body-loop-multiple-first-second
