@@ -37580,6 +37580,7 @@ class Emitter {
                 return true;
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return true;
+            if (ts.isIdentifier(unwrapped)) return true;
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isPrefixUnaryExpression(unwrapped)) {
@@ -38663,6 +38664,14 @@ class Emitter {
                 };
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return this.emitExpr(unwrapped);
+            if (ts.isIdentifier(unwrapped)) {
+                const symbol = this.symbolForIdentifier(unwrapped);
+                const declaration = symbol?.valueDeclaration;
+                if (!symbol || !declaration || !ts.isParameter(declaration) || !this.closureEnvBindingForSymbol(symbol)) {
+                    unsupported(unwrapped, "lazy multi-yield return identifiers must be stable generator parameters");
+                }
+                return this.emitExpr(unwrapped);
+            }
             if (ts.isTypeOfExpression(unwrapped)) {
                 return this.emitSimpleLazyResumeTypeOf(unwrapped, build(unwrapped.expression));
             }

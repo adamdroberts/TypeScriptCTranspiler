@@ -60,6 +60,10 @@ function* instanceLeaves(): Generator<any, boolean, any> {
     return (yield new InstanceMarker()), (yield new InstanceMarker()) instanceof InstanceMarker;
 }
 
+function* parameterLeaves(offset: number): Generator<number, number, number> {
+    return offset + (yield 22) + (yield 23);
+}
+
 const iter = sum();
 const first: any = iter.next();
 const second: any = iter.next(3);
@@ -146,3 +150,8 @@ const instanceFirst: any = instanceIter.next();
 const instanceSecond: any = instanceIter.next(new InstanceMarker());
 const instanceDone: any = instanceIter.next(new InstanceMarker());
 console.log("instanceof", instanceFirst.done, instanceSecond.done, instanceDone.done, instanceDone.value);
+const parameterIter = parameterLeaves(10);
+const parameterFirst: any = parameterIter.next();
+const parameterSecond: any = parameterIter.next(2);
+const parameterDone: any = parameterIter.next(3);
+console.log("parameter", parameterFirst.value, parameterSecond.value, parameterDone.done, parameterDone.value);
