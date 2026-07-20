@@ -563,6 +563,20 @@ async function chooseWhileContinueNestedDoAwait(value: string, repeat: boolean, 
     return await laterBodyValue(value);
 }
 
+async function chooseWhileContinueNestedIteratorsAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat)) {
+        for (const item of ["one", "two"]) {
+            value += "-" + item;
+        }
+        for (const key in { first: 1, second: 2 }) {
+            value += "-" + key;
+        }
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopInitializerUninitializedVarCapture(): Promise<string> {
     for (var value: any; await laterTrue();) {
         value = "loop-uninitialized-var-captured";
@@ -2709,6 +2723,7 @@ chooseWhileContinueNestedWhileAwait("while-nested-escaping-continue", true, true
 chooseWhileContinueNestedWhileAwait("while-nested-escaping-continue", true, false).then((value) => console.log("await-while-escaping-var-continue-nested-false", value));
 chooseWhileContinueNestedDoAwait("while-do-escaping-continue", true, true).then((value) => console.log("await-while-escaping-var-continue-do-true", value));
 chooseWhileContinueNestedDoAwait("while-do-escaping-continue", true, false).then((value) => console.log("await-while-escaping-var-continue-do-false", value));
+chooseWhileContinueNestedIteratorsAwait("while-iterators-escaping-continue", true).then((value) => console.log("await-while-escaping-var-continue-iterators", value));
 chooseLoopInitializerUninitializedVarCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-capture", value));
 chooseLoopInitializerTypedUninitializedVarCapture().then((value) => console.log("await-loop-initializer-typed-uninitialized-var-capture", value));
 chooseLoopInitializerUninitializedVarFallthroughCapture().then((value) => console.log("await-loop-initializer-uninitialized-var-fallthrough", value));
