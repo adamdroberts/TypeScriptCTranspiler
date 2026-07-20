@@ -33584,7 +33584,7 @@ class Emitter {
         if (body.statements.length !== 2) return false;
         const loop = body.statements[0]!;
         const fallthrough = body.statements[1]!;
-        if (!ts.isReturnStatement(fallthrough)) return false;
+        if (!ts.isReturnStatement(fallthrough) && !ts.isThrowStatement(fallthrough)) return false;
         const fallthroughExpression = fallthrough.expression ?? ts.factory.createVoidZero();
         const loopCondition = ts.isWhileStatement(loop)
             ? loop.expression
@@ -33683,7 +33683,9 @@ class Emitter {
         ) {
             const breakBody = [
                 ...loopBody.slice(0, -1),
-                ts.factory.createReturnStatement(fallthroughExpression),
+                ts.isThrowStatement(fallthrough)
+                    ? ts.factory.createThrowStatement(fallthroughExpression)
+                    : ts.factory.createReturnStatement(fallthroughExpression),
             ];
             if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
                 buf,
@@ -33710,6 +33712,7 @@ class Emitter {
             loopInitializer,
             loopInitializerCaptures,
         )) return true;
+        if (ts.isThrowStatement(fallthrough)) return false;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
             return expressions.slice(1).reduce(
                 (expression, next) => ts.factory.createBinaryExpression(
