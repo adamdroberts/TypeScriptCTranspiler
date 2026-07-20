@@ -1,2 +1,3 @@
 steps: false pause true done true undefined
 events: start|try-before|resumed:answer|finally
+return: false return-pause true returned start|try-before|resumed:answer|finally|return-finally

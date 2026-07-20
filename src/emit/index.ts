@@ -35777,7 +35777,8 @@ class Emitter {
 
     private isSimpleLazyGeneratorTryFinally(stmt: ts.TryStatement): boolean {
         if (stmt.catchClause || !stmt.finallyBlock) return false;
-        if (this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock) ||
+        const terminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
+        if ((!terminalReturn && this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock)) ||
             this.lazyGeneratorContainsAbruptControlFlow(stmt.finallyBlock)) {
             return false;
         }
@@ -35785,6 +35786,16 @@ class Emitter {
         if (!stmt.tryBlock.statements.every((child) => this.isValidLazyGeneratorStatement(child))) return false;
         return stmt.finallyBlock.statements.every((child) =>
             !this.nodeContainsYield(child) && this.isValidLazyGeneratorStatement(child));
+    }
+
+    private lazyGeneratorTryTerminalReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {
+        const statements = stmt.tryBlock.statements;
+        const last = statements[statements.length - 1];
+        if (!last || !ts.isReturnStatement(last) || (last.expression && this.nodeContainsYield(last.expression))) return null;
+        for (const child of statements.slice(0, -1)) {
+            if (this.lazyGeneratorContainsAbruptControlFlow(child)) return null;
+        }
+        return last;
     }
 
     private lazyGeneratorHasFinalizer(node: ts.Node): boolean {
@@ -36526,13 +36537,32 @@ class Emitter {
 
         if (ts.isTryStatement(stmt) && this.isSimpleLazyGeneratorTryFinally(stmt)) {
             buf.open("");
+            const terminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
             this.activeLazyGeneratorFinalizers.push(stmt.finallyBlock!.statements.slice());
-            for (const child of stmt.tryBlock.statements) {
+            const tryStatements = terminalReturn
+                ? stmt.tryBlock.statements.slice(0, -1)
+                : stmt.tryBlock.statements;
+            for (const child of tryStatements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
             this.activeLazyGeneratorFinalizers.pop();
+            if (terminalReturn) {
+                if (terminalReturn.expression) {
+                    const result = this.emitExpr(terminalReturn.expression);
+                    buf.line(`a->iter_return = ${this.coerce(result, T_VALUE, terminalReturn.expression)};`);
+                } else {
+                    buf.line("a->iter_return = tsc_value_undefined();");
+                }
+                buf.line("a->iter_has_return = true;");
+                buf.line("a->iter_return_consumed = false;");
+            }
             for (const child of stmt.finallyBlock!.statements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+            }
+            if (terminalReturn) {
+                buf.line("*state = -1;");
+                buf.line("*done = true;");
+                buf.line("return;");
             }
             buf.close();
             return;

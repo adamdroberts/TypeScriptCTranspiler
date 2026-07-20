@@ -19,3 +19,17 @@ const after: any = iter.next("after");
 
 console.log("steps:", first.done, first.value, done.done, done.value, after.done, after.value);
 console.log("events:", events.join("|"));
+
+function* terminalReturn(): Generator<string, string, string> {
+    try {
+        yield "return-pause";
+        return "returned";
+    } finally {
+        events.push("return-finally");
+    }
+}
+
+const returned = terminalReturn();
+const returnFirst: any = returned.next();
+const returnDone: any = returned.next("resume");
+console.log("return:", returnFirst.done, returnFirst.value, returnDone.done, returnDone.value, events.join("|"));
