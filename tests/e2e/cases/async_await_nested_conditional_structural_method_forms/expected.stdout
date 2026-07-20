@@ -1,0 +1,4 @@
+static-true: ["static-first","static-second"]
+static-false: {"first":"static-left","second":"static-right"}
+object-true: {"first":"object-first","second":"object-second"}
+object-false: ["object-left","object-right"]
