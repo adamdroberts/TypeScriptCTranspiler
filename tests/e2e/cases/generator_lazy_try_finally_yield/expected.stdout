@@ -3,3 +3,4 @@ events: start|try-before|resumed:answer|finally
 return: false return-pause true returned start|try-before|resumed:answer|finally|return-finally
 throw: false throw-pause start|try-before|resumed:answer|finally|return-finally|throw-finally
 caught: false catch-pause true caught
+caught-bound: false bound-catch-pause true bound-caught

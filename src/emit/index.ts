@@ -35793,7 +35793,8 @@ class Emitter {
     }
 
     private lazyGeneratorTryCatchReturn(stmt: ts.TryStatement): ts.ReturnStatement | null {
-        if (!stmt.catchClause || stmt.finallyBlock || stmt.catchClause.variableDeclaration) return null;
+        if (!stmt.catchClause || stmt.finallyBlock) return null;
+        if (stmt.catchClause.variableDeclaration && !ts.isIdentifier(stmt.catchClause.variableDeclaration.name)) return null;
         const tryStatements = stmt.tryBlock.statements;
         if (!tryStatements.some((child) => this.nodeContainsYield(child)) ||
             this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock) ||

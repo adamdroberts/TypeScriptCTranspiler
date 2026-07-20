@@ -64,3 +64,17 @@ const caught = caughtThrow();
 const caughtFirst: any = caught.next();
 const caughtDone: any = caught.throw("handled");
 console.log("caught:", caughtFirst.done, caughtFirst.value, caughtDone.done, caughtDone.value);
+
+function* caughtBoundThrow(): Generator<string, string, string> {
+    try {
+        yield "bound-catch-pause";
+    } catch (error) {
+        return "bound-caught";
+    }
+    return "normal";
+}
+
+const caughtBound = caughtBoundThrow();
+const caughtBoundFirst: any = caughtBound.next();
+const caughtBoundDone: any = caughtBound.throw("handled-bound");
+console.log("caught-bound:", caughtBoundFirst.done, caughtBoundFirst.value, caughtBoundDone.done, caughtBoundDone.value);
