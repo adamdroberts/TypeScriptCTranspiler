@@ -32452,7 +32452,8 @@ class Emitter {
             if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) return false;
             if (statement.declarationList.declarations.length !== 1) return false;
             const declaration = statement.declarationList.declarations[0]!;
-            return ts.isIdentifier(declaration.name) && !!declaration.initializer;
+            return ts.isIdentifier(declaration.name) &&
+                (!!declaration.initializer || (statement.declarationList.flags & ts.NodeFlags.Let) !== 0);
         });
         if (!bodyPreludeSupported) return false;
         const bodyAwaitExpr = this.unwrapTransparentExpression(bodyReturn.expression);
