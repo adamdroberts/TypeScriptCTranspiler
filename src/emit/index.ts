@@ -30833,6 +30833,14 @@ class Emitter {
                 return true;
             }
             const nestedExpression = this.unwrapTransparentExpression(expression.expression);
+            if (ts.isAwaitExpression(nestedExpression)) {
+                const innerSource = this.emitExpr(nestedExpression.expression);
+                const innerPromise = this.prepareType(innerSource.ty);
+                if (innerPromise.kind === "promise") {
+                    buf.line(`return tsc_promise_adopt(${innerSource.c});`);
+                    return true;
+                }
+            }
             if (this.isAsyncAwaitShortCircuitBinary(nestedExpression)) {
                 const logicalContinuation = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
                     nestedExpression,
