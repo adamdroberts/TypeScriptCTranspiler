@@ -1,0 +1,3 @@
+{
+  "description": "lazy generator yield* delegates one suspended inner yield at a time and forwards next values"
+}

@@ -35919,8 +35919,12 @@ class Emitter {
         let arrayExpr: string;
         let sourceElemType: CType;
         if (source.ty.kind === "array" && source.ty.elem) {
-            const tmp = this.freshTemp("_yield_star_source");
-            arrayExpr = `({ tsc_array_t* ${tmp} = ${source.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`;
+            if (source.lazyGenerator) {
+                arrayExpr = source.c;
+            } else {
+                const tmp = this.freshTemp("_yield_star_source");
+                arrayExpr = `({ tsc_array_t* ${tmp} = ${source.c}; tsc_array_materialize_all(${tmp}); ${tmp}; })`;
+            }
             sourceElemType = source.ty.elem;
         } else if (source.ty.kind === "map" && source.ty.key && source.ty.elem) {
             const map = this.freshTemp("_yield_map");
@@ -35967,6 +35971,12 @@ class Emitter {
         }
         buf.line(`${envLocalName}->yield_star_arr_${slot} = ${arrayExpr};`);
         buf.line(`${envLocalName}->yield_star_idx_${slot} = 0;`);
+        buf.close();
+
+        buf.open(`if (${envLocalName}->yield_star_idx_${slot} >= ${envLocalName}->yield_star_arr_${slot}->len && ${envLocalName}->yield_star_arr_${slot}->is_lazy_generator && ${envLocalName}->yield_star_arr_${slot}->lazy_next)`);
+        buf.line("bool _yield_star_done = false;");
+        buf.line(`${envLocalName}->yield_star_arr_${slot}->lazy_next(${envLocalName}->yield_star_arr_${slot}, &${envLocalName}->yield_star_arr_${slot}->state, ${envLocalName}->yield_star_arr_${slot}->env, next_arg, &_yield_star_done);`);
+        buf.line(`if (_yield_star_done) ${envLocalName}->yield_star_arr_${slot}->is_lazy_generator = false;`);
         buf.close();
 
         buf.open(`if (${envLocalName}->yield_star_idx_${slot} < ${envLocalName}->yield_star_arr_${slot}->len)`);
