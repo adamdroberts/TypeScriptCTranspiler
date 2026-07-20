@@ -235,6 +235,23 @@ async function chooseLoopThrowAwaitAliasExpression(condition: boolean): Promise<
     return "body-throw-alias-expression-fallthrough";
 }
 
+async function chooseLoopReturnAwaitAliasPostlude(condition: boolean, prefix: string): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const value = await laterBodyValue(prefix + "-alias-post");
+        prefix += "-updated";
+        return value + prefix;
+    }
+    return prefix + "-alias-post-fallthrough";
+}
+
+async function chooseLoopThrowAwaitAliasPostlude(condition: boolean): Promise<string> {
+    while (await (condition ? laterTrue() : laterFalse())) {
+        const reason = await laterBodyValue("body-throw-alias-post");
+        throw reason + "-updated";
+    }
+    return "body-throw-alias-post-fallthrough";
+}
+
 async function chooseForIf(flag: boolean): Promise<string> {
     for (; await laterTrue();) {
         if (flag) return "for-if-yes";
@@ -417,6 +434,10 @@ chooseLoopReturnAwaitAliasExpression(true, "body-return").then((value) => consol
 chooseLoopReturnAwaitAliasExpression(false, "body-return").then((value) => console.log("await-while-return-await-alias-expression-false", value));
 chooseLoopThrowAwaitAliasExpression(true).catch((reason) => console.log("await-while-throw-await-alias-expression-true", reason));
 chooseLoopThrowAwaitAliasExpression(false).then((value) => console.log("await-while-throw-await-alias-expression-false", value));
+chooseLoopReturnAwaitAliasPostlude(true, "body-return").then((value) => console.log("await-while-return-await-alias-postlude-true", value));
+chooseLoopReturnAwaitAliasPostlude(false, "body-return").then((value) => console.log("await-while-return-await-alias-postlude-false", value));
+chooseLoopThrowAwaitAliasPostlude(true).catch((reason) => console.log("await-while-throw-await-alias-postlude-true", reason));
+chooseLoopThrowAwaitAliasPostlude(false).then((value) => console.log("await-while-throw-await-alias-postlude-false", value));
 chooseForIf(true).then((value) => console.log("await-for-if-true", value));
 chooseForIf(false).then((value) => console.log("await-for-if-false", value));
 chooseLoopLocal(true, "local-loop").then((value) => console.log("await-while-local-true", value));

@@ -282,6 +282,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitExpr: ts.AwaitExpression;
     bodyReturnExpr: ts.Expression;
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
+    bodyPostAwaitStatements: readonly ts.Statement[];
     bodyPreludeStatements: readonly ts.Statement[];
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
@@ -32468,6 +32469,21 @@ class Emitter {
         return ok;
     }
 
+    private asyncAwaitLoopPostStatementSupported(stmt: ts.Statement): boolean {
+        if (!ts.isExpressionStatement(stmt)) return false;
+        let ok = true;
+        const visit = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                ok = false;
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(stmt.expression);
+        return ok;
+    }
+
     private emitAsyncAwaitConditionalExpressionReturnContinuation(
         buf: CBuf,
         body: ts.Block,
@@ -32495,6 +32511,7 @@ class Emitter {
         let bodyAwaitExpr: ts.AwaitExpression | null = null;
         let bodyReturnExpr: ts.Expression | null = null;
         let bodyAwaitedAliasSymbols: readonly ts.Symbol[] = [];
+        let bodyPostAwaitStatements: readonly ts.Statement[] = [];
         let bodyPreludeStatements: readonly ts.Statement[];
         let bodyRejectResult = ts.isThrowStatement(bodyAction);
         const bodyAliasExpressionSupported = (expression: ts.Expression, symbol: ts.Symbol): boolean => {
@@ -32521,8 +32538,17 @@ class Emitter {
             bodyReturnExpr = bodyAwaitExpr;
             bodyPreludeStatements = loopBody.slice(0, -1);
         } else if ((ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) &&
-            loopBody.length >= 2 && ts.isVariableStatement(loopBody[loopBody.length - 2])) {
-            const bodyAwaitStatement = loopBody[loopBody.length - 2];
+            loopBody.length >= 2 &&
+            (ts.isVariableStatement(loopBody[loopBody.length - 2]) ||
+                (loopBody.length >= 3 && ts.isExpressionStatement(loopBody[loopBody.length - 2]) &&
+                    (() => {
+                        const declarationStatement = loopBody[loopBody.length - 3];
+                        return ts.isVariableStatement(declarationStatement) &&
+                            declarationStatement.declarationList.declarations.length === 1 &&
+                            !!declarationStatement.declarationList.declarations[0]!.initializer;
+                    })()))) {
+            const postCount = ts.isExpressionStatement(loopBody[loopBody.length - 2]) ? 1 : 0;
+            const bodyAwaitStatement = loopBody[loopBody.length - 2 - postCount];
             if (!bodyAwaitStatement || !ts.isVariableStatement(bodyAwaitStatement) ||
                 (bodyAwaitStatement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                 bodyAwaitStatement.declarationList.declarations.length !== 1) return false;
@@ -32541,7 +32567,8 @@ class Emitter {
                 : declarationAwait;
             bodyReturnExpr = bodyAction.expression;
             bodyAwaitedAliasSymbols = [declarationSymbol];
-            bodyPreludeStatements = loopBody.slice(0, -2);
+            bodyPostAwaitStatements = postCount === 1 ? [loopBody[loopBody.length - 2]!] : [];
+            bodyPreludeStatements = loopBody.slice(0, -2 - postCount);
             bodyRejectResult = ts.isThrowStatement(bodyAction);
         } else if (ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)) {
             const assignmentStatement = loopBody[loopBody.length - 2];
@@ -32572,6 +32599,7 @@ class Emitter {
         } else {
             return false;
         }
+        if (!bodyPostAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         const bodyPreludeSupported = bodyPreludeStatements.every((statement) => {
             if (ts.isExpressionStatement(statement)) return true;
             if (ts.isVariableStatement(statement)) {
@@ -32659,6 +32687,7 @@ class Emitter {
         };
         visitReferences(condition);
         for (const statement of bodyPreludeStatements) visitReferences(statement);
+        for (const statement of bodyPostAwaitStatements) visitReferences(statement);
         visitReferences(bodyAwaitExpr);
         visitReferences(fallthroughExpr);
         if (!ok) return false;
@@ -32670,6 +32699,7 @@ class Emitter {
             bodyAwaitExpr,
             bodyReturnExpr,
             bodyAwaitedAliasSymbols,
+            bodyPostAwaitStatements,
             bodyPreludeStatements,
             bodyRejectResult,
             fallthroughExpr,
@@ -32685,6 +32715,7 @@ class Emitter {
             continuation.thisValue,
             continuation.bodyRejectResult,
             continuation.bodyAwaitedAliasSymbols,
+            continuation.bodyPostAwaitStatements,
         );
         const adapter = this.ensureAsyncAwaitLoopConditionReturnAwaitContinuationAdapter(
             conditionPromiseType,
@@ -33699,6 +33730,7 @@ class Emitter {
         thisValue: EmitResult | null,
         rejectResult = false,
         awaitedAliasSymbols: readonly ts.Symbol[] = [],
+        postAwaitStatements: readonly ts.Statement[] = [],
     ): string {
         const name = `tsc_async_await_expression_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -33758,6 +33790,7 @@ class Emitter {
         let returned: EmitResult;
         this.asyncAwaitContinuationAdapterDepth++;
         try {
+            for (const statement of postAwaitStatements) this.emitStmt(buf, statement);
             returned = this.emitExpr(returnExpr);
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
