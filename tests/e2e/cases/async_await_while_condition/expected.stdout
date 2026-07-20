@@ -10,6 +10,8 @@ await-while-logical-true logical-yes
 await-while-logical-false logical-no
 await-while-conditional-true conditional-yes
 await-while-conditional-false conditional-no
+await-while-nullish-true nullish-yes
+await-while-nullish-false nullish-no
 await-while-method-true method-loop-yes
 await-while-method-false method-loop-no
 await-while-value-true value-loop-yes
