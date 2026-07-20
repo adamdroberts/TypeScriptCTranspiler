@@ -23,6 +23,23 @@ function* recoveringSource(): Generator<string, string, string> {
     return "recovering-normal";
 }
 
+function* anyRecoveringSource(): Generator<any, string, string> {
+    try {
+        events.push("reverse-start");
+        yield "reverse-pause";
+    } catch (error: any) {
+        events.push("reverse-catch:" + error);
+        return "reverse-done";
+    } finally {
+        events.push("reverse-finally");
+    }
+    return "reverse-normal";
+}
+
+function convertAnySource(iter: Generator<any, string, string>): Generator<string, string, string> {
+    return iter;
+}
+
 function closeThroughConversion(iter: Generator<any, string, string>): void {
     const first: any = iter.next();
     const result: any = iter.return("closed");
@@ -47,3 +64,8 @@ function recoverThroughConversion(iter: Generator<any, string, string>): void {
 closeThroughConversion(source());
 throwThroughConversion(source());
 recoverThroughConversion(recoveringSource());
+
+const reverseIterator = convertAnySource(anyRecoveringSource());
+const reverseYield: any = reverseIterator.next();
+const reverseResult: any = reverseIterator.throw("reverse-recover");
+console.log("recover-reverse", reverseYield.done, reverseYield.value, reverseResult.done, reverseResult.value, events.join("|"));

@@ -1,3 +1,4 @@
 return false pause true closed inner-start|inner-finally
 throw false pause inner-start|inner-finally|inner-start|inner-finally
 recover false recovering-pause true recovering-done inner-start|inner-finally|inner-start|inner-finally|recovering-start|recovering-catch:recover|recovering-finally
+recover-reverse false reverse-pause true reverse-done inner-start|inner-finally|inner-start|inner-finally|recovering-start|recovering-catch:recover|recovering-finally|reverse-start|reverse-catch:reverse-recover|reverse-finally
