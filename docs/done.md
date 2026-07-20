@@ -260,6 +260,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also preserve non-computed property reads from stable receivers across suspension points. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve literal-key element reads from stable receivers across suspension points. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve computed element reads when receiver and index are supported staged expressions. Test: `generator_lazy_multi_yield_return`
+- Lazy `yield*` now delegates from an outer-captured typed array source across suspended items and terminal return. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve unshadowed `NaN` and `Infinity` global leaves around yielded operands. Test: `generator_lazy_multi_yield_return`
 - Computed `[Symbol.iterator]()` manual invocation is implemented for typed arrays, strings, Sets, Maps, generator results, custom iterable classes, and custom iterator objects, allowing manual iterator protocol navigation. Test: `manual_symbol_iterator`
 - Generator iterator `next`, `return`, and `throw` property values are non-constructable built-in methods with standard names, arity, and no own `prototype` metadata. Test: `generator_dynamic_symbol_iterator`

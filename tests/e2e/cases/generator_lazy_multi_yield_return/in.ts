@@ -105,6 +105,13 @@ function makeCapturedMutableGenerator(): [() => Generator<number, number, number
     ];
 }
 
+function makeCapturedDelegator(source: number[]): () => Generator<number, string, undefined> {
+    return function* capturedDelegator(): Generator<number, string, undefined> {
+        yield* source;
+        return "captured-delegation";
+    };
+}
+
 class ThisLeaves {
     marker = 9;
     items = [7, 8];
@@ -254,6 +261,11 @@ const capturedMutableFirst: any = capturedMutableIter.next();
 const capturedMutableSecond: any = capturedMutableIter.next(4);
 const capturedMutableDone: any = capturedMutableIter.next(5);
 console.log("captured-mutable", capturedMutableFirst.value, capturedMutableSecond.value, capturedMutableDone.done, capturedMutableDone.value);
+const capturedDelegatedIter: any = makeCapturedDelegator([60, 61])();
+const capturedDelegatedFirst: any = capturedDelegatedIter.next();
+const capturedDelegatedSecond: any = capturedDelegatedIter.next(99);
+const capturedDelegatedDone: any = capturedDelegatedIter.next(99);
+console.log("captured-yield-star", capturedDelegatedFirst.value, capturedDelegatedSecond.value, capturedDelegatedDone.done, capturedDelegatedDone.value);
 const thisLeaves = new ThisLeaves();
 const thisIter = thisLeaves.values();
 const thisFirst: any = thisIter.next();

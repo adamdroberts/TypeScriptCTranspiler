@@ -21,6 +21,7 @@ infinity 36 37 true Infinity
 captured 40 41 true 21
 captured-local 42 43 true 22
 captured-mutable 44 45 true 29
+captured-yield-star 60 61 true captured-delegation
 this 26 27 true 9
 property 46 47 true 18
 element 48 49 true 17
