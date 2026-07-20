@@ -21,22 +21,30 @@ async function chooseLoopFalse(): Promise<string> {
 }
 
 class LoopChooser {
-    async pick(): Promise<string> {
-        while (await laterTrue()) {
-            return "method-loop-yes";
+    private readonly prefix: string;
+
+    constructor(prefix: string) {
+        this.prefix = prefix;
+    }
+
+    async pick(flag: boolean): Promise<string> {
+        while (await (flag ? laterTrue() : laterFalse())) {
+            return this.prefix + "yes";
         }
-        return "method-loop-no";
+        return this.prefix + "no";
     }
 }
 
-const chooseLoopValue = async (): Promise<string> => {
-    while (await laterFalse()) {
-        return "value-loop-yes";
+const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> => {
+    while (await (flag ? laterTrue() : laterFalse())) {
+        return prefix + "yes";
     }
-    return "value-loop-no";
+    return prefix + "no";
 };
 
 chooseLoopTrue().then((value) => console.log("await-while-true", value));
 chooseLoopFalse().then((value) => console.log("await-while-false", value));
-new LoopChooser().pick().then((value) => console.log("await-while-method", value));
-chooseLoopValue().then((value) => console.log("await-while-value", value));
+new LoopChooser("method-loop-").pick(true).then((value) => console.log("await-while-method-true", value));
+new LoopChooser("method-loop-").pick(false).then((value) => console.log("await-while-method-false", value));
+chooseLoopValue(true, "value-loop-").then((value) => console.log("await-while-value-true", value));
+chooseLoopValue(false, "value-loop-").then((value) => console.log("await-while-value-false", value));

@@ -32429,8 +32429,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
-        if (body.statements.length !== 2 || parameters.some((parameter) =>
-            !this.isThisParameter(parameter) && ts.isIdentifier(parameter.name))) return false;
+        if (body.statements.length !== 2) return false;
         const loop = body.statements[0]!;
         const fallthrough = body.statements[1]!;
         if (!ts.isWhileStatement(loop) || !ts.isReturnStatement(fallthrough) || !fallthrough.expression) return false;
@@ -32442,6 +32441,43 @@ class Emitter {
         if (loopBody.length !== 1 || !ts.isReturnStatement(loopBody[0]!) || !loopBody[0]!.expression) return false;
         const awaitedType = this.prepareType(mapTsType(condition, this.checker.getTypeAtLocation(condition), this.checker));
         if (awaitedType.kind !== "boolean") return false;
+        const continuationParams = this.asyncAwaitContinuationParameters(parameters);
+        const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        for (const parameter of continuationParams) paramsBySymbol.set(parameter.symbol, parameter);
+        const referenced = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        let usesThis = false;
+        let ok = true;
+        const visitReferences = (node: ts.Node): void => {
+            if (!ok) return;
+            if (ts.isAwaitExpression(node)) {
+                ok = false;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            if (node.kind === ts.SyntaxKind.ThisKeyword) {
+                if (!thisValue) {
+                    ok = false;
+                } else {
+                    usesThis = true;
+                }
+                return;
+            }
+            if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                const parameter = symbol ? paramsBySymbol.get(symbol) : undefined;
+                if (parameter) {
+                    referenced.set(parameter.symbol, parameter);
+                } else if (symbol) {
+                    const capture = this.asyncAwaitClosureCaptureParameter(symbol);
+                    if (capture) referenced.set(capture.symbol, capture);
+                }
+            }
+            ts.forEachChild(node, visitReferences);
+        };
+        visitReferences(condition.expression);
+        visitReferences(loopBody[0]!.expression);
+        visitReferences(fallthrough.expression);
+        if (!ok) return false;
         const returnExpr = ts.factory.createConditionalExpression(
             condition,
             ts.factory.createToken(ts.SyntaxKind.QuestionToken),
@@ -32452,8 +32488,8 @@ class Emitter {
         const continuation: AsyncAwaitExpressionReturnContinuation = {
             awaitExpr: condition,
             returnExpr,
-            params: [],
-            thisValue: null,
+            params: [...referenced.values()],
+            thisValue: usesThis ? thisValue : null,
         };
         return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, continuation);
     }
