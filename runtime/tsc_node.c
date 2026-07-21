@@ -2574,6 +2574,42 @@ tsc_url_search_params_t* tsc_value_as_url_search_params(tsc_value_t v) {
     return NULL;
 }
 
+tsc_array_buffer_t* tsc_value_as_array_buffer(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_array_buffer) return (tsc_array_buffer_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not an ArrayBuffer"));
+    return NULL;
+}
+
+tsc_data_view_t* tsc_value_as_data_view(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_data_view) return (tsc_data_view_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a DataView"));
+    return NULL;
+}
+
+tsc_text_encoder_t* tsc_value_as_text_encoder(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_text_encoder) return (tsc_text_encoder_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a TextEncoder"));
+    return NULL;
+}
+
+tsc_text_decoder_t* tsc_value_as_text_decoder(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_text_decoder) return (tsc_text_decoder_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a TextDecoder"));
+    return NULL;
+}
+
 tsc_str_t* tsc_value_typeof(tsc_value_t v) {
     if (!value_is_box(v)) return tsc_str_from_lit("number", 6);
     switch (value_tag(v)) {

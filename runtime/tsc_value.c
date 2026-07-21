@@ -4287,6 +4287,34 @@ tsc_value_t tsc_value_url_search_params(tsc_url_search_params_t* params) {
     return tsc_value_object(o);
 }
 
+tsc_value_t tsc_value_array_buffer(tsc_array_buffer_t* buffer) {
+    if (!buffer) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(buffer);
+    o->is_array_buffer = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_data_view(tsc_data_view_t* view) {
+    if (!view) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(view);
+    o->is_data_view = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_text_encoder(tsc_text_encoder_t* encoder) {
+    if (!encoder) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(encoder);
+    o->is_text_encoder = true;
+    return tsc_value_object(o);
+}
+
+tsc_value_t tsc_value_text_decoder(tsc_text_decoder_t* decoder) {
+    if (!decoder) return tsc_value_null();
+    tsc_object_t* o = tsc_object_new_class(decoder);
+    o->is_text_decoder = true;
+    return tsc_value_object(o);
+}
+
 bool tsc_util_types_is_date(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
         tsc_object_t* o = (tsc_object_t*)value_ptr(v);

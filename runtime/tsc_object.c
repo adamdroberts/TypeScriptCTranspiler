@@ -69,6 +69,10 @@ static tsc_object_t* tsc_object_alloc(tsc_value_t prototype) {
     o->is_typed_array = false;
     o->is_url = false;
     o->is_url_search_params = false;
+    o->is_array_buffer = false;
+    o->is_data_view = false;
+    o->is_text_encoder = false;
+    o->is_text_decoder = false;
     o->shape_version = 1;
     o->shape = tsc_shape_get_root();
     o->object_id = TSC_ID_INC(g_object_id_counter);

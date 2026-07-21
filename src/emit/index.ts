@@ -57462,9 +57462,9 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "error", "buffer", "url", "urlsearchparams", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "error", "buffer", "url", "urlsearchparams", "arraybuffer", "dataview", "textencoder", "textdecoder", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
-            unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/void in this subset");
+            unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/arraybuffer/dataview/textencoder/textdecoder/void in this subset");
         }
         const key = `dispatch:${this.typeKey(prepared)}`;
         const existing = this.dispatchTaskAdapters.get(key);
@@ -72648,6 +72648,14 @@ class Emitter {
                     return `tsc_value_as_url(${r.c})`;
                 case "urlsearchparams":
                     return `tsc_value_as_url_search_params(${r.c})`;
+                case "arraybuffer":
+                    return `tsc_value_as_array_buffer(${r.c})`;
+                case "dataview":
+                    return `tsc_value_as_data_view(${r.c})`;
+                case "textencoder":
+                    return `tsc_value_as_text_encoder(${r.c})`;
+                case "textdecoder":
+                    return `tsc_value_as_text_decoder(${r.c})`;
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
                 case "promise":
@@ -72734,6 +72742,14 @@ class Emitter {
                     return `tsc_value_url(${r.c})`;
                 case "urlsearchparams":
                     return `tsc_value_url_search_params(${r.c})`;
+                case "arraybuffer":
+                    return `tsc_value_array_buffer(${r.c})`;
+                case "dataview":
+                    return `tsc_value_data_view(${r.c})`;
+                case "textencoder":
+                    return `tsc_value_text_encoder(${r.c})`;
+                case "textdecoder":
+                    return `tsc_value_text_decoder(${r.c})`;
                 case "promise":
                     return `tsc_value_promise(${r.c})`;
                 case "void":
