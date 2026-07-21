@@ -748,6 +748,16 @@ async function chooseLoopThreeAwaitMixedAndOrContinueAwait(value: string, repeat
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitMixedAndOrContinueDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; await laterCondition(repeat) && await laterCondition(repeat) || await laterCondition(repeat); value += "-mixed-incrementor") {
+        suffix = "-mixed-declaration";
+        value += suffix;
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitMixedOrAndContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat) || await laterCondition(repeat) && await laterCondition(repeat)) {
         value += "-three-mixed-or-and";
@@ -3649,6 +3659,7 @@ chooseLoopThreeAwaitAndContinueThrowAwait("loop-three-await-and-continue-throw",
 chooseLoopThreeAwaitBreakAwait("loop-three-await-break", true).then((value) => console.log("await-loop-three-await-break", value));
 chooseLoopConditionalThreeAwaitBreakAwait("loop-three-await-conditional-break", true).then((value) => console.log("await-loop-three-await-conditional-break", value));
 chooseLoopThreeAwaitMixedAndOrContinueAwait("loop-three-await-mixed-and-or", true).then((value) => console.log("await-loop-three-await-mixed-and-or", value));
+chooseLoopThreeAwaitMixedAndOrContinueDeclarationAwait("loop-three-await-mixed-and-or-declaration", true).then((value) => console.log("await-loop-three-await-mixed-and-or-declaration", value));
 chooseLoopThreeAwaitMixedOrAndContinueAwait("loop-three-await-mixed-or-and", true).then((value) => console.log("await-loop-three-await-mixed-or-and", value));
 chooseLoopThreeAwaitMixedNullishOrContinueAwait("loop-three-await-mixed-nullish-or", true).then((value) => console.log("await-loop-three-await-mixed-nullish-or", value));
 chooseLoopThreeAwaitMixedOrNullishContinueAwait("loop-three-await-mixed-or-nullish", true).then((value) => console.log("await-loop-three-await-mixed-or-nullish", value));
