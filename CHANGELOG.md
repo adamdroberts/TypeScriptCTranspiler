@@ -3255,3 +3255,4 @@ These are AOT closure requirements, not permanent product limits.
 - Mutable uninitialized-`var` leading chains now preserve terminal post-await throws across async surfaces. Test: `async_await_while_condition`.
 - Direct-prelude `return await` now preserves assigned-before-use uninitialized `var` state through an await-free `if` prelude. Test: `async_await_while_condition`.
 - Direct-prelude `return await` now preserves assigned-before-use uninitialized dynamic `var` state through a self-terminating await-free `while` prelude. Test: `async_await_while_condition`.
+- Direct-prelude `return await` now preserves assigned-before-use uninitialized dynamic `var` state through a guaranteed-first-iteration await-free `do…while` prelude. Test: `async_await_while_condition`.
