@@ -251,6 +251,8 @@ await-while-method-false method-loop-no
 await-while-method-multiple-false method-loop-multiple-no
 await-while-value-false value-loop-no
 await-direct-multiple-locals direct-multiple-source
+await-direct-uninitialized-var-if-true direct-uninitialized-var-if-if
+await-direct-uninitialized-var-if-false direct-uninitialized-var-if-else
 await-direct-assigned-var-return direct-assigned-var-return-assigned-var-return
 await-method-assigned-var-return direct-assigned-var-method-assigned-var-method-return
 await-arrow-assigned-var-return direct-assigned-var-arrow-assigned-var-arrow-return

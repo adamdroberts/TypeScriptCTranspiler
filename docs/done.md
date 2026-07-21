@@ -10,6 +10,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Leading async/await chains preserve assigned-before-use uninitialized `var` locals before multiple awaited declarations. Test: `async_await_while_condition`.
 - Leading async/await chains preserve bounded mutation of an assigned-before-use uninitialized `var` between multiple awaited declarations. Test: `async_await_while_condition`.
 - The bounded mutable uninitialized-`var` leading-chain coverage also applies to async class methods and function values. Test: `async_await_while_condition`.
+- Direct-prelude `return await` preserves an assigned-before-use uninitialized `var` selected by an await-free `if` prelude. Test: `async_await_while_condition`.
 - Mutable uninitialized-`var` leading chains preserve terminal post-await throws across declarations, async class methods, and function values. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now resolve synchronous direct `return` bodies before the false fallthrough in `while` and initializer-free `for` forms across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Multi-await outer-`break` loop conditions now accept initializer-free `for` incrementors as unreachable skipped work before awaited post-loop fallthrough. Test: `async_await_while_condition`.
