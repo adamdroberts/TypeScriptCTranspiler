@@ -636,6 +636,15 @@ async function chooseLoopThreeAwaitBreakDeclarationAwait(value: string, repeat: 
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitContinueDeclarationIncrementorAwait(value: string, repeat: boolean): Promise<string> {
+    for (let suffix = "-three-declaration"; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); suffix += "-three-incrementor") {
+        value += suffix;
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopConditionalThreeAwaitBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
     for (let suffix = "-conditional-declaration"; await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(repeat); suffix += "-unexpected-incrementor") {
         value += suffix;
@@ -3610,6 +3619,7 @@ chooseLoopTwoAwaitContinueInitializerIncrementorAwait("loop-two-await-continue-i
 chooseLoopThreeAwaitContinueIncrementorAwait("loop-three-await-continue-incrementor", true).then((value) => console.log("await-loop-three-await-continue-incrementor", value));
 chooseLoopThreeAwaitContinueInitializerIncrementorAwait("loop-three-await-continue-initializer-incrementor", true).then((value) => console.log("await-loop-three-await-continue-initializer-incrementor", value));
 chooseLoopThreeAwaitBreakDeclarationAwait("loop-three-await-break-declaration", true).then((value) => console.log("await-loop-three-await-break-declaration", value));
+chooseLoopThreeAwaitContinueDeclarationIncrementorAwait("loop-three-await-continue-declaration", true).then((value) => console.log("await-loop-three-await-continue-declaration", value));
 chooseLoopConditionalThreeAwaitBreakDeclarationAwait("loop-three-await-conditional-declaration", true).then((value) => console.log("await-loop-three-await-conditional-declaration", value));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));
 chooseLoopTwoAwaitOrContinueThrowAwait("loop-two-await-or-continue-throw", true).catch((reason) => console.log("await-loop-two-await-or-continue-throw", reason));

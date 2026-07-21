@@ -33320,7 +33320,6 @@ class Emitter {
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
-        if (loopInitializer && !bodyIsBreak && ts.isVariableStatement(loopInitializer)) return false;
         if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
             loopInitializer.declarationList.declarations.some((declaration) => !declaration.initializer)) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
@@ -35046,7 +35045,8 @@ class Emitter {
                 loopInitializer,
                 loopInitializerCaptures,
             )) return true;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) && loopBreakSkipsIncrementor &&
+        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
+            (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
             awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
                 buf,
@@ -35059,6 +35059,7 @@ class Emitter {
                 ts.isThrowStatement(fallthrough),
                 loopInitializer,
                 loopInitializerCaptures,
+                loopIncrementor,
             )) return true;
         if (
             loopBody.length > 0 &&

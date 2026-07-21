@@ -18,6 +18,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Bounded two-await outer-`continue` loop conditions now carry initialized simple `for` declaration values through condition re-entry and an await-free incrementor. Test: `async_await_while_condition`.
 - Direct three-or-more awaited logical outer-`continue` loop conditions now execute an await-free initializer-free `for` incrementor before stage-0 condition re-entry. Test: `async_await_while_condition`.
 - Direct three-or-more awaited logical outer-`continue` loop conditions now compose a synchronous expression initializer with an await-free `for` incrementor before stage-0 re-entry. Test: `async_await_while_condition`.
+- Direct three-or-more awaited logical outer-`continue` loop conditions now carry initialized simple `for` declaration values through every condition stage, re-entry, and await-free incrementor. Test: `async_await_while_condition`.
 - Conditional three-await outer-`continue` loop conditions now execute an await-free initializer-free `for` incrementor before condition re-entry. Test: `async_await_while_condition`.
 - Conditional three-await outer-`continue` loop conditions now compose a synchronous expression initializer with an await-free `for` incrementor before condition re-entry. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now route direct two-await `&&`, `||`, and `??` bodies ending in an outer `break` through awaited return/throw fallthrough, preserving await-free body preludes. Test: `async_await_while_condition`.
