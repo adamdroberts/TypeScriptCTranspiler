@@ -306,6 +306,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[];
     bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null;
     bodyContinueElseReturnPreludeStatements: readonly ts.Statement[];
+    bodyContinueElseReturnRejectResult: boolean;
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     fallthroughAwaitExpr?: ts.AwaitExpression;
@@ -34527,6 +34528,8 @@ class Emitter {
         const elseContinueIsReturn = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
             !!elseContinueStatement && ts.isReturnStatement(elseContinueStatement) &&
             !!elseContinueStatement.expression;
+        const elseContinueIsThrow = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
+            !!elseContinueStatement && ts.isThrowStatement(elseContinueStatement);
         const elseContinueBodyStatements = elseContinueIsContinue
             ? bodyContinueElseStatements.slice(0, -1)
             : [];
@@ -34535,15 +34538,15 @@ class Emitter {
             : [];
         let bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[] = [];
-        const bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null = elseContinueIsReturn
+        const bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null = (elseContinueIsReturn || elseContinueIsThrow)
             ? (() => {
                 const expression = this.unwrapTransparentExpression(elseContinueStatement!.expression!);
                 return ts.isAwaitExpression(expression) ? expression : null;
             })()
             : null;
         let bodyContinueElseReturnPreludeStatements: readonly ts.Statement[] = [];
-        if (bodyContinueCondition && elseContinueIsReturn && !bodyContinueElseReturnAwaitExpr) return false;
-        if (bodyContinueCondition && elseContinueIsReturn) {
+        if (bodyContinueCondition && (elseContinueIsReturn || elseContinueIsThrow) && !bodyContinueElseReturnAwaitExpr) return false;
+        if (bodyContinueCondition && (elseContinueIsReturn || elseContinueIsThrow)) {
             bodyContinueElseReturnPreludeStatements = bodyContinueElseStatements.slice(0, -1);
             if (!bodyContinueElseReturnPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         }
@@ -34590,7 +34593,7 @@ class Emitter {
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
         if (initialBody && bodyContinueCondition) return false;
-        if (bodyContinueCondition && !elseContinueIsContinue && !elseContinueIsBreak && !elseContinueIsReturn &&
+        if (bodyContinueCondition && !elseContinueIsContinue && !elseContinueIsBreak && !elseContinueIsReturn && !elseContinueIsThrow &&
             !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyContinueCondition && elseContinueIsContinue &&
             (!bodyContinueElsePreludeStatements.every((statement) => this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)) ||
@@ -35083,6 +35086,7 @@ class Emitter {
             bodyContinueElseBreakPostAwaitStatements,
             bodyContinueElseReturnAwaitExpr,
             bodyContinueElseReturnPreludeStatements,
+            bodyContinueElseReturnRejectResult: elseContinueIsThrow,
             bodyRejectResult,
             fallthroughExpr,
             fallthroughAwaitExpr,
@@ -35126,6 +35130,7 @@ class Emitter {
                     bodyContinueElseBreakPostAwaitStatements: [],
                     bodyContinueElseReturnAwaitExpr: null,
                     bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnRejectResult: false,
                 },
                 bodyContinueElseAwaitExprs,
             );
@@ -35189,6 +35194,7 @@ class Emitter {
                 bodyContinueElseReturnAwaitExpr,
                 continuation.params,
                 continuation.thisValue,
+                continuation.bodyContinueElseReturnRejectResult,
             );
         }
         if (bodyContinueConditionAwaitExpr && bodyContinueConditionPromiseType && bodyContinueConditionAwaitedType) {
