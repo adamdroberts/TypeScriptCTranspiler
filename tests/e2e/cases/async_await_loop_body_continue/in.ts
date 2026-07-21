@@ -18,7 +18,8 @@ export {};
 async function loopBodyAwaitContinue(): Promise<string> {
     for (let count = 0; await laterCondition(count < 2); count++) {
         await laterBody("body-" + count);
-        bodyCount += count;
+        const observed = count;
+        bodyCount += observed;
         continue;
     }
     return await later(bodyCount + "|done");

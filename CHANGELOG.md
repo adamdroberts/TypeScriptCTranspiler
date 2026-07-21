@@ -9,7 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
-- Bounded awaited loop bodies now resume a direct awaited expression, preserve supported await-free postlude statements before `continue`, execute the counted-`for` incrementor, and re-enter the awaited condition. Test: `async_await_loop_body_continue`.
+- Bounded awaited loop bodies now resume a direct awaited expression, preserve supported await-free postlude statements including simple locals before `continue`, execute the counted-`for` incrementor, and re-enter the awaited condition. Test: `async_await_loop_body_continue`.
 - Dispatch capture validation now recursively audits top-level helper functions for mutable or non-primitive global access. Test: `dispatch_capture_transitive_diagnostic`.
 - Threaded dispatch now supports `--no-gc` by protecting the bump-chunk allocator with a runtime mutex. Test: `dispatch_no_gc`.
 - Dispatch task capture validation now permits const array/dynamic values by creating a `structuredClone` snapshot at closure creation. Tests: `dispatch_capture_clone`, `dispatch_serial_capture_clone`.
