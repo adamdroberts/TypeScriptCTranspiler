@@ -35185,7 +35185,7 @@ class Emitter {
             ? continueBranchStatements.slice(0, -1)
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
-        if (initialBody && bodyContinueCondition) return false;
+        if (initialBody && bodyContinueCondition && bodyContinueConditionAwaitExpr) return false;
         if (bodyContinueCondition && !elseContinueIsContinue && !elseContinueIsBreak && !elseContinueIsReturn && !elseContinueIsThrow &&
             !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyContinueCondition && elseContinueIsContinue &&
@@ -35941,31 +35941,56 @@ class Emitter {
                 buf.line(`${initializer.c};`);
             }
         }
+        const resultPromise = this.freshTemp("_await_result");
+        buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
+        const scheduleInitialAwait = (
+            awaitExpr: ts.AwaitExpression,
+            promiseType: CType,
+            adapterName: string,
+        ): void => {
+            const source = this.emitExpr(awaitExpr.expression);
+            const sourcePromise = this.freshTemp("_await_source");
+            const env = this.freshTemp("_await_env");
+            const envType = `${adapterName}_env_t`;
+            buf.line(`tsc_promise_t* const ${sourcePromise} = ${this.coerce(source, promiseType, awaitExpr.expression)};`);
+            buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
+            buf.line(`${env}->receiver = ${sourcePromise};`);
+            buf.line(`${env}->result_promise = ${resultPromise};`);
+            for (const param of continuation.params) buf.line(`${env}->${param.field} = ${param.name};`);
+            if (continuation.thisValue) buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
+            buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
+            buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapterName}, ${env});`);
+            buf.close();
+            buf.open("else");
+            buf.line(`${adapterName}(${env});`);
+            buf.close();
+        };
+        if (initialBody && continuation.bodyContinueCondition && !bodyContinueConditionAwaitExpr && bodyAdapter && loopAdapterName) {
+            const bodyCondition = this.emitExpr(continuation.bodyContinueCondition);
+            const bodyConditionTruth = this.truthyC(bodyCondition, continuation.bodyContinueCondition);
+            buf.open(`if (${bodyConditionTruth})`);
+            for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
+            scheduleInitialAwait(continuation.bodyAwaitExpr!, bodyPromiseType!, bodyAdapter);
+            buf.close();
+            buf.open("else");
+            const initialElseStatements = continuation.bodyContinueElseStatements.length > 0 &&
+                ts.isContinueStatement(continuation.bodyContinueElseStatements[continuation.bodyContinueElseStatements.length - 1]!)
+                ? continuation.bodyContinueElseStatements.slice(0, -1)
+                : continuation.bodyContinueElseStatements;
+            for (const statement of initialElseStatements) this.emitStmt(buf, statement);
+            scheduleInitialAwait(continuation.conditionAwaitExpr, conditionPromiseType, loopAdapterName);
+            buf.close();
+            buf.line(`return ${resultPromise};`);
+            return true;
+        }
         const initialAwaitExpr = initialBody && continuation.bodyAwaitExpr
             ? continuation.bodyAwaitExpr
             : conditionAwaitExpr;
         const initialPromiseType = initialBody && bodyPromiseType
             ? bodyPromiseType
             : conditionPromiseType;
-        const source = this.emitExpr(initialAwaitExpr.expression);
-        const sourcePromise = this.freshTemp("_await_source");
-        const resultPromise = this.freshTemp("_await_result");
         const initialAdapter = initialBody && bodyAdapter ? bodyAdapter : adapter;
-        const envType = `${initialAdapter}_env_t`;
-        const env = this.freshTemp("_await_env");
-        buf.line(`tsc_promise_t* const ${sourcePromise} = ${this.coerce(source, initialPromiseType, initialAwaitExpr.expression)};`);
-        buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
-        buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
-        buf.line(`${env}->receiver = ${sourcePromise};`);
-        buf.line(`${env}->result_promise = ${resultPromise};`);
-        for (const param of continuation.params) buf.line(`${env}->${param.field} = ${param.name};`);
-        if (continuation.thisValue) buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
-        buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
-        buf.line(`tsc_promise_add_callback(${sourcePromise}, ${initialAdapter}, ${env});`);
-        buf.close();
-        buf.open("else");
-        buf.line(`${initialAdapter}(${env});`);
-        buf.close();
+        scheduleInitialAwait(initialAwaitExpr, initialPromiseType, initialAdapter);
         buf.line(`return ${resultPromise};`);
         return true;
     }
@@ -36319,7 +36344,11 @@ class Emitter {
                         buf.line(`${bodyAlternateAdapter}(${elseBodyEnvVar});`);
                         buf.close();
                     } else {
-                        for (const statement of continuation.bodyContinueElseStatements) this.emitStmt(buf, statement);
+                        const synchronousElseStatements = continuation.bodyContinueElseStatements.length > 0 &&
+                            ts.isContinueStatement(continuation.bodyContinueElseStatements[continuation.bodyContinueElseStatements.length - 1]!)
+                            ? continuation.bodyContinueElseStatements.slice(0, -1)
+                            : continuation.bodyContinueElseStatements;
+                        for (const statement of synchronousElseStatements) this.emitStmt(buf, statement);
                         if (continuation.loopIncrementor) {
                             const incrementor = this.emitExpr(continuation.loopIncrementor);
                             buf.line(`${incrementor.c};`);
