@@ -15,6 +15,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Awaited `do…while` bodies now run their first direct awaited body step before the awaited condition, then resume through `continue` and repeat the body in the bounded loop subset. Test: `async_await_do_body_continue`.
 - A bounded loop-body `if` arm may now sequence its direct awaited expression and await-free postlude before `continue`; a false arm re-enters the awaited loop condition without running the body await. Test: `async_await_loop_body_if_continue`.
 - The same bounded loop-body continuation now preserves an await-free `else` arm before condition re-entry when the `if` arm contains the direct awaited `continue` path. Test: `async_await_loop_body_if_else_continue`.
+- Bounded loop-body `if/else` continuations now support direct awaited expression sequences in both arms before `continue`, selecting a branch-specific adapter and preserving rejection propagation. Test: `async_await_loop_body_if_else_await_continue`.
 - Dispatch capture validation now recursively audits top-level helper functions for mutable or non-primitive global access. Test: `dispatch_capture_transitive_diagnostic`.
 - Threaded dispatch now supports `--no-gc` by protecting the bump-chunk allocator with a runtime mutex. Test: `dispatch_no_gc`.
 - Dispatch task capture validation now permits const array/dynamic values by creating a `structuredClone` snapshot at closure creation. Tests: `dispatch_capture_clone`, `dispatch_serial_capture_clone`.

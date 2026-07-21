@@ -296,6 +296,9 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinue: boolean;
     bodyContinueCondition: ts.Expression | null;
     bodyContinueElseStatements: readonly ts.Statement[];
+    bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[];
+    bodyContinueElsePreludeStatements: readonly ts.Statement[];
+    bodyContinueElsePostAwaitStatements: readonly ts.Statement[];
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     fallthroughAwaitExpr?: ts.AwaitExpression;
@@ -25831,7 +25834,7 @@ class Emitter {
         if (!loopStatement) return false;
         const statements = ts.isBlock(loopStatement) ? loopStatement.statements : [loopStatement];
         const final = statements[statements.length - 1]!;
-        const conditional = ts.isIfStatement(final) && !final.elseStatement
+        const conditional = ts.isIfStatement(final)
             ? final
             : null;
         const conditionalStatements = conditional
@@ -34506,12 +34509,40 @@ class Emitter {
                 ? conditionalContinue.elseStatement.statements
                 : [conditionalContinue.elseStatement]
             : [];
+        const elseContinueStatement = bodyContinueElseStatements[bodyContinueElseStatements.length - 1];
+        const elseContinueIsContinue = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
+            !!elseContinueStatement && ts.isContinueStatement(elseContinueStatement);
+        const elseContinueBodyStatements = elseContinueIsContinue
+            ? bodyContinueElseStatements.slice(0, -1)
+            : [];
+        let bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[] = [];
+        let bodyContinueElsePreludeStatements: readonly ts.Statement[] = [];
+        let bodyContinueElsePostAwaitStatements: readonly ts.Statement[] = [];
+        if (bodyContinueCondition && elseContinueIsContinue) {
+            const elseAwaitStatements = elseContinueBodyStatements.flatMap((statement) => {
+                if (!ts.isExpressionStatement(statement)) return [];
+                const expression = this.unwrapTransparentExpression(statement.expression);
+                return ts.isAwaitExpression(expression) ? [{ statement, expression }] : [];
+            });
+            if (elseAwaitStatements.length === 0) return false;
+            const firstAwaitIndex = elseContinueBodyStatements.indexOf(elseAwaitStatements[0]!.statement);
+            const lastAwaitIndex = elseContinueBodyStatements.indexOf(elseAwaitStatements[elseAwaitStatements.length - 1]!.statement);
+            const awaitStatements = new Set<ts.Statement>(elseAwaitStatements.map(({ statement }) => statement));
+            if (elseContinueBodyStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
+            bodyContinueElseAwaitExprs = elseAwaitStatements.map(({ expression }) => expression);
+            bodyContinueElsePreludeStatements = elseContinueBodyStatements.slice(0, firstAwaitIndex);
+            bodyContinueElsePostAwaitStatements = elseContinueBodyStatements.slice(lastAwaitIndex + 1);
+        }
         const bodyContinueStatements = bodyContinueCondition
             ? conditionalThenStatements.slice(0, -1)
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
         if (initialBody && bodyContinueCondition) return false;
-        if (bodyContinueCondition && !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        if (bodyContinueCondition && !elseContinueIsContinue &&
+            !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        if (bodyContinueCondition && elseContinueIsContinue &&
+            (!bodyContinueElsePreludeStatements.every((statement) => this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)) ||
+                !bodyContinueElsePostAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)))) return false;
         if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction) && !bodyContinue) return false;
         const bodyExpression = bodyContinue
             ? ts.factory.createVoidZero()
@@ -34835,6 +34866,16 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
+        const bodyContinueElsePromiseTypes = bodyContinueElseAwaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        )));
+        const bodyContinueElseAwaitedTypes = bodyContinueElseAwaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
+            this.checker,
+        )));
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         const fallthroughAwaitExpr = ts.isAwaitExpression(fallthroughAwait)
             ? fallthroughAwait
@@ -34868,6 +34909,8 @@ class Emitter {
             (conditionAwaitedType.kind !== "boolean" && !(hasNullishOperator && conditionAwaitedType.kind === "value")) ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
+            bodyContinueElsePromiseTypes.some((type) => type.kind !== "promise") ||
+            bodyContinueElseAwaitedTypes.some((type) => type.kind === "never") ||
             (fallthroughAwaitExpr && (!fallthroughPromiseType || fallthroughPromiseType.kind !== "promise")) ||
             (fallthroughAwaitedType && fallthroughAwaitedType.kind === "never")
         ) return false;
@@ -34886,7 +34929,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -34915,7 +34958,11 @@ class Emitter {
         visitReferences(condition);
         for (const statement of bodyPreludeStatements) visitReferences(statement);
         for (const statement of bodyPostAwaitStatements) visitReferences(statement);
-        if (bodyAwaitExpr) visitReferences(bodyAwaitExpr);
+        for (const awaitExpr of bodyAwaitExprs) visitReferences(awaitExpr);
+        for (const awaitExpr of bodyContinueElseAwaitExprs) visitReferences(awaitExpr);
+        for (const statement of bodyContinueElsePreludeStatements) visitReferences(statement);
+        for (const statement of bodyContinueElsePostAwaitStatements) visitReferences(statement);
+        if (bodyAwaitExpr && bodyAwaitExprs.length === 0) visitReferences(bodyAwaitExpr);
         visitReferences(bodyReturnExpr);
         if (bodyLeadingChain) {
             for (const parameter of bodyLeadingChain.params) referenced.set(parameter.symbol, parameter);
@@ -34940,6 +34987,9 @@ class Emitter {
             bodyContinue,
             bodyContinueCondition,
             bodyContinueElseStatements,
+            bodyContinueElseAwaitExprs,
+            bodyContinueElsePreludeStatements,
+            bodyContinueElsePostAwaitStatements,
             bodyRejectResult,
             fallthroughExpr,
             fallthroughAwaitExpr,
@@ -34947,6 +34997,7 @@ class Emitter {
             thisValue: usesThis ? thisValue : null,
         };
         let bodyAdapter: string | null = null;
+        let bodyAlternateAdapter: string | null = null;
         let loopAdapterName: string | undefined;
         if (bodyContinue && bodyAwaitExprs.length > 0) {
             loopAdapterName = `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
@@ -34955,6 +35006,25 @@ class Emitter {
                 conditionPromiseType,
                 continuation,
                 bodyAwaitExprs,
+            );
+        }
+        if (bodyContinueElseAwaitExprs.length > 0) {
+            bodyAlternateAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                loopAdapterName ?? `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`,
+                conditionPromiseType,
+                {
+                    ...continuation,
+                    bodyAwaitExpr: bodyContinueElseAwaitExprs[0]!,
+                    bodyAwaitExprs: bodyContinueElseAwaitExprs,
+                    bodyPreludeStatements: bodyContinueElsePreludeStatements,
+                    bodyPostAwaitStatements: bodyContinueElsePostAwaitStatements,
+                    bodyContinueCondition: null,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                },
+                bodyContinueElseAwaitExprs,
             );
         }
         if (continuation.bodyLeadingContinuation) {
@@ -35017,6 +35087,7 @@ class Emitter {
             continuation,
             bodyPromiseType,
             bodyAdapter,
+            bodyAlternateAdapter,
             fallthroughPromiseType,
             fallthroughAdapter,
             continuation.bodyRejectResult,
@@ -35197,6 +35268,7 @@ class Emitter {
         continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
         bodyPromiseType: CType | null,
         bodyAdapter: string | null,
+        bodyAlternateAdapter: string | null,
         fallthroughPromiseType: CType | null,
         fallthroughAdapter: string | null,
         bodyRejectResult: boolean,
@@ -35303,27 +35375,52 @@ class Emitter {
                 if (continuation.bodyContinueCondition) {
                     buf.close();
                     buf.open("else");
-                    for (const statement of continuation.bodyContinueElseStatements) this.emitStmt(buf, statement);
-                    if (continuation.loopIncrementor) {
-                        const incrementor = this.emitExpr(continuation.loopIncrementor);
-                        buf.line(`${incrementor.c};`);
+                    if (bodyAlternateAdapter) {
+                        for (const statement of continuation.bodyContinueElsePreludeStatements) this.emitStmt(buf, statement);
+                        const elseBodySource = this.emitExpr(continuation.bodyContinueElseAwaitExprs[0]!.expression);
+                        const elseBodySourceVar = this.freshTemp("_await_else_body_source");
+                        const elseBodyEnvVar = this.freshTemp("_await_else_body_env");
+                        const elseBodyEnvType = `${bodyAlternateAdapter}_env_t`;
+                        const elseBodyPromiseType = this.prepareType(mapTsType(
+                            continuation.bodyContinueElseAwaitExprs[0]!.expression,
+                            this.checker.getTypeAtLocation(continuation.bodyContinueElseAwaitExprs[0]!.expression),
+                            this.checker,
+                        ));
+                        buf.line(`tsc_promise_t* const ${elseBodySourceVar} = ${this.coerce(elseBodySource, elseBodyPromiseType, continuation.bodyContinueElseAwaitExprs[0]!.expression)};`);
+                        buf.line(`${elseBodyEnvType}* const ${elseBodyEnvVar} = (${elseBodyEnvType}*)TSC_GC_MALLOC(sizeof(${elseBodyEnvType}));`);
+                        buf.line(`${elseBodyEnvVar}->receiver = ${elseBodySourceVar};`);
+                        buf.line(`${elseBodyEnvVar}->result_promise = _ret;`);
+                        for (const param of continuation.params) buf.line(`${elseBodyEnvVar}->${param.field} = state->${param.field};`);
+                        if (continuation.thisValue) buf.line(`${elseBodyEnvVar}->this_arg = state->this_arg;`);
+                        buf.open(`if (tsc_promise_is_pending(${elseBodySourceVar}))`);
+                        buf.line(`tsc_promise_add_callback(${elseBodySourceVar}, ${bodyAlternateAdapter}, ${elseBodyEnvVar});`);
+                        buf.close();
+                        buf.open("else");
+                        buf.line(`${bodyAlternateAdapter}(${elseBodyEnvVar});`);
+                        buf.close();
+                    } else {
+                        for (const statement of continuation.bodyContinueElseStatements) this.emitStmt(buf, statement);
+                        if (continuation.loopIncrementor) {
+                            const incrementor = this.emitExpr(continuation.loopIncrementor);
+                            buf.line(`${incrementor.c};`);
+                        }
+                        const continueSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
+                        const continueSourceVar = this.freshTemp("_await_continue_source");
+                        const continueEnvVar = this.freshTemp("_await_continue_env");
+                        const continueEnvType = `${name}_env_t`;
+                        buf.line(`tsc_promise_t* const ${continueSourceVar} = ${this.coerce(continueSource, conditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
+                        buf.line(`${continueEnvType}* const ${continueEnvVar} = (${continueEnvType}*)TSC_GC_MALLOC(sizeof(${continueEnvType}));`);
+                        buf.line(`${continueEnvVar}->receiver = ${continueSourceVar};`);
+                        buf.line(`${continueEnvVar}->result_promise = _ret;`);
+                        for (const param of continuation.params) buf.line(`${continueEnvVar}->${param.field} = state->${param.field};`);
+                        if (continuation.thisValue) buf.line(`${continueEnvVar}->this_arg = state->this_arg;`);
+                        buf.open(`if (tsc_promise_is_pending(${continueSourceVar}))`);
+                        buf.line(`tsc_promise_add_callback(${continueSourceVar}, ${name}, ${continueEnvVar});`);
+                        buf.close();
+                        buf.open("else");
+                        buf.line(`${name}(${continueEnvVar});`);
+                        buf.close();
                     }
-                    const continueSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
-                    const continueSourceVar = this.freshTemp("_await_continue_source");
-                    const continueEnvVar = this.freshTemp("_await_continue_env");
-                    const continueEnvType = `${name}_env_t`;
-                    buf.line(`tsc_promise_t* const ${continueSourceVar} = ${this.coerce(continueSource, conditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
-                    buf.line(`${continueEnvType}* const ${continueEnvVar} = (${continueEnvType}*)TSC_GC_MALLOC(sizeof(${continueEnvType}));`);
-                    buf.line(`${continueEnvVar}->receiver = ${continueSourceVar};`);
-                    buf.line(`${continueEnvVar}->result_promise = _ret;`);
-                    for (const param of continuation.params) buf.line(`${continueEnvVar}->${param.field} = state->${param.field};`);
-                    if (continuation.thisValue) buf.line(`${continueEnvVar}->this_arg = state->this_arg;`);
-                    buf.open(`if (tsc_promise_is_pending(${continueSourceVar}))`);
-                    buf.line(`tsc_promise_add_callback(${continueSourceVar}, ${name}, ${continueEnvVar});`);
-                    buf.close();
-                    buf.open("else");
-                    buf.line(`${name}(${continueEnvVar});`);
-                    buf.close();
                     buf.close();
                 }
                 buf.line("tsc_try_pop();");
