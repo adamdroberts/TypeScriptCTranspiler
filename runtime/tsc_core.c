@@ -94,6 +94,9 @@ int tsc_argc;
 char** tsc_argv;
 
 #ifdef TSC_NO_GC
+#ifdef TSC_THREADS
+#include <pthread.h>
+#endif
 typedef struct tsc_no_gc_chunk {
     struct tsc_no_gc_chunk* next;
     size_t cap;
@@ -102,8 +105,14 @@ typedef struct tsc_no_gc_chunk {
 } tsc_no_gc_chunk_t;
 
 static tsc_no_gc_chunk_t* tsc_no_gc_chunks = NULL;
+#ifdef TSC_THREADS
+static pthread_mutex_t tsc_no_gc_chunks_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
 
 void* tsc_no_gc_malloc_uninit(size_t n) {
+#ifdef TSC_THREADS
+    pthread_mutex_lock(&tsc_no_gc_chunks_mutex);
+#endif
     const size_t align = sizeof(max_align_t);
     n = (n + align - 1) & ~(align - 1);
     if (!tsc_no_gc_chunks || tsc_no_gc_chunks->used + n > tsc_no_gc_chunks->cap) {
@@ -117,6 +126,9 @@ void* tsc_no_gc_malloc_uninit(size_t n) {
     }
     void* p = tsc_no_gc_chunks->data + tsc_no_gc_chunks->used;
     tsc_no_gc_chunks->used += n;
+#ifdef TSC_THREADS
+    pthread_mutex_unlock(&tsc_no_gc_chunks_mutex);
+#endif
     return p;
 }
 #endif

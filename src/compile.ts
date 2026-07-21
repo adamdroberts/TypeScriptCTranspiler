@@ -725,12 +725,6 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
     }
-    if (usesDispatch && opts.noGc && dispatchMode !== "serial") {
-        process.stderr.write(
-            "tsc2c: the dispatch API is not supported with --no-gc (the no-GC arena allocator is not thread-safe)\n",
-        );
-        return { exitCode: 3, buildDir, mainC: "" };
-    }
     const mainPath = path.join(buildDir, "main.c");
     await fs.writeFile(mainPath, mainC, "utf8");
     if (opts.verbose) console.error(`[tsc2c] wrote ${mainPath}`);

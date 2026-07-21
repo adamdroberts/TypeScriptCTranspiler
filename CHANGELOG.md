@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Threaded dispatch now supports `--no-gc` by protecting the bump-chunk allocator with a runtime mutex. Test: `dispatch_no_gc`.
 - Dispatch task capture validation now permits const array/dynamic values by creating a `structuredClone` snapshot at closure creation. Tests: `dispatch_capture_clone`, `dispatch_serial_capture_clone`.
 - Added Promise-based `dispatch.group(queue, tasks)` joins and `dispatch.barrier(queue, task)` exclusive completion for concurrent queues, with serial-backend coverage. Tests: `dispatch_group_barrier`, `dispatch_serial_group_barrier`.
 - Dispatch task adapters now support typed `Date`, `RegExp`, `Error`, and `Buffer` return values for both dispatch backends. Tests: `dispatch_objects`, `dispatch_serial_objects`.

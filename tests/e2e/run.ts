@@ -32,6 +32,8 @@ interface Case {
     dispatch?: boolean;
     /** compile.dispatch.serial sidecar: use the no-dependency serial backend. */
     dispatchSerial?: boolean;
+    /** compile.dispatch.no_gc sidecar: keep threaded dispatch while disabling Boehm GC. */
+    dispatchNoGc?: boolean;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -66,12 +68,14 @@ async function discoverCases(): Promise<Case[]> {
         const releasePath = path.join(casesDir, d, "compile.release");
         const dispatchPath = path.join(casesDir, d, "compile.dispatch");
         const dispatchSerialPath = path.join(casesDir, d, "compile.dispatch.serial");
+        const dispatchNoGcPath = path.join(casesDir, d, "compile.dispatch.no_gc");
         const runEnvPath = path.join(casesDir, d, "run.env");
         if (!(await exists(entry))) continue;
 
         const release = await exists(releasePath);
         const dispatch = await exists(dispatchPath);
         const dispatchSerial = await exists(dispatchSerialPath);
+        const dispatchNoGc = await exists(dispatchNoGcPath);
         const emitCOnly = await exists(emitCOnlyPath);
         const nativeAddonManifest = await exists(nativeAddonManifestPath)
             ? nativeAddonManifestPath
@@ -122,6 +126,7 @@ async function discoverCases(): Promise<Case[]> {
                 runEnv,
                 dispatch,
                 dispatchSerial,
+                dispatchNoGc,
             });
             continue;
         }
@@ -214,7 +219,7 @@ async function main(): Promise<void> {
             entry: c.entry,
             output: bin,
             buildDir,
-            noGc: c.dispatch && !c.dispatchSerial ? false : process.env.TSC2C_NO_GC === "1",
+            noGc: c.dispatch && !c.dispatchSerial ? c.dispatchNoGc : process.env.TSC2C_NO_GC === "1",
             dispatch: c.dispatch ? (c.dispatchSerial ? "serial" : "threaded") : undefined,
             release: c.release,
             emitCOnly: c.emitCOnly,
