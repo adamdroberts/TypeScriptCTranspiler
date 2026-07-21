@@ -410,8 +410,10 @@ await-loop-expression-continue loop-expression-continue-initializer-body-increme
 await-loop-expression-continue-throw loop-expression-continue-throw-initializer-body-increment
 await-method-loop-initializer-escaping-var-continue loop-escaping-var-continue-body-method-increment
 await-method-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-body-method-throw-increment
+await-method-loop-expression-continue loop-expression-continue-method-initializer-body-increment
 await-value-loop-initializer-escaping-var-continue loop-escaping-var-continue-value-body-value-increment
 await-value-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-value-body-value-increment
+await-value-loop-expression-continue loop-expression-continue-value-initializer-value-body-value-increment
 await-while-escaping-var-continue while-escaping-continue-continued
 await-while-escaping-var-continue-throw while-escaping-continue-throw-continued
 await-method-escaping-var-continue while-escaping-continue-method-continued

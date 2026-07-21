@@ -488,6 +488,14 @@ class ForContinueFalseChooser {
         }
         throw await laterBodyValue(reason);
     }
+
+    async chooseExpressionInitializer(value: string): Promise<string> {
+        for (value += this.suffix; await laterCondition(value.endsWith(this.suffix)); value += "-increment") {
+            value += "-body";
+            continue;
+        }
+        return await laterBodyValue(value);
+    }
 }
 
 const chooseLoopInitializerEscapingVarContinueFalseValue = async (value: string): Promise<string> => {
@@ -512,6 +520,14 @@ const chooseLoopInitializerEscapingVarContinueThrowValue = async (reason: string
         continue;
     }
     throw await laterBodyValue(reason);
+};
+
+const chooseLoopExpressionInitializerContinueValue = async (value: string): Promise<string> => {
+    for (value += "-value-initializer"; await laterCondition(value.endsWith("-value-initializer")); value += "-value-increment") {
+        value += "-value-body";
+        continue;
+    }
+    return await laterBodyValue(value);
 };
 
 async function chooseWhileContinueAwait(value: string, repeat: boolean): Promise<string> {
@@ -2825,9 +2841,11 @@ chooseLoopExpressionInitializerContinueThrowAwait("loop-expression-continue-thro
 new ForContinueFalseChooser("-method").choose("loop-escaping-var-continue-false").then((value) => console.log("await-method-loop-initializer-escaping-var-continue-false", value));
 new ForContinueFalseChooser("-method-increment").chooseRepeated("loop-escaping-var-continue").then((value) => console.log("await-method-loop-initializer-escaping-var-continue", value));
 new ForContinueFalseChooser("-method-throw-increment").chooseRepeatedThrow("loop-escaping-var-continue-throw").catch((reason) => console.log("await-method-loop-initializer-escaping-var-continue-throw", reason));
+new ForContinueFalseChooser("-method-initializer").chooseExpressionInitializer("loop-expression-continue").then((value) => console.log("await-method-loop-expression-continue", value));
 chooseLoopInitializerEscapingVarContinueFalseValue("loop-escaping-var-continue-false").then((value) => console.log("await-value-loop-initializer-escaping-var-continue-false", value));
 chooseLoopInitializerEscapingVarContinueValue("loop-escaping-var-continue").then((value) => console.log("await-value-loop-initializer-escaping-var-continue", value));
 chooseLoopInitializerEscapingVarContinueThrowValue("loop-escaping-var-continue-throw").catch((reason) => console.log("await-value-loop-initializer-escaping-var-continue-throw", reason));
+chooseLoopExpressionInitializerContinueValue("loop-expression-continue").then((value) => console.log("await-value-loop-expression-continue", value));
 chooseWhileContinueAwait("while-escaping-continue", true).then((value) => console.log("await-while-escaping-var-continue", value));
 chooseWhileContinueAwait("while-escaping-continue-false", false).then((value) => console.log("await-while-escaping-var-continue-false", value));
 chooseWhileContinueThrowAwait("while-escaping-continue-throw", true).catch((reason) => console.log("await-while-escaping-var-continue-throw", reason));
