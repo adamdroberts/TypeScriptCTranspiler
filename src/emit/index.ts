@@ -34811,7 +34811,13 @@ class Emitter {
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
             : null;
-        if (!loopInitializer && !loopIncrementor && awaitExpressions.length === 2 &&
+        const loopBodyAction = loopBody[loopBody.length - 1];
+        const loopBreakSkipsIncrementor = !loopIncrementor || (
+            loopBodyAction !== undefined &&
+            ts.isBreakStatement(loopBodyAction) &&
+            !loopBodyAction.label
+        );
+        if (!loopInitializer && loopBreakSkipsIncrementor && awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
                 condition,
@@ -34822,7 +34828,7 @@ class Emitter {
                 thisValue,
                 ts.isThrowStatement(fallthrough),
             )) return true;
-        if (!loopInitializer && !loopIncrementor && awaitExpressions.length === 3 &&
+        if (!loopInitializer && loopBreakSkipsIncrementor && awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
                 buf,
                 condition,
@@ -34833,7 +34839,7 @@ class Emitter {
                 thisValue,
                 ts.isThrowStatement(fallthrough),
             )) return true;
-        if (!loopInitializer && !loopIncrementor && awaitExpressions.length >= 3 &&
+        if (!loopInitializer && loopBreakSkipsIncrementor && awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
                 buf,
                 condition,
