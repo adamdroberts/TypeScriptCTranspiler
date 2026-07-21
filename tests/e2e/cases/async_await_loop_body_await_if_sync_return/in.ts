@@ -23,6 +23,9 @@ async function loopBodyAwaitIfSyncReturn(): Promise<string> {
             count++;
             continue;
         } else {
+            await later("prep-a-" + count);
+            await later("prep-b-" + count);
+            bodyCount += 0;
             return "early-" + bodyCount;
         }
     }
