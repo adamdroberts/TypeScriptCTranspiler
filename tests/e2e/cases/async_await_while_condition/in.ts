@@ -474,6 +474,22 @@ async function chooseLoopMultipleExpressionInitializerContinueThrowAwait(reason:
     throw await laterBodyValue(reason);
 }
 
+async function chooseLoopExpressionInitializerBreakAwait(value: string): Promise<string> {
+    for (value += "-initializer"; await laterCondition(true); value += "-increment") {
+        value += "-body";
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopExpressionInitializerBreakThrowAwait(reason: string): Promise<string> {
+    for (reason += "-initializer"; await laterCondition(true); reason += "-increment") {
+        reason += "-body";
+        break;
+    }
+    throw await laterBodyValue(reason);
+}
+
 class ForContinueFalseChooser {
     private readonly suffix: string;
 
@@ -2872,6 +2888,8 @@ chooseLoopExpressionInitializerContinueAwait("loop-expression-continue").then((v
 chooseLoopExpressionInitializerContinueThrowAwait("loop-expression-continue-throw").catch((reason) => console.log("await-loop-expression-continue-throw", reason));
 chooseLoopMultipleExpressionInitializerContinueAwait("loop-multiple-expression-continue").then((value) => console.log("await-loop-multiple-expression-continue", value));
 chooseLoopMultipleExpressionInitializerContinueThrowAwait("loop-multiple-expression-continue-throw").catch((reason) => console.log("await-loop-multiple-expression-continue-throw", reason));
+chooseLoopExpressionInitializerBreakAwait("loop-expression-break").then((value) => console.log("await-loop-expression-break", value));
+chooseLoopExpressionInitializerBreakThrowAwait("loop-expression-break-throw").catch((reason) => console.log("await-loop-expression-break-throw", reason));
 new ForContinueFalseChooser("-method").choose("loop-escaping-var-continue-false").then((value) => console.log("await-method-loop-initializer-escaping-var-continue-false", value));
 new ForContinueFalseChooser("-method-increment").chooseRepeated("loop-escaping-var-continue").then((value) => console.log("await-method-loop-initializer-escaping-var-continue", value));
 new ForContinueFalseChooser("-method-throw-increment").chooseRepeatedThrow("loop-escaping-var-continue-throw").catch((reason) => console.log("await-method-loop-initializer-escaping-var-continue-throw", reason));
