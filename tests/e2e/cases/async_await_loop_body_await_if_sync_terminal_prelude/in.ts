@@ -1,0 +1,29 @@
+function later(value: string): Promise<string> {
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
+}
+
+function laterCondition(value: boolean): Promise<boolean> {
+    return new Promise<boolean>((resolve) => setImmediate(() => resolve(value)));
+}
+
+export {};
+
+async function loopBodyAwaitIfSyncTerminalPrelude(): Promise<string> {
+    let count = 0;
+    while (await laterCondition(count < 1)) {
+        if (await laterCondition(count === 0)) {
+            await later("prep-a");
+            await later("prep-b");
+            count += 0;
+            return "true";
+        } else {
+            await later("prep-a-false");
+            await later("prep-b-false");
+            count += 0;
+            return "false";
+        }
+    }
+    return await later("done");
+}
+
+loopBodyAwaitIfSyncTerminalPrelude().then((value) => console.log(value));

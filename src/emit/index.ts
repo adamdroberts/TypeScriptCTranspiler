@@ -34554,8 +34554,6 @@ class Emitter {
         const elseAwaitExpr = ts.isAwaitExpression(elseTerminalExpr) ? elseTerminalExpr : null;
         const thenSynchronousExpr = thenAwaitExpr ? null : thenTerminalExpr;
         const elseSynchronousExpr = elseAwaitExpr ? null : elseTerminalExpr;
-        if ((thenAwaitPreludeExprs && thenAwaitPreludeExprs.length > 0 && !thenAwaitExpr) ||
-            (elseAwaitPreludeExprs && elseAwaitPreludeExprs.length > 0 && !elseAwaitExpr)) return false;
         const conditionAwaitExpr = this.unwrapTransparentExpression(bodyStatement.expression);
         if (!ts.isAwaitExpression(conditionAwaitExpr)) return false;
         const outerAwaitExpr = awaitExpressions[0]!;
@@ -34724,16 +34722,21 @@ class Emitter {
             terminalAwaitExpr: ts.AwaitExpression | null,
             terminalAdapter: string | null,
             postAwaitStatements: readonly ts.Statement[],
+            terminalSynchronousExpr: ts.Expression | null,
+            terminalRejectResult: boolean,
         ): { adapter: string | null; awaitExpr: ts.AwaitExpression | null; promiseType: CType | null; preludeStatements: readonly ts.Statement[] } => {
             if (awaitPreludeExprs.length === 0) {
                 return { adapter: terminalAdapter, awaitExpr: terminalAwaitExpr, promiseType: terminalPromiseType, preludeStatements: [] };
             }
-            if (!terminalPromiseType || !terminalAwaitExpr || !terminalAdapter) {
+            if ((!terminalPromiseType || !terminalAwaitExpr || !terminalAdapter) && !terminalSynchronousExpr) {
                 throw new Error("missing awaited terminal branch adapter");
             }
+            const sequenceConditionAwaitExpr = terminalAwaitExpr ?? awaitPreludeExprs[awaitPreludeExprs.length - 1]!;
+            const sequenceConditionPromiseType = terminalPromiseType ?? promiseTypes[promiseTypes.length - 1]!;
+            const sequenceTargetAdapter = terminalAdapter ?? `tsc_async_await_terminal_sequence_${this.asyncAwaitReturnContinuationAdapters++}`;
             const sequenceContinuation: AsyncAwaitLoopConditionReturnAwaitContinuation = {
-                conditionExpr: terminalAwaitExpr,
-                conditionAwaitExpr: terminalAwaitExpr,
+                conditionExpr: sequenceConditionAwaitExpr,
+                conditionAwaitExpr: sequenceConditionAwaitExpr,
                 bodyAwaitExpr: awaitPreludeExprs[0]!,
                 bodyAwaitExprs: awaitPreludeExprs,
                 bodyReturnExpr: ts.factory.createVoidZero(),
@@ -34757,16 +34760,18 @@ class Emitter {
                 bodyContinueElseReturnPreludeStatements: [],
                 bodyContinueElseReturnRejectResult: false,
                 bodyRejectResult: false,
-                fallthroughExpr: terminalAwaitExpr,
-                fallthroughAwaitExpr: terminalAwaitExpr,
+                fallthroughExpr: sequenceConditionAwaitExpr,
+                fallthroughAwaitExpr: sequenceConditionAwaitExpr,
                 params: capturedParams,
                 thisValue: continuationThisValue,
             };
             const adapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
-                terminalAdapter,
-                terminalPromiseType,
+                sequenceTargetAdapter,
+                sequenceConditionPromiseType,
                 sequenceContinuation,
                 awaitPreludeExprs,
+                terminalSynchronousExpr,
+                terminalRejectResult,
             );
             return {
                 adapter,
@@ -34775,8 +34780,8 @@ class Emitter {
                 preludeStatements: [],
             };
         };
-        const thenBranch = makePreludeAdapter(thenAwaitPreludeExprs, thenPreludePromiseTypes, thenPromiseType, thenAwaitExpr, thenAdapter, thenPrelude.synchronousSuffix);
-        const elseBranch = makePreludeAdapter(elseAwaitPreludeExprs, elsePreludePromiseTypes, elsePromiseType, elseAwaitExpr, elseAdapter, elsePrelude.synchronousSuffix);
+        const thenBranch = makePreludeAdapter(thenAwaitPreludeExprs, thenPreludePromiseTypes, thenPromiseType, thenAwaitExpr, thenAdapter, thenPrelude.synchronousSuffix, thenSynchronousExpr, ts.isThrowStatement(thenStatement));
+        const elseBranch = makePreludeAdapter(elseAwaitPreludeExprs, elsePreludePromiseTypes, elsePromiseType, elseAwaitExpr, elseAdapter, elsePrelude.synchronousSuffix, elseSynchronousExpr, ts.isThrowStatement(elseStatement));
         const nestedAdapter = this.ensureAsyncAwaitLoopBodyConditionalTerminalAdapter(
             nestedConditionPromiseType,
             nestedConditionAwaitedType,
@@ -35870,6 +35875,8 @@ class Emitter {
         conditionPromiseType: CType,
         continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
         bodyAwaitExprs: readonly ts.AwaitExpression[],
+        terminalSynchronousExpr: ts.Expression | null = null,
+        terminalRejectResult = false,
     ): string {
         if (bodyAwaitExprs.length === 0) throw new Error("missing loop body await continuation types");
         const names = bodyAwaitExprs.map(() =>
@@ -35962,19 +35969,34 @@ class Emitter {
                         const incrementor = this.emitExpr(continuation.loopIncrementor);
                         buf.line(`${incrementor.c};`);
                     }
-                    const conditionSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
-                    buf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(conditionSource, conditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
-                    buf.line(`${loopAdapterName}_env_t* ${nextEnvVar} = (${loopAdapterName}_env_t*)TSC_GC_MALLOC(sizeof(${loopAdapterName}_env_t));`);
-                    buf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
-                    buf.line(`${nextEnvVar}->result_promise = _ret;`);
-                    for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
-                    if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
-                    buf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
-                    buf.line(`tsc_promise_add_callback(${nextSourceVar}, ${loopAdapterName}, ${nextEnvVar});`);
-                    buf.close();
-                    buf.open("else");
-                    buf.line(`${loopAdapterName}(${nextEnvVar});`);
-                    buf.close();
+                    if (terminalSynchronousExpr) {
+                        const returned = this.emitExpr(terminalSynchronousExpr);
+                        if (terminalRejectResult) {
+                            const rejected = this.coerceToString(returned, terminalSynchronousExpr);
+                            buf.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
+                        } else {
+                            const returnedType = this.prepareType(returned.ty);
+                            if (returnedType.kind === "void" || returnedType.kind === "never") {
+                                buf.line(`tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));`);
+                            } else {
+                                buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveResult(returned, terminalSynchronousExpr)});`);
+                            }
+                        }
+                    } else {
+                        const conditionSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
+                        buf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(conditionSource, conditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
+                        buf.line(`${loopAdapterName}_env_t* ${nextEnvVar} = (${loopAdapterName}_env_t*)TSC_GC_MALLOC(sizeof(${loopAdapterName}_env_t));`);
+                        buf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
+                        buf.line(`${nextEnvVar}->result_promise = _ret;`);
+                        for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
+                        if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
+                        buf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
+                        buf.line(`tsc_promise_add_callback(${nextSourceVar}, ${loopAdapterName}, ${nextEnvVar});`);
+                        buf.close();
+                        buf.open("else");
+                        buf.line(`${loopAdapterName}(${nextEnvVar});`);
+                        buf.close();
+                    }
                 }
                 buf.line("tsc_try_pop();");
                 buf.line("return;");
