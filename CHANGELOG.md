@@ -20,6 +20,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Direct two-await outer-`continue` loop conditions now execute an await-free initializer-free `for` incrementor before condition re-entry. Regression: `async_await_while_condition`.
 - Direct two-await outer-`continue` loop conditions now compose a synchronous expression initializer with an await-free `for` incrementor before condition re-entry. Regression: `async_await_while_condition`.
 - Direct three-or-more awaited logical outer-`continue` loop conditions now execute an await-free initializer-free `for` incrementor before stage-0 condition re-entry. Regression: `async_await_while_condition`.
+- Direct three-or-more awaited logical outer-`continue` loop conditions now compose a synchronous expression initializer with an await-free `for` incrementor before stage-0 re-entry. Regression: `async_await_while_condition`.
 - Conditional three-await outer-`continue` loop conditions now execute an await-free initializer-free `for` incrementor before condition re-entry. Regression: `async_await_while_condition`.
 - Two-await nullish outer-`continue` conditions now also route terminal `throw await` fallthroughs. Regression: `async_await_while_condition`.
 - Two-await nullish outer-`continue` coverage now includes receiver and function-value captures. Regression: `async_await_while_condition`.
