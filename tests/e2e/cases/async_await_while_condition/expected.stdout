@@ -469,6 +469,7 @@ await-loop-two-await-iterator-control-continue loop-two-await-iterator-control-c
 await-loop-two-await-key-control-continue loop-two-await-key-control-continue1
 await-loop-two-await-for-control-continue loop-two-await-for-control-continue-keep
 await-loop-two-await-catch-continue loop-two-await-catch-continue-caught
+await-loop-two-await-catch-finally-continue loop-two-await-catch-finally-continue-caught-finally
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-while-six-logical-true six-logical-yes

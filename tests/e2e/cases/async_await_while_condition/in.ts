@@ -703,6 +703,22 @@ async function chooseLoopTwoAwaitCatchContinueAwait(value: string, repeat: boole
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitCatchFinallyContinueAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) && await laterCondition(repeat)) {
+        try {
+            if (repeat) throw "caught";
+            value += "-try";
+        } catch (reason) {
+            value += "-" + reason;
+        } finally {
+            value += "-finally";
+        }
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 class ForContinueFalseChooser {
     private readonly suffix: string;
 
@@ -3186,6 +3202,7 @@ chooseLoopTwoAwaitIteratorControlContinueAwait("loop-two-await-iterator-control-
 chooseLoopTwoAwaitKeyControlContinueAwait("loop-two-await-key-control-continue", true).then((value) => console.log("await-loop-two-await-key-control-continue", value));
 chooseLoopTwoAwaitForControlContinueAwait("loop-two-await-for-control-continue", true).then((value) => console.log("await-loop-two-await-for-control-continue", value));
 chooseLoopTwoAwaitCatchContinueAwait("loop-two-await-catch-continue", true).then((value) => console.log("await-loop-two-await-catch-continue", value));
+chooseLoopTwoAwaitCatchFinallyContinueAwait("loop-two-await-catch-finally-continue", true).then((value) => console.log("await-loop-two-await-catch-finally-continue", value));
 new ForContinueFalseChooser("-method-false-initializer").chooseExpressionInitializerFalseBreak("loop-expression-break-false").then((value) => console.log("await-method-loop-expression-break-false", value));
 new ForContinueFalseChooser("-method-false-throw-initializer").chooseExpressionInitializerFalseBreakThrow("loop-expression-break-false-throw").catch((reason) => console.log("await-method-loop-expression-break-false-throw", reason));
 chooseLoopExpressionInitializerFalseBreakValue("loop-expression-break-false").then((value) => console.log("await-value-loop-expression-break-false", value));
