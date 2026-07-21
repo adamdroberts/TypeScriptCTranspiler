@@ -32985,8 +32985,6 @@ class Emitter {
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
-            loopInitializer.declarationList.declarations.some((declaration) => !declaration.initializer)) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33320,8 +33318,6 @@ class Emitter {
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
-            loopInitializer.declarationList.declarations.some((declaration) => !declaration.initializer)) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33870,8 +33866,6 @@ class Emitter {
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
-            loopInitializer.declarationList.declarations.some((declaration) => !declaration.initializer)) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
