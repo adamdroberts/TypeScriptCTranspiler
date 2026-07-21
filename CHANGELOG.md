@@ -10,6 +10,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Bounded awaited loop conditions now support two direct awaited `&&`/`||` operands before an outer `continue`, preserving short-circuiting, body expression preludes, repeated condition evaluation, and return-await fallthrough. Regression: `async_await_while_condition`.
+- The same two-await outer-`continue` lowering now covers the short-circuit `||` path and terminal `throw await` fallthrough. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve simple await-free `const`/`let` declaration-list initializers on `for` loops when their variables do not cross into the continuation, across async declarations, class methods, and function values; captured loop-local state and unsupported declaration forms remain deferred. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now carry simple await-free `const`/`let` `for`-initializer values into direct synchronous return continuations. Regression: `async_await_while_condition`.
 - Captured simple `for`-initializer values now survive a second direct `return await` suspension after the awaited loop condition. Regression: `async_await_while_condition`.
