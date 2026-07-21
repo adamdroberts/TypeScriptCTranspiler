@@ -57346,6 +57346,47 @@ class Emitter {
             unsupported(fn, "dispatch tasks may not be async or use await in this subset");
         }
         const allowedCaptureKinds = new Set(["number", "boolean", "string", "dispatchqueue"]);
+        const auditedTransitiveFunctions = new Set<ts.FunctionLikeDeclaration>();
+        const auditTransitiveFunction = (helper: ts.FunctionLikeDeclaration): void => {
+            if (auditedTransitiveFunctions.has(helper)) return;
+            auditedTransitiveFunctions.add(helper);
+            if (!helper.body) return;
+            const audit = (node: ts.Node): void => {
+                if (node !== helper && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
+                    const sym = this.symbolForIdentifier(node);
+                    const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+                    if (decl && !decl.getSourceFile().isDeclarationFile) {
+                        if (ts.isFunctionDeclaration(decl) && !this.isNodeWithin(decl, helper)) {
+                            auditTransitiveFunction(decl);
+                        } else if (this.isTopLevelValueDeclaration(decl)) {
+                            const type = this.prepareType(mapTsType(
+                                decl,
+                                this.checker.getTypeOfSymbolAtLocation(sym!, decl),
+                                this.checker,
+                            ));
+                            if (!allowedCaptureKinds.has(type.kind)) {
+                                unsupported(
+                                    node,
+                                    "dispatch task transitively accesses a non-primitive or mutable global through a helper function",
+                                );
+                            }
+                            if (ts.isVariableDeclaration(decl)) {
+                                const isConst = (ts.getCombinedNodeFlags(decl) & ts.NodeFlags.Const) !== 0;
+                                if (!isConst) {
+                                    unsupported(
+                                        node,
+                                        "dispatch task transitively accesses a mutable global through a helper function",
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                ts.forEachChild(node, audit);
+            };
+            audit(helper.body);
+        };
         const visit = (node: ts.Node): void => {
             if (ts.isAwaitExpression(node)) {
                 unsupported(node, "dispatch tasks may not use await in this subset");
@@ -57363,6 +57404,9 @@ class Emitter {
             if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
                 const sym = this.symbolForIdentifier(node);
                 const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+                if (decl && ts.isFunctionDeclaration(decl) && !this.isNodeWithin(decl, fn)) {
+                    auditTransitiveFunction(decl);
+                }
                 if (
                     sym &&
                     decl &&

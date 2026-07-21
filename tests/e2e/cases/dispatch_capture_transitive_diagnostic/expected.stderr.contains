@@ -1,0 +1,1 @@
+dispatch task transitively accesses a mutable global through a helper function

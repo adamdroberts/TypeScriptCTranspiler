@@ -167,6 +167,8 @@ on Phase 6, cross-referenced from Phases 11/13.
   `readonly`-typed data, or const arrays/dynamic values are automatically deep-copied via
   `structuredClone`. `await` inside a dispatched closure is a compile error (MVP). Later: `Shared<T>`
   locked-accessor escape hatch; queue-confinement ("actor") typing.
+  Top-level helper functions referenced by a task are recursively audited so transitive mutable or
+  non-primitive global access is rejected. Test: `dispatch_capture_transitive_diagnostic`.
 - [x] Usage flag → `src/compile.ts`: append `tsc_dispatch.c`, define `TSC_THREADS`, probe and link
   `-ldispatch` (+ rpath), emit the actionable not-found diagnostic; `--dispatch=serial` fallback
   flag.

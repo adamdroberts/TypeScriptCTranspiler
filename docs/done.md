@@ -15,6 +15,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Promise-based dispatch.group joins inline task arrays, and dispatch.barrier provides exclusive completion on concurrent queues across threaded and serial backends. Tests: dispatch_group_barrier, dispatch_serial_group_barrier
 - Const array/dynamic values captured by dispatch tasks are copied with structuredClone when the closure is created, preventing later caller mutation from crossing the dispatch boundary. Tests: dispatch_capture_clone, dispatch_serial_capture_clone
 - Threaded dispatch now works with `--no-gc`; the bump-chunk allocator is mutex-protected under `TSC_THREADS`. Test: dispatch_no_gc
+- Dispatch capture validation recursively audits top-level helper functions and rejects transitive mutable-global access. Test: dispatch_capture_transitive_diagnostic
 - Leading async/await chains preserve assigned-before-use uninitialized `var` locals before multiple awaited declarations. Test: `async_await_while_condition`.
 - Leading async/await chains preserve bounded mutation of an assigned-before-use uninitialized `var` between multiple awaited declarations. Test: `async_await_while_condition`.
 - The bounded mutable uninitialized-`var` leading-chain coverage also applies to async class methods and function values. Test: `async_await_while_condition`.
