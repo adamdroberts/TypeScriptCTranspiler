@@ -18,7 +18,10 @@ function laterBody(value: string): Promise<string> {
 async function doBodyAwaitContinue(): Promise<string> {
     let count = 0;
     do {
-        await laterBody("body-" + count);
+        bodyCount += 0;
+        await laterBody("first-" + count);
+        await laterBody("second-" + count);
+        bodyCount += 0;
         count++;
         continue;
     } while (await laterCondition(count < 2));
