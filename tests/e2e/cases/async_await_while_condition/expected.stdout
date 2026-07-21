@@ -459,6 +459,7 @@ await-loop-two-await-continue loop-two-await-continue-body
 await-loop-two-await-continue-throw loop-two-await-continue-throw-body
 await-loop-two-await-or-continue loop-two-await-or-continue-body
 await-loop-two-await-or-continue-throw loop-two-await-or-continue-throw-body
+await-loop-three-await-mixed-or-and loop-three-await-mixed-or-and-three-mixed-or-and
 await-loop-two-await-method-continue loop-two-await-method-continue-method-body
 await-loop-two-await-value-continue loop-two-await-value-continue-value-body
 await-loop-two-await-control-continue loop-two-await-control-continue-if
@@ -484,6 +485,7 @@ await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
 await-loop-three-await-and-continue loop-three-await-and-continue-three-and
 await-loop-three-await-or-continue loop-three-await-or-continue-three-or
 await-loop-three-await-and-continue-throw loop-three-await-and-continue-throw-three-and
+await-loop-three-await-mixed-and-or loop-three-await-mixed-and-or-three-mixed-and-or
 await-loop-two-await-method-nullish loop-two-await-method-nullish-method-nullish
 await-loop-three-await-method-continue loop-three-await-method-continue-method-three-and
 await-loop-two-await-value-nullish loop-two-await-value-nullish-value-nullish

@@ -33294,15 +33294,18 @@ class Emitter {
         )) return false;
         const unwrappedCondition = this.unwrapTransparentExpression(condition);
         if (!ts.isBinaryExpression(unwrappedCondition)) return false;
-        const operator = unwrappedCondition.operatorToken.kind;
-        if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
-            operator !== ts.SyntaxKind.BarBarToken &&
-            operator !== ts.SyntaxKind.QuestionQuestionToken) return false;
+        const allowedOperators = new Set([
+            ts.SyntaxKind.AmpersandAmpersandToken,
+            ts.SyntaxKind.BarBarToken,
+            ts.SyntaxKind.QuestionQuestionToken,
+        ]);
         const leaves: ts.Expression[] = [];
+        const operators: ts.SyntaxKind[] = [];
         const flatten = (expression: ts.Expression): void => {
             const current = this.unwrapTransparentExpression(expression);
-            if (ts.isBinaryExpression(current) && current.operatorToken.kind === operator) {
+            if (ts.isBinaryExpression(current) && allowedOperators.has(current.operatorToken.kind)) {
                 flatten(current.left);
+                operators.push(current.operatorToken.kind);
                 flatten(current.right);
             } else {
                 leaves.push(current);
@@ -33310,7 +33313,13 @@ class Emitter {
         };
         flatten(unwrappedCondition);
         if (leaves.length !== awaitExpressions.length ||
-            leaves.some((leaf, index) => leaf !== awaitExpressions[index])) return false;
+            leaves.some((leaf, index) => leaf !== awaitExpressions[index]) ||
+            (operators.some((kind) => kind !== operators[0]) &&
+                !(operators.length === 2 &&
+                    operators.every((kind) => kind === ts.SyntaxKind.AmpersandAmpersandToken || kind === ts.SyntaxKind.BarBarToken)))) return false;
+        const operator = operators[0]!;
+        const mixedThreeLeaf = operators.length === 2 && operators[0] !== operators[1];
+        if (mixedThreeLeaf && awaitExpressions.length !== 3) return false;
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const promiseTypes = awaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
@@ -33449,6 +33458,7 @@ class Emitter {
         const emitNextStage = (
             stageBuf: CBuf,
             index: number,
+            targetIndex: number,
             currentValue: string,
             scope: Map<ts.Symbol, string>,
             awaitScope: Map<ts.AwaitExpression, EmitResult>,
@@ -33458,7 +33468,7 @@ class Emitter {
             if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
             let source: EmitResult;
             try {
-                source = this.emitExpr(awaitExpressions[index + 1]!.expression);
+                source = this.emitExpr(awaitExpressions[targetIndex]!.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
                 this.awaitExpressionValueScopes.pop();
@@ -33466,8 +33476,8 @@ class Emitter {
             }
             const sourceVar = this.freshTemp("_await_multi_source");
             const envVar = this.freshTemp("_await_multi_env");
-            const nextEnvType = stageEnvTypes[index + 1]!;
-            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseTypes[index + 1]!, awaitExpressions[index + 1]!.expression)};`);
+            const nextEnvType = stageEnvTypes[targetIndex]!;
+            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseTypes[targetIndex]!, awaitExpressions[targetIndex]!.expression)};`);
             stageBuf.line(`${nextEnvType}* const ${envVar} = (${nextEnvType}*)TSC_GC_MALLOC(sizeof(${nextEnvType}));`);
             stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
             stageBuf.line(`${envVar}->result_promise = _ret;`);
@@ -33477,10 +33487,10 @@ class Emitter {
             for (const param of params) stageBuf.line(`${envVar}->${param.field} = state->${param.field};`);
             if (thisValue) stageBuf.line(`${envVar}->this_arg = state->this_arg;`);
             stageBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-            stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${stageNames[index + 1]}, ${envVar});`);
+            stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${stageNames[targetIndex]}, ${envVar});`);
             stageBuf.close();
             stageBuf.open("else");
-            stageBuf.line(`${stageNames[index + 1]}(${envVar});`);
+            stageBuf.line(`${stageNames[targetIndex]}(${envVar});`);
             stageBuf.close();
             stageBuf.line("tsc_try_pop();");
             stageBuf.line("return;");
@@ -33509,7 +33519,48 @@ class Emitter {
             stageBuf.open(`if (setjmp(${eh}.jb) == 0)`);
             const truthy = this.truthyExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
             const nullish = this.nullishExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
-            if (operator === ts.SyntaxKind.QuestionQuestionToken) {
+            if (mixedThreeLeaf) {
+                if (index === 0) {
+                    if (operators[0] === ts.SyntaxKind.AmpersandAmpersandToken) {
+                        stageBuf.open(`if (${truthy})`);
+                        emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
+                        stageBuf.close();
+                        stageBuf.open("else");
+                        emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                        stageBuf.close();
+                    } else {
+                        stageBuf.open(`if (${truthy})`);
+                        emitBodyReentry(stageBuf);
+                        stageBuf.close();
+                        stageBuf.open("else");
+                        emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
+                        stageBuf.close();
+                    }
+                } else if (index === 1) {
+                    if (operators[1] === ts.SyntaxKind.BarBarToken) {
+                        stageBuf.open(`if (${truthy})`);
+                        emitBodyReentry(stageBuf);
+                        stageBuf.close();
+                        stageBuf.open("else");
+                        emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                        stageBuf.close();
+                    } else {
+                        stageBuf.open(`if (${truthy})`);
+                        emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                        stageBuf.close();
+                        stageBuf.open("else");
+                        emitFallthrough(stageBuf, scope, awaitScope);
+                        stageBuf.close();
+                    }
+                } else {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                }
+            } else if (operator === ts.SyntaxKind.QuestionQuestionToken) {
                 stageBuf.open(`if (!(${nullish}))`);
                 stageBuf.open(`if (${truthy})`);
                 emitBodyReentry(stageBuf);
@@ -33524,7 +33575,7 @@ class Emitter {
                     stageBuf.close();
                 } else {
                     stageBuf.open("else");
-                    emitNextStage(stageBuf, index, currentValue, scope, awaitScope);
+                    emitNextStage(stageBuf, index, index + 1, currentValue, scope, awaitScope);
                     stageBuf.close();
                 }
             } else {
@@ -33537,7 +33588,7 @@ class Emitter {
                     if (operator === ts.SyntaxKind.AmpersandAmpersandToken) emitBodyReentry(stageBuf);
                     else emitFallthrough(stageBuf, scope, awaitScope);
                 } else {
-                    emitNextStage(stageBuf, index, currentValue, scope, awaitScope);
+                    emitNextStage(stageBuf, index, index + 1, currentValue, scope, awaitScope);
                 }
             }
             stageBuf.close();
