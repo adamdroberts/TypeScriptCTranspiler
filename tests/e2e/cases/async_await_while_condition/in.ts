@@ -816,12 +816,30 @@ async function chooseLoopThreeAwaitRightAndOrContinueAwait(value: string, repeat
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitRightAndOrBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; await laterCondition(repeat) && (await laterCondition(repeat) || await laterCondition(repeat)); value += "-unexpected-incrementor") {
+        suffix = "-right-and-or-break-declaration";
+        value += suffix;
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitRightOrNullishContinueAwait(value: string, repeat: boolean): Promise<string> {
     for (var suffix: any; await laterCondition(repeat) || (await laterNull() ?? await laterCondition(repeat)); value += "-three-right-or-nullish-incrementor") {
         suffix = "-three-right-or-nullish";
         value += suffix;
         repeat = false;
         continue;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopThreeAwaitRightOrNullishBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; await laterCondition(repeat) || (await laterNull() ?? await laterCondition(repeat)); value += "-unexpected-incrementor") {
+        suffix = "-right-or-nullish-break-declaration";
+        value += suffix;
+        break;
     }
     return await laterBodyValue(value);
 }
@@ -3692,7 +3710,9 @@ chooseLoopThreeAwaitMixedOrAndContinueAwait("loop-three-await-mixed-or-and", tru
 chooseLoopThreeAwaitMixedNullishOrContinueAwait("loop-three-await-mixed-nullish-or", true).then((value) => console.log("await-loop-three-await-mixed-nullish-or", value));
 chooseLoopThreeAwaitMixedOrNullishContinueAwait("loop-three-await-mixed-or-nullish", true).then((value) => console.log("await-loop-three-await-mixed-or-nullish", value));
 chooseLoopThreeAwaitRightAndOrContinueAwait("loop-three-await-right-and-or", true).then((value) => console.log("await-loop-three-await-right-and-or", value));
+chooseLoopThreeAwaitRightAndOrBreakDeclarationAwait("loop-three-await-right-and-or-break-declaration", true).then((value) => console.log("await-loop-three-await-right-and-or-break-declaration", value));
 chooseLoopThreeAwaitRightOrNullishContinueAwait("loop-three-await-right-or-nullish", true).then((value) => console.log("await-loop-three-await-right-or-nullish", value));
+chooseLoopThreeAwaitRightOrNullishBreakDeclarationAwait("loop-three-await-right-or-nullish-break-declaration", true).then((value) => console.log("await-loop-three-await-right-or-nullish-break-declaration", value));
 chooseLoopThreeAwaitRightNullishOrContinueAwait("loop-three-await-right-nullish-or", true).then((value) => console.log("await-loop-three-await-right-nullish-or", value));
 chooseLoopThreeAwaitRightAndNullishContinueAwait("loop-three-await-right-and-nullish", true).then((value) => console.log("await-loop-three-await-right-and-nullish", value));
 chooseLoopThreeAwaitRightNullishAndContinueAwait("loop-three-await-right-nullish-and", true).then((value) => console.log("await-loop-three-await-right-nullish-and", value));
