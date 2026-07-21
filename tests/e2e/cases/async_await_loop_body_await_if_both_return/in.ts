@@ -17,10 +17,20 @@ async function loopBodyAwaitIfBothReturn(): Promise<string> {
             if (bodyCount === 0) {
                 bodyCount++;
             }
+            try {
+                bodyCount += 0;
+            } finally {
+                bodyCount += 0;
+            }
             return await later("true-" + bodyCount);
         } else {
             if (bodyCount === 0) {
                 bodyCount++;
+            }
+            try {
+                bodyCount += 0;
+            } finally {
+                bodyCount += 0;
             }
             return await later("false-" + bodyCount);
         }
