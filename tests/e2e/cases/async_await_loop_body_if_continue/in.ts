@@ -19,7 +19,9 @@ async function loopBodyIfContinue(): Promise<string> {
     let count = 0;
     while (await laterCondition(count < 2)) {
         if (count < 2) {
+            bodyCount += 0;
             await laterBody("body-" + count);
+            bodyCount += 0;
             count++;
             continue;
         }

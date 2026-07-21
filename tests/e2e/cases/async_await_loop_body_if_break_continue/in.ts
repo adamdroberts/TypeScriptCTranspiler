@@ -19,7 +19,9 @@ async function loopBodyIfBreakContinue(): Promise<string> {
     let count = 0;
     while (await laterCondition(count < 2)) {
         if (count < 1) {
+            bodyCount += 0;
             await laterBody("body-" + count);
+            bodyCount += 0;
             count++;
             continue;
         } else {
