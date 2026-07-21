@@ -101,6 +101,14 @@ async function chooseDirectAwaitUninitializedVarDoPrelude(prefix: string): Promi
     return await laterBodyValue(source);
 }
 
+async function chooseDirectAwaitUninitializedVarForPrelude(prefix: string): Promise<string> {
+    var source: any;
+    for (let index = 0; index < 1; index++) {
+        source = prefix + "-for";
+    }
+    return await laterBodyValue(source);
+}
+
 class MutableUninitializedVarAwaitChooser {
     async choose(prefix: string): Promise<string> {
         var source: string;
@@ -3755,6 +3763,7 @@ chooseDirectAwaitUninitializedVarIfPrelude("direct-uninitialized-var-if", true).
 chooseDirectAwaitUninitializedVarIfPrelude("direct-uninitialized-var-if", false).then((value) => console.log("await-direct-uninitialized-var-if-false", value));
 chooseDirectAwaitUninitializedVarWhilePrelude("direct-uninitialized-var-while", true).then((value) => console.log("await-direct-uninitialized-var-while-true", value));
 chooseDirectAwaitUninitializedVarDoPrelude("direct-uninitialized-var-do").then((value) => console.log("await-direct-uninitialized-var-do", value));
+chooseDirectAwaitUninitializedVarForPrelude("direct-uninitialized-var-for").then((value) => console.log("await-direct-uninitialized-var-for", value));
 new MutableUninitializedVarAwaitChooser().choose("method-mutable-uninitialized-var").then((value) => console.log("await-method-mutable-uninitialized-var-prelude", value));
 new MutableUninitializedVarAwaitChooser().chooseThrow("method-mutable-uninitialized-var").catch((reason) => console.log("await-method-mutable-uninitialized-var-throw", reason));
 chooseMutableUninitializedVarAwaitValue("value-mutable-uninitialized-var").then((value) => console.log("await-value-mutable-uninitialized-var-prelude", value));

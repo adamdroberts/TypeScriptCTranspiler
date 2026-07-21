@@ -3256,3 +3256,4 @@ These are AOT closure requirements, not permanent product limits.
 - Direct-prelude `return await` now preserves assigned-before-use uninitialized `var` state through an await-free `if` prelude. Test: `async_await_while_condition`.
 - Direct-prelude `return await` now preserves assigned-before-use uninitialized dynamic `var` state through a self-terminating await-free `while` prelude. Test: `async_await_while_condition`.
 - Direct-prelude `return await` now preserves assigned-before-use uninitialized dynamic `var` state through a guaranteed-first-iteration await-free `do…while` prelude. Test: `async_await_while_condition`.
+- Direct-prelude `return await` now preserves assigned-before-use uninitialized dynamic `var` state through a guaranteed-one-iteration await-free ordinary `for` prelude. Test: `async_await_while_condition`.
