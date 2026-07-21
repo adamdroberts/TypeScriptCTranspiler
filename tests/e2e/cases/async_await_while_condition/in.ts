@@ -804,6 +804,15 @@ async function chooseLoopConditionalThreeAwaitContinueIncrementorAwait(value: st
     return await laterBodyValue(value);
 }
 
+async function chooseLoopConditionalThreeAwaitContinueInitializerIncrementorAwait(value: string, repeat: boolean): Promise<string> {
+    for (value += "-conditional-initializer"; await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false); value += "-conditional-incrementor") {
+        value += "-conditional-continue";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopConditionalThreeAwaitContinueThrowAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false)) {
         value += "-three-conditional";
@@ -3598,6 +3607,7 @@ chooseLoopThreeAwaitAndContinueAwait("loop-three-await-and-continue", true).then
 chooseLoopThreeAwaitOrContinueAwait("loop-three-await-or-continue", true).then((value) => console.log("await-loop-three-await-or-continue", value));
 chooseLoopThreeAwaitNullishContinueAwait("loop-three-await-nullish-continue", true).then((value) => console.log("await-loop-three-await-nullish-continue", value));
 chooseLoopConditionalThreeAwaitContinueIncrementorAwait("loop-three-await-conditional-incrementor", true).then((value) => console.log("await-loop-three-await-conditional-incrementor", value));
+chooseLoopConditionalThreeAwaitContinueInitializerIncrementorAwait("loop-three-await-conditional-initializer-incrementor", true).then((value) => console.log("await-loop-three-await-conditional-initializer-incrementor", value));
 chooseLoopThreeAwaitAndContinueThrowAwait("loop-three-await-and-continue-throw", true).catch((reason) => console.log("await-loop-three-await-and-continue-throw", reason));
 chooseLoopThreeAwaitBreakAwait("loop-three-await-break", true).then((value) => console.log("await-loop-three-await-break", value));
 chooseLoopConditionalThreeAwaitBreakAwait("loop-three-await-conditional-break", true).then((value) => console.log("await-loop-three-await-conditional-break", value));

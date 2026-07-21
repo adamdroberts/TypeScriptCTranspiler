@@ -33872,7 +33872,7 @@ class Emitter {
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
-        if (loopInitializer && !bodyIsBreak) return false;
+        if (loopInitializer && !bodyIsBreak && ts.isVariableStatement(loopInitializer)) return false;
         if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
             loopInitializer.declarationList.declarations.some((declaration) => !declaration.initializer)) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
