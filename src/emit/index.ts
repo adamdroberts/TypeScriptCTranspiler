@@ -34518,23 +34518,32 @@ class Emitter {
         const splitPrelude = (statements: readonly ts.Statement[]): {
             awaitExpressions: readonly ts.AwaitExpression[];
             synchronousPrefix: readonly ts.Statement[];
+            synchronousSuffix: readonly ts.Statement[];
         } | null => {
             const synchronousPrefix: ts.Statement[] = [];
+            const synchronousSuffix: ts.Statement[] = [];
             const awaitExpressions: ts.AwaitExpression[] = [];
             let sawAwait = false;
+            let sawSuffix = false;
             for (const statement of statements) {
                 const expression = ts.isExpressionStatement(statement)
                     ? this.unwrapTransparentExpression(statement.expression)
                     : null;
                 if (expression && ts.isAwaitExpression(expression)) {
+                    if (sawSuffix) return null;
                     sawAwait = true;
                     awaitExpressions.push(expression);
                 } else {
-                    if (sawAwait || !this.asyncAwaitLoopPostStatementSupported(statement)) return null;
-                    synchronousPrefix.push(statement);
+                    if (!this.asyncAwaitLoopPostStatementSupported(statement)) return null;
+                    if (sawAwait) {
+                        sawSuffix = true;
+                        synchronousSuffix.push(statement);
+                    } else {
+                        synchronousPrefix.push(statement);
+                    }
                 }
             }
-            return { awaitExpressions, synchronousPrefix };
+            return { awaitExpressions, synchronousPrefix, synchronousSuffix };
         };
         const thenPrelude = splitPrelude(thenPreludeStatements);
         const elsePrelude = splitPrelude(elsePreludeStatements);
@@ -34714,6 +34723,7 @@ class Emitter {
             terminalPromiseType: CType | null,
             terminalAwaitExpr: ts.AwaitExpression | null,
             terminalAdapter: string | null,
+            postAwaitStatements: readonly ts.Statement[],
         ): { adapter: string | null; awaitExpr: ts.AwaitExpression | null; promiseType: CType | null; preludeStatements: readonly ts.Statement[] } => {
             if (awaitPreludeExprs.length === 0) {
                 return { adapter: terminalAdapter, awaitExpr: terminalAwaitExpr, promiseType: terminalPromiseType, preludeStatements: [] };
@@ -34728,7 +34738,7 @@ class Emitter {
                 bodyAwaitExprs: awaitPreludeExprs,
                 bodyReturnExpr: ts.factory.createVoidZero(),
                 bodyAwaitedAliasSymbols: [],
-                bodyPostAwaitStatements: [],
+                bodyPostAwaitStatements: postAwaitStatements,
                 bodyPreludeStatements: [],
                 bodyContinue: false,
                 bodyContinueCondition: null,
@@ -34765,8 +34775,8 @@ class Emitter {
                 preludeStatements: [],
             };
         };
-        const thenBranch = makePreludeAdapter(thenAwaitPreludeExprs, thenPreludePromiseTypes, thenPromiseType, thenAwaitExpr, thenAdapter);
-        const elseBranch = makePreludeAdapter(elseAwaitPreludeExprs, elsePreludePromiseTypes, elsePromiseType, elseAwaitExpr, elseAdapter);
+        const thenBranch = makePreludeAdapter(thenAwaitPreludeExprs, thenPreludePromiseTypes, thenPromiseType, thenAwaitExpr, thenAdapter, thenPrelude.synchronousSuffix);
+        const elseBranch = makePreludeAdapter(elseAwaitPreludeExprs, elsePreludePromiseTypes, elsePromiseType, elseAwaitExpr, elseAdapter, elsePrelude.synchronousSuffix);
         const nestedAdapter = this.ensureAsyncAwaitLoopBodyConditionalTerminalAdapter(
             nestedConditionPromiseType,
             nestedConditionAwaitedType,
