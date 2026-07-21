@@ -30927,11 +30927,14 @@ class Emitter {
                 const isConstOrLet = (stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name)) return null;
-                    if (!decl.initializer && (!isConstOrLet || (stmt.declarationList.flags & ts.NodeFlags.Const))) return null;
+                    if (!decl.initializer && (stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || (this.currentFunctionCellForSymbol(symbol) && (decl.initializer || isConstOrLet))) return null;
-                    if (!decl.initializer && !isConstOrLet) uninitializedPreludeSymbols.add(symbol);
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+                    if (!decl.initializer && !isConstOrLet) {
+                        if (type.kind === "value") return null;
+                        uninitializedPreludeSymbols.add(symbol);
+                    }
                     if (decl.initializer && !this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
                         visitNoAwaitOrNestedScope(decl.initializer);
                         if (!ok) return null;
@@ -30996,10 +30999,14 @@ class Emitter {
             }
             break;
         }
-        if (uninitializedPreludeSymbols.size > 0) return null;
         if (preludeStatements.length === 0) return null;
         const tailStatements = body.statements.slice(tailStart);
         if (tailStatements.length === 0) return null;
+        if (uninitializedPreludeSymbols.size > 0 &&
+            !(tailStatements.length === 2 &&
+                ts.isIfStatement(tailStatements[0]!) &&
+                ts.isReturnStatement(tailStatements[1]!) &&
+                !!tailStatements[1]!.expression)) return null;
         const captures = [...outerCaptures, ...localCaptures];
         let continuation: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation | null = null;
         let rejectResult = false;

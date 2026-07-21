@@ -3226,7 +3226,7 @@ class LoopChooser {
     }
 
     async pickMixedAssignedIfAwaitPrelude(prefix: string, flag: boolean): Promise<string> {
-        var source = prefix + "-assigned-initial";
+        var source: string;
         if (flag) source = await laterBodyValue(prefix + "-assigned-await");
         else source = prefix + "-assigned-sync";
         return await laterBodyValue(source);
@@ -3646,14 +3646,14 @@ const chooseOptionalIfElseAwaitPreludeValue = async (prefix: string, flag: boole
 };
 
 const chooseMixedAssignedIfAwaitPreludeValue = async (prefix: string, flag: boolean): Promise<string> => {
-    var source = prefix + "-assigned-initial";
+    var source: string;
     if (flag) source = await laterBodyValue(prefix + "-assigned-await");
     else source = prefix + "-assigned-sync";
     return await laterBodyValue(source);
 };
 
 async function chooseMixedAssignedIfAwaitPrelude(prefix: string, flag: boolean): Promise<string> {
-    var source = prefix + "-assigned-initial";
+    var source: string;
     if (flag) source = await laterBodyValue(prefix + "-assigned-await");
     else source = prefix + "-assigned-sync";
     return await laterBodyValue(source);
