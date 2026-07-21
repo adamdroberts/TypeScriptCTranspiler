@@ -583,6 +583,14 @@ async function chooseLoopTwoAwaitBreakDeclarationAwait(value: string, repeat: bo
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (let suffix = "-three-declaration"; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
+        value += suffix;
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopTwoAwaitOrContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat) || await laterCondition(repeat)) {
         value += "-body";
@@ -3525,6 +3533,7 @@ chooseLoopTwoAwaitBreakAwait("loop-two-await-break", true).then((value) => conso
 chooseLoopTwoAwaitBreakIncrementorAwait("loop-two-await-break-incrementor", true).then((value) => console.log("await-loop-two-await-break-incrementor", value));
 chooseLoopTwoAwaitBreakInitializerAwait("loop-two-await-break-initializer", true).then((value) => console.log("await-loop-two-await-break-initializer", value));
 chooseLoopTwoAwaitBreakDeclarationAwait("loop-two-await-break-declaration", true).then((value) => console.log("await-loop-two-await-break-declaration", value));
+chooseLoopThreeAwaitBreakDeclarationAwait("loop-three-await-break-declaration", true).then((value) => console.log("await-loop-three-await-break-declaration", value));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));
 chooseLoopTwoAwaitOrContinueThrowAwait("loop-two-await-or-continue-throw", true).catch((reason) => console.log("await-loop-two-await-or-continue-throw", reason));
 chooseLoopThreeAwaitAndContinueAwait("loop-three-await-and-continue", true).then((value) => console.log("await-loop-three-await-and-continue", value));

@@ -11,6 +11,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Multi-await outer-`break` loop conditions now accept initializer-free `for` incrementors as unreachable skipped work before awaited post-loop fallthrough. Test: `async_await_while_condition`.
 - Multi-await outer-`break` loop conditions now preserve a synchronous expression initializer before the first condition suspension alongside a skipped incrementor. Test: `async_await_while_condition`.
 - Bounded two-await outer-`break` loop conditions now carry initialized simple `for` declaration values through both condition suspension stages and body fallthrough. Test: `async_await_while_condition`.
+- Bounded three-or-more direct-awaited logical outer-`break` loop conditions now carry initialized simple `for` declaration values through every condition stage and body fallthrough. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now route direct two-await `&&`, `||`, and `??` bodies ending in an outer `break` through awaited return/throw fallthrough, preserving await-free body preludes. Test: `async_await_while_condition`.
 - Bounded conditional three-await loop conditions now preserve await-free body preludes before an outer `break` and awaited return/throw fallthrough. Test: `async_await_while_condition`.
 - Bounded three-or-more direct-awaited loop conditions now preserve await-free body preludes before an outer `break` and awaited return/throw fallthrough. Test: `async_await_while_condition`.
