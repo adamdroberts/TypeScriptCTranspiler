@@ -32976,12 +32976,14 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         fallthroughRejectResult: boolean,
+        loopInitializer: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length !== 2 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
+        if (loopInitializer && !bodyIsBreak) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33261,6 +33263,10 @@ class Emitter {
         this.closureDefs.write(secondBuf.toString());
 
         const firstSource = this.emitExpr(awaitExpressions[0]!.expression);
+        if (loopInitializer) {
+            const initializer = this.emitExpr(loopInitializer);
+            buf.line(`${initializer.c};`);
+        }
         const sourceVar = this.freshTemp("_await_source");
         const resultVar = this.freshTemp("_await_result");
         const envVar = this.freshTemp("_await_env");
@@ -33290,12 +33296,14 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         fallthroughRejectResult: boolean,
+        loopInitializer: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length < 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
+        if (loopInitializer && !bodyIsBreak) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33790,6 +33798,10 @@ class Emitter {
         }
 
         const firstSource = this.emitExpr(awaitExpressions[0]!.expression);
+        if (loopInitializer) {
+            const initializer = this.emitExpr(loopInitializer);
+            buf.line(`${initializer.c};`);
+        }
         const sourceVar = this.freshTemp("_await_multi_source");
         const resultVar = this.freshTemp("_await_multi_result");
         const envVar = this.freshTemp("_await_multi_env");
@@ -33819,12 +33831,14 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         fallthroughRejectResult: boolean,
+        loopInitializer: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length !== 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
+        if (loopInitializer && !bodyIsBreak) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -34066,6 +34080,10 @@ class Emitter {
         this.closureDefs.write(branchBuf.toString());
 
         const firstSource = this.emitExpr(conditionAwait.expression);
+        if (loopInitializer) {
+            const initializer = this.emitExpr(loopInitializer);
+            buf.line(`${initializer.c};`);
+        }
         const sourceVar = this.freshTemp("_await_conditional_source");
         const resultVar = this.freshTemp("_await_conditional_result");
         const envVar = this.freshTemp("_await_conditional_env");
@@ -34811,13 +34829,31 @@ class Emitter {
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
             : null;
+        const loopInitializerExpression = loopInitializer && ts.isExpression(loopInitializer)
+            ? loopInitializer
+            : null;
+        let loopInitializerExpressionHasAwait = false;
+        if (loopInitializerExpression) {
+            const visitInitializerExpression = (node: ts.Node): void => {
+                if (loopInitializerExpressionHasAwait || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                if (ts.isAwaitExpression(node)) {
+                    loopInitializerExpressionHasAwait = true;
+                    return;
+                }
+                ts.forEachChild(node, visitInitializerExpression);
+            };
+            visitInitializerExpression(loopInitializerExpression);
+        }
+        const loopInitializerBreakSupported = !loopInitializer || (
+            loopInitializerExpression !== null && !loopInitializerExpressionHasAwait
+        );
         const loopBodyAction = loopBody[loopBody.length - 1];
         const loopBreakSkipsIncrementor = !loopIncrementor || (
             loopBodyAction !== undefined &&
             ts.isBreakStatement(loopBodyAction) &&
             !loopBodyAction.label
         );
-        if (!loopInitializer && loopBreakSkipsIncrementor && awaitExpressions.length === 2 &&
+        if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
                 condition,
@@ -34827,8 +34863,9 @@ class Emitter {
                 parameters,
                 thisValue,
                 ts.isThrowStatement(fallthrough),
+                loopInitializerExpression,
             )) return true;
-        if (!loopInitializer && loopBreakSkipsIncrementor && awaitExpressions.length === 3 &&
+        if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
                 buf,
                 condition,
@@ -34838,8 +34875,9 @@ class Emitter {
                 parameters,
                 thisValue,
                 ts.isThrowStatement(fallthrough),
+                loopInitializerExpression,
             )) return true;
-        if (!loopInitializer && loopBreakSkipsIncrementor && awaitExpressions.length >= 3 &&
+        if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
                 buf,
                 condition,
@@ -34849,6 +34887,7 @@ class Emitter {
                 parameters,
                 thisValue,
                 ts.isThrowStatement(fallthrough),
+                loopInitializerExpression,
             )) return true;
         let loopInitializerCaptures: AsyncAwaitContinuationParam[] = [];
         if (loopInitializer) {
