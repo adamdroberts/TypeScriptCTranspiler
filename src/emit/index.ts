@@ -57320,9 +57320,9 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
-            unsupported(expr, "dispatch task return type must be number/string/boolean/array/void in this subset");
+            unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/void in this subset");
         }
         const key = `dispatch:${this.typeKey(prepared)}`;
         const existing = this.dispatchTaskAdapters.get(key);
@@ -72490,6 +72490,10 @@ class Emitter {
                     }
                     return `tsc_value_as_array(${r.c})`;
                 }
+                case "map":
+                    return `tsc_value_as_map(${r.c})`;
+                case "set":
+                    return `tsc_value_as_set(${r.c})`;
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
                 case "promise":

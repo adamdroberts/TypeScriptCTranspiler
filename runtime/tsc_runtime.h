@@ -1039,6 +1039,9 @@ typedef struct tsc_set {
     size_t bucket_cap;
 } tsc_set_t;
 
+tsc_map_t* tsc_value_as_map(tsc_value_t v);
+tsc_set_t* tsc_value_as_set(tsc_value_t v);
+
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap);
 void tsc_set_add_raw(tsc_set_t* s, const void* v);
 void tsc_set_add_int(tsc_set_t* s, int64_t v);

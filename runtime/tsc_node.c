@@ -2500,6 +2500,24 @@ tsc_array_t* tsc_value_as_array(tsc_value_t v) {
     return tsc_array_new(sizeof(tsc_value_t), 1);
 }
 
+tsc_map_t* tsc_value_as_map(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_map) return (tsc_map_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a Map"));
+    return NULL;
+}
+
+tsc_set_t* tsc_value_as_set(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_set) return (tsc_set_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a Set"));
+    return NULL;
+}
+
 tsc_str_t* tsc_value_typeof(tsc_value_t v) {
     if (!value_is_box(v)) return tsc_str_from_lit("number", 6);
     switch (value_tag(v)) {
