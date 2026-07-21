@@ -32979,7 +32979,9 @@ class Emitter {
     ): boolean {
         if (awaitExpressions.length !== 2 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
-        if (!ts.isContinueStatement(bodyAction) || bodyAction.label) return false;
+        const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
+        const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
+        if (!bodyIsContinue && !bodyIsBreak) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33092,18 +33094,22 @@ class Emitter {
             this.argumentValueScopes.push(scope);
             this.awaitExpressionValueScopes.push(awaitScope);
             if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
-            let source: EmitResult;
+            let source: EmitResult | null = null;
             try {
                 for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
-                source = this.emitExpr(awaitExpressions[0]!.expression);
+                if (!bodyIsBreak) source = this.emitExpr(awaitExpressions[0]!.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
                 this.awaitExpressionValueScopes.pop();
                 this.argumentValueScopes.pop();
             }
+            if (bodyIsBreak) {
+                emitFallthrough(stageBuf, scope, awaitScope);
+                return;
+            }
             const sourceVar = this.freshTemp("_await_continue_source");
             const envVar = this.freshTemp("_await_continue_env");
-            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseTypes[0]!, awaitExpressions[0]!.expression)};`);
+            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source!, promiseTypes[0]!, awaitExpressions[0]!.expression)};`);
             stageBuf.line(`${firstEnvType}* const ${envVar} = (${firstEnvType}*)TSC_GC_MALLOC(sizeof(${firstEnvType}));`);
             stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
             stageBuf.line(`${envVar}->result_promise = _ret;`);
