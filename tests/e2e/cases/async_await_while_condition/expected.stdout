@@ -463,7 +463,7 @@ await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-loop-two-await-continue loop-two-await-continue-body
 await-loop-two-await-continue-throw loop-two-await-continue-throw-body
-await-loop-two-await-continue-declaration loop-two-await-continue-declaration-two-declaration
+await-loop-two-await-continue-declaration loop-two-await-continue-declaration-two-declaration-two-incrementor
 await-loop-two-await-continue-incrementor loop-two-await-continue-incrementor-two-continue-two-incrementor
 await-loop-two-await-continue-initializer-incrementor loop-two-await-continue-initializer-incrementor-two-initializer-two-continue-two-incrementor
 await-loop-three-await-break-declaration loop-three-await-break-declaration-three-declaration
@@ -497,8 +497,8 @@ await-loop-two-await-nullish-continue loop-two-await-nullish-continue-nullish
 await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
 await-loop-three-await-continue-incrementor loop-three-await-continue-incrementor-three-continue-three-incrementor
 await-loop-three-await-continue-initializer-incrementor loop-three-await-continue-initializer-incrementor-three-initializer-three-continue-three-incrementor
-await-loop-three-await-continue-declaration loop-three-await-continue-declaration-three-declaration
-await-loop-three-await-conditional-continue-declaration loop-three-await-conditional-continue-declaration-conditional-declaration
+await-loop-three-await-continue-declaration loop-three-await-continue-declaration-three-declaration-three-incrementor
+await-loop-three-await-conditional-continue-declaration loop-three-await-conditional-continue-declaration-conditional-declaration-conditional-incrementor
 await-loop-three-await-and-continue loop-three-await-and-continue-three-and
 await-loop-three-await-or-continue loop-three-await-or-continue-three-or
 await-loop-three-await-conditional-incrementor loop-three-await-conditional-incrementor-conditional-continue-conditional-incrementor
