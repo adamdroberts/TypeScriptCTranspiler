@@ -16,6 +16,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Two-await outer-`continue` lowering now preserves await-free `try`/`finally` cleanup before condition re-entry. Regression: `async_await_while_condition`.
 - Two-await outer-`continue` lowering now preserves await-free `switch` preludes before condition re-entry. Regression: `async_await_while_condition`.
 - Two-await outer-`continue` lowering now preserves bounded await-free nested `while` preludes before condition re-entry. Regression: `async_await_while_condition`.
+- Two-await outer-`continue` lowering now preserves bounded await-free nested `do…while` preludes before condition re-entry. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve simple await-free `const`/`let` declaration-list initializers on `for` loops when their variables do not cross into the continuation, across async declarations, class methods, and function values; captured loop-local state and unsupported declaration forms remain deferred. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now carry simple await-free `const`/`let` `for`-initializer values into direct synchronous return continuations. Regression: `async_await_while_condition`.
 - Captured simple `for`-initializer values now survive a second direct `return await` suspension after the awaited loop condition. Regression: `async_await_while_condition`.

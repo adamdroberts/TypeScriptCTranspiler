@@ -608,6 +608,17 @@ async function chooseLoopTwoAwaitNestedContinueAwait(value: string, repeat: bool
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitNestedDoContinueAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) && await laterCondition(repeat)) {
+        do {
+            value += "-do";
+        } while (false);
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 class ForContinueFalseChooser {
     private readonly suffix: string;
 
@@ -3083,6 +3094,7 @@ chooseLoopTwoAwaitControlContinueAwait("loop-two-await-control-continue", true).
 chooseLoopTwoAwaitTryFinallyContinueAwait("loop-two-await-try-finally-continue", true).then((value) => console.log("await-loop-two-await-try-finally-continue", value));
 chooseLoopTwoAwaitSwitchContinueAwait("loop-two-await-switch-continue", true).then((value) => console.log("await-loop-two-await-switch-continue", value));
 chooseLoopTwoAwaitNestedContinueAwait("loop-two-await-nested-continue", true).then((value) => console.log("await-loop-two-await-nested-continue", value));
+chooseLoopTwoAwaitNestedDoContinueAwait("loop-two-await-nested-do-continue", true).then((value) => console.log("await-loop-two-await-nested-do-continue", value));
 new ForContinueFalseChooser("-method-false-initializer").chooseExpressionInitializerFalseBreak("loop-expression-break-false").then((value) => console.log("await-method-loop-expression-break-false", value));
 new ForContinueFalseChooser("-method-false-throw-initializer").chooseExpressionInitializerFalseBreakThrow("loop-expression-break-false-throw").catch((reason) => console.log("await-method-loop-expression-break-false-throw", reason));
 chooseLoopExpressionInitializerFalseBreakValue("loop-expression-break-false").then((value) => console.log("await-value-loop-expression-break-false", value));

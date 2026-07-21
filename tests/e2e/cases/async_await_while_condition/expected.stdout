@@ -461,6 +461,7 @@ await-loop-two-await-control-continue loop-two-await-control-continue-if
 await-loop-two-await-try-finally-continue loop-two-await-try-finally-continue-try-finally
 await-loop-two-await-switch-continue loop-two-await-switch-continue-case
 await-loop-two-await-nested-continue loop-two-await-nested-continue-nested
+await-loop-two-await-nested-do-continue loop-two-await-nested-do-continue-do
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-while-six-logical-true six-logical-yes
