@@ -466,6 +466,7 @@ await-loop-two-await-for-of-continue loop-two-await-for-of-continue-for-of
 await-loop-two-await-for-in-continue loop-two-await-for-in-continue0
 await-loop-two-await-for-continue loop-two-await-for-continue-for
 await-loop-two-await-iterator-control-continue loop-two-await-iterator-control-continue-keep
+await-loop-two-await-key-control-continue loop-two-await-key-control-continue1
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-while-six-logical-true six-logical-yes
