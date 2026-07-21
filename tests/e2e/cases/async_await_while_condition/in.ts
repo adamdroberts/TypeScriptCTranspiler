@@ -613,6 +613,14 @@ async function chooseLoopThreeAwaitBreakAwait(value: string, repeat: boolean): P
     return await laterBodyValue(value);
 }
 
+async function chooseLoopConditionalThreeAwaitBreakAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(repeat)) {
+        value += "-conditional-break";
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitMixedAndOrContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat) && await laterCondition(repeat) || await laterCondition(repeat)) {
         value += "-three-mixed-and-or";
@@ -3488,6 +3496,7 @@ chooseLoopThreeAwaitOrContinueAwait("loop-three-await-or-continue", true).then((
 chooseLoopThreeAwaitNullishContinueAwait("loop-three-await-nullish-continue", true).then((value) => console.log("await-loop-three-await-nullish-continue", value));
 chooseLoopThreeAwaitAndContinueThrowAwait("loop-three-await-and-continue-throw", true).catch((reason) => console.log("await-loop-three-await-and-continue-throw", reason));
 chooseLoopThreeAwaitBreakAwait("loop-three-await-break", true).then((value) => console.log("await-loop-three-await-break", value));
+chooseLoopConditionalThreeAwaitBreakAwait("loop-three-await-conditional-break", true).then((value) => console.log("await-loop-three-await-conditional-break", value));
 chooseLoopThreeAwaitMixedAndOrContinueAwait("loop-three-await-mixed-and-or", true).then((value) => console.log("await-loop-three-await-mixed-and-or", value));
 chooseLoopThreeAwaitMixedOrAndContinueAwait("loop-three-await-mixed-or-and", true).then((value) => console.log("await-loop-three-await-mixed-or-and", value));
 chooseLoopThreeAwaitMixedNullishOrContinueAwait("loop-three-await-mixed-nullish-or", true).then((value) => console.log("await-loop-three-await-mixed-nullish-or", value));

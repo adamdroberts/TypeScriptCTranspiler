@@ -33816,7 +33816,9 @@ class Emitter {
     ): boolean {
         if (awaitExpressions.length !== 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
-        if (!ts.isContinueStatement(bodyAction) || bodyAction.label) return false;
+        const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
+        const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
+        if (!bodyIsContinue && !bodyIsBreak) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33929,11 +33931,17 @@ class Emitter {
             let source: EmitResult;
             try {
                 for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
-                source = this.emitExpr(conditionAwait.expression);
+                source = bodyIsBreak ? { c: "0", ty: awaitedTypes[0]! } : this.emitExpr(conditionAwait.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
                 this.awaitExpressionValueScopes.pop();
                 this.argumentValueScopes.pop();
+            }
+            if (bodyIsBreak) {
+                emitFallthrough(stageBuf, branchAwaitScope);
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line("return;");
+                return;
             }
             const sourceVar = this.freshTemp("_await_continue_source");
             const envVar = this.freshTemp("_await_continue_env");
