@@ -35064,6 +35064,18 @@ class Emitter {
                 bodyContinueElseAwaitExprs,
             );
         }
+        let fallthroughAdapter: string | null = null;
+        if (fallthroughAwaitExpr && fallthroughPromiseType && fallthroughAwaitedType) {
+            fallthroughAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                fallthroughPromiseType,
+                fallthroughAwaitedType,
+                fallthroughAwaitExpr,
+                fallthroughAwaitExpr,
+                continuation.params,
+                continuation.thisValue,
+                fallthroughRejectResult,
+            );
+        }
         if (bodyContinueConditionAwaitExpr && bodyContinueConditionPromiseType && bodyContinueConditionAwaitedType) {
             bodyConditionAdapter = this.ensureAsyncAwaitLoopBodyConditionalAdapter(
                 conditionPromiseType,
@@ -35073,6 +35085,8 @@ class Emitter {
                 bodyContinueConditionPromiseType,
                 bodyContinueConditionAwaitedType,
                 loopAdapterName!,
+                fallthroughPromiseType,
+                fallthroughAdapter,
             );
         }
         if (continuation.bodyLeadingContinuation) {
@@ -35115,18 +35129,6 @@ class Emitter {
                 continuation.bodyRejectResult,
                 continuation.bodyAwaitedAliasSymbols,
                 continuation.bodyPostAwaitStatements,
-            );
-        }
-        let fallthroughAdapter: string | null = null;
-        if (fallthroughAwaitExpr && fallthroughPromiseType && fallthroughAwaitedType) {
-            fallthroughAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
-                fallthroughPromiseType,
-                fallthroughAwaitedType,
-                fallthroughAwaitExpr,
-                fallthroughAwaitExpr,
-                continuation.params,
-                continuation.thisValue,
-                fallthroughRejectResult,
             );
         }
         const adapter = this.ensureAsyncAwaitLoopConditionReturnAwaitContinuationAdapter(
@@ -35598,6 +35600,8 @@ class Emitter {
         conditionPromiseType: CType,
         conditionAwaitedType: CType,
         loopAdapterName: string,
+        fallthroughPromiseType: CType | null,
+        fallthroughAdapter: string | null,
     ): string {
         const bodyAwaitExpr = continuation.bodyAwaitExpr;
         if (!continuation.bodyContinueConditionAwaitExpr || !bodyAdapter || !bodyAwaitExpr) {
@@ -35683,22 +35687,41 @@ class Emitter {
                     ? continuation.bodyContinueElseBreakPreludeStatements
                     : continuation.bodyContinueElseStatements.slice(0, -1);
                 for (const statement of synchronousElseStatements) this.emitStmt(buf, statement);
-                const source = this.emitExpr(continuation.conditionAwaitExpr.expression);
-                const sourceVar = this.freshTemp("_await_conditional_reentry_source");
-                const envVar = this.freshTemp("_await_conditional_reentry_env");
-                const reentryEnvType = `${loopAdapterName}_env_t`;
-                buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, loopConditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
-                buf.line(`${reentryEnvType}* const ${envVar} = (${reentryEnvType}*)TSC_GC_MALLOC(sizeof(${reentryEnvType}));`);
-                buf.line(`${envVar}->receiver = ${sourceVar};`);
-                buf.line(`${envVar}->result_promise = _ret;`);
-                for (const param of continuation.params) buf.line(`${envVar}->${param.field} = state->${param.field};`);
-                if (continuation.thisValue) buf.line(`${envVar}->this_arg = state->this_arg;`);
-                buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-                buf.line(`tsc_promise_add_callback(${sourceVar}, ${loopAdapterName}, ${envVar});`);
-                buf.close();
-                buf.open("else");
-                buf.line(`${loopAdapterName}(${envVar});`);
-                buf.close();
+                if (continuation.bodyContinueElseBreak && fallthroughAdapter && fallthroughPromiseType && continuation.fallthroughAwaitExpr) {
+                    const source = this.emitExpr(continuation.fallthroughAwaitExpr.expression);
+                    const sourceVar = this.freshTemp("_await_conditional_fallthrough_source");
+                    const envVar = this.freshTemp("_await_conditional_fallthrough_env");
+                    const adapterEnvType = `${fallthroughAdapter}_env_t`;
+                    buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, fallthroughPromiseType, continuation.fallthroughAwaitExpr.expression)};`);
+                    buf.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
+                    buf.line(`${envVar}->receiver = ${sourceVar};`);
+                    buf.line(`${envVar}->result_promise = _ret;`);
+                    for (const param of continuation.params) buf.line(`${envVar}->${param.field} = state->${param.field};`);
+                    if (continuation.thisValue) buf.line(`${envVar}->this_arg = state->this_arg;`);
+                    buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                    buf.line(`tsc_promise_add_callback(${sourceVar}, ${fallthroughAdapter}, ${envVar});`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`${fallthroughAdapter}(${envVar});`);
+                    buf.close();
+                } else {
+                    const source = this.emitExpr(continuation.conditionAwaitExpr.expression);
+                    const sourceVar = this.freshTemp("_await_conditional_reentry_source");
+                    const envVar = this.freshTemp("_await_conditional_reentry_env");
+                    const reentryEnvType = `${loopAdapterName}_env_t`;
+                    buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, loopConditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
+                    buf.line(`${reentryEnvType}* const ${envVar} = (${reentryEnvType}*)TSC_GC_MALLOC(sizeof(${reentryEnvType}));`);
+                    buf.line(`${envVar}->receiver = ${sourceVar};`);
+                    buf.line(`${envVar}->result_promise = _ret;`);
+                    for (const param of continuation.params) buf.line(`${envVar}->${param.field} = state->${param.field};`);
+                    if (continuation.thisValue) buf.line(`${envVar}->this_arg = state->this_arg;`);
+                    buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                    buf.line(`tsc_promise_add_callback(${sourceVar}, ${loopAdapterName}, ${envVar});`);
+                    buf.close();
+                    buf.open("else");
+                    buf.line(`${loopAdapterName}(${envVar});`);
+                    buf.close();
+                }
             }
             buf.close();
             buf.line("tsc_try_pop();");
