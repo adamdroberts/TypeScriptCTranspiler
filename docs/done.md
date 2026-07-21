@@ -3405,6 +3405,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | expression-initializer for-break loops preserve false-condition fallthrough and skip body/incrementor before return/throw-await tails |
 | `async_await_while_condition` | false-condition expression-initializer for-break loops preserve receiver/function-value state before return/throw-await tails |
 | `async_await_while_condition` | two direct awaited loop-condition operands preserve short-circuiting, outer continue re-entry, body expression preludes, and return-await fallthrough |
+| `async_await_while_condition` | two direct awaited `&&` operands preserve terminal throw-await fallthrough after outer continue |
 | `async_await_while_condition` | two direct awaited `||` operands preserve short-circuiting through outer continue and terminal return/throw-await fallthrough |
 | `async_await_while_condition` | two-await outer-continue lowering preserves receiver and function-value captures |
 | `async_await_while_condition` | two-await outer-continue bodies preserve await-free non-abrupt if preludes before repeated conditions |

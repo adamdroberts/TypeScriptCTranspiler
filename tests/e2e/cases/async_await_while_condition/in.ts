@@ -515,6 +515,15 @@ async function chooseLoopTwoAwaitContinueAwait(value: string, repeat: boolean): 
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitContinueThrowAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) && await laterCondition(repeat)) {
+        value += "-body";
+        repeat = false;
+        continue;
+    }
+    throw await laterBodyValue(value);
+}
+
 async function chooseLoopTwoAwaitOrContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat) || await laterCondition(repeat)) {
         value += "-body";
@@ -3218,6 +3227,7 @@ chooseLoopExpressionInitializerBreakThrowAwait("loop-expression-break-throw").ca
 chooseLoopExpressionInitializerFalseBreakAwait("loop-expression-break-false").then((value) => console.log("await-loop-expression-break-false", value));
 chooseLoopExpressionInitializerFalseBreakThrowAwait("loop-expression-break-false-throw").catch((reason) => console.log("await-loop-expression-break-false-throw", reason));
 chooseLoopTwoAwaitContinueAwait("loop-two-await-continue", true).then((value) => console.log("await-loop-two-await-continue", value));
+chooseLoopTwoAwaitContinueThrowAwait("loop-two-await-continue-throw", true).catch((reason) => console.log("await-loop-two-await-continue-throw", reason));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));
 chooseLoopTwoAwaitOrContinueThrowAwait("loop-two-await-or-continue-throw", true).catch((reason) => console.log("await-loop-two-await-or-continue-throw", reason));
 new TwoAwaitContinueChooser("-method-body").choose("loop-two-await-method-continue", true).then((value) => console.log("await-loop-two-await-method-continue", value));

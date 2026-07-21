@@ -453,6 +453,7 @@ await-while-escaping-var-continue-iterator-control while-iterator-control-escapi
 await-while-four-logical-true four-logical-yes
 await-while-four-logical-false four-logical-no
 await-loop-two-await-continue loop-two-await-continue-body
+await-loop-two-await-continue-throw loop-two-await-continue-throw-body
 await-loop-two-await-or-continue loop-two-await-or-continue-body
 await-loop-two-await-or-continue-throw loop-two-await-or-continue-throw-body
 await-loop-two-await-method-continue loop-two-await-method-continue-method-body
