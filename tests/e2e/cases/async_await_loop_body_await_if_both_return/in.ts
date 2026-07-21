@@ -30,6 +30,8 @@ async function loopBodyAwaitIfBothReturn(): Promise<string> {
                     bodyCount++;
                     break;
             }
+            await later("prep-a-" + bodyCount);
+            await later("prep-b-" + bodyCount);
             return await later("true-" + bodyCount);
         } else {
             if (bodyCount === 0) {
@@ -48,6 +50,8 @@ async function loopBodyAwaitIfBothReturn(): Promise<string> {
                     bodyCount++;
                     break;
             }
+            await later("prep-a-" + bodyCount);
+            await later("prep-b-" + bodyCount);
             return await later("false-" + bodyCount);
         }
     }
