@@ -576,9 +576,10 @@ async function chooseLoopTwoAwaitBreakInitializerAwait(value: string, repeat: bo
 }
 
 async function chooseLoopTwoAwaitBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
-    for (let suffix: any; await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
-        suffix = "-two-declaration";
-        value += suffix;
+    for (var prefix: any, suffix: any; await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
+        prefix = "-two-";
+        suffix = "declaration";
+        value += prefix + suffix;
         break;
     }
     return await laterBodyValue(value);
