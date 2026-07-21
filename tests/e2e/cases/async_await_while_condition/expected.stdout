@@ -481,7 +481,13 @@ await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-loop-two-await-nullish-continue loop-two-await-nullish-continue-nullish
 await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
+await-loop-three-await-and-continue loop-three-await-and-continue-three-and
+await-loop-three-await-or-continue loop-three-await-or-continue-three-or
+await-loop-three-await-and-continue-throw loop-three-await-and-continue-throw-three-and
 await-loop-two-await-method-nullish loop-two-await-method-nullish-method-nullish
+await-loop-three-await-method-continue loop-three-await-method-continue-method-three-and
 await-loop-two-await-value-nullish loop-two-await-value-nullish-value-nullish
+await-loop-three-await-value-continue loop-three-await-value-continue-value-three-and
 await-while-six-logical-true six-logical-yes
 await-while-six-logical-false six-logical-no
+await-loop-three-await-nullish-continue loop-three-await-nullish-continue-three-nullish

@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Bounded awaited loop conditions now support two direct awaited `??` operands before an outer `continue`, preserving nullish short-circuiting and return-await fallthrough. Regression: `async_await_while_condition`.
 - Two-await nullish outer-`continue` conditions now also route terminal `throw await` fallthroughs. Regression: `async_await_while_condition`.
 - Two-await nullish outer-`continue` coverage now includes receiver and function-value captures. Regression: `async_await_while_condition`.
+- Awaited loop outer-`continue` lowering now stages flat three-or-more direct-awaited `&&`, `||`, and `??` conditions with return/throw-await fallthroughs. Regression: `async_await_while_condition`.
 - Direct two-await `&&` return-fallthrough coverage now includes a false initial condition that skips the body. Regression: `async_await_while_condition`.
 - The direct two-await `&&` outer-`continue` path now also covers terminal `throw await` fallthrough. Regression: `async_await_while_condition`.
 - Direct two-await `&&` throw-fallthrough coverage now includes a false initial condition that skips the body. Regression: `async_await_while_condition`.
