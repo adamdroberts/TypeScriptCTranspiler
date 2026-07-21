@@ -798,8 +798,9 @@ async function chooseLoopThreeAwaitRightAndOrContinueAwait(value: string, repeat
 }
 
 async function chooseLoopThreeAwaitRightOrNullishContinueAwait(value: string, repeat: boolean): Promise<string> {
-    while (await laterCondition(repeat) || (await laterNull() ?? await laterCondition(repeat))) {
-        value += "-three-right-or-nullish";
+    for (var suffix: any; await laterCondition(repeat) || (await laterNull() ?? await laterCondition(repeat)); value += "-three-right-or-nullish-incrementor") {
+        suffix = "-three-right-or-nullish";
+        value += suffix;
         repeat = false;
         continue;
     }
@@ -816,8 +817,9 @@ async function chooseLoopThreeAwaitRightNullishOrContinueAwait(value: string, re
 }
 
 async function chooseLoopThreeAwaitRightAndNullishContinueAwait(value: string, repeat: boolean): Promise<string> {
-    while (await laterCondition(repeat) && (await laterNull() ?? await laterCondition(repeat))) {
-        value += "-three-right-and-nullish";
+    for (var suffix: any; await laterCondition(repeat) && (await laterNull() ?? await laterCondition(repeat)); value += "-three-right-and-nullish-incrementor") {
+        suffix = "-three-right-and-nullish";
+        value += suffix;
         repeat = false;
         continue;
     }
@@ -825,8 +827,9 @@ async function chooseLoopThreeAwaitRightAndNullishContinueAwait(value: string, r
 }
 
 async function chooseLoopThreeAwaitRightNullishAndContinueAwait(value: string, repeat: boolean): Promise<string> {
-    while (await laterNull() ?? (await laterCondition(repeat) && await laterCondition(repeat))) {
-        value += "-three-right-nullish-and";
+    for (var suffix: any; await laterNull() ?? (await laterCondition(repeat) && await laterCondition(repeat)); value += "-three-right-nullish-and-incrementor") {
+        suffix = "-three-right-nullish-and";
+        value += suffix;
         repeat = false;
         continue;
     }

@@ -506,8 +506,8 @@ await-loop-three-await-conditional-initializer-incrementor loop-three-await-cond
 await-loop-three-await-and-continue-throw loop-three-await-and-continue-throw-three-and
 await-loop-three-await-mixed-and-or loop-three-await-mixed-and-or-three-mixed-and-or
 await-loop-three-await-mixed-and-or-declaration loop-three-await-mixed-and-or-declaration-mixed-declaration-mixed-incrementor
-await-loop-three-await-right-or-nullish loop-three-await-right-or-nullish-three-right-or-nullish
-await-loop-three-await-right-and-nullish loop-three-await-right-and-nullish-three-right-and-nullish
+await-loop-three-await-right-or-nullish loop-three-await-right-or-nullish-three-right-or-nullish-three-right-or-nullish-incrementor
+await-loop-three-await-right-and-nullish loop-three-await-right-and-nullish-three-right-and-nullish-three-right-and-nullish-incrementor
 await-loop-three-await-conditional loop-three-await-conditional-three-conditional
 await-loop-three-await-conditional-throw loop-three-await-conditional-throw-three-conditional
 await-loop-three-await-method-conditional loop-three-await-method-conditional-method-three-conditional
@@ -520,5 +520,5 @@ await-while-six-logical-true six-logical-yes
 await-while-six-logical-false six-logical-no
 await-loop-three-await-mixed-nullish-or loop-three-await-mixed-nullish-or-three-nullish-or-three-nullish-or-incrementor
 await-loop-three-await-right-nullish-or loop-three-await-right-nullish-or-three-right-nullish-or
-await-loop-three-await-right-nullish-and loop-three-await-right-nullish-and-three-right-nullish-and
+await-loop-three-await-right-nullish-and loop-three-await-right-nullish-and-three-right-nullish-and-three-right-nullish-and-incrementor
 await-loop-three-await-nullish-continue loop-three-await-nullish-continue-three-nullish
