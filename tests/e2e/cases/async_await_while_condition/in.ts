@@ -576,7 +576,7 @@ async function chooseLoopTwoAwaitBreakInitializerAwait(value: string, repeat: bo
 }
 
 async function chooseLoopTwoAwaitBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
-    for (var suffix: any; await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
+    for (let suffix: any; await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
         suffix = "-two-declaration";
         value += suffix;
         break;
@@ -640,7 +640,7 @@ async function chooseLoopThreeAwaitBreakDeclarationAwait(value: string, repeat: 
 }
 
 async function chooseLoopThreeAwaitContinueDeclarationIncrementorAwait(value: string, repeat: boolean): Promise<string> {
-    for (var suffix: any; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); value += "-three-incrementor") {
+    for (let suffix: any; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); value += "-three-incrementor") {
         suffix = "-three-declaration";
         value += suffix;
         repeat = false;
@@ -659,7 +659,7 @@ async function chooseLoopConditionalThreeAwaitBreakDeclarationAwait(value: strin
 }
 
 async function chooseLoopConditionalThreeAwaitContinueDeclarationIncrementorAwait(value: string, repeat: boolean): Promise<string> {
-    for (var suffix: any; await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false); value += "-conditional-incrementor") {
+    for (let suffix: any; await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false); value += "-conditional-incrementor") {
         suffix = "-conditional-declaration";
         value += suffix;
         repeat = false;

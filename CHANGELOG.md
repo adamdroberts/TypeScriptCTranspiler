@@ -10,6 +10,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Bounded multi-await direct and conditional loop-control continuations now also carry simple uninitialized `var` declaration storage through condition stages, outer `break`/`continue`, and await-free incrementors. Regression: `async_await_while_condition`.
+- Bounded multi-await direct and conditional loop-control continuations now also carry simple uninitialized `let` declaration storage through condition stages, outer `break`/`continue`, and await-free incrementors. Regression: `async_await_while_condition`.
 - Bounded two-await outer-`break` loop conditions now also carry simple uninitialized `var` declaration storage through both condition suspension stages and body fallthrough. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now support two direct awaited `&&`/`||` operands before an outer `continue`, preserving short-circuiting, body expression preludes, repeated condition evaluation, and return-await fallthrough. Regression: `async_await_while_condition`.
 - Bounded awaited loop conditions now support two direct awaited `??` operands before an outer `continue`, preserving nullish short-circuiting and return-await fallthrough. Regression: `async_await_while_condition`.
