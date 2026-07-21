@@ -10,6 +10,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 - Dispatch task adapters now support typed `Map` and `Set` return values for both `dispatch.sync` and `dispatch.async`. Test: `dispatch_collections`.
+- Added `--dispatch=serial` as a no-libdispatch fallback backend for `dispatch.async`, `dispatch.after`, and `dispatch.sync`, with differential e2e coverage. Tests: `dispatch_serial`, `dispatch_serial_after`.
 - Dispatch task adapters now support typed array return values for both `dispatch.sync` and `dispatch.async`. Test: `dispatch_array`.
 - Optional dispatch scheduling now includes `dispatch.after(delay, queue, task)`, which returns a Promise settled on the main event loop after the bounded delay. Test: `dispatch_after`.
 - Added bounded dynamic `Promise.withResolvers()` records with pending promises and callable `resolve`/`reject` functions. Test: `promise_with_resolvers`.

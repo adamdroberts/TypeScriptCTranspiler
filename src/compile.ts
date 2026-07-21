@@ -56,6 +56,8 @@ export interface CompileOptions {
     runtimeCodeManifest?: string;
     /** Additional package exports/imports conditions to include in AOT module resolution. */
     customConditions?: string[];
+    /** Dispatch backend: threaded libdispatch (default) or single-threaded fallback. */
+    dispatch?: "threaded" | "serial";
 }
 
 export interface CompileResult {
@@ -650,6 +652,11 @@ function containsNativeAddonPackageReference(value: unknown, packageRoot: string
 }
 
 export async function compile(opts: CompileOptions): Promise<CompileResult> {
+    const dispatchMode = opts.dispatch ?? "threaded";
+    if (dispatchMode !== "threaded" && dispatchMode !== "serial") {
+        process.stderr.write(`tsc2c: unsupported dispatch mode: ${dispatchMode}\n`);
+        return { exitCode: 3, buildDir: opts.buildDir ?? "", mainC: "" };
+    }
     const pkg = resolvePackageRoot();
     const buildDir =
         opts.buildDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), "tsc2c-")));
@@ -718,7 +725,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
     }
-    if (usesDispatch && opts.noGc) {
+    if (usesDispatch && opts.noGc && dispatchMode !== "serial") {
         process.stderr.write(
             "tsc2c: the dispatch API is not supported with --no-gc (the no-GC arena allocator is not thread-safe)\n",
         );
@@ -747,8 +754,8 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     }
 
     const pcFlags = await pcre2Flags();
-    const dispatchLink = usesDispatch ? findDispatchLinkOptions() : null;
-    if (usesDispatch && !dispatchLink) {
+    const dispatchLink = usesDispatch && dispatchMode === "threaded" ? findDispatchLinkOptions() : null;
+    if (usesDispatch && dispatchMode === "threaded" && !dispatchLink) {
         process.stderr.write(
             "tsc2c: this program uses the dispatch API, which requires libdispatch (swift-corelibs-libdispatch).\n" +
             "tsc2c: install it (build https://github.com/swiftlang/swift-corelibs-libdispatch with clang+cmake,\n" +
@@ -779,6 +786,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             ...(opts.noGc ? ["-DTSC_NO_GC"] : []),
             ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL"] : []),
             ...(usesNodeEmbed ? ["-DTSC_HAS_LIBNODE"] : []),
+            ...(usesDispatch && dispatchMode === "serial" ? ["-DTSC_DISPATCH_SERIAL"] : []),
             ...(dispatchLink ? ["-DTSC_THREADS", "-pthread", `-I${dispatchLink.includeDir}`] : []),
             ...pcFlags.compileFlags,
         ],

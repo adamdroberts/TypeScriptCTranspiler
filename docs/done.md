@@ -10,6 +10,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - `dispatch.after(delay, queue, task)` schedules the same typed, capture-checked dispatch task after a bounded millisecond delay and settles its Promise on the main event loop. Test: `dispatch_after`
 - Dispatch task adapters now support typed array return values for both `dispatch.sync` and `dispatch.async`, boxing the array for the existing cross-thread result handoff. Test: `dispatch_array`
 - Dispatch task adapters now support typed `Map` and `Set` return values for both `dispatch.sync` and `dispatch.async`, boxing collections for the existing cross-thread result handoff. Test: `dispatch_collections`
+- `--dispatch=serial` now runs `dispatch.async`, `dispatch.after`, and `dispatch.sync` through the existing single-threaded event loop without libdispatch, providing a deterministic fallback and differential test baseline. Tests: `dispatch_serial`, `dispatch_serial_after`
 - Leading async/await chains preserve assigned-before-use uninitialized `var` locals before multiple awaited declarations. Test: `async_await_while_condition`.
 - Leading async/await chains preserve bounded mutation of an assigned-before-use uninitialized `var` between multiple awaited declarations. Test: `async_await_while_condition`.
 - The bounded mutable uninitialized-`var` leading-chain coverage also applies to async class methods and function values. Test: `async_await_while_condition`.

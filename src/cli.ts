@@ -44,6 +44,11 @@ program
         collectOption,
         [],
     )
+    .option(
+        "--dispatch <mode>",
+        "dispatch backend: threaded (default) or serial",
+        "threaded",
+    )
     .option("--verbose", "print compile steps")
     .action(async (entry: string, opts: Record<string, unknown>) => {
         const result = await compile({
@@ -67,6 +72,7 @@ program
                 ? path.resolve(opts.runtimeCodeManifest as string)
                 : undefined,
             customConditions: opts.customCondition as string[] | undefined,
+            dispatch: opts.dispatch as "threaded" | "serial",
         });
         process.exit(result.exitCode);
     });

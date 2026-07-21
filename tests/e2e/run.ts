@@ -30,6 +30,8 @@ interface Case {
     runEnv?: Record<string, string>;
     /** compile.dispatch sidecar: case links libdispatch; skipped when absent. */
     dispatch?: boolean;
+    /** compile.dispatch.serial sidecar: use the no-dependency serial backend. */
+    dispatchSerial?: boolean;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -63,11 +65,13 @@ async function discoverCases(): Promise<Case[]> {
         const unsafeEvalPath = path.join(casesDir, d, "compile.unsafe_eval");
         const releasePath = path.join(casesDir, d, "compile.release");
         const dispatchPath = path.join(casesDir, d, "compile.dispatch");
+        const dispatchSerialPath = path.join(casesDir, d, "compile.dispatch.serial");
         const runEnvPath = path.join(casesDir, d, "run.env");
         if (!(await exists(entry))) continue;
 
         const release = await exists(releasePath);
         const dispatch = await exists(dispatchPath);
+        const dispatchSerial = await exists(dispatchSerialPath);
         const emitCOnly = await exists(emitCOnlyPath);
         const nativeAddonManifest = await exists(nativeAddonManifestPath)
             ? nativeAddonManifestPath
@@ -117,6 +121,7 @@ async function discoverCases(): Promise<Case[]> {
                 customConditions,
                 runEnv,
                 dispatch,
+                dispatchSerial,
             });
             continue;
         }
@@ -200,7 +205,7 @@ async function main(): Promise<void> {
         const bin = path.join(tmpRoot, c.name);
         const buildDir = path.join(tmpRoot, c.name + "-build");
         process.stdout.write(`e2e: ${c.name} … `);
-        if (c.dispatch && !dispatchAvailable) {
+        if (c.dispatch && !c.dispatchSerial && !dispatchAvailable) {
             console.log("SKIP (libdispatch not installed)");
             skipped++;
             continue;
@@ -209,8 +214,8 @@ async function main(): Promise<void> {
             entry: c.entry,
             output: bin,
             buildDir,
-            // dispatch cases always link the GC: dispatch + --no-gc is rejected.
-            noGc: c.dispatch ? false : process.env.TSC2C_NO_GC === "1",
+            noGc: c.dispatch && !c.dispatchSerial ? false : process.env.TSC2C_NO_GC === "1",
+            dispatch: c.dispatch ? (c.dispatchSerial ? "serial" : "threaded") : undefined,
             release: c.release,
             emitCOnly: c.emitCOnly,
             nativeAddonManifest: c.nativeAddonManifest,

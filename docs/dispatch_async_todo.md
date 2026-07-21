@@ -61,14 +61,15 @@ This feature must never become a barrier to using tsc2c. Concretely:
   (header/lib probe in `src/compile.ts`, overridable via `TSC2C_LIBDISPATCH_PREFIX`), compilation
   fails with an actionable diagnostic (what to install/build, or how to enable the fallback) —
   never a cryptic linker error.
-- **Serial fallback mode (stretch).** `--dispatch=serial` compiles dispatch calls to run their
-  closures on the existing single-threaded event loop (dispatch.async → `tsc_set_immediate`,
-  dispatch.sync → direct call). No parallelism, but programs remain runnable and testable on
-  machines without libdispatch — and it gives CI a semantics baseline to diff the threaded mode
-  against.
+- **Serial fallback mode.** `--dispatch=serial` compiles dispatch calls to run their closures on
+  the existing single-threaded event loop (dispatch.async → `tsc_set_immediate`, dispatch.after →
+  `tsc_set_timeout`, dispatch.sync → direct call). No parallelism, but programs remain runnable and
+  testable on machines without libdispatch — and it provides a semantics baseline to diff the
+  threaded mode against. Tests: `dispatch_serial`, `dispatch_serial_after`.
 - **`--no-gc` interaction.** The `TSC_NO_GC` bump-arena allocator (`runtime/tsc_core.c:100-117`)
   is a global unlocked linked list. Initially: `--no-gc` + dispatch is a compile-time error.
-  (Later: lock or per-thread chunk lists if demand exists.)
+  The serial fallback may be combined with `--no-gc` because it does not create worker threads;
+  threaded dispatch still rejects `--no-gc` until the allocator is made thread-safe.
 - **Existing tests untouched.** All current e2e cases (1,620) must pass unchanged with no
   libdispatch installed. Dispatch e2e cases carry a `compile.dispatch` sidecar (precedent:
   `compile.unsafe_eval`) and are skipped by `tests/e2e/run.ts` when the probe fails.
@@ -178,8 +179,9 @@ on Phase 6, cross-referenced from Phases 11/13.
   deterministic via groups/`dispatch.sync` joins and order-independent assertions; runner skips
   when libdispatch probe fails.
 - [x] Capture-discipline diagnostics tests (compile-error cases).
-- [ ] Serial-fallback differential tests: same case, `--dispatch=serial` vs threaded, identical
-  output.
+- [x] Serial-fallback differential tests: `dispatch_serial` exercises the same sync/async program
+  shape as `dispatch_async_basic`, and `dispatch_serial_after` mirrors `dispatch_after`; both
+  produce identical output without libdispatch.
 - [ ] Soak test (manual-tests/): sustained many-thread GC allocation + forced collections;
   documented TSan configuration (known friction: TSan vs Boehm stop-the-world signals — may need
   a TSan job with GC swapped for `--no-gc`-style malloc or GC suppressions).

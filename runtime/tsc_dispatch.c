@@ -1,19 +1,111 @@
 #include "tsc_internal.h"
 
 /* Optional GCD-style dispatch backend. This file is compiled into a program
- * only when the emitter saw a dispatch API use, and always together with
- * -DTSC_THREADS so the rest of the runtime enables its thread hooks. */
-#ifdef TSC_THREADS
+ * only when the emitter saw a dispatch API use. TSC_THREADS selects the real
+ * libdispatch backend; TSC_DISPATCH_SERIAL selects the no-dependency fallback. */
+#if defined(TSC_THREADS) || defined(TSC_DISPATCH_SERIAL)
 
+#ifdef TSC_THREADS
 #include <dispatch/dispatch.h>
 #include <pthread.h>
 #include <signal.h>
+#endif
 
 struct tsc_dispatch_queue {
+#ifdef TSC_THREADS
     dispatch_queue_t queue;
+#endif
     tsc_str_t* label;
     bool concurrent;
 };
+
+#ifdef TSC_DISPATCH_SERIAL
+
+tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label) {
+    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
+    q->label = label ? label : tsc_str_from_lit("", 0);
+    q->concurrent = false;
+    return q;
+}
+
+tsc_dispatch_queue_t* tsc_dispatch_queue_concurrent(void) {
+    tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
+    q->label = tsc_str_from_lit("concurrent", 10);
+    q->concurrent = true;
+    return q;
+}
+
+typedef struct {
+    tsc_dispatch_task_fn_t fn;
+    void* env;
+    tsc_promise_t* promise;
+    double delay_ms;
+} tsc_dispatch_serial_task_t;
+
+static void tsc_dispatch_serial_trampoline(void* ctx) {
+    tsc_dispatch_serial_task_t* task = (tsc_dispatch_serial_task_t*)ctx;
+    tsc_value_t result = tsc_value_undefined();
+    bool is_error = false;
+    tsc_try_frame_t eh;
+    tsc_try_push(&eh);
+    if (setjmp(eh.jb) == 0) {
+        result = task->fn(task->env);
+        tsc_try_pop();
+    } else {
+        is_error = true;
+        result = tsc_value_string(tsc_current_error());
+    }
+    if (is_error) tsc_promise_reject_in_place(task->promise, result);
+    else tsc_promise_fulfill_in_place(task->promise, result);
+}
+
+tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
+    if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.async: invalid queue or task"));
+    tsc_dispatch_serial_task_t* task =
+        (tsc_dispatch_serial_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_serial_task_t));
+    task->fn = fn;
+    task->env = env;
+    task->promise = tsc_promise_pending();
+    task->delay_ms = 0.0;
+    tsc_set_immediate(tsc_dispatch_serial_trampoline, task);
+    return task->promise;
+}
+
+tsc_promise_t* tsc_dispatch_after(
+    tsc_dispatch_queue_t* q,
+    tsc_dispatch_task_fn_t fn,
+    void* env,
+    double delay_ms
+) {
+    if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.after: invalid queue or task"));
+    if (!(delay_ms > 0.0)) delay_ms = 0.0;
+    tsc_dispatch_serial_task_t* task =
+        (tsc_dispatch_serial_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_serial_task_t));
+    task->fn = fn;
+    task->env = env;
+    task->promise = tsc_promise_pending();
+    task->delay_ms = delay_ms;
+    tsc_set_timeout(tsc_dispatch_serial_trampoline, task, delay_ms);
+    return task->promise;
+}
+
+tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
+    if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.sync: invalid queue or task"));
+    tsc_value_t result = tsc_value_undefined();
+    tsc_str_t* error = NULL;
+    tsc_try_frame_t eh;
+    tsc_try_push(&eh);
+    if (setjmp(eh.jb) == 0) {
+        result = fn(env);
+        tsc_try_pop();
+    } else {
+        error = tsc_current_error();
+    }
+    if (error) tsc_throw_str(error);
+    return result;
+}
+
+#else
 
 /* Queue-specific key used to detect dispatch.sync onto the queue that is
  * already running the calling task (a guaranteed deadlock otherwise). */
@@ -204,4 +296,5 @@ tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn
     return task.result;
 }
 
-#endif /* TSC_THREADS */
+#endif /* TSC_DISPATCH_SERIAL */
+#endif /* TSC_THREADS || TSC_DISPATCH_SERIAL */
