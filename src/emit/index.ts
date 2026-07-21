@@ -33287,7 +33287,9 @@ class Emitter {
     ): boolean {
         if (awaitExpressions.length < 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
-        if (!ts.isContinueStatement(bodyAction) || bodyAction.label) return false;
+        const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
+        const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
+        if (!bodyIsContinue && !bodyIsBreak) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33442,6 +33444,20 @@ class Emitter {
             stageBuf.line("return;");
         };
         const emitBodyReentry = (stageBuf: CBuf): void => {
+            if (bodyIsBreak) {
+                this.argumentValueScopes.push(firstScope);
+                this.awaitExpressionValueScopes.push(firstAwaitScope);
+                if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+                try {
+                    for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
+                } finally {
+                    if (thisValue) this.functionThisStack.pop();
+                    this.awaitExpressionValueScopes.pop();
+                    this.argumentValueScopes.pop();
+                }
+                emitFallthrough(stageBuf, firstScope, firstAwaitScope);
+                return;
+            }
             this.argumentValueScopes.push(firstScope);
             this.awaitExpressionValueScopes.push(firstAwaitScope);
             if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
