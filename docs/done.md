@@ -3505,3 +3505,4 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |
 - Direct branch `return await` now carries an assigned-before-use uninitialized `var` through an await-free `while` prelude across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Direct branch `return await` now carries assigned-before-use uninitialized `var` state through await-free `while`, `do while`, ordinary `for`, `for-of`, and `for-in` preludes across async declarations, class methods, and function values. Test: `async_await_while_condition`.
+- Direct branch `return await` now hoists a simple `var` declared inside an await-free `while` prelude body, preserves its assignment through the suspension, and retains JavaScript `undefined` on the false fallthrough across async declarations, class methods, and function values. Test: `async_await_while_condition`.

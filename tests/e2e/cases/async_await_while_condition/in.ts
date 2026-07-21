@@ -2614,6 +2614,15 @@ async function chooseDirectAwaitUninitializedVarLoopPrelude(flag: boolean, prefi
     return await laterBodyValue(source);
 }
 
+async function chooseDirectAwaitEscapingVarLoopPrelude(flag: boolean, prefix: string): Promise<string> {
+    while (flag) {
+        var source: any;
+        source = prefix + "-escaping-while";
+        break;
+    }
+    return await laterBodyValue(source);
+}
+
 async function chooseDirectAwaitUninitializedVarDoPreludeNext(prefix: string): Promise<string> {
     var source: any;
     do {
@@ -3042,6 +3051,15 @@ class LoopChooser {
         return await laterBodyValue(source);
     }
 
+    async pickDirectAwaitEscapingVarLoopPrelude(flag: boolean, prefix: string): Promise<string> {
+        while (flag) {
+            var source: any;
+            source = prefix + "-escaping-while";
+            break;
+        }
+        return await laterBodyValue(source);
+    }
+
     async pickDirectAwaitUninitializedVarDoPreludeNext(prefix: string): Promise<string> {
         var source: any;
         do {
@@ -3347,6 +3365,15 @@ const chooseDirectAwaitUninitializedVarLoopPreludeValue = async (flag: boolean, 
     var source: any;
     while (flag) {
         source = prefix + "-while";
+        break;
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitEscapingVarLoopPreludeValue = async (flag: boolean, prefix: string): Promise<string> => {
+    while (flag) {
+        var source: any;
+        source = prefix + "-escaping-while";
         break;
     }
     return await laterBodyValue(source);
@@ -3987,6 +4014,12 @@ chooseDirectAwaitUninitializedVarTryCatchFinallyPrelude("direct-uninitialized-va
 chooseDirectAwaitUninitializedVarLoopPrelude(true, "direct-uninitialized-var-loop").then((value) => console.log("await-direct-uninitialized-var-loop", value));
 new LoopChooser("method-").pickDirectAwaitUninitializedVarLoopPrelude(true, "direct-uninitialized-var-loop").then((value) => console.log("await-method-direct-uninitialized-var-loop", value));
 chooseDirectAwaitUninitializedVarLoopPreludeValue(true, "value-uninitialized-var-loop").then((value) => console.log("await-value-direct-uninitialized-var-loop", value));
+chooseDirectAwaitEscapingVarLoopPrelude(true, "direct").then((value) => console.log("await-direct-escaping-var-loop", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarLoopPrelude(true, "method").then((value) => console.log("await-method-escaping-var-loop", value));
+chooseDirectAwaitEscapingVarLoopPreludeValue(true, "value").then((value) => console.log("await-value-escaping-var-loop", value));
+chooseDirectAwaitEscapingVarLoopPrelude(false, "direct").then((value) => console.log("await-direct-escaping-var-loop-false", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarLoopPrelude(false, "method").then((value) => console.log("await-method-escaping-var-loop-false", value));
+chooseDirectAwaitEscapingVarLoopPreludeValue(false, "value").then((value) => console.log("await-value-escaping-var-loop-false", value));
 chooseDirectAwaitUninitializedVarDoPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-do-next", value));
 chooseDirectAwaitUninitializedVarForPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-next", value));
 chooseDirectAwaitUninitializedVarForOfPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-of-next", value));

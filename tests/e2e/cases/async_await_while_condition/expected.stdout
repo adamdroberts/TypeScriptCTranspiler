@@ -265,6 +265,12 @@ await-direct-uninitialized-var-try-catch-finally direct-uninitialized-var-try-ca
 await-direct-uninitialized-var-loop direct-uninitialized-var-loop-while
 await-method-direct-uninitialized-var-loop direct-uninitialized-var-loop-while
 await-value-direct-uninitialized-var-loop value-uninitialized-var-loop-while
+await-direct-escaping-var-loop direct-escaping-while
+await-method-escaping-var-loop method-escaping-while
+await-value-escaping-var-loop value-escaping-while
+await-direct-escaping-var-loop-false undefined
+await-method-escaping-var-loop-false undefined
+await-value-escaping-var-loop-false undefined
 await-direct-uninitialized-var-do-next direct-uninitialized-var-next-do
 await-direct-uninitialized-var-for-next direct-uninitialized-var-next-for
 await-direct-uninitialized-var-for-of-next direct-uninitialized-var-next-for-of

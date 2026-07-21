@@ -338,6 +338,7 @@ interface DirectAsyncAwaitAssignmentReturnAlias {
 interface AsyncAwaitPreludeExpressionReturnContinuation {
     preludeStatements: readonly ts.Statement[];
     result: AsyncAwaitIfExpressionReturnNode | AsyncAwaitExpressionReturnContinuation;
+    hoistedSymbols: readonly ts.Symbol[];
     rejectResult?: boolean;
 }
 
@@ -695,6 +696,8 @@ class Emitter {
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
     private awaitExpressionValueScopes: Map<ts.AwaitExpression, EmitResult>[] = [];
     private asyncAwaitEscapingSymbols = new Set<ts.Symbol>();
+    private asyncAwaitHoistedPreludeSymbols = new Set<ts.Symbol>();
+    private asyncAwaitHoistedPreludeDeclaredSymbols = new Set<ts.Symbol>();
     private catchStringSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
@@ -21980,9 +21983,10 @@ class Emitter {
     private asyncAwaitBodyPreludeBefore(
         body: ts.Block,
         stop: (stmt: ts.Statement) => boolean,
-    ): { preludeStatements: ts.Statement[]; captures: AsyncAwaitContinuationParam[]; nextIndex: number } | null {
+    ): { preludeStatements: ts.Statement[]; captures: AsyncAwaitContinuationParam[]; hoistedSymbols: ts.Symbol[]; nextIndex: number } | null {
         const preludeStatements: ts.Statement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
+        const hoistedSymbols: ts.Symbol[] = [];
         const captureSymbols = new Set<ts.Symbol>();
         const declared = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
         const initialized = new Set<ts.Symbol>();
@@ -22059,13 +22063,45 @@ class Emitter {
                 ts.isDoStatement(stmt) || ts.isForStatement(stmt) || ts.isForInStatement(stmt) ||
                 ts.isForOfStatement(stmt) || ts.isTryStatement(stmt)) {
                 if (!this.asyncAwaitDirectPreludeControlFlowSupported(stmt)) return null;
+                const visitControlFlowVariables = (node: ts.Node): void => {
+                    if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+                        const declarationList = node.parent;
+                        if (!ts.isVariableDeclarationList(declarationList) ||
+                            (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0) {
+                            ts.forEachChild(node, visitControlFlowVariables);
+                            return;
+                        }
+                        const symbol = this.symbolForIdentifier(node.name);
+                        if (!symbol || captures.some((capture) => capture.symbol === symbol)) {
+                            ts.forEachChild(node, visitControlFlowVariables);
+                            return;
+                        }
+                        const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
+                        if (!this.isAsyncAwaitPreludeCaptureType(type)) {
+                            ok = false;
+                            return;
+                        }
+                        if (node.initializer) {
+                            visitNoAwaitOrNestedScope(node.initializer);
+                            if (!ok) return;
+                        }
+                        const name = mangleIdent(node.name.text);
+                        captures.push({ symbol, name, type, field: `capture_${name}` });
+                        hoistedSymbols.push(symbol);
+                        return;
+                    }
+                    ts.forEachChild(node, visitControlFlowVariables);
+                };
+                visitControlFlowVariables(stmt);
+                if (!ok) return null;
                 preludeStatements.push(stmt);
                 index++;
                 continue;
             }
             return null;
         }
-        return { preludeStatements, captures, nextIndex: index };
+        return { preludeStatements, captures, hoistedSymbols, nextIndex: index };
     }
 
     private asyncAwaitTryBlockLocalPrelude(
@@ -25775,6 +25811,10 @@ class Emitter {
         if (!preludeMatch || preludeMatch.nextIndex !== body.statements.length - 1) return false;
         const prelude = preludeMatch.preludeStatements;
         const params = [...this.asyncAwaitContinuationParameters(parameters), ...preludeMatch.captures];
+        for (const symbol of preludeMatch.hoistedSymbols) {
+            this.asyncAwaitHoistedPreludeSymbols.add(symbol);
+        }
+        this.emitAsyncAwaitPreludeHoistedDeclarations(buf, params);
         if (!nestedAwait) {
             if (this.isAsyncAwaitShortCircuitBinary(nestedExpression)) {
                 const branch = this.asyncAwaitLogicalExpressionReturnContinuationForExpression(
@@ -30850,6 +30890,7 @@ class Emitter {
         const preludeStatements: ts.Statement[] = [];
         const localCaptures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
+        const hoistedSymbols: ts.Symbol[] = [];
         const uninitializedPreludeSymbols = new Set<ts.Symbol>();
         let ok = true;
         const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
@@ -30911,6 +30952,44 @@ class Emitter {
                 continue;
             }
             if (this.asyncAwaitPreludeControlFlowStatementSupported(stmt)) {
+                const visitControlFlowVariables = (node: ts.Node): void => {
+                    if (!ok || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+                        const declarationList = node.parent;
+                        if (!ts.isVariableDeclarationList(declarationList) ||
+                            (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0) {
+                            ts.forEachChild(node, visitControlFlowVariables);
+                            return;
+                        }
+                        const symbol = this.symbolForIdentifier(node.name);
+                        if (!symbol || captureSymbols.has(symbol)) {
+                            ts.forEachChild(node, visitControlFlowVariables);
+                            return;
+                        }
+                        const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
+                        if (!this.isAsyncAwaitPreludeCaptureType(type)) {
+                            ok = false;
+                            return;
+                        }
+                        if (node.initializer) {
+                            visitNoAwaitOrNestedScope(node.initializer);
+                            if (!ok) return;
+                        }
+                        const name = mangleIdent(node.name.text);
+                        captureSymbols.add(symbol);
+                        hoistedSymbols.push(symbol);
+                        localCaptures.push({
+                            symbol,
+                            name,
+                            type,
+                            field: `capture_${name}`,
+                        });
+                        return;
+                    }
+                    ts.forEachChild(node, visitControlFlowVariables);
+                };
+                visitControlFlowVariables(stmt);
+                if (!ok) return null;
                 preludeStatements.push(stmt);
                 tailStart++;
                 continue;
@@ -30973,7 +31052,7 @@ class Emitter {
                 ? branch
                 : null;
         }
-        return continuation ? { preludeStatements, result: continuation, rejectResult } : null;
+        return continuation ? { preludeStatements, result: continuation, hoistedSymbols, rejectResult } : null;
     }
 
     private asyncAwaitPreludeExpressionReturnContinuationSupported(
@@ -30989,12 +31068,38 @@ class Emitter {
         buf: CBuf,
         match: AsyncAwaitPreludeExpressionReturnContinuation,
     ): boolean {
-        if ("awaitExpr" in match.result) {
-            this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, match.result.params);
-            return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result, !!match.rejectResult);
+        for (const symbol of match.hoistedSymbols) {
+            this.asyncAwaitHoistedPreludeSymbols.add(symbol);
         }
-        this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, this.asyncAwaitIfExpressionReturnBranchParams(match.result));
-        return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result, !!match.rejectResult);
+        try {
+            const params = "awaitExpr" in match.result
+                ? match.result.params
+                : this.asyncAwaitIfExpressionReturnBranchParams(match.result);
+            this.emitAsyncAwaitPreludeHoistedDeclarations(buf, params);
+            if ("awaitExpr" in match.result) {
+                this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, params);
+                return this.emitAsyncAwaitExpressionReturnContinuationResult(buf, match.result, !!match.rejectResult);
+            }
+            this.emitAsyncAwaitPreludeStatements(buf, match.preludeStatements, params);
+            return this.emitAsyncAwaitIfExpressionReturnBranch(buf, match.result, !!match.rejectResult);
+        } finally {
+            for (const symbol of match.hoistedSymbols) {
+                this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+            }
+        }
+    }
+
+    private emitAsyncAwaitPreludeHoistedDeclarations(
+        buf: CBuf,
+        params: readonly AsyncAwaitContinuationParam[],
+    ): void {
+        for (const param of params) {
+            if (!this.asyncAwaitHoistedPreludeSymbols.has(param.symbol) ||
+                this.asyncAwaitHoistedPreludeDeclaredSymbols.has(param.symbol)) continue;
+            const initializer = param.type.kind === "value" ? "tsc_value_undefined()" : this.zeroValue(param.type);
+            buf.line(`${param.type.c} ${param.name} = ${initializer};`);
+            this.asyncAwaitHoistedPreludeDeclaredSymbols.add(param.symbol);
+        }
     }
 
     private emitAsyncAwaitPreludeExpressionReturnContinuation(
@@ -42765,6 +42870,14 @@ class Emitter {
                 continue;
             }
             const sym = this.symbolForIdentifier(d.name);
+            if (sym && this.asyncAwaitHoistedPreludeSymbols.has(sym)) {
+                const type = this.variableStorageType(this.prepareType(mapType(d, this.checker)));
+                if (d.initializer) {
+                    const value = this.emitExpr(d.initializer);
+                    buf.line(`${name} = ${this.coerce(value, type, d.initializer)};`);
+                }
+                continue;
+            }
             const envBinding = this.closureEnvBindingForSymbol(sym);
             if (envBinding) {
                 if (d.initializer) {
