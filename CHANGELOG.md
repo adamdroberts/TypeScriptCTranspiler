@@ -3271,4 +3271,4 @@ These are AOT closure requirements, not permanent product limits.
 - Cover escaping `var` declarations inside direct branch `return await` if/switch/try-finally preludes across declarations, methods, and function values.
 - Support a single optional awaited `if`-arm expression with an await-free `else` before direct branch `return await` across declarations, methods, and function values.
 - Preserve initialized locals assigned by either arm of that optional awaited `if` before direct branch `return await` across declarations, methods, and function values.
-- Preserve typed primitive and top-level dynamic `any` uninitialized locals assigned by either arm of that optional awaited `if`; nested dynamic captures remain deferred.
+- Preserve typed primitive and top-level dynamic `any` uninitialized locals assigned by either arm of that optional awaited `if`, including undefined fallthrough when the optional arm is not entered; nested dynamic captures remain deferred.
