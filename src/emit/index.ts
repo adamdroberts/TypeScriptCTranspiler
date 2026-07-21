@@ -34515,12 +34515,27 @@ class Emitter {
         if (!thenTerminalExpr || !elseTerminalExpr) return false;
         const thenPreludeStatements = thenStatements.slice(0, -1);
         const elsePreludeStatements = elseStatements.slice(0, -1);
-        if (!thenPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) ||
-            !elsePreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        const directAwaitPrelude = (statements: readonly ts.Statement[]): readonly ts.AwaitExpression[] | null => {
+            if (statements.length === 0) return [];
+            const awaits: ts.AwaitExpression[] = [];
+            for (const statement of statements) {
+                if (!ts.isExpressionStatement(statement)) return null;
+                const expression = this.unwrapTransparentExpression(statement.expression);
+                if (!ts.isAwaitExpression(expression)) return null;
+                awaits.push(expression);
+            }
+            return awaits;
+        };
+        const thenAwaitPreludeExprs = directAwaitPrelude(thenPreludeStatements);
+        const elseAwaitPreludeExprs = directAwaitPrelude(elsePreludeStatements);
+        if ((thenAwaitPreludeExprs === null && !thenPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) ||
+            (elseAwaitPreludeExprs === null && !elsePreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)))) return false;
         const thenAwaitExpr = ts.isAwaitExpression(thenTerminalExpr) ? thenTerminalExpr : null;
         const elseAwaitExpr = ts.isAwaitExpression(elseTerminalExpr) ? elseTerminalExpr : null;
         const thenSynchronousExpr = thenAwaitExpr ? null : thenTerminalExpr;
         const elseSynchronousExpr = elseAwaitExpr ? null : elseTerminalExpr;
+        if ((thenAwaitPreludeExprs && thenAwaitPreludeExprs.length > 0 && !thenAwaitExpr) ||
+            (elseAwaitPreludeExprs && elseAwaitPreludeExprs.length > 0 && !elseAwaitExpr)) return false;
         const conditionAwaitExpr = this.unwrapTransparentExpression(bodyStatement.expression);
         if (!ts.isAwaitExpression(conditionAwaitExpr)) return false;
         const outerAwaitExpr = awaitExpressions[0]!;
@@ -34572,6 +34587,26 @@ class Emitter {
                 this.checker,
             ))
             : null;
+        const thenPreludePromiseTypes = thenAwaitPreludeExprs?.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        ))) ?? [];
+        const thenPreludeAwaitedTypes = thenAwaitPreludeExprs?.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
+            this.checker,
+        ))) ?? [];
+        const elsePreludePromiseTypes = elseAwaitPreludeExprs?.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        ))) ?? [];
+        const elsePreludeAwaitedTypes = elseAwaitPreludeExprs?.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
+            this.checker,
+        ))) ?? [];
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const fallthroughPromiseType = this.prepareType(mapTsType(
@@ -34588,6 +34623,10 @@ class Emitter {
             nestedConditionPromiseType.kind !== "promise" || nestedConditionAwaitedType.kind !== "boolean" ||
             (thenPromiseType && (thenPromiseType.kind !== "promise" || thenAwaitedType!.kind === "never")) ||
             (elsePromiseType && (elsePromiseType.kind !== "promise" || elseAwaitedType!.kind === "never")) ||
+            thenPreludePromiseTypes.some((type) => type.kind !== "promise") ||
+            thenPreludeAwaitedTypes.some((type) => type.kind === "never") ||
+            elsePreludePromiseTypes.some((type) => type.kind !== "promise") ||
+            elsePreludeAwaitedTypes.some((type) => type.kind === "never") ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") {
             return false;
         }
@@ -34658,20 +34697,79 @@ class Emitter {
                 ts.isThrowStatement(elseStatement),
             )
             : null;
+        const makePreludeAdapter = (
+            awaitPreludeExprs: readonly ts.AwaitExpression[],
+            promiseTypes: readonly CType[],
+            terminalPromiseType: CType | null,
+            terminalAwaitExpr: ts.AwaitExpression | null,
+            terminalAdapter: string | null,
+        ): { adapter: string | null; awaitExpr: ts.AwaitExpression | null; promiseType: CType | null; preludeStatements: readonly ts.Statement[] } => {
+            if (awaitPreludeExprs.length === 0) {
+                return { adapter: terminalAdapter, awaitExpr: terminalAwaitExpr, promiseType: terminalPromiseType, preludeStatements: [] };
+            }
+            if (!terminalPromiseType || !terminalAwaitExpr || !terminalAdapter) {
+                throw new Error("missing awaited terminal branch adapter");
+            }
+            const sequenceContinuation: AsyncAwaitLoopConditionReturnAwaitContinuation = {
+                conditionExpr: terminalAwaitExpr,
+                conditionAwaitExpr: terminalAwaitExpr,
+                bodyAwaitExpr: awaitPreludeExprs[0]!,
+                bodyAwaitExprs: awaitPreludeExprs,
+                bodyReturnExpr: ts.factory.createVoidZero(),
+                bodyAwaitedAliasSymbols: [],
+                bodyPostAwaitStatements: [],
+                bodyPreludeStatements: [],
+                bodyContinue: false,
+                bodyContinueCondition: null,
+                bodyContinueConditionAwaitExpr: null,
+                bodyContinueConditionNegated: false,
+                bodyContinueElseStatements: [],
+                bodyContinueElseAwaitExprs: [],
+                bodyContinueElsePreludeStatements: [],
+                bodyContinueElsePostAwaitStatements: [],
+                bodyContinueElseBreak: false,
+                bodyContinueElseBreakPreludeStatements: [],
+                bodyContinueElseBreakAwaitExprs: [],
+                bodyContinueElseBreakPostAwaitStatements: [],
+                bodyContinueElseReturnAwaitExpr: null,
+                bodyContinueElseReturnSynchronousExpr: null,
+                bodyContinueElseReturnPreludeStatements: [],
+                bodyContinueElseReturnRejectResult: false,
+                bodyRejectResult: false,
+                fallthroughExpr: terminalAwaitExpr,
+                fallthroughAwaitExpr: terminalAwaitExpr,
+                params: capturedParams,
+                thisValue: continuationThisValue,
+            };
+            const adapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                terminalAdapter,
+                terminalPromiseType,
+                sequenceContinuation,
+                awaitPreludeExprs,
+            );
+            return {
+                adapter,
+                awaitExpr: awaitPreludeExprs[0]!,
+                promiseType: promiseTypes[0]!,
+                preludeStatements: [],
+            };
+        };
+        const thenBranch = makePreludeAdapter(thenAwaitPreludeExprs ?? [], thenPreludePromiseTypes, thenPromiseType, thenAwaitExpr, thenAdapter);
+        const elseBranch = makePreludeAdapter(elseAwaitPreludeExprs ?? [], elsePreludePromiseTypes, elsePromiseType, elseAwaitExpr, elseAdapter);
         const nestedAdapter = this.ensureAsyncAwaitLoopBodyConditionalTerminalAdapter(
             nestedConditionPromiseType,
             nestedConditionAwaitedType,
             conditionAwaitExpr,
-            thenPromiseType,
-            thenAdapter,
-            thenAwaitExpr,
+            thenBranch.promiseType,
+            thenBranch.adapter,
+            thenBranch.awaitExpr,
             thenSynchronousExpr,
-            thenPreludeStatements,
-            elsePromiseType,
-            elseAdapter,
-            elseAwaitExpr,
+            thenAwaitPreludeExprs && thenAwaitPreludeExprs.length > 0 ? [] : thenPreludeStatements,
+            elseBranch.promiseType,
+            elseBranch.adapter,
+            elseBranch.awaitExpr,
             elseSynchronousExpr,
-            elsePreludeStatements,
+            elseAwaitPreludeExprs && elseAwaitPreludeExprs.length > 0 ? [] : elsePreludeStatements,
             ts.isThrowStatement(thenStatement),
             ts.isThrowStatement(elseStatement),
             capturedParams,
