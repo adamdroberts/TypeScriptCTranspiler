@@ -14,8 +14,10 @@ async function loopBodyAwaitIfBothReturn(): Promise<string> {
     let count = 0;
     while (await laterCondition(count < 2)) {
         if (await laterCondition(count === 0)) {
+            bodyCount++;
             return await later("true-" + bodyCount);
         } else {
+            bodyCount++;
             return await later("false-" + bodyCount);
         }
     }

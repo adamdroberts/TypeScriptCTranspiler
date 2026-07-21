@@ -34500,9 +34500,9 @@ class Emitter {
             ts.isBlock(statement) ? statement.statements : [statement];
         const thenStatements = branchStatements(bodyStatement.thenStatement);
         const elseStatements = branchStatements(bodyStatement.elseStatement);
-        if (thenStatements.length !== 1 || elseStatements.length !== 1) return false;
-        const thenStatement = thenStatements[0]!;
-        const elseStatement = elseStatements[0]!;
+        if (thenStatements.length < 1 || elseStatements.length < 1) return false;
+        const thenStatement = thenStatements[thenStatements.length - 1]!;
+        const elseStatement = elseStatements[elseStatements.length - 1]!;
         const terminalExpression = (statement: ts.Statement): ts.Expression | null => {
             if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
                 const expression = statement.expression ? this.unwrapTransparentExpression(statement.expression) : null;
@@ -34513,6 +34513,10 @@ class Emitter {
         const thenTerminalExpr = terminalExpression(thenStatement);
         const elseTerminalExpr = terminalExpression(elseStatement);
         if (!thenTerminalExpr || !elseTerminalExpr) return false;
+        const thenPreludeStatements = thenStatements.slice(0, -1);
+        const elsePreludeStatements = elseStatements.slice(0, -1);
+        if (!thenPreludeStatements.every((statement) => ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)) ||
+            !elsePreludeStatements.every((statement) => ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         const thenAwaitExpr = ts.isAwaitExpression(thenTerminalExpr) ? thenTerminalExpr : null;
         const elseAwaitExpr = ts.isAwaitExpression(elseTerminalExpr) ? elseTerminalExpr : null;
         const thenSynchronousExpr = thenAwaitExpr ? null : thenTerminalExpr;
@@ -34584,7 +34588,9 @@ class Emitter {
             nestedConditionPromiseType.kind !== "promise" || nestedConditionAwaitedType.kind !== "boolean" ||
             (thenPromiseType && (thenPromiseType.kind !== "promise" || thenAwaitedType!.kind === "never")) ||
             (elsePromiseType && (elsePromiseType.kind !== "promise" || elseAwaitedType!.kind === "never")) ||
-            fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
+            fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") {
+            return false;
+        }
 
         const continuationParams = [
             ...this.asyncAwaitContinuationParameters(parameters),
@@ -34620,6 +34626,8 @@ class Emitter {
         };
         visit(condition);
         visit(bodyStatement.expression);
+        for (const statement of thenPreludeStatements) visit(statement);
+        for (const statement of elsePreludeStatements) visit(statement);
         if (thenAwaitExpr) visit(thenAwaitExpr);
         else if (thenSynchronousExpr) visit(thenSynchronousExpr);
         if (elseAwaitExpr) visit(elseAwaitExpr);
@@ -34658,10 +34666,12 @@ class Emitter {
             thenAdapter,
             thenAwaitExpr,
             thenSynchronousExpr,
+            thenPreludeStatements,
             elsePromiseType,
             elseAdapter,
             elseAwaitExpr,
             elseSynchronousExpr,
+            elsePreludeStatements,
             ts.isThrowStatement(thenStatement),
             ts.isThrowStatement(elseStatement),
             capturedParams,
@@ -34752,10 +34762,12 @@ class Emitter {
         thenAdapter: string | null,
         thenAwaitExpr: ts.AwaitExpression | null,
         thenSynchronousExpr: ts.Expression | null,
+        thenPreludeStatements: readonly ts.Statement[],
         elsePromiseType: CType | null,
         elseAdapter: string | null,
         elseAwaitExpr: ts.AwaitExpression | null,
         elseSynchronousExpr: ts.Expression | null,
+        elsePreludeStatements: readonly ts.Statement[],
         thenRejectResult: boolean,
         elseRejectResult: boolean,
         params: readonly AsyncAwaitContinuationParam[],
@@ -34782,11 +34794,13 @@ class Emitter {
             adapter: string | null,
             awaitExpr: ts.AwaitExpression | null,
             synchronousExpr: ts.Expression | null,
+            preludeStatements: readonly ts.Statement[],
             promiseType: CType | null,
             rejectResult: boolean,
         ): void => {
             if (!awaitExpr || !adapter || !promiseType) {
                 if (!synchronousExpr) throw new Error("missing terminal branch expression");
+                for (const statement of preludeStatements) this.emitStmt(out, statement);
                 const returned = this.emitExpr(synchronousExpr);
                 if (rejectResult) {
                     const rejected = this.coerceToString(returned, synchronousExpr);
@@ -34802,6 +34816,7 @@ class Emitter {
                 }
                 return;
             }
+            for (const statement of preludeStatements) this.emitStmt(out, statement);
             const source = this.emitExpr(awaitExpr.expression);
             const sourceVar = this.freshTemp("_await_terminal_branch_source");
             const envVar = this.freshTemp("_await_terminal_branch_env");
@@ -34842,10 +34857,10 @@ class Emitter {
         try {
             const truth = this.truthyC({ c: valueVar, ty: conditionAwaitedType }, conditionAwaitExpr);
             buf.open(`if (${truth})`);
-            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPromiseType, thenRejectResult);
+            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPreludeStatements, thenPromiseType, thenRejectResult);
             buf.close();
             buf.open("else");
-            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePromiseType, elseRejectResult);
+            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePreludeStatements, elsePromiseType, elseRejectResult);
             buf.close();
             buf.line("tsc_try_pop();");
             buf.line("return;");
