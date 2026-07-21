@@ -2576,6 +2576,8 @@ declare namespace dispatch {
      * task body may not use `await` or `this`.
      */
     function async<T>(queue: DispatchQueue, task: () => T): Promise<T>;
+    /** Runs `task` on `queue` after a bounded millisecond delay. */
+    function after<T>(delay: number, queue: DispatchQueue, task: () => T): Promise<T>;
     /** Runs `task` on `queue` and blocks the caller until it completes. */
     function sync<T>(queue: DispatchQueue, task: () => T): T;
 }

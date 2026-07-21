@@ -57163,12 +57163,17 @@ class Emitter {
     }
 
     private emitDispatchCall(call: ts.CallExpression, name: string): EmitResult {
-        if (name !== "async" && name !== "sync") unsupported(call, `dispatch.${name}`);
-        if (call.arguments.length < 2) {
-            unsupported(call, `dispatch.${name} expects a queue and a task function`);
+        if (name !== "async" && name !== "after" && name !== "sync") unsupported(call, `dispatch.${name}`);
+        const isAfter = name === "after";
+        const minimumArguments = isAfter ? 3 : 2;
+        if (call.arguments.length < minimumArguments) {
+            unsupported(call, isAfter
+                ? "dispatch.after expects a delay, queue, and task function"
+                : `dispatch.${name} expects a queue and a task function`);
         }
-        const queueNode = call.arguments[0]!;
-        const taskArgNode = call.arguments[1]!;
+        const delayNode = isAfter ? call.arguments[0]! : null;
+        const queueNode = call.arguments[isAfter ? 1 : 0]!;
+        const taskArgNode = call.arguments[isAfter ? 2 : 1]!;
         const taskFn = this.unwrapTransparentExpression(taskArgNode);
         if (!ts.isArrowFunction(taskFn) && !ts.isFunctionExpression(taskFn)) {
             unsupported(taskArgNode, "dispatch task must be an inline arrow or function expression in this subset");
@@ -57197,26 +57202,38 @@ class Emitter {
         this.usesDispatch = true;
         const envType = `${adapter}_env_t`;
         const specs: SequencedCallArg[] = [
+            ...(delayNode ? [{ value: this.emitExpr(delayNode), target: T_NUMBER, node: delayNode }] : []),
             { value: queue, target: queue.ty, node: queueNode },
             { value: task, target: task.ty, node: taskArgNode },
-            ...this.ignoredArgumentSpecs(call.arguments, 2),
+            ...this.ignoredArgumentSpecs(call.arguments, isAfter ? 3 : 2),
         ];
-        if (name === "async") {
+        if (name === "async" || isAfter) {
             const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
             const resultTy = mapped.kind === "promise" ? mapped : promiseType(T_VALUE);
-            return this.emitSequencedExpr(resultTy, specs, ([q, fn]) => {
+            return this.emitSequencedExpr(resultTy, specs, (values) => {
+                const offset = isAfter ? 1 : 0;
+                const delay = isAfter ? values[0]! : null;
+                const q = values[offset]!;
+                const fn = values[offset + 1]!;
                 const env = this.freshTemp("_dispatch_env");
-                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_dispatch_async(${q}, ${adapter}, ${env}); })`;
+                const schedule = isAfter
+                    ? `tsc_dispatch_after(${q}, ${adapter}, ${env}, ${delay})`
+                    : `tsc_dispatch_async(${q}, ${adapter}, ${env})`;
+                return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; ${schedule}; })`;
             });
         }
         const retTy = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (retTy.kind === "void" || retTy.kind === "never") {
-            return this.emitSequencedExpr(T_VOID, specs, ([q, fn]) => {
+            return this.emitSequencedExpr(T_VOID, specs, (values) => {
+                const q = values[0]!;
+                const fn = values[1]!;
                 const env = this.freshTemp("_dispatch_env");
                 return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; (void)tsc_dispatch_sync(${q}, ${adapter}, ${env}); })`;
             });
         }
-        return this.emitSequencedExpr(retTy, specs, ([q, fn]) => {
+        return this.emitSequencedExpr(retTy, specs, (values) => {
+            const q = values[0]!;
+            const fn = values[1]!;
             const env = this.freshTemp("_dispatch_env");
             const result = this.freshTemp("_dispatch_result");
             const converted = this.coerce({ c: result, ty: T_VALUE }, retTy, call);

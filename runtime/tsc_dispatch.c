@@ -142,6 +142,32 @@ tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_
     return task->promise;
 }
 
+tsc_promise_t* tsc_dispatch_after(
+    tsc_dispatch_queue_t* q,
+    tsc_dispatch_task_fn_t fn,
+    void* env,
+    double delay_ms
+) {
+    if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.after: invalid queue or task"));
+    if (!(delay_ms > 0.0)) delay_ms = 0.0;
+    const double max_delay_ms = 9000000000000.0;
+    if (delay_ms > max_delay_ms) delay_ms = max_delay_ms;
+    tsc_dispatch_async_task_t* task =
+        (tsc_dispatch_async_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_async_task_t));
+    task->fn = fn;
+    task->env = env;
+    task->promise = tsc_promise_pending();
+    tsc_dispatch_task_scheduled();
+    tsc_dispatch_inflight_add(task);
+    dispatch_after_f(
+        dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay_ms * 1000000.0)),
+        q->queue,
+        task,
+        tsc_dispatch_async_trampoline
+    );
+    return task->promise;
+}
+
 typedef struct {
     tsc_dispatch_task_fn_t fn;
     void* env;

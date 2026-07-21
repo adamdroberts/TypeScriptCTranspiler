@@ -154,7 +154,7 @@ on Phase 6, cross-referenced from Phases 11/13.
   (queue-specific key) and throw instead of hanging.
 - [x] Main-loop bridge: main thread keeps `tsc_run_event_loop` (no `dispatch_main()`); program
   exit waits for outstanding dispatch groups like it waits for timers.
-- [ ] Stretch: `dispatch.after(ms, q, fn)`, dispatch groups surfaced as `Promise.all`-style joins,
+- [x] Stretch: `dispatch.after(ms, q, fn)`; dispatch groups surfaced as `Promise.all`-style joins,
   barriers on concurrent queues.
 
 ### Stage 3 — compiler surface

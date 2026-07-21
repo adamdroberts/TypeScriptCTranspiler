@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Optional dispatch scheduling now includes `dispatch.after(delay, queue, task)`, which returns a Promise settled on the main event loop after the bounded delay. Test: `dispatch_after`.
 - Added bounded dynamic `Promise.withResolvers()` records with pending promises and callable `resolve`/`reject` functions. Test: `promise_with_resolvers`.
 - Leading awaited-local chains now hoist nested dynamic `var` captures declared by await-free `if` preludes across async declarations, methods, and function values, including undefined fallthrough. Regression: `async_await_while_condition`.
 - Bounded multi-await direct and conditional loop-control continuations now also carry simple uninitialized `var` declaration storage through condition stages, outer `break`/`continue`, and await-free incrementors. Regression: `async_await_while_condition`.
