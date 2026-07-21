@@ -34509,6 +34509,10 @@ class Emitter {
         const conditionalContinueIsContinue = !!conditionalContinue && !!conditionalContinueStatement && ts.isContinueStatement(conditionalContinueStatement);
         const conditionalThenIsBreak = !!conditionalContinue && !!conditionalContinueStatement &&
             ts.isBreakStatement(conditionalContinueStatement) && !conditionalContinueStatement.label;
+        const conditionalThenIsReturn = !!conditionalContinue && !!conditionalContinueStatement &&
+            ts.isReturnStatement(conditionalContinueStatement) && !!conditionalContinueStatement.expression;
+        const conditionalThenIsThrow = !!conditionalContinue && !!conditionalContinueStatement &&
+            ts.isThrowStatement(conditionalContinueStatement);
         const rawElseStatements = conditionalContinue && conditionalContinue.elseStatement
             ? ts.isBlock(conditionalContinue.elseStatement)
                 ? conditionalContinue.elseStatement.statements
@@ -34517,7 +34521,7 @@ class Emitter {
         const rawElseStatement = rawElseStatements[rawElseStatements.length - 1];
         const rawElseIsContinue = !!conditionalContinue && !!conditionalContinue.elseStatement &&
             !!rawElseStatement && ts.isContinueStatement(rawElseStatement);
-        const symmetricBreakContinue = conditionalThenIsBreak && rawElseIsContinue;
+        const symmetricBreakContinue = (conditionalThenIsBreak || conditionalThenIsReturn || conditionalThenIsThrow) && rawElseIsContinue;
         const continueBranchStatements = symmetricBreakContinue ? rawElseStatements : conditionalThenStatements;
         const alternateBranchStatements = symmetricBreakContinue ? conditionalThenStatements : rawElseStatements;
         const continueBranchStatement = continueBranchStatements[continueBranchStatements.length - 1];
