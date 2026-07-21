@@ -54405,6 +54405,13 @@ class Emitter {
     }
 
     private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
+        if (method === "withResolvers") {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                this.ignoredArgumentSpecs(call.arguments, 0),
+                () => "tsc_promise_with_resolvers()",
+            );
+        }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `Promise.${method} result must be Promise<T>`);
         switch (method) {

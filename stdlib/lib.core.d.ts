@@ -55,12 +55,18 @@ interface Promise<T> {
     catch<TResult = never>(onrejected?: ((reason: any) => TResult | Promise<TResult>) | undefined, ...ignored: any[]): Promise<T | TResult>;
     finally(onfinally?: (() => void) | undefined, ...ignored: any[]): Promise<T>;
 }
+interface PromiseWithResolvers<T> {
+    promise: Promise<T>;
+    resolve(value: T | PromiseLike<T>): void;
+    reject(reason?: any): void;
+}
 interface PromiseConstructor {
     new<T>(executor: (resolve: (value: T) => void, reject: (reason: any) => void) => void, ...ignored: any[]): Promise<T>;
     resolve<T>(value: Promise<T>, ...ignored: any[]): Promise<T>;
     resolve<T>(value: T, ...ignored: any[]): Promise<T>;
     resolve(): Promise<void>;
     reject<T = never>(reason?: any, ...ignored: any[]): Promise<T>;
+    withResolvers<T>(): PromiseWithResolvers<T>;
     all<T>(values: Promise<T>[], ...ignored: any[]): Promise<T[]>;
     all<T>(values: Set<Promise<T>>, ...ignored: any[]): Promise<T[]>;
     all(values: Map<any, any>, ...ignored: any[]): Promise<any[]>;

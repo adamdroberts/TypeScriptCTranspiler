@@ -714,6 +714,25 @@ tsc_promise_t* tsc_promise_pending(void) {
     return p;
 }
 
+tsc_value_t tsc_promise_with_resolvers(void) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_promise_thenable_state_t* state =
+        (tsc_promise_thenable_state_t*)TSC_GC_MALLOC(sizeof(tsc_promise_thenable_state_t));
+    state->promise = promise;
+    state->thenable = tsc_value_promise(promise);
+    state->then_fn = tsc_value_undefined();
+    state->seen = NULL;
+    state->done = false;
+
+    tsc_object_t* record = tsc_object_new();
+    tsc_object_set(record, tsc_str_from_lit("promise", 7), tsc_value_promise(promise));
+    tsc_object_set(record, tsc_str_from_lit("resolve", 7),
+        tsc_value_function_closure_named(promise_thenable_resolve, state, 1.0, tsc_str_from_lit("resolve", 7)));
+    tsc_object_set(record, tsc_str_from_lit("reject", 6),
+        tsc_value_function_closure_named(promise_thenable_reject, state, 1.0, tsc_str_from_lit("reject", 6)));
+    return tsc_value_object(record);
+}
+
 tsc_promise_t* tsc_promise_adopt(tsc_promise_t* promise) {
     return promise ? promise : tsc_promise_resolve(tsc_value_undefined());
 }
