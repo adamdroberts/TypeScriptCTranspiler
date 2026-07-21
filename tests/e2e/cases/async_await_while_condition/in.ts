@@ -3673,6 +3673,17 @@ async function chooseMixedUnassignedIfAwaitPrelude(prefix: string, flag: boolean
     return await laterBodyValue(source);
 }
 
+async function chooseMixedNestedIfAwaitPrelude(prefix: string, flag: boolean): Promise<string> {
+    var source: any;
+    if (flag) {
+        if (prefix.length > 0) void "nested-branch-prelude";
+        source = await laterBodyValue(prefix + "-nested-await");
+    } else {
+        source = prefix + "-nested-sync";
+    }
+    return await laterBodyValue(source);
+}
+
 async function chooseMixedAssignedNumberIfAwaitPrelude(flag: boolean): Promise<number> {
     var source: number;
     if (flag) source = await laterBodyNumber(101);
@@ -4401,6 +4412,8 @@ chooseMixedAssignedIfAwaitPreludeValue("value", true).then((value) => console.lo
 chooseMixedAssignedIfAwaitPreludeValue("value", false).then((value) => console.log("await-value-mixed-assigned-if-false", value));
 chooseMixedUnassignedIfAwaitPrelude("direct", true).then((value) => console.log("await-direct-mixed-unassigned-if-true", value));
 chooseMixedUnassignedIfAwaitPrelude("direct", false).then((value) => console.log("await-direct-mixed-unassigned-if-false", value));
+chooseMixedNestedIfAwaitPrelude("direct", true).then((value) => console.log("await-direct-mixed-nested-if-true", value));
+chooseMixedNestedIfAwaitPrelude("direct", false).then((value) => console.log("await-direct-mixed-nested-if-false", value));
 chooseMixedAssignedNumberIfAwaitPrelude(true).then((value) => console.log("await-number-mixed-assigned-if-true", value));
 chooseMixedAssignedNumberIfAwaitPrelude(false).then((value) => console.log("await-number-mixed-assigned-if-false", value));
 chooseMixedAssignedBooleanIfAwaitPrelude(true).then((value) => console.log("await-boolean-mixed-assigned-if-true", value));

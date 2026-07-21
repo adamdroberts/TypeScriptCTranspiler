@@ -311,6 +311,7 @@ await-direct-mixed-assigned-if-false direct-assigned-sync
 await-method-mixed-assigned-if-false method-assigned-sync
 await-value-mixed-assigned-if-false value-assigned-sync
 await-direct-mixed-unassigned-if-false undefined
+await-direct-mixed-nested-if-false direct-nested-sync
 await-number-mixed-assigned-if-false 202
 await-boolean-mixed-assigned-if-false false
 await-direct-uninitialized-var-do-next direct-uninitialized-var-next-do
@@ -434,6 +435,7 @@ await-direct-mixed-assigned-if-true direct-assigned-await
 await-method-mixed-assigned-if-true method-assigned-await
 await-value-mixed-assigned-if-true value-assigned-await
 await-direct-mixed-unassigned-if-true direct-assigned-await
+await-direct-mixed-nested-if-true direct-nested-await
 await-number-mixed-assigned-if-true 101
 await-boolean-mixed-assigned-if-true true
 await-method-mutable-uninitialized-var-prelude method-mutable-uninitialized-var-mutable-method-var-first-updated-method-mutable-uninitialized-var-mutable-method-var-first-updated-second
