@@ -295,6 +295,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyContinue: boolean;
     bodyContinueCondition: ts.Expression | null;
+    bodyContinueElseStatements: readonly ts.Statement[];
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     fallthroughAwaitExpr?: ts.AwaitExpression;
@@ -34482,7 +34483,7 @@ class Emitter {
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const finalBodyStatement = loopBody[loopBody.length - 1];
-        const conditionalContinue = finalBodyStatement && ts.isIfStatement(finalBodyStatement) && !finalBodyStatement.elseStatement
+        const conditionalContinue = finalBodyStatement && ts.isIfStatement(finalBodyStatement)
             ? finalBodyStatement
             : null;
         const conditionalThenStatements = conditionalContinue
@@ -34500,11 +34501,17 @@ class Emitter {
         const bodyContinueCondition = conditionalContinueIsContinue
             ? conditionalContinue.expression
             : null;
+        const bodyContinueElseStatements = conditionalContinueIsContinue && conditionalContinue?.elseStatement
+            ? ts.isBlock(conditionalContinue.elseStatement)
+                ? conditionalContinue.elseStatement.statements
+                : [conditionalContinue.elseStatement]
+            : [];
         const bodyContinueStatements = bodyContinueCondition
             ? conditionalThenStatements.slice(0, -1)
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
         if (initialBody && bodyContinueCondition) return false;
+        if (bodyContinueCondition && !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction) && !bodyContinue) return false;
         const bodyExpression = bodyContinue
             ? ts.factory.createVoidZero()
@@ -34932,6 +34939,7 @@ class Emitter {
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyContinue,
             bodyContinueCondition,
+            bodyContinueElseStatements,
             bodyRejectResult,
             fallthroughExpr,
             fallthroughAwaitExpr,
@@ -35295,6 +35303,7 @@ class Emitter {
                 if (continuation.bodyContinueCondition) {
                     buf.close();
                     buf.open("else");
+                    for (const statement of continuation.bodyContinueElseStatements) this.emitStmt(buf, statement);
                     if (continuation.loopIncrementor) {
                         const incrementor = this.emitExpr(continuation.loopIncrementor);
                         buf.line(`${incrementor.c};`);
