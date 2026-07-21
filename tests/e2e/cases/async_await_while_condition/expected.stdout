@@ -480,5 +480,6 @@ await-loop-two-await-multiple-local-continue loop-two-await-multiple-local-conti
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-loop-two-await-nullish-continue loop-two-await-nullish-continue-nullish
+await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
 await-while-six-logical-true six-logical-yes
 await-while-six-logical-false six-logical-no

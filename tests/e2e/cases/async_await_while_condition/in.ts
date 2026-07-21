@@ -524,6 +524,15 @@ async function chooseLoopTwoAwaitNullishContinueAwait(value: string, repeat: boo
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitNullishContinueThrowAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterNull() ?? await laterCondition(repeat)) {
+        value += "-nullish";
+        repeat = false;
+        continue;
+    }
+    throw await laterBodyValue(value);
+}
+
 async function chooseLoopTwoAwaitNullableContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await (repeat ? laterNullableTrue() : laterNullableFalse()) ?? await laterCondition(false)) {
         value += "-nullable";
@@ -3246,6 +3255,7 @@ chooseLoopExpressionInitializerFalseBreakAwait("loop-expression-break-false").th
 chooseLoopExpressionInitializerFalseBreakThrowAwait("loop-expression-break-false-throw").catch((reason) => console.log("await-loop-expression-break-false-throw", reason));
 chooseLoopTwoAwaitContinueAwait("loop-two-await-continue", true).then((value) => console.log("await-loop-two-await-continue", value));
 chooseLoopTwoAwaitNullishContinueAwait("loop-two-await-nullish-continue", true).then((value) => console.log("await-loop-two-await-nullish-continue", value));
+chooseLoopTwoAwaitNullishContinueThrowAwait("loop-two-await-nullish-throw", true).catch((reason) => console.log("await-loop-two-await-nullish-throw", reason));
 chooseLoopTwoAwaitNullableContinueAwait("loop-two-await-nullable-continue", true).then((value) => console.log("await-loop-two-await-nullable-continue", value));
 chooseLoopTwoAwaitContinueAwait("loop-two-await-continue-false", false).then((value) => console.log("await-loop-two-await-continue-false", value));
 chooseLoopTwoAwaitContinueThrowAwait("loop-two-await-continue-throw", true).catch((reason) => console.log("await-loop-two-await-continue-throw", reason));
