@@ -2518,6 +2518,42 @@ tsc_set_t* tsc_value_as_set(tsc_value_t v) {
     return NULL;
 }
 
+tsc_date_t* tsc_value_as_date(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_date) return (tsc_date_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a Date"));
+    return NULL;
+}
+
+tsc_regexp_t* tsc_value_as_regexp(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_regexp) return (tsc_regexp_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a RegExp"));
+    return NULL;
+}
+
+tsc_error_t* tsc_value_as_error(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_error) return (tsc_error_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not an Error"));
+    return NULL;
+}
+
+tsc_buffer_t* tsc_value_as_buffer(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_typed_array) return (tsc_buffer_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a Buffer"));
+    return NULL;
+}
+
 tsc_str_t* tsc_value_typeof(tsc_value_t v) {
     if (!value_is_box(v)) return tsc_str_from_lit("number", 6);
     switch (value_tag(v)) {

@@ -1041,6 +1041,10 @@ typedef struct tsc_set {
 
 tsc_map_t* tsc_value_as_map(tsc_value_t v);
 tsc_set_t* tsc_value_as_set(tsc_value_t v);
+tsc_date_t* tsc_value_as_date(tsc_value_t v);
+tsc_regexp_t* tsc_value_as_regexp(tsc_value_t v);
+tsc_error_t* tsc_value_as_error(tsc_value_t v);
+tsc_buffer_t* tsc_value_as_buffer(tsc_value_t v);
 
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap);
 void tsc_set_add_raw(tsc_set_t* s, const void* v);

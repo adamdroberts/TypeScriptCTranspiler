@@ -1,0 +1,4 @@
+date 1700000000000
+buffer 2 ok
+regexp true false
+error boom
