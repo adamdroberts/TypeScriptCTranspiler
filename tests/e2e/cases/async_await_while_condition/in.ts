@@ -3227,6 +3227,7 @@ chooseLoopExpressionInitializerBreakThrowAwait("loop-expression-break-throw").ca
 chooseLoopExpressionInitializerFalseBreakAwait("loop-expression-break-false").then((value) => console.log("await-loop-expression-break-false", value));
 chooseLoopExpressionInitializerFalseBreakThrowAwait("loop-expression-break-false-throw").catch((reason) => console.log("await-loop-expression-break-false-throw", reason));
 chooseLoopTwoAwaitContinueAwait("loop-two-await-continue", true).then((value) => console.log("await-loop-two-await-continue", value));
+chooseLoopTwoAwaitContinueAwait("loop-two-await-continue-false", false).then((value) => console.log("await-loop-two-await-continue-false", value));
 chooseLoopTwoAwaitContinueThrowAwait("loop-two-await-continue-throw", true).catch((reason) => console.log("await-loop-two-await-continue-throw", reason));
 chooseLoopTwoAwaitContinueThrowAwait("loop-two-await-continue-throw-false", false).catch((reason) => console.log("await-loop-two-await-continue-throw-false", reason));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));
