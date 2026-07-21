@@ -3225,6 +3225,13 @@ class LoopChooser {
         return await laterBodyValue(prefix + "-else-tail");
     }
 
+    async pickMixedAssignedIfAwaitPrelude(prefix: string, flag: boolean): Promise<string> {
+        var source = prefix + "-assigned-initial";
+        if (flag) source = await laterBodyValue(prefix + "-assigned-await");
+        else source = prefix + "-assigned-sync";
+        return await laterBodyValue(source);
+    }
+
     async pickDirectAwaitEscapingVarSwitchPrelude(prefix: string, flag: boolean): Promise<string> {
         switch (flag ? 1 : 0) {
             case 1:
@@ -3637,6 +3644,20 @@ const chooseOptionalIfElseAwaitPreludeValue = async (prefix: string, flag: boole
     }
     return await laterBodyValue(prefix + "-else-tail");
 };
+
+const chooseMixedAssignedIfAwaitPreludeValue = async (prefix: string, flag: boolean): Promise<string> => {
+    var source = prefix + "-assigned-initial";
+    if (flag) source = await laterBodyValue(prefix + "-assigned-await");
+    else source = prefix + "-assigned-sync";
+    return await laterBodyValue(source);
+};
+
+async function chooseMixedAssignedIfAwaitPrelude(prefix: string, flag: boolean): Promise<string> {
+    var source = prefix + "-assigned-initial";
+    if (flag) source = await laterBodyValue(prefix + "-assigned-await");
+    else source = prefix + "-assigned-sync";
+    return await laterBodyValue(source);
+}
 
 const chooseDirectAwaitEscapingVarSwitchPreludeValue = async (prefix: string, flag: boolean): Promise<string> => {
     switch (flag ? 1 : 0) {
@@ -4344,6 +4365,12 @@ new LoopChooser("method-").pickOptionalIfElseAwaitPrelude("method", true).then((
 new LoopChooser("method-").pickOptionalIfElseAwaitPrelude("method", false).then((value) => console.log("await-method-optional-if-else-false", value));
 chooseOptionalIfElseAwaitPreludeValue("value", true).then((value) => console.log("await-value-optional-if-else-true", value));
 chooseOptionalIfElseAwaitPreludeValue("value", false).then((value) => console.log("await-value-optional-if-else-false", value));
+chooseMixedAssignedIfAwaitPrelude("direct", true).then((value) => console.log("await-direct-mixed-assigned-if-true", value));
+chooseMixedAssignedIfAwaitPrelude("direct", false).then((value) => console.log("await-direct-mixed-assigned-if-false", value));
+new LoopChooser("method-").pickMixedAssignedIfAwaitPrelude("method", true).then((value) => console.log("await-method-mixed-assigned-if-true", value));
+new LoopChooser("method-").pickMixedAssignedIfAwaitPrelude("method", false).then((value) => console.log("await-method-mixed-assigned-if-false", value));
+chooseMixedAssignedIfAwaitPreludeValue("value", true).then((value) => console.log("await-value-mixed-assigned-if-true", value));
+chooseMixedAssignedIfAwaitPreludeValue("value", false).then((value) => console.log("await-value-mixed-assigned-if-false", value));
 chooseDirectAwaitUninitializedVarDoPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-do-next", value));
 chooseDirectAwaitUninitializedVarForPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-next", value));
 chooseDirectAwaitUninitializedVarForOfPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-of-next", value));

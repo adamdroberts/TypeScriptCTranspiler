@@ -49508,6 +49508,12 @@ class Emitter {
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitThrowAlias(body, fnBody) ||
+                                this.emitAsyncAwaitPreludeExpressionReturnContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitDirectReturnAwaitPrelude(
                                     body,
                                     fnBody,
@@ -49563,12 +49569,6 @@ class Emitter {
                                     type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
                                 ) ||
                                 this.emitAsyncAwaitWhileConditionReturnContinuation(
-                                    body,
-                                    fnBody,
-                                    runtimeParams,
-                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
-                                ) ||
-                                this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                                     body,
                                     fnBody,
                                     runtimeParams,
@@ -60037,6 +60037,12 @@ class Emitter {
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitThrowAlias(this.defs, info.fn.body) ||
+                        this.emitAsyncAwaitPreludeExpressionReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
                         this.emitAsyncAwaitDirectReturnAwaitPrelude(
                             this.defs,
                             info.fn.body,
@@ -60092,12 +60098,6 @@ class Emitter {
                             thisType ? { c: "__tsc_this", ty: thisType } : null,
                         ) ||
                         this.emitAsyncAwaitWhileConditionReturnContinuation(
-                            this.defs,
-                            info.fn.body,
-                            info.fn.parameters,
-                            thisType ? { c: "__tsc_this", ty: thisType } : null,
-                        ) ||
-                        this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                             this.defs,
                             info.fn.body,
                             info.fn.parameters,
