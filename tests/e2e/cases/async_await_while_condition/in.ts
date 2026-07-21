@@ -776,6 +776,24 @@ async function chooseLoopThreeAwaitMixedOrAndBreakDeclarationAwait(value: string
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitLeftOrNullishBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; (await laterCondition(repeat) || await laterCondition(repeat)) ?? await laterCondition(repeat); suffix += "-unexpected-incrementor") {
+        suffix = "-left-or-nullish-break-declaration";
+        value += suffix;
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopThreeAwaitLeftNullishOrBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; (await laterCondition(repeat) ?? await laterCondition(repeat)) || await laterCondition(repeat); suffix += "-unexpected-incrementor") {
+        suffix = "-left-nullish-or-break-declaration";
+        value += suffix;
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitMixedOrAndContinueAwait(value: string, repeat: boolean): Promise<string> {
     for (var suffix: any; await laterCondition(repeat) || await laterCondition(repeat) && await laterCondition(repeat); value += "-three-mixed-or-and-incrementor") {
         suffix = "-three-mixed-or-and";
@@ -3733,6 +3751,8 @@ chooseLoopThreeAwaitMixedAndOrContinueAwait("loop-three-await-mixed-and-or", tru
 chooseLoopThreeAwaitMixedAndOrContinueDeclarationAwait("loop-three-await-mixed-and-or-declaration", true).then((value) => console.log("await-loop-three-await-mixed-and-or-declaration", value));
 chooseLoopThreeAwaitMixedAndOrBreakDeclarationAwait("loop-three-await-mixed-and-or-break-declaration", true).then((value) => console.log("await-loop-three-await-mixed-and-or-break-declaration", value));
 chooseLoopThreeAwaitMixedOrAndBreakDeclarationAwait("loop-three-await-mixed-or-and-break-declaration", true).then((value) => console.log("await-loop-three-await-mixed-or-and-break-declaration", value));
+chooseLoopThreeAwaitLeftOrNullishBreakDeclarationAwait("loop-three-await-left-or-nullish-break-declaration", true).then((value) => console.log("await-loop-three-await-left-or-nullish-break-declaration", value));
+chooseLoopThreeAwaitLeftNullishOrBreakDeclarationAwait("loop-three-await-left-nullish-or-break-declaration", true).then((value) => console.log("await-loop-three-await-left-nullish-or-break-declaration", value));
 chooseLoopThreeAwaitMixedOrAndContinueAwait("loop-three-await-mixed-or-and", true).then((value) => console.log("await-loop-three-await-mixed-or-and", value));
 chooseLoopThreeAwaitMixedNullishOrContinueAwait("loop-three-await-mixed-nullish-or", true).then((value) => console.log("await-loop-three-await-mixed-nullish-or", value));
 chooseLoopThreeAwaitMixedOrNullishContinueAwait("loop-three-await-mixed-or-nullish", true).then((value) => console.log("await-loop-three-await-mixed-or-nullish", value));

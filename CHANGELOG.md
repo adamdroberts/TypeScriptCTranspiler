@@ -3248,3 +3248,4 @@ Features that require build-time proof or an explicit security allow list, docum
 - Dynamic `require(variable)` — finite or allow-listed specifiers compile into AOT dispatch tables; non-finite unlisted specifiers remain rejected.
 
 These are AOT closure requirements, not permanent product limits.
+- Async loop-condition lowering now routes left-associated mixed `||`→`??` and `??`→`||` outer-break shapes through awaited fallthrough while preserving simple uninitialized `var` captures. Test: `async_await_while_condition`.
