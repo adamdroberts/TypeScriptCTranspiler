@@ -304,6 +304,9 @@ await-value-escaping-var-try-finally value-escaping-try
 await-direct-optional-if-false direct-optional-tail
 await-method-optional-if-false method-optional-tail
 await-value-optional-if-false value-optional-tail
+await-direct-optional-if-else-false direct-else-tail
+await-method-optional-if-else-false method-else-tail
+await-value-optional-if-else-false value-else-tail
 await-direct-uninitialized-var-do-next direct-uninitialized-var-next-do
 await-direct-uninitialized-var-for-next direct-uninitialized-var-next-for
 await-direct-uninitialized-var-for-of-next direct-uninitialized-var-next-for-of
@@ -418,6 +421,9 @@ await-direct-mutable-uninitialized-var-throw direct-mutable-uninitialized-var-mu
 await-direct-optional-if-true direct-optional-tail
 await-method-optional-if-true method-optional-tail
 await-value-optional-if-true value-optional-tail
+await-direct-optional-if-else-true direct-else-tail
+await-method-optional-if-else-true method-else-tail
+await-value-optional-if-else-true value-else-tail
 await-method-mutable-uninitialized-var-prelude method-mutable-uninitialized-var-mutable-method-var-first-updated-method-mutable-uninitialized-var-mutable-method-var-first-updated-second
 await-method-mutable-uninitialized-var-throw method-mutable-uninitialized-var-mutable-method-throw-var-first-updated-method-mutable-uninitialized-var-mutable-method-throw-var-first-updated-second
 await-value-mutable-uninitialized-var-prelude value-mutable-uninitialized-var-mutable-value-var-first-updated-value-mutable-uninitialized-var-mutable-value-var-first-updated-second

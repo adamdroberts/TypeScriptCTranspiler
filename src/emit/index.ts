@@ -36314,22 +36314,41 @@ class Emitter {
         if (body.statements.length !== 2) return false;
         const conditional = body.statements[0]!;
         const result = body.statements[1]!;
-        if (!ts.isIfStatement(conditional) || conditional.elseStatement ||
+        if (!ts.isIfStatement(conditional) ||
             !ts.isReturnStatement(result) || !result.expression) return false;
-        const branchStatements = ts.isBlock(conditional.thenStatement)
+        const trueStatements = ts.isBlock(conditional.thenStatement)
             ? conditional.thenStatement.statements
             : [conditional.thenStatement];
-        if (branchStatements.length !== 1 || !this.awaitedContinuationStep(branchStatements[0]!)) return false;
+        const falseStatements = conditional.elseStatement
+            ? ts.isBlock(conditional.elseStatement)
+                ? conditional.elseStatement.statements
+                : [conditional.elseStatement]
+            : [];
+        const trueAwaitIndices = trueStatements
+            .map((statement, index) => this.awaitedContinuationStep(statement) ? index : -1)
+            .filter((index) => index >= 0);
+        const falseAwaitIndices = falseStatements
+            .map((statement, index) => this.awaitedContinuationStep(statement) ? index : -1)
+            .filter((index) => index >= 0);
+        if (trueAwaitIndices.length + falseAwaitIndices.length !== 1) return false;
+        const awaitedInTrue = trueAwaitIndices.length === 1;
+        const awaitedStatements = awaitedInTrue ? trueStatements : falseStatements;
+        const synchronousStatements = awaitedInTrue ? falseStatements : trueStatements;
+        if (!synchronousStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return false;
         const condition = this.emitExpr(conditional.expression);
         const conditionValue = this.coerce(condition, T_BOOLEAN, conditional.expression);
-        const awaitedBranch = ts.factory.createBlock([branchStatements[0]!, result], true);
-        const directBranch = ts.factory.createBlock([result], true);
+        const awaitedBranch = ts.factory.createBlock([...awaitedStatements, result], true);
+        const directBranch = ts.factory.createBlock([...synchronousStatements, result], true);
         buf.open(`if (${conditionValue})`);
-        const awaitedHandled = this.emitAsyncAwaitLeadingReturnContinuation(buf, awaitedBranch, parameters, thisValue);
+        const awaitedHandled = awaitedInTrue
+            ? this.emitAsyncAwaitLeadingReturnContinuation(buf, awaitedBranch, parameters, thisValue)
+            : this.emitAsyncAwaitDirectReturnAwaitPrelude(buf, directBranch, parameters, thisValue);
         buf.close();
         if (!awaitedHandled) return false;
         buf.open("else");
-        const directHandled = this.emitAsyncAwaitDirectReturnAwaitPrelude(buf, directBranch, parameters, thisValue);
+        const directHandled = awaitedInTrue
+            ? this.emitAsyncAwaitDirectReturnAwaitPrelude(buf, directBranch, parameters, thisValue)
+            : this.emitAsyncAwaitLeadingReturnContinuation(buf, awaitedBranch, parameters, thisValue);
         buf.close();
         return directHandled;
     }
