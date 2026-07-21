@@ -283,6 +283,9 @@ await-value-escaping-var-for-in value-escaping-for-in
 await-direct-escaping-var-loop-false undefined
 await-method-escaping-var-loop-false undefined
 await-value-escaping-var-loop-false undefined
+await-direct-escaping-var-try-catch-finally direct-escaping-catch-finally
+await-method-escaping-var-try-catch-finally method-escaping-catch-finally
+await-value-escaping-var-try-catch-finally value-escaping-catch-finally
 await-direct-uninitialized-var-do-next direct-uninitialized-var-next-do
 await-direct-uninitialized-var-for-next direct-uninitialized-var-next-for
 await-direct-uninitialized-var-for-of-next direct-uninitialized-var-next-for-of
