@@ -568,6 +568,22 @@ class ForContinueFalseChooser {
         }
         throw await laterBodyValue(reason);
     }
+
+    async chooseExpressionInitializerFalseBreak(value: string): Promise<string> {
+        for (value += this.suffix; await laterCondition(false); value += "-increment") {
+            value += "-unexpected-body";
+            break;
+        }
+        return await laterBodyValue(value);
+    }
+
+    async chooseExpressionInitializerFalseBreakThrow(reason: string): Promise<string> {
+        for (reason += this.suffix; await laterCondition(false); reason += "-increment") {
+            reason += "-unexpected-body";
+            break;
+        }
+        throw await laterBodyValue(reason);
+    }
 }
 
 const chooseLoopInitializerEscapingVarContinueFalseValue = async (value: string): Promise<string> => {
@@ -621,6 +637,22 @@ const chooseLoopExpressionInitializerBreakValue = async (value: string): Promise
 const chooseLoopExpressionInitializerBreakThrowValue = async (reason: string): Promise<string> => {
     for (reason += "-value-initializer"; await laterCondition(reason.endsWith("-value-initializer")); reason += "-value-increment") {
         reason += "-value-body";
+        break;
+    }
+    throw await laterBodyValue(reason);
+};
+
+const chooseLoopExpressionInitializerFalseBreakValue = async (value: string): Promise<string> => {
+    for (value += "-value-initializer"; await laterCondition(false); value += "-value-increment") {
+        value += "-unexpected-value-body";
+        break;
+    }
+    return await laterBodyValue(value);
+};
+
+const chooseLoopExpressionInitializerFalseBreakThrowValue = async (reason: string): Promise<string> => {
+    for (reason += "-value-initializer"; await laterCondition(false); reason += "-value-increment") {
+        reason += "-unexpected-value-body";
         break;
     }
     throw await laterBodyValue(reason);
@@ -2940,6 +2972,10 @@ chooseLoopExpressionInitializerBreakAwait("loop-expression-break").then((value) 
 chooseLoopExpressionInitializerBreakThrowAwait("loop-expression-break-throw").catch((reason) => console.log("await-loop-expression-break-throw", reason));
 chooseLoopExpressionInitializerFalseBreakAwait("loop-expression-break-false").then((value) => console.log("await-loop-expression-break-false", value));
 chooseLoopExpressionInitializerFalseBreakThrowAwait("loop-expression-break-false-throw").catch((reason) => console.log("await-loop-expression-break-false-throw", reason));
+new ForContinueFalseChooser("-method-false-initializer").chooseExpressionInitializerFalseBreak("loop-expression-break-false").then((value) => console.log("await-method-loop-expression-break-false", value));
+new ForContinueFalseChooser("-method-false-throw-initializer").chooseExpressionInitializerFalseBreakThrow("loop-expression-break-false-throw").catch((reason) => console.log("await-method-loop-expression-break-false-throw", reason));
+chooseLoopExpressionInitializerFalseBreakValue("loop-expression-break-false").then((value) => console.log("await-value-loop-expression-break-false", value));
+chooseLoopExpressionInitializerFalseBreakThrowValue("loop-expression-break-false-throw").catch((reason) => console.log("await-value-loop-expression-break-false-throw", reason));
 new ForContinueFalseChooser("-method-break-initializer").chooseExpressionInitializerBreak("loop-expression-break").then((value) => console.log("await-method-loop-expression-break", value));
 new ForContinueFalseChooser("-method-break-throw-initializer").chooseExpressionInitializerBreakThrow("loop-expression-break-throw").catch((reason) => console.log("await-method-loop-expression-break-throw", reason));
 chooseLoopExpressionInitializerBreakValue("loop-expression-break").then((value) => console.log("await-value-loop-expression-break", value));

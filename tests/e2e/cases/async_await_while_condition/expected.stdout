@@ -387,6 +387,10 @@ await-loop-expression-break loop-expression-break-initializer-body
 await-loop-expression-break-throw loop-expression-break-throw-initializer-body
 await-loop-expression-break-false loop-expression-break-false-initializer
 await-loop-expression-break-false-throw loop-expression-break-false-throw-initializer
+await-method-loop-expression-break-false loop-expression-break-false-method-false-initializer
+await-method-loop-expression-break-false-throw loop-expression-break-false-throw-method-false-throw-initializer
+await-value-loop-expression-break-false loop-expression-break-false-value-initializer
+await-value-loop-expression-break-false-throw loop-expression-break-false-throw-value-initializer
 await-method-loop-expression-break loop-expression-break-method-break-initializer-body
 await-method-loop-expression-break-throw loop-expression-break-throw-method-break-throw-initializer-body
 await-value-loop-expression-break loop-expression-break-value-initializer-value-body
