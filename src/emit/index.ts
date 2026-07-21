@@ -25815,8 +25815,10 @@ class Emitter {
     }
 
     private asyncAwaitLoopBodyAwaitContinueCandidate(body: ts.Block): boolean {
-        if (body.statements.length !== 2) return false;
-        const loop = body.statements[0]!;
+        if (body.statements.length < 2) return false;
+        const loop = body.statements[body.statements.length - 2]!;
+        const prefix = body.statements.slice(0, -2);
+        if (prefix.length > 1 || (prefix.length === 1 && !ts.isVariableStatement(prefix[0]!))) return false;
         const loopStatement = ts.isWhileStatement(loop)
             ? loop.statement
             : ts.isForStatement(loop)
@@ -35318,9 +35320,13 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
-        if (body.statements.length !== 2) return false;
-        const loop = body.statements[0]!;
-        const fallthrough = body.statements[1]!;
+        if (body.statements.length < 2) return false;
+        const preLoopInitializer = body.statements.length === 3 && ts.isVariableStatement(body.statements[0]!)
+            ? body.statements[0]!
+            : null;
+        if (body.statements.length !== 2 && !preLoopInitializer) return false;
+        const loop = body.statements[preLoopInitializer ? 1 : 0]!;
+        const fallthrough = body.statements[preLoopInitializer ? 2 : 1]!;
         if (!ts.isReturnStatement(fallthrough) && !ts.isThrowStatement(fallthrough)) return false;
         const fallthroughExpression = fallthrough.expression ?? ts.factory.createVoidZero();
         const loopCondition = ts.isWhileStatement(loop)
@@ -35356,7 +35362,7 @@ class Emitter {
             ? ts.isExpression(loop.initializer)
                 ? loop.initializer
                 : ts.factory.createVariableStatement(undefined, loop.initializer)
-            : null;
+            : preLoopInitializer;
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
             : null;

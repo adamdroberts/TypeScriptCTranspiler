@@ -9,7 +9,6 @@ function laterCondition(value: boolean): Promise<boolean> {
 export {};
 
 let bodyCount = 0;
-let count = 0;
 
 function laterBody(value: string): Promise<string> {
     bodyCount++;
@@ -17,6 +16,7 @@ function laterBody(value: string): Promise<string> {
 }
 
 async function whileBodyAwaitContinue(): Promise<string> {
+    let count = 0;
     while (await laterCondition(count < 2)) {
         await laterBody("body-" + count);
         count++;
