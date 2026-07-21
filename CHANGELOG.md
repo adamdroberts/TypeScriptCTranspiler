@@ -3265,3 +3265,4 @@ These are AOT closure requirements, not permanent product limits.
 - Direct-prelude `return await` now preserves assigned-before-use uninitialized dynamic `var` state through a caught path in an await-free `try`/`catch`/`finally` prelude. Test: `async_await_while_condition`.
 - Async class methods and function values now share the caught-path uninitialized dynamic-`var` `try`/`catch`/`finally` prelude coverage. Test: `async_await_while_condition`.
 - Cover assigned-before-use uninitialized `var` state in direct branch `return await` while preludes across declarations, methods, and function values.
+- Cover assigned-before-use uninitialized `var` state in all bounded direct branch `return await` loop-prelude shapes across declarations, methods, and function values.

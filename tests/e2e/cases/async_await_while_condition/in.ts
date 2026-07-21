@@ -2614,6 +2614,38 @@ async function chooseDirectAwaitUninitializedVarLoopPrelude(flag: boolean, prefi
     return await laterBodyValue(source);
 }
 
+async function chooseDirectAwaitUninitializedVarDoPreludeNext(prefix: string): Promise<string> {
+    var source: any;
+    do {
+        source = prefix + "-do";
+    } while (false);
+    return await laterBodyValue(source);
+}
+
+async function chooseDirectAwaitUninitializedVarForPreludeNext(prefix: string): Promise<string> {
+    var source: any;
+    for (let index = 0; index < 1; index++) {
+        source = prefix + "-for";
+    }
+    return await laterBodyValue(source);
+}
+
+async function chooseDirectAwaitUninitializedVarForOfPreludeNext(prefix: string): Promise<string> {
+    var source: any;
+    for (const item of ["for-of"]) {
+        source = prefix + "-" + item;
+    }
+    return await laterBodyValue(source);
+}
+
+async function chooseDirectAwaitUninitializedVarForInPreludeNext(prefix: string): Promise<string> {
+    var source: any;
+    for (const item in { "for-in": true }) {
+        source = prefix + "-" + item;
+    }
+    return await laterBodyValue(source);
+}
+
 async function chooseLoopLogical(flag: boolean): Promise<string> {
     while (await laterTrue() && flag) {
         return "logical-yes";
@@ -3010,6 +3042,38 @@ class LoopChooser {
         return await laterBodyValue(source);
     }
 
+    async pickDirectAwaitUninitializedVarDoPreludeNext(prefix: string): Promise<string> {
+        var source: any;
+        do {
+            source = prefix + "-do";
+        } while (false);
+        return await laterBodyValue(source);
+    }
+
+    async pickDirectAwaitUninitializedVarForPreludeNext(prefix: string): Promise<string> {
+        var source: any;
+        for (let index = 0; index < 1; index++) {
+            source = prefix + "-for";
+        }
+        return await laterBodyValue(source);
+    }
+
+    async pickDirectAwaitUninitializedVarForOfPreludeNext(prefix: string): Promise<string> {
+        var source: any;
+        for (const item of ["for-of"]) {
+            source = prefix + "-" + item;
+        }
+        return await laterBodyValue(source);
+    }
+
+    async pickDirectAwaitUninitializedVarForInPreludeNext(prefix: string): Promise<string> {
+        var source: any;
+        for (const item in { "for-in": true }) {
+            source = prefix + "-" + item;
+        }
+        return await laterBodyValue(source);
+    }
+
     async pickMultiple(flag: boolean): Promise<string> {
         while (await (flag ? laterTrue() : laterFalse())) {
             const first = await laterBodyValue(this.prefix + "first"), second = await laterBodyValue(first + "-second");
@@ -3284,6 +3348,38 @@ const chooseDirectAwaitUninitializedVarLoopPreludeValue = async (flag: boolean, 
     while (flag) {
         source = prefix + "-while";
         break;
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitUninitializedVarDoPreludeNextValue = async (prefix: string): Promise<string> => {
+    var source: any;
+    do {
+        source = prefix + "-do";
+    } while (false);
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitUninitializedVarForPreludeNextValue = async (prefix: string): Promise<string> => {
+    var source: any;
+    for (let index = 0; index < 1; index++) {
+        source = prefix + "-for";
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitUninitializedVarForOfPreludeNextValue = async (prefix: string): Promise<string> => {
+    var source: any;
+    for (const item of ["for-of"]) {
+        source = prefix + "-" + item;
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitUninitializedVarForInPreludeNextValue = async (prefix: string): Promise<string> => {
+    var source: any;
+    for (const item in { "for-in": true }) {
+        source = prefix + "-" + item;
     }
     return await laterBodyValue(source);
 };
@@ -3891,6 +3987,18 @@ chooseDirectAwaitUninitializedVarTryCatchFinallyPrelude("direct-uninitialized-va
 chooseDirectAwaitUninitializedVarLoopPrelude(true, "direct-uninitialized-var-loop").then((value) => console.log("await-direct-uninitialized-var-loop", value));
 new LoopChooser("method-").pickDirectAwaitUninitializedVarLoopPrelude(true, "direct-uninitialized-var-loop").then((value) => console.log("await-method-direct-uninitialized-var-loop", value));
 chooseDirectAwaitUninitializedVarLoopPreludeValue(true, "value-uninitialized-var-loop").then((value) => console.log("await-value-direct-uninitialized-var-loop", value));
+chooseDirectAwaitUninitializedVarDoPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-do-next", value));
+chooseDirectAwaitUninitializedVarForPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-next", value));
+chooseDirectAwaitUninitializedVarForOfPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-of-next", value));
+chooseDirectAwaitUninitializedVarForInPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-in-next", value));
+new LoopChooser("method-").pickDirectAwaitUninitializedVarDoPreludeNext("method-uninitialized-var-next").then((value) => console.log("await-method-direct-uninitialized-var-do-next", value));
+new LoopChooser("method-").pickDirectAwaitUninitializedVarForPreludeNext("method-uninitialized-var-next").then((value) => console.log("await-method-direct-uninitialized-var-for-next", value));
+new LoopChooser("method-").pickDirectAwaitUninitializedVarForOfPreludeNext("method-uninitialized-var-next").then((value) => console.log("await-method-direct-uninitialized-var-for-of-next", value));
+new LoopChooser("method-").pickDirectAwaitUninitializedVarForInPreludeNext("method-uninitialized-var-next").then((value) => console.log("await-method-direct-uninitialized-var-for-in-next", value));
+chooseDirectAwaitUninitializedVarDoPreludeNextValue("value-uninitialized-var-next").then((value) => console.log("await-value-direct-uninitialized-var-do-next", value));
+chooseDirectAwaitUninitializedVarForPreludeNextValue("value-uninitialized-var-next").then((value) => console.log("await-value-direct-uninitialized-var-for-next", value));
+chooseDirectAwaitUninitializedVarForOfPreludeNextValue("value-uninitialized-var-next").then((value) => console.log("await-value-direct-uninitialized-var-for-of-next", value));
+chooseDirectAwaitUninitializedVarForInPreludeNextValue("value-uninitialized-var-next").then((value) => console.log("await-value-direct-uninitialized-var-for-in-next", value));
 new UninitializedVarTryCatchFinallyChooser().choose("method-uninitialized-var-try-catch-finally").then((value) => console.log("await-method-uninitialized-var-try-catch-finally", value));
 chooseUninitializedVarTryCatchFinallyValue("value-uninitialized-var-try-catch-finally").then((value) => console.log("await-value-uninitialized-var-try-catch-finally", value));
 new MutableUninitializedVarAwaitChooser().choose("method-mutable-uninitialized-var").then((value) => console.log("await-method-mutable-uninitialized-var-prelude", value));
