@@ -166,8 +166,8 @@ on Phase 6, cross-referenced from Phases 11/13.
   surface), reusing the existing closure-lowering output for the task fn/env.
 - [x] **Capture discipline (the safety core):** at each `dispatch.async`/`sync` boundary, validate
   captures via `collectClosureCaptures` + checker types. MVP rule: captures must be primitives,
-  `readonly`-typed data, or are automatically deep-copied via `structuredClone` (diagnostic notes
-  the copy). `await` inside a dispatched closure is a compile error (MVP). Later: `Shared<T>`
+  `readonly`-typed data, or const arrays/dynamic values are automatically deep-copied via
+  `structuredClone`. `await` inside a dispatched closure is a compile error (MVP). Later: `Shared<T>`
   locked-accessor escape hatch; queue-confinement ("actor") typing.
 - [x] Usage flag → `src/compile.ts`: append `tsc_dispatch.c`, define `TSC_THREADS`, probe and link
   `-ldispatch` (+ rpath), emit the actionable not-found diagnostic; `--dispatch=serial` fallback

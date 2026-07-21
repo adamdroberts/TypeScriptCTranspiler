@@ -676,6 +676,7 @@ class Emitter {
     private timeoutAdapters = new Map<string, string>();
     private dispatchTaskAdapters = new Map<string, string>();
     private usesDispatch = false;
+    private dispatchCaptureClone = false;
     private timersPromisesSetTimeoutAdapters = 0;
     private timersPromisesSchedulerWaitAdapters = 0;
     private timersPromisesSchedulerYieldAdapters = 0;
@@ -21853,6 +21854,11 @@ class Emitter {
         if (env) return env.ptr;
         const cell = this.captureCellForSymbol(sym);
         if (cell) return cell.cellName;
+        const decl = sym.valueDeclaration ?? sym.declarations?.[0];
+        const name = decl ? this.declarationName(decl) : null;
+        if (decl && name && this.isTopLevelValueDeclaration(decl)) {
+            return `&${this.declaredName(name)}`;
+        }
         return null;
     }
 
@@ -22362,7 +22368,7 @@ class Emitter {
                     sym &&
                     decl &&
                     !this.isNodeWithin(decl, fn) &&
-                    !this.isTopLevelValueDeclaration(decl) &&
+                    (!this.isTopLevelValueDeclaration(decl) || this.dispatchCaptureClone) &&
                     this.isCapturableValueDeclaration(decl)
                 ) {
                     const type = this.prepareType(
@@ -49506,7 +49512,16 @@ class Emitter {
             for (const cap of captures) {
                 const ptr = this.capturePtrForSymbol(cap.symbol);
                 if (!ptr) unsupported(fn, `cannot capture ${cap.symbol.getName()}`);
-                pieces.push(`${env}->${cap.field} = ${ptr}`);
+                if (this.dispatchCaptureClone && this.dispatchCaptureCloneable(cap.type)) {
+                    const storage = this.freshTemp("_dispatch_capture");
+                    const boxed = this.coerce({ c: `*${ptr}`, ty: cap.type }, T_VALUE, fn);
+                    const cloned = this.coerce({ c: `tsc_structured_clone(${boxed})`, ty: T_VALUE }, cap.type, fn);
+                    pieces.push(`${cap.type.c}* ${storage} = (${cap.type.c}*)TSC_GC_MALLOC(sizeof(${cap.type.c}))`);
+                    pieces.push(`*${storage} = ${cloned}`);
+                    pieces.push(`${env}->${cap.field} = ${storage}`);
+                } else {
+                    pieces.push(`${env}->${cap.field} = ${ptr}`);
+                }
             }
             pieces.push(`${tmp}->env = ${env}`);
         } else {
@@ -57194,9 +57209,12 @@ class Emitter {
         this.asyncFunctionStack = [];
         this.tryDepth = 0;
         let task: EmitResult;
+        const savedCaptureClone = this.dispatchCaptureClone;
+        this.dispatchCaptureClone = true;
         try {
             task = this.emitExpr(taskArgNode);
         } finally {
+            this.dispatchCaptureClone = savedCaptureClone;
             this.asyncFunctionStack = savedAsyncStack;
             this.tryDepth = savedTryDepth;
         }
@@ -57275,6 +57293,8 @@ class Emitter {
         this.tryDepth = 0;
         const taskResults: EmitResult[] = [];
         const adapters: string[] = [];
+        const savedCaptureClone = this.dispatchCaptureClone;
+        this.dispatchCaptureClone = true;
         try {
             for (const { node, taskNode } of taskNodes) {
                 const task = this.emitExpr(node);
@@ -57282,6 +57302,7 @@ class Emitter {
                 adapters.push(this.ensureDispatchTaskAdapter(node, task.ty));
             }
         } finally {
+            this.dispatchCaptureClone = savedCaptureClone;
             this.asyncFunctionStack = savedAsyncStack;
             this.tryDepth = savedTryDepth;
         }
@@ -57366,10 +57387,10 @@ class Emitter {
                             this.checker.getTypeOfSymbolAtLocation(sym, decl),
                             this.checker,
                         ));
-                        if (!allowedCaptureKinds.has(type.kind)) {
+                        if (!allowedCaptureKinds.has(type.kind) && !this.dispatchCaptureCloneable(type)) {
                             unsupported(
                                 node,
-                                "dispatch task captures must be primitives (number/string/boolean) or DispatchQueue in this subset",
+                                "dispatch task captures must be primitives/DispatchQueue or const structured-cloneable values (array/any)",
                             );
                         }
                     }
@@ -57378,6 +57399,10 @@ class Emitter {
             ts.forEachChild(node, visit);
         };
         if (fn.body) visit(fn.body);
+    }
+
+    private dispatchCaptureCloneable(type: CType): boolean {
+        return type.kind === "array" || type.kind === "value";
     }
 
     private ensureDispatchTaskAdapter(expr: ts.Expression, type: CType): string {
