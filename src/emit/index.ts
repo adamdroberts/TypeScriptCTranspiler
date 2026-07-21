@@ -306,8 +306,10 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[];
     bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[];
     bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null;
+    bodyContinueElseReturnAwaitPreludeExprs: readonly ts.AwaitExpression[];
     bodyContinueElseReturnSynchronousExpr: ts.Expression | null;
     bodyContinueElseReturnPreludeStatements: readonly ts.Statement[];
+    bodyContinueElseReturnPostAwaitStatements: readonly ts.Statement[];
     bodyContinueElseReturnRejectResult: boolean;
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
@@ -34756,8 +34758,10 @@ class Emitter {
                 bodyContinueElseBreakAwaitExprs: [],
                 bodyContinueElseBreakPostAwaitStatements: [],
                 bodyContinueElseReturnAwaitExpr: null,
+                bodyContinueElseReturnAwaitPreludeExprs: [],
                 bodyContinueElseReturnSynchronousExpr: null,
                 bodyContinueElseReturnPreludeStatements: [],
+                bodyContinueElseReturnPostAwaitStatements: [],
                 bodyContinueElseReturnRejectResult: false,
                 bodyRejectResult: false,
                 fallthroughExpr: sequenceConditionAwaitExpr,
@@ -34832,8 +34836,10 @@ class Emitter {
             bodyContinueElseBreakAwaitExprs: [],
             bodyContinueElseBreakPostAwaitStatements: [],
             bodyContinueElseReturnAwaitExpr: null,
+            bodyContinueElseReturnAwaitPreludeExprs: [],
             bodyContinueElseReturnSynchronousExpr: null,
             bodyContinueElseReturnPreludeStatements: [],
+            bodyContinueElseReturnPostAwaitStatements: [],
             bodyContinueElseReturnRejectResult: false,
             bodyRejectResult: false,
             fallthroughExpr,
@@ -35102,10 +35108,39 @@ class Emitter {
             elseContinueStatement!.expression && !bodyContinueElseReturnAwaitExpr
             ? elseContinueStatement!.expression
             : null;
+        let bodyContinueElseReturnAwaitPreludeExprs: readonly ts.AwaitExpression[] = [];
         let bodyContinueElseReturnPreludeStatements: readonly ts.Statement[] = [];
+        let bodyContinueElseReturnPostAwaitStatements: readonly ts.Statement[] = [];
         if (bodyContinueCondition && (elseContinueIsReturn || elseContinueIsThrow)) {
-            bodyContinueElseReturnPreludeStatements = bodyContinueElseStatements.slice(0, -1);
-            if (!bodyContinueElseReturnPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+            const returnPreludeStatements = bodyContinueElseStatements.slice(0, -1);
+            const returnPreludePrefix: ts.Statement[] = [];
+            const returnPreludeSuffix: ts.Statement[] = [];
+            const returnAwaitExpressions: ts.AwaitExpression[] = [];
+            let sawAwait = false;
+            let sawSuffix = false;
+            for (const statement of returnPreludeStatements) {
+                const expression = ts.isExpressionStatement(statement)
+                    ? this.unwrapTransparentExpression(statement.expression)
+                    : null;
+                if (expression && ts.isAwaitExpression(expression)) {
+                    if (sawSuffix) return false;
+                    sawAwait = true;
+                    returnAwaitExpressions.push(expression);
+                } else {
+                    if (!this.asyncAwaitLoopPostStatementSupported(statement)) return false;
+                    if (sawAwait) {
+                        sawSuffix = true;
+                        returnPreludeSuffix.push(statement);
+                    } else {
+                        returnPreludePrefix.push(statement);
+                    }
+                }
+            }
+            bodyContinueElseReturnAwaitPreludeExprs = returnAwaitExpressions;
+            bodyContinueElseReturnPreludeStatements = returnAwaitExpressions.length > 0
+                ? returnPreludePrefix
+                : returnPreludeStatements;
+            bodyContinueElseReturnPostAwaitStatements = returnPreludeSuffix;
         }
         let bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyContinueElsePreludeStatements: readonly ts.Statement[] = [];
@@ -35500,6 +35535,16 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
+        const bodyContinueElseReturnPreludePromiseTypes = bodyContinueElseReturnAwaitPreludeExprs.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        )));
+        const bodyContinueElseReturnPreludeAwaitedTypes = bodyContinueElseReturnAwaitPreludeExprs.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
+            this.checker,
+        )));
         const bodyContinueConditionPromiseType = bodyContinueConditionAwaitExpr
             ? this.prepareType(mapTsType(
                 bodyContinueConditionAwaitExpr.expression,
@@ -35552,6 +35597,8 @@ class Emitter {
             bodyContinueElseAwaitedTypes.some((type) => type.kind === "never") ||
             bodyContinueElseBreakPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyContinueElseBreakAwaitedTypes.some((type) => type.kind === "never") ||
+            bodyContinueElseReturnPreludePromiseTypes.some((type) => type.kind !== "promise") ||
+            bodyContinueElseReturnPreludeAwaitedTypes.some((type) => type.kind === "never") ||
             (bodyContinueConditionAwaitExpr && (!bodyContinueConditionPromiseType || bodyContinueConditionPromiseType.kind !== "promise" || !bodyContinueConditionAwaitedType || bodyContinueConditionAwaitedType.kind !== "boolean")) ||
             (fallthroughAwaitExpr && (!fallthroughPromiseType || fallthroughPromiseType.kind !== "promise")) ||
             (fallthroughAwaitedType && fallthroughAwaitedType.kind === "never")
@@ -35571,7 +35618,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === bodyContinueElseReturnSynchronousExpr || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseReturnAwaitPreludeExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === bodyContinueElseReturnSynchronousExpr || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -35608,6 +35655,8 @@ class Emitter {
         for (const statement of bodyContinueElseBreakPreludeStatements) visitReferences(statement);
         for (const statement of bodyContinueElseBreakPostAwaitStatements) visitReferences(statement);
         for (const statement of bodyContinueElseReturnPreludeStatements) visitReferences(statement);
+        for (const awaitExpr of bodyContinueElseReturnAwaitPreludeExprs) visitReferences(awaitExpr);
+        for (const statement of bodyContinueElseReturnPostAwaitStatements) visitReferences(statement);
         if (bodyContinueElseReturnAwaitExpr) visitReferences(bodyContinueElseReturnAwaitExpr);
         if (bodyContinueElseReturnSynchronousExpr) visitReferences(bodyContinueElseReturnSynchronousExpr);
         if (bodyAwaitExpr && bodyAwaitExprs.length === 0) visitReferences(bodyAwaitExpr);
@@ -35645,8 +35694,10 @@ class Emitter {
             bodyContinueElseBreakAwaitExprs,
             bodyContinueElseBreakPostAwaitStatements,
             bodyContinueElseReturnAwaitExpr,
+            bodyContinueElseReturnAwaitPreludeExprs,
             bodyContinueElseReturnSynchronousExpr,
             bodyContinueElseReturnPreludeStatements,
+            bodyContinueElseReturnPostAwaitStatements,
             bodyContinueElseReturnRejectResult: elseContinueIsThrow,
             bodyRejectResult,
             fallthroughExpr,
@@ -35691,8 +35742,10 @@ class Emitter {
                     bodyContinueElseBreakAwaitExprs: [],
                     bodyContinueElseBreakPostAwaitStatements: [],
                     bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnAwaitPreludeExprs: [],
                     bodyContinueElseReturnSynchronousExpr: null,
                     bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnPostAwaitStatements: [],
                     bodyContinueElseReturnRejectResult: false,
                 },
                 bodyContinueElseAwaitExprs,
@@ -35757,6 +35810,51 @@ class Emitter {
                 bodyContinueElseReturnAwaitExpr,
                 continuation.params,
                 continuation.thisValue,
+                continuation.bodyContinueElseReturnRejectResult,
+            );
+        }
+        if (bodyContinueElseReturnAwaitPreludeExprs.length > 0) {
+            const terminalPromiseType = bodyContinueElseReturnAwaitExpr
+                ? this.prepareType(mapTsType(
+                    bodyContinueElseReturnAwaitExpr.expression,
+                    this.checker.getTypeAtLocation(bodyContinueElseReturnAwaitExpr.expression),
+                    this.checker,
+                ))
+                : null;
+            const sequenceConditionAwaitExpr = bodyContinueElseReturnAwaitExpr ??
+                bodyContinueElseReturnAwaitPreludeExprs[bodyContinueElseReturnAwaitPreludeExprs.length - 1]!;
+            const sequenceConditionPromiseType = terminalPromiseType ?? bodyContinueElseReturnPreludePromiseTypes[bodyContinueElseReturnPreludePromiseTypes.length - 1]!;
+            const sequenceTargetAdapter = bodyReturnAdapter ?? `tsc_async_await_loop_return_sequence_${this.asyncAwaitReturnContinuationAdapters++}`;
+            bodyReturnAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                sequenceTargetAdapter,
+                sequenceConditionPromiseType,
+                {
+                    ...continuation,
+                    conditionExpr: sequenceConditionAwaitExpr,
+                    conditionAwaitExpr: sequenceConditionAwaitExpr,
+                    bodyAwaitExpr: bodyContinueElseReturnAwaitPreludeExprs[0]!,
+                    bodyAwaitExprs: bodyContinueElseReturnAwaitPreludeExprs,
+                    bodyPostAwaitStatements: bodyContinueElseReturnPostAwaitStatements,
+                    bodyContinue: false,
+                    bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                    bodyContinueElseBreak: false,
+                    bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
+                    bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnAwaitPreludeExprs: [],
+                    bodyContinueElseReturnSynchronousExpr: null,
+                    bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnPostAwaitStatements: [],
+                    bodyContinueElseReturnRejectResult: false,
+                },
+                bodyContinueElseReturnAwaitPreludeExprs,
+                bodyContinueElseReturnSynchronousExpr,
                 continuation.bodyContinueElseReturnRejectResult,
             );
         }
@@ -36359,6 +36457,8 @@ class Emitter {
                 this.checker,
             ))
             : null;
+        const returnEntryAwaitExpr = continuation.bodyContinueElseReturnAwaitPreludeExprs[0] ??
+            continuation.bodyContinueElseReturnAwaitExpr;
         const buf = new CBuf();
         buf.open(`void ${name}(void* env)`);
         buf.line(`${envType}* state = (${envType}*)env;`);
@@ -36386,18 +36486,18 @@ class Emitter {
             emitBody(buf, bodyAdapter, bodyAwaitExpr, bodyPromiseType, continuation.bodyPreludeStatements);
             buf.close();
             buf.open("else");
-            if (bodyReturnAdapter && continuation.bodyContinueElseReturnAwaitExpr) {
+            if (bodyReturnAdapter && returnEntryAwaitExpr) {
                 for (const statement of continuation.bodyContinueElseReturnPreludeStatements) this.emitStmt(buf, statement);
-                const source = this.emitExpr(continuation.bodyContinueElseReturnAwaitExpr.expression);
+                const source = this.emitExpr(returnEntryAwaitExpr.expression);
                 const sourceVar = this.freshTemp("_await_conditional_return_source");
                 const envVar = this.freshTemp("_await_conditional_return_env");
                 const adapterEnvType = `${bodyReturnAdapter}_env_t`;
                 const promiseType = this.prepareType(mapTsType(
-                    continuation.bodyContinueElseReturnAwaitExpr.expression,
-                    this.checker.getTypeAtLocation(continuation.bodyContinueElseReturnAwaitExpr.expression),
+                    returnEntryAwaitExpr.expression,
+                    this.checker.getTypeAtLocation(returnEntryAwaitExpr.expression),
                     this.checker,
                 ));
-                buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, continuation.bodyContinueElseReturnAwaitExpr.expression)};`);
+                buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, returnEntryAwaitExpr.expression)};`);
                 buf.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
                 buf.line(`${envVar}->receiver = ${sourceVar};`);
                 buf.line(`${envVar}->result_promise = _ret;`);

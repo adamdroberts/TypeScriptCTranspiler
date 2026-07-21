@@ -23,6 +23,9 @@ async function loopBodyAwaitIfSyncThrow(): Promise<string> {
             count++;
             continue;
         } else {
+            await later("prep-a-" + count);
+            await later("prep-b-" + count);
+            bodyCount += 0;
             throw "boom-" + bodyCount;
         }
     }
