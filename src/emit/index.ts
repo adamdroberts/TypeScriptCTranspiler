@@ -34503,16 +34503,20 @@ class Emitter {
         if (thenStatements.length !== 1 || elseStatements.length !== 1) return false;
         const thenStatement = thenStatements[0]!;
         const elseStatement = elseStatements[0]!;
-        const terminalAwait = (statement: ts.Statement): ts.AwaitExpression | null => {
+        const terminalExpression = (statement: ts.Statement): ts.Expression | null => {
             if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
                 const expression = statement.expression ? this.unwrapTransparentExpression(statement.expression) : null;
-                return expression && ts.isAwaitExpression(expression) ? expression : null;
+                return expression;
             }
             return null;
         };
-        const thenAwaitExpr = terminalAwait(thenStatement);
-        const elseAwaitExpr = terminalAwait(elseStatement);
-        if (!thenAwaitExpr || !elseAwaitExpr) return false;
+        const thenTerminalExpr = terminalExpression(thenStatement);
+        const elseTerminalExpr = terminalExpression(elseStatement);
+        if (!thenTerminalExpr || !elseTerminalExpr) return false;
+        const thenAwaitExpr = ts.isAwaitExpression(thenTerminalExpr) ? thenTerminalExpr : null;
+        const elseAwaitExpr = ts.isAwaitExpression(elseTerminalExpr) ? elseTerminalExpr : null;
+        const thenSynchronousExpr = thenAwaitExpr ? null : thenTerminalExpr;
+        const elseSynchronousExpr = elseAwaitExpr ? null : elseTerminalExpr;
         const conditionAwaitExpr = this.unwrapTransparentExpression(bodyStatement.expression);
         if (!ts.isAwaitExpression(conditionAwaitExpr)) return false;
         const outerAwaitExpr = awaitExpressions[0]!;
@@ -34536,26 +34540,34 @@ class Emitter {
             this.checker.getTypeAtLocation(conditionAwaitExpr),
             this.checker,
         ));
-        const thenPromiseType = this.prepareType(mapTsType(
-            thenAwaitExpr.expression,
-            this.checker.getTypeAtLocation(thenAwaitExpr.expression),
-            this.checker,
-        ));
-        const thenAwaitedType = this.prepareType(mapTsType(
-            thenAwaitExpr,
-            this.checker.getTypeAtLocation(thenAwaitExpr),
-            this.checker,
-        ));
-        const elsePromiseType = this.prepareType(mapTsType(
-            elseAwaitExpr.expression,
-            this.checker.getTypeAtLocation(elseAwaitExpr.expression),
-            this.checker,
-        ));
-        const elseAwaitedType = this.prepareType(mapTsType(
-            elseAwaitExpr,
-            this.checker.getTypeAtLocation(elseAwaitExpr),
-            this.checker,
-        ));
+        const thenPromiseType = thenAwaitExpr
+            ? this.prepareType(mapTsType(
+                thenAwaitExpr.expression,
+                this.checker.getTypeAtLocation(thenAwaitExpr.expression),
+                this.checker,
+            ))
+            : null;
+        const thenAwaitedType = thenAwaitExpr
+            ? this.prepareType(mapTsType(
+                thenAwaitExpr,
+                this.checker.getTypeAtLocation(thenAwaitExpr),
+                this.checker,
+            ))
+            : null;
+        const elsePromiseType = elseAwaitExpr
+            ? this.prepareType(mapTsType(
+                elseAwaitExpr.expression,
+                this.checker.getTypeAtLocation(elseAwaitExpr.expression),
+                this.checker,
+            ))
+            : null;
+        const elseAwaitedType = elseAwaitExpr
+            ? this.prepareType(mapTsType(
+                elseAwaitExpr,
+                this.checker.getTypeAtLocation(elseAwaitExpr),
+                this.checker,
+            ))
+            : null;
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const fallthroughPromiseType = this.prepareType(mapTsType(
@@ -34570,8 +34582,8 @@ class Emitter {
         ));
         if (conditionPromiseType.kind !== "promise" || conditionAwaitedType.kind !== "boolean" ||
             nestedConditionPromiseType.kind !== "promise" || nestedConditionAwaitedType.kind !== "boolean" ||
-            thenPromiseType.kind !== "promise" || thenAwaitedType.kind === "never" ||
-            elsePromiseType.kind !== "promise" || elseAwaitedType.kind === "never" ||
+            (thenPromiseType && (thenPromiseType.kind !== "promise" || thenAwaitedType!.kind === "never")) ||
+            (elsePromiseType && (elsePromiseType.kind !== "promise" || elseAwaitedType!.kind === "never")) ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
 
         const continuationParams = [
@@ -34608,30 +34620,36 @@ class Emitter {
         };
         visit(condition);
         visit(bodyStatement.expression);
-        visit(thenAwaitExpr);
-        visit(elseAwaitExpr);
+        if (thenAwaitExpr) visit(thenAwaitExpr);
+        else if (thenSynchronousExpr) visit(thenSynchronousExpr);
+        if (elseAwaitExpr) visit(elseAwaitExpr);
+        else if (elseSynchronousExpr) visit(elseSynchronousExpr);
         visit(fallthroughExpr);
         if (!ok) return false;
         const capturedParams = [...referenced.values()];
         const continuationThisValue = usesThis ? thisValue : null;
-        const thenAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
-            thenPromiseType,
-            thenAwaitedType,
-            thenAwaitExpr,
-            thenAwaitExpr,
-            capturedParams,
-            continuationThisValue,
-            ts.isThrowStatement(thenStatement),
-        );
-        const elseAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
-            elsePromiseType,
-            elseAwaitedType,
-            elseAwaitExpr,
-            elseAwaitExpr,
-            capturedParams,
-            continuationThisValue,
-            ts.isThrowStatement(elseStatement),
-        );
+        const thenAdapter = thenAwaitExpr && thenPromiseType && thenAwaitedType
+            ? this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                thenPromiseType,
+                thenAwaitedType,
+                thenAwaitExpr,
+                thenAwaitExpr,
+                capturedParams,
+                continuationThisValue,
+                ts.isThrowStatement(thenStatement),
+            )
+            : null;
+        const elseAdapter = elseAwaitExpr && elsePromiseType && elseAwaitedType
+            ? this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                elsePromiseType,
+                elseAwaitedType,
+                elseAwaitExpr,
+                elseAwaitExpr,
+                capturedParams,
+                continuationThisValue,
+                ts.isThrowStatement(elseStatement),
+            )
+            : null;
         const nestedAdapter = this.ensureAsyncAwaitLoopBodyConditionalTerminalAdapter(
             nestedConditionPromiseType,
             nestedConditionAwaitedType,
@@ -34639,9 +34657,13 @@ class Emitter {
             thenPromiseType,
             thenAdapter,
             thenAwaitExpr,
+            thenSynchronousExpr,
             elsePromiseType,
             elseAdapter,
             elseAwaitExpr,
+            elseSynchronousExpr,
+            ts.isThrowStatement(thenStatement),
+            ts.isThrowStatement(elseStatement),
             capturedParams,
             continuationThisValue,
         );
@@ -34726,12 +34748,16 @@ class Emitter {
         conditionPromiseType: CType,
         conditionAwaitedType: CType,
         conditionAwaitExpr: ts.AwaitExpression,
-        thenPromiseType: CType,
-        thenAdapter: string,
-        thenAwaitExpr: ts.AwaitExpression,
-        elsePromiseType: CType,
-        elseAdapter: string,
-        elseAwaitExpr: ts.AwaitExpression,
+        thenPromiseType: CType | null,
+        thenAdapter: string | null,
+        thenAwaitExpr: ts.AwaitExpression | null,
+        thenSynchronousExpr: ts.Expression | null,
+        elsePromiseType: CType | null,
+        elseAdapter: string | null,
+        elseAwaitExpr: ts.AwaitExpression | null,
+        elseSynchronousExpr: ts.Expression | null,
+        thenRejectResult: boolean,
+        elseRejectResult: boolean,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
     ): string {
@@ -34751,7 +34777,31 @@ class Emitter {
         for (const param of params) scope.set(param.symbol, `state->${param.field}`);
         const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
         awaitScope.set(conditionAwaitExpr, { c: valueVar, ty: conditionAwaitedType });
-        const emitBranch = (out: CBuf, adapter: string, awaitExpr: ts.AwaitExpression, promiseType: CType): void => {
+        const emitBranch = (
+            out: CBuf,
+            adapter: string | null,
+            awaitExpr: ts.AwaitExpression | null,
+            synchronousExpr: ts.Expression | null,
+            promiseType: CType | null,
+            rejectResult: boolean,
+        ): void => {
+            if (!awaitExpr || !adapter || !promiseType) {
+                if (!synchronousExpr) throw new Error("missing terminal branch expression");
+                const returned = this.emitExpr(synchronousExpr);
+                if (rejectResult) {
+                    const rejected = this.coerceToString(returned, synchronousExpr);
+                    out.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
+                } else {
+                    const returnedType = this.prepareType(returned.ty);
+                    if (returnedType.kind === "void" || returnedType.kind === "never") {
+                        out.line(`tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));`);
+                    } else {
+                        const resolved = this.promiseResolveResult(returned, synchronousExpr);
+                        out.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
+                    }
+                }
+                return;
+            }
             const source = this.emitExpr(awaitExpr.expression);
             const sourceVar = this.freshTemp("_await_terminal_branch_source");
             const envVar = this.freshTemp("_await_terminal_branch_env");
@@ -34792,10 +34842,10 @@ class Emitter {
         try {
             const truth = this.truthyC({ c: valueVar, ty: conditionAwaitedType }, conditionAwaitExpr);
             buf.open(`if (${truth})`);
-            emitBranch(buf, thenAdapter, thenAwaitExpr, thenPromiseType);
+            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPromiseType, thenRejectResult);
             buf.close();
             buf.open("else");
-            emitBranch(buf, elseAdapter, elseAwaitExpr, elsePromiseType);
+            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePromiseType, elseRejectResult);
             buf.close();
             buf.line("tsc_try_pop();");
             buf.line("return;");
