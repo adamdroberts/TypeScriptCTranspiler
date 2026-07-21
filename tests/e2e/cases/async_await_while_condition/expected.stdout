@@ -435,6 +435,7 @@ await-loop-three-await-conditional-declaration loop-three-await-conditional-decl
 await-loop-three-await-conditional-break loop-three-await-conditional-break-conditional-break
 await-loop-three-await-mixed-and-or-break-declaration loop-three-await-mixed-and-or-break-declaration-mixed-break-declaration
 await-loop-three-await-right-and-or-break-declaration loop-three-await-right-and-or-break-declaration-right-and-or-break-declaration
+await-loop-three-await-right-nullish-or-break-declaration loop-three-await-right-nullish-or-break-declaration-right-nullish-or-break-declaration
 await-method-loop-initializer-escaping-var-continue loop-escaping-var-continue-body-method-increment
 await-method-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-body-method-throw-increment
 await-method-loop-expression-continue loop-expression-continue-method-initializer-body-increment
@@ -477,6 +478,8 @@ await-loop-three-await-break loop-three-await-break-three-break
 await-loop-three-await-mixed-or-and loop-three-await-mixed-or-and-three-mixed-or-and-three-mixed-or-and-incrementor
 await-loop-three-await-mixed-or-nullish loop-three-await-mixed-or-nullish-three-or-nullish-three-or-nullish-incrementor
 await-loop-three-await-right-and-or loop-three-await-right-and-or-three-right-and-or-three-right-and-or-incrementor
+await-loop-three-await-right-and-nullish-break-declaration loop-three-await-right-and-nullish-break-declaration-right-and-nullish-break-declaration
+await-loop-three-await-right-nullish-and-break-declaration loop-three-await-right-nullish-and-break-declaration-right-nullish-and-break-declaration
 await-loop-two-await-method-continue loop-two-await-method-continue-method-body
 await-loop-two-await-value-continue loop-two-await-value-continue-value-body
 await-loop-two-await-control-continue loop-two-await-control-continue-if

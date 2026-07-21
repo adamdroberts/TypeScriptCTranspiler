@@ -854,6 +854,15 @@ async function chooseLoopThreeAwaitRightNullishOrContinueAwait(value: string, re
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitRightNullishOrBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; await laterNull() ?? (await laterCondition(repeat) || await laterCondition(repeat)); value += "-unexpected-incrementor") {
+        suffix = "-right-nullish-or-break-declaration";
+        value += suffix;
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitRightAndNullishContinueAwait(value: string, repeat: boolean): Promise<string> {
     for (var suffix: any; await laterCondition(repeat) && (await laterNull() ?? await laterCondition(repeat)); value += "-three-right-and-nullish-incrementor") {
         suffix = "-three-right-and-nullish";
@@ -864,12 +873,30 @@ async function chooseLoopThreeAwaitRightAndNullishContinueAwait(value: string, r
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitRightAndNullishBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; await laterCondition(repeat) && (await laterNull() ?? await laterCondition(repeat)); value += "-unexpected-incrementor") {
+        suffix = "-right-and-nullish-break-declaration";
+        value += suffix;
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitRightNullishAndContinueAwait(value: string, repeat: boolean): Promise<string> {
     for (var suffix: any; await laterNull() ?? (await laterCondition(repeat) && await laterCondition(repeat)); value += "-three-right-nullish-and-incrementor") {
         suffix = "-three-right-nullish-and";
         value += suffix;
         repeat = false;
         continue;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopThreeAwaitRightNullishAndBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
+    for (var suffix: any; await laterNull() ?? (await laterCondition(repeat) && await laterCondition(repeat)); value += "-unexpected-incrementor") {
+        suffix = "-right-nullish-and-break-declaration";
+        value += suffix;
+        break;
     }
     return await laterBodyValue(value);
 }
@@ -3714,8 +3741,11 @@ chooseLoopThreeAwaitRightAndOrBreakDeclarationAwait("loop-three-await-right-and-
 chooseLoopThreeAwaitRightOrNullishContinueAwait("loop-three-await-right-or-nullish", true).then((value) => console.log("await-loop-three-await-right-or-nullish", value));
 chooseLoopThreeAwaitRightOrNullishBreakDeclarationAwait("loop-three-await-right-or-nullish-break-declaration", true).then((value) => console.log("await-loop-three-await-right-or-nullish-break-declaration", value));
 chooseLoopThreeAwaitRightNullishOrContinueAwait("loop-three-await-right-nullish-or", true).then((value) => console.log("await-loop-three-await-right-nullish-or", value));
+chooseLoopThreeAwaitRightNullishOrBreakDeclarationAwait("loop-three-await-right-nullish-or-break-declaration", true).then((value) => console.log("await-loop-three-await-right-nullish-or-break-declaration", value));
 chooseLoopThreeAwaitRightAndNullishContinueAwait("loop-three-await-right-and-nullish", true).then((value) => console.log("await-loop-three-await-right-and-nullish", value));
+chooseLoopThreeAwaitRightAndNullishBreakDeclarationAwait("loop-three-await-right-and-nullish-break-declaration", true).then((value) => console.log("await-loop-three-await-right-and-nullish-break-declaration", value));
 chooseLoopThreeAwaitRightNullishAndContinueAwait("loop-three-await-right-nullish-and", true).then((value) => console.log("await-loop-three-await-right-nullish-and", value));
+chooseLoopThreeAwaitRightNullishAndBreakDeclarationAwait("loop-three-await-right-nullish-and-break-declaration", true).then((value) => console.log("await-loop-three-await-right-nullish-and-break-declaration", value));
 chooseLoopConditionalThreeAwaitContinueAwait("loop-three-await-conditional", true).then((value) => console.log("await-loop-three-await-conditional", value));
 chooseLoopConditionalThreeAwaitContinueThrowAwait("loop-three-await-conditional-throw", true).catch((reason) => console.log("await-loop-three-await-conditional-throw", reason));
 new ConditionalThreeAwaitChooser("-method-three-conditional").choose("loop-three-await-method-conditional", true).then((value) => console.log("await-loop-three-await-method-conditional", value));
