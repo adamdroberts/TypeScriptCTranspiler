@@ -34854,6 +34854,7 @@ class Emitter {
             null,
             null,
             null,
+            null,
             nestedAdapter,
             nestedConditionPromiseType,
             nestedConditionAwaitedType,
@@ -35922,6 +35923,7 @@ class Emitter {
             bodyPromiseType,
             bodyAdapter,
             bodyAlternateAdapter,
+            bodyBreakAdapter,
             bodyConditionAdapter,
             bodyContinueConditionPromiseType,
             bodyContinueConditionAwaitedType,
@@ -36123,6 +36125,7 @@ class Emitter {
         bodyPromiseType: CType | null,
         bodyAdapter: string | null,
         bodyAlternateAdapter: string | null,
+        bodyBreakAdapter: string | null,
         bodyConditionAdapter: string | null,
         bodyContinueConditionPromiseType: CType | null,
         bodyContinueConditionAwaitedType: CType | null,
@@ -36251,7 +36254,30 @@ class Emitter {
                 if (continuation.bodyContinueCondition) {
                     buf.close();
                     buf.open("else");
-                    if (continuation.bodyContinueElseBreak && fallthroughAdapter && fallthroughPromiseType && continuation.fallthroughAwaitExpr) {
+                    if (bodyBreakAdapter && continuation.bodyContinueElseBreakAwaitExprs.length > 0) {
+                        for (const statement of continuation.bodyContinueElseBreakPreludeStatements) this.emitStmt(buf, statement);
+                        const breakSource = this.emitExpr(continuation.bodyContinueElseBreakAwaitExprs[0]!.expression);
+                        const breakSourceVar = this.freshTemp("_await_break_body_source");
+                        const breakEnvVar = this.freshTemp("_await_break_body_env");
+                        const breakEnvType = `${bodyBreakAdapter}_env_t`;
+                        const breakPromiseType = this.prepareType(mapTsType(
+                            continuation.bodyContinueElseBreakAwaitExprs[0]!.expression,
+                            this.checker.getTypeAtLocation(continuation.bodyContinueElseBreakAwaitExprs[0]!.expression),
+                            this.checker,
+                        ));
+                        buf.line(`tsc_promise_t* const ${breakSourceVar} = ${this.coerce(breakSource, breakPromiseType, continuation.bodyContinueElseBreakAwaitExprs[0]!.expression)};`);
+                        buf.line(`${breakEnvType}* const ${breakEnvVar} = (${breakEnvType}*)TSC_GC_MALLOC(sizeof(${breakEnvType}));`);
+                        buf.line(`${breakEnvVar}->receiver = ${breakSourceVar};`);
+                        buf.line(`${breakEnvVar}->result_promise = _ret;`);
+                        for (const param of continuation.params) buf.line(`${breakEnvVar}->${param.field} = state->${param.field};`);
+                        if (continuation.thisValue) buf.line(`${breakEnvVar}->this_arg = state->this_arg;`);
+                        buf.open(`if (tsc_promise_is_pending(${breakSourceVar}))`);
+                        buf.line(`tsc_promise_add_callback(${breakSourceVar}, ${bodyBreakAdapter}, ${breakEnvVar});`);
+                        buf.close();
+                        buf.open("else");
+                        buf.line(`${bodyBreakAdapter}(${breakEnvVar});`);
+                        buf.close();
+                    } else if (continuation.bodyContinueElseBreak && fallthroughAdapter && fallthroughPromiseType && continuation.fallthroughAwaitExpr) {
                         for (const statement of continuation.bodyContinueElseBreakPreludeStatements) this.emitStmt(buf, statement);
                         const breakSource = this.emitExpr(continuation.fallthroughAwaitExpr.expression);
                         const breakSourceVar = this.freshTemp("_await_break_source");

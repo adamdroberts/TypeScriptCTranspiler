@@ -25,6 +25,9 @@ async function loopBodyIfBreakContinue(): Promise<string> {
             count++;
             continue;
         } else {
+            bodyCount += 0;
+            await laterBody("break-" + count);
+            bodyCount += 0;
             break;
         }
     }
