@@ -471,7 +471,7 @@ await-loop-two-await-or-continue loop-two-await-or-continue-body
 await-loop-two-await-or-continue-throw loop-two-await-or-continue-throw-body
 await-loop-three-await-break loop-three-await-break-three-break
 await-loop-three-await-mixed-or-and loop-three-await-mixed-or-and-three-mixed-or-and-three-mixed-or-and-incrementor
-await-loop-three-await-mixed-or-nullish loop-three-await-mixed-or-nullish-three-or-nullish
+await-loop-three-await-mixed-or-nullish loop-three-await-mixed-or-nullish-three-or-nullish-three-or-nullish-incrementor
 await-loop-three-await-right-and-or loop-three-await-right-and-or-three-right-and-or-three-right-and-or-incrementor
 await-loop-two-await-method-continue loop-two-await-method-continue-method-body
 await-loop-two-await-value-continue loop-two-await-value-continue-value-body
@@ -519,6 +519,6 @@ await-loop-three-await-value-continue loop-three-await-value-continue-value-thre
 await-while-six-logical-true six-logical-yes
 await-while-six-logical-false six-logical-no
 await-loop-three-await-mixed-nullish-or loop-three-await-mixed-nullish-or-three-nullish-or-three-nullish-or-incrementor
-await-loop-three-await-right-nullish-or loop-three-await-right-nullish-or-three-right-nullish-or
+await-loop-three-await-right-nullish-or loop-three-await-right-nullish-or-three-right-nullish-or-three-right-nullish-or-incrementor
 await-loop-three-await-right-nullish-and loop-three-await-right-nullish-and-three-right-nullish-and-three-right-nullish-and-incrementor
 await-loop-three-await-nullish-continue loop-three-await-nullish-continue-three-nullish

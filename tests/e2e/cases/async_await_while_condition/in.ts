@@ -779,8 +779,9 @@ async function chooseLoopThreeAwaitMixedNullishOrContinueAwait(value: string, re
 }
 
 async function chooseLoopThreeAwaitMixedOrNullishContinueAwait(value: string, repeat: boolean): Promise<string> {
-    while ((await laterCondition(repeat) || await laterCondition(repeat)) ?? await laterCondition(repeat)) {
-        value += "-three-or-nullish";
+    for (var suffix: any; (await laterCondition(repeat) || await laterCondition(repeat)) ?? await laterCondition(repeat); value += "-three-or-nullish-incrementor") {
+        suffix = "-three-or-nullish";
+        value += suffix;
         repeat = false;
         continue;
     }
@@ -808,8 +809,9 @@ async function chooseLoopThreeAwaitRightOrNullishContinueAwait(value: string, re
 }
 
 async function chooseLoopThreeAwaitRightNullishOrContinueAwait(value: string, repeat: boolean): Promise<string> {
-    while (await laterNull() ?? (await laterCondition(repeat) || await laterCondition(repeat))) {
-        value += "-three-right-nullish-or";
+    for (var suffix: any; await laterNull() ?? (await laterCondition(repeat) || await laterCondition(repeat)); value += "-three-right-nullish-or-incrementor") {
+        suffix = "-three-right-nullish-or";
+        value += suffix;
         repeat = false;
         continue;
     }
