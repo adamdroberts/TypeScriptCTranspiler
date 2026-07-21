@@ -686,6 +686,15 @@ async function chooseLoopThreeAwaitRightNullishAndContinueAwait(value: string, r
     return await laterBodyValue(value);
 }
 
+async function chooseLoopConditionalThreeAwaitContinueAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false)) {
+        value += "-three-conditional";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 class TwoAwaitContinueChooser {
     private readonly suffix: string;
 
@@ -737,6 +746,23 @@ class ThreeAwaitContinueChooser {
     }
 }
 
+class ConditionalThreeAwaitChooser {
+    private readonly suffix: string;
+
+    constructor(suffix: string) {
+        this.suffix = suffix;
+    }
+
+    async choose(value: string, repeat: boolean): Promise<string> {
+        while (await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false)) {
+            value += this.suffix;
+            repeat = false;
+            continue;
+        }
+        return await laterBodyValue(value);
+    }
+}
+
 const chooseTwoAwaitContinueValue = async (value: string, repeat: boolean): Promise<string> => {
     while (await laterCondition(repeat) || await laterCondition(repeat)) {
         value += "-value-body";
@@ -758,6 +784,15 @@ const chooseTwoAwaitNullishContinueValue = async (value: string, repeat: boolean
 const chooseThreeAwaitContinueValue = async (value: string, repeat: boolean): Promise<string> => {
     while (await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat)) {
         value += "-value-three-and";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+};
+
+const chooseConditionalThreeAwaitValue = async (value: string, repeat: boolean): Promise<string> => {
+    while (await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false)) {
+        value += "-value-three-conditional";
         repeat = false;
         continue;
     }
@@ -3444,6 +3479,9 @@ chooseLoopThreeAwaitRightOrNullishContinueAwait("loop-three-await-right-or-nulli
 chooseLoopThreeAwaitRightNullishOrContinueAwait("loop-three-await-right-nullish-or", true).then((value) => console.log("await-loop-three-await-right-nullish-or", value));
 chooseLoopThreeAwaitRightAndNullishContinueAwait("loop-three-await-right-and-nullish", true).then((value) => console.log("await-loop-three-await-right-and-nullish", value));
 chooseLoopThreeAwaitRightNullishAndContinueAwait("loop-three-await-right-nullish-and", true).then((value) => console.log("await-loop-three-await-right-nullish-and", value));
+chooseLoopConditionalThreeAwaitContinueAwait("loop-three-await-conditional", true).then((value) => console.log("await-loop-three-await-conditional", value));
+new ConditionalThreeAwaitChooser("-method-three-conditional").choose("loop-three-await-method-conditional", true).then((value) => console.log("await-loop-three-await-method-conditional", value));
+chooseConditionalThreeAwaitValue("loop-three-await-value-conditional", true).then((value) => console.log("await-loop-three-await-value-conditional", value));
 new TwoAwaitContinueChooser("-method-body").choose("loop-two-await-method-continue", true).then((value) => console.log("await-loop-two-await-method-continue", value));
 new TwoAwaitNullishContinueChooser("-method-nullish").choose("loop-two-await-method-nullish", true).then((value) => console.log("await-loop-two-await-method-nullish", value));
 new ThreeAwaitContinueChooser("-method-three-and").choose("loop-three-await-method-continue", true).then((value) => console.log("await-loop-three-await-method-continue", value));

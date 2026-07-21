@@ -33788,6 +33788,274 @@ class Emitter {
         return true;
     }
 
+    private emitAsyncAwaitLoopConditionConditionalContinue(
+        buf: CBuf,
+        condition: ts.Expression,
+        awaitExpressions: readonly ts.AwaitExpression[],
+        loopBody: readonly ts.Statement[],
+        fallthroughExpr: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+        fallthroughRejectResult: boolean,
+    ): boolean {
+        if (awaitExpressions.length !== 3 || loopBody.length === 0) return false;
+        const bodyAction = loopBody[loopBody.length - 1]!;
+        if (!ts.isContinueStatement(bodyAction) || bodyAction.label) return false;
+        const bodyPreludeStatements = loopBody.slice(0, -1);
+        if (!bodyPreludeStatements.every((statement) =>
+            ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
+        )) return false;
+        const conditional = this.unwrapTransparentExpression(condition);
+        if (!ts.isConditionalExpression(conditional)) return false;
+        const conditionAwait = this.unwrapTransparentExpression(conditional.condition);
+        const trueAwait = this.unwrapTransparentExpression(conditional.whenTrue);
+        const falseAwait = this.unwrapTransparentExpression(conditional.whenFalse);
+        if (!ts.isAwaitExpression(conditionAwait) || !ts.isAwaitExpression(trueAwait) || !ts.isAwaitExpression(falseAwait) ||
+            awaitExpressions[0] !== conditionAwait || awaitExpressions[1] !== trueAwait || awaitExpressions[2] !== falseAwait) return false;
+        const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
+        if (!ts.isAwaitExpression(fallthroughAwait)) return false;
+        const promiseTypes = awaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        )));
+        const awaitedTypes = awaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
+            this.checker,
+        )));
+        const fallthroughPromiseType = this.prepareType(mapTsType(
+            fallthroughAwait.expression,
+            this.checker.getTypeAtLocation(fallthroughAwait.expression),
+            this.checker,
+        ));
+        const fallthroughAwaitedType = this.prepareType(mapTsType(
+            fallthroughAwait,
+            this.checker.getTypeAtLocation(fallthroughAwait),
+            this.checker,
+        ));
+        if (promiseTypes.some((type) => type.kind !== "promise") ||
+            awaitedTypes.some((type) => type.kind === "never" || type.kind === "void") ||
+            promiseTypes[1]!.c !== promiseTypes[2]!.c || awaitedTypes[1]!.c !== awaitedTypes[2]!.c ||
+            fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
+
+        const params = this.asyncAwaitContinuationParameters(parameters);
+        const adapterBase = `tsc_async_await_loop_condition_conditional_continue_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const firstName = `${adapterBase}_first`;
+        const branchName = `${adapterBase}_branch`;
+        const firstEnvType = `${firstName}_env_t`;
+        const branchEnvType = `${branchName}_env_t`;
+        const fallthroughAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+            fallthroughPromiseType,
+            fallthroughAwaitedType,
+            fallthroughAwait,
+            fallthroughExpr,
+            params,
+            thisValue,
+            fallthroughRejectResult,
+        );
+        this.structDecls.open(`typedef struct ${firstEnvType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        this.structDecls.close(` ${firstEnvType};`);
+        this.structDecls.line();
+        this.structDecls.open(`typedef struct ${branchEnvType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        this.structDecls.close(` ${branchEnvType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${firstName}(void* env);`);
+        this.protos.line(`void ${branchName}(void* env);`);
+
+        const firstScope = new Map<ts.Symbol, string>();
+        for (const param of params) firstScope.set(param.symbol, `state->${param.field}`);
+        const firstAwaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        const emitFallthrough = (
+            stageBuf: CBuf,
+            awaitScope: Map<ts.AwaitExpression, EmitResult>,
+        ): void => {
+            this.argumentValueScopes.push(firstScope);
+            this.awaitExpressionValueScopes.push(awaitScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            try {
+                source = this.emitExpr(fallthroughAwait.expression);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.awaitExpressionValueScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_await_fallthrough_source");
+            const envVar = this.freshTemp("_await_fallthrough_env");
+            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, fallthroughPromiseType, fallthroughAwait.expression)};`);
+            stageBuf.line(`${fallthroughAdapter}_env_t* const ${envVar} = (${fallthroughAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${fallthroughAdapter}_env_t));`);
+            stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
+            stageBuf.line(`${envVar}->result_promise = _ret;`);
+            for (const param of params) stageBuf.line(`${envVar}->${param.field} = state->${param.field};`);
+            if (thisValue) stageBuf.line(`${envVar}->this_arg = state->this_arg;`);
+            stageBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+            stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${fallthroughAdapter}, ${envVar});`);
+            stageBuf.close();
+            stageBuf.open("else");
+            stageBuf.line(`${fallthroughAdapter}(${envVar});`);
+            stageBuf.close();
+            stageBuf.line("tsc_try_pop();");
+            stageBuf.line("return;");
+        };
+        const emitBodyReentry = (stageBuf: CBuf): void => {
+            this.argumentValueScopes.push(firstScope);
+            this.awaitExpressionValueScopes.push(firstAwaitScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            try {
+                for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
+                source = this.emitExpr(conditionAwait.expression);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.awaitExpressionValueScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_await_continue_source");
+            const envVar = this.freshTemp("_await_continue_env");
+            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseTypes[0]!, conditionAwait.expression)};`);
+            stageBuf.line(`${firstEnvType}* const ${envVar} = (${firstEnvType}*)TSC_GC_MALLOC(sizeof(${firstEnvType}));`);
+            stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
+            stageBuf.line(`${envVar}->result_promise = _ret;`);
+            for (const param of params) stageBuf.line(`${envVar}->${param.field} = state->${param.field};`);
+            if (thisValue) stageBuf.line(`${envVar}->this_arg = state->this_arg;`);
+            stageBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+            stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${firstName}, ${envVar});`);
+            stageBuf.close();
+            stageBuf.open("else");
+            stageBuf.line(`${firstName}(${envVar});`);
+            stageBuf.close();
+            stageBuf.line("tsc_try_pop();");
+            stageBuf.line("return;");
+        };
+        const firstBuf = new CBuf();
+        const firstValue = this.freshTemp("_await_conditional_flag");
+        const firstEh = this.freshTemp("_await_conditional_eh");
+        firstAwaitScope.set(conditionAwait, { c: firstValue, ty: awaitedTypes[0]! });
+        firstBuf.open(`void ${firstName}(void* env)`);
+        firstBuf.line(`${firstEnvType}* state = (${firstEnvType}*)env;`);
+        firstBuf.line("tsc_promise_t* _p = state->receiver;");
+        firstBuf.line("tsc_promise_t* _ret = state->result_promise;");
+        firstBuf.open("if (tsc_promise_is_rejected(_p))");
+        firstBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+        firstBuf.line("return;");
+        firstBuf.close();
+        firstBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+        firstBuf.line("return;");
+        firstBuf.close();
+        firstBuf.line(`${awaitedTypes[0]!.c} ${firstValue} = ${this.coerce(this.promiseFulfilledValue(promiseTypes[0]!.elem, "_p"), awaitedTypes[0]!, conditionAwait)};`);
+        firstBuf.line(`tsc_try_frame_t ${firstEh};`);
+        firstBuf.line(`tsc_try_push(&${firstEh});`);
+        firstBuf.open(`if (setjmp(${firstEh}.jb) == 0)`);
+        const firstTruthy = this.truthyExprFromEmitResult({ c: firstValue, ty: awaitedTypes[0]! }, conditionAwait);
+        const branchScope = new Map<ts.Symbol, string>();
+        for (const param of params) branchScope.set(param.symbol, `state->${param.field}`);
+        const branchAwaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        const emitBranchSource = (stageBuf: CBuf, branchAwait: ts.AwaitExpression): void => {
+            this.argumentValueScopes.push(branchScope);
+            this.awaitExpressionValueScopes.push(branchAwaitScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            try {
+                source = this.emitExpr(branchAwait.expression);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.awaitExpressionValueScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_await_conditional_source");
+            const envVar = this.freshTemp("_await_conditional_env");
+            stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseTypes[branchAwait === trueAwait ? 1 : 2]!, branchAwait.expression)};`);
+            stageBuf.line(`${branchEnvType}* const ${envVar} = (${branchEnvType}*)TSC_GC_MALLOC(sizeof(${branchEnvType}));`);
+            stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
+            stageBuf.line(`${envVar}->result_promise = _ret;`);
+            for (const param of params) stageBuf.line(`${envVar}->${param.field} = state->${param.field};`);
+            if (thisValue) stageBuf.line(`${envVar}->this_arg = state->this_arg;`);
+            stageBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+            stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${branchName}, ${envVar});`);
+            stageBuf.close();
+            stageBuf.open("else");
+            stageBuf.line(`${branchName}(${envVar});`);
+            stageBuf.close();
+        };
+        firstBuf.open(`if (${firstTruthy})`);
+        emitBranchSource(firstBuf, trueAwait);
+        firstBuf.close();
+        firstBuf.open("else");
+        emitBranchSource(firstBuf, falseAwait);
+        firstBuf.close();
+        firstBuf.line("tsc_try_pop();");
+        firstBuf.line("return;");
+        firstBuf.close();
+        firstBuf.open("else");
+        firstBuf.line("tsc_try_pop();");
+        firstBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+        firstBuf.close();
+        firstBuf.close();
+        this.closureDefs.write(firstBuf.toString());
+
+        const branchBuf = new CBuf();
+        const branchValue = this.freshTemp("_await_conditional_value");
+        const branchEh = this.freshTemp("_await_conditional_eh");
+        branchAwaitScope.set(trueAwait, { c: branchValue, ty: awaitedTypes[1]! });
+        branchAwaitScope.set(falseAwait, { c: branchValue, ty: awaitedTypes[2]! });
+        branchBuf.open(`void ${branchName}(void* env)`);
+        branchBuf.line(`${branchEnvType}* state = (${branchEnvType}*)env;`);
+        branchBuf.line("tsc_promise_t* _p = state->receiver;");
+        branchBuf.line("tsc_promise_t* _ret = state->result_promise;");
+        branchBuf.open("if (tsc_promise_is_rejected(_p))");
+        branchBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+        branchBuf.line("return;");
+        branchBuf.close();
+        branchBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+        branchBuf.line("return;");
+        branchBuf.close();
+        branchBuf.line(`${awaitedTypes[1]!.c} ${branchValue} = ${this.coerce(this.promiseFulfilledValue(promiseTypes[1]!.elem, "_p"), awaitedTypes[1]!, trueAwait)};`);
+        branchBuf.line(`tsc_try_frame_t ${branchEh};`);
+        branchBuf.line(`tsc_try_push(&${branchEh});`);
+        branchBuf.open(`if (setjmp(${branchEh}.jb) == 0)`);
+        const branchTruthy = this.truthyExprFromEmitResult({ c: branchValue, ty: awaitedTypes[1]! }, trueAwait);
+        branchBuf.open(`if (${branchTruthy})`);
+        emitBodyReentry(branchBuf);
+        branchBuf.close();
+        emitFallthrough(branchBuf, branchAwaitScope);
+        branchBuf.close();
+        branchBuf.open("else");
+        branchBuf.line("tsc_try_pop();");
+        branchBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+        branchBuf.close();
+        branchBuf.close();
+        this.closureDefs.write(branchBuf.toString());
+
+        const firstSource = this.emitExpr(conditionAwait.expression);
+        const sourceVar = this.freshTemp("_await_conditional_source");
+        const resultVar = this.freshTemp("_await_conditional_result");
+        const envVar = this.freshTemp("_await_conditional_env");
+        buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(firstSource, promiseTypes[0]!, conditionAwait.expression)};`);
+        buf.line(`tsc_promise_t* const ${resultVar} = tsc_promise_pending();`);
+        buf.line(`${firstEnvType}* const ${envVar} = (${firstEnvType}*)TSC_GC_MALLOC(sizeof(${firstEnvType}));`);
+        buf.line(`${envVar}->receiver = ${sourceVar};`);
+        buf.line(`${envVar}->result_promise = ${resultVar};`);
+        for (const param of params) buf.line(`${envVar}->${param.field} = ${param.name};`);
+        if (thisValue) buf.line(`${envVar}->this_arg = ${thisValue.c};`);
+        buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+        buf.line(`tsc_promise_add_callback(${sourceVar}, ${firstName}, ${envVar});`);
+        buf.close();
+        buf.open("else");
+        buf.line(`${firstName}(${envVar});`);
+        buf.close();
+        buf.line(`return ${resultVar};`);
+        return true;
+    }
+
     private emitAsyncAwaitLoopConditionReturnAwaitContinuation(
         buf: CBuf,
         condition: ts.Expression,
@@ -34515,6 +34783,17 @@ class Emitter {
             : null;
         if (!loopInitializer && !loopIncrementor && awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
+                buf,
+                condition,
+                awaitExpressions,
+                loopBody,
+                fallthroughExpression,
+                parameters,
+                thisValue,
+                ts.isThrowStatement(fallthrough),
+            )) return true;
+        if (!loopInitializer && !loopIncrementor && awaitExpressions.length === 3 &&
+            this.emitAsyncAwaitLoopConditionConditionalContinue(
                 buf,
                 condition,
                 awaitExpressions,
