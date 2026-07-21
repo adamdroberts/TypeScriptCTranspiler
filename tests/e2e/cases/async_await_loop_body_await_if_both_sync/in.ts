@@ -13,8 +13,14 @@ let bodyCount = 0;
 async function loopBodyAwaitIfBothSync(): Promise<string> {
     while (await laterCondition(true)) {
         if (await laterCondition(true)) {
+            await later("prep-true-a");
+            await later("prep-true-b");
+            bodyCount += 0;
             return "true-" + bodyCount;
         } else {
+            await later("prep-false-a");
+            await later("prep-false-b");
+            bodyCount += 0;
             throw "false-" + bodyCount;
         }
     }
