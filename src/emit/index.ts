@@ -32976,7 +32976,8 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         fallthroughRejectResult: boolean,
-        loopInitializer: ts.Expression | null = null,
+        loopInitializer: ts.Expression | ts.VariableStatement | null = null,
+        loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
     ): boolean {
         if (awaitExpressions.length !== 2 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
@@ -32984,6 +32985,8 @@ class Emitter {
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
         if (loopInitializer && !bodyIsBreak) return false;
+        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
+            loopInitializer.declarationList.declarations.some((declaration) => !declaration.initializer)) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
@@ -33041,6 +33044,7 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        for (const capture of loopInitializerCaptures) this.structDecls.line(`${capture.type.c} ${capture.field};`);
         if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${firstEnvType};`);
         this.structDecls.line();
@@ -33049,6 +33053,7 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line(`${awaitedTypes[0]!.c} first_value;`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        for (const capture of loopInitializerCaptures) this.structDecls.line(`${capture.type.c} ${capture.field};`);
         if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${secondEnvType};`);
         this.structDecls.line();
@@ -33129,6 +33134,7 @@ class Emitter {
         const makeScope = (stateFirstValue: string | null, stateSecondValue: string | null): Map<ts.Symbol, string> => {
             const scope = new Map<ts.Symbol, string>();
             for (const param of params) scope.set(param.symbol, `state->${param.field}`);
+            for (const capture of loopInitializerCaptures) scope.set(capture.symbol, `state->${capture.field}`);
             return scope;
         };
         const firstBuf = new CBuf();
@@ -33199,6 +33205,7 @@ class Emitter {
         firstBuf.line(`${secondEnvVar}->result_promise = _ret;`);
         firstBuf.line(`${secondEnvVar}->first_value = ${firstValue};`);
         for (const param of params) firstBuf.line(`${secondEnvVar}->${param.field} = state->${param.field};`);
+        for (const capture of loopInitializerCaptures) firstBuf.line(`${secondEnvVar}->${capture.field} = state->${capture.field};`);
         if (thisValue) firstBuf.line(`${secondEnvVar}->this_arg = state->this_arg;`);
         firstBuf.open(`if (tsc_promise_is_pending(${secondSourceVar}))`);
         firstBuf.line(`tsc_promise_add_callback(${secondSourceVar}, ${secondName}, ${secondEnvVar});`);
@@ -33262,11 +33269,14 @@ class Emitter {
         this.closureDefs.write(firstBuf.toString());
         this.closureDefs.write(secondBuf.toString());
 
-        const firstSource = this.emitExpr(awaitExpressions[0]!.expression);
         if (loopInitializer) {
-            const initializer = this.emitExpr(loopInitializer);
-            buf.line(`${initializer.c};`);
+            if (ts.isVariableStatement(loopInitializer)) this.emitStmt(buf, loopInitializer);
+            else {
+                const initializer = this.emitExpr(loopInitializer);
+                buf.line(`${initializer.c};`);
+            }
         }
+        const firstSource = this.emitExpr(awaitExpressions[0]!.expression);
         const sourceVar = this.freshTemp("_await_source");
         const resultVar = this.freshTemp("_await_result");
         const envVar = this.freshTemp("_await_env");
@@ -33276,6 +33286,7 @@ class Emitter {
         buf.line(`${envVar}->receiver = ${sourceVar};`);
         buf.line(`${envVar}->result_promise = ${resultVar};`);
         for (const param of params) buf.line(`${envVar}->${param.field} = ${param.name};`);
+        for (const capture of loopInitializerCaptures) buf.line(`${envVar}->${capture.field} = ${capture.name};`);
         if (thisValue) buf.line(`${envVar}->this_arg = ${thisValue.c};`);
         buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
         buf.line(`tsc_promise_add_callback(${sourceVar}, ${firstName}, ${envVar});`);
@@ -34946,6 +34957,20 @@ class Emitter {
             if (!supported) return false;
             loopInitializerCaptures = initializerCaptures;
         }
+        if (loopInitializer && ts.isVariableStatement(loopInitializer) && loopBreakSkipsIncrementor &&
+            awaitExpressions.length === 2 &&
+            this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
+                buf,
+                condition,
+                awaitExpressions,
+                loopBody,
+                fallthroughExpression,
+                parameters,
+                thisValue,
+                ts.isThrowStatement(fallthrough),
+                loopInitializer,
+                loopInitializerCaptures,
+            )) return true;
         if (
             loopBody.length > 0 &&
             loopBody[loopBody.length - 1]!.kind === ts.SyntaxKind.BreakStatement
