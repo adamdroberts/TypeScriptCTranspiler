@@ -472,7 +472,7 @@ await-loop-two-await-or-continue-throw loop-two-await-or-continue-throw-body
 await-loop-three-await-break loop-three-await-break-three-break
 await-loop-three-await-mixed-or-and loop-three-await-mixed-or-and-three-mixed-or-and-three-mixed-or-and-incrementor
 await-loop-three-await-mixed-or-nullish loop-three-await-mixed-or-nullish-three-or-nullish
-await-loop-three-await-right-and-or loop-three-await-right-and-or-three-right-and-or
+await-loop-three-await-right-and-or loop-three-await-right-and-or-three-right-and-or-three-right-and-or-incrementor
 await-loop-two-await-method-continue loop-two-await-method-continue-method-body
 await-loop-two-await-value-continue loop-two-await-value-continue-value-body
 await-loop-two-await-control-continue loop-two-await-control-continue-if

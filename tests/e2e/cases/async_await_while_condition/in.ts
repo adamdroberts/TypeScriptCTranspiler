@@ -788,8 +788,9 @@ async function chooseLoopThreeAwaitMixedOrNullishContinueAwait(value: string, re
 }
 
 async function chooseLoopThreeAwaitRightAndOrContinueAwait(value: string, repeat: boolean): Promise<string> {
-    while (await laterCondition(repeat) && (await laterCondition(repeat) || await laterCondition(repeat))) {
-        value += "-three-right-and-or";
+    for (var suffix: any; await laterCondition(repeat) && (await laterCondition(repeat) || await laterCondition(repeat)); value += "-three-right-and-or-incrementor") {
+        suffix = "-three-right-and-or";
+        value += suffix;
         repeat = false;
         continue;
     }
