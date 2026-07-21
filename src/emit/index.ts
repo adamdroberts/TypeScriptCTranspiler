@@ -694,6 +694,7 @@ class Emitter {
     private cellScopes: Map<ts.Symbol, CaptureCell>[] = [];
     private closureEnvScopes: Map<ts.Symbol, ClosureEnvBinding>[] = [];
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
+    private argumentValueTypeScopes: Map<ts.Symbol, CType>[] = [];
     private awaitExpressionValueScopes: Map<ts.AwaitExpression, EmitResult>[] = [];
     private asyncAwaitEscapingSymbols = new Set<ts.Symbol>();
     private asyncAwaitHoistedPreludeSymbols = new Set<ts.Symbol>();
@@ -21875,6 +21876,16 @@ class Emitter {
         return this.identifierName(id);
     }
 
+    private identifierScopedType(id: ts.Identifier): CType | null {
+        const sym = this.symbolForIdentifier(id);
+        if (!sym) return null;
+        for (let i = this.argumentValueTypeScopes.length - 1; i >= 0; i--) {
+            const type = this.argumentValueTypeScopes[i]!.get(sym);
+            if (type) return type;
+        }
+        return null;
+    }
+
     private identifierDeclaredType(id: ts.Identifier): CType | null {
         const sym = this.symbolForIdentifier(id);
         const requireDestructureType = this.requireDestructureBindingType(id);
@@ -30932,7 +30943,6 @@ class Emitter {
                     if (!symbol || captureSymbols.has(symbol) || (this.currentFunctionCellForSymbol(symbol) && (decl.initializer || isConstOrLet))) return null;
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
                     if (!decl.initializer && !isConstOrLet) {
-                        if (type.kind === "value") return null;
                         uninitializedPreludeSymbols.add(symbol);
                     }
                     if (decl.initializer && !this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
@@ -30970,7 +30980,7 @@ class Emitter {
                             return;
                         }
                         const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
-                        if (!this.isAsyncAwaitPreludeCaptureType(type)) {
+                        if (type.kind === "value" || !this.isAsyncAwaitPreludeCaptureType(type)) {
                             ok = false;
                             return;
                         }
@@ -37213,12 +37223,19 @@ class Emitter {
             ? null
             : this.coerce(this.promiseFulfilledValue(firstPromiseType.elem, "_p"), firstAwaitedType, secondStep.awaitExpr.expression);
         const scope = new Map<ts.Symbol, string>();
+        const scopeTypes = new Map<ts.Symbol, CType>();
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
         if (firstAwaitedType.kind !== "void") {
-            if (firstSymbol) scope.set(firstSymbol, valueVar);
-            for (const symbol of firstBranchSymbols) scope.set(symbol, valueVar);
+            if (firstSymbol) {
+                scope.set(firstSymbol, valueVar);
+                scopeTypes.set(firstSymbol, firstAwaitedType);
+            }
+            for (const symbol of firstBranchSymbols) {
+                scope.set(symbol, valueVar);
+                scopeTypes.set(symbol, firstAwaitedType);
+            }
         }
 
         const buf = new CBuf();
@@ -37240,6 +37257,7 @@ class Emitter {
             buf.line(`${firstAwaitedType.c} ${valueVar} = ${firstValue};`);
         }
         this.argumentValueScopes.push(scope);
+        this.argumentValueTypeScopes.push(scopeTypes);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let secondSource: EmitResult;
         let secondAlternateSource: EmitResult | null = null;
@@ -37761,6 +37779,7 @@ class Emitter {
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
+            this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
         }
         const secondSourceC = this.coerce(secondSource!, promiseTypes[1]!, secondStep.awaitExpr.expression);
@@ -38634,12 +38653,19 @@ class Emitter {
             ? null
             : this.coerce(this.promiseFulfilledValue(promiseType.elem, "_p"), awaitedType, awaitedValueTarget!);
         const scope = new Map<ts.Symbol, string>();
+        const scopeTypes = new Map<ts.Symbol, CType>();
         for (const param of params) {
             scope.set(param.symbol, `state->${param.field}`);
         }
-        if (variableSymbol && awaitedType.kind !== "void") scope.set(variableSymbol, valueVar);
+        if (variableSymbol && awaitedType.kind !== "void") {
+            scope.set(variableSymbol, valueVar);
+            scopeTypes.set(variableSymbol, awaitedType);
+        }
         if (awaitedType.kind !== "void") {
-            for (const symbol of conditionalBranchSymbols) scope.set(symbol, valueVar);
+            for (const symbol of conditionalBranchSymbols) {
+                scope.set(symbol, valueVar);
+                scopeTypes.set(symbol, awaitedType);
+            }
         }
 
         const buf = new CBuf();
@@ -38662,6 +38688,7 @@ class Emitter {
             buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
         }
         this.argumentValueScopes.push(scope);
+        this.argumentValueTypeScopes.push(scopeTypes);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let returned: EmitResult | null = null;
         this.asyncAwaitContinuationAdapterDepth++;
@@ -38735,6 +38762,7 @@ class Emitter {
             this.asyncAwaitContinuationReturnTargets.pop();
             this.asyncAwaitContinuationAdapterDepth--;
             if (thisValue) this.functionThisStack.pop();
+            this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
         }
         const returnedType = returned ? this.prepareType(returned.ty) : T_VOID;
@@ -45648,8 +45676,9 @@ class Emitter {
                 ? this.emitProcessPropertyRead(processNamedImport)
                 : null;
             if (processProp) return processProp;
-            const ty = this.prepareType(mapType(expr, this.checker));
-            const declaredTy = this.identifierDeclaredType(expr);
+            const scopedTy = this.identifierScopedType(expr);
+            const ty = scopedTy ?? this.prepareType(mapType(expr, this.checker));
+            const declaredTy = scopedTy ?? this.identifierDeclaredType(expr);
             if (declaredTy?.kind === "value" && ty.kind === "void") {
                 return { c: this.identifierRead(expr), ty: T_VALUE };
             }
