@@ -33865,6 +33865,7 @@ class Emitter {
         fallthroughRejectResult: boolean,
         loopInitializer: ts.Expression | ts.VariableStatement | null = null,
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
+        loopIncrementor: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length !== 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
@@ -33989,6 +33990,10 @@ class Emitter {
             let source: EmitResult;
             try {
                 for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
+                if (bodyIsContinue && loopIncrementor) {
+                    const incrementor = this.emitExpr(loopIncrementor);
+                    stageBuf.line(`${incrementor.c};`);
+                }
                 source = bodyIsBreak ? { c: "0", ty: awaitedTypes[0]! } : this.emitExpr(conditionAwait.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
@@ -34928,7 +34933,7 @@ class Emitter {
                 [],
                 loopIncrementor,
             )) return true;
-        if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length === 3 &&
+        if (loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
                 buf,
                 condition,
@@ -34939,6 +34944,8 @@ class Emitter {
                 thisValue,
                 ts.isThrowStatement(fallthrough),
                 loopInitializerExpression,
+                [],
+                loopIncrementor,
             )) return true;
         if (loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(

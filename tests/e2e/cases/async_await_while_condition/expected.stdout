@@ -496,6 +496,7 @@ await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
 await-loop-three-await-continue-incrementor loop-three-await-continue-incrementor-three-continue-three-incrementor
 await-loop-three-await-and-continue loop-three-await-and-continue-three-and
 await-loop-three-await-or-continue loop-three-await-or-continue-three-or
+await-loop-three-await-conditional-incrementor loop-three-await-conditional-incrementor-conditional-continue-conditional-incrementor
 await-loop-three-await-and-continue-throw loop-three-await-and-continue-throw-three-and
 await-loop-three-await-mixed-and-or loop-three-await-mixed-and-or-three-mixed-and-or
 await-loop-three-await-right-or-nullish loop-three-await-right-or-nullish-three-right-or-nullish
