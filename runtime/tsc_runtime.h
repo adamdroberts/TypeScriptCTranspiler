@@ -677,6 +677,8 @@ tsc_value_t tsc_value_map(struct tsc_map* m);
 tsc_value_t tsc_value_set(struct tsc_set* s);
 tsc_value_t tsc_value_error(struct tsc_error* e);
 tsc_value_t tsc_value_buffer(struct tsc_buffer* b);
+tsc_value_t tsc_value_url(struct tsc_url* url);
+tsc_value_t tsc_value_url_search_params(struct tsc_url_search_params* params);
 bool tsc_util_types_is_date(tsc_value_t v);
 bool tsc_util_types_is_regexp(tsc_value_t v);
 bool tsc_util_types_is_native_error(tsc_value_t v);
@@ -1045,6 +1047,8 @@ tsc_date_t* tsc_value_as_date(tsc_value_t v);
 tsc_regexp_t* tsc_value_as_regexp(tsc_value_t v);
 tsc_error_t* tsc_value_as_error(tsc_value_t v);
 tsc_buffer_t* tsc_value_as_buffer(tsc_value_t v);
+tsc_url_t* tsc_value_as_url(tsc_value_t v);
+tsc_url_search_params_t* tsc_value_as_url_search_params(tsc_value_t v);
 
 tsc_set_t* tsc_set_new(size_t es, int kk, size_t initial_cap);
 void tsc_set_add_raw(tsc_set_t* s, const void* v);

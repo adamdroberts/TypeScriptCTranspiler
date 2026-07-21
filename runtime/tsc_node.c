@@ -2554,6 +2554,26 @@ tsc_buffer_t* tsc_value_as_buffer(tsc_value_t v) {
     return NULL;
 }
 
+tsc_url_t* tsc_value_as_url(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_url) return (tsc_url_t*)object->class_ptr;
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a URL"));
+    return NULL;
+}
+
+tsc_url_search_params_t* tsc_value_as_url_search_params(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* object = (tsc_object_t*)value_ptr(v);
+        if (object && object->is_url_search_params) {
+            return (tsc_url_search_params_t*)object->class_ptr;
+        }
+    }
+    tsc_throw_str(tsc_str_from_cstr("value is not a URLSearchParams"));
+    return NULL;
+}
+
 tsc_str_t* tsc_value_typeof(tsc_value_t v) {
     if (!value_is_box(v)) return tsc_str_from_lit("number", 6);
     switch (value_tag(v)) {

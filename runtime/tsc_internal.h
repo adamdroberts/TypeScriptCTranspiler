@@ -141,6 +141,8 @@ struct tsc_object {
     bool is_set;
     bool is_error;
     bool is_typed_array;
+    bool is_url;
+    bool is_url_search_params;
     uint64_t shape_version;
     tsc_shape_t* shape;
     uint64_t object_id;

@@ -22368,7 +22368,8 @@ class Emitter {
                     sym &&
                     decl &&
                     !this.isNodeWithin(decl, fn) &&
-                    (!this.isTopLevelValueDeclaration(decl) || this.dispatchCaptureClone) &&
+                    (!this.isTopLevelValueDeclaration(decl) ||
+                        (this.dispatchCaptureClone && !decl.getSourceFile().isDeclarationFile)) &&
                     this.isCapturableValueDeclaration(decl)
                 ) {
                     const type = this.prepareType(
@@ -57461,9 +57462,9 @@ class Emitter {
             unsupported(expr, "dispatch task must not take parameters");
         }
         const ret = this.prepareType(prepared.ret);
-        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "error", "buffer", "void", "never", "value"]);
+        const allowedReturnKinds = new Set(["number", "boolean", "string", "array", "map", "set", "date", "regexp", "error", "buffer", "url", "urlsearchparams", "void", "never", "value"]);
         if (!allowedReturnKinds.has(ret.kind)) {
-            unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/void in this subset");
+            unsupported(expr, "dispatch task return type must be number/string/boolean/array/map/set/date/regexp/error/buffer/url/urlsearchparams/void in this subset");
         }
         const key = `dispatch:${this.typeKey(prepared)}`;
         const existing = this.dispatchTaskAdapters.get(key);
@@ -72643,6 +72644,10 @@ class Emitter {
                     return `tsc_value_as_error(${r.c})`;
                 case "buffer":
                     return `tsc_value_as_buffer(${r.c})`;
+                case "url":
+                    return `tsc_value_as_url(${r.c})`;
+                case "urlsearchparams":
+                    return `tsc_value_as_url_search_params(${r.c})`;
                 case "class":
                     return `((${target.c})tsc_value_as_class(${r.c}))`;
                 case "promise":
@@ -72725,6 +72730,10 @@ class Emitter {
                     return `tsc_value_error(${r.c})`;
                 case "buffer":
                     return `tsc_value_buffer(${r.c})`;
+                case "url":
+                    return `tsc_value_url(${r.c})`;
+                case "urlsearchparams":
+                    return `tsc_value_url_search_params(${r.c})`;
                 case "promise":
                     return `tsc_value_promise(${r.c})`;
                 case "void":
