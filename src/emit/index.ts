@@ -36296,10 +36296,42 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
+        if (this.emitAsyncAwaitOptionalIfLeadingReturnContinuation(buf, body, parameters, thisValue)) {
+            return true;
+        }
         const continuation = this.asyncAwaitLeadingReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
         this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
         return this.emitAsyncAwaitLeadingReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitOptionalIfLeadingReturnContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        if (body.statements.length !== 2) return false;
+        const conditional = body.statements[0]!;
+        const result = body.statements[1]!;
+        if (!ts.isIfStatement(conditional) || conditional.elseStatement ||
+            !ts.isReturnStatement(result) || !result.expression) return false;
+        const branchStatements = ts.isBlock(conditional.thenStatement)
+            ? conditional.thenStatement.statements
+            : [conditional.thenStatement];
+        if (branchStatements.length !== 1 || !this.awaitedContinuationStep(branchStatements[0]!)) return false;
+        const condition = this.emitExpr(conditional.expression);
+        const conditionValue = this.coerce(condition, T_BOOLEAN, conditional.expression);
+        const awaitedBranch = ts.factory.createBlock([branchStatements[0]!, result], true);
+        const directBranch = ts.factory.createBlock([result], true);
+        buf.open(`if (${conditionValue})`);
+        const awaitedHandled = this.emitAsyncAwaitLeadingReturnContinuation(buf, awaitedBranch, parameters, thisValue);
+        buf.close();
+        if (!awaitedHandled) return false;
+        buf.open("else");
+        const directHandled = this.emitAsyncAwaitDirectReturnAwaitPrelude(buf, directBranch, parameters, thisValue);
+        buf.close();
+        return directHandled;
     }
 
     private emitAsyncAwaitLeadingReturnContinuationResult(
