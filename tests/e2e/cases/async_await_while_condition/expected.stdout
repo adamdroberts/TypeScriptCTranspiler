@@ -259,6 +259,7 @@ await-direct-uninitialized-var-for direct-uninitialized-var-for-for
 await-direct-uninitialized-var-for-of direct-uninitialized-var-for-of-of
 await-direct-uninitialized-var-for-in direct-uninitialized-var-for-in-in
 await-direct-uninitialized-var-switch direct-uninitialized-var-switch-switch
+await-direct-uninitialized-var-try-finally direct-uninitialized-var-try-finally-try
 await-direct-assigned-var-return direct-assigned-var-return-assigned-var-return
 await-method-assigned-var-return direct-assigned-var-method-assigned-var-method-return
 await-arrow-assigned-var-return direct-assigned-var-arrow-assigned-var-arrow-return
