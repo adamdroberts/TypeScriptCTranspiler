@@ -52,6 +52,13 @@ async function chooseDirectAwaitMultipleVarPrelude(prefix: string): Promise<stri
     return second;
 }
 
+async function chooseDirectAwaitMultipleUninitializedVarPrelude(prefix: string): Promise<string> {
+    var source: string;
+    source = prefix + "-uninitialized-var";
+    const first = await laterBodyValue(source + "-first"), second = await laterBodyValue(first + "-second");
+    return second;
+}
+
 async function chooseDirectAwaitAssignedVarReturn(prefix: string): Promise<string> {
     var source: string;
     source = prefix + "-assigned-var-return";
@@ -3661,6 +3668,7 @@ chooseLoopSynchronousUncaughtFinallyThrowPreludeValue(false).then((value) => con
 chooseDirectAwaitMultipleLocals("direct-multiple").then((value) => console.log("await-direct-multiple-locals", value));
 chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => console.log("await-direct-multiple-control-prelude", value));
 chooseDirectAwaitMultipleVarPrelude("direct-var").then((value) => console.log("await-direct-multiple-var-prelude", value));
+chooseDirectAwaitMultipleUninitializedVarPrelude("direct-uninitialized-var").then((value) => console.log("await-direct-multiple-uninitialized-var-prelude", value));
 chooseDirectAwaitAssignedVarReturn("direct-assigned-var-return").then((value) => console.log("await-direct-assigned-var-return", value));
 new AssignedVarReturnChooser().choose("direct-assigned-var-method").then((value) => console.log("await-method-assigned-var-return", value));
 chooseArrowAssignedVarReturn("direct-assigned-var-arrow").then((value) => console.log("await-arrow-assigned-var-return", value));

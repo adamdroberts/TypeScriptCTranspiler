@@ -3249,3 +3249,4 @@ Features that require build-time proof or an explicit security allow list, docum
 
 These are AOT closure requirements, not permanent product limits.
 - Async loop-condition lowering now routes left-associated mixed `||`→`??` and `??`→`||` outer-break shapes through awaited fallthrough while preserving simple uninitialized `var` captures. Test: `async_await_while_condition`.
+- Async leading-chain lowering now carries assigned-before-use uninitialized `var` locals across multiple awaited declarations. Test: `async_await_while_condition`.

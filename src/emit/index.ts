@@ -29460,6 +29460,7 @@ class Emitter {
         const preludeStatements: ts.Statement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
         const captureSymbols = new Set<ts.Symbol>();
+        const uninitializedPreludeSymbols = new Set<ts.Symbol>();
         let firstAwaitIndex = 0;
         let ok = true;
         const visitNoAwaitOrNestedScope = (node: ts.Node): void => {
@@ -29486,9 +29487,10 @@ class Emitter {
                 const isConstOrLet = (stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name)) return null;
-                    if (!decl.initializer && (!isConstOrLet || (stmt.declarationList.flags & ts.NodeFlags.Const))) return null;
+                    if (!decl.initializer && (stmt.declarationList.flags & ts.NodeFlags.Const)) return null;
                     const symbol = this.symbolForIdentifier(decl.name);
                     if (!symbol || captureSymbols.has(symbol) || this.currentFunctionCellForSymbol(symbol)) return null;
+                    if (!decl.initializer && !isConstOrLet) uninitializedPreludeSymbols.add(symbol);
                     const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
                     if (decl.initializer && !this.isAsyncAwaitFunctionPreludeInitializer(decl.initializer)) {
                         visitNoAwaitOrNestedScope(decl.initializer);
@@ -29515,6 +29517,16 @@ class Emitter {
                 continue;
             }
             break;
+        }
+        for (const symbol of uninitializedPreludeSymbols) {
+            const assignedBeforeAwait = preludeStatements.some((statement) =>
+                ts.isExpressionStatement(statement) &&
+                ts.isBinaryExpression(statement.expression) &&
+                statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                ts.isIdentifier(statement.expression.left) &&
+                this.symbolForIdentifier(statement.expression.left) === symbol,
+            );
+            if (!assignedBeforeAwait) return null;
         }
         const finalReturnExpression = ts.isReturnStatement(result) && result.expression
             ? this.unwrapTransparentExpression(result.expression)
