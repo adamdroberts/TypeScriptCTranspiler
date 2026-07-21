@@ -490,6 +490,22 @@ async function chooseLoopExpressionInitializerBreakThrowAwait(reason: string): P
     throw await laterBodyValue(reason);
 }
 
+async function chooseLoopExpressionInitializerFalseBreakAwait(value: string): Promise<string> {
+    for (value += "-initializer"; await laterCondition(false); value += "-increment") {
+        value += "-unexpected-body";
+        break;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopExpressionInitializerFalseBreakThrowAwait(reason: string): Promise<string> {
+    for (reason += "-initializer"; await laterCondition(false); reason += "-increment") {
+        reason += "-unexpected-body";
+        break;
+    }
+    throw await laterBodyValue(reason);
+}
+
 class ForContinueFalseChooser {
     private readonly suffix: string;
 
@@ -2922,6 +2938,8 @@ chooseLoopMultipleExpressionInitializerContinueAwait("loop-multiple-expression-c
 chooseLoopMultipleExpressionInitializerContinueThrowAwait("loop-multiple-expression-continue-throw").catch((reason) => console.log("await-loop-multiple-expression-continue-throw", reason));
 chooseLoopExpressionInitializerBreakAwait("loop-expression-break").then((value) => console.log("await-loop-expression-break", value));
 chooseLoopExpressionInitializerBreakThrowAwait("loop-expression-break-throw").catch((reason) => console.log("await-loop-expression-break-throw", reason));
+chooseLoopExpressionInitializerFalseBreakAwait("loop-expression-break-false").then((value) => console.log("await-loop-expression-break-false", value));
+chooseLoopExpressionInitializerFalseBreakThrowAwait("loop-expression-break-false-throw").catch((reason) => console.log("await-loop-expression-break-false-throw", reason));
 new ForContinueFalseChooser("-method-break-initializer").chooseExpressionInitializerBreak("loop-expression-break").then((value) => console.log("await-method-loop-expression-break", value));
 new ForContinueFalseChooser("-method-break-throw-initializer").chooseExpressionInitializerBreakThrow("loop-expression-break-throw").catch((reason) => console.log("await-method-loop-expression-break-throw", reason));
 chooseLoopExpressionInitializerBreakValue("loop-expression-break").then((value) => console.log("await-value-loop-expression-break", value));

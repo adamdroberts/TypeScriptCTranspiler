@@ -66,6 +66,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Awaited `for` continue loops now preserve ordered comma-sequenced expression initializers before condition suspension and incrementor re-entry on return and throw-await paths. Test: `async_await_while_condition`.
 - Awaited `for` break loops now preserve expression initializers and skip the incrementor before post-loop return and throw-await paths. Test: `async_await_while_condition`.
 - Expression-initializer `for` break loops now preserve receiver/function-value state across post-loop return and throw-await paths. Test: `async_await_while_condition`.
+- Expression-initializer `for` break loops now preserve false-condition fallthrough, skipping both body and incrementor before return/throw-await tails. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve synchronous throws handled by await-free `catch` preludes before synchronous direct `return` bodies across async declarations, class methods, and function values; uncaught prelude throws remain rejection paths. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve synchronous rethrows from await-free `catch` preludes as rejection paths before synchronous direct `return` bodies across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now preserve caught synchronous throws through await-free `finally` cleanup before synchronous direct `return` bodies across async declarations, class methods, and function values. Test: `async_await_while_condition`.
@@ -3400,6 +3401,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | awaited for-continue loops preserve ordered comma-sequenced expression initializers before condition suspension and incrementor re-entry |
 | `async_await_while_condition` | awaited for-break loops preserve expression initializers, skip the incrementor, and route post-loop return/throw-await paths |
 | `async_await_while_condition` | expression-initializer for-break loops preserve receiver/function-value state across post-loop return and throw-await paths |
+| `async_await_while_condition` | expression-initializer for-break loops preserve false-condition fallthrough and skip body/incrementor before return/throw-await tails |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
 | `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations remain scoped around the first conditional await source |
 | `async_await_conditional_branch_assigned_prelude` | branch-local let declarations are assigned before the first conditional await source |
