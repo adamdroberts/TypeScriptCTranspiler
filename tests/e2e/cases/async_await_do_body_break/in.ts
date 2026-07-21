@@ -19,7 +19,8 @@ async function doBodyAwaitBreak(): Promise<string> {
     let count = 0;
     do {
         bodyCount += 0;
-        await laterBody("body-" + count);
+        await laterBody("first-" + count);
+        await laterBody("second-" + count);
         bodyCount += 0;
         break;
     } while (await laterCondition(count++ < 2));
