@@ -33301,9 +33301,12 @@ class Emitter {
         ]);
         const leaves: ts.Expression[] = [];
         const operators: ts.SyntaxKind[] = [];
+        let leftAssociated = true;
         const flatten = (expression: ts.Expression): void => {
             const current = this.unwrapTransparentExpression(expression);
             if (ts.isBinaryExpression(current) && allowedOperators.has(current.operatorToken.kind)) {
+                const right = this.unwrapTransparentExpression(current.right);
+                if (ts.isBinaryExpression(right) && allowedOperators.has(right.operatorToken.kind)) leftAssociated = false;
                 flatten(current.left);
                 operators.push(current.operatorToken.kind);
                 flatten(current.right);
@@ -33315,9 +33318,12 @@ class Emitter {
         if (leaves.length !== awaitExpressions.length ||
             leaves.some((leaf, index) => leaf !== awaitExpressions[index]) ||
             (operators.some((kind) => kind !== operators[0]) &&
-                !operators.every((kind) => kind === ts.SyntaxKind.AmpersandAmpersandToken || kind === ts.SyntaxKind.BarBarToken))) return false;
+                !operators.every((kind) => allowedOperators.has(kind)))) return false;
         const operator = operators[0]!;
-        const mixedLogicalChain = operators.some((kind) => kind !== operators[0]);
+        const mixedShortCircuitChain = operators.some((kind) => kind !== operators[0]);
+        const rightAssociatedOrAnd = !leftAssociated && operators.length === 2 &&
+            operators[0] === ts.SyntaxKind.BarBarToken && operators[1] === ts.SyntaxKind.AmpersandAmpersandToken;
+        if (mixedShortCircuitChain && !leftAssociated && !rightAssociatedOrAnd) return false;
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const promiseTypes = awaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
@@ -33499,9 +33505,10 @@ class Emitter {
             nextIndex: number,
             currentValue: string,
             accumulatedTruthy: string,
+            accumulatedNullish: string,
             scope: Map<ts.Symbol, string>,
             awaitScope: Map<ts.AwaitExpression, EmitResult>,
-        ) => void = (stageBuf, lastEvaluatedIndex, nextIndex, currentValue, accumulatedTruthy, scope, awaitScope): void => {
+        ) => void = (stageBuf, lastEvaluatedIndex, nextIndex, currentValue, accumulatedTruthy, accumulatedNullish, scope, awaitScope): void => {
             if (nextIndex >= awaitExpressions.length) {
                 stageBuf.open(`if (${accumulatedTruthy})`);
                 emitBodyReentry(stageBuf);
@@ -33514,9 +33521,11 @@ class Emitter {
             const nextOperator = operators[nextIndex - 1]!;
             const skipNext = nextOperator === ts.SyntaxKind.AmpersandAmpersandToken
                 ? `!(${accumulatedTruthy})`
-                : accumulatedTruthy;
+                : nextOperator === ts.SyntaxKind.BarBarToken
+                    ? accumulatedTruthy
+                    : `!(${accumulatedNullish})`;
             stageBuf.open(`if (${skipNext})`);
-            emitLogicalContinuation(stageBuf, lastEvaluatedIndex, nextIndex + 1, currentValue, accumulatedTruthy, scope, awaitScope);
+            emitLogicalContinuation(stageBuf, lastEvaluatedIndex, nextIndex + 1, currentValue, accumulatedTruthy, accumulatedNullish, scope, awaitScope);
             stageBuf.close();
             stageBuf.open("else");
             emitNextStage(stageBuf, lastEvaluatedIndex, nextIndex, currentValue, scope, awaitScope);
@@ -33546,8 +33555,31 @@ class Emitter {
             stageBuf.open(`if (setjmp(${eh}.jb) == 0)`);
             const truthy = this.truthyExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
             const nullish = this.nullishExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
-            if (mixedLogicalChain) {
-                emitLogicalContinuation(stageBuf, index, index + 1, currentValue, truthy, scope, awaitScope);
+            if (rightAssociatedOrAnd) {
+                if (index === 0) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                } else if (index === 1) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                } else {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                }
+            } else if (mixedShortCircuitChain) {
+                emitLogicalContinuation(stageBuf, index, index + 1, currentValue, truthy, nullish, scope, awaitScope);
             } else if (operator === ts.SyntaxKind.QuestionQuestionToken) {
                 stageBuf.open(`if (!(${nullish}))`);
                 stageBuf.open(`if (${truthy})`);
