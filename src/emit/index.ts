@@ -304,6 +304,8 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinueElseBreakPreludeStatements: readonly ts.Statement[];
     bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[];
     bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[];
+    bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null;
+    bodyContinueElseReturnPreludeStatements: readonly ts.Statement[];
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     fallthroughAwaitExpr?: ts.AwaitExpression;
@@ -34522,6 +34524,9 @@ class Emitter {
             !!elseContinueStatement && ts.isContinueStatement(elseContinueStatement);
         const elseContinueIsBreak = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
             !!elseContinueStatement && ts.isBreakStatement(elseContinueStatement) && !elseContinueStatement.label;
+        const elseContinueIsReturn = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
+            !!elseContinueStatement && ts.isReturnStatement(elseContinueStatement) &&
+            !!elseContinueStatement.expression;
         const elseContinueBodyStatements = elseContinueIsContinue
             ? bodyContinueElseStatements.slice(0, -1)
             : [];
@@ -34530,6 +34535,18 @@ class Emitter {
             : [];
         let bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[] = [];
+        const bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null = elseContinueIsReturn
+            ? (() => {
+                const expression = this.unwrapTransparentExpression(elseContinueStatement!.expression!);
+                return ts.isAwaitExpression(expression) ? expression : null;
+            })()
+            : null;
+        let bodyContinueElseReturnPreludeStatements: readonly ts.Statement[] = [];
+        if (bodyContinueCondition && elseContinueIsReturn && !bodyContinueElseReturnAwaitExpr) return false;
+        if (bodyContinueCondition && elseContinueIsReturn) {
+            bodyContinueElseReturnPreludeStatements = bodyContinueElseStatements.slice(0, -1);
+            if (!bodyContinueElseReturnPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        }
         let bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyContinueElsePreludeStatements: readonly ts.Statement[] = [];
         let bodyContinueElsePostAwaitStatements: readonly ts.Statement[] = [];
@@ -34573,7 +34590,7 @@ class Emitter {
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
         if (initialBody && bodyContinueCondition) return false;
-        if (bodyContinueCondition && !elseContinueIsContinue && !elseContinueIsBreak &&
+        if (bodyContinueCondition && !elseContinueIsContinue && !elseContinueIsBreak && !elseContinueIsReturn &&
             !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyContinueCondition && elseContinueIsContinue &&
             (!bodyContinueElsePreludeStatements.every((statement) => this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)) ||
@@ -34994,7 +35011,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -35030,6 +35047,7 @@ class Emitter {
         for (const awaitExpr of bodyContinueElseBreakAwaitExprs) visitReferences(awaitExpr);
         for (const statement of bodyContinueElseBreakPreludeStatements) visitReferences(statement);
         for (const statement of bodyContinueElseBreakPostAwaitStatements) visitReferences(statement);
+        for (const statement of bodyContinueElseReturnPreludeStatements) visitReferences(statement);
         if (bodyAwaitExpr && bodyAwaitExprs.length === 0) visitReferences(bodyAwaitExpr);
         visitReferences(bodyReturnExpr);
         if (bodyLeadingChain) {
@@ -35063,6 +35081,8 @@ class Emitter {
             bodyContinueElseBreakPreludeStatements,
             bodyContinueElseBreakAwaitExprs,
             bodyContinueElseBreakPostAwaitStatements,
+            bodyContinueElseReturnAwaitExpr,
+            bodyContinueElseReturnPreludeStatements,
             bodyRejectResult,
             fallthroughExpr,
             fallthroughAwaitExpr,
@@ -35072,6 +35092,7 @@ class Emitter {
         let bodyAdapter: string | null = null;
         let bodyAlternateAdapter: string | null = null;
         let bodyBreakAdapter: string | null = null;
+        let bodyReturnAdapter: string | null = null;
         let bodyConditionAdapter: string | null = null;
         let loopAdapterName: string | undefined;
         if (bodyContinue && bodyAwaitExprs.length > 0) {
@@ -35103,6 +35124,8 @@ class Emitter {
                     bodyContinueElseBreakPreludeStatements: [],
                     bodyContinueElseBreakAwaitExprs: [],
                     bodyContinueElseBreakPostAwaitStatements: [],
+                    bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnPreludeStatements: [],
                 },
                 bodyContinueElseAwaitExprs,
             );
@@ -35147,6 +35170,27 @@ class Emitter {
                 bodyContinueElseBreakAwaitExprs,
             );
         }
+        if (bodyContinueElseReturnAwaitExpr) {
+            const returnPromiseType = this.prepareType(mapTsType(
+                bodyContinueElseReturnAwaitExpr.expression,
+                this.checker.getTypeAtLocation(bodyContinueElseReturnAwaitExpr.expression),
+                this.checker,
+            ));
+            const returnAwaitedType = this.prepareType(mapTsType(
+                bodyContinueElseReturnAwaitExpr,
+                this.checker.getTypeAtLocation(bodyContinueElseReturnAwaitExpr),
+                this.checker,
+            ));
+            if (returnPromiseType.kind !== "promise" || returnAwaitedType.kind === "never") return false;
+            bodyReturnAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                returnPromiseType,
+                returnAwaitedType,
+                bodyContinueElseReturnAwaitExpr,
+                bodyContinueElseReturnAwaitExpr,
+                continuation.params,
+                continuation.thisValue,
+            );
+        }
         if (bodyContinueConditionAwaitExpr && bodyContinueConditionPromiseType && bodyContinueConditionAwaitedType) {
             bodyConditionAdapter = this.ensureAsyncAwaitLoopBodyConditionalAdapter(
                 conditionPromiseType,
@@ -35154,6 +35198,7 @@ class Emitter {
                 bodyAdapter,
                 bodyAlternateAdapter,
                 bodyBreakAdapter,
+                bodyReturnAdapter,
                 bodyContinueConditionPromiseType,
                 bodyContinueConditionAwaitedType,
                 loopAdapterName!,
@@ -35670,6 +35715,7 @@ class Emitter {
         bodyAdapter: string | null,
         bodyAlternateAdapter: string | null,
         bodyBreakAdapter: string | null,
+        bodyReturnAdapter: string | null,
         conditionPromiseType: CType,
         conditionAwaitedType: CType,
         loopAdapterName: string,
@@ -35753,7 +35799,30 @@ class Emitter {
             emitBody(buf, bodyAdapter, bodyAwaitExpr, bodyPromiseType, continuation.bodyPreludeStatements);
             buf.close();
             buf.open("else");
-            if (bodyBreakAdapter && continuation.bodyContinueElseBreakAwaitExprs.length > 0) {
+            if (bodyReturnAdapter && continuation.bodyContinueElseReturnAwaitExpr) {
+                for (const statement of continuation.bodyContinueElseReturnPreludeStatements) this.emitStmt(buf, statement);
+                const source = this.emitExpr(continuation.bodyContinueElseReturnAwaitExpr.expression);
+                const sourceVar = this.freshTemp("_await_conditional_return_source");
+                const envVar = this.freshTemp("_await_conditional_return_env");
+                const adapterEnvType = `${bodyReturnAdapter}_env_t`;
+                const promiseType = this.prepareType(mapTsType(
+                    continuation.bodyContinueElseReturnAwaitExpr.expression,
+                    this.checker.getTypeAtLocation(continuation.bodyContinueElseReturnAwaitExpr.expression),
+                    this.checker,
+                ));
+                buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, continuation.bodyContinueElseReturnAwaitExpr.expression)};`);
+                buf.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
+                buf.line(`${envVar}->receiver = ${sourceVar};`);
+                buf.line(`${envVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${envVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${envVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${sourceVar}, ${bodyReturnAdapter}, ${envVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${bodyReturnAdapter}(${envVar});`);
+                buf.close();
+            } else if (bodyBreakAdapter && continuation.bodyContinueElseBreakAwaitExprs.length > 0) {
                 for (const statement of continuation.bodyContinueElseBreakPreludeStatements) this.emitStmt(buf, statement);
                 const source = this.emitExpr(continuation.bodyContinueElseBreakAwaitExprs[0]!.expression);
                 const sourceVar = this.freshTemp("_await_conditional_break_body_source");

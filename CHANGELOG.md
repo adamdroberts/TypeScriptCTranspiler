@@ -20,6 +20,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Awaited loop-body `if` conditions now support a direct awaited boolean before selecting the bounded awaited/await-free `continue` arms; broader nested awaited branch graphs remain deferred. Test: `async_await_loop_body_await_if_continue`.
 - Awaited loop-body `if` conditions now also select direct awaited body continuations in both branches before `continue`; broader nested awaited branch graphs remain deferred. Test: `async_await_loop_body_await_if_else_continue`.
 - Awaited loop-body `if` conditions now route direct awaited body expressions in a nested `else { break; }` arm through the awaited post-loop fallthrough after the true arm's awaited `continue`; broader nested break graphs remain deferred. Test: `async_await_loop_body_await_if_break`.
+- Awaited loop-body `if` conditions now route a direct nested `else { return await ...; }` arm after the true arm's awaited `continue`; broader nested return/control-flow graphs remain deferred. Test: `async_await_loop_body_await_if_return`.
 - Dispatch capture validation now recursively audits top-level helper functions for mutable or non-primitive global access. Test: `dispatch_capture_transitive_diagnostic`.
 - Threaded dispatch now supports `--no-gc` by protecting the bump-chunk allocator with a runtime mutex. Test: `dispatch_no_gc`.
 - Dispatch task capture validation now permits const array/dynamic values by creating a `structuredClone` snapshot at closure creation. Tests: `dispatch_capture_clone`, `dispatch_serial_capture_clone`.
