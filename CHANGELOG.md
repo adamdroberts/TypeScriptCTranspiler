@@ -3268,3 +3268,4 @@ These are AOT closure requirements, not permanent product limits.
 - Cover assigned-before-use uninitialized `var` state in all bounded direct branch `return await` loop-prelude shapes across declarations, methods, and function values.
 - Hoist simple `var` declarations from all direct branch `return await` loop preludes so initialized and undefined fallthrough paths survive the await across declarations, methods, and function values.
 - Cover simple `var` declarations inside caught direct branch `return await` try/catch/finally preludes across declarations, methods, and function values.
+- Cover escaping `var` declarations inside direct branch `return await` if/switch/try-finally preludes across declarations, methods, and function values.

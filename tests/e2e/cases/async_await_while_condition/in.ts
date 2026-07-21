@@ -2668,6 +2668,39 @@ async function chooseDirectAwaitEscapingVarTryCatchFinallyPrelude(prefix: string
     return await laterBodyValue(source);
 }
 
+async function chooseDirectAwaitEscapingVarIfPrelude(prefix: string, flag: boolean): Promise<string> {
+    if (flag) {
+        var source: any;
+        source = prefix + "-escaping-if";
+    } else {
+        source = prefix + "-escaping-else";
+    }
+    return await laterBodyValue(source);
+}
+
+async function chooseDirectAwaitEscapingVarSwitchPrelude(prefix: string, flag: boolean): Promise<string> {
+    switch (flag ? 1 : 0) {
+        case 1:
+            var source: any;
+            source = prefix + "-escaping-switch";
+            break;
+        default:
+            source = prefix + "-escaping-default";
+            break;
+    }
+    return await laterBodyValue(source);
+}
+
+async function chooseDirectAwaitEscapingVarTryFinallyPrelude(prefix: string): Promise<string> {
+    try {
+        var source: any;
+        source = prefix + "-escaping-try";
+    } finally {
+        void "escaping-finally";
+    }
+    return await laterBodyValue(source);
+}
+
 async function chooseDirectAwaitUninitializedVarDoPreludeNext(prefix: string): Promise<string> {
     var source: any;
     do {
@@ -3150,6 +3183,39 @@ class LoopChooser {
         return await laterBodyValue(source);
     }
 
+    async pickDirectAwaitEscapingVarIfPrelude(prefix: string, flag: boolean): Promise<string> {
+        if (flag) {
+            var source: any;
+            source = prefix + "-escaping-if";
+        } else {
+            source = prefix + "-escaping-else";
+        }
+        return await laterBodyValue(source);
+    }
+
+    async pickDirectAwaitEscapingVarSwitchPrelude(prefix: string, flag: boolean): Promise<string> {
+        switch (flag ? 1 : 0) {
+            case 1:
+                var source: any;
+                source = prefix + "-escaping-switch";
+                break;
+            default:
+                source = prefix + "-escaping-default";
+                break;
+        }
+        return await laterBodyValue(source);
+    }
+
+    async pickDirectAwaitEscapingVarTryFinallyPrelude(prefix: string): Promise<string> {
+        try {
+            var source: any;
+            source = prefix + "-escaping-try";
+        } finally {
+            void "method-escaping-finally";
+        }
+        return await laterBodyValue(source);
+    }
+
     async pickDirectAwaitUninitializedVarDoPreludeNext(prefix: string): Promise<string> {
         var source: any;
         do {
@@ -3508,6 +3574,39 @@ const chooseDirectAwaitEscapingVarTryCatchFinallyPreludeValue = async (prefix: s
         var source: any;
         void reason;
         source = prefix + "-escaping-catch-finally";
+    } finally {
+        void "value-escaping-finally";
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitEscapingVarIfPreludeValue = async (prefix: string, flag: boolean): Promise<string> => {
+    if (flag) {
+        var source: any;
+        source = prefix + "-escaping-if";
+    } else {
+        source = prefix + "-escaping-else";
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitEscapingVarSwitchPreludeValue = async (prefix: string, flag: boolean): Promise<string> => {
+    switch (flag ? 1 : 0) {
+        case 1:
+            var source: any;
+            source = prefix + "-escaping-switch";
+            break;
+        default:
+            source = prefix + "-escaping-default";
+            break;
+    }
+    return await laterBodyValue(source);
+};
+
+const chooseDirectAwaitEscapingVarTryFinallyPreludeValue = async (prefix: string): Promise<string> => {
+    try {
+        var source: any;
+        source = prefix + "-escaping-try";
     } finally {
         void "value-escaping-finally";
     }
@@ -4170,6 +4269,21 @@ chooseDirectAwaitEscapingVarLoopPreludeValue(false, "value").then((value) => con
 chooseDirectAwaitEscapingVarTryCatchFinallyPrelude("direct").then((value) => console.log("await-direct-escaping-var-try-catch-finally", value));
 new LoopChooser("method-").pickDirectAwaitEscapingVarTryCatchFinallyPrelude("method").then((value) => console.log("await-method-escaping-var-try-catch-finally", value));
 chooseDirectAwaitEscapingVarTryCatchFinallyPreludeValue("value").then((value) => console.log("await-value-escaping-var-try-catch-finally", value));
+chooseDirectAwaitEscapingVarIfPrelude("direct", true).then((value) => console.log("await-direct-escaping-var-if-true", value));
+chooseDirectAwaitEscapingVarIfPrelude("direct", false).then((value) => console.log("await-direct-escaping-var-if-false", value));
+chooseDirectAwaitEscapingVarSwitchPrelude("direct", true).then((value) => console.log("await-direct-escaping-var-switch-true", value));
+chooseDirectAwaitEscapingVarSwitchPrelude("direct", false).then((value) => console.log("await-direct-escaping-var-switch-false", value));
+chooseDirectAwaitEscapingVarTryFinallyPrelude("direct").then((value) => console.log("await-direct-escaping-var-try-finally", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarIfPrelude("method", true).then((value) => console.log("await-method-escaping-var-if-true", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarIfPrelude("method", false).then((value) => console.log("await-method-escaping-var-if-false", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarSwitchPrelude("method", true).then((value) => console.log("await-method-escaping-var-switch-true", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarSwitchPrelude("method", false).then((value) => console.log("await-method-escaping-var-switch-false", value));
+new LoopChooser("method-").pickDirectAwaitEscapingVarTryFinallyPrelude("method").then((value) => console.log("await-method-escaping-var-try-finally", value));
+chooseDirectAwaitEscapingVarIfPreludeValue("value", true).then((value) => console.log("await-value-escaping-var-if-true", value));
+chooseDirectAwaitEscapingVarIfPreludeValue("value", false).then((value) => console.log("await-value-escaping-var-if-false", value));
+chooseDirectAwaitEscapingVarSwitchPreludeValue("value", true).then((value) => console.log("await-value-escaping-var-switch-true", value));
+chooseDirectAwaitEscapingVarSwitchPreludeValue("value", false).then((value) => console.log("await-value-escaping-var-switch-false", value));
+chooseDirectAwaitEscapingVarTryFinallyPreludeValue("value").then((value) => console.log("await-value-escaping-var-try-finally", value));
 chooseDirectAwaitUninitializedVarDoPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-do-next", value));
 chooseDirectAwaitUninitializedVarForPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-next", value));
 chooseDirectAwaitUninitializedVarForOfPreludeNext("direct-uninitialized-var-next").then((value) => console.log("await-direct-uninitialized-var-for-of-next", value));
