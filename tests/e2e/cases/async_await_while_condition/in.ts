@@ -653,6 +653,15 @@ async function chooseLoopConditionalThreeAwaitBreakDeclarationAwait(value: strin
     return await laterBodyValue(value);
 }
 
+async function chooseLoopConditionalThreeAwaitContinueDeclarationIncrementorAwait(value: string, repeat: boolean): Promise<string> {
+    for (let suffix = "-conditional-declaration"; await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false); suffix += "-conditional-incrementor") {
+        value += suffix;
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopTwoAwaitOrContinueAwait(value: string, repeat: boolean): Promise<string> {
     while (await laterCondition(repeat) || await laterCondition(repeat)) {
         value += "-body";
@@ -3621,6 +3630,7 @@ chooseLoopThreeAwaitContinueInitializerIncrementorAwait("loop-three-await-contin
 chooseLoopThreeAwaitBreakDeclarationAwait("loop-three-await-break-declaration", true).then((value) => console.log("await-loop-three-await-break-declaration", value));
 chooseLoopThreeAwaitContinueDeclarationIncrementorAwait("loop-three-await-continue-declaration", true).then((value) => console.log("await-loop-three-await-continue-declaration", value));
 chooseLoopConditionalThreeAwaitBreakDeclarationAwait("loop-three-await-conditional-declaration", true).then((value) => console.log("await-loop-three-await-conditional-declaration", value));
+chooseLoopConditionalThreeAwaitContinueDeclarationIncrementorAwait("loop-three-await-conditional-continue-declaration", true).then((value) => console.log("await-loop-three-await-conditional-continue-declaration", value));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));
 chooseLoopTwoAwaitOrContinueThrowAwait("loop-two-await-or-continue-throw", true).catch((reason) => console.log("await-loop-two-await-or-continue-throw", reason));
 chooseLoopThreeAwaitAndContinueAwait("loop-three-await-and-continue", true).then((value) => console.log("await-loop-three-await-and-continue", value));

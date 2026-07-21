@@ -498,6 +498,7 @@ await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
 await-loop-three-await-continue-incrementor loop-three-await-continue-incrementor-three-continue-three-incrementor
 await-loop-three-await-continue-initializer-incrementor loop-three-await-continue-initializer-incrementor-three-initializer-three-continue-three-incrementor
 await-loop-three-await-continue-declaration loop-three-await-continue-declaration-three-declaration
+await-loop-three-await-conditional-continue-declaration loop-three-await-conditional-continue-declaration-conditional-declaration
 await-loop-three-await-and-continue loop-three-await-and-continue-three-and
 await-loop-three-await-or-continue loop-three-await-or-continue-three-or
 await-loop-three-await-conditional-incrementor loop-three-await-conditional-incrementor-conditional-continue-conditional-incrementor
