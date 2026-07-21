@@ -33363,6 +33363,10 @@ class Emitter {
             operators[0] === ts.SyntaxKind.AmpersandAmpersandToken && operators[1] === ts.SyntaxKind.QuestionQuestionToken;
         const rightAssociatedNullishAnd = !leftAssociated && operators.length === 2 &&
             operators[0] === ts.SyntaxKind.QuestionQuestionToken && operators[1] === ts.SyntaxKind.AmpersandAmpersandToken;
+        const leftAssociatedAndOr = leftAssociated && operators.length === 2 &&
+            operators[0] === ts.SyntaxKind.AmpersandAmpersandToken && operators[1] === ts.SyntaxKind.BarBarToken;
+        const leftAssociatedOrAnd = leftAssociated && operators.length === 2 &&
+            operators[0] === ts.SyntaxKind.BarBarToken && operators[1] === ts.SyntaxKind.AmpersandAmpersandToken;
         if (mixedShortCircuitChain && !leftAssociated && !rightAssociatedOrAnd && !rightAssociatedAndOr &&
             !rightAssociatedOrNullish && !rightAssociatedNullishOr && !rightAssociatedAndNullish &&
             !rightAssociatedNullishAnd) return false;
@@ -33619,7 +33623,53 @@ class Emitter {
             stageBuf.open(`if (setjmp(${eh}.jb) == 0)`);
             const truthy = this.truthyExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
             const nullish = this.nullishExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
-            if (rightAssociatedOrAnd) {
+            if (leftAssociatedAndOr) {
+                if (index === 0) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                } else if (index === 1) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                } else {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                }
+            } else if (leftAssociatedOrAnd) {
+                if (index === 0) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                } else if (index === 1) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                } else {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                }
+            } else if (rightAssociatedOrAnd) {
                 if (index === 0) {
                     stageBuf.open(`if (${truthy})`);
                     emitBodyReentry(stageBuf);

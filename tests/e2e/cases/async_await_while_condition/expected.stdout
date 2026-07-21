@@ -389,6 +389,7 @@ await-loop-expression-break-false loop-expression-break-false-initializer
 await-loop-expression-break-false-throw loop-expression-break-false-throw-initializer
 await-loop-two-await-continue-false loop-two-await-continue-false
 await-loop-two-await-continue-throw-false loop-two-await-continue-throw-false
+await-loop-three-await-mixed-or-and-break-declaration loop-three-await-mixed-or-and-break-declaration-mixed-or-and-break-declaration
 await-method-loop-expression-break-false loop-expression-break-false-method-false-initializer
 await-method-loop-expression-break-false-throw loop-expression-break-false-throw-method-false-throw-initializer
 await-value-loop-expression-break-false loop-expression-break-false-value-initializer
@@ -431,6 +432,7 @@ await-loop-two-await-break-initializer loop-two-await-break-initializer-two-init
 await-loop-two-await-break-declaration loop-two-await-break-declaration-two-declaration
 await-loop-three-await-conditional-declaration loop-three-await-conditional-declaration-conditional-declaration
 await-loop-three-await-conditional-break loop-three-await-conditional-break-conditional-break
+await-loop-three-await-mixed-and-or-break-declaration loop-three-await-mixed-and-or-break-declaration-mixed-break-declaration
 await-method-loop-initializer-escaping-var-continue loop-escaping-var-continue-body-method-increment
 await-method-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-body-method-throw-increment
 await-method-loop-expression-continue loop-expression-continue-method-initializer-body-increment
