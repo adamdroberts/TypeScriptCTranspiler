@@ -583,6 +583,15 @@ async function chooseLoopTwoAwaitBreakDeclarationAwait(value: string, repeat: bo
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitContinueIncrementorAwait(value: string, repeat: boolean): Promise<string> {
+    for (; await laterCondition(repeat) && await laterCondition(repeat); value += "-two-incrementor") {
+        value += "-two-continue";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
     for (let suffix = "-three-declaration"; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
         value += suffix;
@@ -3541,6 +3550,7 @@ chooseLoopTwoAwaitBreakAwait("loop-two-await-break", true).then((value) => conso
 chooseLoopTwoAwaitBreakIncrementorAwait("loop-two-await-break-incrementor", true).then((value) => console.log("await-loop-two-await-break-incrementor", value));
 chooseLoopTwoAwaitBreakInitializerAwait("loop-two-await-break-initializer", true).then((value) => console.log("await-loop-two-await-break-initializer", value));
 chooseLoopTwoAwaitBreakDeclarationAwait("loop-two-await-break-declaration", true).then((value) => console.log("await-loop-two-await-break-declaration", value));
+chooseLoopTwoAwaitContinueIncrementorAwait("loop-two-await-continue-incrementor", true).then((value) => console.log("await-loop-two-await-continue-incrementor", value));
 chooseLoopThreeAwaitBreakDeclarationAwait("loop-three-await-break-declaration", true).then((value) => console.log("await-loop-three-await-break-declaration", value));
 chooseLoopConditionalThreeAwaitBreakDeclarationAwait("loop-three-await-conditional-declaration", true).then((value) => console.log("await-loop-three-await-conditional-declaration", value));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));

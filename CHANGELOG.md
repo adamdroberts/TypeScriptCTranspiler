@@ -17,6 +17,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Two-await outer-`break` loop conditions now carry initialized simple `for` declaration values through both condition suspension stages and body fallthrough. Regression: `async_await_while_condition`.
 - Three-or-more direct-awaited logical outer-`break` loop conditions now carry initialized simple `for` declaration values through every condition stage and body fallthrough. Regression: `async_await_while_condition`.
 - Conditional three-await outer-`break` loop conditions now carry initialized simple `for` declaration values through the condition and selected branch stage before body fallthrough. Regression: `async_await_while_condition`.
+- Direct two-await outer-`continue` loop conditions now execute an await-free initializer-free `for` incrementor before condition re-entry. Regression: `async_await_while_condition`.
 - Two-await nullish outer-`continue` conditions now also route terminal `throw await` fallthroughs. Regression: `async_await_while_condition`.
 - Two-await nullish outer-`continue` coverage now includes receiver and function-value captures. Regression: `async_await_while_condition`.
 - Awaited loop outer-`continue` lowering now stages flat three-or-more direct-awaited `&&`, `||`, and `??` conditions with return/throw-await fallthroughs. Regression: `async_await_while_condition`.

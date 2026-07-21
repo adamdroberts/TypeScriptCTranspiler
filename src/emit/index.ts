@@ -32978,6 +32978,7 @@ class Emitter {
         fallthroughRejectResult: boolean,
         loopInitializer: ts.Expression | ts.VariableStatement | null = null,
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
+        loopIncrementor: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length !== 2 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
@@ -33104,6 +33105,10 @@ class Emitter {
             let source: EmitResult | null = null;
             try {
                 for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
+                if (bodyIsContinue && loopIncrementor) {
+                    const incrementor = this.emitExpr(loopIncrementor);
+                    stageBuf.line(`${incrementor.c};`);
+                }
                 if (!bodyIsBreak) source = this.emitExpr(awaitExpressions[0]!.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
@@ -34863,6 +34868,21 @@ class Emitter {
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
             : null;
+        const loopBodyAction = loopBody[loopBody.length - 1];
+        let loopIncrementorHasAwait = false;
+        if (loopIncrementor) {
+            const visitIncrementor = (node: ts.Node): void => {
+                if (loopIncrementorHasAwait || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                if (ts.isAwaitExpression(node)) {
+                    loopIncrementorHasAwait = true;
+                    return;
+                }
+                ts.forEachChild(node, visitIncrementor);
+            };
+            visitIncrementor(loopIncrementor);
+        }
+        const loopBodyContinues = loopBodyAction && ts.isContinueStatement(loopBodyAction) && !loopBodyAction.label;
+        const loopContinueIncrementorSupported = !loopIncrementor || !loopIncrementorHasAwait;
         const loopInitializerExpression = loopInitializer && ts.isExpression(loopInitializer)
             ? loopInitializer
             : null;
@@ -34881,13 +34901,15 @@ class Emitter {
         const loopInitializerBreakSupported = !loopInitializer || (
             loopInitializerExpression !== null && !loopInitializerExpressionHasAwait
         );
-        const loopBodyAction = loopBody[loopBody.length - 1];
         const loopBreakSkipsIncrementor = !loopIncrementor || (
             loopBodyAction !== undefined &&
             ts.isBreakStatement(loopBodyAction) &&
             !loopBodyAction.label
         );
-        if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length === 2 &&
+        const loopTwoAwaitControlSupported = loopBreakSkipsIncrementor || (
+            loopBodyContinues && loopContinueIncrementorSupported
+        );
+        if (loopInitializerBreakSupported && loopTwoAwaitControlSupported && awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
                 condition,
@@ -34898,6 +34920,8 @@ class Emitter {
                 thisValue,
                 ts.isThrowStatement(fallthrough),
                 loopInitializerExpression,
+                [],
+                loopIncrementor,
             )) return true;
         if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
