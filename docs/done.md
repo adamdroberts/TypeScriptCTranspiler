@@ -15,6 +15,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Direct-prelude `return await` preserves an assigned-before-use uninitialized dynamic `var` assigned inside a guaranteed-first-iteration await-free `do…while` prelude. Test: `async_await_while_condition`.
 - Direct-prelude `return await` preserves an assigned-before-use uninitialized dynamic `var` assigned inside a guaranteed-one-iteration await-free ordinary `for` prelude. Test: `async_await_while_condition`.
 - Direct-prelude `return await` preserves an assigned-before-use uninitialized dynamic `var` assigned inside a one-element await-free `for…of` prelude. Test: `async_await_while_condition`.
+- Direct-prelude `return await` preserves an assigned-before-use uninitialized dynamic `var` assigned inside a one-key await-free `for…in` prelude. Test: `async_await_while_condition`.
 - Mutable uninitialized-`var` leading chains preserve terminal post-await throws across declarations, async class methods, and function values. Test: `async_await_while_condition`.
 - Bounded awaited loop conditions now resolve synchronous direct `return` bodies before the false fallthrough in `while` and initializer-free `for` forms across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Multi-await outer-`break` loop conditions now accept initializer-free `for` incrementors as unreachable skipped work before awaited post-loop fallthrough. Test: `async_await_while_condition`.
