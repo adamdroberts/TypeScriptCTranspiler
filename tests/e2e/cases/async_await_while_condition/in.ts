@@ -68,6 +68,15 @@ async function chooseDirectAwaitMutableUninitializedVarPrelude(prefix: string): 
     return source + "-" + second;
 }
 
+async function chooseDirectAwaitMutableUninitializedVarThrow(prefix: string): Promise<string> {
+    var source: string;
+    source = prefix + "-mutable-throw-var";
+    const first = await laterBodyValue(source + "-first");
+    source = first + "-updated";
+    const second = await laterBodyValue(source + "-second");
+    throw source + "-" + second;
+}
+
 class MutableUninitializedVarAwaitChooser {
     async choose(prefix: string): Promise<string> {
         var source: string;
@@ -76,6 +85,15 @@ class MutableUninitializedVarAwaitChooser {
         source = first + "-updated";
         const second = await laterBodyValue(source + "-second");
         return source + "-" + second;
+    }
+
+    async chooseThrow(prefix: string): Promise<string> {
+        var source: string;
+        source = prefix + "-mutable-method-throw-var";
+        const first = await laterBodyValue(source + "-first");
+        source = first + "-updated";
+        const second = await laterBodyValue(source + "-second");
+        throw source + "-" + second;
     }
 }
 
@@ -86,6 +104,15 @@ const chooseMutableUninitializedVarAwaitValue = async (prefix: string): Promise<
     source = first + "-updated";
     const second = await laterBodyValue(source + "-second");
     return source + "-" + second;
+};
+
+const chooseMutableUninitializedVarAwaitThrowValue = async (prefix: string): Promise<string> => {
+    var source: string;
+    source = prefix + "-mutable-value-throw-var";
+    const first = await laterBodyValue(source + "-first");
+    source = first + "-updated";
+    const second = await laterBodyValue(source + "-second");
+    throw source + "-" + second;
 };
 
 async function chooseDirectAwaitAssignedVarReturn(prefix: string): Promise<string> {
@@ -3699,8 +3726,11 @@ chooseDirectAwaitMultipleControlPrelude("direct-control").then((value) => consol
 chooseDirectAwaitMultipleVarPrelude("direct-var").then((value) => console.log("await-direct-multiple-var-prelude", value));
 chooseDirectAwaitMultipleUninitializedVarPrelude("direct-uninitialized-var").then((value) => console.log("await-direct-multiple-uninitialized-var-prelude", value));
 chooseDirectAwaitMutableUninitializedVarPrelude("direct-mutable-uninitialized-var").then((value) => console.log("await-direct-mutable-uninitialized-var-prelude", value));
+chooseDirectAwaitMutableUninitializedVarThrow("direct-mutable-uninitialized-var").catch((reason) => console.log("await-direct-mutable-uninitialized-var-throw", reason));
 new MutableUninitializedVarAwaitChooser().choose("method-mutable-uninitialized-var").then((value) => console.log("await-method-mutable-uninitialized-var-prelude", value));
+new MutableUninitializedVarAwaitChooser().chooseThrow("method-mutable-uninitialized-var").catch((reason) => console.log("await-method-mutable-uninitialized-var-throw", reason));
 chooseMutableUninitializedVarAwaitValue("value-mutable-uninitialized-var").then((value) => console.log("await-value-mutable-uninitialized-var-prelude", value));
+chooseMutableUninitializedVarAwaitThrowValue("value-mutable-uninitialized-var").catch((reason) => console.log("await-value-mutable-uninitialized-var-throw", reason));
 chooseDirectAwaitAssignedVarReturn("direct-assigned-var-return").then((value) => console.log("await-direct-assigned-var-return", value));
 new AssignedVarReturnChooser().choose("direct-assigned-var-method").then((value) => console.log("await-method-assigned-var-return", value));
 chooseArrowAssignedVarReturn("direct-assigned-var-arrow").then((value) => console.log("await-arrow-assigned-var-return", value));

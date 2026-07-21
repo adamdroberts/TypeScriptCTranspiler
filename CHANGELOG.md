@@ -3252,3 +3252,4 @@ These are AOT closure requirements, not permanent product limits.
 - Async leading-chain lowering now carries assigned-before-use uninitialized `var` locals across multiple awaited declarations. Test: `async_await_while_condition`.
 - Async leading-chain lowering now preserves bounded mutation of an uninitialized `var` between awaited declarations. Test: `async_await_while_condition`.
 - Async methods and function values now share the mutable uninitialized-`var` leading-chain coverage. Test: `async_await_while_condition`.
+- Mutable uninitialized-`var` leading chains now preserve terminal post-await throws across async surfaces. Test: `async_await_while_condition`.
