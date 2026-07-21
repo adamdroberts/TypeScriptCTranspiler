@@ -2605,6 +2605,15 @@ async function chooseForCondition(flag: boolean): Promise<string> {
     return "for-no";
 }
 
+async function chooseDirectAwaitUninitializedVarLoopPrelude(flag: boolean, prefix: string): Promise<string> {
+    var source: any;
+    while (flag) {
+        source = prefix + "-while";
+        break;
+    }
+    return await laterBodyValue(source);
+}
+
 async function chooseLoopLogical(flag: boolean): Promise<string> {
     while (await laterTrue() && flag) {
         return "logical-yes";
@@ -2992,6 +3001,15 @@ class LoopChooser {
         return this.prefix + "no";
     }
 
+    async pickDirectAwaitUninitializedVarLoopPrelude(flag: boolean, prefix: string): Promise<string> {
+        var source: any;
+        while (flag) {
+            source = prefix + "-while";
+            break;
+        }
+        return await laterBodyValue(source);
+    }
+
     async pickMultiple(flag: boolean): Promise<string> {
         while (await (flag ? laterTrue() : laterFalse())) {
             const first = await laterBodyValue(this.prefix + "first"), second = await laterBodyValue(first + "-second");
@@ -3259,6 +3277,15 @@ const chooseLoopValue = async (flag: boolean, prefix: string): Promise<string> =
         return await laterBodyValue(prefix + "yes");
     }
     return prefix + "no";
+};
+
+const chooseDirectAwaitUninitializedVarLoopPreludeValue = async (flag: boolean, prefix: string): Promise<string> => {
+    var source: any;
+    while (flag) {
+        source = prefix + "-while";
+        break;
+    }
+    return await laterBodyValue(source);
 };
 
 const chooseLoopSynchronousBodyValue = async (flag: boolean): Promise<string> => {
@@ -3861,6 +3888,9 @@ chooseDirectAwaitUninitializedVarSwitchPrelude("direct-uninitialized-var-switch"
 chooseDirectAwaitUninitializedVarTryFinallyPrelude("direct-uninitialized-var-try-finally").then((value) => console.log("await-direct-uninitialized-var-try-finally", value));
 chooseDirectAwaitUninitializedVarTryCatchPrelude("direct-uninitialized-var-try-catch").then((value) => console.log("await-direct-uninitialized-var-try-catch", value));
 chooseDirectAwaitUninitializedVarTryCatchFinallyPrelude("direct-uninitialized-var-try-catch-finally").then((value) => console.log("await-direct-uninitialized-var-try-catch-finally", value));
+chooseDirectAwaitUninitializedVarLoopPrelude(true, "direct-uninitialized-var-loop").then((value) => console.log("await-direct-uninitialized-var-loop", value));
+new LoopChooser("method-").pickDirectAwaitUninitializedVarLoopPrelude(true, "direct-uninitialized-var-loop").then((value) => console.log("await-method-direct-uninitialized-var-loop", value));
+chooseDirectAwaitUninitializedVarLoopPreludeValue(true, "value-uninitialized-var-loop").then((value) => console.log("await-value-direct-uninitialized-var-loop", value));
 new UninitializedVarTryCatchFinallyChooser().choose("method-uninitialized-var-try-catch-finally").then((value) => console.log("await-method-uninitialized-var-try-catch-finally", value));
 chooseUninitializedVarTryCatchFinallyValue("value-uninitialized-var-try-catch-finally").then((value) => console.log("await-value-uninitialized-var-try-catch-finally", value));
 new MutableUninitializedVarAwaitChooser().choose("method-mutable-uninitialized-var").then((value) => console.log("await-method-mutable-uninitialized-var-prelude", value));
