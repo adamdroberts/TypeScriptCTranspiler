@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- The dedicated long-chain fixture now verifies eleven sequential awaited locals across declarations, class methods, async function values, and branch fallthroughs; the broader multi-suspension state-machine and nested suspension graphs remain deferred. Test: `async_await_eight_step_chain`.
+
 This is the next item that most directly expands what programs can be written against `tsc2c`.
 
 - **Phase 6 — `async`/`await` + libuv event loop**
