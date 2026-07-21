@@ -34515,8 +34515,8 @@ class Emitter {
         if (!thenTerminalExpr || !elseTerminalExpr) return false;
         const thenPreludeStatements = thenStatements.slice(0, -1);
         const elsePreludeStatements = elseStatements.slice(0, -1);
-        if (!thenPreludeStatements.every((statement) => ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)) ||
-            !elsePreludeStatements.every((statement) => ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        if (!thenPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) ||
+            !elsePreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         const thenAwaitExpr = ts.isAwaitExpression(thenTerminalExpr) ? thenTerminalExpr : null;
         const elseAwaitExpr = ts.isAwaitExpression(elseTerminalExpr) ? elseTerminalExpr : null;
         const thenSynchronousExpr = thenAwaitExpr ? null : thenTerminalExpr;
