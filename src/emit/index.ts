@@ -295,6 +295,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyContinue: boolean;
     bodyContinueCondition: ts.Expression | null;
+    bodyContinueConditionAwaitExpr: ts.AwaitExpression | null;
     bodyContinueElseStatements: readonly ts.Statement[];
     bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[];
     bodyContinueElsePreludeStatements: readonly ts.Statement[];
@@ -34506,6 +34507,9 @@ class Emitter {
         const bodyContinueCondition = conditionalContinueIsContinue
             ? conditionalContinue.expression
             : null;
+        const bodyContinueConditionAwaitExpr = bodyContinueCondition && ts.isAwaitExpression(this.unwrapTransparentExpression(bodyContinueCondition))
+            ? this.unwrapTransparentExpression(bodyContinueCondition) as ts.AwaitExpression
+            : null;
         const bodyContinueElseStatements = conditionalContinueIsContinue && conditionalContinue?.elseStatement
             ? ts.isBlock(conditionalContinue.elseStatement)
                 ? conditionalContinue.elseStatement.statements
@@ -34533,14 +34537,15 @@ class Emitter {
                 const expression = this.unwrapTransparentExpression(statement.expression);
                 return ts.isAwaitExpression(expression) ? [{ statement, expression }] : [];
             });
-            if (elseAwaitStatements.length === 0) return false;
-            const firstAwaitIndex = elseContinueBodyStatements.indexOf(elseAwaitStatements[0]!.statement);
-            const lastAwaitIndex = elseContinueBodyStatements.indexOf(elseAwaitStatements[elseAwaitStatements.length - 1]!.statement);
-            const awaitStatements = new Set<ts.Statement>(elseAwaitStatements.map(({ statement }) => statement));
-            if (elseContinueBodyStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
-            bodyContinueElseAwaitExprs = elseAwaitStatements.map(({ expression }) => expression);
-            bodyContinueElsePreludeStatements = elseContinueBodyStatements.slice(0, firstAwaitIndex);
-            bodyContinueElsePostAwaitStatements = elseContinueBodyStatements.slice(lastAwaitIndex + 1);
+            if (elseAwaitStatements.length > 0) {
+                const firstAwaitIndex = elseContinueBodyStatements.indexOf(elseAwaitStatements[0]!.statement);
+                const lastAwaitIndex = elseContinueBodyStatements.indexOf(elseAwaitStatements[elseAwaitStatements.length - 1]!.statement);
+                const awaitStatements = new Set<ts.Statement>(elseAwaitStatements.map(({ statement }) => statement));
+                if (elseContinueBodyStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
+                bodyContinueElseAwaitExprs = elseAwaitStatements.map(({ expression }) => expression);
+                bodyContinueElsePreludeStatements = elseContinueBodyStatements.slice(0, firstAwaitIndex);
+                bodyContinueElsePostAwaitStatements = elseContinueBodyStatements.slice(lastAwaitIndex + 1);
+            }
         }
         const bodyContinueStatements = bodyContinueCondition
             ? conditionalThenStatements.slice(0, -1)
@@ -34630,7 +34635,7 @@ class Emitter {
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
-            if (bodyContinueCondition && !bodySynchronousExpressionSupported(bodyContinueCondition)) return false;
+            if (bodyContinueCondition && !bodyContinueConditionAwaitExpr && !bodySynchronousExpressionSupported(bodyContinueCondition)) return false;
             const bodyAwaitStatements = bodyContinueStatements.flatMap((statement) => {
                 if (!ts.isExpressionStatement(statement)) return [];
                 const expression = this.unwrapTransparentExpression(statement.expression);
@@ -34885,6 +34890,20 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
+        const bodyContinueConditionPromiseType = bodyContinueConditionAwaitExpr
+            ? this.prepareType(mapTsType(
+                bodyContinueConditionAwaitExpr.expression,
+                this.checker.getTypeAtLocation(bodyContinueConditionAwaitExpr.expression),
+                this.checker,
+            ))
+            : null;
+        const bodyContinueConditionAwaitedType = bodyContinueConditionAwaitExpr
+            ? this.prepareType(mapTsType(
+                bodyContinueConditionAwaitExpr,
+                this.checker.getTypeAtLocation(bodyContinueConditionAwaitExpr),
+                this.checker,
+            ))
+            : null;
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         const fallthroughAwaitExpr = ts.isAwaitExpression(fallthroughAwait)
             ? fallthroughAwait
@@ -34921,6 +34940,7 @@ class Emitter {
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             bodyContinueElsePromiseTypes.some((type) => type.kind !== "promise") ||
             bodyContinueElseAwaitedTypes.some((type) => type.kind === "never") ||
+            (bodyContinueConditionAwaitExpr && (!bodyContinueConditionPromiseType || bodyContinueConditionPromiseType.kind !== "promise" || !bodyContinueConditionAwaitedType || bodyContinueConditionAwaitedType.kind !== "boolean")) ||
             (fallthroughAwaitExpr && (!fallthroughPromiseType || fallthroughPromiseType.kind !== "promise")) ||
             (fallthroughAwaitedType && fallthroughAwaitedType.kind === "never")
         ) return false;
@@ -34939,7 +34959,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -34996,6 +35016,7 @@ class Emitter {
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyContinue,
             bodyContinueCondition,
+            bodyContinueConditionAwaitExpr,
             bodyContinueElseStatements,
             bodyContinueElseAwaitExprs,
             bodyContinueElsePreludeStatements,
@@ -35010,6 +35031,7 @@ class Emitter {
         };
         let bodyAdapter: string | null = null;
         let bodyAlternateAdapter: string | null = null;
+        let bodyConditionAdapter: string | null = null;
         let loopAdapterName: string | undefined;
         if (bodyContinue && bodyAwaitExprs.length > 0) {
             loopAdapterName = `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
@@ -35031,6 +35053,7 @@ class Emitter {
                     bodyPreludeStatements: bodyContinueElsePreludeStatements,
                     bodyPostAwaitStatements: bodyContinueElsePostAwaitStatements,
                     bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
                     bodyContinueElseStatements: [],
                     bodyContinueElseAwaitExprs: [],
                     bodyContinueElsePreludeStatements: [],
@@ -35039,6 +35062,17 @@ class Emitter {
                     bodyContinueElseBreakPreludeStatements: [],
                 },
                 bodyContinueElseAwaitExprs,
+            );
+        }
+        if (bodyContinueConditionAwaitExpr && bodyContinueConditionPromiseType && bodyContinueConditionAwaitedType) {
+            bodyConditionAdapter = this.ensureAsyncAwaitLoopBodyConditionalAdapter(
+                conditionPromiseType,
+                continuation,
+                bodyAdapter,
+                bodyAlternateAdapter,
+                bodyContinueConditionPromiseType,
+                bodyContinueConditionAwaitedType,
+                loopAdapterName!,
             );
         }
         if (continuation.bodyLeadingContinuation) {
@@ -35102,6 +35136,9 @@ class Emitter {
             bodyPromiseType,
             bodyAdapter,
             bodyAlternateAdapter,
+            bodyConditionAdapter,
+            bodyContinueConditionPromiseType,
+            bodyContinueConditionAwaitedType,
             fallthroughPromiseType,
             fallthroughAdapter,
             continuation.bodyRejectResult,
@@ -35283,6 +35320,9 @@ class Emitter {
         bodyPromiseType: CType | null,
         bodyAdapter: string | null,
         bodyAlternateAdapter: string | null,
+        bodyConditionAdapter: string | null,
+        bodyContinueConditionPromiseType: CType | null,
+        bodyContinueConditionAwaitedType: CType | null,
         fallthroughPromiseType: CType | null,
         fallthroughAdapter: string | null,
         bodyRejectResult: boolean,
@@ -35340,7 +35380,26 @@ class Emitter {
             if (!continuation.bodyContinueCondition) {
                 for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
             }
-            if (continuation.bodyContinue && !(continuation.bodyAwaitExpr && bodyPromiseType && bodyAdapter)) {
+            if (continuation.bodyContinueConditionAwaitExpr && bodyConditionAdapter && bodyContinueConditionPromiseType) {
+                const nestedConditionSource = this.emitExpr(continuation.bodyContinueConditionAwaitExpr.expression);
+                const nestedConditionSourceVar = this.freshTemp("_await_body_condition_source");
+                const nestedConditionEnvVar = this.freshTemp("_await_body_condition_env");
+                const nestedConditionEnvType = `${bodyConditionAdapter}_env_t`;
+                buf.line(`tsc_promise_t* const ${nestedConditionSourceVar} = ${this.coerce(nestedConditionSource, bodyContinueConditionPromiseType, continuation.bodyContinueConditionAwaitExpr.expression)};`);
+                buf.line(`${nestedConditionEnvType}* const ${nestedConditionEnvVar} = (${nestedConditionEnvType}*)TSC_GC_MALLOC(sizeof(${nestedConditionEnvType}));`);
+                buf.line(`${nestedConditionEnvVar}->receiver = ${nestedConditionSourceVar};`);
+                buf.line(`${nestedConditionEnvVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${nestedConditionEnvVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${nestedConditionEnvVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${nestedConditionSourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${nestedConditionSourceVar}, ${bodyConditionAdapter}, ${nestedConditionEnvVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${bodyConditionAdapter}(${nestedConditionEnvVar});`);
+                buf.close();
+                buf.line("tsc_try_pop();");
+                buf.line("return;");
+            } else if (continuation.bodyContinue && !(continuation.bodyAwaitExpr && bodyPromiseType && bodyAdapter)) {
                 if (continuation.loopIncrementor) {
                     const incrementor = this.emitExpr(continuation.loopIncrementor);
                     buf.line(`${incrementor.c};`);
@@ -35514,6 +35573,136 @@ class Emitter {
                 }
                 buf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
             }
+        } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
+            if (continuation.thisValue) this.functionThisStack.pop();
+            this.awaitExpressionValueScopes.pop();
+            this.argumentValueScopes.pop();
+        }
+        buf.close();
+        buf.open("else");
+        buf.line("tsc_try_pop();");
+        buf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+        buf.close();
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
+    private ensureAsyncAwaitLoopBodyConditionalAdapter(
+        loopConditionPromiseType: CType,
+        continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
+        bodyAdapter: string | null,
+        bodyAlternateAdapter: string | null,
+        conditionPromiseType: CType,
+        conditionAwaitedType: CType,
+        loopAdapterName: string,
+    ): string {
+        const bodyAwaitExpr = continuation.bodyAwaitExpr;
+        if (!continuation.bodyContinueConditionAwaitExpr || !bodyAdapter || !bodyAwaitExpr) {
+            throw new Error("missing conditional loop body continuation adapter");
+        }
+        const name = `tsc_async_await_loop_body_condition_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const envType = `${name}_env_t`;
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of continuation.params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        if (continuation.thisValue) this.structDecls.line(`${continuation.thisValue.ty.c} this_arg;`);
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${name}(void* env);`);
+        const valueVar = this.freshTemp("_await_body_condition_value");
+        const eh = this.freshTemp("_await_body_condition_eh");
+        const scope = new Map<ts.Symbol, string>();
+        for (const param of continuation.params) scope.set(param.symbol, `state->${param.field}`);
+        const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        awaitScope.set(continuation.bodyContinueConditionAwaitExpr, { c: valueVar, ty: conditionAwaitedType });
+        const emitBody = (out: CBuf, adapter: string, awaitExpr: ts.AwaitExpression, promiseType: CType, prelude: readonly ts.Statement[]): void => {
+            for (const statement of prelude) this.emitStmt(out, statement);
+            const source = this.emitExpr(awaitExpr.expression);
+            const sourceVar = this.freshTemp("_await_conditional_body_source");
+            const envVar = this.freshTemp("_await_conditional_body_env");
+            const adapterEnvType = `${adapter}_env_t`;
+            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, awaitExpr.expression)};`);
+            out.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
+            out.line(`${envVar}->receiver = ${sourceVar};`);
+            out.line(`${envVar}->result_promise = _ret;`);
+            for (const param of continuation.params) out.line(`${envVar}->${param.field} = state->${param.field};`);
+            if (continuation.thisValue) out.line(`${envVar}->this_arg = state->this_arg;`);
+            out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+            out.line(`tsc_promise_add_callback(${sourceVar}, ${adapter}, ${envVar});`);
+            out.close();
+            out.open("else");
+            out.line(`${adapter}(${envVar});`);
+            out.close();
+        };
+        const bodyPromiseType = this.prepareType(mapTsType(
+            bodyAwaitExpr.expression,
+            this.checker.getTypeAtLocation(bodyAwaitExpr.expression),
+            this.checker,
+        ));
+        const elsePromiseType = continuation.bodyContinueElseAwaitExprs.length > 0
+            ? this.prepareType(mapTsType(
+                continuation.bodyContinueElseAwaitExprs[0]!.expression,
+                this.checker.getTypeAtLocation(continuation.bodyContinueElseAwaitExprs[0]!.expression),
+                this.checker,
+            ))
+            : null;
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+        buf.open("if (tsc_promise_is_rejected(_p))");
+        buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+        buf.line("return;");
+        buf.close();
+        buf.open("if (!tsc_promise_is_fulfilled(_p))");
+        buf.line("return;");
+        buf.close();
+        buf.line(`${conditionAwaitedType.c} ${valueVar} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, continuation.bodyContinueConditionAwaitExpr)};`);
+        buf.line(`tsc_try_frame_t ${eh};`);
+        buf.line(`tsc_try_push(&${eh});`);
+        buf.open(`if (setjmp(${eh}.jb) == 0)`);
+        this.argumentValueScopes.push(scope);
+        this.awaitExpressionValueScopes.push(awaitScope);
+        if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
+        this.asyncAwaitContinuationAdapterDepth++;
+        try {
+            const truth = this.truthyC({ c: valueVar, ty: conditionAwaitedType }, continuation.bodyContinueConditionAwaitExpr);
+            buf.open(`if (${truth})`);
+            emitBody(buf, bodyAdapter, bodyAwaitExpr, bodyPromiseType, continuation.bodyPreludeStatements);
+            buf.close();
+            buf.open("else");
+            if (bodyAlternateAdapter && elsePromiseType && continuation.bodyContinueElseAwaitExprs.length > 0) {
+                emitBody(buf, bodyAlternateAdapter, continuation.bodyContinueElseAwaitExprs[0]!, elsePromiseType, continuation.bodyContinueElsePreludeStatements);
+            } else {
+                const synchronousElseStatements = continuation.bodyContinueElseBreak
+                    ? continuation.bodyContinueElseBreakPreludeStatements
+                    : continuation.bodyContinueElseStatements.slice(0, -1);
+                for (const statement of synchronousElseStatements) this.emitStmt(buf, statement);
+                const source = this.emitExpr(continuation.conditionAwaitExpr.expression);
+                const sourceVar = this.freshTemp("_await_conditional_reentry_source");
+                const envVar = this.freshTemp("_await_conditional_reentry_env");
+                const reentryEnvType = `${loopAdapterName}_env_t`;
+                buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, loopConditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
+                buf.line(`${reentryEnvType}* const ${envVar} = (${reentryEnvType}*)TSC_GC_MALLOC(sizeof(${reentryEnvType}));`);
+                buf.line(`${envVar}->receiver = ${sourceVar};`);
+                buf.line(`${envVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${envVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${envVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${sourceVar}, ${loopAdapterName}, ${envVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${loopAdapterName}(${envVar});`);
+                buf.close();
+            }
+            buf.close();
+            buf.line("tsc_try_pop();");
+            buf.line("return;");
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (continuation.thisValue) this.functionThisStack.pop();

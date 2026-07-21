@@ -35,6 +35,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - The same bounded loop-body continuation now preserves an await-free `else` arm before condition re-entry when the `if` arm contains the direct awaited `continue` path. Test: `async_await_loop_body_if_else_continue`.
 - Bounded loop-body `if/else` continuations now support direct awaited expression sequences in both arms before `continue`, selecting a branch-specific adapter and preserving rejection propagation. Test: `async_await_loop_body_if_else_await_continue`.
 - Awaited loop-body `if` continuations now support an await-free `else { break; }` exit routed through the awaited fallthrough adapter. Test: `async_await_loop_body_if_break_continue`.
+- Awaited loop-body `if` conditions now support a direct awaited boolean before selecting the bounded awaited/await-free `continue` arms; broader nested awaited branch graphs remain deferred. Test: `async_await_loop_body_await_if_continue`.
 - Direct-prelude `return await` preserves an assigned-before-use uninitialized dynamic `var` assigned on a caught path through an await-free `try`/`catch` prelude. Test: `async_await_while_condition`.
 - Direct-prelude `return await` preserves an assigned-before-use uninitialized dynamic `var` assigned on a caught path through an await-free `try`/`catch`/`finally` prelude. Test: `async_await_while_condition`.
 - The uninitialized dynamic-`var` caught-path `try`/`catch`/`finally` prelude coverage also applies to async class methods and function values. Test: `async_await_while_condition`.
