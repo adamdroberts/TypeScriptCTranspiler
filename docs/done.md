@@ -12,6 +12,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Dispatch task adapters now support typed `Map` and `Set` return values for both `dispatch.sync` and `dispatch.async`, boxing collections for the existing cross-thread result handoff. Test: `dispatch_collections`
 - `--dispatch=serial` now runs `dispatch.async`, `dispatch.after`, and `dispatch.sync` through the existing single-threaded event loop without libdispatch, providing a deterministic fallback and differential test baseline. Tests: `dispatch_serial`, `dispatch_serial_after`
 - Dispatch task adapters now return typed Date, RegExp, Error, and Buffer values for both threaded and serial backends. Tests: dispatch_objects, dispatch_serial_objects
+- Promise-based dispatch.group joins inline task arrays, and dispatch.barrier provides exclusive completion on concurrent queues across threaded and serial backends. Tests: dispatch_group_barrier, dispatch_serial_group_barrier
 - Leading async/await chains preserve assigned-before-use uninitialized `var` locals before multiple awaited declarations. Test: `async_await_while_condition`.
 - Leading async/await chains preserve bounded mutation of an assigned-before-use uninitialized `var` between multiple awaited declarations. Test: `async_await_while_condition`.
 - The bounded mutable uninitialized-`var` leading-chain coverage also applies to async class methods and function values. Test: `async_await_while_condition`.

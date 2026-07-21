@@ -57163,8 +57163,10 @@ class Emitter {
     }
 
     private emitDispatchCall(call: ts.CallExpression, name: string): EmitResult {
-        if (name !== "async" && name !== "after" && name !== "sync") unsupported(call, `dispatch.${name}`);
+        if (name === "group") return this.emitDispatchGroupCall(call);
+        if (name !== "async" && name !== "after" && name !== "sync" && name !== "barrier") unsupported(call, `dispatch.${name}`);
         const isAfter = name === "after";
+        const isBarrier = name === "barrier";
         const minimumArguments = isAfter ? 3 : 2;
         if (call.arguments.length < minimumArguments) {
             unsupported(call, isAfter
@@ -57207,7 +57209,7 @@ class Emitter {
             { value: task, target: task.ty, node: taskArgNode },
             ...this.ignoredArgumentSpecs(call.arguments, isAfter ? 3 : 2),
         ];
-        if (name === "async" || isAfter) {
+        if (name === "async" || isAfter || isBarrier) {
             const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
             const resultTy = mapped.kind === "promise" ? mapped : promiseType(T_VALUE);
             return this.emitSequencedExpr(resultTy, specs, (values) => {
@@ -57218,7 +57220,9 @@ class Emitter {
                 const env = this.freshTemp("_dispatch_env");
                 const schedule = isAfter
                     ? `tsc_dispatch_after(${q}, ${adapter}, ${env}, ${delay})`
-                    : `tsc_dispatch_async(${q}, ${adapter}, ${env})`;
+                    : isBarrier
+                        ? `tsc_dispatch_barrier(${q}, ${adapter}, ${env})`
+                        : `tsc_dispatch_async(${q}, ${adapter}, ${env})`;
                 return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; ${schedule}; })`;
             });
         }
@@ -57238,6 +57242,74 @@ class Emitter {
             const result = this.freshTemp("_dispatch_result");
             const converted = this.coerce({ c: result, ty: T_VALUE }, retTy, call);
             return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_value_t ${result} = tsc_dispatch_sync(${q}, ${adapter}, ${env}); ${converted}; })`;
+        });
+    }
+
+    private emitDispatchGroupCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 2) {
+            unsupported(call, "dispatch.group expects a queue and an inline task array");
+        }
+        const queueNode = call.arguments[0]!;
+        const tasksNode = call.arguments[1]!;
+        if (!ts.isArrayLiteralExpression(tasksNode)) {
+            unsupported(tasksNode, "dispatch.group task list must be an array literal in this subset");
+        }
+        const queue = this.emitExpr(queueNode);
+        if (this.prepareType(queue.ty).kind !== "dispatchqueue") {
+            unsupported(queueNode, "dispatch.group queue must be a DispatchQueue");
+        }
+        const taskNodes = tasksNode.elements.map((element) => {
+            if (ts.isSpreadElement(element)) {
+                unsupported(element, "dispatch.group task list does not support spread elements in this subset");
+            }
+            const task = this.unwrapTransparentExpression(element);
+            if (!ts.isArrowFunction(task) && !ts.isFunctionExpression(task)) {
+                unsupported(element, "dispatch.group tasks must be inline arrows or function expressions in this subset");
+            }
+            this.validateDispatchTask(task);
+            return { node: element, taskNode: task };
+        });
+        const savedAsyncStack = this.asyncFunctionStack;
+        const savedTryDepth = this.tryDepth;
+        this.asyncFunctionStack = [];
+        this.tryDepth = 0;
+        const taskResults: EmitResult[] = [];
+        const adapters: string[] = [];
+        try {
+            for (const { node, taskNode } of taskNodes) {
+                const task = this.emitExpr(node);
+                taskResults.push(task);
+                adapters.push(this.ensureDispatchTaskAdapter(node, task.ty));
+            }
+        } finally {
+            this.asyncFunctionStack = savedAsyncStack;
+            this.tryDepth = savedTryDepth;
+        }
+        this.usesDispatch = true;
+        const resultTy = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (resultTy.kind !== "promise") {
+            unsupported(call, "dispatch.group must return Promise<T[]>");
+        }
+        const specs: SequencedCallArg[] = [
+            { value: queue, target: queue.ty, node: queueNode },
+            ...taskResults.map((task, i) => ({ value: task, target: task.ty, node: taskNodes[i]!.node })),
+            ...this.ignoredArgumentSpecs(call.arguments, 2),
+        ];
+        return this.emitSequencedExpr(resultTy, specs, (values) => {
+            const q = values[0]!;
+            const promises = this.freshTemp("_dispatch_group_promises");
+            const pieces = [`tsc_array_t* ${promises} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, taskResults.length)})`];
+            taskResults.forEach((task, i) => {
+                const adapter = adapters[i]!;
+                const envType = `${adapter}_env_t`;
+                const env = this.freshTemp("_dispatch_group_env");
+                const fn = values[i + 1]!;
+                pieces.push(`${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}))`);
+                pieces.push(`${env}->fn = ${fn}`);
+                pieces.push(`tsc_array_push_value(${promises}, tsc_value_promise(tsc_dispatch_async(${q}, ${adapter}, ${env})))`);
+            });
+            pieces.push(`tsc_promise_all_dynamic(${promises})`);
+            return `({ ${pieces.join("; ")}; })`;
         });
     }
 

@@ -2580,6 +2580,10 @@ declare namespace dispatch {
     function after<T>(delay: number, queue: DispatchQueue, task: () => T): Promise<T>;
     /** Runs `task` on `queue` and blocks the caller until it completes. */
     function sync<T>(queue: DispatchQueue, task: () => T): T;
+    /** Runs an inline task list on `queue` and resolves when every task completes. */
+    function group<T>(queue: DispatchQueue, tasks: readonly (() => T)[]): Promise<T[]>;
+    /** Runs a task exclusively after earlier work on a concurrent queue completes. */
+    function barrier<T>(queue: DispatchQueue, task: () => T): Promise<T>;
 }
 
 interface UtilTypes {

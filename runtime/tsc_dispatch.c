@@ -89,6 +89,19 @@ tsc_promise_t* tsc_dispatch_after(
     return task->promise;
 }
 
+tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
+    if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.barrier: invalid queue or task"));
+    if (!q->concurrent) tsc_throw_str(tsc_str_from_cstr("dispatch.barrier requires a concurrent queue"));
+    tsc_dispatch_serial_task_t* task =
+        (tsc_dispatch_serial_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_serial_task_t));
+    task->fn = fn;
+    task->env = env;
+    task->promise = tsc_promise_pending();
+    task->delay_ms = 0.0;
+    tsc_set_immediate(tsc_dispatch_serial_trampoline, task);
+    return task->promise;
+}
+
 tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
     if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.sync: invalid queue or task"));
     tsc_value_t result = tsc_value_undefined();
@@ -190,7 +203,7 @@ tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label) {
 
 tsc_dispatch_queue_t* tsc_dispatch_queue_concurrent(void) {
     tsc_dispatch_queue_t* q = (tsc_dispatch_queue_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_queue_t));
-    q->queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+    q->queue = dispatch_queue_create("concurrent", DISPATCH_QUEUE_CONCURRENT);
     q->label = tsc_str_from_lit("concurrent", 10);
     q->concurrent = true;
     return q;
@@ -257,6 +270,20 @@ tsc_promise_t* tsc_dispatch_after(
         task,
         tsc_dispatch_async_trampoline
     );
+    return task->promise;
+}
+
+tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env) {
+    if (!q || !fn) tsc_throw_str(tsc_str_from_cstr("dispatch.barrier: invalid queue or task"));
+    if (!q->concurrent) tsc_throw_str(tsc_str_from_cstr("dispatch.barrier requires a concurrent queue"));
+    tsc_dispatch_async_task_t* task =
+        (tsc_dispatch_async_task_t*)TSC_GC_MALLOC(sizeof(tsc_dispatch_async_task_t));
+    task->fn = fn;
+    task->env = env;
+    task->promise = tsc_promise_pending();
+    tsc_dispatch_task_scheduled();
+    tsc_dispatch_inflight_add(task);
+    dispatch_barrier_async_f(q->queue, task, tsc_dispatch_async_trampoline);
     return task->promise;
 }
 

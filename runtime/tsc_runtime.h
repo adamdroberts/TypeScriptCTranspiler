@@ -1147,6 +1147,7 @@ tsc_dispatch_queue_t* tsc_dispatch_queue_serial(tsc_str_t* label);
 tsc_dispatch_queue_t* tsc_dispatch_queue_concurrent(void);
 tsc_promise_t* tsc_dispatch_async(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env);
 tsc_promise_t* tsc_dispatch_after(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env, double delay_ms);
+tsc_promise_t* tsc_dispatch_barrier(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env);
 tsc_value_t tsc_dispatch_sync(tsc_dispatch_queue_t* q, tsc_dispatch_task_fn_t fn, void* env);
 
 /* Global recursive lock serializing rare runtime slow paths (shape
