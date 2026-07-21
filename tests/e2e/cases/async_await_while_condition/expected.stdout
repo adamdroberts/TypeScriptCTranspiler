@@ -312,6 +312,12 @@ await-method-mixed-assigned-if-false method-assigned-sync
 await-value-mixed-assigned-if-false value-assigned-sync
 await-direct-mixed-unassigned-if-false undefined
 await-direct-mixed-nested-if-false direct-nested-sync
+await-direct-nested-dynamic-leading direct-nested
+await-direct-nested-dynamic-leading-fallthrough undefined
+await-method-nested-dynamic-leading method-nested-method
+await-method-nested-dynamic-leading-fallthrough undefined
+await-value-nested-dynamic-leading value-nested-value
+await-value-nested-dynamic-leading-fallthrough undefined
 await-number-mixed-assigned-if-false 202
 await-boolean-mixed-assigned-if-false false
 await-direct-uninitialized-var-do-next direct-uninitialized-var-next-do

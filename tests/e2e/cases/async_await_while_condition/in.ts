@@ -3684,6 +3684,29 @@ async function chooseMixedNestedIfAwaitPrelude(prefix: string, flag: boolean): P
     return await laterBodyValue(source);
 }
 
+async function chooseNestedDynamicLeadingPrelude(prefix: string): Promise<string> {
+    if (prefix.length > 0) {
+        var nested: any = prefix + "-nested";
+    }
+    return await laterBodyValue(nested);
+}
+
+class NestedDynamicLeadingChooser {
+    async choose(prefix: string): Promise<string> {
+        if (prefix.length > 0) {
+            var nested: any = prefix + "-nested-method";
+        }
+        return await laterBodyValue(nested);
+    }
+}
+
+const chooseNestedDynamicLeadingValue = async (prefix: string): Promise<string> => {
+    if (prefix.length > 0) {
+        var nested: any = prefix + "-nested-value";
+    }
+    return await laterBodyValue(nested);
+};
+
 async function chooseMixedAssignedNumberIfAwaitPrelude(flag: boolean): Promise<number> {
     var source: number;
     if (flag) source = await laterBodyNumber(101);
@@ -4414,6 +4437,12 @@ chooseMixedUnassignedIfAwaitPrelude("direct", true).then((value) => console.log(
 chooseMixedUnassignedIfAwaitPrelude("direct", false).then((value) => console.log("await-direct-mixed-unassigned-if-false", value));
 chooseMixedNestedIfAwaitPrelude("direct", true).then((value) => console.log("await-direct-mixed-nested-if-true", value));
 chooseMixedNestedIfAwaitPrelude("direct", false).then((value) => console.log("await-direct-mixed-nested-if-false", value));
+chooseNestedDynamicLeadingPrelude("direct").then((value) => console.log("await-direct-nested-dynamic-leading", value));
+chooseNestedDynamicLeadingPrelude("").then((value) => console.log("await-direct-nested-dynamic-leading-fallthrough", value));
+new NestedDynamicLeadingChooser().choose("method").then((value) => console.log("await-method-nested-dynamic-leading", value));
+new NestedDynamicLeadingChooser().choose("").then((value) => console.log("await-method-nested-dynamic-leading-fallthrough", value));
+chooseNestedDynamicLeadingValue("value").then((value) => console.log("await-value-nested-dynamic-leading", value));
+chooseNestedDynamicLeadingValue("").then((value) => console.log("await-value-nested-dynamic-leading-fallthrough", value));
 chooseMixedAssignedNumberIfAwaitPrelude(true).then((value) => console.log("await-number-mixed-assigned-if-true", value));
 chooseMixedAssignedNumberIfAwaitPrelude(false).then((value) => console.log("await-number-mixed-assigned-if-false", value));
 chooseMixedAssignedBooleanIfAwaitPrelude(true).then((value) => console.log("await-boolean-mixed-assigned-if-true", value));

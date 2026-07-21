@@ -263,6 +263,7 @@ interface DirectAsyncAwaitReturnAlias {
 
 interface AsyncAwaitLeadingReturnContinuation {
     preludeStatements: readonly ts.Statement[];
+    hoistedSymbols: readonly ts.Symbol[];
     steps: AsyncAwaitLeadingStep[];
     betweenStatements: readonly (readonly ts.Statement[])[];
     returnExpr: ts.Expression | null;
@@ -29493,6 +29494,7 @@ class Emitter {
             if (!ts.isAwaitExpression(expression)) return null;
             return {
                 preludeStatements: [],
+                hoistedSymbols: [],
                 steps: [{ variable: null, awaitExpr: expression }],
                 betweenStatements: [],
                 returnExpr: null,
@@ -29510,6 +29512,7 @@ class Emitter {
         if (!ts.isReturnStatement(result) && !terminalThrow) return null;
         const preludeStatements: ts.Statement[] = [];
         const captures: AsyncAwaitContinuationParam[] = [];
+        const hoistedSymbols: ts.Symbol[] = [];
         const captureSymbols = new Set<ts.Symbol>();
         const uninitializedPreludeSymbols = new Set<ts.Symbol>();
         let firstAwaitIndex = 0;
@@ -29563,6 +29566,39 @@ class Emitter {
                 continue;
             }
             if (this.asyncAwaitPreludeControlFlowStatementSupported(stmt)) {
+                const visitControlFlowVariables = (node: ts.Node): void => {
+                    if (!ok || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+                        const declarationList = node.parent;
+                        if (!ts.isVariableDeclarationList(declarationList) ||
+                            (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0) {
+                            ts.forEachChild(node, visitControlFlowVariables);
+                            return;
+                        }
+                        const symbol = this.symbolForIdentifier(node.name);
+                        if (!symbol || captureSymbols.has(symbol)) {
+                            ts.forEachChild(node, visitControlFlowVariables);
+                            return;
+                        }
+                        const type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
+                        if (!this.isAsyncAwaitPreludeCaptureType(type)) {
+                            ok = false;
+                            return;
+                        }
+                        if (node.initializer) {
+                            visitNoAwaitOrNestedScope(node.initializer);
+                            if (!ok) return;
+                        }
+                        const name = mangleIdent(node.name.text);
+                        captureSymbols.add(symbol);
+                        captures.push({ symbol, name, type, field: `capture_${name}` });
+                        hoistedSymbols.push(symbol);
+                        return;
+                    }
+                    ts.forEachChild(node, visitControlFlowVariables);
+                };
+                visitControlFlowVariables(stmt);
+                if (!ok) return null;
                 preludeStatements.push(stmt);
                 firstAwaitIndex++;
                 continue;
@@ -29701,6 +29737,7 @@ class Emitter {
         if (!referenced) return null;
         return {
             preludeStatements,
+            hoistedSymbols,
             steps,
             betweenStatements,
             returnExpr: terminalThrow ? null : finalReturnAwait ? finalReturnAwait.expression : finalReturnExpr,
@@ -36066,7 +36103,7 @@ class Emitter {
             return this.emitAsyncAwaitReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "localLeadingReturn") {
-            this.emitAsyncAwaitPreludeStatements(buf, branch.continuation.preludeStatements, branch.continuation.params);
+            this.emitAsyncAwaitLeadingReturnContinuationPrelude(buf, branch.continuation);
             return this.emitAsyncAwaitLeadingReturnContinuationResult(buf, branch.continuation);
         }
         if (branch.kind === "localPreludeReturn") {
@@ -36318,8 +36355,25 @@ class Emitter {
         }
         const continuation = this.asyncAwaitLeadingReturnContinuation(body, parameters, thisValue);
         if (!continuation) return false;
-        this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
+        this.emitAsyncAwaitLeadingReturnContinuationPrelude(buf, continuation);
         return this.emitAsyncAwaitLeadingReturnContinuationResult(buf, continuation);
+    }
+
+    private emitAsyncAwaitLeadingReturnContinuationPrelude(
+        buf: CBuf,
+        continuation: AsyncAwaitLeadingReturnContinuation,
+    ): void {
+        for (const symbol of continuation.hoistedSymbols) {
+            this.asyncAwaitHoistedPreludeSymbols.add(symbol);
+        }
+        try {
+            this.emitAsyncAwaitPreludeHoistedDeclarations(buf, continuation.params);
+            this.emitAsyncAwaitPreludeStatements(buf, continuation.preludeStatements, continuation.params);
+        } finally {
+            for (const symbol of continuation.hoistedSymbols) {
+                this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+            }
+        }
     }
 
     private emitAsyncAwaitOptionalIfLeadingReturnContinuation(
