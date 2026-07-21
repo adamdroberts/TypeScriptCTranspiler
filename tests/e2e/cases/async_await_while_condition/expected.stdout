@@ -464,6 +464,7 @@ await-loop-two-await-nested-continue loop-two-await-nested-continue-nested
 await-loop-two-await-nested-do-continue loop-two-await-nested-do-continue-do
 await-loop-two-await-for-of-continue loop-two-await-for-of-continue-for-of
 await-loop-two-await-for-in-continue loop-two-await-for-in-continue0
+await-loop-two-await-for-continue loop-two-await-for-continue-for
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-while-six-logical-true six-logical-yes
