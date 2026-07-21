@@ -302,6 +302,8 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinueElsePostAwaitStatements: readonly ts.Statement[];
     bodyContinueElseBreak: boolean;
     bodyContinueElseBreakPreludeStatements: readonly ts.Statement[];
+    bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[];
+    bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[];
     bodyRejectResult: boolean;
     fallthroughExpr: ts.Expression;
     fallthroughAwaitExpr?: ts.AwaitExpression;
@@ -34523,14 +34525,33 @@ class Emitter {
         const elseContinueBodyStatements = elseContinueIsContinue
             ? bodyContinueElseStatements.slice(0, -1)
             : [];
-        const bodyContinueElseBreakPreludeStatements = elseContinueIsBreak
+        let bodyContinueElseBreakPreludeStatements = elseContinueIsBreak
             ? bodyContinueElseStatements.slice(0, -1)
             : [];
+        let bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[] = [];
+        let bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[] = [];
         let bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyContinueElsePreludeStatements: readonly ts.Statement[] = [];
         let bodyContinueElsePostAwaitStatements: readonly ts.Statement[] = [];
-        if (bodyContinueCondition && elseContinueIsBreak &&
-            !bodyContinueElseBreakPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        if (bodyContinueCondition && elseContinueIsBreak) {
+            const breakStatements = bodyContinueElseBreakPreludeStatements;
+            const breakAwaitStatements = breakStatements.flatMap((statement) => {
+                if (!ts.isExpressionStatement(statement)) return [];
+                const expression = this.unwrapTransparentExpression(statement.expression);
+                return ts.isAwaitExpression(expression) ? [{ statement, expression }] : [];
+            });
+            if (breakAwaitStatements.length > 0) {
+                const firstAwaitIndex = breakStatements.indexOf(breakAwaitStatements[0]!.statement);
+                const lastAwaitIndex = breakStatements.indexOf(breakAwaitStatements[breakAwaitStatements.length - 1]!.statement);
+                const awaitStatements = new Set<ts.Statement>(breakAwaitStatements.map(({ statement }) => statement));
+                if (breakStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
+                bodyContinueElseBreakAwaitExprs = breakAwaitStatements.map(({ expression }) => expression);
+                bodyContinueElseBreakPreludeStatements = breakStatements.slice(0, firstAwaitIndex);
+                bodyContinueElseBreakPostAwaitStatements = breakStatements.slice(lastAwaitIndex + 1);
+            } else if (!bodyContinueElseBreakPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) {
+                return false;
+            }
+        }
         if (bodyContinueCondition && elseContinueIsContinue) {
             const elseAwaitStatements = elseContinueBodyStatements.flatMap((statement) => {
                 if (!ts.isExpressionStatement(statement)) return [];
@@ -34557,6 +34578,8 @@ class Emitter {
         if (bodyContinueCondition && elseContinueIsContinue &&
             (!bodyContinueElsePreludeStatements.every((statement) => this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)) ||
                 !bodyContinueElsePostAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)))) return false;
+        if (bodyContinueCondition && elseContinueIsBreak && bodyContinueElseBreakAwaitExprs.length > 0 &&
+            (!bodyContinueElseBreakPostAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)))) return false;
         if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction) && !bodyContinue) return false;
         const bodyExpression = bodyContinue
             ? ts.factory.createVoidZero()
@@ -34890,6 +34913,16 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
+        const bodyContinueElseBreakPromiseTypes = bodyContinueElseBreakAwaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        )));
+        const bodyContinueElseBreakAwaitedTypes = bodyContinueElseBreakAwaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
+            this.checker,
+        )));
         const bodyContinueConditionPromiseType = bodyContinueConditionAwaitExpr
             ? this.prepareType(mapTsType(
                 bodyContinueConditionAwaitExpr.expression,
@@ -34940,6 +34973,8 @@ class Emitter {
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             bodyContinueElsePromiseTypes.some((type) => type.kind !== "promise") ||
             bodyContinueElseAwaitedTypes.some((type) => type.kind === "never") ||
+            bodyContinueElseBreakPromiseTypes.some((type) => type.kind !== "promise") ||
+            bodyContinueElseBreakAwaitedTypes.some((type) => type.kind === "never") ||
             (bodyContinueConditionAwaitExpr && (!bodyContinueConditionPromiseType || bodyContinueConditionPromiseType.kind !== "promise" || !bodyContinueConditionAwaitedType || bodyContinueConditionAwaitedType.kind !== "boolean")) ||
             (fallthroughAwaitExpr && (!fallthroughPromiseType || fallthroughPromiseType.kind !== "promise")) ||
             (fallthroughAwaitedType && fallthroughAwaitedType.kind === "never")
@@ -34959,7 +34994,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -34992,6 +35027,9 @@ class Emitter {
         for (const awaitExpr of bodyContinueElseAwaitExprs) visitReferences(awaitExpr);
         for (const statement of bodyContinueElsePreludeStatements) visitReferences(statement);
         for (const statement of bodyContinueElsePostAwaitStatements) visitReferences(statement);
+        for (const awaitExpr of bodyContinueElseBreakAwaitExprs) visitReferences(awaitExpr);
+        for (const statement of bodyContinueElseBreakPreludeStatements) visitReferences(statement);
+        for (const statement of bodyContinueElseBreakPostAwaitStatements) visitReferences(statement);
         if (bodyAwaitExpr && bodyAwaitExprs.length === 0) visitReferences(bodyAwaitExpr);
         visitReferences(bodyReturnExpr);
         if (bodyLeadingChain) {
@@ -35023,6 +35061,8 @@ class Emitter {
             bodyContinueElsePostAwaitStatements,
             bodyContinueElseBreak: elseContinueIsBreak,
             bodyContinueElseBreakPreludeStatements,
+            bodyContinueElseBreakAwaitExprs,
+            bodyContinueElseBreakPostAwaitStatements,
             bodyRejectResult,
             fallthroughExpr,
             fallthroughAwaitExpr,
@@ -35031,6 +35071,7 @@ class Emitter {
         };
         let bodyAdapter: string | null = null;
         let bodyAlternateAdapter: string | null = null;
+        let bodyBreakAdapter: string | null = null;
         let bodyConditionAdapter: string | null = null;
         let loopAdapterName: string | undefined;
         if (bodyContinue && bodyAwaitExprs.length > 0) {
@@ -35060,6 +35101,8 @@ class Emitter {
                     bodyContinueElsePostAwaitStatements: [],
                     bodyContinueElseBreak: false,
                     bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
                 },
                 bodyContinueElseAwaitExprs,
             );
@@ -35076,12 +35119,41 @@ class Emitter {
                 fallthroughRejectResult,
             );
         }
+        if (bodyContinueElseBreakAwaitExprs.length > 0 && fallthroughAdapter && fallthroughPromiseType && fallthroughAwaitExpr) {
+            bodyBreakAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                fallthroughAdapter,
+                fallthroughPromiseType,
+                {
+                    ...continuation,
+                    conditionExpr: ts.factory.createTrue(),
+                    conditionAwaitExpr: fallthroughAwaitExpr,
+                    loopIncrementor: undefined,
+                    bodyAwaitExpr: bodyContinueElseBreakAwaitExprs[0]!,
+                    bodyAwaitExprs: bodyContinueElseBreakAwaitExprs,
+                    bodyPreludeStatements: bodyContinueElseBreakPreludeStatements,
+                    bodyPostAwaitStatements: bodyContinueElseBreakPostAwaitStatements,
+                    bodyContinue: false,
+                    bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                    bodyContinueElseBreak: false,
+                    bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
+                },
+                bodyContinueElseBreakAwaitExprs,
+            );
+        }
         if (bodyContinueConditionAwaitExpr && bodyContinueConditionPromiseType && bodyContinueConditionAwaitedType) {
             bodyConditionAdapter = this.ensureAsyncAwaitLoopBodyConditionalAdapter(
                 conditionPromiseType,
                 continuation,
                 bodyAdapter,
                 bodyAlternateAdapter,
+                bodyBreakAdapter,
                 bodyContinueConditionPromiseType,
                 bodyContinueConditionAwaitedType,
                 loopAdapterName!,
@@ -35597,6 +35669,7 @@ class Emitter {
         continuation: AsyncAwaitLoopConditionReturnAwaitContinuation,
         bodyAdapter: string | null,
         bodyAlternateAdapter: string | null,
+        bodyBreakAdapter: string | null,
         conditionPromiseType: CType,
         conditionAwaitedType: CType,
         loopAdapterName: string,
@@ -35680,7 +35753,30 @@ class Emitter {
             emitBody(buf, bodyAdapter, bodyAwaitExpr, bodyPromiseType, continuation.bodyPreludeStatements);
             buf.close();
             buf.open("else");
-            if (bodyAlternateAdapter && elsePromiseType && continuation.bodyContinueElseAwaitExprs.length > 0) {
+            if (bodyBreakAdapter && continuation.bodyContinueElseBreakAwaitExprs.length > 0) {
+                for (const statement of continuation.bodyContinueElseBreakPreludeStatements) this.emitStmt(buf, statement);
+                const source = this.emitExpr(continuation.bodyContinueElseBreakAwaitExprs[0]!.expression);
+                const sourceVar = this.freshTemp("_await_conditional_break_body_source");
+                const envVar = this.freshTemp("_await_conditional_break_body_env");
+                const adapterEnvType = `${bodyBreakAdapter}_env_t`;
+                const promiseType = this.prepareType(mapTsType(
+                    continuation.bodyContinueElseBreakAwaitExprs[0]!.expression,
+                    this.checker.getTypeAtLocation(continuation.bodyContinueElseBreakAwaitExprs[0]!.expression),
+                    this.checker,
+                ));
+                buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, continuation.bodyContinueElseBreakAwaitExprs[0]!.expression)};`);
+                buf.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
+                buf.line(`${envVar}->receiver = ${sourceVar};`);
+                buf.line(`${envVar}->result_promise = _ret;`);
+                for (const param of continuation.params) buf.line(`${envVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${envVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${sourceVar}, ${bodyBreakAdapter}, ${envVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${bodyBreakAdapter}(${envVar});`);
+                buf.close();
+            } else if (bodyAlternateAdapter && elsePromiseType && continuation.bodyContinueElseAwaitExprs.length > 0) {
                 emitBody(buf, bodyAlternateAdapter, continuation.bodyContinueElseAwaitExprs[0]!, elsePromiseType, continuation.bodyContinueElsePreludeStatements);
             } else {
                 const synchronousElseStatements = continuation.bodyContinueElseBreak

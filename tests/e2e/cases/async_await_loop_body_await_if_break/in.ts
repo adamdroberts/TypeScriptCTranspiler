@@ -23,6 +23,8 @@ async function loopBodyAwaitIfBreak(): Promise<string> {
             count++;
             continue;
         } else {
+            await laterBody("break-start-" + count);
+            await laterBody("break-end-" + count);
             break;
         }
     }
