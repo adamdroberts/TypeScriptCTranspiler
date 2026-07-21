@@ -306,6 +306,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinueElseBreakAwaitExprs: readonly ts.AwaitExpression[];
     bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[];
     bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null;
+    bodyContinueElseReturnSynchronousExpr: ts.Expression | null;
     bodyContinueElseReturnPreludeStatements: readonly ts.Statement[];
     bodyContinueElseReturnRejectResult: boolean;
     bodyRejectResult: boolean;
@@ -34557,8 +34558,11 @@ class Emitter {
                 return ts.isAwaitExpression(expression) ? expression : null;
             })()
             : null;
+        const bodyContinueElseReturnSynchronousExpr = (elseContinueIsReturn || elseContinueIsThrow) &&
+            elseContinueStatement!.expression && !bodyContinueElseReturnAwaitExpr
+            ? elseContinueStatement!.expression
+            : null;
         let bodyContinueElseReturnPreludeStatements: readonly ts.Statement[] = [];
-        if (bodyContinueCondition && (elseContinueIsReturn || elseContinueIsThrow) && !bodyContinueElseReturnAwaitExpr) return false;
         if (bodyContinueCondition && (elseContinueIsReturn || elseContinueIsThrow)) {
             bodyContinueElseReturnPreludeStatements = bodyContinueElseStatements.slice(0, -1);
             if (!bodyContinueElseReturnPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
@@ -35027,7 +35031,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || bodyAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === bodyContinueElseReturnSynchronousExpr || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -35064,6 +35068,8 @@ class Emitter {
         for (const statement of bodyContinueElseBreakPreludeStatements) visitReferences(statement);
         for (const statement of bodyContinueElseBreakPostAwaitStatements) visitReferences(statement);
         for (const statement of bodyContinueElseReturnPreludeStatements) visitReferences(statement);
+        if (bodyContinueElseReturnAwaitExpr) visitReferences(bodyContinueElseReturnAwaitExpr);
+        if (bodyContinueElseReturnSynchronousExpr) visitReferences(bodyContinueElseReturnSynchronousExpr);
         if (bodyAwaitExpr && bodyAwaitExprs.length === 0) visitReferences(bodyAwaitExpr);
         visitReferences(bodyReturnExpr);
         if (bodyLeadingChain) {
@@ -35099,6 +35105,7 @@ class Emitter {
             bodyContinueElseBreakAwaitExprs,
             bodyContinueElseBreakPostAwaitStatements,
             bodyContinueElseReturnAwaitExpr,
+            bodyContinueElseReturnSynchronousExpr,
             bodyContinueElseReturnPreludeStatements,
             bodyContinueElseReturnRejectResult: elseContinueIsThrow,
             bodyRejectResult,
@@ -35144,6 +35151,7 @@ class Emitter {
                     bodyContinueElseBreakAwaitExprs: [],
                     bodyContinueElseBreakPostAwaitStatements: [],
                     bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnSynchronousExpr: null,
                     bodyContinueElseReturnPreludeStatements: [],
                     bodyContinueElseReturnRejectResult: false,
                 },
@@ -35844,6 +35852,21 @@ class Emitter {
                 buf.open("else");
                 buf.line(`${bodyReturnAdapter}(${envVar});`);
                 buf.close();
+            } else if (continuation.bodyContinueElseReturnSynchronousExpr) {
+                for (const statement of continuation.bodyContinueElseReturnPreludeStatements) this.emitStmt(buf, statement);
+                const returned = this.emitExpr(continuation.bodyContinueElseReturnSynchronousExpr);
+                if (continuation.bodyContinueElseReturnRejectResult) {
+                    const rejected = this.coerceToString(returned, continuation.bodyContinueElseReturnSynchronousExpr);
+                    buf.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
+                } else {
+                    const returnedType = this.prepareType(returned.ty);
+                    if (returnedType.kind === "void" || returnedType.kind === "never") {
+                        buf.line(`tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));`);
+                    } else {
+                        const resolved = this.promiseResolveResult(returned, continuation.bodyContinueElseReturnSynchronousExpr);
+                        buf.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
+                    }
+                }
             } else if (bodyBreakAdapter && continuation.bodyContinueElseBreakAwaitExprs.length > 0) {
                 for (const statement of continuation.bodyContinueElseBreakPreludeStatements) this.emitStmt(buf, statement);
                 const source = this.emitExpr(continuation.bodyContinueElseBreakAwaitExprs[0]!.expression);
