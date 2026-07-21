@@ -668,6 +668,24 @@ async function chooseLoopThreeAwaitRightNullishOrContinueAwait(value: string, re
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitRightAndNullishContinueAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) && (await laterNull() ?? await laterCondition(repeat))) {
+        value += "-three-right-and-nullish";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
+async function chooseLoopThreeAwaitRightNullishAndContinueAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterNull() ?? (await laterCondition(repeat) && await laterCondition(repeat))) {
+        value += "-three-right-nullish-and";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 class TwoAwaitContinueChooser {
     private readonly suffix: string;
 
@@ -3424,6 +3442,8 @@ chooseLoopThreeAwaitMixedOrNullishContinueAwait("loop-three-await-mixed-or-nulli
 chooseLoopThreeAwaitRightAndOrContinueAwait("loop-three-await-right-and-or", true).then((value) => console.log("await-loop-three-await-right-and-or", value));
 chooseLoopThreeAwaitRightOrNullishContinueAwait("loop-three-await-right-or-nullish", true).then((value) => console.log("await-loop-three-await-right-or-nullish", value));
 chooseLoopThreeAwaitRightNullishOrContinueAwait("loop-three-await-right-nullish-or", true).then((value) => console.log("await-loop-three-await-right-nullish-or", value));
+chooseLoopThreeAwaitRightAndNullishContinueAwait("loop-three-await-right-and-nullish", true).then((value) => console.log("await-loop-three-await-right-and-nullish", value));
+chooseLoopThreeAwaitRightNullishAndContinueAwait("loop-three-await-right-nullish-and", true).then((value) => console.log("await-loop-three-await-right-nullish-and", value));
 new TwoAwaitContinueChooser("-method-body").choose("loop-two-await-method-continue", true).then((value) => console.log("await-loop-two-await-method-continue", value));
 new TwoAwaitNullishContinueChooser("-method-nullish").choose("loop-two-await-method-nullish", true).then((value) => console.log("await-loop-two-await-method-nullish", value));
 new ThreeAwaitContinueChooser("-method-three-and").choose("loop-three-await-method-continue", true).then((value) => console.log("await-loop-three-await-method-continue", value));

@@ -19,6 +19,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Three-leaf mixed-nullish loop conditions now preserve bounded `??`→`||` and `||`→`??` outer-continue transitions. Regression: `async_await_while_condition`.
 - Right-associated `&&`→`||` loop conditions now preserve bounded outer-continue re-entry and awaited fallthrough. Regression: `async_await_while_condition`.
 - Right-associated mixed-nullish loop conditions now preserve bounded `||`→`??` and `??`→`||` outer-continue transitions. Regression: `async_await_while_condition`.
+- Right-associated mixed-nullish loop conditions now preserve bounded `&&`→`??` and `??`→`&&` outer-continue transitions. Regression: `async_await_while_condition`.
 - Direct two-await `&&` return-fallthrough coverage now includes a false initial condition that skips the body. Regression: `async_await_while_condition`.
 - The direct two-await `&&` outer-`continue` path now also covers terminal `throw await` fallthrough. Regression: `async_await_while_condition`.
 - Direct two-await `&&` throw-fallthrough coverage now includes a false initial condition that skips the body. Regression: `async_await_while_condition`.

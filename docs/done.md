@@ -3414,6 +3414,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | three-leaf mixed-nullish outer-continue conditions preserve truthy/nullish short-circuit transitions |
 | `async_await_while_condition` | right-associated `&&`→`||` outer-continue conditions preserve nested short-circuit transitions |
 | `async_await_while_condition` | right-associated mixed-nullish outer-continue conditions preserve `||`→`??` and `??`→`||` transitions |
+| `async_await_while_condition` | right-associated mixed-nullish outer-continue conditions preserve `&&`→`??` and `??`→`&&` transitions |
 | `async_await_while_condition` | false initial two-await `&&` conditions skip the body before return-await fallthrough |
 | `async_await_while_condition` | two direct awaited `&&` operands preserve terminal throw-await fallthrough after outer continue |
 | `async_await_while_condition` | false initial two-await `&&` conditions skip the body before terminal throw-await fallthrough |
