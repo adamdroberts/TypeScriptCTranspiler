@@ -583,6 +583,15 @@ async function chooseLoopTwoAwaitBreakDeclarationAwait(value: string, repeat: bo
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitContinueDeclarationIncrementorAwait(value: string, repeat: boolean): Promise<string> {
+    for (let suffix = "-two-declaration"; await laterCondition(repeat) && await laterCondition(repeat); suffix += "-two-incrementor") {
+        value += suffix;
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopTwoAwaitContinueIncrementorAwait(value: string, repeat: boolean): Promise<string> {
     for (; await laterCondition(repeat) && await laterCondition(repeat); value += "-two-incrementor") {
         value += "-two-continue";
@@ -3595,6 +3604,7 @@ chooseLoopTwoAwaitBreakAwait("loop-two-await-break", true).then((value) => conso
 chooseLoopTwoAwaitBreakIncrementorAwait("loop-two-await-break-incrementor", true).then((value) => console.log("await-loop-two-await-break-incrementor", value));
 chooseLoopTwoAwaitBreakInitializerAwait("loop-two-await-break-initializer", true).then((value) => console.log("await-loop-two-await-break-initializer", value));
 chooseLoopTwoAwaitBreakDeclarationAwait("loop-two-await-break-declaration", true).then((value) => console.log("await-loop-two-await-break-declaration", value));
+chooseLoopTwoAwaitContinueDeclarationIncrementorAwait("loop-two-await-continue-declaration", true).then((value) => console.log("await-loop-two-await-continue-declaration", value));
 chooseLoopTwoAwaitContinueIncrementorAwait("loop-two-await-continue-incrementor", true).then((value) => console.log("await-loop-two-await-continue-incrementor", value));
 chooseLoopTwoAwaitContinueInitializerIncrementorAwait("loop-two-await-continue-initializer-incrementor", true).then((value) => console.log("await-loop-two-await-continue-initializer-incrementor", value));
 chooseLoopThreeAwaitContinueIncrementorAwait("loop-three-await-continue-incrementor", true).then((value) => console.log("await-loop-three-await-continue-incrementor", value));
