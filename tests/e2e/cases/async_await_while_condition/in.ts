@@ -695,6 +695,15 @@ async function chooseLoopConditionalThreeAwaitContinueAwait(value: string, repea
     return await laterBodyValue(value);
 }
 
+async function chooseLoopConditionalThreeAwaitContinueThrowAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) ? await laterCondition(repeat) : await laterCondition(false)) {
+        value += "-three-conditional";
+        repeat = false;
+        continue;
+    }
+    throw await laterBodyValue(value);
+}
+
 class TwoAwaitContinueChooser {
     private readonly suffix: string;
 
@@ -3480,6 +3489,7 @@ chooseLoopThreeAwaitRightNullishOrContinueAwait("loop-three-await-right-nullish-
 chooseLoopThreeAwaitRightAndNullishContinueAwait("loop-three-await-right-and-nullish", true).then((value) => console.log("await-loop-three-await-right-and-nullish", value));
 chooseLoopThreeAwaitRightNullishAndContinueAwait("loop-three-await-right-nullish-and", true).then((value) => console.log("await-loop-three-await-right-nullish-and", value));
 chooseLoopConditionalThreeAwaitContinueAwait("loop-three-await-conditional", true).then((value) => console.log("await-loop-three-await-conditional", value));
+chooseLoopConditionalThreeAwaitContinueThrowAwait("loop-three-await-conditional-throw", true).catch((reason) => console.log("await-loop-three-await-conditional-throw", reason));
 new ConditionalThreeAwaitChooser("-method-three-conditional").choose("loop-three-await-method-conditional", true).then((value) => console.log("await-loop-three-await-method-conditional", value));
 chooseConditionalThreeAwaitValue("loop-three-await-value-conditional", true).then((value) => console.log("await-loop-three-await-value-conditional", value));
 new TwoAwaitContinueChooser("-method-body").choose("loop-two-await-method-continue", true).then((value) => console.log("await-loop-two-await-method-continue", value));

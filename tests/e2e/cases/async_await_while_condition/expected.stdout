@@ -491,6 +491,7 @@ await-loop-three-await-mixed-and-or loop-three-await-mixed-and-or-three-mixed-an
 await-loop-three-await-right-or-nullish loop-three-await-right-or-nullish-three-right-or-nullish
 await-loop-three-await-right-and-nullish loop-three-await-right-and-nullish-three-right-and-nullish
 await-loop-three-await-conditional loop-three-await-conditional-three-conditional
+await-loop-three-await-conditional-throw loop-three-await-conditional-throw-three-conditional
 await-loop-three-await-method-conditional loop-three-await-method-conditional-method-three-conditional
 await-loop-three-await-value-conditional loop-three-await-value-conditional-value-three-conditional
 await-loop-two-await-method-nullish loop-two-await-method-nullish-method-nullish
