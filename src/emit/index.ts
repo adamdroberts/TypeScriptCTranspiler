@@ -32981,7 +32981,9 @@ class Emitter {
         const bodyAction = loopBody[loopBody.length - 1]!;
         if (!ts.isContinueStatement(bodyAction) || bodyAction.label) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
-        if (!bodyPreludeStatements.every((statement) => ts.isExpressionStatement(statement))) return false;
+        if (!bodyPreludeStatements.every((statement) =>
+            ts.isExpressionStatement(statement) || this.asyncAwaitNonAbruptControlFlowPreludeSupported(statement)
+        )) return false;
         const unwrappedCondition = this.unwrapTransparentExpression(condition);
         if (!ts.isBinaryExpression(unwrappedCondition) ||
             (unwrappedCondition.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&

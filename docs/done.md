@@ -3407,6 +3407,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | two direct awaited loop-condition operands preserve short-circuiting, outer continue re-entry, body expression preludes, and return-await fallthrough |
 | `async_await_while_condition` | two direct awaited `||` operands preserve short-circuiting through outer continue and terminal return/throw-await fallthrough |
 | `async_await_while_condition` | two-await outer-continue lowering preserves receiver and function-value captures |
+| `async_await_while_condition` | two-await outer-continue bodies preserve await-free non-abrupt if preludes before repeated conditions |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
 | `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations remain scoped around the first conditional await source |
 | `async_await_conditional_branch_assigned_prelude` | branch-local let declarations are assigned before the first conditional await source |
