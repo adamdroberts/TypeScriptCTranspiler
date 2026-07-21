@@ -429,6 +429,7 @@ await-loop-two-await-break loop-two-await-break-two-break
 await-loop-two-await-break-incrementor loop-two-await-break-incrementor-two-for-break
 await-loop-two-await-break-initializer loop-two-await-break-initializer-two-initializer-two-initializer-body
 await-loop-two-await-break-declaration loop-two-await-break-declaration-two-declaration
+await-loop-three-await-conditional-declaration loop-three-await-conditional-declaration-conditional-declaration
 await-loop-three-await-conditional-break loop-three-await-conditional-break-conditional-break
 await-method-loop-initializer-escaping-var-continue loop-escaping-var-continue-body-method-increment
 await-method-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-body-method-throw-increment
