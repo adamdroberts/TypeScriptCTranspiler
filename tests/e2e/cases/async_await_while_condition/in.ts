@@ -592,6 +592,15 @@ async function chooseLoopTwoAwaitContinueIncrementorAwait(value: string, repeat:
     return await laterBodyValue(value);
 }
 
+async function chooseLoopThreeAwaitContinueIncrementorAwait(value: string, repeat: boolean): Promise<string> {
+    for (; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); value += "-three-incrementor") {
+        value += "-three-continue";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 async function chooseLoopThreeAwaitBreakDeclarationAwait(value: string, repeat: boolean): Promise<string> {
     for (let suffix = "-three-declaration"; await laterCondition(repeat) && await laterCondition(repeat) && await laterCondition(repeat); suffix += "-unexpected-incrementor") {
         value += suffix;
@@ -3551,6 +3560,7 @@ chooseLoopTwoAwaitBreakIncrementorAwait("loop-two-await-break-incrementor", true
 chooseLoopTwoAwaitBreakInitializerAwait("loop-two-await-break-initializer", true).then((value) => console.log("await-loop-two-await-break-initializer", value));
 chooseLoopTwoAwaitBreakDeclarationAwait("loop-two-await-break-declaration", true).then((value) => console.log("await-loop-two-await-break-declaration", value));
 chooseLoopTwoAwaitContinueIncrementorAwait("loop-two-await-continue-incrementor", true).then((value) => console.log("await-loop-two-await-continue-incrementor", value));
+chooseLoopThreeAwaitContinueIncrementorAwait("loop-three-await-continue-incrementor", true).then((value) => console.log("await-loop-three-await-continue-incrementor", value));
 chooseLoopThreeAwaitBreakDeclarationAwait("loop-three-await-break-declaration", true).then((value) => console.log("await-loop-three-await-break-declaration", value));
 chooseLoopConditionalThreeAwaitBreakDeclarationAwait("loop-three-await-conditional-declaration", true).then((value) => console.log("await-loop-three-await-conditional-declaration", value));
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));

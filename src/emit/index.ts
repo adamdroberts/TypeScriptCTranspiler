@@ -33314,6 +33314,7 @@ class Emitter {
         fallthroughRejectResult: boolean,
         loopInitializer: ts.Expression | ts.VariableStatement | null = null,
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
+        loopIncrementor: ts.Expression | null = null,
     ): boolean {
         if (awaitExpressions.length < 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
@@ -33500,6 +33501,10 @@ class Emitter {
             let source: EmitResult;
             try {
                 for (const statement of bodyPreludeStatements) this.emitStmt(stageBuf, statement);
+                if (bodyIsContinue && loopIncrementor) {
+                    const incrementor = this.emitExpr(loopIncrementor);
+                    stageBuf.line(`${incrementor.c};`);
+                }
                 source = this.emitExpr(awaitExpressions[0]!.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
@@ -34935,7 +34940,7 @@ class Emitter {
                 ts.isThrowStatement(fallthrough),
                 loopInitializerExpression,
             )) return true;
-        if (loopInitializerBreakSupported && loopBreakSkipsIncrementor && awaitExpressions.length >= 3 &&
+        if (loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
                 buf,
                 condition,
@@ -34946,6 +34951,8 @@ class Emitter {
                 thisValue,
                 ts.isThrowStatement(fallthrough),
                 loopInitializerExpression,
+                [],
+                loopIncrementor,
             )) return true;
         let loopInitializerCaptures: AsyncAwaitContinuationParam[] = [];
         if (loopInitializer) {

@@ -493,6 +493,7 @@ await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-loop-two-await-nullish-continue loop-two-await-nullish-continue-nullish
 await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
+await-loop-three-await-continue-incrementor loop-three-await-continue-incrementor-three-continue-three-incrementor
 await-loop-three-await-and-continue loop-three-await-and-continue-three-and
 await-loop-three-await-or-continue loop-three-await-or-continue-three-or
 await-loop-three-await-and-continue-throw loop-three-await-and-continue-throw-three-and
