@@ -424,6 +424,7 @@ await-loop-expression-continue loop-expression-continue-initializer-body-increme
 await-loop-expression-continue-throw loop-expression-continue-throw-initializer-body-increment
 await-loop-multiple-expression-continue loop-multiple-expression-continue-first-second-body-increment
 await-loop-multiple-expression-continue-throw loop-multiple-expression-continue-throw-first-second-body-increment
+await-loop-two-await-nullable-continue loop-two-await-nullable-continue-nullable
 await-method-loop-initializer-escaping-var-continue loop-escaping-var-continue-body-method-increment
 await-method-loop-initializer-escaping-var-continue-throw loop-escaping-var-continue-throw-body-method-throw-increment
 await-method-loop-expression-continue loop-expression-continue-method-initializer-body-increment
@@ -478,5 +479,6 @@ await-loop-two-await-assigned-local-continue loop-two-await-assigned-local-conti
 await-loop-two-await-multiple-local-continue loop-two-await-multiple-local-continue-first-second
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
+await-loop-two-await-nullish-continue loop-two-await-nullish-continue-nullish
 await-while-six-logical-true six-logical-yes
 await-while-six-logical-false six-logical-no

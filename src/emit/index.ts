@@ -32987,7 +32987,8 @@ class Emitter {
         const unwrappedCondition = this.unwrapTransparentExpression(condition);
         if (!ts.isBinaryExpression(unwrappedCondition) ||
             (unwrappedCondition.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
-                unwrappedCondition.operatorToken.kind !== ts.SyntaxKind.BarBarToken)) return false;
+                unwrappedCondition.operatorToken.kind !== ts.SyntaxKind.BarBarToken &&
+                unwrappedCondition.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken)) return false;
         const left = this.unwrapTransparentExpression(unwrappedCondition.left);
         const right = this.unwrapTransparentExpression(unwrappedCondition.right);
         if (!ts.isAwaitExpression(left) || !ts.isAwaitExpression(right) ||
@@ -33144,16 +33145,33 @@ class Emitter {
         firstBuf.line(`tsc_try_push(&${firstEh});`);
         firstBuf.open(`if (setjmp(${firstEh}.jb) == 0)`);
         const firstTruthy = this.truthyExprFromEmitResult({ c: firstValue, ty: awaitedTypes[0]! }, awaitExpressions[0]!);
-        const firstShortCircuit = unwrappedCondition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
-            ? `!(${firstTruthy})`
-            : firstTruthy;
-        firstBuf.open(`if (${firstShortCircuit})`);
-        if (unwrappedCondition.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
-            emitFallthrough(firstBuf, firstScope, firstAwaitScope);
-        } else {
+        const operator = unwrappedCondition.operatorToken.kind;
+        const firstNullish = this.nullishExprFromEmitResult(
+            { c: firstValue, ty: awaitedTypes[0]! },
+            awaitExpressions[0]!,
+        );
+        if (operator === ts.SyntaxKind.QuestionQuestionToken) {
+            firstBuf.open(`if (!(${firstNullish}))`);
+            firstBuf.open(`if (${firstTruthy})`);
             emitBodyReentry(firstBuf, firstScope, firstAwaitScope);
+            firstBuf.close();
+            firstBuf.open("else");
+            emitFallthrough(firstBuf, firstScope, firstAwaitScope);
+            firstBuf.close();
+            firstBuf.close();
+            firstBuf.open("else");
+        } else {
+            const firstShortCircuit = operator === ts.SyntaxKind.AmpersandAmpersandToken
+                ? `!(${firstTruthy})`
+                : firstTruthy;
+            firstBuf.open(`if (${firstShortCircuit})`);
+            if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
+                emitFallthrough(firstBuf, firstScope, firstAwaitScope);
+            } else {
+                emitBodyReentry(firstBuf, firstScope, firstAwaitScope);
+            }
+            firstBuf.close();
         }
-        firstBuf.close();
         this.argumentValueScopes.push(firstScope);
         this.awaitExpressionValueScopes.push(firstAwaitScope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -33183,6 +33201,7 @@ class Emitter {
         firstBuf.line("tsc_try_pop();");
         firstBuf.line("return;");
         firstBuf.close();
+        if (operator === ts.SyntaxKind.QuestionQuestionToken) firstBuf.close();
         firstBuf.open("else");
         firstBuf.line("tsc_try_pop();");
         firstBuf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
