@@ -296,6 +296,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinue: boolean;
     bodyContinueCondition: ts.Expression | null;
     bodyContinueConditionAwaitExpr: ts.AwaitExpression | null;
+    bodyContinueConditionNegated: boolean;
     bodyContinueElseStatements: readonly ts.Statement[];
     bodyContinueElseAwaitExprs: readonly ts.AwaitExpression[];
     bodyContinueElsePreludeStatements: readonly ts.Statement[];
@@ -34506,30 +34507,38 @@ class Emitter {
             ? conditionalThenStatements[conditionalThenStatements.length - 1]!
             : null;
         const conditionalContinueIsContinue = !!conditionalContinue && !!conditionalContinueStatement && ts.isContinueStatement(conditionalContinueStatement);
-        const bodyAction = conditionalContinueIsContinue
-            ? conditionalContinueStatement!
-            : finalBodyStatement;
-        const bodyContinueCondition = conditionalContinueIsContinue
-            ? conditionalContinue.expression
-            : null;
-        const bodyContinueConditionAwaitExpr = bodyContinueCondition && ts.isAwaitExpression(this.unwrapTransparentExpression(bodyContinueCondition))
-            ? this.unwrapTransparentExpression(bodyContinueCondition) as ts.AwaitExpression
-            : null;
-        const bodyContinueElseStatements = conditionalContinueIsContinue && conditionalContinue?.elseStatement
+        const conditionalThenIsBreak = !!conditionalContinue && !!conditionalContinueStatement &&
+            ts.isBreakStatement(conditionalContinueStatement) && !conditionalContinueStatement.label;
+        const rawElseStatements = conditionalContinue && conditionalContinue.elseStatement
             ? ts.isBlock(conditionalContinue.elseStatement)
                 ? conditionalContinue.elseStatement.statements
                 : [conditionalContinue.elseStatement]
             : [];
-        const elseContinueStatement = bodyContinueElseStatements[bodyContinueElseStatements.length - 1];
-        const elseContinueIsContinue = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
-            !!elseContinueStatement && ts.isContinueStatement(elseContinueStatement);
-        const elseContinueIsBreak = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
-            !!elseContinueStatement && ts.isBreakStatement(elseContinueStatement) && !elseContinueStatement.label;
-        const elseContinueIsReturn = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
-            !!elseContinueStatement && ts.isReturnStatement(elseContinueStatement) &&
+        const rawElseStatement = rawElseStatements[rawElseStatements.length - 1];
+        const rawElseIsContinue = !!conditionalContinue && !!conditionalContinue.elseStatement &&
+            !!rawElseStatement && ts.isContinueStatement(rawElseStatement);
+        const symmetricBreakContinue = conditionalThenIsBreak && rawElseIsContinue;
+        const continueBranchStatements = symmetricBreakContinue ? rawElseStatements : conditionalThenStatements;
+        const alternateBranchStatements = symmetricBreakContinue ? conditionalThenStatements : rawElseStatements;
+        const continueBranchStatement = continueBranchStatements[continueBranchStatements.length - 1];
+        const alternateBranchStatement = alternateBranchStatements[alternateBranchStatements.length - 1];
+        const bodyAction = conditionalContinueIsContinue || symmetricBreakContinue
+            ? continueBranchStatement!
+            : finalBodyStatement;
+        const bodyContinueCondition = (conditionalContinueIsContinue || symmetricBreakContinue) && conditionalContinue
+            ? conditionalContinue.expression
+            : null;
+        const bodyContinueConditionNegated = symmetricBreakContinue;
+        const bodyContinueConditionAwaitExpr = bodyContinueCondition && ts.isAwaitExpression(this.unwrapTransparentExpression(bodyContinueCondition))
+            ? this.unwrapTransparentExpression(bodyContinueCondition) as ts.AwaitExpression
+            : null;
+        const bodyContinueElseStatements = alternateBranchStatements;
+        const elseContinueStatement = alternateBranchStatement;
+        const elseContinueIsContinue = !!elseContinueStatement && ts.isContinueStatement(elseContinueStatement);
+        const elseContinueIsBreak = !!elseContinueStatement && ts.isBreakStatement(elseContinueStatement) && !elseContinueStatement.label;
+        const elseContinueIsReturn = !!elseContinueStatement && ts.isReturnStatement(elseContinueStatement) &&
             !!elseContinueStatement.expression;
-        const elseContinueIsThrow = !!conditionalContinue && !!conditionalContinue?.elseStatement &&
-            !!elseContinueStatement && ts.isThrowStatement(elseContinueStatement);
+        const elseContinueIsThrow = !!elseContinueStatement && ts.isThrowStatement(elseContinueStatement);
         const elseContinueBodyStatements = elseContinueIsContinue
             ? bodyContinueElseStatements.slice(0, -1)
             : [];
@@ -34589,7 +34598,7 @@ class Emitter {
             }
         }
         const bodyContinueStatements = bodyContinueCondition
-            ? conditionalThenStatements.slice(0, -1)
+            ? continueBranchStatements.slice(0, -1)
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
         if (initialBody && bodyContinueCondition) return false;
@@ -35076,6 +35085,7 @@ class Emitter {
             bodyContinue,
             bodyContinueCondition,
             bodyContinueConditionAwaitExpr,
+            bodyContinueConditionNegated,
             bodyContinueElseStatements,
             bodyContinueElseAwaitExprs,
             bodyContinueElsePreludeStatements,
@@ -35120,6 +35130,7 @@ class Emitter {
                     bodyPostAwaitStatements: bodyContinueElsePostAwaitStatements,
                     bodyContinueCondition: null,
                     bodyContinueConditionAwaitExpr: null,
+                    bodyContinueConditionNegated: false,
                     bodyContinueElseStatements: [],
                     bodyContinueElseAwaitExprs: [],
                     bodyContinueElsePreludeStatements: [],
@@ -35801,7 +35812,8 @@ class Emitter {
         this.asyncAwaitContinuationAdapterDepth++;
         try {
             const truth = this.truthyC({ c: valueVar, ty: conditionAwaitedType }, continuation.bodyContinueConditionAwaitExpr);
-            buf.open(`if (${truth})`);
+            const continueTruth = continuation.bodyContinueConditionNegated ? `!(${truth})` : truth;
+            buf.open(`if (${continueTruth})`);
             emitBody(buf, bodyAdapter, bodyAwaitExpr, bodyPromiseType, continuation.bodyPreludeStatements);
             buf.close();
             buf.open("else");
