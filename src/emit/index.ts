@@ -33315,11 +33315,9 @@ class Emitter {
         if (leaves.length !== awaitExpressions.length ||
             leaves.some((leaf, index) => leaf !== awaitExpressions[index]) ||
             (operators.some((kind) => kind !== operators[0]) &&
-                !(operators.length === 2 &&
-                    operators.every((kind) => kind === ts.SyntaxKind.AmpersandAmpersandToken || kind === ts.SyntaxKind.BarBarToken)))) return false;
+                !operators.every((kind) => kind === ts.SyntaxKind.AmpersandAmpersandToken || kind === ts.SyntaxKind.BarBarToken))) return false;
         const operator = operators[0]!;
-        const mixedThreeLeaf = operators.length === 2 && operators[0] !== operators[1];
-        if (mixedThreeLeaf && awaitExpressions.length !== 3) return false;
+        const mixedLogicalChain = operators.some((kind) => kind !== operators[0]);
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const promiseTypes = awaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
@@ -33495,6 +33493,35 @@ class Emitter {
             stageBuf.line("tsc_try_pop();");
             stageBuf.line("return;");
         };
+        const emitLogicalContinuation: (
+            stageBuf: CBuf,
+            lastEvaluatedIndex: number,
+            nextIndex: number,
+            currentValue: string,
+            accumulatedTruthy: string,
+            scope: Map<ts.Symbol, string>,
+            awaitScope: Map<ts.AwaitExpression, EmitResult>,
+        ) => void = (stageBuf, lastEvaluatedIndex, nextIndex, currentValue, accumulatedTruthy, scope, awaitScope): void => {
+            if (nextIndex >= awaitExpressions.length) {
+                stageBuf.open(`if (${accumulatedTruthy})`);
+                emitBodyReentry(stageBuf);
+                stageBuf.close();
+                stageBuf.open("else");
+                emitFallthrough(stageBuf, scope, awaitScope);
+                stageBuf.close();
+                return;
+            }
+            const nextOperator = operators[nextIndex - 1]!;
+            const skipNext = nextOperator === ts.SyntaxKind.AmpersandAmpersandToken
+                ? `!(${accumulatedTruthy})`
+                : accumulatedTruthy;
+            stageBuf.open(`if (${skipNext})`);
+            emitLogicalContinuation(stageBuf, lastEvaluatedIndex, nextIndex + 1, currentValue, accumulatedTruthy, scope, awaitScope);
+            stageBuf.close();
+            stageBuf.open("else");
+            emitNextStage(stageBuf, lastEvaluatedIndex, nextIndex, currentValue, scope, awaitScope);
+            stageBuf.close();
+        };
 
         for (let index = 0; index < awaitExpressions.length; index++) {
             const stageBuf = new CBuf();
@@ -33519,47 +33546,8 @@ class Emitter {
             stageBuf.open(`if (setjmp(${eh}.jb) == 0)`);
             const truthy = this.truthyExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
             const nullish = this.nullishExprFromEmitResult({ c: currentValue, ty: awaitedTypes[index]! }, awaitExpressions[index]!);
-            if (mixedThreeLeaf) {
-                if (index === 0) {
-                    if (operators[0] === ts.SyntaxKind.AmpersandAmpersandToken) {
-                        stageBuf.open(`if (${truthy})`);
-                        emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
-                        stageBuf.close();
-                        stageBuf.open("else");
-                        emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
-                        stageBuf.close();
-                    } else {
-                        stageBuf.open(`if (${truthy})`);
-                        emitBodyReentry(stageBuf);
-                        stageBuf.close();
-                        stageBuf.open("else");
-                        emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
-                        stageBuf.close();
-                    }
-                } else if (index === 1) {
-                    if (operators[1] === ts.SyntaxKind.BarBarToken) {
-                        stageBuf.open(`if (${truthy})`);
-                        emitBodyReentry(stageBuf);
-                        stageBuf.close();
-                        stageBuf.open("else");
-                        emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
-                        stageBuf.close();
-                    } else {
-                        stageBuf.open(`if (${truthy})`);
-                        emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
-                        stageBuf.close();
-                        stageBuf.open("else");
-                        emitFallthrough(stageBuf, scope, awaitScope);
-                        stageBuf.close();
-                    }
-                } else {
-                    stageBuf.open(`if (${truthy})`);
-                    emitBodyReentry(stageBuf);
-                    stageBuf.close();
-                    stageBuf.open("else");
-                    emitFallthrough(stageBuf, scope, awaitScope);
-                    stageBuf.close();
-                }
+            if (mixedLogicalChain) {
+                emitLogicalContinuation(stageBuf, index, index + 1, currentValue, truthy, scope, awaitScope);
             } else if (operator === ts.SyntaxKind.QuestionQuestionToken) {
                 stageBuf.open(`if (!(${nullish}))`);
                 stageBuf.open(`if (${truthy})`);
