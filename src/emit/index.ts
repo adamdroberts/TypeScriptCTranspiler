@@ -25821,6 +25821,8 @@ class Emitter {
         if (prefix.length > 1 || (prefix.length === 1 && !ts.isVariableStatement(prefix[0]!))) return false;
         const loopStatement = ts.isWhileStatement(loop)
             ? loop.statement
+            : ts.isDoStatement(loop)
+                ? loop.statement
             : ts.isForStatement(loop)
                 ? loop.statement
                 : null;
@@ -25977,10 +25979,10 @@ class Emitter {
         for (const param of params) buf.line(`${env}->${param.field} = ${param.name};`);
         if (thisValue) buf.line(`${env}->this_arg = ${thisValue.c};`);
         buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
-        buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
+            buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
         buf.close();
         buf.open("else");
-        buf.line(`${adapter}(${env});`);
+            buf.line(`${adapter}(${env});`);
         buf.close();
         buf.line(`return ${resultPromise};`);
         return true;
@@ -34466,6 +34468,7 @@ class Emitter {
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
         loopIncrementor: ts.Expression | null = null,
         fallthroughRejectResult = false,
+        initialBody = false,
     ): boolean {
         if (awaitExpressions.length !== 1) return false;
         const bodyAction = loopBody[loopBody.length - 1];
@@ -34976,6 +34979,7 @@ class Emitter {
             fallthroughAdapter,
             continuation.bodyRejectResult,
             loopAdapterName,
+            initialBody,
         );
         if (loopInitializer) {
             if (ts.isVariableStatement(loopInitializer)) {
@@ -34985,12 +34989,19 @@ class Emitter {
                 buf.line(`${initializer.c};`);
             }
         }
-        const source = this.emitExpr(conditionAwaitExpr.expression);
+        const initialAwaitExpr = initialBody && continuation.bodyAwaitExpr
+            ? continuation.bodyAwaitExpr
+            : conditionAwaitExpr;
+        const initialPromiseType = initialBody && bodyPromiseType
+            ? bodyPromiseType
+            : conditionPromiseType;
+        const source = this.emitExpr(initialAwaitExpr.expression);
         const sourcePromise = this.freshTemp("_await_source");
         const resultPromise = this.freshTemp("_await_result");
-        const envType = `${adapter}_env_t`;
+        const initialAdapter = initialBody && bodyAdapter ? bodyAdapter : adapter;
+        const envType = `${initialAdapter}_env_t`;
         const env = this.freshTemp("_await_env");
-        buf.line(`tsc_promise_t* const ${sourcePromise} = ${this.coerce(source, conditionPromiseType, conditionAwaitExpr.expression)};`);
+        buf.line(`tsc_promise_t* const ${sourcePromise} = ${this.coerce(source, initialPromiseType, initialAwaitExpr.expression)};`);
         buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->receiver = ${sourcePromise};`);
@@ -34998,10 +35009,10 @@ class Emitter {
         for (const param of continuation.params) buf.line(`${env}->${param.field} = ${param.name};`);
         if (continuation.thisValue) buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
         buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
-        buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapter}, ${env});`);
+        buf.line(`tsc_promise_add_callback(${sourcePromise}, ${initialAdapter}, ${env});`);
         buf.close();
         buf.open("else");
-        buf.line(`${adapter}(${env});`);
+        buf.line(`${initialAdapter}(${env});`);
         buf.close();
         buf.line(`return ${resultPromise};`);
         return true;
@@ -35148,6 +35159,7 @@ class Emitter {
         fallthroughAdapter: string | null,
         bodyRejectResult: boolean,
         adapterName?: string,
+        initialBody = false,
     ): string {
         const name = adapterName ?? `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -35331,6 +35343,8 @@ class Emitter {
         const fallthroughExpression = fallthrough.expression ?? ts.factory.createVoidZero();
         const loopCondition = ts.isWhileStatement(loop)
             ? loop.expression
+            : ts.isDoStatement(loop)
+                ? loop.expression
             : ts.isForStatement(loop) && loop.condition
                 ? loop.condition
                 : null;
@@ -35351,6 +35365,8 @@ class Emitter {
         if (!conditionAwaitsAreValid || awaitExpressions.length === 0) return false;
         const loopStatement = ts.isWhileStatement(loop)
             ? loop.statement
+            : ts.isDoStatement(loop)
+                ? loop.statement
             : ts.isForStatement(loop)
                 ? loop.statement
                 : null;
@@ -35363,6 +35379,7 @@ class Emitter {
                 ? loop.initializer
                 : ts.factory.createVariableStatement(undefined, loop.initializer)
             : preLoopInitializer;
+        const doWhile = ts.isDoStatement(loop);
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
             : null;
@@ -35407,7 +35424,7 @@ class Emitter {
         const loopTwoAwaitControlSupported = loopBreakSkipsIncrementor || (
             loopBodyContinues && loopContinueIncrementorSupported
         );
-        if (loopInitializerBreakSupported && loopTwoAwaitControlSupported && awaitExpressions.length === 2 &&
+        if (!doWhile && loopInitializerBreakSupported && loopTwoAwaitControlSupported && awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
                 condition,
@@ -35421,7 +35438,7 @@ class Emitter {
                 [],
                 loopIncrementor,
             )) return true;
-        if (loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length === 3 &&
+        if (!doWhile && loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
                 buf,
                 condition,
@@ -35435,7 +35452,7 @@ class Emitter {
                 [],
                 loopIncrementor,
             )) return true;
-        if (loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length >= 3 &&
+        if (!doWhile && loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
                 buf,
                 condition,
@@ -35506,7 +35523,7 @@ class Emitter {
             if (!supported) return false;
             loopInitializerCaptures = initializerCaptures;
         }
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) && loopTwoAwaitControlSupported &&
+        if (!doWhile && loopInitializer && ts.isVariableStatement(loopInitializer) && loopTwoAwaitControlSupported &&
             awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
@@ -35521,7 +35538,7 @@ class Emitter {
                 loopInitializerCaptures,
                 loopIncrementor,
             )) return true;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
+        if (!doWhile && loopInitializer && ts.isVariableStatement(loopInitializer) &&
             (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
             awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
@@ -35537,7 +35554,7 @@ class Emitter {
                 loopInitializerCaptures,
                 loopIncrementor,
             )) return true;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
+        if (!doWhile && loopInitializer && ts.isVariableStatement(loopInitializer) &&
             (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
             awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
@@ -35576,6 +35593,7 @@ class Emitter {
                 loopInitializerCaptures,
                 loopIncrementor,
                 ts.isThrowStatement(fallthrough),
+                doWhile,
             )) return true;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
@@ -35591,6 +35609,7 @@ class Emitter {
             loopInitializerCaptures,
             loopIncrementor,
             ts.isThrowStatement(fallthrough),
+            doWhile,
         )) return true;
         if (ts.isThrowStatement(fallthrough)) return false;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
