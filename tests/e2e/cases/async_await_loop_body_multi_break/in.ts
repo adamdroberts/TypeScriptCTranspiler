@@ -17,8 +17,10 @@ function laterBody(value: string): Promise<string> {
 
 async function loopBodyMultipleAwaitsBreak(): Promise<string> {
     for (let count = 0; await laterCondition(count < 2); count++) {
+        bodyCount += 0;
         await laterBody("first-" + count);
         await laterBody("second-" + count);
+        bodyCount += 0;
         break;
     }
     return await later(bodyCount + "|done");

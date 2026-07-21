@@ -11,6 +11,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ### Added
 - Bounded awaited loop bodies now resume a direct awaited expression, preserve supported await-free postlude statements including simple locals before `continue`, execute the counted-`for` incrementor, and re-enter the awaited condition. Test: `async_await_loop_body_continue`.
 - Bounded awaited loop bodies now sequence multiple direct awaited expression statements before `continue`, propagating rejection and resuming the next body await before the loop incrementor and condition re-entry. Test: `async_await_loop_body_multi_continue`.
+- Bounded awaited loop bodies now preserve await-free prefix/suffix statements around multiple direct awaited expression statements before `break` or `continue`. Tests: `async_await_loop_body_multi_break`, `async_await_loop_body_multi_continue`.
 - The same direct awaited loop-body `continue` continuation now covers awaited `while` conditions with one supported await-free pre-loop local declaration. Test: `async_await_while_body_continue`.
 - Awaited `do…while` bodies now run their first direct awaited body step before the awaited condition, then resume through `continue` and repeat the body in the bounded loop subset. Test: `async_await_do_body_continue`.
 - A bounded loop-body `if` arm may now sequence its direct awaited expression and await-free postlude before `continue`; a false arm re-enters the awaited loop condition without running the body await. Test: `async_await_loop_body_if_continue`.
