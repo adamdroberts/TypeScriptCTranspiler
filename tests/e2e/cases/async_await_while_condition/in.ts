@@ -740,6 +740,17 @@ async function chooseLoopTwoAwaitAssignedLocalContinueAwait(value: string, repea
     return await laterBodyValue(value);
 }
 
+async function chooseLoopTwoAwaitMultipleLocalContinueAwait(value: string, repeat: boolean): Promise<string> {
+    while (await laterCondition(repeat) && await laterCondition(repeat)) {
+        const first = "-first";
+        const second = "-second";
+        value += first + second;
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+}
+
 class ForContinueFalseChooser {
     private readonly suffix: string;
 
@@ -3226,6 +3237,7 @@ chooseLoopTwoAwaitCatchContinueAwait("loop-two-await-catch-continue", true).then
 chooseLoopTwoAwaitCatchFinallyContinueAwait("loop-two-await-catch-finally-continue", true).then((value) => console.log("await-loop-two-await-catch-finally-continue", value));
 chooseLoopTwoAwaitLocalContinueAwait("loop-two-await-local-continue", true).then((value) => console.log("await-loop-two-await-local-continue", value));
 chooseLoopTwoAwaitAssignedLocalContinueAwait("loop-two-await-assigned-local-continue", true).then((value) => console.log("await-loop-two-await-assigned-local-continue", value));
+chooseLoopTwoAwaitMultipleLocalContinueAwait("loop-two-await-multiple-local-continue", true).then((value) => console.log("await-loop-two-await-multiple-local-continue", value));
 new ForContinueFalseChooser("-method-false-initializer").chooseExpressionInitializerFalseBreak("loop-expression-break-false").then((value) => console.log("await-method-loop-expression-break-false", value));
 new ForContinueFalseChooser("-method-false-throw-initializer").chooseExpressionInitializerFalseBreakThrow("loop-expression-break-false-throw").catch((reason) => console.log("await-method-loop-expression-break-false-throw", reason));
 chooseLoopExpressionInitializerFalseBreakValue("loop-expression-break-false").then((value) => console.log("await-value-loop-expression-break-false", value));

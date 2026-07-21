@@ -472,6 +472,7 @@ await-loop-two-await-catch-continue loop-two-await-catch-continue-caught
 await-loop-two-await-catch-finally-continue loop-two-await-catch-finally-continue-caught-finally
 await-loop-two-await-local-continue loop-two-await-local-continue-local
 await-loop-two-await-assigned-local-continue loop-two-await-assigned-local-continue-assigned
+await-loop-two-await-multiple-local-continue loop-two-await-multiple-local-continue-first-second
 await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-while-six-logical-true six-logical-yes
