@@ -34567,7 +34567,6 @@ class Emitter {
                 const awaitIndex = loopBody.indexOf(bodyAwaitStatements[0]!.statement);
                 bodyPreludeStatements = loopBody.slice(0, awaitIndex);
                 bodyPostAwaitStatements = loopBody.slice(awaitIndex + 1, -1);
-                if (bodyPostAwaitStatements.length > 0) return false;
             } else {
                 bodyPreludeStatements = loopBody.slice(0, -1);
             }
@@ -35051,6 +35050,7 @@ class Emitter {
                 buf.line(`${bodyAwaitedType.c} ${bodyValueVar} = ${bodyValue};`);
                 buf.line(`(void)${bodyValueVar};`);
             }
+            for (const statement of continuation.bodyPostAwaitStatements) this.emitStmt(buf, statement);
             if (continuation.loopIncrementor) {
                 const incrementor = this.emitExpr(continuation.loopIncrementor);
                 buf.line(`${incrementor.c};`);

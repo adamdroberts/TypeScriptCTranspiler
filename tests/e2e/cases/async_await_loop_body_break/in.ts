@@ -2,6 +2,12 @@ function later(value: string): Promise<string> {
     return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
 }
 
+function laterCondition(value: boolean): Promise<boolean> {
+    return new Promise<boolean>((resolve) => setImmediate(() => resolve(value)));
+}
+
+export {};
+
 let bodyCount = 0;
 
 function laterBody(value: string): Promise<string> {
@@ -9,19 +15,12 @@ function laterBody(value: string): Promise<string> {
     return later(value);
 }
 
-function laterCondition(value: boolean): Promise<boolean> {
-    return new Promise<boolean>((resolve) => setImmediate(() => resolve(value)));
-}
-
-export {};
-
-async function loopBodyAwaitContinue(): Promise<string> {
+async function loopBodyAwaitBreak(): Promise<string> {
     for (let count = 0; await laterCondition(count < 2); count++) {
         await laterBody("body-" + count);
-        bodyCount += count;
-        continue;
+        break;
     }
     return await later(bodyCount + "|done");
 }
 
-loopBodyAwaitContinue().then((value) => console.log(value));
+loopBodyAwaitBreak().then((value) => console.log(value));
