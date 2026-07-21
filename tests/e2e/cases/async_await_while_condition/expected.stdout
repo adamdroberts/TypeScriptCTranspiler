@@ -481,5 +481,7 @@ await-while-five-logical-true five-logical-yes
 await-while-five-logical-false five-logical-no
 await-loop-two-await-nullish-continue loop-two-await-nullish-continue-nullish
 await-loop-two-await-nullish-throw loop-two-await-nullish-throw-nullish
+await-loop-two-await-method-nullish loop-two-await-method-nullish-method-nullish
+await-loop-two-await-value-nullish loop-two-await-value-nullish-value-nullish
 await-while-six-logical-true six-logical-yes
 await-while-six-logical-false six-logical-no

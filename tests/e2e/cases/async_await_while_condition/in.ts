@@ -586,9 +586,35 @@ class TwoAwaitContinueChooser {
     }
 }
 
+class TwoAwaitNullishContinueChooser {
+    private readonly suffix: string;
+
+    constructor(suffix: string) {
+        this.suffix = suffix;
+    }
+
+    async choose(value: string, repeat: boolean): Promise<string> {
+        while (await laterNull() ?? await laterCondition(repeat)) {
+            value += this.suffix;
+            repeat = false;
+            continue;
+        }
+        return await laterBodyValue(value);
+    }
+}
+
 const chooseTwoAwaitContinueValue = async (value: string, repeat: boolean): Promise<string> => {
     while (await laterCondition(repeat) || await laterCondition(repeat)) {
         value += "-value-body";
+        repeat = false;
+        continue;
+    }
+    return await laterBodyValue(value);
+};
+
+const chooseTwoAwaitNullishContinueValue = async (value: string, repeat: boolean): Promise<string> => {
+    while (await laterNull() ?? await laterCondition(repeat)) {
+        value += "-value-nullish";
         repeat = false;
         continue;
     }
@@ -3263,7 +3289,9 @@ chooseLoopTwoAwaitContinueThrowAwait("loop-two-await-continue-throw-false", fals
 chooseLoopTwoAwaitOrContinueAwait("loop-two-await-or-continue", true).then((value) => console.log("await-loop-two-await-or-continue", value));
 chooseLoopTwoAwaitOrContinueThrowAwait("loop-two-await-or-continue-throw", true).catch((reason) => console.log("await-loop-two-await-or-continue-throw", reason));
 new TwoAwaitContinueChooser("-method-body").choose("loop-two-await-method-continue", true).then((value) => console.log("await-loop-two-await-method-continue", value));
+new TwoAwaitNullishContinueChooser("-method-nullish").choose("loop-two-await-method-nullish", true).then((value) => console.log("await-loop-two-await-method-nullish", value));
 chooseTwoAwaitContinueValue("loop-two-await-value-continue", true).then((value) => console.log("await-loop-two-await-value-continue", value));
+chooseTwoAwaitNullishContinueValue("loop-two-await-value-nullish", true).then((value) => console.log("await-loop-two-await-value-nullish", value));
 chooseLoopTwoAwaitControlContinueAwait("loop-two-await-control-continue", true).then((value) => console.log("await-loop-two-await-control-continue", value));
 chooseLoopTwoAwaitTryFinallyContinueAwait("loop-two-await-try-finally-continue", true).then((value) => console.log("await-loop-two-await-try-finally-continue", value));
 chooseLoopTwoAwaitSwitchContinueAwait("loop-two-await-switch-continue", true).then((value) => console.log("await-loop-two-await-switch-continue", value));

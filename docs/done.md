@@ -3407,6 +3407,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | two direct awaited loop-condition operands preserve short-circuiting, outer continue re-entry, body expression preludes, and return-await fallthrough |
 | `async_await_while_condition` | two direct awaited nullish operands preserve nullish short-circuiting before outer continue and return-await fallthrough |
 | `async_await_while_condition` | two direct awaited nullish operands preserve terminal throw-await fallthrough after outer continue |
+| `async_await_while_condition` | nullish two-await outer-continue lowering preserves receiver and function-value captures |
 | `async_await_while_condition` | false initial two-await `&&` conditions skip the body before return-await fallthrough |
 | `async_await_while_condition` | two direct awaited `&&` operands preserve terminal throw-await fallthrough after outer continue |
 | `async_await_while_condition` | false initial two-await `&&` conditions skip the body before terminal throw-await fallthrough |
