@@ -33323,7 +33323,9 @@ class Emitter {
         const mixedShortCircuitChain = operators.some((kind) => kind !== operators[0]);
         const rightAssociatedOrAnd = !leftAssociated && operators.length === 2 &&
             operators[0] === ts.SyntaxKind.BarBarToken && operators[1] === ts.SyntaxKind.AmpersandAmpersandToken;
-        if (mixedShortCircuitChain && !leftAssociated && !rightAssociatedOrAnd) return false;
+        const rightAssociatedAndOr = !leftAssociated && operators.length === 2 &&
+            operators[0] === ts.SyntaxKind.AmpersandAmpersandToken && operators[1] === ts.SyntaxKind.BarBarToken;
+        if (mixedShortCircuitChain && !leftAssociated && !rightAssociatedOrAnd && !rightAssociatedAndOr) return false;
         const fallthroughAwait = this.unwrapTransparentExpression(fallthroughExpr);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const promiseTypes = awaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
@@ -33569,6 +33571,29 @@ class Emitter {
                     stageBuf.close();
                     stageBuf.open("else");
                     emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                } else {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                }
+            } else if (rightAssociatedAndOr) {
+                if (index === 0) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitNextStage(stageBuf, index, 1, currentValue, scope, awaitScope);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitFallthrough(stageBuf, scope, awaitScope);
+                    stageBuf.close();
+                } else if (index === 1) {
+                    stageBuf.open(`if (${truthy})`);
+                    emitBodyReentry(stageBuf);
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    emitNextStage(stageBuf, index, 2, currentValue, scope, awaitScope);
                     stageBuf.close();
                 } else {
                     stageBuf.open(`if (${truthy})`);
