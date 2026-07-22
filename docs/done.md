@@ -476,6 +476,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also evaluate direct no-yield conditional leaves at the final resume, preserving branch and side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield template-expression leaves at the final resume, preserving interpolation side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield tagged-template leaves at the final resume, preserving tag side-effect timing. Test: `generator_lazy_multi_yield_return`
+- Finite lazy multi-yield returns also evaluate no-yield array/object literal leaves at the final resume, including property reads from those literals. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve outer captured parameter identifiers through the lazy generator environment. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve outer captured local identifiers through closure-cell pointers. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve non-computed property reads from stable receivers across suspension points. Test: `generator_lazy_multi_yield_return`

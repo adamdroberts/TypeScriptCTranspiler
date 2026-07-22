@@ -33,6 +33,8 @@ template-leaf-before left right 0
 template-leaf true AmidB 1
 tagged-template-leaf-before left right 0
 tagged-template-leaf true AtagB 1
+literal-leaf 61 62
+literal-leaf-done true 11
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21

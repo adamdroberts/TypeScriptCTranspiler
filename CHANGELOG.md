@@ -285,6 +285,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite lazy multi-yield returns now evaluate direct no-yield conditional leaves at the final resume, preserving branch and side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield template-expression leaves at the final resume, preserving interpolation side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield tagged-template leaves at the final resume, preserving tag side-effect timing. Regression: `generator_lazy_multi_yield_return`.
+- Finite lazy multi-yield returns now evaluate no-yield array/object literal leaves at the final resume, including property reads from those literals. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve outer captured parameter identifiers through the lazy generator environment. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve outer captured local identifiers through closure-cell pointers. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve non-computed property reads from stable receivers across suspension points. Regression: `generator_lazy_multi_yield_return`.
