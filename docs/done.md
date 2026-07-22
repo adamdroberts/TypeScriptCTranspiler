@@ -3585,7 +3585,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_while_condition` | two-await outer-continue bodies preserve assigned-before-use uninitialized let locals before repeated conditions |
 | `async_await_while_condition` | two-await outer-continue bodies preserve multiple ordered initialized locals before repeated conditions |
 | `async_await_pending_return_expr` | conditional leading await steps preserve bounded await-free expression preludes in both direct arms across declarations, methods, and function values |
-| `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations, including simple initialized or assigned-before-suspension uninitialized `var` declarations and ordinary multi-declaration lists consumed before suspension, remain scoped around the first conditional await source |
+| `async_await_conditional_branch_prelude_declaration` | branch-local initialized declarations, including simple initialized or assigned-before-suspension uninitialized `var` declarations consumed before suspension, remain scoped around the first conditional await source |
+| `async_await_conditional_branch_local_sequence` | ordinary multi-declaration lists mix synchronous branch-local declarators with direct awaited declarators |
 | `async_await_conditional_branch_assigned_prelude` | branch-local let declarations are assigned before the first conditional await source |
 | `async_await_pending_return_expr` | conditional leading await steps allow branch-local awaited declarations used only as sequencing points |
 | `async_await_pending_return_expr` | conditional leading await steps accept mixed bare-await and branch-local declaration arms for sequencing |

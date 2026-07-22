@@ -29093,8 +29093,19 @@ class Emitter {
                     });
                     if (hasDirectAwaitInitializer) {
                         const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(statement);
-                        if (!splitStatements) return false;
-                        statements.push(...splitStatements);
+                        if (splitStatements) {
+                            statements.push(...splitStatements);
+                        } else {
+                            if (statement.declarationList.declarations.some((declaration) => !ts.isIdentifier(declaration.name))) {
+                                return false;
+                            }
+                            statements.push(...statement.declarationList.declarations.map((declaration) =>
+                                ts.factory.updateVariableStatement(
+                                    statement,
+                                    statement.modifiers,
+                                    ts.factory.updateVariableDeclarationList(statement.declarationList, [declaration]),
+                                )));
+                        }
                     } else {
                         statements.push(statement);
                     }
