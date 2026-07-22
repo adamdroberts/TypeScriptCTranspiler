@@ -483,6 +483,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Lazy finite multi-yield returns now preserve side-effect-free Math defaults over earlier parameters, including captured closures; arbitrary calls and unsupported Math methods remain deferred. Test: `generator_lazy_inline_parameter_default_math`
 - Lazy finite multi-yield returns now preserve side-effect-free `Number.isFinite`/`isInteger`/`isNaN`/`isSafeInteger` defaults over earlier parameters, including captured closures. Test: `generator_lazy_inline_parameter_default_number`
 - Lazy finite multi-yield returns now preserve side-effect-free `Number.parseInt`/`parseFloat` defaults over earlier parameters, including an optional radix and captured closures. Test: `generator_lazy_inline_parameter_default_number_parse`
+- Lazy finite multi-yield returns now preserve side-effect-free `Date.parse`/`Date.UTC` defaults over earlier parameters, including chained and captured closures. Test: `generator_lazy_inline_parameter_default_date`
 - Finite lazy multi-yield returns also evaluate direct no-yield postfix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield prefix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Test: `generator_lazy_multi_yield_return`

@@ -52209,6 +52209,9 @@ class Emitter {
                 const isNumberParser =
                     (method === "parseInt" || method === "parseFloat") &&
                     node.arguments.length >= 1 && node.arguments.length <= 2;
+                const isDateStaticCall =
+                    (method === "parse" && node.arguments.length === 1) ||
+                    (method === "UTC" && node.arguments.length <= 7);
                 const isPureBuiltinCall =
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
@@ -52219,7 +52222,8 @@ class Emitter {
                         "max", "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
                         "tanh", "trunc",
                     ]).has(method)) ||
-                        (receiver.text === "Number" && (isNumberPredicate || isNumberParser)));
+                        (receiver.text === "Number" && (isNumberPredicate || isNumberParser)) ||
+                        (receiver.text === "Date" && isDateStaticCall));
                 if (
                     !isPureBuiltinCall ||
                     node.arguments.some(ts.isSpreadElement)
