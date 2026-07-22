@@ -21,9 +21,11 @@ class BaseBox {
 }
 
 class Box extends BaseBox {
+    width: number;
     label: string;
     constructor(w: number, h: number, l: string) {
         super(w, h);
+        this.width = w + 1;
         this.label = l;
     }
 }
