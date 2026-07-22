@@ -1,8 +1,8 @@
 let bodyCount = 0;
 
-function laterBody(value: string): Promise<void> {
+function laterBody(value: string): Promise<string> {
     bodyCount++;
-    return Promise.resolve(undefined);
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
 }
 
 async function forOfBodyAwaitBreak(): Promise<string> {

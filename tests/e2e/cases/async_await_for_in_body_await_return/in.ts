@@ -1,14 +1,14 @@
 let bodyCount = 0;
 
-function laterBody(value: string): Promise<void> {
+function laterBody(value: string): Promise<string> {
     bodyCount++;
-    return Promise.resolve(undefined);
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
 }
 
 async function forInBodyAwaitReturn(): Promise<string> {
     const values: Record<string, string> = { first: "a", second: "b" };
     for (const key in values) {
-        await laterBody(values[key]);
+        await laterBody(key);
         return await Promise.resolve(bodyCount + "|returned");
     }
     return await Promise.resolve("fallthrough");
