@@ -2,8 +2,9 @@ import { setTimeout as delay } from "node:timers/promises";
 
 async function declaration(): Promise<string> {
     const one = await delay(1, "1");
-    var switchMarker;
+    var switchMarker, switchLabel;
     switchMarker = "";
+    switchLabel = one;
     switch (one) {
         case "never":
             switchMarker = "x";
@@ -75,8 +76,9 @@ async function declaration(): Promise<string> {
 class Chain {
     async method(): Promise<string> {
         const one = await delay(1, "a");
-        var switchMarker;
+        var switchMarker, switchLabel;
         switchMarker = "";
+        switchLabel = one;
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -148,8 +150,9 @@ class Chain {
 
 const value = async (): Promise<string> => {
     const one = await delay(1, "A");
-    var switchMarker;
+    var switchMarker, switchLabel;
     switchMarker = "";
+    switchLabel = one;
     switch (one) {
         case "never":
             switchMarker = "X";
@@ -221,8 +224,9 @@ const value = async (): Promise<string> => {
 async function branchEight(flag: boolean): Promise<string> {
     if (flag) {
         const one = await delay(21, "b");
-        var switchMarker;
+        var switchMarker, switchLabel;
         switchMarker = "";
+        switchLabel = one;
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -291,8 +295,9 @@ async function branchEight(flag: boolean): Promise<string> {
         return fourteen;
     }
     const one = await delay(29, "f");
-    var switchMarker;
+    var switchMarker, switchLabel;
     switchMarker = "";
+    switchLabel = one;
     switch (one) {
         case "never":
             switchMarker = "x";
@@ -365,8 +370,9 @@ class BranchChain {
     async method(flag: boolean): Promise<string> {
         if (flag) {
             const one = await delay(37, "m");
-            var switchMarker;
+            var switchMarker, switchLabel;
             switchMarker = "";
+            switchLabel = one;
             switch (one) {
                 case "never":
                     switchMarker = "x";
@@ -435,8 +441,9 @@ class BranchChain {
             return fourteen;
         }
         const one = await delay(45, "n");
-        var switchMarker;
+        var switchMarker, switchLabel;
         switchMarker = "";
+        switchLabel = one;
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -509,8 +516,9 @@ class BranchChain {
 const branchValue = async (flag: boolean): Promise<string> => {
     if (flag) {
         const one = await delay(53, "v");
-        var switchMarker;
+        var switchMarker, switchLabel;
         switchMarker = "";
+        switchLabel = one;
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -579,8 +587,9 @@ const branchValue = async (flag: boolean): Promise<string> => {
         return fourteen;
     }
     const one = await delay(61, "x");
-    var switchMarker;
+    var switchMarker, switchLabel;
     switchMarker = "";
+    switchLabel = one;
     switch (one) {
         case "never":
             switchMarker = "x";
