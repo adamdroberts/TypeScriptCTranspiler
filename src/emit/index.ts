@@ -52138,10 +52138,20 @@ class Emitter {
             );
             if (!hasRestParameter) return false;
         }
-        return target.parameters.every((parameter) =>
-            ts.isIdentifier(parameter.name) &&
-            !this.isThisParameter(parameter) &&
-            (!parameter.initializer || this.isSupportedInlineClosureDefault(parameter)),
+        return target.parameters.every((parameter) => this.isSupportedInlineClosureParameter(parameter));
+    }
+
+    private isSupportedInlineClosureParameter(parameter: ts.ParameterDeclaration): boolean {
+        if (this.isThisParameter(parameter) || parameter.initializer && !this.isSupportedInlineClosureDefault(parameter)) {
+            return false;
+        }
+        if (ts.isIdentifier(parameter.name)) return true;
+        if (!ts.isArrayBindingPattern(parameter.name) || parameter.initializer) return false;
+        return parameter.name.elements.every((element) =>
+            ts.isBindingElement(element) &&
+            !element.dotDotDotToken &&
+            !element.initializer &&
+            ts.isIdentifier(element.name),
         );
     }
 
@@ -53053,7 +53063,7 @@ class Emitter {
         if (!sig) unsupported(fn, "could not resolve closure signature");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const params = runtimeParams.map((p) => {
-            if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
+            if (!this.isSupportedInlineClosureParameter(p)) unsupported(p, "unsupported closure parameter shape");
             if (p.initializer && !this.isSupportedInlineClosureDefault(p)) {
                 unsupported(p, "default closure parameters currently require a literal initializer");
             }
@@ -53123,10 +53133,13 @@ class Emitter {
         const ret = this.prepareType(type.ret);
         const envParam = this.freshTemp("_envp");
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
+        const paramNames = runtimeParams.map((p, i) =>
+            ts.isIdentifier(p.name) ? mangleIdent(p.name.text) : `_param${i}`,
+        );
         const paramDecls = runtimeParams.map((p, i) => {
-            if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
+            if (!this.isSupportedInlineClosureParameter(p)) unsupported(p, "unsupported closure parameter shape");
             const pt = type.params?.[i] ?? this.prepareType(mapType(p, this.checker));
-            return `${pt.c} ${mangleIdent(p.name.text)}`;
+            return `${pt.c} ${paramNames[i]}`;
         });
         const thisDecl = type.thisParam ? [`${type.thisParam.c} __tsc_this`] : [];
         const signature = `${ret.c} ${implName}(${["void* " + envParam, ...thisDecl, ...paramDecls].join(", ")})`;
@@ -53147,6 +53160,25 @@ class Emitter {
         } else {
             body.line(`(void)${envParam};`);
         }
+        const argumentScope = new Map<ts.Symbol, string>();
+        const argumentTypeScope = new Map<ts.Symbol, CType>();
+        for (let i = 0; i < runtimeParams.length; i++) {
+            const parameter = runtimeParams[i]!;
+            if (!ts.isArrayBindingPattern(parameter.name)) continue;
+            const parameterType = type.params?.[i] ?? this.prepareType(mapType(parameter, this.checker));
+            if (parameterType.kind !== "array" || !parameterType.elem) {
+                unsupported(parameter, "array destructuring requires an array parameter type");
+            }
+            parameter.name.elements.forEach((element, index) => {
+                if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) {
+                    unsupported(parameter, "array destructuring requires simple binding elements");
+                }
+                const symbol = this.symbolForIdentifier(element.name);
+                if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                argumentScope.set(symbol, `TSC_ARR(${parameterType.elem!.c}, ${paramNames[i]}, ${index})`);
+                argumentTypeScope.set(symbol, parameterType.elem!);
+            });
+        }
 
         const capturedCells = this.capturedCellsFor(fn);
         const isAsync = this.isAsyncDeclaration(fn);
@@ -53161,6 +53193,8 @@ class Emitter {
             }
         }
         this.closureEnvScopes.push(envBindings);
+        this.argumentValueScopes.push(argumentScope);
+        this.argumentValueTypeScopes.push(argumentTypeScope);
         try {
             if (isGenerator) {
                 this.emitGeneratorFunctionLikeBody(
@@ -53364,6 +53398,8 @@ class Emitter {
                 }
             }
         } finally {
+            this.argumentValueTypeScopes.pop();
+            this.argumentValueScopes.pop();
             this.closureEnvScopes.pop();
         }
         body.close();
