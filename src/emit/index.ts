@@ -43965,7 +43965,7 @@ class Emitter {
                 if (!symbol) continue;
                 const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
                 const isLet = (statement.declarationList.flags & ts.NodeFlags.Let) !== 0;
-                if (isConst || (isLet && !this.forLoopBodyMutatesSymbol(body, symbol))) stable.add(symbol);
+                if (isConst || isLet) stable.add(symbol);
             }
         }
         return stable;

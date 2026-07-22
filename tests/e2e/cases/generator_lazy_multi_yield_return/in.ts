@@ -74,6 +74,13 @@ function* immutableLetLeaves(): Generator<number, number, number> {
     return base + (yield 32) + (yield 33);
 }
 
+function* mutableLetLeaves(): Generator<number, number, number> {
+    let base = 11;
+    const first = yield 32;
+    base += first;
+    return base + (yield 33) + (yield 34);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -234,6 +241,12 @@ const immutableLetFirst: any = immutableLetIter.next();
 const immutableLetSecond: any = immutableLetIter.next(4);
 const immutableLetDone: any = immutableLetIter.next(5);
 console.log("immutable-let", immutableLetFirst.value, immutableLetSecond.value, immutableLetDone.done, immutableLetDone.value);
+const mutableLetIter = mutableLetLeaves();
+const mutableLetFirst: any = mutableLetIter.next();
+const mutableLetSecond: any = mutableLetIter.next(4);
+const mutableLetThird: any = mutableLetIter.next(5);
+const mutableLetDone: any = mutableLetIter.next(6);
+console.log("mutable-let", mutableLetFirst.value, mutableLetSecond.value, mutableLetThird.value, mutableLetDone.done, mutableLetDone.value);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
