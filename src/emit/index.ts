@@ -29148,7 +29148,7 @@ class Emitter {
             });
             const uninitializedPreludeSymbols = leaf.statements.slice(0, firstAwaitIndex).flatMap((statement) => {
                 if (!ts.isVariableStatement(statement)) return [];
-                if (!(statement.declarationList.flags & ts.NodeFlags.Let)) return [];
+                if (statement.declarationList.flags & ts.NodeFlags.Const) return [];
                 return statement.declarationList.declarations.flatMap((declaration) => {
                     if (!ts.isIdentifier(declaration.name) || declaration.initializer) return [];
                     const symbol = this.symbolForIdentifier(declaration.name);
@@ -32883,7 +32883,7 @@ class Emitter {
         const isVar = !(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let));
         for (const declaration of stmt.declarationList.declarations) {
             if (!ts.isIdentifier(declaration.name) ||
-                (!declaration.initializer && (isVar || !(stmt.declarationList.flags & ts.NodeFlags.Let)))) return false;
+                (!declaration.initializer && !isVar && !(stmt.declarationList.flags & ts.NodeFlags.Let))) return false;
             if (!declaration.initializer) continue;
             let ok = true;
             const visit = (node: ts.Node): void => {

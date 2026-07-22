@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 async function declaration(kind: number): Promise<string> {
     let first = "seed";
-    if (kind === 0) { var suffix = "-zero"; first = await delay(1, "zero" + suffix); }
+    if (kind === 0) { var suffix; suffix = "-zero"; first = await delay(1, "zero" + suffix); }
     else if (kind === 1) first = await delay(1, "one");
     else if (kind === 2) first = await delay(1, "two");
     else if (kind === 3) first = await delay(1, "three");
@@ -14,7 +14,7 @@ async function declaration(kind: number): Promise<string> {
     else if (kind === 9) first = await delay(1, "nine");
     else if (kind === 10) first = await delay(1, "ten");
     else if (kind === 11) first = await delay(1, "eleven");
-    else { var suffix = "-twelve"; first = await delay(1, "twelve" + suffix); }
+    else { var suffix; suffix = "-twelve"; first = await delay(1, "twelve" + suffix); }
     const second = await delay(1, first + "-second");
     return second;
 }
