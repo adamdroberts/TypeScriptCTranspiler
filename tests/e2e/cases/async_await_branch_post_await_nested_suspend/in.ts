@@ -58,6 +58,9 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
             nestedValue = nestedValue + "-in";
         }
         nestedValue = nestedValue + "-nested-prefix";
+        if (inner) {
+            nestedValue = nestedValue + "-nested-control-if";
+        }
         var nestedAwaitValue = nestedValue;
         if (inner) {
             nestedAwaitValue = await later(nestedValue + "-nested-if");

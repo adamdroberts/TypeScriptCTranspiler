@@ -39373,16 +39373,18 @@ class Emitter {
                     stepStatements.push(statement);
                 } else {
                     if (steps.length === 0) {
-                        if (!ts.isExpressionStatement(statement)) return null;
+                        if (!ts.isExpressionStatement(statement) &&
+                            !this.asyncAwaitInterstitialControlFlowSupported(statement)) return null;
                         let valid = true;
                         const visit = (node: ts.Node): void => {
-                            if (!valid || ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                            if (!valid || ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node) ||
+                                ts.isVariableStatement(node)) {
                                 valid = false;
                                 return;
                             }
                             ts.forEachChild(node, visit);
                         };
-                        visit(statement.expression);
+                        visit(statement);
                         if (!valid) return null;
                         leadingStatements.push(statement);
                     } else {
