@@ -52218,6 +52218,7 @@ class Emitter {
                 const isRegExpStaticCall = method === "escape" && node.arguments.length === 1;
                 const isUrlStaticCall = method === "canParse" && node.arguments.length >= 1 && node.arguments.length <= 2;
                 const isJsonStaticCall = method === "parse" && node.arguments.length === 1;
+                const isPromiseStaticCall = method === "resolve" && node.arguments.length <= 1;
                 const isGlobalStringCall =
                     ts.isIdentifier(expression) &&
                     new Set(["encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent", "btoa", "atob"]).has(expression.text) &&
@@ -52240,7 +52241,8 @@ class Emitter {
                         (receiver.text === "Object" && isObjectStaticCall) ||
                         (receiver.text === "RegExp" && isRegExpStaticCall) ||
                         (receiver.text === "URL" && isUrlStaticCall) ||
-                        (receiver.text === "JSON" && isJsonStaticCall)));
+                        (receiver.text === "JSON" && isJsonStaticCall) ||
+                        (receiver.text === "Promise" && isPromiseStaticCall)));
                 if (
                     !isPureBuiltinCall ||
                     node.arguments.some(ts.isSpreadElement)
