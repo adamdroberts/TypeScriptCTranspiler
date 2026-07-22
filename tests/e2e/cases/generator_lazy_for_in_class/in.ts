@@ -1,11 +1,14 @@
 const events: string[] = [];
 
-class BaseKeyRecord {
+class RootKeyRecord {
     alpha: string = "a";
 }
 
-class KeyRecord extends BaseKeyRecord {
+class BaseKeyRecord extends RootKeyRecord {
     alpha: string = "derived-a";
+}
+
+class KeyRecord extends BaseKeyRecord {
     beta: string = "b";
 }
 

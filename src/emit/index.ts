@@ -22622,6 +22622,25 @@ class Emitter {
         type: CType;
     }[] {
         const fields: { name: string; type: CType }[] = [];
+        const seen = new Set<string>();
+        const append = (field: { name: string; type: CType }): void => {
+            if (seen.has(field.name)) return;
+            seen.add(field.name);
+            fields.push(field);
+        };
+        const collect = (base: ts.ClassDeclaration): void => {
+            if (!base.heritageClauses) return;
+            for (const h of base.heritageClauses) {
+                if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+                for (const t of h.types) {
+                    const sym = this.checker.getSymbolAtLocation(t.expression);
+                    const parent = sym?.getDeclarations()?.find(ts.isClassDeclaration);
+                    if (!parent) continue;
+                    collect(parent);
+                    for (const field of this.classOwnInstanceFields(parent)) append(field);
+                }
+            }
+        };
         if (!cd.heritageClauses) return fields;
         for (const h of cd.heritageClauses) {
             if (h.token !== ts.SyntaxKind.ExtendsKeyword) continue;
@@ -22631,12 +22650,7 @@ class Emitter {
                 if (!sym) continue;
                 const base = sym.getDeclarations()?.find(ts.isClassDeclaration);
                 if (!base) continue;
-                // Recurse for multi-level inheritance.
-                for (const f of this.collectInheritedFields(base)) fields.push(f);
-                fields.push(...this.classOwnInstanceFields(base).map((field) => ({
-                    name: field.name,
-                    type: field.type,
-                })));
+                collect(base);
             }
         }
         return fields;
