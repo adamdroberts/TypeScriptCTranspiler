@@ -70,6 +70,7 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
             await later(nestedValue + "-nested-only-one");
             await later(nestedValue + "-nested-only-two");
         }
+        if (inner) await later(nestedValue + "-nested-single-only");
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");

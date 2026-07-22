@@ -29113,7 +29113,7 @@ class Emitter {
         });
         if (awaitSteps.some((indices, index) => indices.length === 0 && leaves[index]!.statements.length > 0)) return null;
         const stepCount = Math.max(...awaitSteps.map((indices) => indices.length));
-        if (stepCount < 2) return null;
+        if (stepCount < 1) return null;
         const hasUnequalSteps = awaitSteps.some((indices) => indices.length !== stepCount);
         if (hasUnequalSteps) {
             for (let stepIndex = 0; stepIndex < stepCount; stepIndex++) {
@@ -39872,8 +39872,10 @@ class Emitter {
                         if (i === 0) buf.open(`if (${branchChoiceVar} == 0)`);
                         else buf.open(`else if (${branchChoiceVar} == ${i})`);
                         for (const statement of branch.beforeStatements) this.emitStmt(buf, statement);
-                        const source = this.emitExpr(branch.awaitExpr.expression);
-                        const sourceC = this.coerce(source, promiseTypes[0]!, branch.awaitExpr.expression);
+                        const source = branch.skip ? null : this.emitExpr(branch.awaitExpr.expression);
+                        const sourceC = branch.skip
+                            ? "tsc_promise_resolve(tsc_value_undefined())"
+                            : this.coerce(source!, promiseTypes[0]!, branch.awaitExpr.expression);
                         buf.line(`${stagedSourceVar} = ${sourceC};`);
                         buf.close();
                     }
@@ -39888,8 +39890,11 @@ class Emitter {
                 }
                 let stagedSource = "";
                 for (let i = branches.length - 1; i >= 0; i--) {
-                    const source = this.emitExpr(branches[i]!.awaitExpr.expression);
-                    const sourceC = this.coerce(source, promiseTypes[0]!, branches[i]!.awaitExpr.expression);
+                    const branch = branches[i]!;
+                    const source = branch.skip ? null : this.emitExpr(branch.awaitExpr.expression);
+                    const sourceC = branch.skip
+                        ? "tsc_promise_resolve(tsc_value_undefined())"
+                        : this.coerce(source!, promiseTypes[0]!, branch.awaitExpr.expression);
                     stagedSource = stagedSource
                         ? `(${branchChoiceVar} == ${i} ? ${sourceC} : ${stagedSource})`
                         : sourceC;
