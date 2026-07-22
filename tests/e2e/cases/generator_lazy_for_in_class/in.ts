@@ -5,6 +5,7 @@ class BaseKeyRecord {
 }
 
 class KeyRecord extends BaseKeyRecord {
+    alpha: string = "derived-a";
     beta: string = "b";
 }
 

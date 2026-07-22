@@ -22543,7 +22543,9 @@ class Emitter {
         for (const { name: fn, type: ft } of baseFields) {
             this.structDecls.line(`${ft.c} ${mangleIdent(fn)};`);
         }
+        const inheritedFieldNames = new Set(baseFields.map(({ name: fn }) => fn));
         for (const field of this.classOwnInstanceFields(cd)) {
+            if (inheritedFieldNames.has(field.name)) continue;
             this.structDecls.line(`${field.type.c} ${mangleIdent(field.name)};`);
         }
         this.structDecls.close(";");
