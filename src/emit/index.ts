@@ -52238,6 +52238,16 @@ class Emitter {
 
     private emitDynamicValueCall(call: ts.CallExpression, callee: EmitResult): EmitResult {
         if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
+            if (call.questionDotToken) {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: callee, target: T_VALUE, node: call.expression }],
+                    ([fn]) => {
+                        const list = this.emitSpreadCallArgumentList(call.arguments);
+                        return `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${list.c}))`;
+                    },
+                );
+            }
             const list = this.emitSpreadCallArgumentList(call.arguments);
             return this.emitSequencedCall("tsc_value_apply_function", T_VALUE, [
                 { value: callee, target: T_VALUE, node: call.expression },
@@ -55789,7 +55799,19 @@ class Emitter {
             { value: recv, target: T_VALUE, node: call.expression },
         ];
         if (args.some((arg) => ts.isSpreadElement(arg))) {
-            if (optionalReceiver) unsupported(call, "optional dynamic method calls with spread arguments");
+            if (optionalReceiver) {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv, target: T_VALUE, node: call.expression }],
+                    ([target]) => {
+                        const argList = this.emitSpreadCallArgumentList(args);
+                        const fn = this.freshTemp("_dyn_call_fn");
+                        const cache = this.freshTemp("_prop_cache");
+                        const invoke = `({ static tsc_prop_cache_t ${cache}; tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache}); tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${argList.c})); })`;
+                        return `tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${invoke}`;
+                    },
+                );
+            }
             const argList = this.emitSpreadCallArgumentList(args);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: call.expression },
