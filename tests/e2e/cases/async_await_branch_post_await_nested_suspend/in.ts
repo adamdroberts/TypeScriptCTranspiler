@@ -34,7 +34,11 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");
-        var nestedValue = first + (inner ? "-try" : "-fallback");
+        try {
+            var nestedValue = first + "-try";
+        } finally {
+            nestedValue = first + "-finally";
+        }
         await later(nestedValue + "-await");
     }
     return await later(nestedValue + "-return");
@@ -42,7 +46,7 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
 
 branchPostAwaitNestedControl(true, true).then((value) => console.log("control-true-if", value));
 branchPostAwaitNestedControl(true, false).then((value) => console.log("control-true-else", value));
-branchPostAwaitNestedControl(false, false).then((value) => console.log("control-false-fallback", value));
+branchPostAwaitNestedControl(false, false).then((value) => console.log("control-false-try", value));
 
 class NestedSuspendRunner {
     async run(flag: boolean): Promise<string> {

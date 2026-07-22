@@ -5,7 +5,7 @@ value-false value-first-return
 true first-return
 control-true-if control-first-if-return
 control-true-else control-first-else-return
-control-false-fallback control-first-fallback-return
+control-false-try control-first-finally-return
 method-true method-first-return
 value-true value-first-return
 throw-reason-true throw-first-throw
