@@ -51,6 +51,9 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
             nestedValue = nestedValue + "-do";
             doCount++;
         } while (doCount < 2);
+        for (const suffix of ["-of", "-of"]) {
+            nestedValue = nestedValue + suffix;
+        }
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");

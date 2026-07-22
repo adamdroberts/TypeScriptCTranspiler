@@ -32772,6 +32772,28 @@ class Emitter {
                 ok = false;
                 return;
             }
+            if (ts.isForInStatement(node) || ts.isForOfStatement(node)) {
+                if (ts.isForOfStatement(node) && node.awaitModifier) {
+                    ok = false;
+                    return;
+                }
+                if (ts.isVariableDeclarationList(node.initializer)) {
+                    for (const declaration of node.initializer.declarations) {
+                        if (!ts.isIdentifier(declaration.name)) {
+                            ok = false;
+                            return;
+                        }
+                        if (declaration.initializer) visit(declaration.initializer);
+                        if (!ok) return;
+                    }
+                } else {
+                    visit(node.initializer);
+                }
+                visit(node.expression);
+                if (!ok) return;
+                visit(node.statement);
+                return;
+            }
             if (ts.isVariableStatement(node)) {
                 visitVariableDeclarationList(node.declarationList);
                 return;
