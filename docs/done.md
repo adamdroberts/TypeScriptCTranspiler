@@ -2481,7 +2481,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
 | `generator_lazy` | narrow lazy lowering for sequential generators with on-demand next/materialization |
 | `generator_lazy_for` | lazy generators resume across simple counted for-loop suspension points |
-| `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived field overrides; regular `for_in` covers the same inherited-field resolver and override path |
+| `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived field overrides; regular `for_in` covers the same multi-level inherited-field resolver and override path |
 | `generator_lazy_continue` | lazy generators support unlabeled continue inside while, do-while, and counted for loops |
 | `generator_lazy_do_while` | lazy generators resume across simple do-while loop suspension points |
 | `generator_lazy_if_else` | lazy generators resume across simple if/else control flow |

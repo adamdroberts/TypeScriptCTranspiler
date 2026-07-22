@@ -10,13 +10,21 @@ for (const k in p) {
     console.log(k);
 }
 
-class BaseBox {
+class RootBox {
     width: number;
     height: number;
 
     constructor(w: number, h: number) {
         this.width = w;
         this.height = h;
+    }
+}
+
+class BaseBox extends RootBox {
+    width: number;
+    constructor(w: number, h: number) {
+        super(w, h);
+        this.width = w;
     }
 }
 
