@@ -66,6 +66,10 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
             nestedAwaitValue = await later(nestedValue + "-nested-else");
             nestedValue = nestedAwaitValue + "-assigned-alt-post";
         }
+        if (inner) {
+            await later(nestedValue + "-nested-only-one");
+            await later(nestedValue + "-nested-only-two");
+        }
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");

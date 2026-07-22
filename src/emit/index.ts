@@ -29060,7 +29060,7 @@ class Emitter {
     }
 
     private asyncAwaitConditionalLeadingSteps(stmt: ts.Statement): AsyncAwaitLeadingStep[] | null {
-        if (!ts.isIfStatement(stmt) || !stmt.elseStatement) return null;
+        if (!ts.isIfStatement(stmt)) return null;
         type Leaf = {
             condition: ts.Expression | null;
             statements: readonly ts.Statement[];
@@ -29097,7 +29097,12 @@ class Emitter {
             leaves.push({ condition, statements });
             return true;
         };
-        if (!collect(stmt, null) || leaves.length < 2) return null;
+        if (stmt.elseStatement) {
+            if (!collect(stmt, null) || leaves.length < 2) return null;
+        } else {
+            if (!collect(stmt.thenStatement, stmt.expression)) return null;
+            leaves.push({ condition: null, statements: [] });
+        }
         leaves[leaves.length - 1]!.condition = null;
         const awaitSteps = leaves.map((leaf) => {
             const indices: number[] = [];
@@ -29106,7 +29111,7 @@ class Emitter {
             }
             return indices;
         });
-        if (awaitSteps.some((indices) => indices.length === 0)) return null;
+        if (awaitSteps.some((indices, index) => indices.length === 0 && leaves[index]!.statements.length > 0)) return null;
         const stepCount = Math.max(...awaitSteps.map((indices) => indices.length));
         if (stepCount < 2) return null;
         const hasUnequalSteps = awaitSteps.some((indices) => indices.length !== stepCount);
@@ -29123,7 +29128,7 @@ class Emitter {
         }
         for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
             const leaf = leaves[leafIndex]!;
-            const firstAwaitIndex = awaitSteps[leafIndex]![0]!;
+            const firstAwaitIndex = awaitSteps[leafIndex]![0] ?? leaf.statements.length;
             for (let statementIndex = 0; statementIndex < leaf.statements.length; statementIndex++) {
                 const statement = leaf.statements[statementIndex]!;
                 if (!this.awaitedContinuationStep(statement) && !(
@@ -29252,9 +29257,14 @@ class Emitter {
                 const nextAwaitIndex = skip
                     ? leaf.statements.length
                     : awaitSteps[leafIndex]!.find((candidate) => candidate > awaitIndex!) ?? leaf.statements.length;
-                const placeholder = step ?? this.awaitedContinuationStep(
-                    leaf.statements[awaitSteps[leafIndex]![awaitSteps[leafIndex]!.length - 1]!]!,
-                );
+                const placeholder = step ?? (() => {
+                    const sourceLeafIndex = awaitSteps.findIndex((indices) => indices.length > 0);
+                    if (sourceLeafIndex < 0) return null;
+                    const sourceIndices = awaitSteps[sourceLeafIndex]!;
+                    return this.awaitedContinuationStep(
+                        leaves[sourceLeafIndex]!.statements[sourceIndices[sourceIndices.length - 1]!]!,
+                    );
+                })();
                 if (!placeholder) return null;
                 branches.push({
                     awaitExpr: placeholder.awaitExpr,
