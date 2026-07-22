@@ -46,6 +46,11 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
         for (let forCount = 0; forCount < 2; forCount++) {
             nestedValue = nestedValue + "-for";
         }
+        let doCount = 0;
+        do {
+            nestedValue = nestedValue + "-do";
+            doCount++;
+        } while (doCount < 2);
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");
