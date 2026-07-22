@@ -52212,6 +52212,7 @@ class Emitter {
                 const isDateStaticCall =
                     (method === "parse" && node.arguments.length === 1) ||
                     (method === "UTC" && node.arguments.length <= 7);
+                const isStringStaticCall = method === "fromCharCode" || method === "fromCodePoint";
                 const isPureBuiltinCall =
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
@@ -52223,7 +52224,8 @@ class Emitter {
                         "tanh", "trunc",
                     ]).has(method)) ||
                         (receiver.text === "Number" && (isNumberPredicate || isNumberParser)) ||
-                        (receiver.text === "Date" && isDateStaticCall));
+                        (receiver.text === "Date" && isDateStaticCall) ||
+                        (receiver.text === "String" && isStringStaticCall));
                 if (
                     !isPureBuiltinCall ||
                     node.arguments.some(ts.isSpreadElement)
