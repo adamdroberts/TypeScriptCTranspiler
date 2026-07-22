@@ -1,6 +1,6 @@
 branch-fallthrough: fallthrough
-declaration-zero: zero-second
-declaration-twelve: twelve-second
+declaration-zero: zero-zero-second
+declaration-twelve: twelve-twelve-second
 method-eleven: method-eleven-second
 value-ten: value-ten-second
 branch-twelve: branch-twelve-second

@@ -32880,10 +32880,10 @@ class Emitter {
         if (!ts.isVariableStatement(stmt)) {
             return this.asyncAwaitInterstitialControlFlowSupported(stmt);
         }
-        if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return false;
+        const isVar = !(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let));
         for (const declaration of stmt.declarationList.declarations) {
             if (!ts.isIdentifier(declaration.name) ||
-                (!declaration.initializer && !(stmt.declarationList.flags & ts.NodeFlags.Let))) return false;
+                (!declaration.initializer && (isVar || !(stmt.declarationList.flags & ts.NodeFlags.Let)))) return false;
             if (!declaration.initializer) continue;
             let ok = true;
             const visit = (node: ts.Node): void => {
