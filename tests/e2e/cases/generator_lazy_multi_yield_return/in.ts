@@ -348,6 +348,9 @@ const arrowFunctionValueLeaf = (): number => {
 function* arrowFunctionValueLeaves(): Generator<number, number, number> {
     return (yield 107) + arrowFunctionValueLeaf() + (yield 108);
 }
+function* inlineFunctionValueLeaves(): Generator<number, number, number> {
+    return (yield 109) + (() => 7)() + (yield 110);
+}
 
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
@@ -719,6 +722,12 @@ const arrowFunctionValueLeafSecond: any = arrowFunctionValueLeafIter.next(2);
 console.log("arrow-function-value-leaf-before", arrowFunctionValueLeafFirst.value, arrowFunctionValueLeafSecond.value, arrowFunctionValueLeafCounter);
 const arrowFunctionValueLeafDone: any = arrowFunctionValueLeafIter.next(3);
 console.log("arrow-function-value-leaf", arrowFunctionValueLeafDone.done, arrowFunctionValueLeafDone.value, arrowFunctionValueLeafCounter);
+const inlineFunctionValueLeafIter = inlineFunctionValueLeaves();
+const inlineFunctionValueLeafFirst: any = inlineFunctionValueLeafIter.next();
+const inlineFunctionValueLeafSecond: any = inlineFunctionValueLeafIter.next(2);
+console.log("inline-function-value-leaf-before", inlineFunctionValueLeafFirst.value, inlineFunctionValueLeafSecond.value, functionValueLeafCounter);
+const inlineFunctionValueLeafDone: any = inlineFunctionValueLeafIter.next(3);
+console.log("inline-function-value-leaf", inlineFunctionValueLeafDone.done, inlineFunctionValueLeafDone.value, functionValueLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);

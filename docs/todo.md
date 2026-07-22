@@ -390,6 +390,7 @@ This is the next item that most directly expands what programs can be written ag
   - Finite lazy multi-yield returns now preserve initialized mutable `var` locals across suspension points. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield call/new/member-call leaves, including widened rest-parameter spread calls, at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now verify parameter-held and top-level lifted-arrow function-value calls as direct no-yield leaves at the final resume, preserving invocation timing. Test: `generator_lazy_multi_yield_return`.
+  - Finite lazy multi-yield returns now inline bounded zero-argument, no-capture arrow/function-expression calls with a single yield-free return at the final resume; captured, parameterized, multi-statement, and otherwise effectful inline closures remain deferred. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield postfix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield prefix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Test: `generator_lazy_multi_yield_return`.

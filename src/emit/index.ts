@@ -42309,6 +42309,12 @@ class Emitter {
         let hasNestedFunctionOrClass = false;
         const checkNestedScopes = (node: ts.Node) => {
             if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+                const closureParent = ts.isParenthesizedExpression(node.parent) ? node.parent.parent : node.parent;
+                if (ts.isFunctionLike(node) && ts.isCallExpression(closureParent) &&
+                    this.unwrapTransparentExpression(closureParent.expression) === node &&
+                    this.inlineNoCaptureClosureBody(closureParent)) {
+                    return;
+                }
                 hasNestedFunctionOrClass = true;
                 return;
             }
@@ -51614,6 +51620,8 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
+        const inlineClosure = this.emitNoCaptureInlineClosureCall(call);
+        if (inlineClosure) return inlineClosure;
         // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
         if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
             if (!this.currentBaseClass) {
@@ -52087,6 +52095,28 @@ class Emitter {
             result.lazyGenerator = true;
         }
         return result;
+    }
+
+    private inlineNoCaptureClosureBody(call: ts.CallExpression): ts.Expression | null {
+        const target = this.unwrapTransparentExpression(call.expression);
+        if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return null;
+        const fn = target;
+        if (fn.parameters.length !== 0 || call.arguments.length !== 0 || this.nodeContainsYield(fn)) return null;
+        if (this.collectClosureCaptures(fn).length > 0) return null;
+        if (ts.isBlock(fn.body)) {
+            if (fn.body.statements.length !== 1) return null;
+            const statement = fn.body.statements[0];
+            if (!ts.isReturnStatement(statement) || !statement.expression) return null;
+            if (this.nodeContainsYield(statement.expression)) return null;
+            return statement.expression;
+        }
+        if (this.nodeContainsYield(fn.body)) return null;
+        return fn.body;
+    }
+
+    private emitNoCaptureInlineClosureCall(call: ts.CallExpression): EmitResult | null {
+        const body = this.inlineNoCaptureClosureBody(call);
+        return body ? this.emitExpr(body) : null;
     }
 
     private emitObjectPrototypeCall(call: ts.CallExpression): EmitResult | null {
