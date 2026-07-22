@@ -486,6 +486,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Lazy finite multi-yield returns now preserve side-effect-free `Date.parse`/`Date.UTC` defaults over earlier parameters, including chained and captured closures. Test: `generator_lazy_inline_parameter_default_date`
 - Lazy finite multi-yield returns now preserve side-effect-free `String.fromCharCode`/`fromCodePoint` defaults over earlier parameters, including captured closures. Test: `generator_lazy_inline_parameter_default_string_static`
 - Lazy finite multi-yield returns now preserve side-effect-free `Array.isArray` defaults over earlier parameters, including captured closures. Test: `generator_lazy_inline_parameter_default_array_static`
+- Lazy finite multi-yield returns now preserve side-effect-free `Object.is` defaults over earlier parameters, including captured closures. Test: `generator_lazy_inline_parameter_default_object_static`
 - Finite lazy multi-yield returns also evaluate direct no-yield postfix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield prefix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Test: `generator_lazy_multi_yield_return`
