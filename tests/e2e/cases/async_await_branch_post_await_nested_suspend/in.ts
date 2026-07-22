@@ -38,6 +38,11 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
             default:
                 nestedValue = nestedValue + "-default";
         }
+        var loopCount = 0;
+        while (loopCount < 2) {
+            nestedValue = nestedValue + "-loop";
+            loopCount++;
+        }
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");
