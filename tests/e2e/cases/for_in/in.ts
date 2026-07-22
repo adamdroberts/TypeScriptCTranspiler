@@ -10,13 +10,20 @@ for (const k in p) {
     console.log(k);
 }
 
-class Box {
+class BaseBox {
     width: number;
     height: number;
-    label: string;
-    constructor(w: number, h: number, l: string) {
+
+    constructor(w: number, h: number) {
         this.width = w;
         this.height = h;
+    }
+}
+
+class Box extends BaseBox {
+    label: string;
+    constructor(w: number, h: number, l: string) {
+        super(w, h);
         this.label = l;
     }
 }
