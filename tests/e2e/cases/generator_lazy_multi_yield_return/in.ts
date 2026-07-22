@@ -158,6 +158,17 @@ function* templateLeaves(): Generator<string, string, string> {
     return (yield "left") + `${templateLeaf()}` + (yield "right");
 }
 
+let taggedLeafCounter = 0;
+
+function taggedLeaf(_strings: TemplateStringsArray): string {
+    taggedLeafCounter++;
+    return "tag";
+}
+
+function* taggedTemplateLeaves(): Generator<string, string, string> {
+    return (yield "left") + taggedLeaf`mid` + (yield "right");
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -380,6 +391,12 @@ const templateLeafSecond: any = templateLeafIter.next("A");
 console.log("template-leaf-before", templateLeafFirst.value, templateLeafSecond.value, templateLeafCounter);
 const templateLeafDone: any = templateLeafIter.next("B");
 console.log("template-leaf", templateLeafDone.done, templateLeafDone.value, templateLeafCounter);
+const taggedTemplateLeafIter = taggedTemplateLeaves();
+const taggedTemplateLeafFirst: any = taggedTemplateLeafIter.next();
+const taggedTemplateLeafSecond: any = taggedTemplateLeafIter.next("A");
+console.log("tagged-template-leaf-before", taggedTemplateLeafFirst.value, taggedTemplateLeafSecond.value, taggedLeafCounter);
+const taggedTemplateLeafDone: any = taggedTemplateLeafIter.next("B");
+console.log("tagged-template-leaf", taggedTemplateLeafDone.done, taggedTemplateLeafDone.value, taggedLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
