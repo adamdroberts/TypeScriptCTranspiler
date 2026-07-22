@@ -42381,7 +42381,7 @@ class Emitter {
                 this.checker.getTypeAtLocation(stmt.expression),
                 this.checker,
             ));
-            if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value") return false;
+            if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value" && sourceType.kind !== "class") return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -43343,8 +43343,17 @@ class Emitter {
         }
         const decl = stmt.initializer.declarations[0]!;
         const source = this.emitExpr(stmt.expression);
-        const keys = source.ty.kind === "array"
-            ? `value_array_keys(${source.c}, false)`
+        const keys = source.ty.kind === "class"
+            ? (() => {
+                const fields = this.classOwnPropertyNames(stmt.expression, source);
+                if (!fields) unsupported(stmt.expression, "lazy generator for-in typed class fields are unavailable");
+                const entries = fields.map((field) =>
+                    `{ tsc_str_t* _lazy_for_in_key = tsc_str_from_lit(${JSON.stringify(field)}, ${utf8ByteLen(field)}); tsc_array_push_raw(_lazy_for_in_keys, &_lazy_for_in_key); }`,
+                ).join(" ");
+                return `({ tsc_array_t* _lazy_for_in_keys = tsc_array_new(sizeof(tsc_str_t*), ${Math.max(1, fields.length)}); ${entries} _lazy_for_in_keys; })`;
+            })()
+            : source.ty.kind === "array"
+                ? `value_array_keys(${source.c}, false)`
             : source.ty.kind === "string"
                 ? `value_string_keys(${source.c}, false)`
                 : source.ty.kind === "buffer"
@@ -44234,8 +44243,8 @@ class Emitter {
                         this.checker.getTypeAtLocation(node.expression),
                         this.checker,
                     ));
-                    if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value") {
-                        unsupported(node.expression, "lazy generator for-in currently supports arrays, strings, Buffers, and dynamic values");
+                    if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value" && sourceType.kind !== "class") {
+                        unsupported(node.expression, "lazy generator for-in currently supports arrays, strings, Buffers, typed classes, and dynamic values");
                     }
                     const index = forInInfos.length;
                     const info: LazyForInInfo = {
