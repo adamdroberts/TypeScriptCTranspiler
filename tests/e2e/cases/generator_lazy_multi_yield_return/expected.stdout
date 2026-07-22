@@ -81,6 +81,7 @@ arrow-function-value-leaf-before 107 108 0
 arrow-function-value-leaf true 12 1
 inline-function-value-leaf-before 109 110 1
 inline-function-value-leaf true 12 1
+inline-parameterized-function-value-leaf 111 112 true 12
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21
