@@ -36322,6 +36322,10 @@ class Emitter {
         }
         if (initialBody && continuation.bodyAwaitExpr) {
             for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
+            if (this.statementListAlwaysExits(continuation.bodyPreludeStatements)) {
+                buf.line(`return ${resultPromise};`);
+                return true;
+            }
         }
         const initialAwaitExpr = initialBody && continuation.bodyAwaitExpr
             ? continuation.bodyAwaitExpr
@@ -36511,6 +36515,21 @@ class Emitter {
         this.structDecls.line();
         this.protos.line(`void ${name}(void* env);`);
 
+        if (
+            initialBody &&
+            continuation.bodyPreludeStatements.length > 0 &&
+            this.statementListAlwaysExits(continuation.bodyPreludeStatements)
+        ) {
+            const unreachableBuf = new CBuf();
+            unreachableBuf.open(`void ${name}(void* env)`);
+            unreachableBuf.line("(void)env;");
+            unreachableBuf.line("return;");
+            unreachableBuf.close();
+            unreachableBuf.line();
+            this.closureDefs.write(unreachableBuf.toString());
+            return name;
+        }
+
         const conditionValueVar = this.freshTemp("_await_condition_value");
         const resolvedVar = this.freshTemp("_await_resolved");
         const eh = this.freshTemp("_await_eh");
@@ -36548,10 +36567,15 @@ class Emitter {
             const emittedCondition = this.emitExpr(continuation.conditionExpr);
             const conditionTruth = this.truthyC(emittedCondition, continuation.conditionExpr);
             buf.open(`if (${conditionTruth})`);
+            let bodyPreludeExits = false;
             if (!continuation.bodyContinueCondition) {
                 for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
+                bodyPreludeExits = this.statementListAlwaysExits(continuation.bodyPreludeStatements);
             }
-            if (continuation.bodyContinueConditionAwaitExpr && bodyConditionAdapter && bodyContinueConditionPromiseType) {
+            if (bodyPreludeExits) {
+                buf.line("tsc_try_pop();");
+                buf.line("return;");
+            } else if (continuation.bodyContinueConditionAwaitExpr && bodyConditionAdapter && bodyContinueConditionPromiseType) {
                 const nestedConditionSource = this.emitExpr(continuation.bodyContinueConditionAwaitExpr.expression);
                 const nestedConditionSourceVar = this.freshTemp("_await_body_condition_source");
                 const nestedConditionEnvVar = this.freshTemp("_await_body_condition_env");
