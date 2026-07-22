@@ -352,7 +352,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Lazy generator `for...of` lowering now also accepts typed `Map` sources, yielding typed key/value entry pairs one at a time across suspension. Regression: `generator_lazy_for_of`.
 - Lazy generator `for...of` lowering now also accepts typed `Set` sources, preserving one-value-at-a-time suspension alongside the existing array/string subset. Regression: `generator_lazy_for_of`.
 - Lazy generators now lower bounded `for...in` loops over typed arrays, strings, and dynamic values with suspension-safe key positions and loop control. Test: `generator_lazy_for_in`.
-- Lazy generators now cover bounded `for...in` loops over typed class instances with statically resolved enumerable fields and suspension-safe key positions. Test: `generator_lazy_for_in_class`.
+- Lazy generators now cover bounded `for...in` loops over typed class instances with statically resolved enumerable fields and typed interface-shaped object values, preserving suspension-safe key positions. Test: `generator_lazy_for_in_class`.
 - Lazy generators now lower bounded array- and string-backed `for...of` loops with suspension-safe iterator positions and `break`/`continue` handling. Test: `generator_lazy_for_of`.
 - Lazy generator behavior now survives direct and aliased generator function-value calls, retaining per-yield suspension and `.next(value)` delivery through closure adapters. Test: `generator_lazy_function_value`.
 - Lazy generator `yield*` now preserves the delegated iterator return value for resumed assignment and return expressions. Test: `generator_lazy_yield_star_return`.

@@ -1,3 +1,3 @@
 {
-  "description": "lazy generators suspend and resume across typed class for-in loops"
+  "description": "lazy generators suspend and resume across typed class and interface for-in loops"
 }
