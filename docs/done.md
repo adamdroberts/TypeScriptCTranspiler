@@ -477,6 +477,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also preserve homogeneous numeric and boolean operands for no-yield `&&` / `||` leaves, including short-circuiting the right operand at the final resume. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve same-kind pointer operands for no-yield `??` leaves, including nullable and non-null array fallback timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve definitely non-null same-kind pointer operands for no-yield `&&` / `||` leaves, including array fallback timing; nullable pointer logical operands remain deferred. Test: `generator_lazy_multi_yield_return`
+- Finite lazy multi-yield returns also preserve BigInt zero/non-zero truthiness for no-yield `&&` / `||` leaves, including right-hand short-circuit timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve bounded optional property and element leaves across suspension points, including nullish receivers and final comparisons. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield conditional leaves at the final resume, preserving branch and side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield template-expression leaves at the final resume, preserving interpolation side-effect timing. Test: `generator_lazy_multi_yield_return`

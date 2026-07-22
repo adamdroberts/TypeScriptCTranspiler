@@ -45389,6 +45389,7 @@ class Emitter {
         if (value.ty.kind === "value") return `tsc_value_is_truthy(${value.c})`;
         if (value.ty.kind === "boolean") return value.c;
         if (value.ty.kind === "number") return `(${value.c} != 0.0 && !isnan(${value.c}))`;
+        if (value.ty.kind === "bigint") return `(${value.c} != NULL && tsc_bigint_cmp(${value.c}, tsc_bigint_from_lit("0")) != 0)`;
         if (value.ty.kind === "string") return `(${value.c} != NULL && ${value.c}->len > 0)`;
         if (isPointerKind(value.ty)) return `(${value.c} != NULL)`;
         return this.coerce(value, T_BOOLEAN, node);

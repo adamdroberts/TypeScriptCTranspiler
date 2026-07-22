@@ -263,6 +263,23 @@ function* pointerLogicalLeaves(): Generator<any, any, any> {
 function* pointerLogicalPresentLeaves(): Generator<any, any, any> {
     return (yield 95), (yield 96), (nonNullArrayLeaf() || pointerNullishFallback());
 }
+let bigintLogicalLeafCounter = 0;
+function bigintLogicalLeaf(): bigint {
+    bigintLogicalLeafCounter++;
+    return 2n;
+}
+function bigintLogicalTrueCondition(): bigint {
+    return 1n;
+}
+function bigintLogicalFalseCondition(): bigint {
+    return 0n;
+}
+function* bigintLogicalLeaves(): Generator<number, boolean, number> {
+    return (yield 97), (yield 98), ((bigintLogicalTrueCondition() && bigintLogicalLeaf()) === 2n);
+}
+function* bigintLogicalFalseLeaves(): Generator<number, boolean, number> {
+    return (yield 99), (yield 100), ((bigintLogicalFalseCondition() && bigintLogicalLeaf()) === 2n);
+}
 
 function* optionalPropertyLeaves(): Generator<any, boolean, any> {
     return (yield null)?.value === (yield { value: 1 }).value;
@@ -615,6 +632,18 @@ const pointerLogicalPresentLeafSecond: any = pointerLogicalPresentLeafIter.next(
 console.log("pointer-logical-present-before", pointerLogicalPresentLeafFirst.value, pointerLogicalPresentLeafSecond.value, pointerNullishFallbackCounter);
 const pointerLogicalPresentLeafDone: any = pointerLogicalPresentLeafIter.next(3);
 console.log("pointer-logical-present", pointerLogicalPresentLeafDone.done, pointerLogicalPresentLeafDone.value.length, pointerNullishFallbackCounter);
+const bigintLogicalLeafIter = bigintLogicalLeaves();
+const bigintLogicalLeafFirst: any = bigintLogicalLeafIter.next();
+const bigintLogicalLeafSecond: any = bigintLogicalLeafIter.next(2);
+console.log("bigint-logical-leaf-before", bigintLogicalLeafFirst.value.toString(), bigintLogicalLeafSecond.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalLeafDone: any = bigintLogicalLeafIter.next(3);
+console.log("bigint-logical-leaf", bigintLogicalLeafDone.done, bigintLogicalLeafDone.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalFalseLeafIter = bigintLogicalFalseLeaves();
+const bigintLogicalFalseLeafFirst: any = bigintLogicalFalseLeafIter.next();
+const bigintLogicalFalseLeafSecond: any = bigintLogicalFalseLeafIter.next(2);
+console.log("bigint-logical-false-before", bigintLogicalFalseLeafFirst.value.toString(), bigintLogicalFalseLeafSecond.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalFalseLeafDone: any = bigintLogicalFalseLeafIter.next(3);
+console.log("bigint-logical-false", bigintLogicalFalseLeafDone.done, bigintLogicalFalseLeafDone.value.toString(), bigintLogicalLeafCounter);
 const optionalPropertyLeafIter = optionalPropertyLeaves();
 const optionalPropertyLeafFirst: any = optionalPropertyLeafIter.next();
 const optionalPropertyLeafSecond: any = optionalPropertyLeafIter.next({ value: 2 });
