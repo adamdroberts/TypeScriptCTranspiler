@@ -23,6 +23,8 @@ initialized-var 41 42 true 25
 side-leaf 43 44 true 15 side-leaf
 update-leaf 45 46 true 5 1
 prefix-leaf 47 48 true 6 1
+delete-leaf-before 53 54 1
+delete-leaf true 6 undefined
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21
