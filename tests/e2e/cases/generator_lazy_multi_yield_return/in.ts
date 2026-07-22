@@ -95,6 +95,12 @@ function* assignedVarLeaves(): Generator<number, number, number> {
     return base + (yield 39) + (yield 40);
 }
 
+function* initializedVarLeaves(): Generator<number, number, number> {
+    var base = 12;
+    base += 2;
+    return base + (yield 41) + (yield 42);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -273,6 +279,11 @@ const assignedVarSecond: any = assignedVarIter.next(4);
 const assignedVarThird: any = assignedVarIter.next(5);
 const assignedVarDone: any = assignedVarIter.next(6);
 console.log("assigned-var", assignedVarFirst.value, assignedVarSecond.value, assignedVarThird.value, assignedVarDone.done, assignedVarDone.value);
+const initializedVarIter = initializedVarLeaves();
+const initializedVarFirst: any = initializedVarIter.next();
+const initializedVarSecond: any = initializedVarIter.next(5);
+const initializedVarDone: any = initializedVarIter.next(6);
+console.log("initialized-var", initializedVarFirst.value, initializedVarSecond.value, initializedVarDone.done, initializedVarDone.value);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);

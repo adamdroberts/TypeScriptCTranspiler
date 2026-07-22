@@ -43993,7 +43993,8 @@ class Emitter {
                     continue;
                 }
                 if (this.nodeContainsYield(declaration.initializer)) continue;
-                if (isConst || isLet) stable.add(symbol);
+                const isVar = !isConst && !isLet;
+                if (isConst || isLet || isVar) stable.add(symbol);
             }
         }
         return stable;

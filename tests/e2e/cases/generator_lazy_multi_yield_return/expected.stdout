@@ -19,6 +19,7 @@ immutable-let 32 33 true 20
 mutable-let 32 33 34 true 26
 assigned-let 35 36 37 true 17
 assigned-var 38 39 40 true 18
+initialized-var 41 42 true 25
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21
