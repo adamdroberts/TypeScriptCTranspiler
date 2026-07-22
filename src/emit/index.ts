@@ -53527,6 +53527,8 @@ class Emitter {
         this.closureEnvScopes.push(envBindings);
         this.argumentValueScopes.push(argumentScope);
         this.argumentValueTypeScopes.push(argumentTypeScope);
+        const outerGeneratorStack = this.generatorStack;
+        this.generatorStack = [];
         try {
             if (isGenerator) {
                 this.emitGeneratorFunctionLikeBody(
@@ -53730,6 +53732,7 @@ class Emitter {
                 }
             }
         } finally {
+            this.generatorStack = outerGeneratorStack;
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
             this.closureEnvScopes.pop();

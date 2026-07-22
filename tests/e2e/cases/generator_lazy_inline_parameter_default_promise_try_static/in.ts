@@ -1,5 +1,5 @@
 function* values(): Generator<number, number, number> {
-    return (yield 1) + ((result: Promise<number> = Promise.try(() => 7), valid: boolean = result === result) => valid ? 1 : 0)() + (yield 2);
+    return (yield 1) + ((result: Promise<number> = Promise.try(() => 7), block: Promise<number> = Promise.try(function (): number { return 8; }), valid: boolean = result === result && block === block) => valid ? 1 : 0)() + (yield 2);
 }
 
 const iter = values();
@@ -12,7 +12,7 @@ function makeCapturedValues(): () => Generator<number, number, number> {
     let offset = 5;
     offset = 6;
     return function* (): Generator<number, number, number> {
-        return (yield 1) + ((result: Promise<number> = Promise.try(() => 7), valid: boolean = result === result) => (valid ? 1 : 0) + offset)() + (yield 2);
+        return (yield 1) + ((result: Promise<number> = Promise.try(() => 7), block: Promise<number> = Promise.try(function (): number { return 8; }), valid: boolean = result === result && block === block) => (valid ? 1 : 0) + offset)() + (yield 2);
     };
 }
 
