@@ -52225,7 +52225,12 @@ class Emitter {
                     new Set(["encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent", "btoa", "atob"]).has(expression.text) &&
                     this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
                     node.arguments.length === 1;
-                const isPureBuiltinCall = isGlobalStringCall || (
+                const isGlobalPrimitiveCoercionCall =
+                    ts.isIdentifier(expression) &&
+                    new Set(["String", "Number", "Boolean"]).has(expression.text) &&
+                    this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
+                    node.arguments.length <= 1;
+                const isPureBuiltinCall = isGlobalStringCall || isGlobalPrimitiveCoercionCall || (
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
                     ((receiver.text === "Math" && new Set([
