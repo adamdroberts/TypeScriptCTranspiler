@@ -295,6 +295,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitFinallyAwaitExpr?: ts.AwaitExpression;
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
+    bodyAwaitCatchSymbol?: ts.Symbol;
     bodyAwaitCatchAdapter?: string;
     bodyPreludeStatements: readonly ts.Statement[];
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
@@ -35609,6 +35610,7 @@ class Emitter {
         let continuationBodyAwaitFinallyAwaitExpr: ts.AwaitExpression | undefined;
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
+        let bodyAwaitCatchSymbol: ts.Symbol | undefined;
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -35638,7 +35640,7 @@ class Emitter {
                 ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.tryBlock.statements[0]! as ts.ExpressionStatement).expression));
             const simpleAwaitCatch = bodyContinueStatements.length >= 1 && ts.isTryStatement(bodyContinueStatements[0]!) &&
                 !!bodyContinueStatements[0]!.catchClause && !bodyContinueStatements[0]!.finallyBlock &&
-                !bodyContinueStatements[0]!.catchClause!.variableDeclaration &&
+                (!bodyContinueStatements[0]!.catchClause!.variableDeclaration || ts.isIdentifier(bodyContinueStatements[0]!.catchClause!.variableDeclaration.name)) &&
                 bodyContinueStatements[0]!.tryBlock.statements.length === 1 &&
                 ts.isExpressionStatement(bodyContinueStatements[0]!.tryBlock.statements[0]!) &&
                 ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.tryBlock.statements[0]! as ts.ExpressionStatement).expression)) &&
@@ -35646,7 +35648,7 @@ class Emitter {
                 bodyContinueStatements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement));
             const simpleAwaitCatchFinally = bodyContinueStatements.length >= 1 && ts.isTryStatement(bodyContinueStatements[0]!) &&
                 !!bodyContinueStatements[0]!.catchClause && !!bodyContinueStatements[0]!.finallyBlock &&
-                !bodyContinueStatements[0]!.catchClause!.variableDeclaration &&
+                (!bodyContinueStatements[0]!.catchClause!.variableDeclaration || ts.isIdentifier(bodyContinueStatements[0]!.catchClause!.variableDeclaration.name)) &&
                 bodyContinueStatements[0]!.tryBlock.statements.length === 1 &&
                 ts.isExpressionStatement(bodyContinueStatements[0]!.tryBlock.statements[0]!) &&
                 ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.tryBlock.statements[0]! as ts.ExpressionStatement).expression)) &&
@@ -35655,7 +35657,7 @@ class Emitter {
                 bodyContinueStatements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement));
             const simpleAwaitCatchAwait = bodyContinueStatements.length >= 1 && ts.isTryStatement(bodyContinueStatements[0]!) &&
                 !!bodyContinueStatements[0]!.catchClause &&
-                !bodyContinueStatements[0]!.catchClause!.variableDeclaration &&
+                (!bodyContinueStatements[0]!.catchClause!.variableDeclaration || ts.isIdentifier(bodyContinueStatements[0]!.catchClause!.variableDeclaration.name)) &&
                 bodyContinueStatements[0]!.tryBlock.statements.length === 1 &&
                 ts.isExpressionStatement(bodyContinueStatements[0]!.tryBlock.statements[0]!) &&
                 ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.tryBlock.statements[0]! as ts.ExpressionStatement).expression)) &&
@@ -35751,6 +35753,10 @@ class Emitter {
                     ? [...finallyStatements.slice(1), ...bodyContinueStatements.slice(1)]
                     : bodyContinueStatements.slice(1);
                 bodyAwaitCatchAwaitExpr = catchAwaitExpression;
+                bodyAwaitCatchSymbol = tryStatement.catchClause!.variableDeclaration &&
+                    ts.isIdentifier(tryStatement.catchClause!.variableDeclaration.name)
+                    ? this.symbolForIdentifier(tryStatement.catchClause!.variableDeclaration.name) ?? undefined
+                    : undefined;
                 bodyAwaitFinallyStatements = finallyAwaitExpression ? [] : finallyStatements;
                 continuationBodyAwaitFinallyAwaitExpr = finallyAwaitExpression ?? undefined;
             } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
@@ -36150,6 +36156,7 @@ class Emitter {
             bodyAwaitFinallyAwaitExpr: continuationBodyAwaitFinallyAwaitExpr,
             bodyAwaitCatchStatements,
             bodyAwaitCatchAwaitExpr,
+            bodyAwaitCatchSymbol,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyContinue,
@@ -36570,6 +36577,7 @@ class Emitter {
                     this.checker.getTypeAtLocation(continuation.bodyAwaitCatchAwaitExpr.expression),
                     this.checker,
                 ));
+                if (continuation.bodyAwaitCatchSymbol) scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
                 this.argumentValueScopes.push(scope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 let catchSource: EmitResult;
@@ -36592,6 +36600,7 @@ class Emitter {
                 buf.line(`${continuation.bodyAwaitCatchAdapter}(${catchEnvVar});`);
                 buf.close();
             } else if (index === 0 && continuation.bodyAwaitCatchStatements) {
+                if (continuation.bodyAwaitCatchSymbol) scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
                 this.argumentValueScopes.push(scope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 this.asyncAwaitContinuationAdapterDepth++;
