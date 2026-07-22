@@ -39246,7 +39246,18 @@ class Emitter {
             : [conditional.thenStatement];
         if (!first || !first.variable || branchStatements.length === 0) return false;
         const branches = branchStatements.map((statement) => this.awaitedContinuationStep(statement));
-        if (branches.some((branch) => !branch || branch.variable)) return false;
+        if (branches.some((branch) => !branch)) return false;
+        for (let i = 0; i < branches.length; i++) {
+            const branch = branches[i]!;
+            if (!branch.variable) continue;
+            const statement = branchStatements[i]!;
+            if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
+                (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                !ts.isIdentifier(statement.declarationList.declarations[0]!.name) ||
+                this.symbolForIdentifier(statement.declarationList.declarations[0]!.name) !== this.symbolForIdentifier(branch.variable)) {
+                return false;
+            }
+        }
         const returnAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(returnAwait)) return false;
         const validCondition = (node: ts.Node): boolean => {
@@ -39296,7 +39307,7 @@ class Emitter {
             returnAwaited: true,
             params: tailParams,
             thisValue: callbackThis,
-            usesAwaitedLocals: [...branches.map(() => false), false],
+            usesAwaitedLocals: [...branches.map((branch) => !!branch!.variable), false],
         };
         const falseContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],

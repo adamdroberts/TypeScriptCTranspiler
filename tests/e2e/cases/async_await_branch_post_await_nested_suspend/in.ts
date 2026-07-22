@@ -9,8 +9,8 @@ function laterReject(reason: string): Promise<string> {
 async function branchPostAwaitNestedSuspend(flag: boolean): Promise<string> {
     const first = await later("first");
     if (flag) {
-        await later(first + "-branch");
-        await later(first + "-branch-two");
+        const branchValue = await later(first + "-branch");
+        await later(branchValue + "-branch-two");
     }
     return await later(first + "-return");
 }
@@ -22,8 +22,8 @@ class NestedSuspendRunner {
     async run(flag: boolean): Promise<string> {
         const first = await later("method-first");
         if (flag) {
-            await later(first + "-branch");
-            await later(first + "-branch-two");
+            const branchValue = await later(first + "-branch");
+            await later(branchValue + "-branch-two");
         }
         return await later(first + "-return");
     }
@@ -36,8 +36,8 @@ runner.run(false).then((value) => console.log("method-false", value));
 const nestedSuspendValue = async (flag: boolean): Promise<string> => {
     const first = await later("value-first");
     if (flag) {
-        await later(first + "-branch");
-        await later(first + "-branch-two");
+        const branchValue = await later(first + "-branch");
+        await later(branchValue + "-branch-two");
     }
     return await later(first + "-return");
 };
