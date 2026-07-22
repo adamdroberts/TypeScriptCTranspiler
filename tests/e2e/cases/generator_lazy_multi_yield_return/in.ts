@@ -112,6 +112,12 @@ function* sideEffectingLeaves(): Generator<number, number, number> {
     return (yield 43) + sideLeaf() + (yield 44);
 }
 
+let updateLeafCounter = 0;
+
+function* updateLeaves(): Generator<number, number, number> {
+    return (yield 45) + updateLeafCounter++ + (yield 46);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -300,6 +306,11 @@ const sideLeafFirst: any = sideLeafIter.next();
 const sideLeafSecond: any = sideLeafIter.next(4);
 const sideLeafDone: any = sideLeafIter.next(6);
 console.log("side-leaf", sideLeafFirst.value, sideLeafSecond.value, sideLeafDone.done, sideLeafDone.value, sideLeafEvents.join("|"));
+const updateLeafIter = updateLeaves();
+const updateLeafFirst: any = updateLeafIter.next();
+const updateLeafSecond: any = updateLeafIter.next(2);
+const updateLeafDone: any = updateLeafIter.next(3);
+console.log("update-leaf", updateLeafFirst.value, updateLeafSecond.value, updateLeafDone.done, updateLeafDone.value, updateLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
