@@ -5,12 +5,16 @@ function laterBody(value: string): Promise<string> {
     return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
 }
 
+function laterResult(value: string): Promise<string> {
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
+}
+
 async function forOfBodyAwaitBreak(): Promise<string> {
     for (const item of ["a", "b"]) {
         await laterBody(item);
         break;
     }
-    return await Promise.resolve(bodyCount + "|done");
+    return await laterResult(bodyCount + "|done");
 }
 
 forOfBodyAwaitBreak().then((value) => console.log(value));

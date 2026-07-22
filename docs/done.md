@@ -73,9 +73,9 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Awaited `for…in` body continuations now cover the two-stage awaited body/catch/finally chain while preserving iterator progression across `continue`. Test: `async_await_for_in_body_try_await_catch_await_finally_continue`.
 - Awaited `for…in` body continuations now cover delayed direct awaited body work while preserving iterator progression across `continue`. Test: `async_await_for_in_body_await_continue`.
 - Awaited `for…of` body continuations now cover delayed direct awaited body work while preserving iterator progression across `continue`. Test: `async_await_for_of_body_await_continue`.
-- Awaited `for…in` body continuations now route delayed direct awaited body work through `break` and post-loop fallthrough. Test: `async_await_for_in_body_await_break`.
-- Awaited `for…in` body continuations now settle an awaited return after delayed direct awaited body work. Test: `async_await_for_in_body_await_return`.
-- Awaited `for…of` body continuations now route delayed direct awaited body work through `break` and awaited `return` terminals. Tests: `async_await_for_of_body_await_break`, `async_await_for_of_body_await_return`.
+- Awaited `for…in` body continuations now route delayed direct awaited body work through `break` and a separately delayed post-loop fallthrough await. Test: `async_await_for_in_body_await_break`.
+- Awaited `for…in` body continuations now settle a separately delayed terminal `return await` after delayed direct awaited body work. Test: `async_await_for_in_body_await_return`.
+- Awaited `for…of` body continuations now route delayed direct awaited body work through `break` and separately delayed awaited `return`/fallthrough terminals. Tests: `async_await_for_of_body_await_break`, `async_await_for_of_body_await_return`.
 - Awaited `for…of` body continuations now route direct awaited body work through `break` and awaited `return` terminals. Tests: `async_await_for_of_body_await_break`, `async_await_for_of_body_await_return`.
 - Awaited `for…in` and `for…of` body continuations now preserve delayed awaited rejection through `throw await` terminals. Tests: `async_await_for_in_body_await_throw`, `async_await_for_of_body_await_throw`.
 - Awaited `for…in` and `for…of` bodies now route the two-stage awaited catch/finally chain through terminal `break`, preserving cleanup and post-loop fallthrough. Tests: `async_await_for_in_body_try_await_catch_await_finally_await_break`, `async_await_for_of_body_try_await_catch_await_finally_await_break`.
