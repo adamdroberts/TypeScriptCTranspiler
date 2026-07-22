@@ -52196,6 +52196,15 @@ class Emitter {
                 if (!symbol || !preceding.has(symbol)) supported = false;
                 return;
             }
+            if (ts.isPropertyAccessExpression(node)) {
+                visit(node.expression);
+                return;
+            }
+            if (ts.isElementAccessExpression(node)) {
+                visit(node.expression);
+                if (node.argumentExpression) visit(node.argumentExpression);
+                return;
+            }
             if (
                 ts.isNumericLiteral(node) ||
                 ts.isStringLiteralLike(node) ||
