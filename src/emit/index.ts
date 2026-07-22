@@ -35634,10 +35634,33 @@ class Emitter {
                 const awaitStatement = tryStatement.tryBlock.statements[0]! as ts.ExpressionStatement;
                 const awaitExpression = this.unwrapTransparentExpression(awaitStatement.expression) as ts.AwaitExpression;
                 bodyAwaitExpr = awaitExpression;
-                bodyAwaitExprs = [awaitExpression];
                 bodyPreludeStatements = [];
-                bodyPostAwaitStatements = [];
-                bodyAwaitFinallyStatements = tryStatement.finallyBlock!.statements;
+                const finallyStatements = tryStatement.finallyBlock!.statements;
+                const finallyAwaitStatements = finallyStatements.filter((statement): statement is ts.ExpressionStatement =>
+                    ts.isExpressionStatement(statement) &&
+                    ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression))
+                );
+                const finallyHasNestedAwait = finallyStatements.some((statement) => {
+                    let found = false;
+                    const visit = (node: ts.Node): void => {
+                        if (found || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                        if (ts.isAwaitExpression(node)) {
+                            found = true;
+                            return;
+                        }
+                        ts.forEachChild(node, visit);
+                    };
+                    visit(statement);
+                    return found;
+                });
+                if (finallyAwaitStatements.length > 1 || (finallyHasNestedAwait && finallyAwaitStatements.length === 0) ||
+                    (finallyAwaitStatements.length === 1 && finallyStatements.indexOf(finallyAwaitStatements[0]!) !== 0)) return false;
+                const finallyAwaitExpression = finallyAwaitStatements.length === 1
+                    ? this.unwrapTransparentExpression(finallyAwaitStatements[0]!.expression) as ts.AwaitExpression
+                    : null;
+                bodyAwaitExprs = finallyAwaitExpression ? [awaitExpression, finallyAwaitExpression] : [awaitExpression];
+                bodyPostAwaitStatements = finallyAwaitExpression ? finallyStatements.slice(1) : [];
+                bodyAwaitFinallyStatements = finallyAwaitExpression ? [] : finallyStatements;
             } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
                 const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[0]!.statement);
                 const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[bodyAwaitStatements.length - 1]!.statement);
