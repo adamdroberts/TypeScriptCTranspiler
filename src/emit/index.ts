@@ -43956,17 +43956,17 @@ class Emitter {
             }
         }
         if (!body) return stable;
-        const uninitializedLetSymbols = new Set<ts.Symbol>();
-        const assignedUninitializedLetSymbols = new Set<ts.Symbol>();
+        const uninitializedAssignedSymbols = new Set<ts.Symbol>();
+        const assignedUninitializedSymbols = new Set<ts.Symbol>();
         for (const statement of body.statements) {
             if (statement.getStart() >= stmt.getStart()) continue;
             if (ts.isVariableStatement(statement)) {
-                const isLet = (statement.declarationList.flags & ts.NodeFlags.Let) !== 0;
-                if (isLet) {
+                const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
+                if (!isConst) {
                     for (const declaration of statement.declarationList.declarations) {
                         if (!declaration.initializer && ts.isIdentifier(declaration.name)) {
                             const symbol = this.symbolForIdentifier(declaration.name);
-                            if (symbol) uninitializedLetSymbols.add(symbol);
+                            if (symbol) uninitializedAssignedSymbols.add(symbol);
                         }
                     }
                 }
@@ -43974,8 +43974,8 @@ class Emitter {
                 statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
                 ts.isIdentifier(statement.expression.left)) {
                 const symbol = this.symbolForIdentifier(statement.expression.left);
-                if (symbol && uninitializedLetSymbols.has(symbol) && !this.nodeContainsYield(statement.expression.right)) {
-                    assignedUninitializedLetSymbols.add(symbol);
+                if (symbol && uninitializedAssignedSymbols.has(symbol) && !this.nodeContainsYield(statement.expression.right)) {
+                    assignedUninitializedSymbols.add(symbol);
                 }
             }
         }
@@ -43989,7 +43989,7 @@ class Emitter {
                 const isConst = (statement.declarationList.flags & ts.NodeFlags.Const) !== 0;
                 const isLet = (statement.declarationList.flags & ts.NodeFlags.Let) !== 0;
                 if (!declaration.initializer) {
-                    if (isLet && assignedUninitializedLetSymbols.has(symbol)) stable.add(symbol);
+                    if (!isConst && assignedUninitializedSymbols.has(symbol)) stable.add(symbol);
                     continue;
                 }
                 if (this.nodeContainsYield(declaration.initializer)) continue;

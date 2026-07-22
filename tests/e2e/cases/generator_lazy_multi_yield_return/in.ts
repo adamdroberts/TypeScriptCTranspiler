@@ -88,6 +88,13 @@ function* assignedLetLeaves(): Generator<number, number, number> {
     return base + (yield 36) + (yield 37);
 }
 
+function* assignedVarLeaves(): Generator<number, number, number> {
+    var base: number;
+    const first = yield 38;
+    base = first + 3;
+    return base + (yield 39) + (yield 40);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -260,6 +267,12 @@ const assignedLetSecond: any = assignedLetIter.next(4);
 const assignedLetThird: any = assignedLetIter.next(5);
 const assignedLetDone: any = assignedLetIter.next(6);
 console.log("assigned-let", assignedLetFirst.value, assignedLetSecond.value, assignedLetThird.value, assignedLetDone.done, assignedLetDone.value);
+const assignedVarIter = assignedVarLeaves();
+const assignedVarFirst: any = assignedVarIter.next();
+const assignedVarSecond: any = assignedVarIter.next(4);
+const assignedVarThird: any = assignedVarIter.next(5);
+const assignedVarDone: any = assignedVarIter.next(6);
+console.log("assigned-var", assignedVarFirst.value, assignedVarSecond.value, assignedVarThird.value, assignedVarDone.done, assignedVarDone.value);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);

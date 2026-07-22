@@ -275,6 +275,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite lazy multi-yield returns now preserve initialized `let` locals proven not to be mutated in the generator body. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve initialized mutable `let` locals mutated between suspension points. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve simple uninitialized `let` locals assigned before use after a suspension point. Regression: `generator_lazy_multi_yield_return`.
+- Finite lazy multi-yield returns now preserve simple uninitialized `var` locals assigned before use after a suspension point. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve outer captured parameter identifiers through the lazy generator environment. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve outer captured local identifiers through closure-cell pointers. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve non-computed property reads from stable receivers across suspension points. Regression: `generator_lazy_multi_yield_return`.
