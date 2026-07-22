@@ -147,6 +147,17 @@ function* conditionalLeaves(): Generator<number, number, number> {
     return (yield 57) + (conditionalLeafCounter === 0 ? conditionalLeaf() : 1) + (yield 58);
 }
 
+let templateLeafCounter = 0;
+
+function templateLeaf(): string {
+    templateLeafCounter++;
+    return "mid";
+}
+
+function* templateLeaves(): Generator<string, string, string> {
+    return (yield "left") + `${templateLeaf()}` + (yield "right");
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -363,6 +374,12 @@ const conditionalLeafSecond: any = conditionalLeafIter.next(2);
 console.log("conditional-leaf-before", conditionalLeafFirst.value, conditionalLeafSecond.value, conditionalLeafCounter);
 const conditionalLeafDone: any = conditionalLeafIter.next(3);
 console.log("conditional-leaf", conditionalLeafDone.done, conditionalLeafDone.value, conditionalLeafCounter);
+const templateLeafIter = templateLeaves();
+const templateLeafFirst: any = templateLeafIter.next();
+const templateLeafSecond: any = templateLeafIter.next("A");
+console.log("template-leaf-before", templateLeafFirst.value, templateLeafSecond.value, templateLeafCounter);
+const templateLeafDone: any = templateLeafIter.next("B");
+console.log("template-leaf", templateLeafDone.done, templateLeafDone.value, templateLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
