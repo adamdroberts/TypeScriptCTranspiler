@@ -75135,6 +75135,14 @@ class Emitter {
             return { c: `tsc_fs_dirent_name(${recv.c})`, ty: T_STRING };
         }
         if (recv.ty.kind === "value") {
+            if (isOpt) {
+                const key = this.stringLit(pa.name.text);
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv }],
+                    ([obj]) => `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : tsc_value_get_prop(${obj}, ${key})`,
+                );
+            }
             if (recv.ty.resolverElem) {
                 const key = pa.name.text;
                 const cache = this.freshTemp("_resolver_prop_cache");

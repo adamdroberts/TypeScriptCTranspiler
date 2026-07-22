@@ -19,7 +19,9 @@ function* access(): Generator<number, string, any> {
 
     const optionalTail: string = (yield 4)?.["tail"];
     const optionalMissing: any = (yield 5)?.["tail"];
-    return optionalTail + ":" + String(optionalMissing) + ":" + picked;
+    const optionalLabel: any = (yield 6)?.label;
+    const optionalMissingLabel: any = (yield 7)?.label;
+    return optionalTail + ":" + String(optionalMissing) + ":" + String(optionalLabel) + ":" + String(optionalMissingLabel) + ":" + picked;
 }
 
 const iter = access();
@@ -30,7 +32,9 @@ const r2: any = iter.next(mark("alpha", { label: "alpha" }));
 const r3: any = iter.next(mark("array", [10, 42]));
 const r4: any = iter.next(mark("nested", { nested: { code: "deep" } }));
 const r5: any = iter.next(mark("tail", { tail: "done" }));
-const done: any = iter.next(mark("missing", null));
+const r6: any = iter.next(mark("missing", null));
+const r7: any = iter.next(mark("label", { label: "dynamic" }));
+const done: any = iter.next(mark("missing label", null));
 
-console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, r5.done, r5.value, done.done, done.value);
+console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, r5.done, r5.value, r6.done, r6.value, r7.done, r7.value, done.done, done.value);
 console.log("events:", events.join("|"));
