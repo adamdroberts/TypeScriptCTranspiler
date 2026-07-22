@@ -52205,6 +52205,10 @@ class Emitter {
                 if (node.argumentExpression) visit(node.argumentExpression);
                 return;
             }
+            if (ts.isTemplateExpression(node)) {
+                for (const span of node.templateSpans) visit(span.expression);
+                return;
+            }
             if (
                 ts.isNumericLiteral(node) ||
                 ts.isStringLiteralLike(node) ||
