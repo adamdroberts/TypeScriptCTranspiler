@@ -29152,10 +29152,18 @@ class Emitter {
                 if (!this.awaitedContinuationStep(statement) && !(
                     statementIndex < firstAwaitIndex
                         ? this.asyncAwaitConditionalLeadingPreludeStatementSupported(statement)
-                        : this.asyncAwaitInterstitialControlFlowSupported(statement)
+                        : this.asyncAwaitInterstitialControlFlowSupported(statement, true)
                 )) {
                     return null;
                 }
+            }
+            for (let stepIndex = 0; stepIndex < awaitSteps[leafIndex]!.length; stepIndex++) {
+                const awaitIndex = awaitSteps[leafIndex]![stepIndex]!;
+                const nextAwaitIndex = awaitSteps[leafIndex]![stepIndex + 1] ?? leaf.statements.length;
+                if (!this.asyncAwaitInterstitialCaptures(
+                    leaf.statements.slice(awaitIndex + 1, nextAwaitIndex),
+                    true,
+                )) return null;
             }
             const preludeSymbols = leaf.statements.slice(0, firstAwaitIndex).flatMap((statement) => {
                 if (!ts.isVariableStatement(statement)) return [];

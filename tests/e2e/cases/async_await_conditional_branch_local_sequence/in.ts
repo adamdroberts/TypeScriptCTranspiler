@@ -3,10 +3,14 @@ import { setTimeout as delay } from "node:timers/promises";
 async function declaration(kind: number): Promise<string> {
     if (kind === 0) {
         const zeroMarker = "zero-", zero = await delay(1, zeroMarker + "one");
-        const zeroAgain = await delay(1, "zero-two");
+        var zeroPostMarker;
+        zeroPostMarker = "zero-post-";
+        const zeroAgain = await delay(1, zeroPostMarker + "two");
     } else {
         const otherMarker = "other-", other = await delay(1, otherMarker + "one");
-        const otherAgain = await delay(1, "other-two");
+        var otherPostMarker;
+        otherPostMarker = "other-post-";
+        const otherAgain = await delay(1, otherPostMarker + "two");
     }
     return "declaration-done";
 }
