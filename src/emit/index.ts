@@ -206,6 +206,7 @@ interface AsyncAwaitFourStepReturnContinuation {
 
 interface AsyncAwaitLeadingConditionalBranch {
     awaitExpr: ts.AwaitExpression;
+    skip?: boolean;
     variable: ts.Identifier | null;
     condition: ts.Expression | null;
     beforeStatements: readonly ts.Statement[];
@@ -29106,8 +29107,20 @@ class Emitter {
             return indices;
         });
         if (awaitSteps.some((indices) => indices.length === 0)) return null;
-        const stepCount = awaitSteps[0]!.length;
-        if (stepCount < 2 || awaitSteps.some((indices) => indices.length !== stepCount)) return null;
+        const stepCount = Math.max(...awaitSteps.map((indices) => indices.length));
+        if (stepCount < 2) return null;
+        const hasUnequalSteps = awaitSteps.some((indices) => indices.length !== stepCount);
+        if (hasUnequalSteps) {
+            for (let stepIndex = 0; stepIndex < stepCount; stepIndex++) {
+                if (awaitSteps.every((indices) => indices.length > stepIndex)) continue;
+                for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
+                    const awaitIndex = awaitSteps[leafIndex]![stepIndex];
+                    if (awaitIndex === undefined) continue;
+                    const step = this.awaitedContinuationStep(leaves[leafIndex]!.statements[awaitIndex]!);
+                    if (!step || step.variable) return null;
+                }
+            }
+        }
         for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
             const leaf = leaves[leafIndex]!;
             const firstAwaitIndex = awaitSteps[leafIndex]![0]!;
@@ -29193,15 +29206,14 @@ class Emitter {
             for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
                 const leaf = leaves[leafIndex]!;
                 for (let stepIndex = 0; stepIndex < stepCount; stepIndex++) {
-                    const awaitIndex = awaitSteps[leafIndex]![stepIndex]!;
+                    const awaitIndex = awaitSteps[leafIndex]![stepIndex];
+                    if (awaitIndex === undefined) continue;
                     const statement = leaf.statements[awaitIndex]!;
                     const local = this.awaitedLocalDeclaration(statement);
                     if (variables[leafIndex]![stepIndex] && !local) return null;
                     const localSymbol = local ? this.symbolForIdentifier(local.variable) : null;
                     if (!localSymbol) continue;
-                    const nextAwaitIndex = stepIndex + 1 < stepCount
-                        ? awaitSteps[leafIndex]![stepIndex + 1]!
-                        : -1;
+                    const nextAwaitIndex = awaitSteps[leafIndex]!.find((candidate) => candidate > awaitIndex) ?? -1;
                     const nextAwaitExpr = nextAwaitIndex >= 0
                         ? this.awaitedContinuationStep(leaf.statements[nextAwaitIndex]!)?.awaitExpr.expression ?? null
                         : null;
@@ -29231,26 +29243,36 @@ class Emitter {
             const branches: AsyncAwaitLeadingConditionalBranch[] = [];
             for (let leafIndex = 0; leafIndex < leaves.length; leafIndex++) {
                 const leaf = leaves[leafIndex]!;
-                const awaitIndex = awaitSteps[leafIndex]![stepIndex]!;
-                const nextAwaitIndex = stepIndex + 1 < stepCount
-                    ? awaitSteps[leafIndex]![stepIndex + 1]!
-                    : leaf.statements.length;
-                const step = this.awaitedContinuationStep(leaf.statements[awaitIndex]!);
-                if (!step) return null;
+                const awaitIndex = awaitSteps[leafIndex]![stepIndex];
+                const skip = awaitIndex === undefined;
+                const step = skip
+                    ? null
+                    : this.awaitedContinuationStep(leaf.statements[awaitIndex]!);
+                if (!step && !skip) return null;
+                const nextAwaitIndex = skip
+                    ? leaf.statements.length
+                    : awaitSteps[leafIndex]!.find((candidate) => candidate > awaitIndex!) ?? leaf.statements.length;
+                const placeholder = step ?? this.awaitedContinuationStep(
+                    leaf.statements[awaitSteps[leafIndex]![awaitSteps[leafIndex]!.length - 1]!]!,
+                );
+                if (!placeholder) return null;
                 branches.push({
-                    awaitExpr: step.awaitExpr,
-                    variable: step.variable,
+                    awaitExpr: placeholder.awaitExpr,
+                    skip,
+                    variable: step?.variable ?? null,
                     condition: leaf.condition,
-                    beforeStatements: stepIndex === 0 ? leaf.statements.slice(0, awaitIndex) : [],
-                    afterStatements: leaf.statements.slice(awaitIndex + 1, nextAwaitIndex),
+                    beforeStatements: !skip && stepIndex === 0 ? leaf.statements.slice(0, awaitIndex!) : [],
+                    afterStatements: !skip ? leaf.statements.slice(awaitIndex! + 1, nextAwaitIndex) : [],
                 });
             }
+            const firstBranch = branches.find((branch) => !branch.skip);
+            if (!firstBranch) return null;
             steps.push({
-                variable,
-                awaitExpr: branches[0]!.awaitExpr,
-                condition: branches[0]!.condition ?? undefined,
-                beforeStatements: branches[0]!.beforeStatements,
-                afterStatements: branches[0]!.afterStatements,
+                variable: hasUnequalSteps && branches.some((branch) => branch.skip) ? null : variable,
+                awaitExpr: firstBranch.awaitExpr,
+                condition: firstBranch.condition ?? undefined,
+                beforeStatements: firstBranch.beforeStatements,
+                afterStatements: firstBranch.afterStatements,
                 conditionalBranches: branches,
             });
         }
@@ -29893,7 +29915,7 @@ class Emitter {
         };
 
         for (const branch of steps[0]!.conditionalBranches ?? []) {
-            visit(branch.awaitExpr.expression, 0);
+            if (!branch.skip) visit(branch.awaitExpr.expression, 0);
             if (branch.condition) visit(branch.condition, 0);
             for (const statement of branch.beforeStatements) visit(statement, 0);
             for (const statement of branch.afterStatements) visit(statement, 1);
@@ -30053,7 +30075,7 @@ class Emitter {
         }
         for (let i = 1; i < steps.length; i++) {
             for (const branch of steps[i]!.conditionalBranches ?? []) {
-                visit(branch.awaitExpr.expression, i);
+                if (!branch.skip) visit(branch.awaitExpr.expression, i);
                 if (branch.condition) visit(branch.condition, i);
                 for (const statement of branch.beforeStatements) visit(statement, i);
                 for (const statement of branch.afterStatements) visit(statement, i + 1);
@@ -31590,6 +31612,7 @@ class Emitter {
             ));
             if (promise.kind !== "promise") return false;
             for (const branch of step.conditionalBranches ?? []) {
+                if (branch.skip) continue;
                 const branchPromise = this.prepareType(mapTsType(
                     branch.awaitExpr.expression,
                     this.checker.getTypeAtLocation(branch.awaitExpr.expression),
@@ -40600,14 +40623,19 @@ class Emitter {
                 const sources: EmitResult[] = [];
                 let staged = "";
                 for (let i = branches.length - 1; i >= 0; i--) {
-                    const source = this.emitExpr(branches[i]!.awaitExpr.expression);
-                    sources[i] = source;
-                    const sourceC = this.coerce(source, promiseTypes[1]!, branches[i]!.awaitExpr.expression);
+                    const branch = branches[i]!;
+                    const source = branch.skip ? null : this.emitExpr(branch.awaitExpr.expression);
+                    if (source) sources[i] = source;
+                    const sourceC = branch.skip
+                        ? "tsc_promise_resolve(tsc_value_undefined())"
+                        : this.coerce(source!, promiseTypes[1]!, branch.awaitExpr.expression);
                     staged = staged
                         ? `(${secondBranchChoiceVar} == ${i} ? ${sourceC} : ${staged})`
                         : sourceC;
                 }
-                secondSource = sources[0]!;
+                const firstSourceBranch = branches.find((branch) => !branch.skip);
+                if (!firstSourceBranch) return "";
+                secondSource = this.emitExpr(firstSourceBranch.awaitExpr.expression);
                 genericSecondSourceC = staged;
             } else if (secondStep.condition) {
                 secondCondition = this.emitExpr(secondStep.condition);
