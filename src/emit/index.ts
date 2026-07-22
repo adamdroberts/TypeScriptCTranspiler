@@ -52196,6 +52196,28 @@ class Emitter {
                 if (!symbol || !preceding.has(symbol)) supported = false;
                 return;
             }
+            if (ts.isCallExpression(node)) {
+                const expression = node.expression;
+                if (
+                    !ts.isPropertyAccessExpression(expression) ||
+                    !ts.isIdentifier(expression.expression) ||
+                    expression.expression.text !== "Math" ||
+                    !this.isUnshadowedGlobalIdentifier(expression.expression, "Math") ||
+                    node.arguments.some(ts.isSpreadElement) ||
+                    !new Set([
+                        "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
+                        "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "floor",
+                        "f16round", "fround", "hypot", "imul", "log", "log1p", "log2", "log10",
+                        "max", "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
+                        "tanh", "trunc",
+                    ]).has(expression.name.text)
+                ) {
+                    supported = false;
+                    return;
+                }
+                for (const argument of node.arguments) visit(argument);
+                return;
+            }
             if (ts.isPropertyAccessExpression(node)) {
                 visit(node.expression);
                 return;
