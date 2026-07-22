@@ -282,7 +282,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite lazy multi-yield returns now evaluate direct no-yield prefix-update leaves at the final resume, preserving side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield assignment leaves at the final resume, preserving mutation timing. Regression: `generator_lazy_multi_yield_return`.
-- Finite lazy multi-yield returns now evaluate bounded no-yield string/string logical leaves for `&&` and `||` at the final resume, preserving short-circuit side-effect timing. Regression: `generator_lazy_multi_yield_return`.
+- Finite lazy multi-yield returns now evaluate bounded no-yield string/string logical leaves for `&&`, `||`, and `??` at the final resume, preserving short-circuit/nullish side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield conditional leaves at the final resume, preserving branch and side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield template-expression leaves at the final resume, preserving interpolation side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield tagged-template leaves at the final resume, preserving tag side-effect timing. Regression: `generator_lazy_multi_yield_return`.

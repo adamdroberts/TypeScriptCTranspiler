@@ -42965,7 +42965,8 @@ class Emitter {
 
     private isSimpleLazyMultiYieldStringLogicalLeaf(expr: ts.BinaryExpression): boolean {
         if (expr.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
-            expr.operatorToken.kind !== ts.SyntaxKind.BarBarToken) return false;
+            expr.operatorToken.kind !== ts.SyntaxKind.BarBarToken &&
+            expr.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken) return false;
         const left = this.prepareType(mapTsType(expr.left, this.checker.getTypeAtLocation(expr.left), this.checker));
         const right = this.prepareType(mapTsType(expr.right, this.checker.getTypeAtLocation(expr.right), this.checker));
         return left.kind === "string" && right.kind === "string";

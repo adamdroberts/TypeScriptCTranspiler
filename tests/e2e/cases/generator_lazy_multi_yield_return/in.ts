@@ -189,6 +189,18 @@ function* logicalLeaves(): Generator<string, string, string> {
     return (yield "left") + (logicalCondition && logicalLeaf()) + (yield "right");
 }
 
+let nullishLeafCounter = 0;
+const nullishLeafValue: string | null = null;
+
+function nullishLeaf(): string {
+    nullishLeafCounter++;
+    return "mid";
+}
+
+function* nullishLeaves(): Generator<string, string, string> {
+    return (yield "left") + (nullishLeafValue ?? nullishLeaf()) + (yield "right");
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -435,6 +447,12 @@ const logicalLeafSecond: any = logicalLeafIter.next("A");
 console.log("logical-leaf-before", logicalLeafFirst.value, logicalLeafSecond.value, logicalLeafCounter);
 const logicalLeafDone: any = logicalLeafIter.next("B");
 console.log("logical-leaf", logicalLeafDone.done, logicalLeafDone.value, logicalLeafCounter);
+const nullishLeafIter = nullishLeaves();
+const nullishLeafFirst: any = nullishLeafIter.next();
+const nullishLeafSecond: any = nullishLeafIter.next("A");
+console.log("nullish-leaf-before", nullishLeafFirst.value, nullishLeafSecond.value, nullishLeafCounter);
+const nullishLeafDone: any = nullishLeafIter.next("B");
+console.log("nullish-leaf", nullishLeafDone.done, nullishLeafDone.value, nullishLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
