@@ -39311,8 +39311,22 @@ class Emitter {
             const betweenStatements: ts.Statement[][] = [];
             let pendingBetween: ts.Statement[] = [];
             for (const statement of statements) {
-                const step = this.asyncAwaitConditionalLeadingStep(statement) ??
-                    this.awaitedContinuationStep(statement);
+                const conditionalSteps = this.asyncAwaitConditionalLeadingSteps(statement);
+                const step = conditionalSteps
+                    ? null
+                    : this.asyncAwaitConditionalLeadingStep(statement) ?? this.awaitedContinuationStep(statement);
+                if (conditionalSteps) {
+                    if (steps.length === 0 && pendingBetween.length > 0) return null;
+                    for (const conditionalStep of conditionalSteps) {
+                        if (steps.length > 0) {
+                            betweenStatements.push(pendingBetween);
+                            pendingBetween = [];
+                        }
+                        steps.push(conditionalStep);
+                        stepStatements.push(statement);
+                    }
+                    continue;
+                }
                 if (step) {
                     if (steps.length === 0 && pendingBetween.length > 0) return null;
                     if (steps.length > 0) {
@@ -39332,7 +39346,8 @@ class Emitter {
                 const step = steps[i]!;
                 if (!step.variable) continue;
                 const statement = stepStatements[i]!;
-                if (this.asyncAwaitConditionalLeadingStep(statement)) continue;
+                if (this.asyncAwaitConditionalLeadingSteps(statement) ||
+                    this.asyncAwaitConditionalLeadingStep(statement)) continue;
                 if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                     !ts.isIdentifier(statement.declarationList.declarations[0]!.name) ||

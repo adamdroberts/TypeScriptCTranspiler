@@ -8,5 +8,5 @@ method-true method-first-return
 value-true value-first-return
 throw-reason-true throw-first-throw
 throw-reason-false throw-first-throw
-control-true-if control-first-if-switch-loop-loop-for-for-do-do-of-of-in-in-nested-if-assigned-post-return
-control-true-else control-first-else-default-loop-loop-for-for-do-do-of-of-in-in-nested-else-assigned-alt-post-return
+control-true-if control-first-if-switch-loop-loop-for-for-do-do-of-of-in-in-nested-if-nested-if-two-assigned-post-return
+control-true-else control-first-else-default-loop-loop-for-for-do-do-of-of-in-in-nested-else-nested-else-two-assigned-alt-post-return
