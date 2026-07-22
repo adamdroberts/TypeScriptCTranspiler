@@ -52209,6 +52209,26 @@ class Emitter {
                 for (const span of node.templateSpans) visit(span.expression);
                 return;
             }
+            if (ts.isArrayLiteralExpression(node)) {
+                for (const element of node.elements) {
+                    if (ts.isSpreadElement(element) || ts.isOmittedExpression(element)) {
+                        supported = false;
+                        return;
+                    }
+                    visit(element);
+                }
+                return;
+            }
+            if (ts.isObjectLiteralExpression(node)) {
+                for (const property of node.properties) {
+                    if (!ts.isPropertyAssignment(property) || this.staticPropertyName(property.name) === null) {
+                        supported = false;
+                        return;
+                    }
+                    visit(property.initializer);
+                }
+                return;
+            }
             if (
                 ts.isNumericLiteral(node) ||
                 ts.isStringLiteralLike(node) ||
