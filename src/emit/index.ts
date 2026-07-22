@@ -42312,7 +42312,7 @@ class Emitter {
                 const closureParent = ts.isParenthesizedExpression(node.parent) ? node.parent.parent : node.parent;
                 if (ts.isFunctionLike(node) && ts.isCallExpression(closureParent) &&
                     this.unwrapTransparentExpression(closureParent.expression) === node &&
-                    (this.isNoCaptureInlineClosureCall(closureParent) || this.inlineClosureBody(closureParent) !== null)) {
+                    this.isInlineYieldFreeClosureCall(closureParent)) {
                     return;
                 }
                 hasNestedFunctionOrClass = true;
@@ -44435,7 +44435,7 @@ class Emitter {
                 const closureParent = ts.isParenthesizedExpression(node.parent) ? node.parent.parent : node.parent;
                 if (!(ts.isFunctionLike(node) && ts.isCallExpression(closureParent) &&
                     this.unwrapTransparentExpression(closureParent.expression) === node &&
-                    (this.isNoCaptureInlineClosureCall(closureParent) || this.inlineClosureBody(closureParent) !== null))) {
+                    this.isInlineYieldFreeClosureCall(closureParent))) {
                     return;
                 }
             }
