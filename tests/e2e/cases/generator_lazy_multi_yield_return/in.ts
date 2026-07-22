@@ -235,6 +235,18 @@ function* newLeaves(): Generator<number, number, number> {
     return (yield 73) + new NewLeaf().value + (yield 74);
 }
 
+let memberCallLeafCounter = 0;
+const memberCallLeafObject = {
+    value(): number {
+        memberCallLeafCounter++;
+        return 6;
+    },
+};
+
+function* memberCallLeaves(): Generator<number, number, number> {
+    return (yield 75) + memberCallLeafObject.value() + (yield 76);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -509,6 +521,12 @@ const newLeafSecond: any = newLeafIter.next(2);
 console.log("new-leaf-before", newLeafFirst.value, newLeafSecond.value, newLeafCounter);
 const newLeafDone: any = newLeafIter.next(3);
 console.log("new-leaf", newLeafDone.done, newLeafDone.value, newLeafCounter);
+const memberCallLeafIter = memberCallLeaves();
+const memberCallLeafFirst: any = memberCallLeafIter.next();
+const memberCallLeafSecond: any = memberCallLeafIter.next(2);
+console.log("member-call-leaf-before", memberCallLeafFirst.value, memberCallLeafSecond.value, memberCallLeafCounter);
+const memberCallLeafDone: any = memberCallLeafIter.next(3);
+console.log("member-call-leaf", memberCallLeafDone.done, memberCallLeafDone.value, memberCallLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);

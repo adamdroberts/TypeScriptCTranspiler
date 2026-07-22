@@ -468,7 +468,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also preserve simple uninitialized `let` locals assigned before use after a suspension point. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve simple uninitialized `var` locals assigned before use after a suspension point. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve initialized mutable `var` locals across suspension points. Test: `generator_lazy_multi_yield_return`
-- Finite lazy multi-yield returns also evaluate direct no-yield call/new leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
+- Finite lazy multi-yield returns also evaluate direct no-yield call/new/member-call leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield postfix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield prefix-update leaves at the final resume, preserving side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Test: `generator_lazy_multi_yield_return`
