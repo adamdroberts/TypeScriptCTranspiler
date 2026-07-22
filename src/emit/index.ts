@@ -52131,7 +52131,13 @@ class Emitter {
         const target = this.unwrapTransparentExpression(call.expression);
         if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return false;
         if (this.nodeContainsYield(target)) return false;
-        if (call.arguments.some((argument) => ts.isSpreadElement(argument))) return false;
+        if (call.arguments.some((argument) => ts.isSpreadElement(argument))) {
+            const signature = this.checker.getResolvedSignature(call);
+            const hasRestParameter = !!signature?.getParameters().some((param) =>
+                !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken,
+            );
+            if (!hasRestParameter) return false;
+        }
         return target.parameters.every((parameter) =>
             ts.isIdentifier(parameter.name) &&
             !this.isThisParameter(parameter) &&
@@ -52826,7 +52832,10 @@ class Emitter {
         const sig = this.checker.getResolvedSignature(call);
         if (!sig) unsupported(call, "unresolved function value call signature");
         const sigParams = sig.getParameters();
-        if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
+        const hasRestParameter = sigParams.some((param) =>
+            !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken,
+        );
+        if (call.arguments.some((arg) => ts.isSpreadElement(arg)) && !hasRestParameter) {
             const argList = this.emitSpreadCallArgumentList(call.arguments);
             const ret = this.prepareType(callee.ty.ret);
             const result = this.emitSequencedExpr(ret, [
@@ -52844,9 +52853,6 @@ class Emitter {
             if (callee.lazyGeneratorFactory) result.lazyGenerator = true;
             return result;
         }
-        const hasRestParameter = sigParams.some((param) =>
-            !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken,
-        );
         if (call.arguments.length > params.length && !hasRestParameter) {
             unsupported(
                 call,
