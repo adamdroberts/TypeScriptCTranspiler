@@ -22,6 +22,28 @@ async function branchPostAwaitNestedSuspend(flag: boolean): Promise<string> {
 branchPostAwaitNestedSuspend(true).then((value) => console.log("true", value));
 branchPostAwaitNestedSuspend(false).then((value) => console.log("false", value));
 
+async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Promise<string> {
+    const first = await later("control-first");
+    if (flag) {
+        await later(first + "-branch");
+        if (inner) {
+            var nestedValue = first + "-if";
+        } else {
+            nestedValue = first + "-else";
+        }
+        await later(nestedValue + "-await");
+    } else {
+        await later(first + "-alternate");
+        var nestedValue = first + (inner ? "-try" : "-fallback");
+        await later(nestedValue + "-await");
+    }
+    return await later(nestedValue + "-return");
+}
+
+branchPostAwaitNestedControl(true, true).then((value) => console.log("control-true-if", value));
+branchPostAwaitNestedControl(true, false).then((value) => console.log("control-true-else", value));
+branchPostAwaitNestedControl(false, false).then((value) => console.log("control-false-fallback", value));
+
 class NestedSuspendRunner {
     async run(flag: boolean): Promise<string> {
         const first = await later("method-first");

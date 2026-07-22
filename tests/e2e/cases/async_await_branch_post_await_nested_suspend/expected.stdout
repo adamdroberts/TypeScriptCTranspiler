@@ -3,6 +3,9 @@ false first-return
 method-false method-first-return
 value-false value-first-return
 true first-return
+control-true-if control-first-if-return
+control-true-else control-first-else-return
+control-false-fallback control-first-fallback-return
 method-true method-first-return
 value-true value-first-return
 throw-reason-true throw-first-throw

@@ -32698,21 +32698,57 @@ class Emitter {
     private asyncAwaitInterstitialCaptures(
         statements: readonly ts.Statement[],
     ): AsyncAwaitContinuationParam[] | null {
-        const captures: AsyncAwaitContinuationParam[] = [];
-        for (const stmt of statements) {
-            if (!ts.isVariableStatement(stmt)) continue;
-            for (const decl of stmt.declarationList.declarations) {
-                if (!ts.isIdentifier(decl.name)) return null;
-                if (!decl.initializer && !(stmt.declarationList.flags & ts.NodeFlags.Let)) return null;
-                const symbol = this.symbolForIdentifier(decl.name);
-                if (!symbol) return null;
-                const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
-                if (!this.isAsyncAwaitPreludeCaptureType(type)) return null;
-                const name = mangleIdent(decl.name.text);
-                captures.push({ symbol, name, type, field: `capture_${name}` });
+        const captures = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        let valid = true;
+        const addDeclaration = (decl: ts.VariableDeclaration): void => {
+            if (!valid) return;
+            if (!ts.isIdentifier(decl.name)) {
+                valid = false;
+                return;
             }
+            if (!decl.initializer && !(ts.isVariableDeclarationList(decl.parent) &&
+                (decl.parent.flags & ts.NodeFlags.Let))) {
+                valid = false;
+                return;
+            }
+            const symbol = this.symbolForIdentifier(decl.name);
+            if (!symbol) {
+                valid = false;
+                return;
+            }
+            const type = this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
+            if (!this.isAsyncAwaitPreludeCaptureType(type)) {
+                valid = false;
+                return;
+            }
+            if (!captures.has(symbol)) {
+                const name = mangleIdent(decl.name.text);
+                captures.set(symbol, { symbol, name, type, field: `capture_${name}` });
+            }
+        };
+        const visitNested = (node: ts.Node): void => {
+            if (!valid || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+            if (ts.isVariableStatement(node)) {
+                if (node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) return;
+                for (const decl of node.declarationList.declarations) addDeclaration(decl);
+                return;
+            }
+            if (ts.isVariableDeclarationList(node)) {
+                if (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) return;
+                for (const decl of node.declarations) addDeclaration(decl);
+                return;
+            }
+            ts.forEachChild(node, visitNested);
+        };
+        for (const stmt of statements) {
+            if (ts.isVariableStatement(stmt)) {
+                for (const decl of stmt.declarationList.declarations) addDeclaration(decl);
+            } else {
+                visitNested(stmt);
+            }
+            if (!valid) return null;
         }
-        return captures;
+        return [...captures.values()];
     }
 
     private asyncAwaitInterstitialControlFlowSupported(stmt: ts.Statement): boolean {
@@ -40303,7 +40339,23 @@ class Emitter {
             }
             : null;
         const nextStepSymbol = secondStep.variable ? this.symbolForIdentifier(secondStep.variable) : null;
-        const interstitialCaptures = this.asyncAwaitInterstitialCaptures(betweenStatements[0] ?? [])!
+        const firstStepPostAwaitStatements = [
+            ...(firstStep.conditionalBranches ?? []).flatMap((branch) => branch.afterStatements),
+            ...(firstStep.afterStatements ?? []),
+            ...(firstStep.alternateAfterStatements ?? []),
+            ...(firstStep.alternateAlternateAfterStatements ?? []),
+            ...(firstStep.alternateThirdAfterStatements ?? []),
+            ...(firstStep.alternateFourthAfterStatements ?? []),
+            ...(firstStep.alternateFifthAfterStatements ?? []),
+            ...(firstStep.alternateSixthAfterStatements ?? []),
+            ...(firstStep.alternateSeventhAfterStatements ?? []),
+            ...(firstStep.alternateEighthAfterStatements ?? []),
+            ...(firstStep.alternateNinthAfterStatements ?? []),
+        ];
+        const interstitialCaptures = this.asyncAwaitInterstitialCaptures([
+            ...firstStepPostAwaitStatements,
+            ...(betweenStatements[0] ?? []),
+        ])!
             .filter((capture) => !nextStepSymbol || capture.symbol !== nextStepSymbol);
         const nestedParams = [
             ...params,
@@ -40382,6 +40434,17 @@ class Emitter {
         if (firstValue && (firstSymbol || firstBranchSymbols.length > 0)) {
             buf.line(`${firstAwaitedType.c} ${valueVar} = ${firstValue};`);
         }
+        const addedHoistedSymbols: ts.Symbol[] = [];
+        for (const capture of interstitialCaptures) {
+            if (!this.asyncAwaitHoistedPreludeSymbols.has(capture.symbol)) {
+                this.asyncAwaitHoistedPreludeSymbols.add(capture.symbol);
+                addedHoistedSymbols.push(capture.symbol);
+            }
+        }
+        const addedDeclaredSymbols = interstitialCaptures
+            .map((capture) => capture.symbol)
+            .filter((symbol) => !this.asyncAwaitHoistedPreludeDeclaredSymbols.has(symbol));
+        this.emitAsyncAwaitPreludeHoistedDeclarations(buf, interstitialCaptures);
         this.argumentValueScopes.push(scope);
         this.argumentValueTypeScopes.push(scopeTypes);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -40907,6 +40970,12 @@ class Emitter {
             if (thisValue) this.functionThisStack.pop();
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
+            for (const symbol of addedHoistedSymbols) {
+                this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+            }
+            for (const symbol of addedDeclaredSymbols) {
+                this.asyncAwaitHoistedPreludeDeclaredSymbols.delete(symbol);
+            }
         }
         const secondSourceC = this.coerce(secondSource!, promiseTypes[1]!, secondStep.awaitExpr.expression);
         const stagedSecondSource = genericSecondSourceC ?? (secondAlternateSource && secondCondition && secondBranchChoiceVar
