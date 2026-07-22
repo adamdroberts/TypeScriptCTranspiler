@@ -49,6 +49,8 @@ new-leaf-before 73 74 0
 new-leaf true 12 1
 member-call-leaf-before 75 76 0
 member-call-leaf true 11 1
+spread-call-leaf-before 77 78 0
+spread-call-leaf true 10 1
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21

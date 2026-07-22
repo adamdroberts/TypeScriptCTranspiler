@@ -277,7 +277,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Finite lazy multi-yield returns now preserve simple uninitialized `let` locals assigned before use after a suspension point. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve simple uninitialized `var` locals assigned before use after a suspension point. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now preserve initialized mutable `var` locals across suspension points. Regression: `generator_lazy_multi_yield_return`.
-- Finite lazy multi-yield returns now evaluate direct no-yield call/new/member-call leaves at the final resume, preserving side-effect timing. Regression: `generator_lazy_multi_yield_return`.
+- Finite lazy multi-yield returns now evaluate direct no-yield call/new/member-call leaves, including widened rest-parameter spread calls, at the final resume, preserving side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield postfix-update leaves at the final resume, preserving side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield prefix-update leaves at the final resume, preserving side-effect timing. Regression: `generator_lazy_multi_yield_return`.
 - Finite lazy multi-yield returns now evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Regression: `generator_lazy_multi_yield_return`.
