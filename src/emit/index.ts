@@ -35185,7 +35185,6 @@ class Emitter {
             ? continueBranchStatements.slice(0, -1)
             : loopBody.slice(0, -1);
         const bodyContinue = ts.isContinueStatement(bodyAction);
-        if (initialBody && bodyContinueCondition && bodyContinueConditionAwaitExpr) return false;
         if (bodyContinueCondition && !elseContinueIsContinue && !elseContinueIsBreak && !elseContinueIsReturn && !elseContinueIsThrow &&
             !bodyContinueElseStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyContinueCondition && elseContinueIsContinue &&
@@ -35965,6 +35964,11 @@ class Emitter {
             buf.line(`${adapterName}(${env});`);
             buf.close();
         };
+        if (initialBody && bodyContinueConditionAwaitExpr && bodyConditionAdapter && bodyContinueConditionPromiseType) {
+            scheduleInitialAwait(bodyContinueConditionAwaitExpr, bodyContinueConditionPromiseType, bodyConditionAdapter);
+            buf.line(`return ${resultPromise};`);
+            return true;
+        }
         if (initialBody && continuation.bodyContinueCondition && !bodyContinueConditionAwaitExpr && bodyAdapter && loopAdapterName) {
             const bodyCondition = this.emitExpr(continuation.bodyContinueCondition);
             const bodyConditionTruth = this.truthyC(bodyCondition, continuation.bodyContinueCondition);
