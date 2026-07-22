@@ -39244,9 +39244,9 @@ class Emitter {
         const branchStatements = ts.isBlock(conditional.thenStatement)
             ? conditional.thenStatement.statements
             : [conditional.thenStatement];
-        if (!first || !first.variable || branchStatements.length !== 1) return false;
-        const branch = this.awaitedContinuationStep(branchStatements[0]!);
-        if (!branch || branch.variable) return false;
+        if (!first || !first.variable || branchStatements.length === 0) return false;
+        const branches = branchStatements.map((statement) => this.awaitedContinuationStep(statement));
+        if (branches.some((branch) => !branch || branch.variable)) return false;
         const returnAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(returnAwait)) return false;
         const validCondition = (node: ts.Node): boolean => {
@@ -39288,15 +39288,15 @@ class Emitter {
         const trueContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],
             hoistedSymbols: [],
-            steps: [branch, returnStep],
-            betweenStatements: [[]],
+            steps: [...branches, returnStep] as AsyncAwaitLeadingStep[],
+            betweenStatements: branches.slice(1).map(() => []),
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
             params: tailParams,
             thisValue: callbackThis,
-            usesAwaitedLocals: [false, false],
+            usesAwaitedLocals: [...branches.map(() => false), false],
         };
         const falseContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],
