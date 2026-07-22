@@ -492,6 +492,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Leading awaited-local chains now propagate terminal post-await `throw` rejections after multiple suspensions across declarations, class methods, and function values. Test: `async_await_pending_return_expr`.
 - Added ten-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Added twelve-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
+- Added thirteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Nested conditional leading await selection now supports seven Promise-valued leaves across declarations, methods, function values, and branch-block fallthrough. Test: `async_await_seven_leaf_conditional`.
 - Nested conditional leading await selection now supports eight Promise-valued leaves across declarations, methods, function values, and branch-block fallthrough. Test: `async_await_eight_leaf_conditional`.
 - Nested conditional leading await selection now supports nine Promise-valued leaves across declarations, methods, function values, and branch-block fallthrough. Test: `async_await_nine_leaf_conditional`.
