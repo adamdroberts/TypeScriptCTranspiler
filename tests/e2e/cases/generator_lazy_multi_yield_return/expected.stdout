@@ -55,6 +55,10 @@ pointer-nullish-leaf-before 89 90 0
 pointer-nullish-leaf true 7 1
 pointer-nullish-present-before 91 92 1
 pointer-nullish-present true 7 1
+pointer-logical-leaf-before 93 94 1
+pointer-logical-leaf true 2 2
+pointer-logical-present-before 95 96 2
+pointer-logical-present true 2 2
 optional-property-leaf null 1 true false
 optional-element-leaf null 1 true false
 new-leaf-before 73 74 0

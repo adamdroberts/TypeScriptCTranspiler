@@ -248,11 +248,20 @@ function nullableArrayLeaf(): number[] | null {
 function presentArrayLeaf(): number[] | null {
     return [8, 9];
 }
+function nonNullArrayLeaf(): number[] {
+    return [10, 11];
+}
 function* pointerNullishLeaves(): Generator<number, number, number> {
     return (yield 89) + (nullableArrayLeaf() ?? pointerNullishFallback()).length + (yield 90);
 }
 function* pointerNullishPresentLeaves(): Generator<number, number, number> {
     return (yield 91) + (presentArrayLeaf() ?? pointerNullishFallback()).length + (yield 92);
+}
+function* pointerLogicalLeaves(): Generator<any, any, any> {
+    return (yield 93), (yield 94), (nonNullArrayLeaf() && pointerNullishFallback());
+}
+function* pointerLogicalPresentLeaves(): Generator<any, any, any> {
+    return (yield 95), (yield 96), (nonNullArrayLeaf() || pointerNullishFallback());
 }
 
 function* optionalPropertyLeaves(): Generator<any, boolean, any> {
@@ -594,6 +603,18 @@ const pointerNullishPresentLeafSecond: any = pointerNullishPresentLeafIter.next(
 console.log("pointer-nullish-present-before", pointerNullishPresentLeafFirst.value, pointerNullishPresentLeafSecond.value, pointerNullishFallbackCounter);
 const pointerNullishPresentLeafDone: any = pointerNullishPresentLeafIter.next(3);
 console.log("pointer-nullish-present", pointerNullishPresentLeafDone.done, pointerNullishPresentLeafDone.value, pointerNullishFallbackCounter);
+const pointerLogicalLeafIter = pointerLogicalLeaves();
+const pointerLogicalLeafFirst: any = pointerLogicalLeafIter.next();
+const pointerLogicalLeafSecond: any = pointerLogicalLeafIter.next(2);
+console.log("pointer-logical-leaf-before", pointerLogicalLeafFirst.value, pointerLogicalLeafSecond.value, pointerNullishFallbackCounter);
+const pointerLogicalLeafDone: any = pointerLogicalLeafIter.next(3);
+console.log("pointer-logical-leaf", pointerLogicalLeafDone.done, pointerLogicalLeafDone.value.length, pointerNullishFallbackCounter);
+const pointerLogicalPresentLeafIter = pointerLogicalPresentLeaves();
+const pointerLogicalPresentLeafFirst: any = pointerLogicalPresentLeafIter.next();
+const pointerLogicalPresentLeafSecond: any = pointerLogicalPresentLeafIter.next(2);
+console.log("pointer-logical-present-before", pointerLogicalPresentLeafFirst.value, pointerLogicalPresentLeafSecond.value, pointerNullishFallbackCounter);
+const pointerLogicalPresentLeafDone: any = pointerLogicalPresentLeafIter.next(3);
+console.log("pointer-logical-present", pointerLogicalPresentLeafDone.done, pointerLogicalPresentLeafDone.value.length, pointerNullishFallbackCounter);
 const optionalPropertyLeafIter = optionalPropertyLeaves();
 const optionalPropertyLeafFirst: any = optionalPropertyLeafIter.next();
 const optionalPropertyLeafSecond: any = optionalPropertyLeafIter.next({ value: 2 });

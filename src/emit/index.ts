@@ -42971,9 +42971,19 @@ class Emitter {
         const right = this.prepareType(mapTsType(expr.right, this.checker.getTypeAtLocation(expr.right), this.checker));
         return (left.kind === "string" && right.kind === "string") ||
             (left.kind === right.kind && (left.kind === "number" || left.kind === "boolean")) ||
-            (expr.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
-                left.kind === right.kind && isPointerKind(left)) ||
+            (left.kind === right.kind && isPointerKind(left) &&
+                (expr.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+                    (this.isDefinitelyNonNullishLogicalOperand(expr.left) &&
+                        this.isDefinitelyNonNullishLogicalOperand(expr.right)))) ||
             left.kind === "value" || right.kind === "value";
+    }
+
+    private isDefinitelyNonNullishLogicalOperand(expr: ts.Expression): boolean {
+        const type = this.checker.getTypeAtLocation(expr);
+        const parts = type.isUnion() ? type.types : [type];
+        return parts.every((part) =>
+            (part.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) === 0,
+        );
     }
 
     private lazyGeneratorMaxMultiYieldReturn(node: ts.Node): number {
@@ -44168,7 +44178,11 @@ class Emitter {
                     this.checker,
                 ));
                 if (leftType.kind === rightType.kind &&
-                    (leftType.kind === "number" || leftType.kind === "boolean")) {
+                    ((leftType.kind === "number" || leftType.kind === "boolean") ||
+                        (leftType.kind !== "string" && isPointerKind(leftType) &&
+                            (unwrapped.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+                                (this.isDefinitelyNonNullishLogicalOperand(unwrapped.left) &&
+                                    this.isDefinitelyNonNullishLogicalOperand(unwrapped.right)))))) {
                     return this.emitSimpleLazyResumeBinary(
                         unwrapped,
                         build(unwrapped.left),
@@ -45410,7 +45424,8 @@ class Emitter {
             return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
         }
         if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
-            if (left.ty.kind === "number" || left.ty.kind === "boolean") {
+            if ((left.ty.kind === "number" || left.ty.kind === "boolean" || isPointerKind(left.ty)) &&
+                sameCType(left.ty, right.ty)) {
                 if (left.ty.kind !== right.ty.kind) {
                     unsupported(bin, "lazy logical operands must have matching primitive types");
                 }
@@ -45433,7 +45448,8 @@ class Emitter {
             return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
         }
         if (op === ts.SyntaxKind.BarBarToken) {
-            if (left.ty.kind === "number" || left.ty.kind === "boolean") {
+            if ((left.ty.kind === "number" || left.ty.kind === "boolean" || isPointerKind(left.ty)) &&
+                sameCType(left.ty, right.ty)) {
                 if (left.ty.kind !== right.ty.kind) {
                     unsupported(bin, "lazy logical operands must have matching primitive types");
                 }
