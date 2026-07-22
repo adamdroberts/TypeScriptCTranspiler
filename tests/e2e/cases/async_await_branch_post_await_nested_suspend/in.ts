@@ -9,10 +9,12 @@ function laterReject(reason: string): Promise<string> {
 async function branchPostAwaitNestedSuspend(flag: boolean): Promise<string> {
     const first = await later("first");
     if (flag) {
-        const branchValue = await later(first + "-branch");
+        let branchValue = await later(first + "-branch");
+        branchValue = branchValue + "-post";
         await later(branchValue + "-branch-two");
     } else {
-        const branchValue = await later(first + "-else");
+        let branchValue = await later(first + "-else");
+        branchValue = branchValue + "-post";
         await later(branchValue + "-else-two");
     }
     return await later(first + "-return");
@@ -25,10 +27,12 @@ class NestedSuspendRunner {
     async run(flag: boolean): Promise<string> {
         const first = await later("method-first");
         if (flag) {
-            const branchValue = await later(first + "-branch");
+            let branchValue = await later(first + "-branch");
+            branchValue = branchValue + "-post";
             await later(branchValue + "-branch-two");
         } else {
-            const branchValue = await later(first + "-else");
+            let branchValue = await later(first + "-else");
+            branchValue = branchValue + "-post";
             await later(branchValue + "-else-two");
         }
         return await later(first + "-return");
@@ -42,10 +46,12 @@ runner.run(false).then((value) => console.log("method-false", value));
 const nestedSuspendValue = async (flag: boolean): Promise<string> => {
     const first = await later("value-first");
     if (flag) {
-        const branchValue = await later(first + "-branch");
+        let branchValue = await later(first + "-branch");
+        branchValue = branchValue + "-post";
         await later(branchValue + "-branch-two");
     } else {
-        const branchValue = await later(first + "-else");
+        let branchValue = await later(first + "-else");
+        branchValue = branchValue + "-post";
         await later(branchValue + "-else-two");
     }
     return await later(first + "-return");
@@ -70,7 +76,7 @@ branchPostAwaitNestedReject().then(
 async function branchPostAwaitNestedThrow(flag: boolean): Promise<string> {
     const first = await later("throw-first");
     if (flag) {
-        const branchValue = await later(first + "-branch");
+        let branchValue = await later(first + "-branch");
         await later(branchValue + "-branch-two");
     } else {
         const branchValue = await later(first + "-else");
