@@ -17,8 +17,11 @@ function* classKeys(record: KeyRecord): Generator<string, string, string> {
     return "class-done";
 }
 
-interface KeyShape {
+interface BaseShape {
     alpha: string;
+}
+
+interface KeyShape extends BaseShape {
     beta: string;
 }
 
