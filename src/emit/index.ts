@@ -52169,7 +52169,7 @@ class Emitter {
             ts.isBindingElement(element) &&
             !element.dotDotDotToken &&
             (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
-            (!element.propertyName || ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)) &&
+            (!element.propertyName || this.staticPropertyName(element.propertyName) !== null) &&
             this.isSupportedInlineBindingName(element.name),
         );
     }
@@ -53230,10 +53230,14 @@ class Emitter {
                         unsupported(pattern, "object destructuring requires simple static binding elements");
                     }
                     const property = element.propertyName ?? element.name;
-                    if (!ts.isIdentifier(property) && !ts.isStringLiteral(property)) {
+                    const key = element.propertyName
+                        ? emitter.staticPropertyName(element.propertyName)
+                        : ts.isIdentifier(element.name)
+                            ? element.name.text
+                            : null;
+                    if (key === null) {
                         unsupported(element, "object destructuring requires static property names");
                     }
-                    const key = property.text;
                     const raw = `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`;
                     if (ts.isIdentifier(element.name)) {
                         bindIdentifier(element, raw, T_VALUE);
