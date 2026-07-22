@@ -33617,6 +33617,9 @@ class Emitter {
             ))
             : promiseTypes[0]!;
         const initialAdapter = initialBody ? initialBodyAdapter! : firstName;
+        if (initialBody) {
+            for (const statement of initialBodyPreludeStatements) this.emitStmt(buf, statement);
+        }
         const firstSource = this.emitExpr(initialAwaitExpr.expression);
         const sourceVar = this.freshTemp("_await_source");
         const resultVar = this.freshTemp("_await_result");
@@ -34379,6 +34382,9 @@ class Emitter {
         const initialAwaitExpr = initialBody ? initialBodyAwaitExprs[0]! : awaitExpressions[0]!;
         const initialPromiseType = initialBody ? initialBodyPromiseType! : promiseTypes[0]!;
         const initialAdapter = initialBody ? initialBodyAdapter! : stageNames[0]!;
+        if (initialBody) {
+            for (const statement of initialBodyPreludeStatements) this.emitStmt(buf, statement);
+        }
         const firstSource = this.emitExpr(initialAwaitExpr.expression);
         const sourceVar = this.freshTemp("_await_multi_source");
         const resultVar = this.freshTemp("_await_multi_result");
@@ -34779,6 +34785,9 @@ class Emitter {
         const initialAwaitExpr = initialBody ? initialBodyAwaitExprs[0]! : conditionAwait;
         const initialPromiseType = initialBody ? initialBodyPromiseType! : promiseTypes[0]!;
         const initialAdapter = initialBody ? initialBodyAdapter! : firstName;
+        if (initialBody) {
+            for (const statement of initialBodyPreludeStatements) this.emitStmt(buf, statement);
+        }
         const firstSource = this.emitExpr(initialAwaitExpr.expression);
         const sourceVar = this.freshTemp("_await_conditional_source");
         const resultVar = this.freshTemp("_await_conditional_result");
@@ -36310,6 +36319,9 @@ class Emitter {
             buf.close();
             buf.line(`return ${resultPromise};`);
             return true;
+        }
+        if (initialBody && continuation.bodyAwaitExpr) {
+            for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
         }
         const initialAwaitExpr = initialBody && continuation.bodyAwaitExpr
             ? continuation.bodyAwaitExpr
