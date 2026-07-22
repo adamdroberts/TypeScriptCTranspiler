@@ -130,6 +130,12 @@ function* deleteLeaves(): Generator<number, number, number> {
     return (yield 53) + (delete deleteLeafObject.value, 1) + (yield 54);
 }
 
+let assignmentLeafCounter = 0;
+
+function* assignmentLeaves(): Generator<number, number, number> {
+    return (yield 55) + (assignmentLeafCounter += 2) + (yield 56);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -334,6 +340,12 @@ const deleteLeafSecond: any = deleteLeafIter.next(2);
 console.log("delete-leaf-before", deleteLeafFirst.value, deleteLeafSecond.value, deleteLeafObject.value);
 const deleteLeafDone: any = deleteLeafIter.next(3);
 console.log("delete-leaf", deleteLeafDone.done, deleteLeafDone.value, deleteLeafObject.value);
+const assignmentLeafIter = assignmentLeaves();
+const assignmentLeafFirst: any = assignmentLeafIter.next();
+const assignmentLeafSecond: any = assignmentLeafIter.next(2);
+console.log("assignment-leaf-before", assignmentLeafFirst.value, assignmentLeafSecond.value, assignmentLeafCounter);
+const assignmentLeafDone: any = assignmentLeafIter.next(3);
+console.log("assignment-leaf", assignmentLeafDone.done, assignmentLeafDone.value, assignmentLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
