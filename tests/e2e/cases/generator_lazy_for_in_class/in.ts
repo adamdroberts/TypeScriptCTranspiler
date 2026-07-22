@@ -1,7 +1,10 @@
 const events: string[] = [];
 
-class KeyRecord {
+class BaseKeyRecord {
     alpha: string = "a";
+}
+
+class KeyRecord extends BaseKeyRecord {
     beta: string = "b";
 }
 
@@ -9,7 +12,7 @@ function* classKeys(record: KeyRecord): Generator<string, string, string> {
     for (const key in record) {
         events.push("class:" + key);
         yield key;
-        if (key === "alpha") break;
+        if (key === "beta") break;
     }
     return "class-done";
 }
@@ -34,6 +37,8 @@ const first: any = iter.next("ignored");
 console.log("first", first.done, first.value, events.join("|"));
 const second: any = iter.next("resume");
 console.log("second", second.done, second.value, events.join("|"));
+const third: any = iter.next("resume");
+console.log("third", third.done, third.value, events.join("|"));
 
 const interfaceIter = interfaceKeys({ alpha: "a", beta: "b" });
 console.log("interface-created", events.join("|"));

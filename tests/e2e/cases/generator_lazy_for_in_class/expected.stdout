@@ -1,6 +1,7 @@
 created
 first false alpha class:alpha
-second true class-done class:alpha
-interface-created class:alpha
-interface-first false alpha class:alpha|interface:alpha
-interface-second true interface-done class:alpha|interface:alpha
+second false beta class:alpha|class:beta
+third true class-done class:alpha|class:beta
+interface-created class:alpha|class:beta
+interface-first false alpha class:alpha|class:beta|interface:alpha
+interface-second true interface-done class:alpha|class:beta|interface:alpha

@@ -46934,15 +46934,23 @@ class Emitter {
         if (iter.ty.kind !== "class" || !iter.ty.className) return null;
         const tsType = this.checker.getTypeAtLocation(expr);
         const names: string[] = [];
-        for (const prop of tsType.getProperties()) {
-            // Skip methods — for-in only enumerates own enumerable properties,
-            // which for our typed shapes are data fields.
-            const decl = prop.valueDeclaration ?? prop.declarations?.[0];
-            if (!decl) continue;
-            if (ts.isMethodDeclaration(decl) || ts.isMethodSignature(decl)) continue;
-            if (ts.isGetAccessor(decl) || ts.isSetAccessor(decl)) continue;
-            names.push(prop.getName());
-        }
+        const seen = new Set<string>();
+        const collect = (type: ts.Type): void => {
+            for (const base of type.getBaseTypes() ?? []) collect(base);
+            for (const prop of type.getProperties()) {
+                // Skip methods — for-in only enumerates own enumerable properties,
+                // which for our typed shapes are data fields.
+                const decl = prop.valueDeclaration ?? prop.declarations?.[0];
+                if (!decl) continue;
+                if (ts.isMethodDeclaration(decl) || ts.isMethodSignature(decl)) continue;
+                if (ts.isGetAccessor(decl) || ts.isSetAccessor(decl)) continue;
+                const name = prop.getName();
+                if (seen.has(name)) continue;
+                seen.add(name);
+                names.push(name);
+            }
+        };
+        collect(tsType);
         return names;
     }
 
