@@ -27,6 +27,8 @@ delete-leaf-before 53 54 1
 delete-leaf true 6 undefined
 assignment-leaf-before 55 56 0
 assignment-leaf true 7 2
+conditional-leaf-before 57 58 0
+conditional-leaf true 12 1
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21

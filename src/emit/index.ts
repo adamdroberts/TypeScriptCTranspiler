@@ -42904,6 +42904,9 @@ class Emitter {
             if (ts.isDeleteExpression(unwrapped)) {
                 return !this.nodeContainsYield(unwrapped);
             }
+            if (ts.isConditionalExpression(unwrapped)) {
+                return !this.nodeContainsYield(unwrapped);
+            }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
                 (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
                 return !this.nodeContainsYield(unwrapped);
@@ -44094,6 +44097,9 @@ class Emitter {
                 return this.emitExpr(unwrapped);
             }
             if (ts.isDeleteExpression(unwrapped)) {
+                return this.emitExpr(unwrapped);
+            }
+            if (ts.isConditionalExpression(unwrapped)) {
                 return this.emitExpr(unwrapped);
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&

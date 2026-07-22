@@ -136,6 +136,17 @@ function* assignmentLeaves(): Generator<number, number, number> {
     return (yield 55) + (assignmentLeafCounter += 2) + (yield 56);
 }
 
+let conditionalLeafCounter = 0;
+
+function conditionalLeaf(): number {
+    conditionalLeafCounter++;
+    return 7;
+}
+
+function* conditionalLeaves(): Generator<number, number, number> {
+    return (yield 57) + (conditionalLeafCounter === 0 ? conditionalLeaf() : 1) + (yield 58);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -346,6 +357,12 @@ const assignmentLeafSecond: any = assignmentLeafIter.next(2);
 console.log("assignment-leaf-before", assignmentLeafFirst.value, assignmentLeafSecond.value, assignmentLeafCounter);
 const assignmentLeafDone: any = assignmentLeafIter.next(3);
 console.log("assignment-leaf", assignmentLeafDone.done, assignmentLeafDone.value, assignmentLeafCounter);
+const conditionalLeafIter = conditionalLeaves();
+const conditionalLeafFirst: any = conditionalLeafIter.next();
+const conditionalLeafSecond: any = conditionalLeafIter.next(2);
+console.log("conditional-leaf-before", conditionalLeafFirst.value, conditionalLeafSecond.value, conditionalLeafCounter);
+const conditionalLeafDone: any = conditionalLeafIter.next(3);
+console.log("conditional-leaf", conditionalLeafDone.done, conditionalLeafDone.value, conditionalLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
