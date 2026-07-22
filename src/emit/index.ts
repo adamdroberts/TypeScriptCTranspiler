@@ -52146,12 +52146,22 @@ class Emitter {
             return false;
         }
         if (ts.isIdentifier(parameter.name)) return true;
-        if (!ts.isArrayBindingPattern(parameter.name) || parameter.initializer) return false;
+        if (parameter.initializer) return false;
+        if (ts.isArrayBindingPattern(parameter.name)) {
+            return parameter.name.elements.every((element) =>
+                ts.isBindingElement(element) &&
+                !element.dotDotDotToken &&
+                !element.initializer &&
+                ts.isIdentifier(element.name),
+            );
+        }
+        if (!ts.isObjectBindingPattern(parameter.name)) return false;
         return parameter.name.elements.every((element) =>
             ts.isBindingElement(element) &&
             !element.dotDotDotToken &&
             !element.initializer &&
-            ts.isIdentifier(element.name),
+            ts.isIdentifier(element.name) &&
+            (!element.propertyName || ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)),
         );
     }
 
@@ -53164,19 +53174,41 @@ class Emitter {
         const argumentTypeScope = new Map<ts.Symbol, CType>();
         for (let i = 0; i < runtimeParams.length; i++) {
             const parameter = runtimeParams[i]!;
-            if (!ts.isArrayBindingPattern(parameter.name)) continue;
             const parameterType = type.params?.[i] ?? this.prepareType(mapType(parameter, this.checker));
-            if (parameterType.kind !== "array" || !parameterType.elem) {
-                unsupported(parameter, "array destructuring requires an array parameter type");
-            }
-            parameter.name.elements.forEach((element, index) => {
-                if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) {
-                    unsupported(parameter, "array destructuring requires simple binding elements");
+            if (ts.isArrayBindingPattern(parameter.name)) {
+                if (parameterType.kind !== "array" || !parameterType.elem) {
+                    unsupported(parameter, "array destructuring requires an array parameter type");
                 }
+                parameter.name.elements.forEach((element, index) => {
+                    if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) {
+                        unsupported(parameter, "array destructuring requires simple binding elements");
+                    }
+                    const symbol = this.symbolForIdentifier(element.name);
+                    if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                    argumentScope.set(symbol, `TSC_ARR(${parameterType.elem!.c}, ${paramNames[i]}, ${index})`);
+                    argumentTypeScope.set(symbol, parameterType.elem!);
+                });
+                continue;
+            }
+            if (!ts.isObjectBindingPattern(parameter.name)) continue;
+            if (parameterType.kind !== "value") {
+                unsupported(parameter, "object destructuring currently requires a dynamic object parameter type");
+            }
+            parameter.name.elements.forEach((element) => {
+                if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) {
+                    unsupported(parameter, "object destructuring requires simple binding elements");
+                }
+                const property = element.propertyName ?? element.name;
+                if (!ts.isIdentifier(property) && !ts.isStringLiteral(property)) {
+                    unsupported(element, "object destructuring requires static property names");
+                }
+                const key = property.text;
+                const bindingType = this.prepareType(mapType(element.name, this.checker));
+                const raw = `tsc_value_get_prop(${paramNames[i]}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`;
                 const symbol = this.symbolForIdentifier(element.name);
                 if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
-                argumentScope.set(symbol, `TSC_ARR(${parameterType.elem!.c}, ${paramNames[i]}, ${index})`);
-                argumentTypeScope.set(symbol, parameterType.elem!);
+                argumentScope.set(symbol, bindingType.kind === "value" ? raw : this.unboxDynamicValue(raw, bindingType));
+                argumentTypeScope.set(symbol, bindingType);
             });
         }
 
