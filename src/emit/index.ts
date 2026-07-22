@@ -52230,7 +52230,14 @@ class Emitter {
                     new Set(["String", "Number", "Boolean"]).has(expression.text) &&
                     this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
                     node.arguments.length <= 1;
-                const isPureBuiltinCall = isGlobalStringCall || isGlobalPrimitiveCoercionCall || (
+                const isGlobalNumericCall =
+                    ts.isIdentifier(expression) &&
+                    this.isUnshadowedGlobalIdentifier(expression, expression.text) &&
+                    (((expression.text === "parseInt" || expression.text === "parseFloat") &&
+                        node.arguments.length >= 1 && node.arguments.length <= 2) ||
+                        ((expression.text === "isFinite" || expression.text === "isNaN") &&
+                            node.arguments.length === 1));
+                const isPureBuiltinCall = isGlobalStringCall || isGlobalPrimitiveCoercionCall || isGlobalNumericCall || (
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
                     ((receiver.text === "Math" && new Set([
