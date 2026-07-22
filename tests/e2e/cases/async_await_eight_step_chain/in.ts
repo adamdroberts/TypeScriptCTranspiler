@@ -2,7 +2,8 @@ import { setTimeout as delay } from "node:timers/promises";
 
 async function declaration(): Promise<string> {
     const one = await delay(1, "1");
-    let switchMarker = "";
+    var switchMarker;
+    switchMarker = "";
     switch (one) {
         case "never":
             switchMarker = "x";
@@ -74,7 +75,8 @@ async function declaration(): Promise<string> {
 class Chain {
     async method(): Promise<string> {
         const one = await delay(1, "a");
-        let switchMarker = "";
+        var switchMarker;
+        switchMarker = "";
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -146,7 +148,8 @@ class Chain {
 
 const value = async (): Promise<string> => {
     const one = await delay(1, "A");
-    let switchMarker = "";
+    var switchMarker;
+    switchMarker = "";
     switch (one) {
         case "never":
             switchMarker = "X";
@@ -218,7 +221,8 @@ const value = async (): Promise<string> => {
 async function branchEight(flag: boolean): Promise<string> {
     if (flag) {
         const one = await delay(21, "b");
-        let switchMarker = "";
+        var switchMarker;
+        switchMarker = "";
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -287,7 +291,8 @@ async function branchEight(flag: boolean): Promise<string> {
         return fourteen;
     }
     const one = await delay(29, "f");
-    let switchMarker = "";
+    var switchMarker;
+    switchMarker = "";
     switch (one) {
         case "never":
             switchMarker = "x";
@@ -360,7 +365,8 @@ class BranchChain {
     async method(flag: boolean): Promise<string> {
         if (flag) {
             const one = await delay(37, "m");
-            let switchMarker = "";
+            var switchMarker;
+            switchMarker = "";
             switch (one) {
                 case "never":
                     switchMarker = "x";
@@ -429,7 +435,8 @@ class BranchChain {
             return fourteen;
         }
         const one = await delay(45, "n");
-        let switchMarker = "";
+        var switchMarker;
+        switchMarker = "";
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -502,7 +509,8 @@ class BranchChain {
 const branchValue = async (flag: boolean): Promise<string> => {
     if (flag) {
         const one = await delay(53, "v");
-        let switchMarker = "";
+        var switchMarker;
+        switchMarker = "";
         switch (one) {
             case "never":
                 switchMarker = "x";
@@ -571,7 +579,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
         return fourteen;
     }
     const one = await delay(61, "x");
-    let switchMarker = "";
+    var switchMarker;
+    switchMarker = "";
     switch (one) {
         case "never":
             switchMarker = "x";

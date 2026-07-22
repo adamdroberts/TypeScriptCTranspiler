@@ -29768,25 +29768,25 @@ class Emitter {
                 visitNoAwaitOrNestedScope(stmt.expression);
                 if (!ok) return null;
             } else if (ts.isVariableStatement(stmt)) {
-                if (!(stmt.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let))) return null;
+                const isConst = (stmt.declarationList.flags & ts.NodeFlags.Const) !== 0;
                 for (const decl of stmt.declarationList.declarations) {
                     if (!ts.isIdentifier(decl.name)) return null;
                     if (decl.initializer) {
                         visitNoAwaitOrNestedScope(decl.initializer);
                         if (!ok) return null;
-                    } else if (!(stmt.declarationList.flags & ts.NodeFlags.Let)) {
+                    } else if (isConst) {
                         return null;
                     }
                 }
             } else if (ts.isIfStatement(stmt)) {
                 if (!this.asyncAwaitInterstitialControlFlowSupported(stmt, true)) return null;
             } else if (ts.isSwitchStatement(stmt)) {
-                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt)) return null;
+                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt, true)) return null;
             } else if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt) || ts.isForStatement(stmt) ||
                 ts.isForInStatement(stmt) || ts.isForOfStatement(stmt)) {
-                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt)) return null;
+                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt, true)) return null;
             } else if (ts.isTryStatement(stmt)) {
-                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt)) return null;
+                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt, true)) return null;
             } else {
                 return null;
             }
