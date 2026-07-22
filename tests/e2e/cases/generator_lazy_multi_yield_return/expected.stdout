@@ -35,6 +35,8 @@ tagged-template-leaf-before left right 0
 tagged-template-leaf true AtagB 1
 literal-leaf 61 62
 literal-leaf-done true 11
+regexp-leaf 63 64
+regexp-leaf-done true 7
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21

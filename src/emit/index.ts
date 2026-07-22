@@ -42889,6 +42889,7 @@ class Emitter {
                 return true;
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return true;
+            if (ts.isRegularExpressionLiteral(unwrapped)) return true;
             if (ts.isIdentifier(unwrapped)) return true;
             if (unwrapped.kind === ts.SyntaxKind.ThisKeyword) return true;
             if (ts.isPropertyAccessExpression(unwrapped)) return visit(unwrapped.expression);
@@ -44072,6 +44073,7 @@ class Emitter {
                 };
             }
             if (this.isSimpleLazyMultiYieldLiteral(unwrapped)) return this.emitExpr(unwrapped);
+            if (ts.isRegularExpressionLiteral(unwrapped)) return this.emitExpr(unwrapped);
             if (ts.isIdentifier(unwrapped)) {
                 const symbol = this.symbolForIdentifier(unwrapped);
                 const declaration = symbol?.valueDeclaration;

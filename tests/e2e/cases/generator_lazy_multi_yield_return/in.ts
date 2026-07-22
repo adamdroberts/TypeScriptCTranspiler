@@ -173,6 +173,10 @@ function* literalLeaves(): Generator<number, number, number> {
     return (yield 61) + [1, 2].length + ({ value: 4 }).value + (yield 62);
 }
 
+function* regexpLeaves(): Generator<number, number, number> {
+    return (yield 63) + /ab/.source.length + (yield 64);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -407,6 +411,12 @@ const literalLeafSecond: any = literalLeafIter.next(2);
 console.log("literal-leaf", literalLeafFirst.value, literalLeafSecond.value);
 const literalLeafDone: any = literalLeafIter.next(3);
 console.log("literal-leaf-done", literalLeafDone.done, literalLeafDone.value);
+const regexpLeafIter = regexpLeaves();
+const regexpLeafFirst: any = regexpLeafIter.next();
+const regexpLeafSecond: any = regexpLeafIter.next(2);
+console.log("regexp-leaf", regexpLeafFirst.value, regexpLeafSecond.value);
+const regexpLeafDone: any = regexpLeafIter.next(3);
+console.log("regexp-leaf-done", regexpLeafDone.done, regexpLeafDone.value);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
