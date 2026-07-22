@@ -11,6 +11,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ### Added
 - `Promise.withResolvers<T>()` now preserves the statically typed `Promise<T>` member through boxed resolver-record storage, including typed assignment and thenable resolution. Test: `promise_with_resolvers`.
 - Lazy finite multi-yield returns now preserve no-capture inline arrow/function-expression calls with simple typed parameters and yield-free bodies at the final resume. Test: `generator_lazy_multi_yield_return`.
+- Lazy finite multi-yield returns now inline captured zero-argument arrow/function-expression calls with a single yield-free return, preserving outer-capture values across suspension. Test: `generator_lazy_inline_captured_closure`.
 - Bounded awaited loop bodies now resume a direct awaited expression, preserve supported await-free postlude statements including simple locals before `continue`, execute the counted-`for` incrementor, and re-enter the awaited condition. Test: `async_await_loop_body_continue`.
 - Bounded awaited loop bodies now sequence multiple direct awaited expression statements before `continue`, propagating rejection and resuming the next body await before the loop incrementor and condition re-entry. Test: `async_await_loop_body_multi_continue`.
 - Bounded awaited loop bodies now preserve await-free prefix/suffix statements around multiple direct awaited expression statements before `break` or `continue`. Tests: `async_await_loop_body_multi_break`, `async_await_loop_body_multi_continue`.

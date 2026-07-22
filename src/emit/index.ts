@@ -42312,7 +42312,7 @@ class Emitter {
                 const closureParent = ts.isParenthesizedExpression(node.parent) ? node.parent.parent : node.parent;
                 if (ts.isFunctionLike(node) && ts.isCallExpression(closureParent) &&
                     this.unwrapTransparentExpression(closureParent.expression) === node &&
-                    this.isNoCaptureInlineClosureCall(closureParent)) {
+                    (this.isNoCaptureInlineClosureCall(closureParent) || this.inlineClosureBody(closureParent) !== null)) {
                     return;
                 }
                 hasNestedFunctionOrClass = true;
@@ -44431,7 +44431,14 @@ class Emitter {
         const hasLazyClose = hasYieldStar || hasLazyFinalizer || hasLazyCatch;
         const outerCaptureBindings = new Map<ts.Symbol, ClosureEnvBinding>();
         const collectOuterCaptures = (node: ts.Node): void => {
-            if (node !== fn && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (node !== fn && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+                const closureParent = ts.isParenthesizedExpression(node.parent) ? node.parent.parent : node.parent;
+                if (!(ts.isFunctionLike(node) && ts.isCallExpression(closureParent) &&
+                    this.unwrapTransparentExpression(closureParent.expression) === node &&
+                    (this.isNoCaptureInlineClosureCall(closureParent) || this.inlineClosureBody(closureParent) !== null))) {
+                    return;
+                }
+            }
             if (ts.isIdentifier(node) && !this.isNonValueIdentifier(node)) {
                 const symbol = this.symbolForIdentifier(node);
                 const binding = this.closureEnvBindingForSymbol(symbol);
@@ -51620,7 +51627,7 @@ class Emitter {
     }
 
     private emitCall(call: ts.CallExpression): EmitResult {
-        const inlineClosure = this.emitNoCaptureInlineClosureCall(call);
+        const inlineClosure = this.emitInlineClosureCall(call);
         if (inlineClosure) return inlineClosure;
         // super(args) inside a subclass ctor -> Base_init((Base*)self, args)
         if (call.expression.kind === ts.SyntaxKind.SuperKeyword) {
@@ -52097,11 +52104,11 @@ class Emitter {
         return result;
     }
 
-    private inlineNoCaptureClosureBody(call: ts.CallExpression): ts.Expression | null {
+    private inlineClosureBody(call: ts.CallExpression): ts.Expression | null {
         const target = this.unwrapTransparentExpression(call.expression);
         if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return null;
         const fn = target;
-        if (!this.isNoCaptureInlineClosureCall(call) || fn.parameters.length !== 0 || call.arguments.length !== 0) return null;
+        if (!this.isInlineYieldFreeClosureCall(call) || fn.parameters.length !== 0 || call.arguments.length !== 0) return null;
         if (ts.isBlock(fn.body)) {
             if (fn.body.statements.length !== 1) return null;
             const statement = fn.body.statements[0];
@@ -52115,8 +52122,15 @@ class Emitter {
 
     private isNoCaptureInlineClosureCall(call: ts.CallExpression): boolean {
         const target = this.unwrapTransparentExpression(call.expression);
+        return this.isInlineYieldFreeClosureCall(call) &&
+            (ts.isArrowFunction(target) || ts.isFunctionExpression(target)) &&
+            this.collectClosureCaptures(target).length === 0;
+    }
+
+    private isInlineYieldFreeClosureCall(call: ts.CallExpression): boolean {
+        const target = this.unwrapTransparentExpression(call.expression);
         if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return false;
-        if (this.nodeContainsYield(target) || this.collectClosureCaptures(target).length > 0) return false;
+        if (this.nodeContainsYield(target)) return false;
         return target.parameters.every((parameter) =>
             ts.isIdentifier(parameter.name) &&
             !this.isThisParameter(parameter) &&
@@ -52125,8 +52139,8 @@ class Emitter {
         );
     }
 
-    private emitNoCaptureInlineClosureCall(call: ts.CallExpression): EmitResult | null {
-        const body = this.inlineNoCaptureClosureBody(call);
+    private emitInlineClosureCall(call: ts.CallExpression): EmitResult | null {
+        const body = this.inlineClosureBody(call);
         return body ? this.emitExpr(body) : null;
     }
 
