@@ -57,6 +57,11 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
         for (const key in { first: 1, second: 2 }) {
             nestedValue = nestedValue + "-in";
         }
+        if (inner) {
+            await later(nestedValue + "-nested-if");
+        } else {
+            await later(nestedValue + "-nested-else");
+        }
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");
@@ -112,7 +117,11 @@ nestedSuspendValue(false).then((value) => console.log("value-false", value));
 async function branchPostAwaitNestedReject(): Promise<string> {
     const first = await later("reject-first");
     if (true) {
-        await laterReject("branch-reject");
+        if (true) {
+            await laterReject("branch-reject");
+        } else {
+            await later(first + "-branch-recover");
+        }
     }
     return await later(first + "-unreachable");
 }
