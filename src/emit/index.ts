@@ -52213,7 +52213,9 @@ class Emitter {
                     (method === "parse" && node.arguments.length === 1) ||
                     (method === "UTC" && node.arguments.length <= 7);
                 const isStringStaticCall = method === "fromCharCode" || method === "fromCodePoint";
-                const isArrayStaticCall = method === "isArray" && node.arguments.length === 1;
+                const isArrayStaticCall =
+                    (method === "isArray" && node.arguments.length === 1) ||
+                    method === "of";
                 const isObjectStaticCall = method === "is" && node.arguments.length === 2;
                 const isRegExpStaticCall = method === "escape" && node.arguments.length === 1;
                 const isUrlStaticCall = method === "canParse" && node.arguments.length >= 1 && node.arguments.length <= 2;
