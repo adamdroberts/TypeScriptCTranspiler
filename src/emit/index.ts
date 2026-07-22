@@ -52159,18 +52159,20 @@ class Emitter {
         if (ts.isArrayBindingPattern(name)) {
             return name.elements.every((element) =>
                 ts.isBindingElement(element) &&
-                !element.dotDotDotToken &&
-                (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
-                this.isSupportedInlineBindingName(element.name),
+                (element.dotDotDotToken
+                    ? ts.isIdentifier(element.name) && !element.initializer
+                    : (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
+                        this.isSupportedInlineBindingName(element.name)),
             );
         }
         if (!ts.isObjectBindingPattern(name)) return false;
         return name.elements.every((element) =>
             ts.isBindingElement(element) &&
-            !element.dotDotDotToken &&
-            (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
-            (!element.propertyName || this.staticPropertyName(element.propertyName) !== null) &&
-            this.isSupportedInlineBindingName(element.name),
+            (element.dotDotDotToken
+                ? ts.isIdentifier(element.name) && !element.initializer
+                : (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
+                    (!element.propertyName || this.staticPropertyName(element.propertyName) !== null) &&
+                    this.isSupportedInlineBindingName(element.name)),
         );
     }
 
@@ -53222,14 +53224,45 @@ class Emitter {
             }
             function bindObjectPattern(pattern: ts.ObjectBindingPattern, source: string): void {
                 pattern.elements.forEach((element) => {
-                    if (
-                        !ts.isBindingElement(element) ||
-                        element.dotDotDotToken ||
-                        element.initializer && !emitter.isSupportedInlineBindingDefault(element)
-                    ) {
+                    if (!ts.isBindingElement(element)) {
                         unsupported(pattern, "object destructuring requires simple static binding elements");
                     }
-                    const property = element.propertyName ?? element.name;
+                    if (element.dotDotDotToken) {
+                        if (!ts.isIdentifier(element.name) || element.initializer) {
+                            unsupported(element, "object rest destructuring requires an identifier binding");
+                        }
+                        const excluded = pattern.elements
+                            .filter((candidate): candidate is ts.BindingElement =>
+                                ts.isBindingElement(candidate) && !candidate.dotDotDotToken,
+                            )
+                            .map((candidate) => candidate.propertyName
+                                ? emitter.staticPropertyName(candidate.propertyName)
+                                : ts.isIdentifier(candidate.name)
+                                    ? candidate.name.text
+                                    : null)
+                            .filter((key): key is string => key !== null);
+                        const sourceTmp = emitter.freshTemp("_object_rest_src");
+                        const rest = emitter.freshTemp("_object_rest");
+                        const keys = emitter.freshTemp("_object_rest_keys");
+                        const index = emitter.freshTemp("_object_rest_i");
+                        const key = emitter.freshTemp("_object_rest_key");
+                        const skip = excluded.map((name) =>
+                            `tsc_str_eq(${key}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}))`,
+                        ).join(" || ");
+                        const value = `({ tsc_value_t ${sourceTmp} = ${source}; tsc_object_t* ${rest} = tsc_object_new(); tsc_array_t* ${keys} = tsc_value_object_keys(${sourceTmp}); for (size_t ${index} = 0; ${index} < ${keys}->len; ${index}++) { tsc_str_t* ${key} = TSC_ARR(tsc_str_t*, ${keys}, ${index}); ${skip ? `if (${skip}) continue; ` : ""} tsc_object_set(${rest}, ${key}, tsc_value_get_prop(${sourceTmp}, ${key})); } tsc_value_object(${rest}); })`;
+                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
+                        if (bindingType.kind !== "value") {
+                            unsupported(element, "object rest bindings currently require a dynamic object type");
+                        }
+                        const symbol = emitter.symbolForIdentifier(element.name);
+                        if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                        argumentScope.set(symbol, value);
+                        argumentTypeScope.set(symbol, bindingType);
+                        return;
+                    }
+                    if (element.initializer && !emitter.isSupportedInlineBindingDefault(element)) {
+                        unsupported(element, "object destructuring requires literal defaults");
+                    }
                     const key = element.propertyName
                         ? emitter.staticPropertyName(element.propertyName)
                         : ts.isIdentifier(element.name)
@@ -53265,6 +53298,20 @@ class Emitter {
                 pattern.elements.forEach((element, index) => {
                     if (!ts.isBindingElement(element)) {
                         unsupported(pattern, "array destructuring does not support omitted elements");
+                    }
+                    if (element.dotDotDotToken) {
+                        if (!ts.isIdentifier(element.name) || element.initializer) {
+                            unsupported(element, "array rest destructuring requires an identifier binding");
+                        }
+                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
+                        if (bindingType.kind !== "array" || !bindingType.elem) {
+                            unsupported(element, "array rest bindings require an array type");
+                        }
+                        const symbol = emitter.symbolForIdentifier(element.name);
+                        if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                        argumentScope.set(symbol, `tsc_array_slice(${source}, ${index}, (double)${source}->len)`);
+                        argumentTypeScope.set(symbol, bindingType);
+                        return;
                     }
                     const elementType = sourceType.elem!;
                     const elementExpr = `TSC_ARR(${elementType.c}, ${source}, ${index})`;
