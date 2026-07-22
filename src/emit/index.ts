@@ -52160,7 +52160,7 @@ class Emitter {
             return name.elements.every((element) =>
                 ts.isBindingElement(element) &&
                 !element.dotDotDotToken &&
-                !element.initializer &&
+                (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
                 this.isSupportedInlineBindingName(element.name),
             );
         }
@@ -52168,10 +52168,16 @@ class Emitter {
         return name.elements.every((element) =>
             ts.isBindingElement(element) &&
             !element.dotDotDotToken &&
-            !element.initializer &&
+            (!element.initializer || this.isSupportedInlineBindingDefault(element)) &&
             (!element.propertyName || ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)) &&
             this.isSupportedInlineBindingName(element.name),
         );
+    }
+
+    private isSupportedInlineBindingDefault(element: ts.BindingElement): boolean {
+        if (!element.initializer || !ts.isIdentifier(element.name)) return false;
+        const value = this.unwrapTransparentExpression(element.initializer);
+        return this.isSimpleLazyMultiYieldLiteral(value) || ts.isRegularExpressionLiteral(value);
     }
 
     private isSupportedInlineClosureDefault(parameter: ts.ParameterDeclaration): boolean {
@@ -53185,9 +53191,42 @@ class Emitter {
             const parameter = runtimeParams[i]!;
             const parameterType = type.params?.[i] ?? this.prepareType(mapType(parameter, this.checker));
             const emitter = this;
+            function bindIdentifier(
+                element: ts.BindingElement,
+                raw: string,
+                sourceType: CType,
+            ): void {
+                if (!ts.isIdentifier(element.name)) {
+                    unsupported(element, "destructured identifier binding required");
+                }
+                const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
+                const symbol = emitter.symbolForIdentifier(element.name);
+                if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                let value = sourceType.kind === "value" && bindingType.kind !== "value"
+                    ? emitter.unboxDynamicValue(raw, bindingType)
+                    : raw;
+                if (element.initializer) {
+                    if (sourceType.kind !== "value") {
+                        unsupported(element, "destructured defaults require dynamically boxed source elements");
+                    }
+                    const fallback = emitter.emitExpr(element.initializer);
+                    const boxedFallback = emitter.coerce(fallback, T_VALUE, element.initializer);
+                    const tmp = emitter.freshTemp("_binding_default");
+                    const selected = `({ tsc_value_t ${tmp} = ${raw}; tsc_value_is_undefined(${tmp}) ? ${boxedFallback} : ${tmp}; })`;
+                    value = bindingType.kind === "value"
+                        ? selected
+                        : emitter.unboxDynamicValue(selected, bindingType);
+                }
+                argumentScope.set(symbol, value);
+                argumentTypeScope.set(symbol, bindingType);
+            }
             function bindObjectPattern(pattern: ts.ObjectBindingPattern, source: string): void {
                 pattern.elements.forEach((element) => {
-                    if (!ts.isBindingElement(element) || element.dotDotDotToken || element.initializer) {
+                    if (
+                        !ts.isBindingElement(element) ||
+                        element.dotDotDotToken ||
+                        element.initializer && !emitter.isSupportedInlineBindingDefault(element)
+                    ) {
                         unsupported(pattern, "object destructuring requires simple static binding elements");
                     }
                     const property = element.propertyName ?? element.name;
@@ -53197,11 +53236,7 @@ class Emitter {
                     const key = property.text;
                     const raw = `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`;
                     if (ts.isIdentifier(element.name)) {
-                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
-                        const symbol = emitter.symbolForIdentifier(element.name);
-                        if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
-                        argumentScope.set(symbol, bindingType.kind === "value" ? raw : emitter.unboxDynamicValue(raw, bindingType));
-                        argumentTypeScope.set(symbol, bindingType);
+                        bindIdentifier(element, raw, T_VALUE);
                     } else if (ts.isObjectBindingPattern(element.name)) {
                         bindObjectPattern(element.name, raw);
                     } else if (ts.isArrayBindingPattern(element.name)) {
@@ -53230,16 +53265,7 @@ class Emitter {
                     const elementType = sourceType.elem!;
                     const elementExpr = `TSC_ARR(${elementType.c}, ${source}, ${index})`;
                     if (ts.isIdentifier(element.name)) {
-                        const symbol = emitter.symbolForIdentifier(element.name);
-                        if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
-                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
-                        argumentScope.set(
-                            symbol,
-                            elementType.kind === "value" && bindingType.kind !== "value"
-                                    ? emitter.unboxDynamicValue(elementExpr, bindingType)
-                                : elementExpr,
-                        );
-                        argumentTypeScope.set(symbol, bindingType);
+                        bindIdentifier(element, elementExpr, elementType);
                     } else if (ts.isArrayBindingPattern(element.name)) {
                         const nestedType = elementType.kind === "value"
                             ? emitter.prepareType(mapType(element.name, emitter.checker))
