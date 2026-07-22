@@ -24134,6 +24134,12 @@ class Emitter {
                             (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, m.body) ||
                                 this.emitDirectAsyncAwaitThrowAlias(this.defs, m.body) ||
+                                this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
+                                    this.defs,
+                                    m.body,
+                                    m.parameters,
+                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
+                                ) ||
                                 this.emitAsyncAwaitDirectReturnAwaitPrelude(
                                     this.defs,
                                     m.body,
@@ -24237,12 +24243,6 @@ class Emitter {
                                     isStatic(m) ? null : { c: "self", ty: classType(name) },
                                 ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
-                                    this.defs,
-                                    m.body,
-                                    m.parameters,
-                                    isStatic(m) ? null : { c: "self", ty: classType(name) },
-                                ) ||
-                                this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
                                     this.defs,
                                     m.body,
                                     m.parameters,
@@ -25714,6 +25714,7 @@ class Emitter {
             if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
                 !this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, fd.body) &&
                 !this.emitDirectAsyncAwaitThrowAlias(this.defs, fd.body) &&
+                !this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitDirectReturnAwaitPrelude(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitInitializerReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitAssignmentReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25735,7 +25736,6 @@ class Emitter {
                 !this.emitAsyncAwaitIteratorBodyContinueReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitIteratorBodyTerminalReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitIteratorTryFinallyReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
-                !this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitLeadingReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitFourStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
                 !this.emitAsyncAwaitThreeStepReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -52638,6 +52638,12 @@ class Emitter {
                             (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitThrowAlias(body, fnBody) ||
+                                this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
+                                    body,
+                                    fnBody,
+                                    runtimeParams,
+                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
+                                ) ||
                                 this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                                     body,
                                     fnBody,
@@ -52741,12 +52747,6 @@ class Emitter {
                                     type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
                                 ) ||
                                 this.emitAsyncAwaitExpressionReturnContinuation(
-                                    body,
-                                    fnBody,
-                                    runtimeParams,
-                                    type.thisParam ? { c: "__tsc_this", ty: type.thisParam } : null,
-                                ) ||
-                                this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
                                     body,
                                     fnBody,
                                     runtimeParams,
@@ -63324,6 +63324,12 @@ class Emitter {
                     (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitThrowAlias(this.defs, info.fn.body) ||
+                        this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
+                            this.defs,
+                            info.fn.body,
+                            info.fn.parameters,
+                            thisType ? { c: "__tsc_this", ty: thisType } : null,
+                        ) ||
                         this.emitAsyncAwaitPreludeExpressionReturnContinuation(
                             this.defs,
                             info.fn.body,

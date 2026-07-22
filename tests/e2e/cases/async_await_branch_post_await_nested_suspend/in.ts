@@ -31,6 +31,17 @@ const runner = new NestedSuspendRunner();
 runner.run(true).then((value) => console.log("method-true", value));
 runner.run(false).then((value) => console.log("method-false", value));
 
+const nestedSuspendValue = async (flag: boolean): Promise<string> => {
+    const first = await later("value-first");
+    if (flag) {
+        await later(first + "-branch");
+    }
+    return await later(first + "-return");
+};
+
+nestedSuspendValue(true).then((value) => console.log("value-true", value));
+nestedSuspendValue(false).then((value) => console.log("value-false", value));
+
 async function branchPostAwaitNestedReject(): Promise<string> {
     const first = await later("reject-first");
     if (true) {
