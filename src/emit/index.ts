@@ -29111,7 +29111,6 @@ class Emitter {
             }
             return indices;
         });
-        if (awaitSteps.some((indices, index) => indices.length === 0 && leaves[index]!.statements.length > 0)) return null;
         const stepCount = Math.max(...awaitSteps.map((indices) => indices.length));
         if (stepCount < 1) return null;
         const hasUnequalSteps = awaitSteps.some((indices) => indices.length !== stepCount);
@@ -29272,7 +29271,9 @@ class Emitter {
                     variable: step?.variable ?? null,
                     condition: leaf.condition,
                     beforeStatements: !skip && stepIndex === 0 ? leaf.statements.slice(0, awaitIndex!) : [],
-                    afterStatements: !skip ? leaf.statements.slice(awaitIndex! + 1, nextAwaitIndex) : [],
+                    afterStatements: skip && awaitSteps[leafIndex]!.length === 0 && stepIndex === 0
+                        ? leaf.statements
+                        : !skip ? leaf.statements.slice(awaitIndex! + 1, nextAwaitIndex) : [],
                 });
             }
             const firstBranch = branches.find((branch) => !branch.skip);
