@@ -54,7 +54,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Awaited counted `for` body continuations now cover the same awaited body/catch/finally chain while preserving the loop incrementor across `continue`. Test: `async_await_for_body_try_await_catch_await_finally_await_continue`.
 - Awaited `for…of` body continuations now cover the two-stage awaited body/catch/finally chain while preserving iterator progression across `continue`. Test: `async_await_for_of_body_try_await_catch_await_finally_continue`.
 - Awaited `for…in` body continuations now cover the two-stage awaited body/catch/finally chain while preserving iterator progression across `continue`. Test: `async_await_for_in_body_try_await_catch_await_finally_continue`.
-- Awaited `for…in` body continuations now cover direct awaited body work while preserving iterator progression across `continue`. Test: `async_await_for_in_body_await_continue`.
+- Awaited `for…in` body continuations now cover delayed direct awaited body work while preserving iterator progression across `continue`. Test: `async_await_for_in_body_await_continue`.
+- Awaited `for…of` body continuations now cover delayed direct awaited body work while preserving iterator progression across `continue`. Test: `async_await_for_of_body_await_continue`.
 - Awaited `for…in` body continuations now route direct awaited body work through `break` and post-loop fallthrough. Test: `async_await_for_in_body_await_break`.
 - Awaited `for…in` body continuations now settle an awaited return after direct awaited body work. Test: `async_await_for_in_body_await_return`.
 - Awaited `for…of` body continuations now route direct awaited body work through `break` and awaited `return` terminals. Tests: `async_await_for_of_body_await_break`, `async_await_for_of_body_await_return`.
