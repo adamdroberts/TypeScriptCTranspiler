@@ -77,6 +77,8 @@ spread-call-leaf-before 77 78 0
 spread-call-leaf true 10 1
 function-value-leaf-before 105 106 0
 function-value-leaf true 11 1
+arrow-function-value-leaf-before 107 108 0
+arrow-function-value-leaf true 12 1
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21
