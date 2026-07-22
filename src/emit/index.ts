@@ -35717,6 +35717,10 @@ class Emitter {
                 bodyPreludeStatements = [];
                 bodyPostAwaitStatements = bodyContinueStatements.slice(1);
                 bodyAwaitCatchStatements = tryStatement.catchClause!.block.statements;
+                bodyAwaitCatchSymbol = tryStatement.catchClause!.variableDeclaration &&
+                    ts.isIdentifier(tryStatement.catchClause!.variableDeclaration.name)
+                    ? this.symbolForIdentifier(tryStatement.catchClause!.variableDeclaration.name) ?? undefined
+                    : undefined;
             } else if (simpleAwaitCatchFinally) {
                 const tryStatement = bodyContinueStatements[0]! as ts.TryStatement;
                 const awaitStatement = tryStatement.tryBlock.statements[0]! as ts.ExpressionStatement;
@@ -35727,6 +35731,10 @@ class Emitter {
                 bodyPostAwaitStatements = bodyContinueStatements.slice(1);
                 bodyAwaitCatchStatements = tryStatement.catchClause!.block.statements;
                 bodyAwaitFinallyStatements = tryStatement.finallyBlock!.statements;
+                bodyAwaitCatchSymbol = tryStatement.catchClause!.variableDeclaration &&
+                    ts.isIdentifier(tryStatement.catchClause!.variableDeclaration.name)
+                    ? this.symbolForIdentifier(tryStatement.catchClause!.variableDeclaration.name) ?? undefined
+                    : undefined;
             } else if (simpleAwaitCatchAwait) {
                 const tryStatement = bodyContinueStatements[0]! as ts.TryStatement;
                 const awaitStatement = tryStatement.tryBlock.statements[0]! as ts.ExpressionStatement;
