@@ -26,6 +26,7 @@ interface BaseShape {
 }
 
 interface KeyShape extends BaseShape {
+    alpha: string;
     beta: string;
 }
 

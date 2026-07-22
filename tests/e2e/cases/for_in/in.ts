@@ -4,6 +4,7 @@ interface BasePoint {
 }
 
 interface Point extends BasePoint {
+    x: number;
     z: number;
 }
 
