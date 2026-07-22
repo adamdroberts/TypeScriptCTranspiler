@@ -291,6 +291,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyReturnExpr: ts.Expression;
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
     bodyPostAwaitStatements: readonly ts.Statement[];
+    bodyAwaitFinallyStatements?: readonly ts.Statement[];
     bodyPreludeStatements: readonly ts.Statement[];
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyContinue: boolean;
@@ -35600,6 +35601,7 @@ class Emitter {
             return found;
         };
         const directBodyAwait = this.unwrapTransparentExpression(bodyExpression);
+        let bodyAwaitFinallyStatements: readonly ts.Statement[] = [];
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -35622,7 +35624,21 @@ class Emitter {
                 visit(statement);
                 return found;
             });
-            if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
+            const simpleAwaitFinally = bodyContinueStatements.length === 1 && ts.isTryStatement(bodyContinueStatements[0]!) &&
+                !bodyContinueStatements[0]!.catchClause && !!bodyContinueStatements[0]!.finallyBlock &&
+                bodyContinueStatements[0]!.tryBlock.statements.length === 1 &&
+                ts.isExpressionStatement(bodyContinueStatements[0]!.tryBlock.statements[0]!) &&
+                ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.tryBlock.statements[0]! as ts.ExpressionStatement).expression));
+            if (simpleAwaitFinally) {
+                const tryStatement = bodyContinueStatements[0]! as ts.TryStatement;
+                const awaitStatement = tryStatement.tryBlock.statements[0]! as ts.ExpressionStatement;
+                const awaitExpression = this.unwrapTransparentExpression(awaitStatement.expression) as ts.AwaitExpression;
+                bodyAwaitExpr = awaitExpression;
+                bodyAwaitExprs = [awaitExpression];
+                bodyPreludeStatements = [];
+                bodyPostAwaitStatements = [];
+                bodyAwaitFinallyStatements = tryStatement.finallyBlock!.statements;
+            } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
                 const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[0]!.statement);
                 const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[bodyAwaitStatements.length - 1]!.statement);
                 const awaitStatements = new Set<ts.Statement>(bodyAwaitStatements.map(({ statement }) => statement));
@@ -35980,6 +35996,7 @@ class Emitter {
         visitReferences(condition);
         for (const statement of bodyPreludeStatements) visitReferences(statement);
         for (const statement of bodyPostAwaitStatements) visitReferences(statement);
+        for (const statement of bodyAwaitFinallyStatements) visitReferences(statement);
         for (const awaitExpr of bodyAwaitExprs) visitReferences(awaitExpr);
         for (const awaitExpr of bodyContinueElseAwaitExprs) visitReferences(awaitExpr);
         for (const statement of bodyContinueElsePreludeStatements) visitReferences(statement);
@@ -36012,6 +36029,7 @@ class Emitter {
             bodyReturnExpr,
             bodyAwaitedAliasSymbols,
             bodyPostAwaitStatements,
+            bodyAwaitFinallyStatements,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyContinue,
@@ -36418,6 +36436,7 @@ class Emitter {
                     buf.line(`${awaitedTypes[index]!.c} ${bodyValueVar} = ${bodyValue};`);
                     buf.line(`(void)${bodyValueVar};`);
                 }
+                for (const statement of continuation.bodyAwaitFinallyStatements ?? []) this.emitStmt(buf, statement);
                 if (index + 1 < names.length) {
                     const nextSource = this.emitExpr(bodyAwaitExprs[index + 1]!.expression);
                     buf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(nextSource, promiseTypes[index + 1]!, bodyAwaitExprs[index + 1]!.expression)};`);
