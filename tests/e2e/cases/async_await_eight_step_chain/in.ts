@@ -21,6 +21,9 @@ async function declaration(): Promise<string> {
     for (let index = 0; index < 1; index++) {
         loopMarker = "";
     }
+    for (const item of [one]) {
+        loopMarker = item;
+    }
     const two = await delay(2, one + "2");
     const three = await delay(3, two + "3");
     const four = await delay(4, three + "4");
@@ -58,6 +61,9 @@ class Chain {
         } while (loopMarker.length > 0);
         for (let index = 0; index < 1; index++) {
             loopMarker = "";
+        }
+        for (const item of [one]) {
+            loopMarker = item;
         }
         const two = await delay(2, one + "b");
         const three = await delay(3, two + "c");
@@ -97,6 +103,9 @@ const value = async (): Promise<string> => {
     for (let index = 0; index < 1; index++) {
         loopMarker = "";
     }
+    for (const item of [one]) {
+        loopMarker = item;
+    }
     const two = await delay(2, one + "B");
     const three = await delay(3, two + "C");
     const four = await delay(4, three + "D");
@@ -135,6 +144,9 @@ async function branchEight(flag: boolean): Promise<string> {
         for (let index = 0; index < 1; index++) {
             loopMarker = "";
         }
+        for (const item of [one]) {
+            loopMarker = item;
+        }
         const two = await delay(22, one + "1");
         const three = await delay(23, two + "2");
         const four = await delay(24, three + "3");
@@ -169,6 +181,9 @@ async function branchEight(flag: boolean): Promise<string> {
     } while (loopMarker.length > 0);
     for (let index = 0; index < 1; index++) {
         loopMarker = "";
+    }
+    for (const item of [one]) {
+        loopMarker = item;
     }
     const two = await delay(30, one + "1");
     const three = await delay(31, two + "2");
@@ -209,6 +224,9 @@ class BranchChain {
             for (let index = 0; index < 1; index++) {
                 loopMarker = "";
             }
+            for (const item of [one]) {
+                loopMarker = item;
+            }
             const two = await delay(38, one + "1");
             const three = await delay(39, two + "2");
             const four = await delay(40, three + "3");
@@ -243,6 +261,9 @@ class BranchChain {
         } while (loopMarker.length > 0);
         for (let index = 0; index < 1; index++) {
             loopMarker = "";
+        }
+        for (const item of [one]) {
+            loopMarker = item;
         }
         const two = await delay(46, one + "1");
         const three = await delay(47, two + "2");
@@ -283,6 +304,9 @@ const branchValue = async (flag: boolean): Promise<string> => {
         for (let index = 0; index < 1; index++) {
             loopMarker = "";
         }
+        for (const item of [one]) {
+            loopMarker = item;
+        }
         const two = await delay(54, one + "1");
         const three = await delay(55, two + "2");
         const four = await delay(56, three + "3");
@@ -317,6 +341,9 @@ const branchValue = async (flag: boolean): Promise<string> => {
     } while (loopMarker.length > 0);
     for (let index = 0; index < 1; index++) {
         loopMarker = "";
+    }
+    for (const item of [one]) {
+        loopMarker = item;
     }
     const two = await delay(62, one + "1");
     const three = await delay(63, two + "2");
