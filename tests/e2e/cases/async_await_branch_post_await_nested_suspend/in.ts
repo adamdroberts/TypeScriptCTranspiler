@@ -54,6 +54,9 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
         for (const suffix of ["-of", "-of"]) {
             nestedValue = nestedValue + suffix;
         }
+        for (const key in { first: 1, second: 2 }) {
+            nestedValue = nestedValue + "-in";
+        }
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");

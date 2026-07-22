@@ -3,8 +3,8 @@ false first-return
 method-false method-first-return
 value-false value-first-return
 true first-return
-control-true-if control-first-if-switch-loop-loop-for-for-do-do-of-of-return
-control-true-else control-first-else-default-loop-loop-for-for-do-do-of-of-return
+control-true-if control-first-if-switch-loop-loop-for-for-do-do-of-of-in-in-return
+control-true-else control-first-else-default-loop-loop-for-for-do-do-of-of-in-in-return
 control-false-try control-first-finally-return
 method-true method-first-return
 value-true value-first-return
