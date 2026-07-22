@@ -41,6 +41,8 @@ logical-leaf-before left right 0
 logical-leaf true AmidB 1
 nullish-leaf-before left right 0
 nullish-leaf true AmidB 1
+dynamic-logical-leaf-before left right 0
+dynamic-logical-leaf true AmidB 1
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21

@@ -42969,7 +42969,8 @@ class Emitter {
             expr.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken) return false;
         const left = this.prepareType(mapTsType(expr.left, this.checker.getTypeAtLocation(expr.left), this.checker));
         const right = this.prepareType(mapTsType(expr.right, this.checker.getTypeAtLocation(expr.right), this.checker));
-        return left.kind === "string" && right.kind === "string";
+        return (left.kind === "string" && right.kind === "string") ||
+            left.kind === "value" || right.kind === "value";
     }
 
     private lazyGeneratorMaxMultiYieldReturn(node: ts.Node): number {
