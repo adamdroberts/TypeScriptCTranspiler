@@ -75158,6 +75158,13 @@ class Emitter {
                 }
             }
             if (pa.name.text === "length") {
+                if (isOpt) {
+                    return this.emitSequencedExpr(
+                        T_VALUE,
+                        [{ value: recv }],
+                        ([obj]) => `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : tsc_value_num(tsc_value_length(${obj}))`,
+                    );
+                }
                 return { c: `tsc_value_length(${recv.c})`, ty: T_NUMBER };
             }
             const key = pa.name.text;
