@@ -31,6 +31,13 @@ async function branchPostAwaitNestedControl(flag: boolean, inner: boolean): Prom
         } else {
             nestedValue = first + "-else";
         }
+        switch (inner ? 1 : 0) {
+            case 1:
+                nestedValue = nestedValue + "-switch";
+                break;
+            default:
+                nestedValue = nestedValue + "-default";
+        }
         await later(nestedValue + "-await");
     } else {
         await later(first + "-alternate");
