@@ -52223,10 +52223,22 @@ class Emitter {
                 const isUrlStaticCall = method === "canParse" && node.arguments.length >= 1 && node.arguments.length <= 2;
                 const isJsonStaticCall = method === "parse" && node.arguments.length === 1;
                 const isJsonStringifyCall = method === "stringify" && node.arguments.length === 1;
+                const isPromiseTryLiteralCallback = method === "try" && node.arguments.length === 1 && (() => {
+                    const callback = this.unwrapTransparentExpression(node.arguments[0]!);
+                    if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return false;
+                    if (callback.parameters.length !== 0 || this.nodeContainsYield(callback)) return false;
+                    const body = ts.isBlock(callback.body)
+                        ? callback.body.statements.length === 1 && ts.isReturnStatement(callback.body.statements[0])
+                            ? callback.body.statements[0].expression
+                            : undefined
+                        : callback.body;
+                    return !!body && this.isSimpleLazyMultiYieldLiteral(this.unwrapTransparentExpression(body));
+                })();
                 const isPromiseStaticCall =
                     (method === "resolve" && node.arguments.length <= 1) ||
                     ((method === "all" || method === "allSettled" || method === "race" || method === "any") && node.arguments.length === 1) ||
-                    (method === "withResolvers" && node.arguments.length === 0);
+                    (method === "withResolvers" && node.arguments.length === 0) ||
+                    isPromiseTryLiteralCallback;
                 const isGlobalStringCall =
                     ts.isIdentifier(expression) &&
                     new Set(["encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent", "btoa", "atob"]).has(expression.text) &&
@@ -52270,6 +52282,7 @@ class Emitter {
                     supported = false;
                     return;
                 }
+                if (isPromiseTryLiteralCallback) return;
                 for (const argument of node.arguments) visit(argument);
                 return;
             }
