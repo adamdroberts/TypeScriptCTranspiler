@@ -35654,7 +35654,7 @@ class Emitter {
                 bodyContinueStatements[0]!.finallyBlock!.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
                 bodyContinueStatements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement));
             const simpleAwaitCatchAwait = bodyContinueStatements.length >= 1 && ts.isTryStatement(bodyContinueStatements[0]!) &&
-                !!bodyContinueStatements[0]!.catchClause && !bodyContinueStatements[0]!.finallyBlock &&
+                !!bodyContinueStatements[0]!.catchClause &&
                 !bodyContinueStatements[0]!.catchClause!.variableDeclaration &&
                 bodyContinueStatements[0]!.tryBlock.statements.length === 1 &&
                 ts.isExpressionStatement(bodyContinueStatements[0]!.tryBlock.statements[0]!) &&
@@ -35662,6 +35662,7 @@ class Emitter {
                 bodyContinueStatements[0]!.catchClause!.block.statements.length === 1 &&
                 ts.isExpressionStatement(bodyContinueStatements[0]!.catchClause!.block.statements[0]!) &&
                 ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.catchClause!.block.statements[0]! as ts.ExpressionStatement).expression)) &&
+                (!bodyContinueStatements[0]!.finallyBlock || bodyContinueStatements[0]!.finallyBlock!.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) &&
                 bodyContinueStatements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement));
             if (simpleAwaitFinally) {
                 const tryStatement = bodyContinueStatements[0]! as ts.TryStatement;
@@ -35726,6 +35727,7 @@ class Emitter {
                 bodyPreludeStatements = [];
                 bodyPostAwaitStatements = bodyContinueStatements.slice(1);
                 bodyAwaitCatchAwaitExpr = catchAwaitExpression;
+                bodyAwaitFinallyStatements = tryStatement.finallyBlock?.statements ?? [];
             } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
                 const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[0]!.statement);
                 const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[bodyAwaitStatements.length - 1]!.statement);
@@ -36166,7 +36168,7 @@ class Emitter {
                         ...continuation,
                         bodyAwaitExpr: continuation.bodyAwaitCatchAwaitExpr,
                         bodyAwaitExprs: [continuation.bodyAwaitCatchAwaitExpr],
-                        bodyAwaitCatchStatements: [],
+                        bodyAwaitCatchStatements: undefined,
                         bodyAwaitCatchAwaitExpr: undefined,
                         bodyAwaitCatchAdapter: undefined,
                     },
@@ -36614,6 +36616,16 @@ class Emitter {
                 buf.open("else");
                 buf.line(`${names[1]}(${rejectedFinallyEnvVar});`);
                 buf.close();
+            } else if (index === 0 && continuation.bodyAwaitFinallyStatements && continuation.bodyAwaitFinallyStatements.length > 0) {
+                this.argumentValueScopes.push(scope);
+                if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
+                try {
+                    for (const statement of continuation.bodyAwaitFinallyStatements) this.emitStmt(buf, statement);
+                } finally {
+                    if (continuation.thisValue) this.functionThisStack.pop();
+                    this.argumentValueScopes.pop();
+                }
+                buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
             } else {
                 buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
             }
