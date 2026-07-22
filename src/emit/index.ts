@@ -52225,7 +52225,8 @@ class Emitter {
                 const isJsonStringifyCall = method === "stringify" && node.arguments.length === 1;
                 const isPromiseStaticCall =
                     (method === "resolve" && node.arguments.length <= 1) ||
-                    ((method === "all" || method === "allSettled" || method === "race" || method === "any") && node.arguments.length === 1);
+                    ((method === "all" || method === "allSettled" || method === "race" || method === "any") && node.arguments.length === 1) ||
+                    (method === "withResolvers" && node.arguments.length === 0);
                 const isGlobalStringCall =
                     ts.isIdentifier(expression) &&
                     new Set(["encodeURI", "encodeURIComponent", "decodeURI", "decodeURIComponent", "btoa", "atob"]).has(expression.text) &&
