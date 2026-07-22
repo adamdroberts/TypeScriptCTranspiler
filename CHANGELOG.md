@@ -56,6 +56,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Awaited `for…in` body continuations now cover the two-stage awaited body/catch/finally chain while preserving iterator progression across `continue`. Test: `async_await_for_in_body_try_await_catch_await_finally_continue`.
 - Awaited `for…in` body continuations now cover direct awaited body work while preserving iterator progression across `continue`. Test: `async_await_for_in_body_await_continue`.
 - Awaited `for…in` body continuations now route direct awaited body work through `break` and post-loop fallthrough. Test: `async_await_for_in_body_await_break`.
+- Awaited `for…in` body continuations now settle an awaited return after direct awaited body work. Test: `async_await_for_in_body_await_return`.
 - Awaited `do…while` bodies now preserve an await-free caught-throw `try`/`catch`/`finally` prelude on the initial and repeated iterations before awaited body continuation and condition re-entry. Test: `async_await_do_body_try_catch_finally_continue`.
 - Fixed awaited `do…while` body preludes with a throwing `finally`: unreachable awaited-body and fallthrough code is no longer emitted after the initial rejection, avoiding invalid continuation captures. Test: `async_await_do_body_try_finally_throw_continue`.
 - Awaited `do…while` re-entry now preserves a later await-free `finally` throw in the body prelude, rejecting the resumed loop before another awaited body step. Test: `async_await_do_body_late_finally_throw_continue`.
