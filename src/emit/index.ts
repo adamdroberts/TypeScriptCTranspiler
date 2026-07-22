@@ -42901,6 +42901,10 @@ class Emitter {
             if (ts.isPostfixUnaryExpression(unwrapped)) {
                 return !this.nodeContainsYield(unwrapped);
             }
+            if (ts.isPrefixUnaryExpression(unwrapped) &&
+                (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
+                return !this.nodeContainsYield(unwrapped);
+            }
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isPrefixUnaryExpression(unwrapped)) {
@@ -44081,6 +44085,10 @@ class Emitter {
                 return this.emitExpr(unwrapped);
             }
             if (ts.isPostfixUnaryExpression(unwrapped)) {
+                return this.emitExpr(unwrapped);
+            }
+            if (ts.isPrefixUnaryExpression(unwrapped) &&
+                (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
                 return this.emitExpr(unwrapped);
             }
             if (ts.isTypeOfExpression(unwrapped)) {

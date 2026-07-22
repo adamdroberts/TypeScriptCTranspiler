@@ -118,6 +118,12 @@ function* updateLeaves(): Generator<number, number, number> {
     return (yield 45) + updateLeafCounter++ + (yield 46);
 }
 
+let prefixLeafCounter = 0;
+
+function* prefixUpdateLeaves(): Generator<number, number, number> {
+    return (yield 47) + (++prefixLeafCounter) + (yield 48);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -311,6 +317,11 @@ const updateLeafFirst: any = updateLeafIter.next();
 const updateLeafSecond: any = updateLeafIter.next(2);
 const updateLeafDone: any = updateLeafIter.next(3);
 console.log("update-leaf", updateLeafFirst.value, updateLeafSecond.value, updateLeafDone.done, updateLeafDone.value, updateLeafCounter);
+const prefixLeafIter = prefixUpdateLeaves();
+const prefixLeafFirst: any = prefixLeafIter.next();
+const prefixLeafSecond: any = prefixLeafIter.next(2);
+const prefixLeafDone: any = prefixLeafIter.next(3);
+console.log("prefix-leaf", prefixLeafFirst.value, prefixLeafSecond.value, prefixLeafDone.done, prefixLeafDone.value, prefixLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
