@@ -66,3 +66,24 @@ branchPostAwaitNestedReject().then(
     (value) => console.log("reject-value", value),
     (reason) => console.log("reject-reason", reason),
 );
+
+async function branchPostAwaitNestedThrow(flag: boolean): Promise<string> {
+    const first = await later("throw-first");
+    if (flag) {
+        const branchValue = await later(first + "-branch");
+        await later(branchValue + "-branch-two");
+    } else {
+        const branchValue = await later(first + "-else");
+        await later(branchValue + "-else-two");
+    }
+    throw await later(first + "-throw");
+}
+
+branchPostAwaitNestedThrow(true).then(
+    (value) => console.log("throw-value", value),
+    (reason) => console.log("throw-reason-true", reason),
+);
+branchPostAwaitNestedThrow(false).then(
+    (value) => console.log("throw-value", value),
+    (reason) => console.log("throw-reason-false", reason),
+);
