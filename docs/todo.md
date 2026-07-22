@@ -10,7 +10,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - `Promise.withResolvers<T>()` is now covered as a bounded typed resolver-record surface: boxed records preserve the `Promise<T>` type of `.promise` while resolver functions retain runtime thenable adoption; richer resolver-record operations remain deferred. Test: `promise_with_resolvers`.
 
-- The dedicated long-chain fixture now verifies eleven sequential awaited locals across declarations, class methods, async function values, and branch fallthroughs; the broader multi-suspension state-machine and nested suspension graphs remain deferred. Test: `async_await_eight_step_chain`.
+- The dedicated long-chain fixture now verifies twelve sequential awaited locals across declarations, class methods, async function values, and branch fallthroughs; the broader multi-suspension state-machine and nested suspension graphs remain deferred. Test: `async_await_eight_step_chain`.
 
 This is the next item that most directly expands what programs can be written against `tsc2c`.
 
