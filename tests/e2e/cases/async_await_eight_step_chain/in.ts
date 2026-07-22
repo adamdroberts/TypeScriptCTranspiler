@@ -47,11 +47,11 @@ async function declaration(): Promise<string> {
         loopMarker = one;
     }
     if (one.length < 0) {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = one;
         loopMarker = branchMarker;
     }
@@ -119,11 +119,11 @@ class Chain {
             loopMarker = one;
         }
         if (one.length < 0) {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = one;
             loopMarker = branchMarker;
         }
@@ -191,11 +191,11 @@ const value = async (): Promise<string> => {
         loopMarker = one;
     }
     if (one.length < 0) {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = one;
         loopMarker = branchMarker;
     }
@@ -263,11 +263,11 @@ async function branchEight(flag: boolean): Promise<string> {
             loopMarker = one;
         }
         if (one.length < 0) {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = one;
             loopMarker = branchMarker;
         }
@@ -332,11 +332,11 @@ async function branchEight(flag: boolean): Promise<string> {
         loopMarker = one;
     }
     if (one.length < 0) {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = one;
         loopMarker = branchMarker;
     }
@@ -405,11 +405,11 @@ class BranchChain {
                 loopMarker = one;
             }
             if (one.length < 0) {
-                let branchMarker = "";
+                let branchMarker;
                 branchMarker = "never";
                 loopMarker = branchMarker;
             } else {
-                let branchMarker = "";
+                let branchMarker;
                 branchMarker = one;
                 loopMarker = branchMarker;
             }
@@ -474,11 +474,11 @@ class BranchChain {
             loopMarker = one;
         }
         if (one.length < 0) {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = one;
             loopMarker = branchMarker;
         }
@@ -547,11 +547,11 @@ const branchValue = async (flag: boolean): Promise<string> => {
             loopMarker = one;
         }
         if (one.length < 0) {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            let branchMarker = "";
+            let branchMarker;
             branchMarker = one;
             loopMarker = branchMarker;
         }
@@ -616,11 +616,11 @@ const branchValue = async (flag: boolean): Promise<string> => {
         loopMarker = one;
     }
     if (one.length < 0) {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        let branchMarker = "";
+        let branchMarker;
         branchMarker = one;
         loopMarker = branchMarker;
     }

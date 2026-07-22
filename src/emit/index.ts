@@ -29779,7 +29779,7 @@ class Emitter {
                     }
                 }
             } else if (ts.isIfStatement(stmt)) {
-                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt)) return null;
+                if (!this.asyncAwaitInterstitialControlFlowSupported(stmt, true)) return null;
             } else if (ts.isSwitchStatement(stmt)) {
                 if (!this.asyncAwaitInterstitialControlFlowSupported(stmt)) return null;
             } else if (ts.isWhileStatement(stmt) || ts.isDoStatement(stmt) || ts.isForStatement(stmt) ||
