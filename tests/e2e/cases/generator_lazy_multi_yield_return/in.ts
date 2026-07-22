@@ -332,6 +332,15 @@ function* spreadCallLeaves(): Generator<number, number, number> {
     return (yield 77) + spreadCallLeaf(...([2, 3] as number[])) + (yield 78);
 }
 
+let functionValueLeafCounter = 0;
+function functionValueLeaf(): number {
+    functionValueLeafCounter++;
+    return 6;
+}
+function* functionValueLeaves(fn: () => number): Generator<number, number, number> {
+    return (yield 105) + fn() + (yield 106);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -690,6 +699,12 @@ const spreadCallLeafSecond: any = spreadCallLeafIter.next(2);
 console.log("spread-call-leaf-before", spreadCallLeafFirst.value, spreadCallLeafSecond.value, spreadCallLeafCounter);
 const spreadCallLeafDone: any = spreadCallLeafIter.next(3);
 console.log("spread-call-leaf", spreadCallLeafDone.done, spreadCallLeafDone.value, spreadCallLeafCounter);
+const functionValueLeafIter = functionValueLeaves(functionValueLeaf);
+const functionValueLeafFirst: any = functionValueLeafIter.next();
+const functionValueLeafSecond: any = functionValueLeafIter.next(2);
+console.log("function-value-leaf-before", functionValueLeafFirst.value, functionValueLeafSecond.value, functionValueLeafCounter);
+const functionValueLeafDone: any = functionValueLeafIter.next(3);
+console.log("function-value-leaf", functionValueLeafDone.done, functionValueLeafDone.value, functionValueLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
