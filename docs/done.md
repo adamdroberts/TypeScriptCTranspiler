@@ -465,6 +465,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also preserve direct pre-return `const` locals with yield-free initializers across suspension points. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve initialized `let` locals proven not to be mutated in the generator body. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve initialized mutable `let` locals mutated between suspension points. Test: `generator_lazy_multi_yield_return`
+- Finite lazy multi-yield returns also preserve simple uninitialized `let` locals assigned before use after a suspension point. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve outer captured parameter identifiers through the lazy generator environment. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve outer captured local identifiers through closure-cell pointers. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also preserve non-computed property reads from stable receivers across suspension points. Test: `generator_lazy_multi_yield_return`
