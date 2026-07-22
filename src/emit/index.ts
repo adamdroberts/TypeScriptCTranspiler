@@ -29087,9 +29087,17 @@ class Emitter {
             const statements: ts.Statement[] = [];
             for (const statement of sourceStatements) {
                 if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length > 1) {
-                    const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(statement);
-                    if (!splitStatements) return false;
-                    statements.push(...splitStatements);
+                    const hasDirectAwaitInitializer = statement.declarationList.declarations.some((declaration) => {
+                        const initializer = declaration.initializer && this.unwrapTransparentExpression(declaration.initializer);
+                        return !!initializer && ts.isAwaitExpression(initializer);
+                    });
+                    if (hasDirectAwaitInitializer) {
+                        const splitStatements = this.asyncAwaitSplitAllAwaitedDeclaration(statement);
+                        if (!splitStatements) return false;
+                        statements.push(...splitStatements);
+                    } else {
+                        statements.push(statement);
+                    }
                 } else {
                     statements.push(statement);
                 }
