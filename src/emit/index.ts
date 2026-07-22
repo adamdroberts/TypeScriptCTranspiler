@@ -52131,11 +52131,11 @@ class Emitter {
         const target = this.unwrapTransparentExpression(call.expression);
         if (!ts.isArrowFunction(target) && !ts.isFunctionExpression(target)) return false;
         if (this.nodeContainsYield(target)) return false;
+        if (call.arguments.some((argument) => ts.isSpreadElement(argument))) return false;
         return target.parameters.every((parameter) =>
             ts.isIdentifier(parameter.name) &&
             !this.isThisParameter(parameter) &&
-            !parameter.initializer &&
-            !parameter.dotDotDotToken,
+            !parameter.initializer,
         );
     }
 
@@ -52816,6 +52816,9 @@ class Emitter {
             unsupported(call.expression, "call target is not a function value");
         }
         const params = callee.ty.params ?? [];
+        const sig = this.checker.getResolvedSignature(call);
+        if (!sig) unsupported(call, "unresolved function value call signature");
+        const sigParams = sig.getParameters();
         if (call.arguments.some((arg) => ts.isSpreadElement(arg))) {
             const argList = this.emitSpreadCallArgumentList(call.arguments);
             const ret = this.prepareType(callee.ty.ret);
@@ -52834,15 +52837,15 @@ class Emitter {
             if (callee.lazyGeneratorFactory) result.lazyGenerator = true;
             return result;
         }
-        if (call.arguments.length > params.length) {
+        const hasRestParameter = sigParams.some((param) =>
+            !!param.valueDeclaration && ts.isParameter(param.valueDeclaration) && !!param.valueDeclaration.dotDotDotToken,
+        );
+        if (call.arguments.length > params.length && !hasRestParameter) {
             unsupported(
                 call,
                 `function value expects at most ${params.length} args, got ${call.arguments.length}`,
             );
         }
-        const sig = this.checker.getResolvedSignature(call);
-        if (!sig) unsupported(call, "unresolved function value call signature");
-        const sigParams = sig.getParameters();
         const specs: SequencedCallArg[] = [
             { value: callee, target: callee.ty, node: call.expression },
             ...(sigParams.length > 0
