@@ -13,7 +13,8 @@ async function declaration(): Promise<string> {
             switchMarker = "";
             break;
     }
-    let loopMarker = "x";
+    var loopMarker;
+    loopMarker = "x";
     while (loopMarker.length > 0) {
         loopMarker = "";
     }
@@ -87,7 +88,8 @@ class Chain {
                 switchMarker = "";
                 break;
         }
-        let loopMarker = "x";
+        var loopMarker;
+        loopMarker = "x";
         while (loopMarker.length > 0) {
             loopMarker = "";
         }
@@ -161,7 +163,8 @@ const value = async (): Promise<string> => {
             switchMarker = "";
             break;
     }
-    let loopMarker = "x";
+    var loopMarker;
+    loopMarker = "x";
     while (loopMarker.length > 0) {
         loopMarker = "";
     }
@@ -235,7 +238,8 @@ async function branchEight(flag: boolean): Promise<string> {
                 switchMarker = "";
                 break;
         }
-        let loopMarker = "x";
+        var loopMarker;
+        loopMarker = "x";
         while (loopMarker.length > 0) {
             loopMarker = "";
         }
@@ -306,7 +310,8 @@ async function branchEight(flag: boolean): Promise<string> {
             switchMarker = "";
             break;
     }
-    let loopMarker = "x";
+    var loopMarker;
+    loopMarker = "x";
     while (loopMarker.length > 0) {
         loopMarker = "";
     }
@@ -381,7 +386,8 @@ class BranchChain {
                     switchMarker = "";
                     break;
             }
-            let loopMarker = "x";
+            var loopMarker;
+            loopMarker = "x";
             while (loopMarker.length > 0) {
                 loopMarker = "";
             }
@@ -452,7 +458,8 @@ class BranchChain {
                 switchMarker = "";
                 break;
         }
-        let loopMarker = "x";
+        var loopMarker;
+        loopMarker = "x";
         while (loopMarker.length > 0) {
             loopMarker = "";
         }
@@ -527,7 +534,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
                 switchMarker = "";
                 break;
         }
-        let loopMarker = "x";
+        var loopMarker;
+        loopMarker = "x";
         while (loopMarker.length > 0) {
             loopMarker = "";
         }
@@ -598,7 +606,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
             switchMarker = "";
             break;
     }
-    let loopMarker = "x";
+    var loopMarker;
+    loopMarker = "x";
     while (loopMarker.length > 0) {
         loopMarker = "";
     }
