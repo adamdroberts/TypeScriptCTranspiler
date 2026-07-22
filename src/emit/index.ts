@@ -42932,6 +42932,9 @@ class Emitter {
             if (this.isAssignmentOperatorKind(op)) {
                 return !this.nodeContainsYield(unwrapped);
             }
+            if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
+                return !this.nodeContainsYield(unwrapped);
+            }
             if (op === ts.SyntaxKind.InstanceOfKeyword) return visit(unwrapped.left);
             if (![ts.SyntaxKind.CommaToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
                 ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
@@ -42958,6 +42961,14 @@ class Emitter {
             expr.kind === ts.SyntaxKind.TrueKeyword ||
             expr.kind === ts.SyntaxKind.FalseKeyword ||
             expr.kind === ts.SyntaxKind.NullKeyword;
+    }
+
+    private isSimpleLazyMultiYieldStringLogicalLeaf(expr: ts.BinaryExpression): boolean {
+        if (expr.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
+            expr.operatorToken.kind !== ts.SyntaxKind.BarBarToken) return false;
+        const left = this.prepareType(mapTsType(expr.left, this.checker.getTypeAtLocation(expr.left), this.checker));
+        const right = this.prepareType(mapTsType(expr.right, this.checker.getTypeAtLocation(expr.right), this.checker));
+        return left.kind === "string" && right.kind === "string";
     }
 
     private lazyGeneratorMaxMultiYieldReturn(node: ts.Node): number {
@@ -44138,6 +44149,9 @@ class Emitter {
             }
             if (!ts.isBinaryExpression(unwrapped)) unsupported(node, "lazy multi-yield return contains an unsupported expression leaf");
             if (this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) {
+                return this.emitExpr(unwrapped);
+            }
+            if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
                 return this.emitExpr(unwrapped);
             }
             if (unwrapped.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {

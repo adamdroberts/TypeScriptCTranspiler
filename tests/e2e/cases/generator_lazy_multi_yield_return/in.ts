@@ -177,6 +177,18 @@ function* regexpLeaves(): Generator<number, number, number> {
     return (yield 63) + /ab/.source.length + (yield 64);
 }
 
+let logicalLeafCounter = 0;
+const logicalCondition: string = "yes";
+
+function logicalLeaf(): string {
+    logicalLeafCounter++;
+    return "mid";
+}
+
+function* logicalLeaves(): Generator<string, string, string> {
+    return (yield "left") + (logicalCondition && logicalLeaf()) + (yield "right");
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -417,6 +429,12 @@ const regexpLeafSecond: any = regexpLeafIter.next(2);
 console.log("regexp-leaf", regexpLeafFirst.value, regexpLeafSecond.value);
 const regexpLeafDone: any = regexpLeafIter.next(3);
 console.log("regexp-leaf-done", regexpLeafDone.done, regexpLeafDone.value);
+const logicalLeafIter = logicalLeaves();
+const logicalLeafFirst: any = logicalLeafIter.next();
+const logicalLeafSecond: any = logicalLeafIter.next("A");
+console.log("logical-leaf-before", logicalLeafFirst.value, logicalLeafSecond.value, logicalLeafCounter);
+const logicalLeafDone: any = logicalLeafIter.next("B");
+console.log("logical-leaf", logicalLeafDone.done, logicalLeafDone.value, logicalLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
