@@ -47,10 +47,12 @@ async function declaration(): Promise<string> {
         loopMarker = one;
     }
     if (one.length < 0) {
-        const branchMarker = "never";
+        let branchMarker = "";
+        branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        const branchMarker = one;
+        let branchMarker = "";
+        branchMarker = one;
         loopMarker = branchMarker;
     }
     const two = await delay(2, one + "2" + (loopMarker === one ? "" : ""));
@@ -117,10 +119,12 @@ class Chain {
             loopMarker = one;
         }
         if (one.length < 0) {
-            const branchMarker = "never";
+            let branchMarker = "";
+            branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            const branchMarker = one;
+            let branchMarker = "";
+            branchMarker = one;
             loopMarker = branchMarker;
         }
         const two = await delay(2, one + "b" + (loopMarker === one ? "" : ""));
@@ -187,10 +191,12 @@ const value = async (): Promise<string> => {
         loopMarker = one;
     }
     if (one.length < 0) {
-        const branchMarker = "never";
+        let branchMarker = "";
+        branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        const branchMarker = one;
+        let branchMarker = "";
+        branchMarker = one;
         loopMarker = branchMarker;
     }
     const two = await delay(2, one + "B" + (loopMarker === one ? "" : ""));
@@ -257,10 +263,12 @@ async function branchEight(flag: boolean): Promise<string> {
             loopMarker = one;
         }
         if (one.length < 0) {
-            const branchMarker = "never";
+            let branchMarker = "";
+            branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            const branchMarker = one;
+            let branchMarker = "";
+            branchMarker = one;
             loopMarker = branchMarker;
         }
         const two = await delay(22, one + "1" + (loopMarker === one ? "" : ""));
@@ -324,10 +332,12 @@ async function branchEight(flag: boolean): Promise<string> {
         loopMarker = one;
     }
     if (one.length < 0) {
-        const branchMarker = "never";
+        let branchMarker = "";
+        branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        const branchMarker = one;
+        let branchMarker = "";
+        branchMarker = one;
         loopMarker = branchMarker;
     }
     const two = await delay(30, one + "1" + (loopMarker === one ? "" : ""));
@@ -395,10 +405,12 @@ class BranchChain {
                 loopMarker = one;
             }
             if (one.length < 0) {
-                const branchMarker = "never";
+                let branchMarker = "";
+                branchMarker = "never";
                 loopMarker = branchMarker;
             } else {
-                const branchMarker = one;
+                let branchMarker = "";
+                branchMarker = one;
                 loopMarker = branchMarker;
             }
             const two = await delay(38, one + "1" + (loopMarker === one ? "" : ""));
@@ -462,10 +474,12 @@ class BranchChain {
             loopMarker = one;
         }
         if (one.length < 0) {
-            const branchMarker = "never";
+            let branchMarker = "";
+            branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            const branchMarker = one;
+            let branchMarker = "";
+            branchMarker = one;
             loopMarker = branchMarker;
         }
         const two = await delay(46, one + "1" + (loopMarker === one ? "" : ""));
@@ -533,10 +547,12 @@ const branchValue = async (flag: boolean): Promise<string> => {
             loopMarker = one;
         }
         if (one.length < 0) {
-            const branchMarker = "never";
+            let branchMarker = "";
+            branchMarker = "never";
             loopMarker = branchMarker;
         } else {
-            const branchMarker = one;
+            let branchMarker = "";
+            branchMarker = one;
             loopMarker = branchMarker;
         }
         const two = await delay(54, one + "1" + (loopMarker === one ? "" : ""));
@@ -600,10 +616,12 @@ const branchValue = async (flag: boolean): Promise<string> => {
         loopMarker = one;
     }
     if (one.length < 0) {
-        const branchMarker = "never";
+        let branchMarker = "";
+        branchMarker = "never";
         loopMarker = branchMarker;
     } else {
-        const branchMarker = one;
+        let branchMarker = "";
+        branchMarker = one;
         loopMarker = branchMarker;
     }
     const two = await delay(62, one + "1" + (loopMarker === one ? "" : ""));
