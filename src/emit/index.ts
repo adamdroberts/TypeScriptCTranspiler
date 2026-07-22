@@ -52151,29 +52151,26 @@ class Emitter {
             return this.isSupportedInlineBindingName(parameter.name);
         }
         if (!ts.isObjectBindingPattern(parameter.name)) return false;
-        return this.isSupportedInlineObjectBindingName(parameter.name);
+        return this.isSupportedInlineBindingName(parameter.name);
     }
 
     private isSupportedInlineBindingName(name: ts.BindingName): boolean {
         if (ts.isIdentifier(name)) return true;
-        if (!ts.isArrayBindingPattern(name)) return false;
-        return name.elements.every((element) =>
-            ts.isBindingElement(element) &&
-            !element.dotDotDotToken &&
-            !element.initializer &&
-            this.isSupportedInlineBindingName(element.name),
-        );
-    }
-
-    private isSupportedInlineObjectBindingName(name: ts.BindingName): boolean {
-        if (ts.isIdentifier(name)) return true;
+        if (ts.isArrayBindingPattern(name)) {
+            return name.elements.every((element) =>
+                ts.isBindingElement(element) &&
+                !element.dotDotDotToken &&
+                !element.initializer &&
+                this.isSupportedInlineBindingName(element.name),
+            );
+        }
         if (!ts.isObjectBindingPattern(name)) return false;
         return name.elements.every((element) =>
             ts.isBindingElement(element) &&
             !element.dotDotDotToken &&
             !element.initializer &&
             (!element.propertyName || ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)) &&
-            (ts.isIdentifier(element.name) || this.isSupportedInlineObjectBindingName(element.name)),
+            this.isSupportedInlineBindingName(element.name),
         );
     }
 
@@ -53187,50 +53184,8 @@ class Emitter {
         for (let i = 0; i < runtimeParams.length; i++) {
             const parameter = runtimeParams[i]!;
             const parameterType = type.params?.[i] ?? this.prepareType(mapType(parameter, this.checker));
-            if (ts.isArrayBindingPattern(parameter.name)) {
-                if (parameterType.kind !== "array" || !parameterType.elem) {
-                    unsupported(parameter, "array destructuring requires an array parameter type");
-                }
-                const bindArrayPattern = (
-                    pattern: ts.ArrayBindingPattern,
-                    source: string,
-                    sourceType: CType,
-                ): void => {
-                    if (sourceType.kind !== "array" || !sourceType.elem) {
-                        unsupported(pattern, "nested array destructuring requires nested array parameter types");
-                    }
-                    pattern.elements.forEach((element, index) => {
-                        if (!ts.isBindingElement(element)) {
-                            unsupported(pattern, "array destructuring does not support omitted elements");
-                        }
-                        const elementType = sourceType.elem!;
-                        const elementExpr = `TSC_ARR(${elementType.c}, ${source}, ${index})`;
-                        if (ts.isIdentifier(element.name)) {
-                            const symbol = this.symbolForIdentifier(element.name);
-                            if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
-                            const bindingType = this.prepareType(mapType(element.name, this.checker));
-                            argumentScope.set(
-                                symbol,
-                                elementType.kind === "value" && bindingType.kind !== "value"
-                                    ? this.unboxDynamicValue(elementExpr, bindingType)
-                                    : elementExpr,
-                            );
-                            argumentTypeScope.set(symbol, bindingType);
-                        } else if (ts.isArrayBindingPattern(element.name)) {
-                            bindArrayPattern(element.name, elementExpr, elementType);
-                        } else {
-                            unsupported(element, "nested array destructuring requires array binding patterns");
-                        }
-                    });
-                };
-                bindArrayPattern(parameter.name, paramNames[i], parameterType);
-                continue;
-            }
-            if (!ts.isObjectBindingPattern(parameter.name)) continue;
-            if (parameterType.kind !== "value") {
-                unsupported(parameter, "object destructuring currently requires a dynamic object parameter type");
-            }
-            const bindObjectPattern = (pattern: ts.ObjectBindingPattern, source: string): void => {
+            const emitter = this;
+            function bindObjectPattern(pattern: ts.ObjectBindingPattern, source: string): void {
                 pattern.elements.forEach((element) => {
                     if (!ts.isBindingElement(element) || element.dotDotDotToken || element.initializer) {
                         unsupported(pattern, "object destructuring requires simple static binding elements");
@@ -53242,19 +53197,69 @@ class Emitter {
                     const key = property.text;
                     const raw = `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`;
                     if (ts.isIdentifier(element.name)) {
-                        const bindingType = this.prepareType(mapType(element.name, this.checker));
-                        const symbol = this.symbolForIdentifier(element.name);
+                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
+                        const symbol = emitter.symbolForIdentifier(element.name);
                         if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
-                        argumentScope.set(symbol, bindingType.kind === "value" ? raw : this.unboxDynamicValue(raw, bindingType));
+                        argumentScope.set(symbol, bindingType.kind === "value" ? raw : emitter.unboxDynamicValue(raw, bindingType));
                         argumentTypeScope.set(symbol, bindingType);
                     } else if (ts.isObjectBindingPattern(element.name)) {
                         bindObjectPattern(element.name, raw);
+                    } else if (ts.isArrayBindingPattern(element.name)) {
+                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
+                        if (bindingType.kind !== "array" || !bindingType.elem) {
+                            unsupported(element, "mixed destructuring requires an array-typed nested binding");
+                        }
+                        bindArrayPattern(element.name, emitter.unboxDynamicValue(raw, bindingType), bindingType);
                     } else {
-                        unsupported(element, "nested object destructuring requires object binding patterns");
+                        unsupported(element, "nested object destructuring requires supported binding patterns");
                     }
                 });
-            };
-            bindObjectPattern(parameter.name, paramNames[i]);
+            }
+            function bindArrayPattern(
+                pattern: ts.ArrayBindingPattern,
+                source: string,
+                sourceType: CType,
+            ): void {
+                if (sourceType.kind !== "array" || !sourceType.elem) {
+                    unsupported(pattern, "array destructuring requires an array parameter type");
+                }
+                pattern.elements.forEach((element, index) => {
+                    if (!ts.isBindingElement(element)) {
+                        unsupported(pattern, "array destructuring does not support omitted elements");
+                    }
+                    const elementType = sourceType.elem!;
+                    const elementExpr = `TSC_ARR(${elementType.c}, ${source}, ${index})`;
+                    if (ts.isIdentifier(element.name)) {
+                        const symbol = emitter.symbolForIdentifier(element.name);
+                        if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                        const bindingType = emitter.prepareType(mapType(element.name, emitter.checker));
+                        argumentScope.set(
+                            symbol,
+                            elementType.kind === "value" && bindingType.kind !== "value"
+                                    ? emitter.unboxDynamicValue(elementExpr, bindingType)
+                                : elementExpr,
+                        );
+                        argumentTypeScope.set(symbol, bindingType);
+                    } else if (ts.isArrayBindingPattern(element.name)) {
+                        const nestedType = elementType.kind === "value"
+                            ? emitter.prepareType(mapType(element.name, emitter.checker))
+                            : elementType;
+                        bindArrayPattern(element.name, elementType.kind === "value" ? emitter.unboxDynamicValue(elementExpr, nestedType) : elementExpr, nestedType);
+                    } else if (ts.isObjectBindingPattern(element.name)) {
+                        bindObjectPattern(element.name, elementExpr);
+                    } else {
+                        unsupported(element, "nested array destructuring requires supported binding patterns");
+                    }
+                });
+            }
+            if (ts.isArrayBindingPattern(parameter.name)) {
+                bindArrayPattern(parameter.name, paramNames[i], parameterType);
+            } else if (ts.isObjectBindingPattern(parameter.name)) {
+                if (parameterType.kind !== "value") {
+                    unsupported(parameter, "object destructuring currently requires a dynamic object parameter type");
+                }
+                bindObjectPattern(parameter.name, paramNames[i]);
+            }
         }
 
         const capturedCells = this.capturedCellsFor(fn);
