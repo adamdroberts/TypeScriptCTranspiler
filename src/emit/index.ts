@@ -35662,7 +35662,16 @@ class Emitter {
                 bodyContinueStatements[0]!.catchClause!.block.statements.length === 1 &&
                 ts.isExpressionStatement(bodyContinueStatements[0]!.catchClause!.block.statements[0]!) &&
                 ts.isAwaitExpression(this.unwrapTransparentExpression((bodyContinueStatements[0]!.catchClause!.block.statements[0]! as ts.ExpressionStatement).expression)) &&
-                (!bodyContinueStatements[0]!.finallyBlock || bodyContinueStatements[0]!.finallyBlock!.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) &&
+                (!bodyContinueStatements[0]!.finallyBlock || (() => {
+                    const statements = bodyContinueStatements[0]!.finallyBlock!.statements;
+                    const awaitStatements = statements.filter((statement): statement is ts.ExpressionStatement =>
+                        ts.isExpressionStatement(statement) &&
+                        ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression))
+                    );
+                    return awaitStatements.length <= 1 &&
+                        (awaitStatements.length === 0 || statements.indexOf(awaitStatements[0]!) === 0) &&
+                        statements.slice(awaitStatements.length === 1 ? 1 : 0).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement));
+                })()) &&
                 bodyContinueStatements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement));
             if (simpleAwaitFinally) {
                 const tryStatement = bodyContinueStatements[0]! as ts.TryStatement;
@@ -35691,7 +35700,7 @@ class Emitter {
                 if (finallyAwaitStatements.length > 1 || (finallyHasNestedAwait && finallyAwaitStatements.length === 0) ||
                     (finallyAwaitStatements.length === 1 && finallyStatements.indexOf(finallyAwaitStatements[0]!) !== 0)) return false;
                 const finallyAwaitExpression = finallyAwaitStatements.length === 1
-                    ? this.unwrapTransparentExpression(finallyAwaitStatements[0]!.expression) as ts.AwaitExpression
+                    ? this.unwrapTransparentExpression((finallyAwaitStatements[0]! as ts.ExpressionStatement).expression) as ts.AwaitExpression
                     : null;
                 bodyAwaitExprs = finallyAwaitExpression ? [awaitExpression, finallyAwaitExpression] : [awaitExpression];
                 bodyPostAwaitStatements = finallyAwaitExpression ? finallyStatements.slice(1) : [];
@@ -35722,12 +35731,28 @@ class Emitter {
                 const catchAwaitStatement = tryStatement.catchClause!.block.statements[0]! as ts.ExpressionStatement;
                 const awaitExpression = this.unwrapTransparentExpression(awaitStatement.expression) as ts.AwaitExpression;
                 const catchAwaitExpression = this.unwrapTransparentExpression(catchAwaitStatement.expression) as ts.AwaitExpression;
+                const finallyStatements = tryStatement.finallyBlock?.statements ?? [];
+                const finallyAwaitStatements = finallyStatements.filter((statement): statement is ts.ExpressionStatement =>
+                    ts.isExpressionStatement(statement) &&
+                    ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression))
+                );
+                const finalAwaitStatement = finallyAwaitStatements.length === 1
+                    ? finallyAwaitStatements[0]! as ts.ExpressionStatement
+                    : null;
+                const finallyAwaitExpression = finalAwaitStatement
+                    ? this.unwrapTransparentExpression(finalAwaitStatement.expression) as ts.AwaitExpression
+                    : null;
                 bodyAwaitExpr = awaitExpression;
-                bodyAwaitExprs = [awaitExpression];
                 bodyPreludeStatements = [];
-                bodyPostAwaitStatements = bodyContinueStatements.slice(1);
+                bodyAwaitExprs = finallyAwaitExpression
+                    ? [awaitExpression, finallyAwaitExpression]
+                    : [awaitExpression];
+                bodyPostAwaitStatements = finallyAwaitExpression
+                    ? [...finallyStatements.slice(1), ...bodyContinueStatements.slice(1)]
+                    : bodyContinueStatements.slice(1);
                 bodyAwaitCatchAwaitExpr = catchAwaitExpression;
-                bodyAwaitFinallyStatements = tryStatement.finallyBlock?.statements ?? [];
+                bodyAwaitFinallyStatements = finallyAwaitExpression ? [] : finallyStatements;
+                continuationBodyAwaitFinallyAwaitExpr = finallyAwaitExpression ?? undefined;
             } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
                 const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[0]!.statement);
                 const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[bodyAwaitStatements.length - 1]!.statement);
@@ -36161,18 +36186,21 @@ class Emitter {
         if (bodyContinue && bodyAwaitExprs.length > 0) {
             loopAdapterName = `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
             if (continuation.bodyAwaitCatchAwaitExpr) {
+                const catchAwaitExprs = continuation.bodyAwaitFinallyAwaitExpr
+                    ? [continuation.bodyAwaitCatchAwaitExpr, continuation.bodyAwaitFinallyAwaitExpr]
+                    : [continuation.bodyAwaitCatchAwaitExpr];
                 bodyCatchAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
                     loopAdapterName,
                     conditionPromiseType,
                     {
                         ...continuation,
                         bodyAwaitExpr: continuation.bodyAwaitCatchAwaitExpr,
-                        bodyAwaitExprs: [continuation.bodyAwaitCatchAwaitExpr],
+                        bodyAwaitExprs: catchAwaitExprs,
                         bodyAwaitCatchStatements: undefined,
                         bodyAwaitCatchAwaitExpr: undefined,
                         bodyAwaitCatchAdapter: undefined,
                     },
-                    [continuation.bodyAwaitCatchAwaitExpr],
+                    catchAwaitExprs,
                 );
             }
             bodyAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
