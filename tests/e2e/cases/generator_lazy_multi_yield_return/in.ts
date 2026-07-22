@@ -280,6 +280,12 @@ function* bigintLogicalLeaves(): Generator<number, boolean, number> {
 function* bigintLogicalFalseLeaves(): Generator<number, boolean, number> {
     return (yield 99), (yield 100), ((bigintLogicalFalseCondition() && bigintLogicalLeaf()) === 2n);
 }
+function* bigintLogicalOrLeaves(): Generator<number, boolean, number> {
+    return (yield 101), (yield 102), ((bigintLogicalFalseCondition() || bigintLogicalLeaf()) === 2n);
+}
+function* bigintLogicalOrTrueLeaves(): Generator<number, boolean, number> {
+    return (yield 103), (yield 104), ((bigintLogicalTrueCondition() || bigintLogicalLeaf()) === 2n);
+}
 
 function* optionalPropertyLeaves(): Generator<any, boolean, any> {
     return (yield null)?.value === (yield { value: 1 }).value;
@@ -644,6 +650,18 @@ const bigintLogicalFalseLeafSecond: any = bigintLogicalFalseLeafIter.next(2);
 console.log("bigint-logical-false-before", bigintLogicalFalseLeafFirst.value.toString(), bigintLogicalFalseLeafSecond.value.toString(), bigintLogicalLeafCounter);
 const bigintLogicalFalseLeafDone: any = bigintLogicalFalseLeafIter.next(3);
 console.log("bigint-logical-false", bigintLogicalFalseLeafDone.done, bigintLogicalFalseLeafDone.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalOrLeafIter = bigintLogicalOrLeaves();
+const bigintLogicalOrLeafFirst: any = bigintLogicalOrLeafIter.next();
+const bigintLogicalOrLeafSecond: any = bigintLogicalOrLeafIter.next(2);
+console.log("bigint-logical-or-before", bigintLogicalOrLeafFirst.value.toString(), bigintLogicalOrLeafSecond.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalOrLeafDone: any = bigintLogicalOrLeafIter.next(3);
+console.log("bigint-logical-or", bigintLogicalOrLeafDone.done, bigintLogicalOrLeafDone.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalOrTrueLeafIter = bigintLogicalOrTrueLeaves();
+const bigintLogicalOrTrueLeafFirst: any = bigintLogicalOrTrueLeafIter.next();
+const bigintLogicalOrTrueLeafSecond: any = bigintLogicalOrTrueLeafIter.next(2);
+console.log("bigint-logical-or-true-before", bigintLogicalOrTrueLeafFirst.value.toString(), bigintLogicalOrTrueLeafSecond.value.toString(), bigintLogicalLeafCounter);
+const bigintLogicalOrTrueLeafDone: any = bigintLogicalOrTrueLeafIter.next(3);
+console.log("bigint-logical-or-true", bigintLogicalOrTrueLeafDone.done, bigintLogicalOrTrueLeafDone.value.toString(), bigintLogicalLeafCounter);
 const optionalPropertyLeafIter = optionalPropertyLeaves();
 const optionalPropertyLeafFirst: any = optionalPropertyLeafIter.next();
 const optionalPropertyLeafSecond: any = optionalPropertyLeafIter.next({ value: 2 });

@@ -63,6 +63,10 @@ bigint-logical-leaf-before 97 98 0
 bigint-logical-leaf true true 1
 bigint-logical-false-before 99 100 1
 bigint-logical-false true false 1
+bigint-logical-or-before 101 102 1
+bigint-logical-or true true 2
+bigint-logical-or-true-before 103 104 2
+bigint-logical-or-true true false 2
 optional-property-leaf null 1 true false
 optional-element-leaf null 1 true false
 new-leaf-before 73 74 0
