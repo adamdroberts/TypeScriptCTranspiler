@@ -52209,6 +52209,10 @@ class Emitter {
                 for (const span of node.templateSpans) visit(span.expression);
                 return;
             }
+            if (ts.isTypeOfExpression(node) || ts.isVoidExpression(node)) {
+                visit(node.expression);
+                return;
+            }
             if (ts.isArrayLiteralExpression(node)) {
                 for (const element of node.elements) {
                     if (ts.isOmittedExpression(element)) {
