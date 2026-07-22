@@ -28938,30 +28938,30 @@ class Emitter {
         const trueStep = this.awaitedContinuationStep(whenTrue.statement);
         const falseStep = nested ?? (whenFalse ? this.awaitedContinuationStep(whenFalse.statement) : null);
         if (!trueStep || !falseStep) return null;
-        if (!whenTrue.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (!whenTrue.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (whenFalse && !whenFalse.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (whenFalse && !whenFalse.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.beforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateAlternateBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateThirdBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateFourthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateFifthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateSixthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateSeventhBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+        if (!whenTrue.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (!whenTrue.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (whenFalse && !whenFalse.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (whenFalse && !whenFalse.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.beforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateAlternateBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateThirdBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateFourthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateFifthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateSixthBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateSeventhBeforeStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
         if (nested && !(nested.conditionalBranches ?? []).every((branch) =>
-            branch.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement)))) return null;
-        if (nested && !(nested.afterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateAlternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateThirdAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateFourthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateFifthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateSixthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
-        if (nested && !(nested.alternateSeventhAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement))) return null;
+            branch.beforeStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true)))) return null;
+        if (nested && !(nested.afterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateAlternateAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateThirdAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateFourthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateFifthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateSixthAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
+        if (nested && !(nested.alternateSeventhAfterStatements ?? []).every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true))) return null;
         if (nested && !(nested.conditionalBranches ?? []).every((branch) =>
-            branch.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement)))) return null;
+            branch.afterStatements.every((statement) => this.asyncAwaitInterstitialControlFlowSupported(statement, true)))) return null;
         let variable = trueStep.variable;
         if (trueStep.variable || falseStep.variable) {
             if (!trueStep.variable || !falseStep.variable) {
@@ -29818,7 +29818,7 @@ class Emitter {
             }
         }
         for (const statements of betweenStatements) {
-            if (!this.asyncAwaitInterstitialCaptures(statements)) return null;
+            if (!this.asyncAwaitInterstitialCaptures(statements, true)) return null;
         }
         const awaitedStepSymbols = new Set(
             steps
