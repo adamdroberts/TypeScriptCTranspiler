@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- `Promise.withResolvers<T>()` now preserves the statically typed `Promise<T>` member through boxed resolver-record storage, including typed assignment and thenable resolution. Test: `promise_with_resolvers`.
 - Bounded awaited loop bodies now resume a direct awaited expression, preserve supported await-free postlude statements including simple locals before `continue`, execute the counted-`for` incrementor, and re-enter the awaited condition. Test: `async_await_loop_body_continue`.
 - Bounded awaited loop bodies now sequence multiple direct awaited expression statements before `continue`, propagating rejection and resuming the next body await before the loop incrementor and condition re-entry. Test: `async_await_loop_body_multi_continue`.
 - Bounded awaited loop bodies now preserve await-free prefix/suffix statements around multiple direct awaited expression statements before `break` or `continue`. Tests: `async_await_loop_body_multi_break`, `async_await_loop_body_multi_continue`.

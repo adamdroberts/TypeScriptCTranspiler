@@ -56448,8 +56448,9 @@ class Emitter {
 
     private emitPromiseStatic(call: ts.CallExpression, method: string): EmitResult {
         if (method === "withResolvers") {
+            const resolverType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
             return this.emitSequencedExpr(
-                T_VALUE,
+                resolverType,
                 this.ignoredArgumentSpecs(call.arguments, 0),
                 () => "tsc_promise_with_resolvers()",
             );
@@ -73791,6 +73792,20 @@ class Emitter {
             return { c: `tsc_fs_dirent_name(${recv.c})`, ty: T_STRING };
         }
         if (recv.ty.kind === "value") {
+            if (recv.ty.resolverElem) {
+                const key = pa.name.text;
+                const cache = this.freshTemp("_resolver_prop_cache");
+                const property = `({ static tsc_prop_cache_t ${cache}; tsc_value_get_prop_cached(${recv.c}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}), &${cache}); })`;
+                if (key === "promise") {
+                    return {
+                        c: `tsc_value_as_promise(${property})`,
+                        ty: promiseType(recv.ty.resolverElem),
+                    };
+                }
+                if (key === "resolve" || key === "reject") {
+                    return { c: property, ty: T_VALUE };
+                }
+            }
             if (pa.name.text === "length") {
                 return { c: `tsc_value_length(${recv.c})`, ty: T_NUMBER };
             }

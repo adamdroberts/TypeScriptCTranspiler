@@ -56,6 +56,8 @@ export interface CType {
     thisParam?: CType;
     ret?: CType;
     closureName?: string;
+    /** Typed Promise.withResolvers record metadata while retaining boxed storage. */
+    resolverElem?: CType;
 }
 
 export type TypeBindings = Map<string, CType>;
@@ -120,6 +122,10 @@ export function finRegistryType(elem: CType): CType {
 
 export function promiseType(elem: CType): CType {
     return { kind: "promise", c: "tsc_promise_t*", elem };
+}
+
+export function promiseResolverType(elem: CType): CType {
+    return { kind: "value", c: "tsc_value_t", resolverElem: elem };
 }
 
 export const T_EVENT_EMITTER: CType = { kind: "eventemitter", c: "tsc_event_emitter_t*" };
@@ -422,6 +428,11 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 return promiseType(mapTsType(node, ta[0]!, checker));
             }
             return promiseType(T_VALUE);
+        }
+        if (sym?.getName() === "PromiseWithResolvers") {
+            const tr = t as ts.TypeReference;
+            const ta = tr.typeArguments;
+            return promiseResolverType(ta && ta.length >= 1 ? mapTsType(node, ta[0]!, checker) : T_VALUE);
         }
         if (sym?.getName() === "EventEmitter") return T_EVENT_EMITTER;
         if (sym?.getName() === "Event") return T_EVENT;
