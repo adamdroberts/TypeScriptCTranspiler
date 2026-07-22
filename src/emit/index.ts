@@ -52198,19 +52198,27 @@ class Emitter {
             }
             if (ts.isCallExpression(node)) {
                 const expression = node.expression;
-                if (
-                    !ts.isPropertyAccessExpression(expression) ||
-                    !ts.isIdentifier(expression.expression) ||
-                    expression.expression.text !== "Math" ||
-                    !this.isUnshadowedGlobalIdentifier(expression.expression, "Math") ||
-                    node.arguments.some(ts.isSpreadElement) ||
-                    !new Set([
+                const receiver = ts.isPropertyAccessExpression(expression) &&
+                    ts.isIdentifier(expression.expression)
+                    ? expression.expression
+                    : undefined;
+                const method = ts.isPropertyAccessExpression(expression) ? expression.name.text : "";
+                const isPureBuiltinCall =
+                    receiver &&
+                    this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
+                    ((receiver.text === "Math" && new Set([
                         "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh",
                         "cbrt", "ceil", "clz32", "cos", "cosh", "exp", "expm1", "floor",
                         "f16round", "fround", "hypot", "imul", "log", "log1p", "log2", "log10",
                         "max", "min", "pow", "round", "sign", "sin", "sinh", "sqrt", "tan",
                         "tanh", "trunc",
-                    ]).has(expression.name.text)
+                    ]).has(method)) ||
+                        (receiver.text === "Number" &&
+                            new Set(["isFinite", "isInteger", "isNaN", "isSafeInteger"]).has(method) &&
+                            node.arguments.length === 1));
+                if (
+                    !isPureBuiltinCall ||
+                    node.arguments.some(ts.isSpreadElement)
                 ) {
                     supported = false;
                     return;
