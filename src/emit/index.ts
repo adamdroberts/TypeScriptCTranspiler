@@ -55016,6 +55016,7 @@ class Emitter {
         method: string,
     ): EmitResult {
         const args = call.arguments;
+        const optionalReceiver = ts.isPropertyAccessExpression(call.expression) && !!call.expression.questionDotToken;
         const missing: EmitResult = { c: "tsc_value_undefined()", ty: T_VALUE };
         const oneArg = (callee: string, fallback: EmitResult = missing): EmitResult => {
             const arg = args[0] ? this.emitExpr(args[0]) : fallback;
@@ -55788,6 +55789,7 @@ class Emitter {
             { value: recv, target: T_VALUE, node: call.expression },
         ];
         if (args.some((arg) => ts.isSpreadElement(arg))) {
+            if (optionalReceiver) unsupported(call, "optional dynamic method calls with spread arguments");
             const argList = this.emitSpreadCallArgumentList(args);
             return this.emitSequencedExpr(T_VALUE, [
                 { value: recv, target: T_VALUE, node: call.expression },
@@ -55816,7 +55818,10 @@ class Emitter {
             }
             pieces.push(`tsc_value_t ${fn} = tsc_value_get_prop_cached(${target}, tsc_str_from_lit("${escapeCString(method)}", ${utf8ByteLen(method)}), &${cache})`);
             pieces.push(`tsc_value_apply_function(${fn}, ${target}, tsc_value_array(${av}))`);
-            return `({ ${pieces.join("; ")}; })`;
+            const body = `({ ${pieces.join("; ")}; })`;
+            return optionalReceiver
+                ? `(tsc_value_is_nullish(${target}) ? tsc_value_undefined() : ${body})`
+                : body;
         });
     }
 

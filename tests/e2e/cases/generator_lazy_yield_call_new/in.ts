@@ -33,7 +33,10 @@ function* flow(): Generator<any, string, any> {
     const optionalCall = ((yield 4) as any)?.("optional");
     events.push("optional " + String(optionalCall));
     const optionalMissing = ((yield 5) as any)?.("missing");
-    return first + "|" + second + "|" + box.value + "|" + String(optionalCall) + "|" + String(optionalMissing);
+    const optionalMethod = ((yield 6) as any)?.run("member");
+    events.push("method " + String(optionalMethod));
+    const missingMethod = ((yield 7) as any)?.run("missing");
+    return first + "|" + second + "|" + box.value + "|" + String(optionalCall) + "|" + String(optionalMissing) + "|" + String(optionalMethod) + "|" + String(missingMethod);
 }
 
 const iter = flow();
@@ -45,6 +48,8 @@ const r3: any = iter.next(mark("beta", 12));
 const r4: any = iter.next(mark("gamma", "tail"));
 const r5: any = iter.next(mark("call", (value: string) => value.toUpperCase()));
 const r6: any = iter.next(mark("missing", null));
+const r7: any = iter.next(mark("method", { run: (value: string) => value.toUpperCase() }));
+const r8: any = iter.next(mark("missing method", null));
 
-console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, r5.done, r5.value, r6.done, r6.value);
+console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, r5.done, r5.value, r6.done, r6.value, r7.done, r7.value, r8.done, r8.value);
 console.log("events:", events.join("|"));

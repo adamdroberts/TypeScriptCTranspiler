@@ -2508,7 +2508,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_yield_unary` | lazy generators resume single suspended yield unary/prefix/typeof/void expressions |
 | `generator_lazy_yield_array_literal` | lazy generators resume single suspended yield inside array literal expressions |
 | `generator_lazy_yield_access` | lazy generators resume single suspended yield inside property and element access expressions |
-| `generator_lazy_yield_call_new` | lazy generators resume single suspended yield inside typed call and new expressions, including bounded optional calls on dynamically yielded callables |
+| `generator_lazy_yield_call_new` | lazy generators resume single suspended yield inside typed call and new expressions, including bounded optional calls and member calls on dynamically yielded values |
 | `generator_lazy_yield_delete_postfix` | lazy generators resume single suspended yield inside delete plus prefix and postfix update expressions |
 | `generator_lazy_yield_template` | lazy generators resume single suspended yield inside standard template expressions |
 | `generator_lazy_yield_tagged_template` | lazy generators resume single suspended yield inside tagged template expressions |
