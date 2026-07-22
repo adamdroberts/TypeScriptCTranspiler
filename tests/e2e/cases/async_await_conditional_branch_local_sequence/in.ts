@@ -2,15 +2,17 @@ import { setTimeout as delay } from "node:timers/promises";
 
 async function declaration(kind: number): Promise<string> {
     if (kind === 0) {
+        var zeroPostPrefix = "zero-post-";
         const zeroMarker = "zero-", zero = await delay(1, zeroMarker + "one");
         var zeroPostMarker;
         zeroPostMarker = "zero-post-";
-        const zeroAgain = await delay(1, zeroPostMarker + "two");
+        const zeroAgain = await delay(1, zeroPostPrefix + zeroPostMarker + "two");
     } else {
+        var otherPostPrefix = "other-post-";
         const otherMarker = "other-", other = await delay(1, otherMarker + "one");
         var otherPostMarker;
         otherPostMarker = "other-post-";
-        const otherAgain = await delay(1, otherPostMarker + "two");
+        const otherAgain = await delay(1, otherPostPrefix + otherPostMarker + "two");
     }
     return "declaration-done";
 }

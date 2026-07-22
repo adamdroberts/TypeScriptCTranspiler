@@ -3463,6 +3463,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_deep_conditional_leading_chain` | flattened deep nested conditional leading await selections preserve branch context and fallthrough |
 | `async_await_conditional_arm_await_chain` | conditional arms compose equal-length sequential awaited assignments before a common continuation |
 | `async_await_conditional_branch_local_sequence` | conditional arms compose equal-length branch-local awaited declaration sequences used only for sequencing |
+| `async_await_conditional_branch_local_sequence` | escaping initialized or assigned-before-suspension var state survives the first conditional await |
 | `async_await_conditional_branch_local_value_flow` | branch-local first awaited values feed the next sequencing-only await expression |
 | `async_await_conditional_branch_local_multi_value_flow` | branch-local values feed multiple consecutive sequencing-only conditional awaits |
 | `async_await_conditional_mixed_branch_value_flow` | branch-local value flow composes with a sibling direct-await sequencing arm |

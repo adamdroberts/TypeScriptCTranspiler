@@ -29165,14 +29165,6 @@ class Emitter {
                     true,
                 )) return null;
             }
-            const preludeSymbols = leaf.statements.slice(0, firstAwaitIndex).flatMap((statement) => {
-                if (!ts.isVariableStatement(statement)) return [];
-                return statement.declarationList.declarations.flatMap((declaration) => {
-                    if (!ts.isIdentifier(declaration.name)) return [];
-                    const symbol = this.symbolForIdentifier(declaration.name);
-                    return symbol ? [symbol] : [];
-                });
-            });
             const uninitializedPreludeSymbols = leaf.statements.slice(0, firstAwaitIndex).flatMap((statement) => {
                 if (!ts.isVariableStatement(statement)) return [];
                 if (statement.declarationList.flags & ts.NodeFlags.Const) return [];
@@ -29192,20 +29184,6 @@ class Emitter {
                     if (symbol) assignedSymbols.add(symbol);
                 }
                 if (uninitializedPreludeSymbols.some((symbol) => !assignedSymbols.has(symbol))) return null;
-            }
-            if (preludeSymbols.length > 0) {
-                let escapes = false;
-                const visit = (node: ts.Node): void => {
-                    if (escapes) return;
-                    if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) &&
-                        preludeSymbols.includes(this.symbolForIdentifier(node)!)) {
-                        escapes = true;
-                        return;
-                    }
-                    ts.forEachChild(node, visit);
-                };
-                for (const later of leaf.statements.slice(firstAwaitIndex + 1)) visit(later);
-                if (escapes) return null;
             }
             if (leaf.condition) {
                 let valid = true;
@@ -29829,6 +29807,16 @@ class Emitter {
         }
         if (pendingBetween.length > 0) return null;
         if (steps.length < 2 && !finalThrowAwait) return null;
+        for (const branch of steps[0]!.conditionalBranches ?? []) {
+            const branchCaptures = this.asyncAwaitInterstitialCaptures(branch.beforeStatements, true);
+            if (!branchCaptures) return null;
+            for (const capture of branchCaptures) {
+                if (captureSymbols.has(capture.symbol)) continue;
+                captureSymbols.add(capture.symbol);
+                captures.push(capture);
+                hoistedSymbols.push(capture.symbol);
+            }
+        }
         for (const statements of betweenStatements) {
             if (!this.asyncAwaitInterstitialCaptures(statements)) return null;
         }
@@ -39917,6 +39905,9 @@ class Emitter {
         const firstSourceC = firstSource
             ? this.coerce(firstSource, promiseTypes[0]!, firstStep.awaitExpr.expression)
             : "";
+        for (const symbol of continuation.hoistedSymbols) {
+            this.asyncAwaitHoistedPreludeSymbols.add(symbol);
+        }
         const firstConditionalSource = firstStep.conditionalBranches
             ? (() => {
                 const branches = firstStep.conditionalBranches!;
@@ -40430,6 +40421,9 @@ class Emitter {
                 return `(${branchChoiceVar} == 0 ? ${firstSourceC} : (${branchChoiceVar} == 1 ? ${alternateSourceC} : (${branchChoiceVar} == 2 ? ${alternateAlternateSourceC} : (${branchChoiceVar} == 3 ? ${alternateThirdSourceC} : (${branchChoiceVar} == 4 ? ${alternateFourthSourceC} : (${branchChoiceVar} == 5 ? ${alternateFifthSourceC} : (${branchChoiceVar} == 6 ? ${alternateSixthSourceC} : (${branchChoiceVar} == 7 ? ${alternateSeventhSourceC} : (${branchChoiceVar} == 8 ? ${alternateEighthSourceC} : ${alternateNinthSourceC})))))))))`;
             })()
             : firstSourceC;
+        for (const symbol of continuation.hoistedSymbols) {
+            this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+        }
         buf.line(`tsc_promise_t* const ${sourcePromise} = ${firstConditionalSource};`);
         if (!resultPromiseOverride) {
             buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
