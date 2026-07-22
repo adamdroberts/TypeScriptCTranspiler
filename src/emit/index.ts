@@ -52135,8 +52135,15 @@ class Emitter {
         return target.parameters.every((parameter) =>
             ts.isIdentifier(parameter.name) &&
             !this.isThisParameter(parameter) &&
-            !parameter.initializer,
+            (!parameter.initializer || this.isSupportedInlineClosureDefault(parameter)),
         );
+    }
+
+    private isSupportedInlineClosureDefault(parameter: ts.ParameterDeclaration): boolean {
+        const initializer = parameter.initializer;
+        if (!initializer) return true;
+        const value = this.unwrapTransparentExpression(initializer);
+        return this.isSimpleLazyMultiYieldLiteral(value) || ts.isRegularExpressionLiteral(value);
     }
 
     private emitInlineClosureCall(call: ts.CallExpression): EmitResult | null {
@@ -53041,7 +53048,9 @@ class Emitter {
         const runtimeParams = fn.parameters.filter((p) => !this.isThisParameter(p));
         const params = runtimeParams.map((p) => {
             if (!ts.isIdentifier(p.name)) unsupported(p, "closure parameter destructuring");
-            if (p.initializer) unsupported(p, "default closure parameters");
+            if (p.initializer && !this.isSupportedInlineClosureDefault(p)) {
+                unsupported(p, "default closure parameters currently require a literal initializer");
+            }
             return this.prepareType(mapType(p, this.checker));
         });
         const ret = this.prepareType(mapTsType(fn, sig.getReturnType(), this.checker));
