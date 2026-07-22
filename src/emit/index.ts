@@ -34495,7 +34495,7 @@ class Emitter {
         fallthroughRejectResult: boolean,
         initialBody: boolean,
     ): boolean {
-        if (awaitExpressions.length !== 1 || (loopInitializer && !ts.isVariableStatement(loopInitializer)) || loopIncrementor || initialBody || loopBody.length !== 1) return false;
+        if (awaitExpressions.length !== 1 || (loopInitializer && !ts.isVariableStatement(loopInitializer)) || loopIncrementor || loopBody.length !== 1) return false;
         const bodyStatement = loopBody[0]!;
         if (!ts.isIfStatement(bodyStatement) || !bodyStatement.elseStatement) return false;
         const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
@@ -34863,12 +34863,15 @@ class Emitter {
             false,
         );
         if (loopInitializer) this.emitStmt(buf, loopInitializer);
-        const source = this.emitExpr(outerAwaitExpr.expression);
+        const initialAwaitExpr = initialBody ? conditionAwaitExpr : outerAwaitExpr;
+        const initialPromiseType = initialBody ? nestedConditionPromiseType : conditionPromiseType;
+        const initialAdapter = initialBody ? nestedAdapter : outerAdapter;
+        const source = this.emitExpr(initialAwaitExpr.expression);
         const sourceVar = this.freshTemp("_await_source");
         const resultVar = this.freshTemp("_await_result");
-        const adapterEnvType = `${outerAdapter}_env_t`;
+        const adapterEnvType = `${initialAdapter}_env_t`;
         const envVar = this.freshTemp("_await_env");
-        buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, conditionPromiseType, outerAwaitExpr.expression)};`);
+        buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, initialPromiseType, initialAwaitExpr.expression)};`);
         buf.line(`tsc_promise_t* const ${resultVar} = tsc_promise_pending();`);
         buf.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
         buf.line(`${envVar}->receiver = ${sourceVar};`);
@@ -34876,10 +34879,10 @@ class Emitter {
         for (const param of capturedParams) buf.line(`${envVar}->${param.field} = ${param.name};`);
         if (continuationThisValue) buf.line(`${envVar}->this_arg = ${continuationThisValue.c};`);
         buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-        buf.line(`tsc_promise_add_callback(${sourceVar}, ${outerAdapter}, ${envVar});`);
+        buf.line(`tsc_promise_add_callback(${sourceVar}, ${initialAdapter}, ${envVar});`);
         buf.close();
         buf.open("else");
-        buf.line(`${outerAdapter}(${envVar});`);
+        buf.line(`${initialAdapter}(${envVar});`);
         buf.close();
         buf.line(`return ${resultVar};`);
         return true;
