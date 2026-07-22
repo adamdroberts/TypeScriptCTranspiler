@@ -33652,16 +33652,36 @@ class Emitter {
         loopInitializer: ts.Expression | ts.VariableStatement | null = null,
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
         loopIncrementor: ts.Expression | null = null,
+        initialBody = false,
     ): boolean {
         if (awaitExpressions.length < 3 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
         const bodyIsContinue = ts.isContinueStatement(bodyAction) && !bodyAction.label;
         const bodyIsBreak = ts.isBreakStatement(bodyAction) && !bodyAction.label;
         if (!bodyIsContinue && !bodyIsBreak) return false;
+        if (initialBody && !bodyIsContinue) return false;
         const bodyPreludeStatements = loopBody.slice(0, -1);
         if (!bodyPreludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) || this.asyncAwaitLoopBodyControlPreludeSupported(statement, true, true, true)
         )) return false;
+        let initialBodyAwaitExprs: readonly ts.AwaitExpression[] = [];
+        let initialBodyPreludeStatements: readonly ts.Statement[] = [];
+        let initialBodyPostAwaitStatements: readonly ts.Statement[] = [];
+        if (initialBody) {
+            const awaitStatements = bodyPreludeStatements.flatMap((statement) => {
+                if (!ts.isExpressionStatement(statement)) return [];
+                const expression = this.unwrapTransparentExpression(statement.expression);
+                return ts.isAwaitExpression(expression) ? [{ statement, expression }] : [];
+            });
+            if (awaitStatements.length === 0) return false;
+            const firstAwaitIndex = bodyPreludeStatements.indexOf(awaitStatements[0]!.statement);
+            const lastAwaitIndex = bodyPreludeStatements.indexOf(awaitStatements[awaitStatements.length - 1]!.statement);
+            const awaitStatementSet = new Set<ts.Statement>(awaitStatements.map(({ statement }) => statement));
+            if (bodyPreludeStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatementSet.has(statement))) return false;
+            initialBodyAwaitExprs = awaitStatements.map(({ expression }) => expression);
+            initialBodyPreludeStatements = bodyPreludeStatements.slice(0, firstAwaitIndex);
+            initialBodyPostAwaitStatements = bodyPreludeStatements.slice(lastAwaitIndex + 1);
+        }
         const unwrappedCondition = this.unwrapTransparentExpression(condition);
         if (!ts.isBinaryExpression(unwrappedCondition)) return false;
         const allowedOperators = new Set([
@@ -33753,6 +33773,55 @@ class Emitter {
             thisValue,
             fallthroughRejectResult,
         );
+        const initialBodyPromiseType = initialBody
+            ? this.prepareType(mapTsType(
+                initialBodyAwaitExprs[0]!.expression,
+                this.checker.getTypeAtLocation(initialBodyAwaitExprs[0]!.expression),
+                this.checker,
+            ))
+            : null;
+        let initialBodyAdapter: string | null = null;
+        if (initialBody) {
+            initialBodyAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                stageNames[0]!,
+                initialBodyPromiseType!,
+                {
+                    conditionExpr: condition,
+                    conditionAwaitExpr: awaitExpressions[0]!,
+                    loopIncrementor: undefined,
+                    bodyAwaitExpr: initialBodyAwaitExprs[0]!,
+                    bodyAwaitExprs: initialBodyAwaitExprs,
+                    bodyReturnExpr: ts.factory.createVoidZero(),
+                    bodyAwaitedAliasSymbols: [],
+                    bodyPostAwaitStatements: initialBodyPostAwaitStatements,
+                    bodyPreludeStatements: initialBodyPreludeStatements,
+                    bodyContinue: true,
+                    bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
+                    bodyContinueConditionNegated: false,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                    bodyContinueElseBreak: false,
+                    bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
+                    bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnAwaitPreludeExprs: [],
+                    bodyContinueElseReturnSynchronousExpr: null,
+                    bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnPostAwaitStatements: [],
+                    bodyContinueElseReturnRejectResult: false,
+                    bodyRejectResult: false,
+                    fallthroughExpr,
+                    fallthroughAwaitExpr: fallthroughAwait,
+                    params: [...params, ...loopInitializerCaptures],
+                    thisValue,
+                },
+                initialBodyAwaitExprs,
+            );
+        }
         for (let index = 0; index < stageEnvTypes.length; index++) {
             const envType = stageEnvTypes[index]!;
             this.structDecls.open(`typedef struct ${envType}`);
@@ -33823,6 +33892,37 @@ class Emitter {
             stageBuf.line("return;");
         };
         const emitBodyReentry = (stageBuf: CBuf): void => {
+            if (initialBody && initialBodyAdapter) {
+                this.argumentValueScopes.push(firstScope);
+                this.awaitExpressionValueScopes.push(firstAwaitScope);
+                if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+                let source: EmitResult;
+                try {
+                    source = this.emitExpr(initialBodyAwaitExprs[0]!.expression);
+                } finally {
+                    if (thisValue) this.functionThisStack.pop();
+                    this.awaitExpressionValueScopes.pop();
+                    this.argumentValueScopes.pop();
+                }
+                const sourceVar = this.freshTemp("_await_body_reentry_source");
+                const envVar = this.freshTemp("_await_body_reentry_env");
+                stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, initialBodyPromiseType!, initialBodyAwaitExprs[0]!.expression)};`);
+                stageBuf.line(`${initialBodyAdapter}_env_t* const ${envVar} = (${initialBodyAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${initialBodyAdapter}_env_t));`);
+                stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
+                stageBuf.line(`${envVar}->result_promise = _ret;`);
+                for (const param of params) stageBuf.line(`${envVar}->${param.field} = state->${param.field};`);
+                for (const capture of loopInitializerCaptures) stageBuf.line(`${envVar}->${capture.field} = state->${capture.field};`);
+                if (thisValue) stageBuf.line(`${envVar}->this_arg = state->this_arg;`);
+                stageBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${initialBodyAdapter}, ${envVar});`);
+                stageBuf.close();
+                stageBuf.open("else");
+                stageBuf.line(`${initialBodyAdapter}(${envVar});`);
+                stageBuf.close();
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line("return;");
+                return;
+            }
             if (bodyIsBreak) {
                 this.argumentValueScopes.push(firstScope);
                 this.awaitExpressionValueScopes.push(firstAwaitScope);
@@ -34276,23 +34376,27 @@ class Emitter {
                 buf.line(`${initializer.c};`);
             }
         }
-        const firstSource = this.emitExpr(awaitExpressions[0]!.expression);
+        const initialAwaitExpr = initialBody ? initialBodyAwaitExprs[0]! : awaitExpressions[0]!;
+        const initialPromiseType = initialBody ? initialBodyPromiseType! : promiseTypes[0]!;
+        const initialAdapter = initialBody ? initialBodyAdapter! : stageNames[0]!;
+        const firstSource = this.emitExpr(initialAwaitExpr.expression);
         const sourceVar = this.freshTemp("_await_multi_source");
         const resultVar = this.freshTemp("_await_multi_result");
         const envVar = this.freshTemp("_await_multi_env");
-        buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(firstSource, promiseTypes[0]!, awaitExpressions[0]!.expression)};`);
+        buf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(firstSource, initialPromiseType, initialAwaitExpr.expression)};`);
         buf.line(`tsc_promise_t* const ${resultVar} = tsc_promise_pending();`);
-        buf.line(`${stageEnvTypes[0]}* const ${envVar} = (${stageEnvTypes[0]}*)TSC_GC_MALLOC(sizeof(${stageEnvTypes[0]}));`);
+        const initialEnvType = `${initialAdapter}_env_t`;
+        buf.line(`${initialEnvType}* const ${envVar} = (${initialEnvType}*)TSC_GC_MALLOC(sizeof(${initialEnvType}));`);
         buf.line(`${envVar}->receiver = ${sourceVar};`);
         buf.line(`${envVar}->result_promise = ${resultVar};`);
         for (const param of params) buf.line(`${envVar}->${param.field} = ${param.name};`);
         for (const capture of loopInitializerCaptures) buf.line(`${envVar}->${capture.field} = ${capture.name};`);
         if (thisValue) buf.line(`${envVar}->this_arg = ${thisValue.c};`);
         buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-        buf.line(`tsc_promise_add_callback(${sourceVar}, ${stageNames[0]}, ${envVar});`);
+        buf.line(`tsc_promise_add_callback(${sourceVar}, ${initialAdapter}, ${envVar});`);
         buf.close();
         buf.open("else");
-        buf.line(`${stageNames[0]}(${envVar});`);
+        buf.line(`${initialAdapter}(${envVar});`);
         buf.close();
         buf.line(`return ${resultVar};`);
         return true;
@@ -36912,7 +37016,7 @@ class Emitter {
                 [],
                 loopIncrementor,
             )) return true;
-        if (!doWhile && loopInitializerBreakSupported && (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) && awaitExpressions.length >= 3 &&
+        if (loopInitializerBreakSupported && loopTwoAwaitControlSupported && awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
                 buf,
                 condition,
@@ -36925,6 +37029,7 @@ class Emitter {
                 loopInitializerExpression,
                 [],
                 loopIncrementor,
+                doWhile,
             )) return true;
         let loopInitializerCaptures: AsyncAwaitContinuationParam[] = [];
         if (loopInitializer) {
@@ -37015,7 +37120,7 @@ class Emitter {
                 loopInitializerCaptures,
                 loopIncrementor,
             )) return true;
-        if (!doWhile && loopInitializer && ts.isVariableStatement(loopInitializer) &&
+        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
             (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
             awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
@@ -37030,6 +37135,7 @@ class Emitter {
                 loopInitializer,
                 loopInitializerCaptures,
                 loopIncrementor,
+                doWhile,
             )) return true;
         if (
             loopBody.length > 0 &&
