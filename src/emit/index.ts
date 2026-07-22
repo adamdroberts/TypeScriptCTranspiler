@@ -39242,15 +39242,37 @@ class Emitter {
             !ts.isReturnStatement(result) || !result.expression) return false;
         const first = this.awaitedContinuationStep(firstStatement);
         if (!first || !first.variable) return false;
-        const parseBranch = (branch: ts.Statement): AsyncAwaitLeadingStep[] | null => {
+        const parseBranch = (branch: ts.Statement): {
+            steps: AsyncAwaitLeadingStep[];
+            betweenStatements: ts.Statement[][];
+        } | null => {
             const statements = ts.isBlock(branch) ? branch.statements : [branch];
-            if (statements.length === 0) return [];
-            const steps = statements.map((statement) => this.awaitedContinuationStep(statement));
-            if (steps.some((step) => !step)) return null;
+            if (statements.length === 0) return null;
+            const steps: AsyncAwaitLeadingStep[] = [];
+            const stepStatements: ts.Statement[] = [];
+            const betweenStatements: ts.Statement[][] = [];
+            let pendingBetween: ts.Statement[] = [];
+            for (const statement of statements) {
+                const step = this.awaitedContinuationStep(statement);
+                if (step) {
+                    if (steps.length === 0 && pendingBetween.length > 0) return null;
+                    if (steps.length > 0) {
+                        betweenStatements.push(pendingBetween);
+                        pendingBetween = [];
+                    }
+                    steps.push(step);
+                    stepStatements.push(statement);
+                } else {
+                    if (steps.length === 0 || !this.asyncAwaitInterstitialControlFlowSupported(statement)) return null;
+                    pendingBetween.push(statement);
+                }
+            }
+            if (steps.length === 0) return null;
+            betweenStatements.push(pendingBetween);
             for (let i = 0; i < steps.length; i++) {
                 const step = steps[i]!;
                 if (!step.variable) continue;
-                const statement = statements[i]!;
+                const statement = stepStatements[i]!;
                 if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
                     !ts.isIdentifier(statement.declarationList.declarations[0]!.name) ||
@@ -39258,10 +39280,13 @@ class Emitter {
                     return null;
                 }
             }
-            return steps as AsyncAwaitLeadingStep[];
+            return { steps, betweenStatements };
         };
         const branches = parseBranch(conditional.thenStatement);
-        const alternateBranches = conditional.elseStatement ? parseBranch(conditional.elseStatement) : [];
+        const alternateBranches = conditional.elseStatement ? parseBranch(conditional.elseStatement) : {
+            steps: [],
+            betweenStatements: [],
+        };
         if (!branches || !alternateBranches) return false;
         const returnAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(returnAwait)) return false;
@@ -39304,28 +39329,28 @@ class Emitter {
         const trueContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],
             hoistedSymbols: [],
-            steps: [...branches, returnStep],
-            betweenStatements: branches.map(() => []),
+            steps: [...branches.steps, returnStep],
+            betweenStatements: branches.betweenStatements,
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
             params: tailParams,
             thisValue: callbackThis,
-            usesAwaitedLocals: [...branches.map((branch) => !!branch.variable), false],
+            usesAwaitedLocals: [...branches.steps.map((branch) => !!branch.variable), false],
         };
         const falseContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],
             hoistedSymbols: [],
-            steps: [...alternateBranches, returnStep],
-            betweenStatements: alternateBranches.map(() => []),
+            steps: [...alternateBranches.steps, returnStep],
+            betweenStatements: alternateBranches.betweenStatements,
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
             params: tailParams,
             thisValue: callbackThis,
-            usesAwaitedLocals: [...alternateBranches.map((branch) => !!branch.variable), false],
+            usesAwaitedLocals: [...alternateBranches.steps.map((branch) => !!branch.variable), false],
         };
 
         const bodyName = `tsc_async_await_nested_if_after_await_${this.asyncAwaitReturnContinuationAdapters++}`;

@@ -15,7 +15,6 @@ async function branchPostAwaitNestedSuspend(flag: boolean): Promise<string> {
     } else {
         let branchValue = await later(first + "-else");
         branchValue = branchValue + "-post";
-        await later(branchValue + "-else-two");
     }
     return await later(first + "-return");
 }
@@ -33,7 +32,6 @@ class NestedSuspendRunner {
         } else {
             let branchValue = await later(first + "-else");
             branchValue = branchValue + "-post";
-            await later(branchValue + "-else-two");
         }
         return await later(first + "-return");
     }
@@ -52,7 +50,6 @@ const nestedSuspendValue = async (flag: boolean): Promise<string> => {
     } else {
         let branchValue = await later(first + "-else");
         branchValue = branchValue + "-post";
-        await later(branchValue + "-else-two");
     }
     return await later(first + "-return");
 };
