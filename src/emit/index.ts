@@ -52216,7 +52216,8 @@ class Emitter {
                 const isArrayStaticCall =
                     (method === "isArray" && node.arguments.length === 1) ||
                     method === "of" ||
-                    (method === "from" && node.arguments.length === 1);
+                    (method === "from" && node.arguments.length === 1) ||
+                    (method === "fromAsync" && node.arguments.length === 1);
                 const isObjectStaticCall = method === "is" && node.arguments.length === 2;
                 const isRegExpStaticCall = method === "escape" && node.arguments.length === 1;
                 const isUrlStaticCall = method === "canParse" && node.arguments.length >= 1 && node.arguments.length <= 2;
