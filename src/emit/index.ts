@@ -39335,6 +39335,7 @@ class Emitter {
         const first = this.awaitedContinuationStep(firstStatement);
         if (!first || !first.variable) return false;
         const parseBranch = (branch: ts.Statement): {
+            leadingStatements: ts.Statement[];
             steps: AsyncAwaitLeadingStep[];
             betweenStatements: ts.Statement[][];
         } | null => {
@@ -39343,6 +39344,7 @@ class Emitter {
             const steps: AsyncAwaitLeadingStep[] = [];
             const stepStatements: ts.Statement[] = [];
             const betweenStatements: ts.Statement[][] = [];
+            const leadingStatements: ts.Statement[] = [];
             let pendingBetween: ts.Statement[] = [];
             for (const statement of statements) {
                 const conditionalSteps = this.asyncAwaitConditionalLeadingSteps(statement);
@@ -39370,8 +39372,23 @@ class Emitter {
                     steps.push(step);
                     stepStatements.push(statement);
                 } else {
-                    if (steps.length === 0 || !this.asyncAwaitInterstitialControlFlowSupported(statement)) return null;
-                    pendingBetween.push(statement);
+                    if (steps.length === 0) {
+                        if (!ts.isExpressionStatement(statement)) return null;
+                        let valid = true;
+                        const visit = (node: ts.Node): void => {
+                            if (!valid || ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                                valid = false;
+                                return;
+                            }
+                            ts.forEachChild(node, visit);
+                        };
+                        visit(statement.expression);
+                        if (!valid) return null;
+                        leadingStatements.push(statement);
+                    } else {
+                        if (!this.asyncAwaitInterstitialControlFlowSupported(statement)) return null;
+                        pendingBetween.push(statement);
+                    }
                 }
             }
             if (steps.length === 0) return null;
@@ -39389,10 +39406,11 @@ class Emitter {
                     return null;
                 }
             }
-            return { steps, betweenStatements };
+            return { leadingStatements, steps, betweenStatements };
         };
         const branches = parseBranch(conditional.thenStatement);
         const alternateBranches = conditional.elseStatement ? parseBranch(conditional.elseStatement) : {
+            leadingStatements: [],
             steps: [],
             betweenStatements: [],
         };
@@ -39436,7 +39454,7 @@ class Emitter {
         const callbackThis = thisValue ? { c: "state->this_arg", ty: thisValue.ty } : null;
         const returnStep: AsyncAwaitLeadingStep = { variable: null, awaitExpr: returnAwait };
         const trueContinuation: AsyncAwaitLeadingReturnContinuation = {
-            preludeStatements: [],
+            preludeStatements: branches.leadingStatements,
             hoistedSymbols: [],
             steps: [...branches.steps, returnStep],
             betweenStatements: branches.betweenStatements,
@@ -39449,7 +39467,7 @@ class Emitter {
             usesAwaitedLocals: [...branches.steps.map((branch) => !!branch.variable), false],
         };
         const falseContinuation: AsyncAwaitLeadingReturnContinuation = {
-            preludeStatements: [],
+            preludeStatements: alternateBranches.leadingStatements,
             hoistedSymbols: [],
             steps: [...alternateBranches.steps, returnStep],
             betweenStatements: alternateBranches.betweenStatements,
@@ -39501,9 +39519,11 @@ class Emitter {
         bodyBuf.open(`if (setjmp(${eh}.jb) == 0)`);
         const condition = this.emitExpr(conditional.expression);
         bodyBuf.open(`if (${this.coerce(condition, T_BOOLEAN, conditional.expression)})`);
+        for (const statement of trueContinuation.preludeStatements) this.emitStmt(bodyBuf, statement);
         this.emitAsyncAwaitLeadingReturnContinuationResult(bodyBuf, trueContinuation, "_ret", false);
         bodyBuf.close();
         bodyBuf.open("else");
+        for (const statement of falseContinuation.preludeStatements) this.emitStmt(bodyBuf, statement);
         this.emitAsyncAwaitLeadingReturnContinuationResult(bodyBuf, falseContinuation, "_ret", false);
         bodyBuf.close();
         bodyBuf.line(`tsc_try_pop();`);
