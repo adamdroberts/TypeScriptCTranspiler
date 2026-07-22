@@ -52151,13 +52151,7 @@ class Emitter {
             return this.isSupportedInlineBindingName(parameter.name);
         }
         if (!ts.isObjectBindingPattern(parameter.name)) return false;
-        return parameter.name.elements.every((element) =>
-            ts.isBindingElement(element) &&
-            !element.dotDotDotToken &&
-            !element.initializer &&
-            ts.isIdentifier(element.name) &&
-            (!element.propertyName || ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)),
-        );
+        return this.isSupportedInlineObjectBindingName(parameter.name);
     }
 
     private isSupportedInlineBindingName(name: ts.BindingName): boolean {
@@ -52168,6 +52162,18 @@ class Emitter {
             !element.dotDotDotToken &&
             !element.initializer &&
             this.isSupportedInlineBindingName(element.name),
+        );
+    }
+
+    private isSupportedInlineObjectBindingName(name: ts.BindingName): boolean {
+        if (ts.isIdentifier(name)) return true;
+        if (!ts.isObjectBindingPattern(name)) return false;
+        return name.elements.every((element) =>
+            ts.isBindingElement(element) &&
+            !element.dotDotDotToken &&
+            !element.initializer &&
+            (!element.propertyName || ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)) &&
+            (ts.isIdentifier(element.name) || this.isSupportedInlineObjectBindingName(element.name)),
         );
     }
 
@@ -53224,22 +53230,31 @@ class Emitter {
             if (parameterType.kind !== "value") {
                 unsupported(parameter, "object destructuring currently requires a dynamic object parameter type");
             }
-            parameter.name.elements.forEach((element) => {
-                if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) {
-                    unsupported(parameter, "object destructuring requires simple binding elements");
-                }
-                const property = element.propertyName ?? element.name;
-                if (!ts.isIdentifier(property) && !ts.isStringLiteral(property)) {
-                    unsupported(element, "object destructuring requires static property names");
-                }
-                const key = property.text;
-                const bindingType = this.prepareType(mapType(element.name, this.checker));
-                const raw = `tsc_value_get_prop(${paramNames[i]}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`;
-                const symbol = this.symbolForIdentifier(element.name);
-                if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
-                argumentScope.set(symbol, bindingType.kind === "value" ? raw : this.unboxDynamicValue(raw, bindingType));
-                argumentTypeScope.set(symbol, bindingType);
-            });
+            const bindObjectPattern = (pattern: ts.ObjectBindingPattern, source: string): void => {
+                pattern.elements.forEach((element) => {
+                    if (!ts.isBindingElement(element) || element.dotDotDotToken || element.initializer) {
+                        unsupported(pattern, "object destructuring requires simple static binding elements");
+                    }
+                    const property = element.propertyName ?? element.name;
+                    if (!ts.isIdentifier(property) && !ts.isStringLiteral(property)) {
+                        unsupported(element, "object destructuring requires static property names");
+                    }
+                    const key = property.text;
+                    const raw = `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`;
+                    if (ts.isIdentifier(element.name)) {
+                        const bindingType = this.prepareType(mapType(element.name, this.checker));
+                        const symbol = this.symbolForIdentifier(element.name);
+                        if (!symbol) unsupported(element.name, "could not resolve destructured closure parameter");
+                        argumentScope.set(symbol, bindingType.kind === "value" ? raw : this.unboxDynamicValue(raw, bindingType));
+                        argumentTypeScope.set(symbol, bindingType);
+                    } else if (ts.isObjectBindingPattern(element.name)) {
+                        bindObjectPattern(element.name, raw);
+                    } else {
+                        unsupported(element, "nested object destructuring requires object binding patterns");
+                    }
+                });
+            };
+            bindObjectPattern(parameter.name, paramNames[i]);
         }
 
         const capturedCells = this.capturedCellsFor(fn);
