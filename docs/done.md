@@ -2498,6 +2498,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_throw_yield` | lazy generators resume suspended throw-yield expressions and close before throwing |
 | `generator_lazy_while` | lazy generators resume across simple while-loop suspension points |
 | `generator_lazy_yield_expression` | lazy generators resume single suspended yield expressions |
+| `generator_lazy_yield_access` | lazy generators resume suspended property, element, and bounded optional element access |
 | `generator_lazy_yield_binary_more` | lazy generators resume single suspended yield binary arithmetic, bitwise, and shift expressions |
 | `generator_lazy_yield_comparison` | lazy generators resume single suspended yield binary comparison expressions |
 | `generator_lazy_yield_instanceof` | lazy generators resume single suspended yield values inside instanceof expressions |

@@ -75346,6 +75346,7 @@ class Emitter {
             return { c: moduleNsMember, ty };
         }
         const recv = precomputedReceiver ?? this.emitExpr(ea.expression);
+        const isOpt = !!ea.questionDotToken;
         const isArrayPrototypeReceiver = this.isStaticArrayPrototypeExpression(ea.expression);
         if (isArrayPrototypeReceiver && this.isSymbolIteratorExpression(ea.argumentExpression)) {
             return this.emitSequencedExpr(
@@ -75386,6 +75387,17 @@ class Emitter {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
             const et = recv.ty.elem!;
+            if (isOpt) {
+                return this.emitSequencedExpr(
+                    et,
+                    [{ value: recv }, { value: idx }],
+                    ([obj, index]) => `${obj} != NULL ? ${
+                        et.kind === "value"
+                            ? `tsc_value_get_index(tsc_value_array(${obj}), ${index})`
+                            : `TSC_ARR(${et.c}, ${obj}, (size_t)(${index}))`
+                    } : ${this.zeroValue(et)}`,
+                );
+            }
             if (et.kind === "value") {
                 return {
                     c: `tsc_value_get_index(tsc_value_array(${recv.c}), ${idx.c})`,
@@ -75422,15 +75434,53 @@ class Emitter {
         if (recv.ty.kind === "string") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
+            if (isOpt) {
+                return this.emitSequencedExpr(
+                    T_STRING,
+                    [{ value: recv }, { value: idx }],
+                    ([obj, index]) => `${obj} != NULL ? tsc_str_char_at(${obj}, ${index}) : ${this.zeroValue(T_STRING)}`,
+                );
+            }
             return { c: `tsc_str_char_at(${recv.c}, ${idx.c})`, ty: T_STRING };
         }
         if (recv.ty.kind === "buffer") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
             requireNumber(ea.argumentExpression, idx.ty);
+            if (isOpt) {
+                return this.emitSequencedExpr(
+                    T_NUMBER,
+                    [{ value: recv }, { value: idx }],
+                    ([obj, index]) => `${obj} != NULL ? tsc_buffer_get(${obj}, ${index}) : ${this.zeroValue(T_NUMBER)}`,
+                );
+            }
             return { c: `tsc_buffer_get(${recv.c}, ${idx.c})`, ty: T_NUMBER };
         }
         if (recv.ty.kind === "value") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
+            if (isOpt) {
+                let accessKind: "index" | "prop" | "symbol";
+                if (idx.ty.kind === "number") {
+                    accessKind = "index";
+                } else if (idx.ty.kind === "string") {
+                    accessKind = "prop";
+                } else if (idx.ty.kind === "symbol" && this.isSupportedWellKnownSymbolExpression(ea.argumentExpression)) {
+                    accessKind = "symbol";
+                } else {
+                    unsupported(ea.argumentExpression, "dynamic optional index must be number, string, or supported symbol");
+                }
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: recv }, { value: idx }],
+                    ([obj, index]) => {
+                        const access = accessKind === "index"
+                            ? `tsc_value_get_index(${obj}, ${index})`
+                            : accessKind === "prop"
+                                ? `tsc_value_get_prop(${obj}, ${index})`
+                                : `tsc_value_get_symbol_prop(${obj}, ${index})`;
+                        return `tsc_value_is_nullish(${obj}) ? tsc_value_undefined() : ${access}`;
+                    },
+                );
+            }
             if (idx.ty.kind === "number") {
                 return { c: `tsc_value_get_index(${recv.c}, ${idx.c})`, ty: T_VALUE };
             }

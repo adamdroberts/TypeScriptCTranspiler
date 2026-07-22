@@ -17,7 +17,9 @@ function* access(): Generator<number, string, any> {
     const nested: string = (yield 3).nested.code;
     events.push("nested " + nested);
 
-    return (yield 4)["tail"] + ":" + picked;
+    const optionalTail: string = (yield 4)?.["tail"];
+    const optionalMissing: any = (yield 5)?.["tail"];
+    return optionalTail + ":" + String(optionalMissing) + ":" + picked;
 }
 
 const iter = access();
@@ -27,7 +29,8 @@ const r1: any = iter.next(mark("ignored", { label: "unused" }));
 const r2: any = iter.next(mark("alpha", { label: "alpha" }));
 const r3: any = iter.next(mark("array", [10, 42]));
 const r4: any = iter.next(mark("nested", { nested: { code: "deep" } }));
-const done: any = iter.next(mark("tail", { tail: "done" }));
+const r5: any = iter.next(mark("tail", { tail: "done" }));
+const done: any = iter.next(mark("missing", null));
 
-console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, done.done, done.value);
+console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, r5.done, r5.value, done.done, done.value);
 console.log("events:", events.join("|"));
