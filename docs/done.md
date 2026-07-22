@@ -474,6 +474,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite lazy multi-yield returns also evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield assignment leaves at the final resume, preserving mutation timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate bounded no-yield string/string and dynamic-value logical leaves for `&&`, `||`, and `??` at the final resume, preserving short-circuit/nullish side-effect timing. Test: `generator_lazy_multi_yield_return`
+- Finite lazy multi-yield returns also preserve bounded optional property leaves across suspension points, including nullish receivers and a final comparison. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield conditional leaves at the final resume, preserving branch and side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield template-expression leaves at the final resume, preserving interpolation side-effect timing. Test: `generator_lazy_multi_yield_return`
 - Finite lazy multi-yield returns also evaluate direct no-yield tagged-template leaves at the final resume, preserving tag side-effect timing. Test: `generator_lazy_multi_yield_return`

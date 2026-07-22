@@ -213,6 +213,10 @@ function* dynamicLogicalLeaves(): Generator<string, string, string> {
     return (yield "left") + (dynamicLogicalCondition && dynamicLogicalLeaf()) + (yield "right");
 }
 
+function* optionalPropertyLeaves(): Generator<any, boolean, any> {
+    return (yield null)?.value === (yield { value: 1 }).value;
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -471,6 +475,11 @@ const dynamicLogicalLeafSecond: any = dynamicLogicalLeafIter.next("A");
 console.log("dynamic-logical-leaf-before", dynamicLogicalLeafFirst.value, dynamicLogicalLeafSecond.value, dynamicLogicalLeafCounter);
 const dynamicLogicalLeafDone: any = dynamicLogicalLeafIter.next("B");
 console.log("dynamic-logical-leaf", dynamicLogicalLeafDone.done, dynamicLogicalLeafDone.value, dynamicLogicalLeafCounter);
+const optionalPropertyLeafIter = optionalPropertyLeaves();
+const optionalPropertyLeafFirst: any = optionalPropertyLeafIter.next();
+const optionalPropertyLeafSecond: any = optionalPropertyLeafIter.next({ value: 2 });
+const optionalPropertyLeafDone: any = optionalPropertyLeafIter.next(3);
+console.log("optional-property-leaf", optionalPropertyLeafFirst.value, optionalPropertyLeafSecond.value.value, optionalPropertyLeafDone.done, optionalPropertyLeafDone.value);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
