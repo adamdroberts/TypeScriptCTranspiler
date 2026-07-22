@@ -292,6 +292,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
     bodyPostAwaitStatements: readonly ts.Statement[];
     bodyAwaitFinallyStatements?: readonly ts.Statement[];
+    bodyAwaitFinallyAwaitExpr?: ts.AwaitExpression;
     bodyPreludeStatements: readonly ts.Statement[];
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyContinue: boolean;
@@ -35602,6 +35603,7 @@ class Emitter {
         };
         const directBodyAwait = this.unwrapTransparentExpression(bodyExpression);
         let bodyAwaitFinallyStatements: readonly ts.Statement[] = [];
+        let continuationBodyAwaitFinallyAwaitExpr: ts.AwaitExpression | undefined;
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -35661,6 +35663,7 @@ class Emitter {
                 bodyAwaitExprs = finallyAwaitExpression ? [awaitExpression, finallyAwaitExpression] : [awaitExpression];
                 bodyPostAwaitStatements = finallyAwaitExpression ? finallyStatements.slice(1) : [];
                 bodyAwaitFinallyStatements = finallyAwaitExpression ? [] : finallyStatements;
+                continuationBodyAwaitFinallyAwaitExpr = finallyAwaitExpression ?? undefined;
             } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
                 const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[0]!.statement);
                 const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[bodyAwaitStatements.length - 1]!.statement);
@@ -36053,6 +36056,7 @@ class Emitter {
             bodyAwaitedAliasSymbols,
             bodyPostAwaitStatements,
             bodyAwaitFinallyStatements,
+            bodyAwaitFinallyAwaitExpr: continuationBodyAwaitFinallyAwaitExpr,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyContinue,
@@ -36408,6 +36412,10 @@ class Emitter {
             this.structDecls.open(`typedef struct ${envType}`);
             this.structDecls.line("tsc_promise_t* receiver;");
             this.structDecls.line("tsc_promise_t* result_promise;");
+            if (continuation.bodyAwaitFinallyAwaitExpr) {
+                this.structDecls.line("bool reject_after_success;");
+                this.structDecls.line("tsc_value_t rejection_reason;");
+            }
             for (const param of continuation.params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (continuation.thisValue) this.structDecls.line(`${continuation.thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -36441,7 +36449,36 @@ class Emitter {
             buf.line("tsc_promise_t* _p = state->receiver;");
             buf.line("tsc_promise_t* _ret = state->result_promise;");
             buf.open("if (tsc_promise_is_rejected(_p))");
-            buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            if (index === 0 && continuation.bodyAwaitFinallyAwaitExpr && names.length > 1) {
+                const rejectedFinallySourceVar = this.freshTemp("_await_rejected_finally_source");
+                const rejectedFinallyEnvVar = this.freshTemp("_await_rejected_finally_env");
+                const rejectedFinallyEnvType = `${names[1]!}_env_t`;
+                this.argumentValueScopes.push(scope);
+                if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
+                let rejectedFinallySource: EmitResult;
+                try {
+                    rejectedFinallySource = this.emitExpr(continuation.bodyAwaitFinallyAwaitExpr.expression);
+                } finally {
+                    if (continuation.thisValue) this.functionThisStack.pop();
+                    this.argumentValueScopes.pop();
+                }
+                buf.line(`tsc_promise_t* const ${rejectedFinallySourceVar} = ${this.coerce(rejectedFinallySource, promiseTypes[1]!, continuation.bodyAwaitFinallyAwaitExpr.expression)};`);
+                buf.line(`${rejectedFinallyEnvType}* const ${rejectedFinallyEnvVar} = (${rejectedFinallyEnvType}*)TSC_GC_MALLOC(sizeof(${rejectedFinallyEnvType}));`);
+                buf.line(`${rejectedFinallyEnvVar}->receiver = ${rejectedFinallySourceVar};`);
+                buf.line(`${rejectedFinallyEnvVar}->result_promise = _ret;`);
+                buf.line(`${rejectedFinallyEnvVar}->reject_after_success = true;`);
+                buf.line(`${rejectedFinallyEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
+                for (const param of continuation.params) buf.line(`${rejectedFinallyEnvVar}->${param.field} = state->${param.field};`);
+                if (continuation.thisValue) buf.line(`${rejectedFinallyEnvVar}->this_arg = state->this_arg;`);
+                buf.open(`if (tsc_promise_is_pending(${rejectedFinallySourceVar}))`);
+                buf.line(`tsc_promise_add_callback(${rejectedFinallySourceVar}, ${names[1]}, ${rejectedFinallyEnvVar});`);
+                buf.close();
+                buf.open("else");
+                buf.line(`${names[1]}(${rejectedFinallyEnvVar});`);
+                buf.close();
+            } else {
+                buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            }
             buf.line("return;");
             buf.close();
             buf.open("if (!tsc_promise_is_fulfilled(_p))");
@@ -36466,6 +36503,9 @@ class Emitter {
                     buf.line(`${names[index + 1]!}_env_t* ${nextEnvVar} = (${names[index + 1]!}_env_t*)TSC_GC_MALLOC(sizeof(${names[index + 1]!}_env_t));`);
                     buf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
                     buf.line(`${nextEnvVar}->result_promise = _ret;`);
+                    if (continuation.bodyAwaitFinallyAwaitExpr) {
+                        buf.line(`${nextEnvVar}->reject_after_success = false;`);
+                    }
                     for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
                     buf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
@@ -36476,6 +36516,13 @@ class Emitter {
                     buf.close();
                 } else {
                     for (const statement of continuation.bodyPostAwaitStatements) this.emitStmt(buf, statement);
+                    if (continuation.bodyAwaitFinallyAwaitExpr) {
+                        buf.open("if (state->reject_after_success)");
+                        buf.line("tsc_promise_reject_in_place(_ret, state->rejection_reason);");
+                        buf.line("tsc_try_pop();");
+                        buf.line("return;");
+                        buf.close();
+                    }
                     if (continuation.loopIncrementor) {
                         const incrementor = this.emitExpr(continuation.loopIncrementor);
                         buf.line(`${incrementor.c};`);
