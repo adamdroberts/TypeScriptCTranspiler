@@ -45,6 +45,8 @@ dynamic-logical-leaf-before left right 0
 dynamic-logical-leaf true AmidB 1
 optional-property-leaf null 1 true false
 optional-element-leaf null 1 true false
+new-leaf-before 73 74 0
+new-leaf true 12 1
 global 34 35 true NaN
 infinity 36 37 true Infinity
 captured 40 41 true 21

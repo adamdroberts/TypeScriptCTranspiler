@@ -221,6 +221,20 @@ function* optionalElementLeaves(): Generator<any, boolean, any> {
     return (yield null)?.[0] === (yield [1])[0];
 }
 
+let newLeafCounter = 0;
+
+class NewLeaf {
+    value = 7;
+
+    constructor() {
+        newLeafCounter++;
+    }
+}
+
+function* newLeaves(): Generator<number, number, number> {
+    return (yield 73) + new NewLeaf().value + (yield 74);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -489,6 +503,12 @@ const optionalElementLeafFirst: any = optionalElementLeafIter.next();
 const optionalElementLeafSecond: any = optionalElementLeafIter.next([2]);
 const optionalElementLeafDone: any = optionalElementLeafIter.next(3);
 console.log("optional-element-leaf", optionalElementLeafFirst.value, optionalElementLeafSecond.value[0], optionalElementLeafDone.done, optionalElementLeafDone.value);
+const newLeafIter = newLeaves();
+const newLeafFirst: any = newLeafIter.next();
+const newLeafSecond: any = newLeafIter.next(2);
+console.log("new-leaf-before", newLeafFirst.value, newLeafSecond.value, newLeafCounter);
+const newLeafDone: any = newLeafIter.next(3);
+console.log("new-leaf", newLeafDone.done, newLeafDone.value, newLeafCounter);
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
