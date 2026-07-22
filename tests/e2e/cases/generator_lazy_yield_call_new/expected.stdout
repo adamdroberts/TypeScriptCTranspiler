@@ -1,3 +1,3 @@
 created: <empty>
-steps: false 1 false 2 false 3 true call:7|second:12|tail
-events: ignored|start|alpha|combine 7|first call:7|beta|combine 12|second second:12|gamma|box tail|boxed tail
+steps: false 1 false 2 false 3 false 4 false 5 true call:7|second:12|tail|OPTIONAL|undefined
+events: ignored|start|alpha|combine 7|first call:7|beta|combine 12|second second:12|gamma|box tail|boxed tail|call|optional OPTIONAL|missing

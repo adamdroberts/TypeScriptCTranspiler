@@ -52258,7 +52258,10 @@ class Emitter {
                 for (const value of vals) {
                     pieces.push(`tsc_array_push_value(${av}, ${value})`);
                 }
-                pieces.push(`tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`);
+                const invoke = `tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${av}))`;
+                pieces.push(call.questionDotToken
+                    ? `tsc_value_is_nullish(${fn}) ? tsc_value_undefined() : ${invoke}`
+                    : invoke);
                 return `({ ${pieces.join("; ")}; })`;
             },
         );

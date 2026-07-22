@@ -30,7 +30,10 @@ function* flow(): Generator<any, string, any> {
     const box = new Box(yield 3);
     events.push("boxed " + box.value);
 
-    return first + "|" + second + "|" + box.value;
+    const optionalCall = ((yield 4) as any)?.("optional");
+    events.push("optional " + String(optionalCall));
+    const optionalMissing = ((yield 5) as any)?.("missing");
+    return first + "|" + second + "|" + box.value + "|" + String(optionalCall) + "|" + String(optionalMissing);
 }
 
 const iter = flow();
@@ -40,6 +43,8 @@ const r1: any = iter.next(mark("ignored", 99));
 const r2: any = iter.next(mark("alpha", 7));
 const r3: any = iter.next(mark("beta", 12));
 const r4: any = iter.next(mark("gamma", "tail"));
+const r5: any = iter.next(mark("call", (value: string) => value.toUpperCase()));
+const r6: any = iter.next(mark("missing", null));
 
-console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value);
+console.log("steps:", r1.done, r1.value, r2.done, r2.value, r3.done, r3.value, r4.done, r4.value, r5.done, r5.value, r6.done, r6.value);
 console.log("events:", events.join("|"));
