@@ -1,6 +1,9 @@
-interface Point {
+interface BasePoint {
     x: number;
     y: number;
+}
+
+interface Point extends BasePoint {
     z: number;
 }
 
