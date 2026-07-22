@@ -52211,16 +52211,20 @@ class Emitter {
             }
             if (ts.isArrayLiteralExpression(node)) {
                 for (const element of node.elements) {
-                    if (ts.isSpreadElement(element) || ts.isOmittedExpression(element)) {
+                    if (ts.isOmittedExpression(element)) {
                         supported = false;
                         return;
                     }
-                    visit(element);
+                    visit(ts.isSpreadElement(element) ? element.expression : element);
                 }
                 return;
             }
             if (ts.isObjectLiteralExpression(node)) {
                 for (const property of node.properties) {
+                    if (ts.isSpreadAssignment(property)) {
+                        visit(property.expression);
+                        continue;
+                    }
                     if (ts.isShorthandPropertyAssignment(property)) {
                         visit(property.name);
                         continue;
