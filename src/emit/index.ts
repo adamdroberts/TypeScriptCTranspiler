@@ -52217,6 +52217,7 @@ class Emitter {
                 const isObjectStaticCall = method === "is" && node.arguments.length === 2;
                 const isRegExpStaticCall = method === "escape" && node.arguments.length === 1;
                 const isUrlStaticCall = method === "canParse" && node.arguments.length >= 1 && node.arguments.length <= 2;
+                const isJsonStaticCall = method === "parse" && node.arguments.length === 1;
                 const isPureBuiltinCall =
                     receiver &&
                     this.isUnshadowedGlobalIdentifier(receiver, receiver.text) &&
@@ -52233,7 +52234,8 @@ class Emitter {
                         (receiver.text === "Array" && isArrayStaticCall) ||
                         (receiver.text === "Object" && isObjectStaticCall) ||
                         (receiver.text === "RegExp" && isRegExpStaticCall) ||
-                        (receiver.text === "URL" && isUrlStaticCall));
+                        (receiver.text === "URL" && isUrlStaticCall) ||
+                        (receiver.text === "JSON" && isJsonStaticCall));
                 if (
                     !isPureBuiltinCall ||
                     node.arguments.some(ts.isSpreadElement)
