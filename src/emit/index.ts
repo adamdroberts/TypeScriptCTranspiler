@@ -38593,7 +38593,8 @@ class Emitter {
         if (!ts.isAwaitExpression(bodyAwait)) return false;
         const terminal = loopBody[1]!;
         const isBreak = ts.isBreakStatement(terminal) && !terminal.label;
-        const terminalAwaitCandidate = ts.isReturnStatement(terminal) && terminal.expression
+        const isThrow = ts.isThrowStatement(terminal);
+        const terminalAwaitCandidate = (ts.isReturnStatement(terminal) || isThrow) && terminal.expression
             ? this.unwrapTransparentExpression(terminal.expression)
             : null;
         if (!isBreak && (!terminalAwaitCandidate || !ts.isAwaitExpression(terminalAwaitCandidate))) return false;
@@ -38681,9 +38682,10 @@ class Emitter {
                 terminalPromiseType!,
                 terminalAwaitedType!,
                 terminalAwait!,
-                terminalAwait!.expression,
+                isThrow ? terminalAwait! : terminalAwait!.expression,
                 params,
                 thisValue,
+                isThrow,
             );
         const bodyScope = (state: string, item: string | null): Map<ts.Symbol, string> => {
             const scope = new Map<ts.Symbol, string>();

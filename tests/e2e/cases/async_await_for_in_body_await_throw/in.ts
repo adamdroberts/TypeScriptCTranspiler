@@ -1,18 +1,18 @@
 let bodyCount = 0;
 
-function laterBody(value: string): Promise<void> {
+function laterBody(value: string): Promise<string> {
     bodyCount++;
-    return Promise.resolve(undefined);
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
 }
 
 function laterReason(value: string): Promise<string> {
-    return Promise.resolve(value);
+    return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
 }
 
 async function forInBodyAwaitThrow(): Promise<string> {
     const values: Record<string, string> = { first: "a", second: "b" };
     for (const key in values) {
-        await laterBody(values[key]);
+        await laterBody(key);
         throw await laterReason("in-throw-" + bodyCount);
     }
     return await Promise.resolve("fallthrough");
