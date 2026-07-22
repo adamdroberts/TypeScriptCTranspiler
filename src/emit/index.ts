@@ -52186,7 +52186,45 @@ class Emitter {
         const initializer = parameter.initializer;
         if (!initializer) return true;
         const value = this.unwrapTransparentExpression(initializer);
-        return this.isSimpleLazyMultiYieldLiteral(value) || ts.isRegularExpressionLiteral(value);
+        if (this.isSimpleLazyMultiYieldLiteral(value) || ts.isRegularExpressionLiteral(value)) return true;
+        const preceding = this.precedingParameterSymbols(parameter);
+        let supported = true;
+        const visit = (node: ts.Node): void => {
+            if (!supported) return;
+            if (ts.isIdentifier(node)) {
+                const symbol = this.symbolForIdentifier(node);
+                if (!symbol || !preceding.has(symbol)) supported = false;
+                return;
+            }
+            if (
+                ts.isNumericLiteral(node) ||
+                ts.isStringLiteralLike(node) ||
+                node.kind === ts.SyntaxKind.TrueKeyword ||
+                node.kind === ts.SyntaxKind.FalseKeyword ||
+                node.kind === ts.SyntaxKind.NullKeyword ||
+                ts.isParenthesizedExpression(node) ||
+                ts.isPrefixUnaryExpression(node) ||
+                ts.isBinaryExpression(node) ||
+                ts.isConditionalExpression(node)
+            ) {
+                if (ts.isParenthesizedExpression(node)) {
+                    visit(node.expression);
+                } else if (ts.isPrefixUnaryExpression(node)) {
+                    visit(node.operand);
+                } else if (ts.isBinaryExpression(node)) {
+                    visit(node.left);
+                    visit(node.right);
+                } else if (ts.isConditionalExpression(node)) {
+                    visit(node.condition);
+                    visit(node.whenTrue);
+                    visit(node.whenFalse);
+                }
+                return;
+            }
+            supported = false;
+        };
+        visit(value);
+        return supported;
     }
 
     private emitInlineClosureCall(call: ts.CallExpression): EmitResult | null {
