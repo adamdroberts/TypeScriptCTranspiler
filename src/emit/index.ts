@@ -52221,6 +52221,10 @@ class Emitter {
             }
             if (ts.isObjectLiteralExpression(node)) {
                 for (const property of node.properties) {
+                    if (ts.isShorthandPropertyAssignment(property)) {
+                        visit(property.name);
+                        continue;
+                    }
                     if (!ts.isPropertyAssignment(property) || this.staticPropertyName(property.name) === null) {
                         supported = false;
                         return;
