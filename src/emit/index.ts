@@ -42895,6 +42895,9 @@ class Emitter {
             if (ts.isElementAccessExpression(unwrapped)) {
                 return visit(unwrapped.expression) && visit(unwrapped.argumentExpression);
             }
+            if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
+                return !this.nodeContainsYield(unwrapped);
+            }
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isPrefixUnaryExpression(unwrapped)) {
@@ -44070,6 +44073,9 @@ class Emitter {
             }
             if (ts.isElementAccessExpression(unwrapped)) {
                 return this.emitElementAccess(unwrapped, build(unwrapped.expression), build(unwrapped.argumentExpression));
+            }
+            if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
+                return this.emitExpr(unwrapped);
             }
             if (ts.isTypeOfExpression(unwrapped)) {
                 return this.emitSimpleLazyResumeTypeOf(unwrapped, build(unwrapped.expression));

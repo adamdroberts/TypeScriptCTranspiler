@@ -101,6 +101,17 @@ function* initializedVarLeaves(): Generator<number, number, number> {
     return base + (yield 41) + (yield 42);
 }
 
+const sideLeafEvents: string[] = [];
+
+function sideLeaf(): number {
+    sideLeafEvents.push("side-leaf");
+    return 5;
+}
+
+function* sideEffectingLeaves(): Generator<number, number, number> {
+    return (yield 43) + sideLeaf() + (yield 44);
+}
+
 function* globalLeaves(): Generator<number, number, number> {
     return (yield 34) + NaN + (yield 35);
 }
@@ -284,6 +295,11 @@ const initializedVarFirst: any = initializedVarIter.next();
 const initializedVarSecond: any = initializedVarIter.next(5);
 const initializedVarDone: any = initializedVarIter.next(6);
 console.log("initialized-var", initializedVarFirst.value, initializedVarSecond.value, initializedVarDone.done, initializedVarDone.value);
+const sideLeafIter = sideEffectingLeaves();
+const sideLeafFirst: any = sideLeafIter.next();
+const sideLeafSecond: any = sideLeafIter.next(4);
+const sideLeafDone: any = sideLeafIter.next(6);
+console.log("side-leaf", sideLeafFirst.value, sideLeafSecond.value, sideLeafDone.done, sideLeafDone.value, sideLeafEvents.join("|"));
 const globalIter = globalLeaves();
 const globalFirst: any = globalIter.next();
 const globalSecond: any = globalIter.next(4);
