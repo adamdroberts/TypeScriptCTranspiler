@@ -39336,6 +39336,7 @@ class Emitter {
         if (!first || !first.variable) return false;
         const parseBranch = (branch: ts.Statement): {
             leadingStatements: ts.Statement[];
+            leadingCaptures: AsyncAwaitContinuationParam[];
             steps: AsyncAwaitLeadingStep[];
             betweenStatements: ts.Statement[][];
         } | null => {
@@ -39378,7 +39379,8 @@ class Emitter {
                         let valid = true;
                         const visit = (node: ts.Node): void => {
                             if (!valid || ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node) ||
-                                ts.isVariableStatement(node)) {
+                                (ts.isVariableStatement(node) &&
+                                    (node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0)) {
                                 valid = false;
                                 return;
                             }
@@ -39395,6 +39397,8 @@ class Emitter {
             }
             if (steps.length === 0) return null;
             betweenStatements.push(pendingBetween);
+            const leadingCaptures = this.asyncAwaitInterstitialCaptures(leadingStatements);
+            if (!leadingCaptures) return null;
             for (let i = 0; i < steps.length; i++) {
                 const step = steps[i]!;
                 if (!step.variable) continue;
@@ -39408,11 +39412,12 @@ class Emitter {
                     return null;
                 }
             }
-            return { leadingStatements, steps, betweenStatements };
+            return { leadingStatements, leadingCaptures, steps, betweenStatements };
         };
         const branches = parseBranch(conditional.thenStatement);
         const alternateBranches = conditional.elseStatement ? parseBranch(conditional.elseStatement) : {
             leadingStatements: [],
+            leadingCaptures: [],
             steps: [],
             betweenStatements: [],
         };
@@ -39453,31 +39458,35 @@ class Emitter {
             field: `capture_${mangleIdent(first.variable.text)}_nested_if`,
         };
         const tailParams = [...baseParams, firstCapture];
+        const trueParams = [...tailParams, ...branches.leadingCaptures];
+        const falseParams = [...tailParams, ...alternateBranches.leadingCaptures];
+        const leadingCaptures = [...branches.leadingCaptures, ...alternateBranches.leadingCaptures]
+            .filter((capture, index, captures) => captures.findIndex((candidate) => candidate.symbol === capture.symbol) === index);
         const callbackThis = thisValue ? { c: "state->this_arg", ty: thisValue.ty } : null;
         const returnStep: AsyncAwaitLeadingStep = { variable: null, awaitExpr: returnAwait };
         const trueContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: branches.leadingStatements,
-            hoistedSymbols: [],
+            hoistedSymbols: branches.leadingCaptures.map((capture) => capture.symbol),
             steps: [...branches.steps, returnStep],
             betweenStatements: branches.betweenStatements,
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
-            params: tailParams,
+            params: trueParams,
             thisValue: callbackThis,
             usesAwaitedLocals: [...branches.steps.map((branch) => !!branch.variable), false],
         };
         const falseContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: alternateBranches.leadingStatements,
-            hoistedSymbols: [],
+            hoistedSymbols: alternateBranches.leadingCaptures.map((capture) => capture.symbol),
             steps: [...alternateBranches.steps, returnStep],
             betweenStatements: alternateBranches.betweenStatements,
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
-            params: tailParams,
+            params: falseParams,
             thisValue: callbackThis,
             usesAwaitedLocals: [...alternateBranches.steps.map((branch) => !!branch.variable), false],
         };
@@ -39508,6 +39517,8 @@ class Emitter {
         bodyBuf.line("return;");
         bodyBuf.close();
         bodyBuf.line(`${firstAwaitedType.c} ${valueVar} = ${this.coerce(this.promiseFulfilledValue(firstPromiseType.elem, "_p"), firstAwaitedType, first.awaitExpr)};`);
+        for (const capture of leadingCaptures) this.asyncAwaitHoistedPreludeSymbols.add(capture.symbol);
+        this.emitAsyncAwaitPreludeHoistedDeclarations(bodyBuf, leadingCaptures);
         const callbackScope = new Map<ts.Symbol, string>();
         for (const param of this.asyncAwaitContinuationParameters(parameters)) {
             callbackScope.set(param.symbol, `state->${param.field}`);
@@ -39521,10 +39532,12 @@ class Emitter {
         bodyBuf.open(`if (setjmp(${eh}.jb) == 0)`);
         const condition = this.emitExpr(conditional.expression);
         bodyBuf.open(`if (${this.coerce(condition, T_BOOLEAN, conditional.expression)})`);
+        for (const capture of branches.leadingCaptures) callbackScope.set(capture.symbol, capture.name);
         for (const statement of trueContinuation.preludeStatements) this.emitStmt(bodyBuf, statement);
         this.emitAsyncAwaitLeadingReturnContinuationResult(bodyBuf, trueContinuation, "_ret", false);
         bodyBuf.close();
         bodyBuf.open("else");
+        for (const capture of alternateBranches.leadingCaptures) callbackScope.set(capture.symbol, capture.name);
         for (const statement of falseContinuation.preludeStatements) this.emitStmt(bodyBuf, statement);
         this.emitAsyncAwaitLeadingReturnContinuationResult(bodyBuf, falseContinuation, "_ret", false);
         bodyBuf.close();
@@ -39536,6 +39549,7 @@ class Emitter {
         bodyBuf.close();
         if (thisValue) this.functionThisStack.pop();
         this.argumentValueScopes.pop();
+        for (const capture of leadingCaptures) this.asyncAwaitHoistedPreludeSymbols.delete(capture.symbol);
         bodyBuf.close();
         bodyBuf.line();
         this.closureDefs.write(bodyBuf.toString());

@@ -9,4 +9,4 @@ value-true value-first-return
 throw-reason-true throw-first-throw
 throw-reason-false throw-first-throw
 control-true-else control-first-else-default-loop-loop-for-for-do-do-of-of-in-in-nested-prefix-nested-else-assigned-alt-post-nested-sync-else-return
-control-true-if control-first-if-switch-loop-loop-for-for-do-do-of-of-in-in-nested-prefix-nested-control-if-nested-if-assigned-post-return
+control-true-if control-first-if-switch-loop-loop-for-for-do-do-of-of-in-in-nested-prefix-nested-control-if-nested-var-nested-if-assigned-post-return
