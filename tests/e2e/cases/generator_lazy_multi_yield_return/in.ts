@@ -237,6 +237,24 @@ function* booleanLogicalFalseLeaves(): Generator<number, number, number> {
     return (yield 87) + (false && booleanLogicalLeaf() ? 1 : 0) + (yield 88);
 }
 
+let pointerNullishFallbackCounter = 0;
+function pointerNullishFallback(): number[] {
+    pointerNullishFallbackCounter++;
+    return [6, 7];
+}
+function nullableArrayLeaf(): number[] | null {
+    return null;
+}
+function presentArrayLeaf(): number[] | null {
+    return [8, 9];
+}
+function* pointerNullishLeaves(): Generator<number, number, number> {
+    return (yield 89) + (nullableArrayLeaf() ?? pointerNullishFallback()).length + (yield 90);
+}
+function* pointerNullishPresentLeaves(): Generator<number, number, number> {
+    return (yield 91) + (presentArrayLeaf() ?? pointerNullishFallback()).length + (yield 92);
+}
+
 function* optionalPropertyLeaves(): Generator<any, boolean, any> {
     return (yield null)?.value === (yield { value: 1 }).value;
 }
@@ -564,6 +582,18 @@ const booleanLogicalFalseLeafSecond: any = booleanLogicalFalseLeafIter.next(2);
 console.log("boolean-logical-false-before", booleanLogicalFalseLeafFirst.value, booleanLogicalFalseLeafSecond.value, booleanLogicalLeafCounter);
 const booleanLogicalFalseLeafDone: any = booleanLogicalFalseLeafIter.next(3);
 console.log("boolean-logical-false", booleanLogicalFalseLeafDone.done, booleanLogicalFalseLeafDone.value, booleanLogicalLeafCounter);
+const pointerNullishLeafIter = pointerNullishLeaves();
+const pointerNullishLeafFirst: any = pointerNullishLeafIter.next();
+const pointerNullishLeafSecond: any = pointerNullishLeafIter.next(2);
+console.log("pointer-nullish-leaf-before", pointerNullishLeafFirst.value, pointerNullishLeafSecond.value, pointerNullishFallbackCounter);
+const pointerNullishLeafDone: any = pointerNullishLeafIter.next(3);
+console.log("pointer-nullish-leaf", pointerNullishLeafDone.done, pointerNullishLeafDone.value, pointerNullishFallbackCounter);
+const pointerNullishPresentLeafIter = pointerNullishPresentLeaves();
+const pointerNullishPresentLeafFirst: any = pointerNullishPresentLeafIter.next();
+const pointerNullishPresentLeafSecond: any = pointerNullishPresentLeafIter.next(2);
+console.log("pointer-nullish-present-before", pointerNullishPresentLeafFirst.value, pointerNullishPresentLeafSecond.value, pointerNullishFallbackCounter);
+const pointerNullishPresentLeafDone: any = pointerNullishPresentLeafIter.next(3);
+console.log("pointer-nullish-present", pointerNullishPresentLeafDone.done, pointerNullishPresentLeafDone.value, pointerNullishFallbackCounter);
 const optionalPropertyLeafIter = optionalPropertyLeaves();
 const optionalPropertyLeafFirst: any = optionalPropertyLeafIter.next();
 const optionalPropertyLeafSecond: any = optionalPropertyLeafIter.next({ value: 2 });

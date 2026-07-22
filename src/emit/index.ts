@@ -42971,6 +42971,8 @@ class Emitter {
         const right = this.prepareType(mapTsType(expr.right, this.checker.getTypeAtLocation(expr.right), this.checker));
         return (left.kind === "string" && right.kind === "string") ||
             (left.kind === right.kind && (left.kind === "number" || left.kind === "boolean")) ||
+            (expr.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
+                left.kind === right.kind && isPointerKind(left)) ||
             left.kind === "value" || right.kind === "value";
     }
 

@@ -51,6 +51,10 @@ boolean-logical-leaf-before 83 84 0
 boolean-logical-leaf true 6 1
 boolean-logical-false-before 87 88 1
 boolean-logical-false true 5 1
+pointer-nullish-leaf-before 89 90 0
+pointer-nullish-leaf true 7 1
+pointer-nullish-present-before 91 92 1
+pointer-nullish-present true 7 1
 optional-property-leaf null 1 true false
 optional-element-leaf null 1 true false
 new-leaf-before 73 74 0
