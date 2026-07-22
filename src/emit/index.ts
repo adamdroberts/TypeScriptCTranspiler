@@ -39238,26 +39238,31 @@ class Emitter {
         const firstStatement = body.statements[0]!;
         const conditional = body.statements[1]!;
         const result = body.statements[2]!;
-        if (!ts.isIfStatement(conditional) || conditional.elseStatement ||
+        if (!ts.isIfStatement(conditional) ||
             !ts.isReturnStatement(result) || !result.expression) return false;
         const first = this.awaitedContinuationStep(firstStatement);
-        const branchStatements = ts.isBlock(conditional.thenStatement)
-            ? conditional.thenStatement.statements
-            : [conditional.thenStatement];
-        if (!first || !first.variable || branchStatements.length === 0) return false;
-        const branches = branchStatements.map((statement) => this.awaitedContinuationStep(statement));
-        if (branches.some((branch) => !branch)) return false;
-        for (let i = 0; i < branches.length; i++) {
-            const branch = branches[i]!;
-            if (!branch.variable) continue;
-            const statement = branchStatements[i]!;
-            if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
-                (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                !ts.isIdentifier(statement.declarationList.declarations[0]!.name) ||
-                this.symbolForIdentifier(statement.declarationList.declarations[0]!.name) !== this.symbolForIdentifier(branch.variable)) {
-                return false;
+        if (!first || !first.variable) return false;
+        const parseBranch = (branch: ts.Statement): AsyncAwaitLeadingStep[] | null => {
+            const statements = ts.isBlock(branch) ? branch.statements : [branch];
+            if (statements.length === 0) return [];
+            const steps = statements.map((statement) => this.awaitedContinuationStep(statement));
+            if (steps.some((step) => !step)) return null;
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i]!;
+                if (!step.variable) continue;
+                const statement = statements[i]!;
+                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
+                    (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                    !ts.isIdentifier(statement.declarationList.declarations[0]!.name) ||
+                    this.symbolForIdentifier(statement.declarationList.declarations[0]!.name) !== this.symbolForIdentifier(step.variable)) {
+                    return null;
+                }
             }
-        }
+            return steps as AsyncAwaitLeadingStep[];
+        };
+        const branches = parseBranch(conditional.thenStatement);
+        const alternateBranches = conditional.elseStatement ? parseBranch(conditional.elseStatement) : [];
+        if (!branches || !alternateBranches) return false;
         const returnAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(returnAwait)) return false;
         const validCondition = (node: ts.Node): boolean => {
@@ -39299,28 +39304,28 @@ class Emitter {
         const trueContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],
             hoistedSymbols: [],
-            steps: [...branches, returnStep] as AsyncAwaitLeadingStep[],
-            betweenStatements: branches.slice(1).map(() => []),
+            steps: [...branches, returnStep],
+            betweenStatements: branches.map(() => []),
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
             params: tailParams,
             thisValue: callbackThis,
-            usesAwaitedLocals: [...branches.map((branch) => !!branch!.variable), false],
+            usesAwaitedLocals: [...branches.map((branch) => !!branch.variable), false],
         };
         const falseContinuation: AsyncAwaitLeadingReturnContinuation = {
             preludeStatements: [],
             hoistedSymbols: [],
-            steps: [returnStep],
-            betweenStatements: [],
+            steps: [...alternateBranches, returnStep],
+            betweenStatements: alternateBranches.map(() => []),
             returnExpr: returnAwait.expression,
             terminalThrowExpr: null,
             terminalThrowStatement: null,
             returnAwaited: true,
             params: tailParams,
             thisValue: callbackThis,
-            usesAwaitedLocals: [false],
+            usesAwaitedLocals: [...alternateBranches.map((branch) => !!branch.variable), false],
         };
 
         const bodyName = `tsc_async_await_nested_if_after_await_${this.asyncAwaitReturnContinuationAdapters++}`;
