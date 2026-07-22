@@ -42970,6 +42970,7 @@ class Emitter {
         const left = this.prepareType(mapTsType(expr.left, this.checker.getTypeAtLocation(expr.left), this.checker));
         const right = this.prepareType(mapTsType(expr.right, this.checker.getTypeAtLocation(expr.right), this.checker));
         return (left.kind === "string" && right.kind === "string") ||
+            (left.kind === right.kind && (left.kind === "number" || left.kind === "boolean")) ||
             left.kind === "value" || right.kind === "value";
     }
 
@@ -44154,6 +44155,24 @@ class Emitter {
                 return this.emitExpr(unwrapped);
             }
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
+                const leftType = this.prepareType(mapTsType(
+                    unwrapped.left,
+                    this.checker.getTypeAtLocation(unwrapped.left),
+                    this.checker,
+                ));
+                const rightType = this.prepareType(mapTsType(
+                    unwrapped.right,
+                    this.checker.getTypeAtLocation(unwrapped.right),
+                    this.checker,
+                ));
+                if (leftType.kind === rightType.kind &&
+                    (leftType.kind === "number" || leftType.kind === "boolean")) {
+                    return this.emitSimpleLazyResumeBinary(
+                        unwrapped,
+                        build(unwrapped.left),
+                        build(unwrapped.right),
+                    );
+                }
                 return this.emitExpr(unwrapped);
             }
             if (unwrapped.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) {
@@ -45389,6 +45408,16 @@ class Emitter {
             return this.emitSequencedExpr(right.ty, [{ value: left }], () => right.c);
         }
         if (op === ts.SyntaxKind.AmpersandAmpersandToken) {
+            if (left.ty.kind === "number" || left.ty.kind === "boolean") {
+                if (left.ty.kind !== right.ty.kind) {
+                    unsupported(bin, "lazy logical operands must have matching primitive types");
+                }
+                return this.emitSequencedExpr(
+                    left.ty,
+                    [{ value: left }],
+                    ([lv]) => `(${this.truthyExprFromEmitResult({ c: lv!, ty: left.ty }, bin.left)} ? ${right.c} : ${lv})`,
+                );
+            }
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 const rc = this.coerce(right, T_VALUE, bin.right);
                 return this.emitSequencedExpr(
@@ -45402,6 +45431,16 @@ class Emitter {
             return { c: `(${lb} && ${rb})`, ty: T_BOOLEAN };
         }
         if (op === ts.SyntaxKind.BarBarToken) {
+            if (left.ty.kind === "number" || left.ty.kind === "boolean") {
+                if (left.ty.kind !== right.ty.kind) {
+                    unsupported(bin, "lazy logical operands must have matching primitive types");
+                }
+                return this.emitSequencedExpr(
+                    left.ty,
+                    [{ value: left }],
+                    ([lv]) => `(${this.truthyExprFromEmitResult({ c: lv!, ty: left.ty }, bin.left)} ? ${lv} : ${right.c})`,
+                );
+            }
             if (left.ty.kind === "value" || right.ty.kind === "value") {
                 const rc = this.coerce(right, T_VALUE, bin.right);
                 return this.emitSequencedExpr(

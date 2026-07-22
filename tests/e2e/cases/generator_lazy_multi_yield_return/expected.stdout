@@ -43,6 +43,14 @@ nullish-leaf-before left right 0
 nullish-leaf true AmidB 1
 dynamic-logical-leaf-before left right 0
 dynamic-logical-leaf true AmidB 1
+numeric-logical-leaf-before 81 82 0
+numeric-logical-leaf true 9 1
+numeric-logical-false-before 85 86 1
+numeric-logical-false true 5 1
+boolean-logical-leaf-before 83 84 0
+boolean-logical-leaf true 6 1
+boolean-logical-false-before 87 88 1
+boolean-logical-false true 5 1
 optional-property-leaf null 1 true false
 optional-element-leaf null 1 true false
 new-leaf-before 73 74 0

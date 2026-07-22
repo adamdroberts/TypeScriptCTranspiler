@@ -213,6 +213,30 @@ function* dynamicLogicalLeaves(): Generator<string, string, string> {
     return (yield "left") + (dynamicLogicalCondition && dynamicLogicalLeaf()) + (yield "right");
 }
 
+let numericLogicalLeafCounter = 0;
+function numericLogicalLeaf(): number {
+    numericLogicalLeafCounter++;
+    return 4;
+}
+function* numericLogicalLeaves(): Generator<number, number, number> {
+    return (yield 81) + (1 && numericLogicalLeaf()) + (yield 82);
+}
+function* numericLogicalFalseLeaves(): Generator<number, number, number> {
+    return (yield 85) + (0 && numericLogicalLeaf()) + (yield 86);
+}
+
+let booleanLogicalLeafCounter = 0;
+function booleanLogicalLeaf(): boolean {
+    booleanLogicalLeafCounter++;
+    return true;
+}
+function* booleanLogicalLeaves(): Generator<number, number, number> {
+    return (yield 83) + (true && booleanLogicalLeaf() ? 1 : 0) + (yield 84);
+}
+function* booleanLogicalFalseLeaves(): Generator<number, number, number> {
+    return (yield 87) + (false && booleanLogicalLeaf() ? 1 : 0) + (yield 88);
+}
+
 function* optionalPropertyLeaves(): Generator<any, boolean, any> {
     return (yield null)?.value === (yield { value: 1 }).value;
 }
@@ -516,6 +540,30 @@ const dynamicLogicalLeafSecond: any = dynamicLogicalLeafIter.next("A");
 console.log("dynamic-logical-leaf-before", dynamicLogicalLeafFirst.value, dynamicLogicalLeafSecond.value, dynamicLogicalLeafCounter);
 const dynamicLogicalLeafDone: any = dynamicLogicalLeafIter.next("B");
 console.log("dynamic-logical-leaf", dynamicLogicalLeafDone.done, dynamicLogicalLeafDone.value, dynamicLogicalLeafCounter);
+const numericLogicalLeafIter = numericLogicalLeaves();
+const numericLogicalLeafFirst: any = numericLogicalLeafIter.next();
+const numericLogicalLeafSecond: any = numericLogicalLeafIter.next(2);
+console.log("numeric-logical-leaf-before", numericLogicalLeafFirst.value, numericLogicalLeafSecond.value, numericLogicalLeafCounter);
+const numericLogicalLeafDone: any = numericLogicalLeafIter.next(3);
+console.log("numeric-logical-leaf", numericLogicalLeafDone.done, numericLogicalLeafDone.value, numericLogicalLeafCounter);
+const numericLogicalFalseLeafIter = numericLogicalFalseLeaves();
+const numericLogicalFalseLeafFirst: any = numericLogicalFalseLeafIter.next();
+const numericLogicalFalseLeafSecond: any = numericLogicalFalseLeafIter.next(2);
+console.log("numeric-logical-false-before", numericLogicalFalseLeafFirst.value, numericLogicalFalseLeafSecond.value, numericLogicalLeafCounter);
+const numericLogicalFalseLeafDone: any = numericLogicalFalseLeafIter.next(3);
+console.log("numeric-logical-false", numericLogicalFalseLeafDone.done, numericLogicalFalseLeafDone.value, numericLogicalLeafCounter);
+const booleanLogicalLeafIter = booleanLogicalLeaves();
+const booleanLogicalLeafFirst: any = booleanLogicalLeafIter.next();
+const booleanLogicalLeafSecond: any = booleanLogicalLeafIter.next(2);
+console.log("boolean-logical-leaf-before", booleanLogicalLeafFirst.value, booleanLogicalLeafSecond.value, booleanLogicalLeafCounter);
+const booleanLogicalLeafDone: any = booleanLogicalLeafIter.next(3);
+console.log("boolean-logical-leaf", booleanLogicalLeafDone.done, booleanLogicalLeafDone.value, booleanLogicalLeafCounter);
+const booleanLogicalFalseLeafIter = booleanLogicalFalseLeaves();
+const booleanLogicalFalseLeafFirst: any = booleanLogicalFalseLeafIter.next();
+const booleanLogicalFalseLeafSecond: any = booleanLogicalFalseLeafIter.next(2);
+console.log("boolean-logical-false-before", booleanLogicalFalseLeafFirst.value, booleanLogicalFalseLeafSecond.value, booleanLogicalLeafCounter);
+const booleanLogicalFalseLeafDone: any = booleanLogicalFalseLeafIter.next(3);
+console.log("boolean-logical-false", booleanLogicalFalseLeafDone.done, booleanLogicalFalseLeafDone.value, booleanLogicalLeafCounter);
 const optionalPropertyLeafIter = optionalPropertyLeaves();
 const optionalPropertyLeafFirst: any = optionalPropertyLeafIter.next();
 const optionalPropertyLeafSecond: any = optionalPropertyLeafIter.next({ value: 2 });

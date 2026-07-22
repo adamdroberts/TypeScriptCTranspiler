@@ -394,6 +394,7 @@ This is the next item that most directly expands what programs can be written ag
   - Finite lazy multi-yield returns now evaluate direct no-yield delete leaves at the final resume, preserving property-deletion timing. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield assignment leaves at the final resume, preserving mutation timing. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate bounded no-yield string/string and dynamic-value logical leaves for `&&`, `||`, and `??` at the final resume, preserving short-circuit/nullish side-effect timing. Test: `generator_lazy_multi_yield_return`.
+  - Finite lazy multi-yield returns now also preserve homogeneous numeric and boolean operands for no-yield `&&` / `||` leaves, including short-circuiting the right operand at the final resume. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now preserve bounded optional property and element leaves across suspension points, including nullish receivers and final comparisons. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield conditional leaves at the final resume, preserving branch and side-effect timing. Test: `generator_lazy_multi_yield_return`.
   - Finite lazy multi-yield returns now evaluate direct no-yield template-expression leaves at the final resume, preserving interpolation side-effect timing. Test: `generator_lazy_multi_yield_return`.
