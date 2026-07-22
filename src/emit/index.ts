@@ -32731,8 +32731,10 @@ class Emitter {
 
     private asyncAwaitInterstitialCaptures(
         statements: readonly ts.Statement[],
+        allowUninitializedVar = false,
     ): AsyncAwaitContinuationParam[] | null {
         const captures = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
+        const uninitialized = new Set<ts.Symbol>();
         let valid = true;
         const addDeclaration = (decl: ts.VariableDeclaration): void => {
             if (!valid) return;
@@ -32741,7 +32743,7 @@ class Emitter {
                 return;
             }
             if (!decl.initializer && !(ts.isVariableDeclarationList(decl.parent) &&
-                (decl.parent.flags & ts.NodeFlags.Let))) {
+                (decl.parent.flags & ts.NodeFlags.Let)) && !allowUninitializedVar) {
                 valid = false;
                 return;
             }
@@ -32755,6 +32757,7 @@ class Emitter {
                 valid = false;
                 return;
             }
+            if (!decl.initializer && allowUninitializedVar) uninitialized.add(symbol);
             if (!captures.has(symbol)) {
                 const name = mangleIdent(decl.name.text);
                 captures.set(symbol, { symbol, name, type, field: `capture_${name}` });
@@ -32782,17 +32785,34 @@ class Emitter {
             }
             if (!valid) return null;
         }
+        if (uninitialized.size > 0) {
+            const assigned = new Set<ts.Symbol>();
+            const visitAssignments = (node: ts.Node): void => {
+                if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                if (ts.isBinaryExpression(node) &&
+                    node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    ts.isIdentifier(node.left)) {
+                    const symbol = this.symbolForIdentifier(node.left);
+                    if (symbol) assigned.add(symbol);
+                }
+                ts.forEachChild(node, visitAssignments);
+            };
+            for (const stmt of statements) visitAssignments(stmt);
+            for (const symbol of uninitialized) {
+                if (!assigned.has(symbol)) return null;
+            }
+        }
         return [...captures.values()];
     }
 
-    private asyncAwaitInterstitialControlFlowSupported(stmt: ts.Statement): boolean {
+    private asyncAwaitInterstitialControlFlowSupported(stmt: ts.Statement, allowUninitializedVar = false): boolean {
         let ok = true;
         const visitVariableDeclarationList = (declarationList: ts.VariableDeclarationList): void => {
             const isConstOrLet = (declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0;
             const isVar = !isConstOrLet;
             for (const declaration of declarationList.declarations) {
                 if (!ts.isIdentifier(declaration.name) ||
-                    (!declaration.initializer && (isVar || !(declarationList.flags & ts.NodeFlags.Let)))) {
+                    (!declaration.initializer && (isVar || !(declarationList.flags & ts.NodeFlags.Let)) && !allowUninitializedVar)) {
                     ok = false;
                     return;
                 }
@@ -39390,7 +39410,7 @@ class Emitter {
                         if (!valid) return null;
                         leadingStatements.push(statement);
                     } else {
-                        if (!this.asyncAwaitInterstitialControlFlowSupported(statement)) return null;
+                        if (!this.asyncAwaitInterstitialControlFlowSupported(statement, true)) return null;
                         pendingBetween.push(statement);
                     }
                 }
@@ -40469,7 +40489,7 @@ class Emitter {
         const interstitialCaptures = this.asyncAwaitInterstitialCaptures([
             ...firstStepPostAwaitStatements,
             ...(betweenStatements[0] ?? []),
-        ])!
+        ], true)!
             .filter((capture) => !nextStepSymbol || capture.symbol !== nextStepSymbol);
         const nestedParams = [
             ...params,
