@@ -39473,12 +39473,24 @@ class Emitter {
         }
         if (!directAction && !branchCondition && ts.isSwitchStatement(controlStatement)) {
             switchStatement = controlStatement;
+            let invalidSwitchClause = false;
             const parsedRoutes: ({ prelude: readonly ts.Statement[]; action: "continue" | "break" } | null)[] =
-                switchStatement.caseBlock.clauses.map((clause) => branchRoute(clause.statements));
+                switchStatement.caseBlock.clauses.map((clause) => {
+                    const route = branchRoute(clause.statements);
+                    if (route) return route;
+                    if (!clause.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) {
+                        invalidSwitchClause = true;
+                    }
+                    return null;
+                });
+            if (invalidSwitchClause) return false;
             let nextRoute: { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null = null;
             for (let index = parsedRoutes.length - 1; index >= 0; index--) {
-                const route: { prelude: readonly ts.Statement[]; action: "continue" | "break" } =
-                    parsedRoutes[index] ?? nextRoute ?? { prelude: [], action: "continue" };
+                const clause = switchStatement.caseBlock.clauses[index]!;
+                const route: { prelude: readonly ts.Statement[]; action: "continue" | "break" } = parsedRoutes[index]
+                    ?? (nextRoute
+                        ? { prelude: [...clause.statements, ...nextRoute.prelude], action: nextRoute.action }
+                        : { prelude: [...clause.statements], action: "continue" });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }

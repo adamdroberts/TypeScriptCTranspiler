@@ -4,6 +4,8 @@ function later(value: string): Promise<string> {
 
 let ofCount = 0;
 let inCount = 0;
+let ofFallthroughCount = 0;
+let inFallthroughCount = 0;
 let lastOf = "";
 let lastIn = "";
 
@@ -26,6 +28,7 @@ async function runOf(): Promise<string> {
         second = await laterOf(marker);
         switch (item) {
             case "of-a":
+                ofFallthroughCount++;
             case "of-b":
                 lastOf = second + "-continue";
                 continue;
@@ -34,7 +37,7 @@ async function runOf(): Promise<string> {
                 break;
         }
     }
-    return await later(ofCount + "|" + lastOf);
+    return await later(ofCount + "|" + ofFallthroughCount + "|" + lastOf);
 }
 
 async function runIn(): Promise<string> {
@@ -47,6 +50,7 @@ async function runIn(): Promise<string> {
         second = await laterIn(marker);
         switch (key) {
             case "in-a":
+                inFallthroughCount++;
             case "in-b":
                 lastIn = second + "-continue";
                 continue;
@@ -55,7 +59,7 @@ async function runIn(): Promise<string> {
                 break;
         }
     }
-    return await later(inCount + "|" + lastIn);
+    return await later(inCount + "|" + inFallthroughCount + "|" + lastIn);
 }
 
 runOf().then((value) => console.log(value));
