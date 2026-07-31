@@ -39442,8 +39442,15 @@ class Emitter {
             awaitExpr: ts.AwaitExpression;
             alias: ts.Identifier | null;
         };
+        type ControlPreludeAlias = {
+            symbol: ts.Symbol;
+            identifier: ts.Identifier;
+            type: CType;
+            field: string;
+        };
         type ControlRoute = {
             prelude: readonly ts.Statement[];
+            preludeAliases?: readonly ControlPreludeAlias[];
             awaitSteps: readonly ControlAwaitStep[];
             betweenAwaitStatements: readonly (readonly ts.Statement[])[];
             postAwaitStatements: readonly ts.Statement[];
@@ -39454,6 +39461,31 @@ class Emitter {
         let switchRoutes: Array<ControlRoute & { caseExpression: ts.Expression | null }> = [];
         const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
             ts.isBlock(statement) ? statement.statements : [statement];
+        let controlPreludeAliasCounter = 0;
+        const controlPreludeAliasesFor = (statements: readonly ts.Statement[]): ControlPreludeAlias[] => {
+            const aliases: ControlPreludeAlias[] = [];
+            for (const statement of statements) {
+                if (!ts.isVariableStatement(statement)) continue;
+                for (const declaration of statement.declarationList.declarations) {
+                    if (!declaration.initializer || !ts.isIdentifier(declaration.name)) continue;
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    const type = this.prepareType(mapTsType(
+                        declaration.name,
+                        this.checker.getTypeAtLocation(declaration.name),
+                        this.checker,
+                    ));
+                    if (symbol && type.kind !== "void" && type.kind !== "never") {
+                        aliases.push({
+                            symbol,
+                            identifier: declaration.name,
+                            type,
+                            field: `awaited_control_prelude_${controlPreludeAliasCounter++}`,
+                        });
+                    }
+                }
+            }
+            return aliases;
+        };
         const branchRoute = (statements: readonly ts.Statement[]): ControlRoute | null => {
             if (statements.length === 0) return null;
             const action = actionForStatement(statements[statements.length - 1]);
@@ -39506,8 +39538,10 @@ class Emitter {
             const postAwaitStatements = prelude.slice(lastAwaitIndex + 1);
             if (!preludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) ||
                 !postAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+            const preludeAliases = controlPreludeAliasesFor(preludeStatements);
             return {
                 prelude: preludeStatements,
+                preludeAliases,
                 awaitSteps: awaitEntries.map(({ expression, alias }) => ({ awaitExpr: expression, alias })),
                 betweenAwaitStatements,
                 postAwaitStatements,
@@ -39550,6 +39584,10 @@ class Emitter {
                     ?? (nextRoute
                         ? {
                             prelude: [...clause.statements, ...nextRoute.prelude],
+                            preludeAliases: [
+                                ...controlPreludeAliasesFor(clause.statements),
+                                ...(nextRoute.preludeAliases ?? []),
+                            ],
                             awaitSteps: nextRoute.awaitSteps,
                             betweenAwaitStatements: nextRoute.betweenAwaitStatements,
                             postAwaitStatements: nextRoute.postAwaitStatements,
@@ -39565,6 +39603,7 @@ class Emitter {
                 switchRoutes.push({
                     caseExpression: ts.isCaseClause(clause) ? clause.expression : null,
                     prelude: route.prelude,
+                    preludeAliases: route.preludeAliases,
                     awaitSteps: route.awaitSteps,
                     betweenAwaitStatements: route.betweenAwaitStatements,
                     postAwaitStatements: route.postAwaitStatements,
@@ -39775,6 +39814,15 @@ class Emitter {
                 controlAliasBySymbol.set(symbol, entry);
             }
         }
+        const controlPreludeAliasEntries: ControlPreludeAlias[] = [];
+        const controlPreludeAliasSymbols = new Set<ts.Symbol>();
+        for (const route of awaitedControlRoutes) {
+            for (const alias of route.preludeAliases ?? []) {
+                if (controlPreludeAliasSymbols.has(alias.symbol)) continue;
+                controlPreludeAliasSymbols.add(alias.symbol);
+                controlPreludeAliasEntries.push(alias);
+            }
+        }
         const names = steps.map(() => `tsc_async_await_iterator_multi_continue_${this.asyncAwaitReturnContinuationAdapters++}`);
         const envTypes = names.map((name) => `${name}_env_t`);
         const conditionName = branchConditionAwaitExpr
@@ -39800,6 +39848,7 @@ class Emitter {
             this.structDecls.line(`${itemType.c} iteration_value;`);
             for (const alias of bodyAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
             for (const alias of controlAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
+            for (const alias of controlPreludeAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
             for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -39923,6 +39972,9 @@ class Emitter {
                 routeBuf.line("return;");
                 routeBuf.close();
                 const routeScope = scopeFor("state", steps.length);
+                for (const alias of route.preludeAliases ?? []) {
+                    routeScope.set(alias.symbol, `state->${alias.field}`);
+                }
                 for (let priorIndex = 0; priorIndex < index; priorIndex++) {
                     const priorAlias = route.awaitSteps[priorIndex]!.alias;
                     const priorSymbol = priorAlias ? this.symbolForIdentifier(priorAlias) : null;
@@ -39971,6 +40023,10 @@ class Emitter {
         }
         const emitControlRoute = (out: CBuf, state: string, route: ControlRoute): void => {
             for (const statement of route.prelude) this.emitStmt(out, statement);
+            for (const alias of route.preludeAliases ?? []) {
+                const value = this.emitExpr(alias.identifier);
+                out.line(`${state}->${alias.field} = ${this.coerce(value, alias.type, alias.identifier)};`);
+            }
             if (route.awaitSteps.length === 0) {
                 emitAction(out, state, route.action);
                 return;

@@ -33,16 +33,18 @@ async function runOf(): Promise<string> {
         switch (item) {
             case "of-a":
                 lastOf = second + "-continue";
+                const switchContinueSuffix = "-between";
                 const switchContinueValue = await laterControl(lastOf);
-                lastOf = switchContinueValue + "-between";
+                lastOf = switchContinueValue + switchContinueSuffix;
                 await laterControl(lastOf);
                 lastOf = lastOf + "-post";
                 continue;
             default:
                 lastOf = second + "-break";
+                const switchBreakSuffix = "-between";
                 var switchBreakValue: string;
                 switchBreakValue = await laterControl(lastOf);
-                lastOf = switchBreakValue + "-between";
+                lastOf = switchBreakValue + switchBreakSuffix;
                 await laterControl(lastOf);
                 lastOf = lastOf + "-post";
                 break;
@@ -62,16 +64,18 @@ async function runIn(): Promise<string> {
         switch (key) {
             case "in-a":
                 lastIn = second + "-continue";
+                const switchContinueSuffix = "-between";
                 const switchContinueValue = await laterControl(lastIn);
-                lastIn = switchContinueValue + "-between";
+                lastIn = switchContinueValue + switchContinueSuffix;
                 await laterControl(lastIn);
                 lastIn = lastIn + "-post";
                 continue;
             default:
                 lastIn = second + "-break";
+                const switchBreakSuffix = "-between";
                 var switchBreakValue: string;
                 switchBreakValue = await laterControl(lastIn);
-                lastIn = switchBreakValue + "-between";
+                lastIn = switchBreakValue + switchBreakSuffix;
                 await laterControl(lastIn);
                 lastIn = lastIn + "-post";
                 break;
