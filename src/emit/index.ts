@@ -39439,14 +39439,19 @@ class Emitter {
         let branchCondition: ts.Expression | null = null;
         let branchThenAction: "continue" | "break" | null = null;
         let branchElseAction: "continue" | "break" | null = null;
-        if (!directAction && ts.isIfStatement(controlStatement) && controlStatement.elseStatement) {
+        if (!directAction && ts.isIfStatement(controlStatement)) {
             const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
                 ts.isBlock(statement) ? statement.statements : [statement];
             const thenStatements = branchStatements(controlStatement.thenStatement);
-            const elseStatements = branchStatements(controlStatement.elseStatement);
-            if (thenStatements.length !== 1 || elseStatements.length !== 1) return false;
+            if (thenStatements.length !== 1) return false;
             branchThenAction = actionForStatement(thenStatements[0]);
-            branchElseAction = actionForStatement(elseStatements[0]);
+            if (controlStatement.elseStatement) {
+                const elseStatements = branchStatements(controlStatement.elseStatement);
+                if (elseStatements.length !== 1) return false;
+                branchElseAction = actionForStatement(elseStatements[0]);
+            } else {
+                branchElseAction = "continue";
+            }
             if (!branchThenAction || !branchElseAction) return false;
             branchCondition = controlStatement.expression;
         }
