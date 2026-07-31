@@ -43,6 +43,17 @@ async function runOf(): Promise<string> {
             }
             break;
         }
+        for (const topLevelNested of ["top-level"]) {
+            if (topLevelNested === "top-level") {
+                continue;
+            }
+            break;
+        }
+        for (const topLevelKey in { top: "value" }) {
+            if (topLevelKey === "top") {
+                break;
+            }
+        }
         let nestedWhileCount = 0;
         while (nestedWhileCount < 3) {
             nestedWhileCount += 1;
@@ -135,6 +146,17 @@ async function runIn(): Promise<string> {
                 continue;
             }
             break;
+        }
+        for (const topLevelNested of ["top-level"]) {
+            if (topLevelNested === "top-level") {
+                continue;
+            }
+            break;
+        }
+        for (const topLevelKey in { top: "value" }) {
+            if (topLevelKey === "top") {
+                break;
+            }
         }
         let nestedWhileCount = 0;
         while (nestedWhileCount < 3) {
