@@ -39431,9 +39431,26 @@ class Emitter {
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         const controlStatement = loopBody[loopBody.length - 1];
-        if (!controlStatement ||
-            ((!ts.isContinueStatement(controlStatement) && !ts.isBreakStatement(controlStatement)) || controlStatement.label)) return false;
-        const continues = ts.isContinueStatement(controlStatement);
+        if (!controlStatement) return false;
+        const actionForStatement = (statement: ts.Statement | undefined): "continue" | "break" | null =>
+            statement && ts.isContinueStatement(statement) && !statement.label ? "continue" :
+                statement && ts.isBreakStatement(statement) && !statement.label ? "break" : null;
+        let directAction = actionForStatement(controlStatement);
+        let branchCondition: ts.Expression | null = null;
+        let branchThenAction: "continue" | "break" | null = null;
+        let branchElseAction: "continue" | "break" | null = null;
+        if (!directAction && ts.isIfStatement(controlStatement) && controlStatement.elseStatement) {
+            const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
+                ts.isBlock(statement) ? statement.statements : [statement];
+            const thenStatements = branchStatements(controlStatement.thenStatement);
+            const elseStatements = branchStatements(controlStatement.elseStatement);
+            if (thenStatements.length !== 1 || elseStatements.length !== 1) return false;
+            branchThenAction = actionForStatement(thenStatements[0]);
+            branchElseAction = actionForStatement(elseStatements[0]);
+            if (!branchThenAction || !branchElseAction) return false;
+            branchCondition = controlStatement.expression;
+        }
+        if (!directAction && !branchCondition) return false;
 
         const steps: { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
         const between: ts.Statement[][] = [];
@@ -39632,6 +39649,19 @@ class Emitter {
             out.line(`${terminalAdapter}(${fallEnv});`);
             out.close();
         };
+        const emitContinue = (out: CBuf, state: string): void => {
+            out.line("state->index++;");
+            out.open("if (state->index < state->items->len)");
+            emitNextIteration(out, state);
+            out.close();
+            out.open("else");
+            emitFallthrough(out, state);
+            out.close();
+        };
+        const emitAction = (out: CBuf, state: string, action: "continue" | "break"): void => {
+            if (action === "continue") emitContinue(out, state);
+            else emitFallthrough(out, state);
+        };
         for (let index = 0; index < names.length; index++) {
             const bodyBuf = new CBuf();
             const name = names[index]!;
@@ -39684,16 +39714,16 @@ class Emitter {
                     bodyBuf.line(`${names[nextIndex]}(${nextEnv});`);
                     bodyBuf.close();
                 } else {
-                    if (continues) {
-                        bodyBuf.line("state->index++;");
-                        bodyBuf.open("if (state->index < state->items->len)");
-                        emitNextIteration(bodyBuf, "state");
+                    if (branchCondition) {
+                        const condition = this.emitExpr(branchCondition);
+                        bodyBuf.open(`if (${this.truthyC(condition, branchCondition)})`);
+                        emitAction(bodyBuf, "state", branchThenAction!);
                         bodyBuf.close();
                         bodyBuf.open("else");
-                        emitFallthrough(bodyBuf, "state");
+                        emitAction(bodyBuf, "state", branchElseAction!);
                         bodyBuf.close();
                     } else {
-                        emitFallthrough(bodyBuf, "state");
+                        emitAction(bodyBuf, "state", directAction!);
                     }
                 }
             } finally {
