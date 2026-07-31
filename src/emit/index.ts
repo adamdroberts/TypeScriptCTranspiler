@@ -38912,9 +38912,24 @@ class Emitter {
         const fallthroughAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
-        if (loopBody.length !== 2 || !ts.isExpressionStatement(loopBody[0]!)) return false;
-        const bodyAwait = this.unwrapTransparentExpression(loopBody[0]!.expression);
-        if (!ts.isAwaitExpression(bodyAwait)) return false;
+        if (loopBody.length !== 2) return false;
+        const bodyStatement = loopBody[0]!;
+        let bodyAlias: ts.Identifier | null = null;
+        let bodyAwait: ts.AwaitExpression;
+        if (ts.isExpressionStatement(bodyStatement)) {
+            const candidate = this.unwrapTransparentExpression(bodyStatement.expression);
+            if (!ts.isAwaitExpression(candidate)) return false;
+            bodyAwait = candidate;
+        } else if (ts.isVariableStatement(bodyStatement) && bodyStatement.declarationList.declarations.length === 1) {
+            const declaration = bodyStatement.declarationList.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+            const candidate = this.unwrapTransparentExpression(declaration.initializer);
+            if (!ts.isAwaitExpression(candidate)) return false;
+            bodyAlias = declaration.name;
+            bodyAwait = candidate;
+        } else {
+            return false;
+        }
         const terminal = loopBody[1]!;
         const isBreak = ts.isBreakStatement(terminal) && !terminal.label;
         const isThrow = ts.isThrowStatement(terminal);
@@ -38954,9 +38969,10 @@ class Emitter {
             itemType = iter.ty.elem;
         }
         const bodyPromiseType = this.prepareType(mapTsType(bodyAwait.expression, this.checker.getTypeAtLocation(bodyAwait.expression), this.checker));
+        const bodyAwaitedType = this.prepareType(mapTsType(bodyAwait, this.checker.getTypeAtLocation(bodyAwait), this.checker));
         const fallthroughPromiseType = this.prepareType(mapTsType(fallthroughAwait.expression, this.checker.getTypeAtLocation(fallthroughAwait.expression), this.checker));
         const fallthroughAwaitedType = this.prepareType(mapTsType(fallthroughAwait, this.checker.getTypeAtLocation(fallthroughAwait), this.checker));
-        if (bodyPromiseType.kind !== "promise" || fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
+        if (bodyPromiseType.kind !== "promise" || bodyAwaitedType.kind === "never" || fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
         const terminalPromiseType = terminalAwait
             ? this.prepareType(mapTsType(terminalAwait.expression, this.checker.getTypeAtLocation(terminalAwait.expression), this.checker))
             : null;
@@ -38980,9 +38996,13 @@ class Emitter {
         const targetAwait = isBreak ? fallthroughAwait : terminalAwait!;
         const targetPromiseType = isBreak ? fallthroughPromiseType : terminalPromiseType!;
         const targetAwaitedType = isBreak ? fallthroughAwaitedType : terminalAwaitedType!;
-        const terminalCarriedAliases = terminalAwait
+        const terminalCarriedAliases: { symbol: ts.Symbol; type: CType; field: string }[] = terminalAwait
             ? [{ symbol: bindingSymbol, type: itemType, field: "iteration_value" }]
             : [];
+        const bodyAliasSymbol = bodyAlias ? this.symbolForIdentifier(bodyAlias) : null;
+        if (terminalAwait && bodyAliasSymbol && bodyAwaitedType.kind !== "void") {
+            terminalCarriedAliases.push({ symbol: bodyAliasSymbol, type: bodyAwaitedType, field: "awaited_body_value" });
+        }
         const targetAdapter = isBreak
             ? this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
                 fallthroughPromiseType,
@@ -39022,7 +39042,12 @@ class Emitter {
         bodyBuf.open("if (!tsc_promise_is_fulfilled(_p))");
         bodyBuf.line("return;");
         bodyBuf.close();
+        const bodyValueVar = this.freshTemp("_async_iter_body_value");
+        if (bodyAliasSymbol && bodyAwaitedType.kind !== "void") {
+            bodyBuf.line(`${bodyAwaitedType.c} ${bodyValueVar} = ${this.coerce(this.promiseFulfilledValue(bodyPromiseType.elem, "_p"), bodyAwaitedType, bodyAwait)};`);
+        }
         const targetScope = bodyScope("state", terminalAwait ? "state->iteration_value" : null);
+        if (bodyAliasSymbol && bodyAwaitedType.kind !== "void") targetScope.set(bodyAliasSymbol, bodyValueVar);
         this.argumentValueScopes.push(targetScope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let targetSource: EmitResult;
@@ -39037,7 +39062,10 @@ class Emitter {
         bodyBuf.line("_target_env->receiver = _target_source;");
         bodyBuf.line("_target_env->result_promise = _ret;");
         for (const param of params) bodyBuf.line(`_target_env->${param.field} = state->${param.field};`);
-        for (const alias of terminalCarriedAliases) bodyBuf.line(`_target_env->${alias.field} = state->${alias.field};`);
+        for (const alias of terminalCarriedAliases) {
+            const value = alias.field === "awaited_body_value" ? bodyValueVar : `state->${alias.field}`;
+            bodyBuf.line(`_target_env->${alias.field} = ${value};`);
+        }
         if (thisValue) bodyBuf.line("_target_env->this_arg = state->this_arg;");
         bodyBuf.open("if (tsc_promise_is_pending(_target_source))");
         bodyBuf.line(`tsc_promise_add_callback(_target_source, ${targetAdapter}, _target_env);`);

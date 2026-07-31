@@ -12,8 +12,8 @@ function laterResult(value: string): Promise<string> {
 async function forInBodyAwaitReturn(): Promise<string> {
     const values: Record<string, string> = { first: "a", second: "b" };
     for (const key in values) {
-        await laterBody(key);
-        return await laterResult(bodyCount + "|" + key + "|returned");
+        const bodyValue = await laterBody(key);
+        return await laterResult(bodyCount + "|" + bodyValue + "|returned");
     }
     return await laterResult("fallthrough");
 }
