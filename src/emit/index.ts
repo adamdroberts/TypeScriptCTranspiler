@@ -39470,6 +39470,12 @@ class Emitter {
             branchCondition = controlStatement.expression;
         }
         if (!directAction && !branchCondition) return false;
+        const branchConditionAwait = branchCondition
+            ? this.unwrapTransparentExpression(branchCondition)
+            : null;
+        const branchConditionAwaitExpr = branchConditionAwait && ts.isAwaitExpression(branchConditionAwait)
+            ? branchConditionAwait
+            : null;
 
         const steps: { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
         const between: ts.Statement[][] = [];
@@ -39564,9 +39570,25 @@ class Emitter {
             this.checker.getTypeAtLocation(fallthroughAwait),
             this.checker,
         ));
+        const branchConditionPromiseType = branchConditionAwaitExpr
+            ? this.prepareType(mapTsType(
+                branchConditionAwaitExpr.expression,
+                this.checker.getTypeAtLocation(branchConditionAwaitExpr.expression),
+                this.checker,
+            ))
+            : null;
+        const branchConditionAwaitedType = branchConditionAwaitExpr
+            ? this.prepareType(mapTsType(
+                branchConditionAwaitExpr,
+                this.checker.getTypeAtLocation(branchConditionAwaitExpr),
+                this.checker,
+            ))
+            : null;
         if (bodyPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
-            fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
+            fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never" ||
+            (branchConditionPromiseType && branchConditionPromiseType.kind !== "promise") ||
+            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never")) return false;
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
 
         const bodyAliasEntries = steps.flatMap(({ alias }, index) => {
@@ -39578,6 +39600,9 @@ class Emitter {
         });
         const names = steps.map(() => `tsc_async_await_iterator_multi_continue_${this.asyncAwaitReturnContinuationAdapters++}`);
         const envTypes = names.map((name) => `${name}_env_t`);
+        const conditionName = branchConditionAwaitExpr
+            ? `tsc_async_await_iterator_multi_continue_condition_${this.asyncAwaitReturnContinuationAdapters++}`
+            : null;
         for (const envType of envTypes) {
             this.structDecls.open(`typedef struct ${envType}`);
             this.structDecls.line("tsc_promise_t* receiver;");
@@ -39592,6 +39617,7 @@ class Emitter {
             this.structDecls.line();
         }
         names.forEach((name) => this.protos.line(`void ${name}(void* env);`));
+        if (conditionName) this.protos.line(`void ${conditionName}(void* env);`);
         const terminalAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
             fallthroughPromiseType,
             fallthroughAwaitedType,
@@ -39681,6 +39707,43 @@ class Emitter {
             if (action === "continue") emitContinue(out, state);
             else emitFallthrough(out, state);
         };
+        if (conditionName && branchConditionAwaitExpr && branchConditionAwaitedType && branchConditionPromiseType) {
+            const conditionBuf = new CBuf();
+            const conditionEnvType = envTypes[envTypes.length - 1]!;
+            conditionBuf.open(`void ${conditionName}(void* env)`);
+            conditionBuf.line(`${conditionEnvType}* state = (${conditionEnvType}*)env;`);
+            conditionBuf.line("tsc_promise_t* _p = state->receiver;");
+            conditionBuf.line("tsc_promise_t* _ret = state->result_promise;");
+            conditionBuf.open("if (tsc_promise_is_rejected(_p))");
+            conditionBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            conditionBuf.line("return;");
+            conditionBuf.close();
+            conditionBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+            conditionBuf.line("return;");
+            conditionBuf.close();
+            const conditionValue = this.freshTemp("_async_iter_continue_condition_value");
+            conditionBuf.line(`${branchConditionAwaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(branchConditionPromiseType.elem, "_p"), branchConditionAwaitedType, branchConditionAwaitExpr)};`);
+            const conditionScope = scopeFor("state", steps.length);
+            this.argumentValueScopes.push(conditionScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            try {
+                const truth = this.truthyExprFromEmitResult({ c: conditionValue, ty: branchConditionAwaitedType }, branchConditionAwaitExpr);
+                conditionBuf.open(`if (${truth})`);
+                for (const statement of branchThenPrelude) this.emitStmt(conditionBuf, statement);
+                emitAction(conditionBuf, "state", branchThenAction!);
+                conditionBuf.close();
+                conditionBuf.open("else");
+                for (const statement of branchElsePrelude) this.emitStmt(conditionBuf, statement);
+                emitAction(conditionBuf, "state", branchElseAction!);
+                conditionBuf.close();
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
+            conditionBuf.close();
+            conditionBuf.line();
+            this.closureDefs.write(conditionBuf.toString());
+        }
         for (let index = 0; index < names.length; index++) {
             const bodyBuf = new CBuf();
             const name = names[index]!;
@@ -39734,15 +39797,28 @@ class Emitter {
                     bodyBuf.close();
                 } else {
                     if (branchCondition) {
-                        const condition = this.emitExpr(branchCondition);
-                        bodyBuf.open(`if (${this.truthyC(condition, branchCondition)})`);
-                        for (const statement of branchThenPrelude) this.emitStmt(bodyBuf, statement);
-                        emitAction(bodyBuf, "state", branchThenAction!);
-                        bodyBuf.close();
-                        bodyBuf.open("else");
-                        for (const statement of branchElsePrelude) this.emitStmt(bodyBuf, statement);
-                        emitAction(bodyBuf, "state", branchElseAction!);
-                        bodyBuf.close();
+                        if (branchConditionAwaitExpr && branchConditionPromiseType && conditionName) {
+                            const conditionSource = this.emitExpr(branchConditionAwaitExpr.expression);
+                            const conditionSourceVar = this.freshTemp("_async_iter_continue_condition_source");
+                            bodyBuf.line(`tsc_promise_t* const ${conditionSourceVar} = ${this.coerce(conditionSource, branchConditionPromiseType, branchConditionAwaitExpr.expression)};`);
+                            bodyBuf.line(`state->receiver = ${conditionSourceVar};`);
+                            bodyBuf.open(`if (tsc_promise_is_pending(${conditionSourceVar}))`);
+                            bodyBuf.line(`tsc_promise_add_callback(${conditionSourceVar}, ${conditionName}, state);`);
+                            bodyBuf.close();
+                            bodyBuf.open("else");
+                            bodyBuf.line(`${conditionName}(state);`);
+                            bodyBuf.close();
+                        } else {
+                            const condition = this.emitExpr(branchCondition);
+                            bodyBuf.open(`if (${this.truthyC(condition, branchCondition)})`);
+                            for (const statement of branchThenPrelude) this.emitStmt(bodyBuf, statement);
+                            emitAction(bodyBuf, "state", branchThenAction!);
+                            bodyBuf.close();
+                            bodyBuf.open("else");
+                            for (const statement of branchElsePrelude) this.emitStmt(bodyBuf, statement);
+                            emitAction(bodyBuf, "state", branchElseAction!);
+                            bodyBuf.close();
+                        }
                     } else {
                         emitAction(bodyBuf, "state", directAction!);
                     }
