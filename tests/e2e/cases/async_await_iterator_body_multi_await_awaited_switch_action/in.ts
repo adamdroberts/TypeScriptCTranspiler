@@ -43,6 +43,7 @@ async function runOf(): Promise<string> {
                 lastOf = switchPostValue + switchPostSuffix;
                 const switchFinalValue = await laterControl(lastOf);
                 lastOf = switchFinalValue;
+                await laterControl(lastOf);
                 continue;
             default:
                 lastOf = second + "-break";
@@ -59,6 +60,7 @@ async function runOf(): Promise<string> {
                 var switchBreakFinalValue: string;
                 switchBreakFinalValue = await laterControl(lastOf);
                 lastOf = switchBreakFinalValue;
+                await laterControl(lastOf);
                 break;
         }
     }
@@ -86,6 +88,7 @@ async function runIn(): Promise<string> {
                 lastIn = switchPostValue + switchPostSuffix;
                 const switchFinalValue = await laterControl(lastIn);
                 lastIn = switchFinalValue;
+                await laterControl(lastIn);
                 continue;
             default:
                 lastIn = second + "-break";
@@ -102,6 +105,7 @@ async function runIn(): Promise<string> {
                 var switchBreakFinalValue: string;
                 switchBreakFinalValue = await laterControl(lastIn);
                 lastIn = switchBreakFinalValue;
+                await laterControl(lastIn);
                 break;
         }
     }
