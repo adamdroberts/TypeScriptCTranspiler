@@ -59,7 +59,9 @@ async function runOf(): Promise<string> {
         try {
             throw "postlude";
         } catch (reason) {
-            ofCount += 2;
+            var recoveryBump: number;
+            recoveryBump = 2;
+            ofCount += recoveryBump;
         } finally {
             ofCount += 1;
         }
@@ -122,7 +124,9 @@ async function runIn(): Promise<string> {
         try {
             throw "postlude";
         } catch (reason) {
-            inCount += 2;
+            var recoveryBump: number;
+            recoveryBump = 2;
+            inCount += recoveryBump;
         } finally {
             inCount += 1;
         }
