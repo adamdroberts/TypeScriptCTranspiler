@@ -44,7 +44,8 @@ async function runOf(): Promise<string> {
             case 21:
                 ofCount += 1;
             case 22:
-                ofCount += 1;
+                const clauseBump = 1;
+                ofCount += clauseBump;
                 break;
             default:
                 break;
@@ -64,7 +65,8 @@ async function runOf(): Promise<string> {
         if (ofCount < 0) {
             ofCount += 100;
         } else {
-            ofCount += 1;
+            var branchBump = 2;
+            ofCount += branchBump;
         }
         const suffix = "-second";
         const second = await laterOf(first + suffix);
@@ -103,7 +105,8 @@ async function runIn(): Promise<string> {
             case 21:
                 inCount += 1;
             case 22:
-                inCount += 1;
+                const clauseBump = 1;
+                inCount += clauseBump;
                 break;
             default:
                 break;
@@ -123,7 +126,8 @@ async function runIn(): Promise<string> {
         if (inCount < 0) {
             inCount += 100;
         } else {
-            inCount += 1;
+            var branchBump = 2;
+            inCount += branchBump;
         }
         const suffix = "-second";
         const second = await laterIn(first + suffix);

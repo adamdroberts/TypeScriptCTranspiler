@@ -33124,14 +33124,10 @@ class Emitter {
                 return;
             }
             if (ts.isVariableStatement(node)) {
-                if ((node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
-                    ok = false;
-                    return;
-                }
                 for (const declaration of node.declarationList.declarations) {
                     if (
                         !ts.isIdentifier(declaration.name) ||
-                        (!declaration.initializer && (node.declarationList.flags & ts.NodeFlags.Let) === 0)
+                        (!declaration.initializer && (node.declarationList.flags & ts.NodeFlags.Const) !== 0)
                     ) {
                         ok = false;
                         return;
@@ -33315,13 +33311,9 @@ class Emitter {
                 return;
             }
             if (ts.isVariableStatement(node)) {
-                if ((node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
-                    ok = false;
-                    return;
-                }
                 for (const declaration of node.declarationList.declarations) {
                     if (!ts.isIdentifier(declaration.name) ||
-                        (!declaration.initializer && (node.declarationList.flags & ts.NodeFlags.Let) === 0)) {
+                        (!declaration.initializer && (node.declarationList.flags & ts.NodeFlags.Const) !== 0)) {
                         ok = false;
                         return;
                     }
