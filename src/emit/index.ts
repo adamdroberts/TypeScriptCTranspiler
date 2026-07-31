@@ -39514,6 +39514,12 @@ class Emitter {
         const branchConditionAwaitExpr = branchConditionAwait && ts.isAwaitExpression(branchConditionAwait)
             ? branchConditionAwait
             : null;
+        const switchExpression = switchStatement
+            ? this.unwrapTransparentExpression(switchStatement.expression)
+            : null;
+        const switchAwaitExpr = switchExpression && ts.isAwaitExpression(switchExpression)
+            ? switchExpression
+            : null;
 
         const steps: { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
         const between: ts.Statement[][] = [];
@@ -39622,19 +39628,36 @@ class Emitter {
                 this.checker,
             ))
             : null;
-        const switchType = switchStatement
+        const switchPromiseType = switchAwaitExpr
             ? this.prepareType(mapTsType(
-                switchStatement.expression,
-                this.checker.getTypeAtLocation(switchStatement.expression),
+                switchAwaitExpr.expression,
+                this.checker.getTypeAtLocation(switchAwaitExpr.expression),
                 this.checker,
             ))
             : null;
+        const switchDiscriminatorType = switchAwaitExpr
+            ? this.prepareType(mapTsType(
+                switchAwaitExpr,
+                this.checker.getTypeAtLocation(switchAwaitExpr),
+                this.checker,
+            ))
+            : switchStatement
+                ? this.prepareType(mapTsType(
+                    switchStatement.expression,
+                    this.checker.getTypeAtLocation(switchStatement.expression),
+                    this.checker,
+                ))
+                : null;
+        if (switchAwaitExpr && !switchPromiseType) return false;
+        if (switchStatement && !switchDiscriminatorType) return false;
+        if (switchAwaitExpr && switchPromiseType && switchPromiseType.kind !== "promise") return false;
+        if (switchAwaitExpr && switchDiscriminatorType && switchDiscriminatorType.kind === "never") return false;
+        if (switchDiscriminatorType && switchDiscriminatorType.kind !== "string" && switchDiscriminatorType.kind !== "boolean" && switchDiscriminatorType.kind !== "number") return false;
         if (bodyPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never" ||
             (branchConditionPromiseType && branchConditionPromiseType.kind !== "promise") ||
-            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never") ||
-            (switchType && switchType.kind !== "string" && switchType.kind !== "boolean" && switchType.kind !== "number")) return false;
+            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never")) return false;
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
 
         const bodyAliasEntries = steps.flatMap(({ alias }, index) => {
@@ -39648,6 +39671,9 @@ class Emitter {
         const envTypes = names.map((name) => `${name}_env_t`);
         const conditionName = branchConditionAwaitExpr
             ? `tsc_async_await_iterator_multi_continue_condition_${this.asyncAwaitReturnContinuationAdapters++}`
+            : null;
+        const switchConditionName = switchAwaitExpr
+            ? `tsc_async_await_iterator_multi_continue_switch_${this.asyncAwaitReturnContinuationAdapters++}`
             : null;
         for (const envType of envTypes) {
             this.structDecls.open(`typedef struct ${envType}`);
@@ -39664,6 +39690,7 @@ class Emitter {
         }
         names.forEach((name) => this.protos.line(`void ${name}(void* env);`));
         if (conditionName) this.protos.line(`void ${conditionName}(void* env);`);
+        if (switchConditionName) this.protos.line(`void ${switchConditionName}(void* env);`);
         const terminalAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
             fallthroughPromiseType,
             fallthroughAwaitedType,
@@ -39753,6 +39780,27 @@ class Emitter {
             if (action === "continue") emitContinue(out, state);
             else emitFallthrough(out, state);
         };
+        const emitSwitchRouting = (out: CBuf, state: string, discriminator: EmitResult): void => {
+            const isString = discriminator.ty.kind === "string";
+            const discriminatorVar = this.freshTemp("_async_iter_switch_value");
+            out.line(`${discriminator.ty.c} ${discriminatorVar} = ${discriminator.c};`);
+            let emittedRoute = false;
+            for (const route of switchRoutes) {
+                let condition = "1";
+                if (route.caseExpression) {
+                    const caseValue = this.emitExpr(route.caseExpression);
+                    const coercedCase = this.coerce(caseValue, discriminator.ty, route.caseExpression);
+                    condition = isString
+                        ? `tsc_str_eq(${discriminatorVar}, ${coercedCase})`
+                        : `(${discriminatorVar} == ${coercedCase})`;
+                }
+                out.open(emittedRoute ? `else if (${condition})` : `if (${condition})`);
+                for (const statement of route.prelude) this.emitStmt(out, statement);
+                emitAction(out, state, route.action);
+                out.close();
+                emittedRoute = true;
+            }
+        };
         if (conditionName && branchConditionAwaitExpr && branchConditionAwaitedType && branchConditionPromiseType) {
             const conditionBuf = new CBuf();
             const conditionEnvType = envTypes[envTypes.length - 1]!;
@@ -39790,6 +39838,35 @@ class Emitter {
             conditionBuf.line();
             this.closureDefs.write(conditionBuf.toString());
         }
+        if (switchConditionName && switchAwaitExpr && switchPromiseType && switchDiscriminatorType) {
+            const switchBuf = new CBuf();
+            const switchEnvType = envTypes[envTypes.length - 1]!;
+            switchBuf.open(`void ${switchConditionName}(void* env)`);
+            switchBuf.line(`${switchEnvType}* state = (${switchEnvType}*)env;`);
+            switchBuf.line("tsc_promise_t* _p = state->receiver;");
+            switchBuf.line("tsc_promise_t* _ret = state->result_promise;");
+            switchBuf.open("if (tsc_promise_is_rejected(_p))");
+            switchBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            switchBuf.line("return;");
+            switchBuf.close();
+            switchBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+            switchBuf.line("return;");
+            switchBuf.close();
+            const switchValue = this.freshTemp("_async_iter_switch_value");
+            switchBuf.line(`${switchDiscriminatorType.c} ${switchValue} = ${this.coerce(this.promiseFulfilledValue(switchPromiseType.elem, "_p"), switchDiscriminatorType, switchAwaitExpr)};`);
+            const switchScope = scopeFor("state", steps.length);
+            this.argumentValueScopes.push(switchScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            try {
+                emitSwitchRouting(switchBuf, "state", { c: switchValue, ty: switchDiscriminatorType });
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
+            switchBuf.close();
+            switchBuf.line();
+            this.closureDefs.write(switchBuf.toString());
+        }
         for (let index = 0; index < names.length; index++) {
             const bodyBuf = new CBuf();
             const name = names[index]!;
@@ -39808,11 +39885,12 @@ class Emitter {
             const nextScope = scopeFor("state", index);
             const currentAlias = bodyAliasEntries.find((alias) => alias.index === index);
             const currentValueVar = currentAlias ? this.freshTemp("_async_iter_continue_value") : null;
+            const nextAwait = index + 1 < names.length ? steps[index + 1]!.awaitExpr : null;
             if (currentAlias && currentValueVar) {
                 bodyBuf.line(`${currentAlias.type.c} ${currentValueVar} = ${this.coerce(this.promiseFulfilledValue(bodyPromiseTypes[index]!.elem, "_p"), currentAlias.type, steps[index]!.awaitExpr)};`);
                 nextScope.set(currentAlias.symbol, currentValueVar);
+                if (!nextAwait) bodyBuf.line(`state->${currentAlias.field} = ${currentValueVar};`);
             }
-            const nextAwait = index + 1 < names.length ? steps[index + 1]!.awaitExpr : null;
             this.argumentValueScopes.push(nextScope);
             if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
             try {
@@ -39866,26 +39944,20 @@ class Emitter {
                             bodyBuf.close();
                         }
                     } else if (switchStatement) {
-                        const discriminator = this.emitExpr(switchStatement.expression);
-                        const isString = discriminator.ty.kind === "string";
-                        const isBoolean = discriminator.ty.kind === "boolean";
-                        const discriminatorVar = this.freshTemp("_async_iter_switch_value");
-                        bodyBuf.line(`${discriminator.ty.c} ${discriminatorVar} = ${discriminator.c};`);
-                        let emittedRoute = false;
-                        for (const route of switchRoutes) {
-                            let condition = "1";
-                            if (route.caseExpression) {
-                                const caseValue = this.emitExpr(route.caseExpression);
-                                const coercedCase = this.coerce(caseValue, discriminator.ty, route.caseExpression);
-                                condition = isString
-                                    ? `tsc_str_eq(${discriminatorVar}, ${coercedCase})`
-                                    : `(${discriminatorVar} == ${coercedCase})`;
-                            }
-                            bodyBuf.open(emittedRoute ? `else if (${condition})` : `if (${condition})`);
-                            for (const statement of route.prelude) this.emitStmt(bodyBuf, statement);
-                            emitAction(bodyBuf, "state", route.action);
+                        if (switchAwaitExpr && switchPromiseType && switchConditionName) {
+                            const switchSource = this.emitExpr(switchAwaitExpr.expression);
+                            const switchSourceVar = this.freshTemp("_async_iter_switch_source");
+                            bodyBuf.line(`tsc_promise_t* const ${switchSourceVar} = ${this.coerce(switchSource, switchPromiseType, switchAwaitExpr.expression)};`);
+                            bodyBuf.line(`state->receiver = ${switchSourceVar};`);
+                            bodyBuf.open(`if (tsc_promise_is_pending(${switchSourceVar}))`);
+                            bodyBuf.line(`tsc_promise_add_callback(${switchSourceVar}, ${switchConditionName}, state);`);
                             bodyBuf.close();
-                            emittedRoute = true;
+                            bodyBuf.open("else");
+                            bodyBuf.line(`${switchConditionName}(state);`);
+                            bodyBuf.close();
+                        } else {
+                            const discriminator = this.emitExpr(switchStatement.expression);
+                            emitSwitchRouting(bodyBuf, "state", discriminator);
                         }
                     } else {
                         emitAction(bodyBuf, "state", directAction!);
