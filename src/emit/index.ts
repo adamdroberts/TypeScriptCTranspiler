@@ -35771,8 +35771,17 @@ class Emitter {
             const bodyAwaitStatements = bodyContinueStatements.flatMap((statement) => {
                 if (!ts.isExpressionStatement(statement)) return [];
                 const expression = this.unwrapTransparentExpression(statement.expression);
+                return ts.isAwaitExpression(expression) ? [{ statement, expression, symbol: undefined }] : [];
+            });
+            const bodyAwaitLocalStatements = bodyContinueStatements.flatMap((statement) => {
+                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return [];
+                const declaration = statement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return [];
+                const expression = this.unwrapTransparentExpression(declaration.initializer);
                 return ts.isAwaitExpression(expression) ? [{ statement, expression }] : [];
             });
+            const bodyAwaitableStatements = [...bodyAwaitStatements, ...bodyAwaitLocalStatements]
+                .sort((left, right) => bodyContinueStatements.indexOf(left.statement) - bodyContinueStatements.indexOf(right.statement));
             const bodyHasOtherAwait = bodyContinueStatements.some((statement) => {
                 let found = false;
                 const visit = (node: ts.Node): void => {
@@ -35920,13 +35929,13 @@ class Emitter {
                     : undefined;
                 bodyAwaitFinallyStatements = finallyAwaitExpression ? [] : finallyStatements;
                 continuationBodyAwaitFinallyAwaitExpr = finallyAwaitExpression ?? undefined;
-            } else if (bodyAwaitStatements.length > 0 && bodyHasOtherAwait) {
-                const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[0]!.statement);
-                const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitStatements[bodyAwaitStatements.length - 1]!.statement);
-                const awaitStatements = new Set<ts.Statement>(bodyAwaitStatements.map(({ statement }) => statement));
+            } else if (bodyAwaitableStatements.length > 0 && bodyHasOtherAwait) {
+                const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitableStatements[0]!.statement);
+                const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitableStatements[bodyAwaitableStatements.length - 1]!.statement);
+                const awaitStatements = new Set<ts.Statement>(bodyAwaitableStatements.map(({ statement }) => statement));
                 if (bodyContinueStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
-                bodyAwaitExpr = bodyAwaitStatements[0]!.expression;
-                bodyAwaitExprs = bodyAwaitStatements.map(({ expression }) => expression);
+                bodyAwaitExpr = bodyAwaitableStatements[0]!.expression;
+                bodyAwaitExprs = bodyAwaitableStatements.map(({ expression }) => expression);
                 bodyPreludeStatements = bodyContinueStatements.slice(0, firstAwaitIndex);
                 bodyPostAwaitStatements = bodyContinueStatements.slice(lastAwaitIndex + 1);
             } else {
