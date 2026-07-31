@@ -39432,10 +39432,16 @@ class Emitter {
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         const controlStatement = loopBody[loopBody.length - 1];
         if (!controlStatement) return false;
-        const actionForStatement = (statement: ts.Statement | undefined): "continue" | "break" | null =>
+        type ControlAction = "continue" | "break" | "return";
+        const actionForStatement = (statement: ts.Statement | undefined): ControlAction | null =>
             statement && ts.isContinueStatement(statement) && !statement.label ? "continue" :
-                statement && ts.isBreakStatement(statement) && !statement.label ? "break" : null;
+                statement && ts.isBreakStatement(statement) && !statement.label ? "break" :
+                    statement && ts.isReturnStatement(statement) && statement.expression &&
+                    this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "return" : null;
         let directAction = actionForStatement(controlStatement);
+        const directReturnExpression = directAction === "return" && ts.isReturnStatement(controlStatement)
+            ? controlStatement.expression ?? null
+            : null;
         let branchCondition: ts.Expression | null = null;
         let switchStatement: ts.SwitchStatement | null = null;
         type ControlAwaitStep = {
@@ -39455,7 +39461,8 @@ class Emitter {
             betweenAwaitStatements: readonly (readonly ts.Statement[])[];
             betweenAwaitAliases?: readonly (readonly ControlPreludeAlias[])[];
             postAwaitStatements: readonly ts.Statement[];
-            action: "continue" | "break";
+            action: ControlAction;
+            returnExpression: ts.Expression | null;
         };
         let branchThenRoute: ControlRoute | null = null;
         let branchElseRoute: ControlRoute | null = null;
@@ -39501,6 +39508,10 @@ class Emitter {
             if (statements.length === 0) return null;
             const action = actionForStatement(statements[statements.length - 1]);
             if (!action) return null;
+            const terminalStatement = statements[statements.length - 1]!;
+            const returnExpression = action === "return" && ts.isReturnStatement(terminalStatement)
+                ? terminalStatement.expression ?? null
+                : null;
             const prelude = statements.slice(0, -1);
             const awaitEntries: { index: number; expression: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
             for (let index = 0; index < prelude.length; index++) {
@@ -39534,7 +39545,7 @@ class Emitter {
             }
             if (awaitEntries.length === 0) {
                 if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action };
+                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action, returnExpression };
             }
             const awaitIndices = awaitEntries.map(({ index }) => index);
             const betweenAwaitStatements: (readonly ts.Statement[])[] = [];
@@ -39559,6 +39570,7 @@ class Emitter {
                 betweenAwaitAliases,
                 postAwaitStatements,
                 action,
+                returnExpression,
             };
         };
         if (!directAction && ts.isIfStatement(controlStatement)) {
@@ -39572,7 +39584,7 @@ class Emitter {
                 if (!elseRoute) return false;
                 branchElseRoute = elseRoute;
             } else {
-                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" };
+                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null };
             }
             if (!branchThenRoute || !branchElseRoute) return false;
             branchCondition = controlStatement.expression;
@@ -39606,8 +39618,9 @@ class Emitter {
                             betweenAwaitAliases: nextRoute.betweenAwaitAliases,
                             postAwaitStatements: nextRoute.postAwaitStatements,
                             action: nextRoute.action,
+                            returnExpression: nextRoute.returnExpression,
                         }
-                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
+                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }
@@ -39623,10 +39636,11 @@ class Emitter {
                     betweenAwaitAliases: route.betweenAwaitAliases,
                     postAwaitStatements: route.postAwaitStatements,
                     action: route.action,
+                    returnExpression: route.returnExpression,
                 });
             }
             if (!switchRoutes.some((route) => route.caseExpression === null)) {
-                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
+                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null });
             }
         }
         if (!directAction && !branchCondition && !switchStatement) return false;
@@ -39975,6 +39989,19 @@ class Emitter {
             if (action === "continue") emitContinue(out, state);
             else emitFallthrough(out, state);
         };
+        const emitRouteAction = (out: CBuf, state: string, action: ControlAction, returnExpression: ts.Expression | null): void => {
+            if (action === "return") {
+                if (!returnExpression) return;
+                const returned = this.emitExpr(returnExpression);
+                const resolved = returned.ty.kind === "promise"
+                    ? returned.c
+                    : this.promiseResolveResult(returned, returnExpression);
+                out.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
+                out.line("return;");
+                return;
+            }
+            emitAction(out, state, action);
+        };
         for (const route of awaitedControlRoutes) {
             for (let index = 0; index < route.awaitSteps.length; index++) {
                 const awaitStep = route.awaitSteps[index]!;
@@ -40041,7 +40068,7 @@ class Emitter {
                         routeBuf.close();
                     } else {
                         for (const statement of route.postAwaitStatements) this.emitStmt(routeBuf, statement);
-                        emitAction(routeBuf, "state", route.action);
+                        emitRouteAction(routeBuf, "state", route.action, route.returnExpression);
                     }
                 } finally {
                     if (thisValue) this.functionThisStack.pop();
@@ -40059,7 +40086,7 @@ class Emitter {
                 out.line(`${state}->${alias.field} = ${this.coerce(value, alias.type, alias.identifier)};`);
             }
             if (route.awaitSteps.length === 0) {
-                emitAction(out, state, route.action);
+                emitRouteAction(out, state, route.action, route.returnExpression);
                 return;
             }
             const awaitExpr = route.awaitSteps[0]!.awaitExpr;
@@ -40252,7 +40279,7 @@ class Emitter {
                             emitSwitchRouting(bodyBuf, "state", discriminator);
                         }
                     } else {
-                        emitAction(bodyBuf, "state", directAction!);
+                        emitRouteAction(bodyBuf, "state", directAction!, directReturnExpression);
                     }
                 }
             } finally {
