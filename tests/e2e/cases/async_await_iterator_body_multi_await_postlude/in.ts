@@ -21,6 +21,13 @@ async function runOf(): Promise<string> {
         if (ofCount > 0) {
             ofCount += 10;
         }
+        switch (ofCount) {
+            case 11:
+                ofCount += 1;
+                break;
+            default:
+                break;
+        }
         const suffix = "-second";
         const second = await laterOf(first + suffix);
         return await later(ofCount + "|" + second);
@@ -34,6 +41,13 @@ async function runIn(): Promise<string> {
         const first = await laterIn(key);
         if (inCount > 0) {
             inCount += 10;
+        }
+        switch (inCount) {
+            case 11:
+                inCount += 1;
+                break;
+            default:
+                break;
         }
         const suffix = "-second";
         const second = await laterIn(first + suffix);
