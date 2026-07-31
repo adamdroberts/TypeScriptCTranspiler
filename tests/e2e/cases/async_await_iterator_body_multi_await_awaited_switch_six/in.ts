@@ -35,9 +35,11 @@ async function runOf(): Promise<string> {
                 await laterControl(lastOf);
                 await laterControl(lastOf);
                 await laterControl(lastOf);
+                await laterControl(lastOf);
                 continue;
             default:
                 lastOf = second;
+                await laterControl(lastOf);
                 await laterControl(lastOf);
                 await laterControl(lastOf);
                 await laterControl(lastOf);
@@ -62,9 +64,11 @@ async function runIn(): Promise<string> {
                 await laterControl(lastIn);
                 await laterControl(lastIn);
                 await laterControl(lastIn);
+                await laterControl(lastIn);
                 continue;
             default:
                 lastIn = second;
+                await laterControl(lastIn);
                 await laterControl(lastIn);
                 await laterControl(lastIn);
                 await laterControl(lastIn);
