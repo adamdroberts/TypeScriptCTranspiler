@@ -3,6 +3,8 @@ function later(value: string): Promise<string> {
 }
 
 let bodyCount = 0;
+let lastOf = "";
+let lastIn = "";
 
 function laterBody(value: string): Promise<string> {
     bodyCount++;
@@ -13,9 +15,13 @@ async function runOf(): Promise<string> {
     for (const item of ["of-a", "of-b"]) {
         var first: string;
         first = await laterBody(item);
+        const marker = first + "-second";
+        var second: string;
+        second = await laterBody(marker);
+        lastOf = second;
         continue;
     }
-    return await later(bodyCount + "|done");
+    return await later(bodyCount + "|" + lastOf);
 }
 
 async function runIn(): Promise<string> {
@@ -23,9 +29,13 @@ async function runIn(): Promise<string> {
     for (const key in values) {
         var first: string;
         first = await laterBody(key);
+        const marker = first + "-second";
+        var second: string;
+        second = await laterBody(marker);
+        lastIn = second;
         continue;
     }
-    return await later(bodyCount + "|done");
+    return await later(bodyCount + "|" + lastIn);
 }
 
 runOf().then((value) => console.log(value));
