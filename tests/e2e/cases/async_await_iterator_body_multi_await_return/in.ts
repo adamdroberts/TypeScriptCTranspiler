@@ -11,9 +11,9 @@ function laterBody(value: string): Promise<string> {
 
 async function runOf(): Promise<string> {
     for (const item of ["of"]) {
-        await laterBody(item);
-        await laterBody(item + "-second");
-        return await later(bodyCount + "|" + item + "|return");
+        const first = await laterBody(item);
+        const second = await laterBody(first + "-second");
+        return await later(bodyCount + "|" + second + "|return");
     }
     return await later("fallthrough");
 }
@@ -21,9 +21,9 @@ async function runOf(): Promise<string> {
 async function runIn(): Promise<string> {
     const values: Record<string, string> = { in: "value" };
     for (const key in values) {
-        await laterBody(key);
-        await laterBody(key + "-second");
-        return await later(bodyCount + "|" + key + "|return");
+        const first = await laterBody(key);
+        const second = await laterBody(first + "-second");
+        return await later(bodyCount + "|" + second + "|return");
     }
     return await later("fallthrough");
 }

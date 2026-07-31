@@ -38913,12 +38913,21 @@ class Emitter {
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         if (loopBody.length < 3) return false;
-        const bodyAwaits = loopBody.slice(0, -1).map((statement) => {
-            if (!ts.isExpressionStatement(statement)) return null;
-            const expression = this.unwrapTransparentExpression(statement.expression);
-            return ts.isAwaitExpression(expression) ? expression : null;
+        const bodySteps = loopBody.slice(0, -1).map((statement) => {
+            if (ts.isExpressionStatement(statement)) {
+                const expression = this.unwrapTransparentExpression(statement.expression);
+                return ts.isAwaitExpression(expression) ? { awaitExpr: expression, alias: null as ts.Identifier | null } : null;
+            }
+            if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
+                const declaration = statement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return null;
+                const expression = this.unwrapTransparentExpression(declaration.initializer);
+                return ts.isAwaitExpression(expression) ? { awaitExpr: expression, alias: declaration.name } : null;
+            }
+            return null;
         });
-        if (bodyAwaits.length < 2 || bodyAwaits.some((awaitExpr) => !awaitExpr)) return false;
+        if (bodySteps.length < 2 || bodySteps.some((step) => !step)) return false;
+        const steps = bodySteps as { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[];
         const terminal = loopBody[loopBody.length - 1]!;
         const isThrow = ts.isThrowStatement(terminal);
         const terminalAwaitCandidate = ts.isReturnStatement(terminal) || isThrow
@@ -38956,9 +38965,14 @@ class Emitter {
             itemsExpr = iter.c;
             itemType = iter.ty.elem;
         }
-        const bodyPromiseTypes = bodyAwaits.map((awaitExpr) => this.prepareType(mapTsType(
-            awaitExpr!.expression,
-            this.checker.getTypeAtLocation(awaitExpr!.expression),
+        const bodyPromiseTypes = steps.map(({ awaitExpr }) => this.prepareType(mapTsType(
+            awaitExpr.expression,
+            this.checker.getTypeAtLocation(awaitExpr.expression),
+            this.checker,
+        )));
+        const bodyAwaitedTypes = steps.map(({ awaitExpr }) => this.prepareType(mapTsType(
+            awaitExpr,
+            this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
         if (bodyPromiseTypes.some((type) => type.kind !== "promise")) return false;
@@ -38986,13 +39000,21 @@ class Emitter {
             terminalPromiseType.kind !== "promise" || terminalAwaitedType.kind === "never") return false;
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
 
-        const names = bodyAwaits.map(() => `tsc_async_await_iterator_multi_body_${this.asyncAwaitReturnContinuationAdapters++}`);
+        const bodyAliasEntries = steps.flatMap(({ alias }, index) => {
+            const symbol = alias ? this.symbolForIdentifier(alias) : null;
+            const type = bodyAwaitedTypes[index]!;
+            return symbol && type.kind !== "void" && type.kind !== "never"
+                ? [{ symbol, index, type, field: `awaited_body_value_${index}` }]
+                : [];
+        });
+        const names = steps.map(() => `tsc_async_await_iterator_multi_body_${this.asyncAwaitReturnContinuationAdapters++}`);
         const envTypes = names.map((name) => `${name}_env_t`);
         for (const envType of envTypes) {
             this.structDecls.open(`typedef struct ${envType}`);
             this.structDecls.line("tsc_promise_t* receiver;");
             this.structDecls.line("tsc_promise_t* result_promise;");
             this.structDecls.line(`${itemType.c} iteration_value;`);
+            for (const alias of bodyAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
             for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -39009,12 +39031,18 @@ class Emitter {
             isThrow,
             [],
             [],
-            [{ symbol: bindingSymbol, type: itemType, field: "iteration_value" }],
+            [
+                { symbol: bindingSymbol, type: itemType, field: "iteration_value" },
+                ...bodyAliasEntries.map(({ symbol, type, field }) => ({ symbol, type, field })),
+            ],
         );
-        const scopeFor = (state: string): Map<ts.Symbol, string> => {
+        const scopeFor = (state: string, index: number): Map<ts.Symbol, string> => {
             const scope = new Map<ts.Symbol, string>();
             for (const param of params) scope.set(param.symbol, `${state}->${param.field}`);
             scope.set(bindingSymbol!, `${state}->iteration_value`);
+            for (const alias of bodyAliasEntries) {
+                if (alias.index < index) scope.set(alias.symbol, `${state}->${alias.field}`);
+            }
             return scope;
         };
         for (let index = 0; index < names.length; index++) {
@@ -39032,8 +39060,14 @@ class Emitter {
             bodyBuf.open("if (!tsc_promise_is_fulfilled(_p))");
             bodyBuf.line("return;");
             bodyBuf.close();
-            const nextScope = scopeFor("state");
-            const nextAwait = index + 1 < names.length ? bodyAwaits[index + 1]! : terminalAwait;
+            const nextScope = scopeFor("state", index);
+            const currentAlias = bodyAliasEntries.find((alias) => alias.index === index);
+            const currentValueVar = currentAlias ? this.freshTemp("_async_iter_multi_value") : null;
+            if (currentAlias && currentValueVar) {
+                bodyBuf.line(`${currentAlias.type.c} ${currentValueVar} = ${this.coerce(this.promiseFulfilledValue(bodyPromiseTypes[index]!.elem, "_p"), currentAlias.type, steps[index]!.awaitExpr)};`);
+                nextScope.set(currentAlias.symbol, currentValueVar);
+            }
+            const nextAwait = index + 1 < names.length ? steps[index + 1]!.awaitExpr : terminalAwait;
             const nextPromiseType = index + 1 < names.length ? bodyPromiseTypes[index + 1]! : terminalPromiseType;
             const nextAdapter = index + 1 < names.length ? names[index + 1]! : terminalAdapter;
             this.argumentValueScopes.push(nextScope);
@@ -39051,8 +39085,11 @@ class Emitter {
             bodyBuf.line(`${nextAdapter}_env_t* const ${envVar} = (${nextAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${nextAdapter}_env_t));`);
             bodyBuf.line(`${envVar}->receiver = ${sourceVar};`);
             bodyBuf.line(`${envVar}->result_promise = _ret;`);
-            if (nextAdapter === terminalAdapter) bodyBuf.line(`${envVar}->iteration_value = state->iteration_value;`);
-            else bodyBuf.line(`${envVar}->iteration_value = state->iteration_value;`);
+            bodyBuf.line(`${envVar}->iteration_value = state->iteration_value;`);
+            for (const alias of bodyAliasEntries) {
+                const value = alias.index === index && currentValueVar ? currentValueVar : `state->${alias.field}`;
+                bodyBuf.line(`${envVar}->${alias.field} = ${value};`);
+            }
             for (const param of params) bodyBuf.line(`${envVar}->${param.field} = state->${param.field};`);
             if (thisValue) bodyBuf.line(`${envVar}->this_arg = state->this_arg;`);
             bodyBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
@@ -39100,12 +39137,12 @@ class Emitter {
         if (thisValue) this.functionThisStack.push(thisValue);
         let initialSource: EmitResult;
         try {
-            initialSource = this.emitExpr(bodyAwaits[0]!.expression);
+            initialSource = this.emitExpr(steps[0]!.awaitExpr.expression);
         } finally {
             if (thisValue) this.functionThisStack.pop();
             this.argumentValueScopes.pop();
         }
-        buf.line(`${initialEnv}->receiver = ${this.coerce(initialSource, bodyPromiseTypes[0]!, bodyAwaits[0]!.expression)};`);
+        buf.line(`${initialEnv}->receiver = ${this.coerce(initialSource, bodyPromiseTypes[0]!, steps[0]!.awaitExpr.expression)};`);
         buf.open(`if (tsc_promise_is_pending(${initialEnv}->receiver))`);
         buf.line(`tsc_promise_add_callback(${initialEnv}->receiver, ${names[0]}, ${initialEnv});`);
         buf.close();
