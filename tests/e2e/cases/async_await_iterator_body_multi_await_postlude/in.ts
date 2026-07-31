@@ -31,6 +31,9 @@ async function runOf(): Promise<string> {
         while (ofCount === 12) {
             ofCount += 1;
         }
+        do {
+            ofCount += 1;
+        } while (ofCount === 13);
         const suffix = "-second";
         const second = await laterOf(first + suffix);
         return await later(ofCount + "|" + second);
@@ -55,6 +58,9 @@ async function runIn(): Promise<string> {
         while (inCount === 12) {
             inCount += 1;
         }
+        do {
+            inCount += 1;
+        } while (inCount === 13);
         const suffix = "-second";
         const second = await laterIn(first + suffix);
         throw await later("in-" + inCount + "|" + second);
