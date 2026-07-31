@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Added regression coverage confirming awaited assigned aliases survive multiple loop-body awaits into `break` and the post-loop awaited fallthrough. Test: `async_await_loop_body_await_assignment_break`.
 - Added regression coverage confirming nested awaited loop branches reuse assigned-before-use aliases across multiple awaits before `continue`. Test: `async_await_loop_body_if_await_assignment_continue`.
 - Async loop-body continuations now recognize assigned-before-use `let` aliases (`local = await ...`) and carry them through multiple awaits before `continue`. Test: `async_await_loop_body_await_assignment_multi_continue`.
 - Added regression coverage confirming nested awaited loop-body `if` branches carry multiple awaited locals through await-free statements and later awaits before `continue`. Test: `async_await_loop_body_if_await_local_continue`.
