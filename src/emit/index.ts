@@ -319,6 +319,9 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyContinueElseBreakPostAwaitStatements: readonly ts.Statement[];
     bodyContinueElseReturnAwaitExpr: ts.AwaitExpression | null;
     bodyContinueElseReturnAwaitPreludeExprs: readonly ts.AwaitExpression[];
+    bodyContinueElseReturnAwaitedAliasSymbols?: readonly ts.Symbol[];
+    bodyContinueElseReturnAwaitedAliasIndices?: readonly number[];
+    bodyContinueElseReturnBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyContinueElseReturnSynchronousExpr: ts.Expression | null;
     bodyContinueElseReturnPreludeStatements: readonly ts.Statement[];
     bodyContinueElseReturnPostAwaitStatements: readonly ts.Statement[];
@@ -35610,23 +35613,52 @@ class Emitter {
             ? elseContinueStatement!.expression
             : null;
         let bodyContinueElseReturnAwaitPreludeExprs: readonly ts.AwaitExpression[] = [];
+        let bodyContinueElseReturnAwaitedAliasSymbols: readonly ts.Symbol[] = [];
+        let bodyContinueElseReturnAwaitedAliasIndices: readonly number[] = [];
+        let bodyContinueElseReturnBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyContinueElseReturnPreludeStatements: readonly ts.Statement[] = [];
         let bodyContinueElseReturnPostAwaitStatements: readonly ts.Statement[] = [];
         if (bodyContinueCondition && (elseContinueIsReturn || elseContinueIsThrow)) {
             const returnPreludeStatements = bodyContinueElseStatements.slice(0, -1);
             const returnPreludePrefix: ts.Statement[] = [];
             const returnPreludeSuffix: ts.Statement[] = [];
-            const returnAwaitExpressions: ts.AwaitExpression[] = [];
+            const returnAwaitEntries: { expression: ts.AwaitExpression; statement: ts.Statement; symbol?: ts.Symbol }[] = [];
             let sawAwait = false;
             let sawSuffix = false;
-            for (const statement of returnPreludeStatements) {
+            for (const [statementIndex, statement] of returnPreludeStatements.entries()) {
                 const expression = ts.isExpressionStatement(statement)
                     ? this.unwrapTransparentExpression(statement.expression)
                     : null;
-                if (expression && ts.isAwaitExpression(expression)) {
+                let awaitEntry: { expression: ts.AwaitExpression; symbol?: ts.Symbol } | null =
+                    expression && ts.isAwaitExpression(expression) ? { expression, symbol: undefined } : null;
+                if (!awaitEntry && ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
+                    const declaration = statement.declarationList.declarations[0]!;
+                    if (ts.isIdentifier(declaration.name) && declaration.initializer) {
+                        const initializer = this.unwrapTransparentExpression(declaration.initializer);
+                        if (ts.isAwaitExpression(initializer)) {
+                            awaitEntry = { expression: initializer, symbol: this.symbolForIdentifier(declaration.name) };
+                        }
+                    }
+                }
+                if (!awaitEntry && expression && ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    ts.isIdentifier(expression.left) && ts.isAwaitExpression(this.unwrapTransparentExpression(expression.right))) {
+                    const declarationStatement = returnPreludeStatements[statementIndex - 1];
+                    if (ts.isVariableStatement(declarationStatement) &&
+                        (declarationStatement.declarationList.flags & ts.NodeFlags.Let) !== 0 &&
+                        declarationStatement.declarationList.declarations.length === 1) {
+                        const declaration = declarationStatement.declarationList.declarations[0]!;
+                        if (ts.isIdentifier(declaration.name) && !declaration.initializer && declaration.name.text === expression.left.text) {
+                            awaitEntry = {
+                                expression: this.unwrapTransparentExpression(expression.right) as ts.AwaitExpression,
+                                symbol: this.symbolForIdentifier(expression.left),
+                            };
+                        }
+                    }
+                }
+                if (awaitEntry) {
                     if (sawSuffix) return false;
                     sawAwait = true;
-                    returnAwaitExpressions.push(expression);
+                    returnAwaitEntries.push({ ...awaitEntry, statement });
                 } else {
                     if (!this.asyncAwaitLoopPostStatementSupported(statement)) return false;
                     if (sawAwait) {
@@ -35637,8 +35669,19 @@ class Emitter {
                     }
                 }
             }
-            bodyContinueElseReturnAwaitPreludeExprs = returnAwaitExpressions;
-            bodyContinueElseReturnPreludeStatements = returnAwaitExpressions.length > 0
+            const returnAwaitIndices = returnAwaitEntries.map(({ statement }) => returnPreludeStatements.indexOf(statement));
+            const betweenAwaitStatements: ts.Statement[][] = [];
+            for (let index = 0; index + 1 < returnAwaitIndices.length; index++) {
+                const between = returnPreludeStatements.slice(returnAwaitIndices[index]! + 1, returnAwaitIndices[index + 1]!);
+                if (!between.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+                betweenAwaitStatements.push(between);
+            }
+            bodyContinueElseReturnAwaitPreludeExprs = returnAwaitEntries.map(({ expression }) => expression);
+            const aliasEntries = returnAwaitEntries.flatMap(({ symbol }, index) => symbol ? [{ symbol, index }] : []);
+            bodyContinueElseReturnAwaitedAliasSymbols = aliasEntries.map(({ symbol }) => symbol);
+            bodyContinueElseReturnAwaitedAliasIndices = aliasEntries.map(({ index }) => index);
+            bodyContinueElseReturnBetweenAwaitStatements = betweenAwaitStatements;
+            bodyContinueElseReturnPreludeStatements = returnAwaitEntries.length > 0
                 ? returnPreludePrefix
                 : returnPreludeStatements;
             bodyContinueElseReturnPostAwaitStatements = returnPreludeSuffix;
@@ -36417,6 +36460,9 @@ class Emitter {
             bodyContinueElseBreakPostAwaitStatements,
             bodyContinueElseReturnAwaitExpr,
             bodyContinueElseReturnAwaitPreludeExprs,
+            bodyContinueElseReturnAwaitedAliasSymbols,
+            bodyContinueElseReturnAwaitedAliasIndices,
+            bodyContinueElseReturnBetweenAwaitStatements,
             bodyContinueElseReturnSynchronousExpr,
             bodyContinueElseReturnPreludeStatements,
             bodyContinueElseReturnPostAwaitStatements,
@@ -36578,6 +36624,9 @@ class Emitter {
                     conditionAwaitExpr: sequenceConditionAwaitExpr,
                     bodyAwaitExpr: bodyContinueElseReturnAwaitPreludeExprs[0]!,
                     bodyAwaitExprs: bodyContinueElseReturnAwaitPreludeExprs,
+                    bodyAwaitedAliasSymbols: continuation.bodyContinueElseReturnAwaitedAliasSymbols ?? [],
+                    bodyAwaitedAliasIndices: continuation.bodyContinueElseReturnAwaitedAliasIndices ?? [],
+                    bodyBetweenAwaitStatements: continuation.bodyContinueElseReturnBetweenAwaitStatements ?? [],
                     bodyPostAwaitStatements: bodyContinueElseReturnPostAwaitStatements,
                     bodyContinue: false,
                     bodyContinueCondition: null,
