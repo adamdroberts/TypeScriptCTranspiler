@@ -39430,8 +39430,10 @@ class Emitter {
         const fallthroughAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
-        const continueStatement = loopBody[loopBody.length - 1];
-        if (!continueStatement || !ts.isContinueStatement(continueStatement) || continueStatement.label) return false;
+        const controlStatement = loopBody[loopBody.length - 1];
+        if (!controlStatement ||
+            ((!ts.isContinueStatement(controlStatement) && !ts.isBreakStatement(controlStatement)) || controlStatement.label)) return false;
+        const continues = ts.isContinueStatement(controlStatement);
 
         const steps: { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
         const between: ts.Statement[][] = [];
@@ -39603,6 +39605,33 @@ class Emitter {
             out.line(`${nextName}(${nextEnv});`);
             out.close();
         };
+        const emitFallthrough = (out: CBuf, state: string): void => {
+            const fallScope = new Map<ts.Symbol, string>();
+            for (const param of params) fallScope.set(param.symbol, `${state}->${param.field}`);
+            this.argumentValueScopes.push(fallScope);
+            if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
+            let fallSource: EmitResult;
+            try {
+                fallSource = this.emitExpr(fallthroughAwait.expression);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
+            const fallSourceVar = this.freshTemp("_async_iter_continue_fall_source");
+            const fallEnv = this.freshTemp("_async_iter_continue_fall_env");
+            out.line(`tsc_promise_t* const ${fallSourceVar} = ${this.coerce(fallSource, fallthroughPromiseType, fallthroughAwait.expression)};`);
+            out.line(`${terminalAdapter}_env_t* const ${fallEnv} = (${terminalAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${terminalAdapter}_env_t));`);
+            out.line(`${fallEnv}->receiver = ${fallSourceVar};`);
+            out.line(`${fallEnv}->result_promise = ${state}->result_promise;`);
+            for (const param of params) out.line(`${fallEnv}->${param.field} = ${state}->${param.field};`);
+            if (thisValue) out.line(`${fallEnv}->this_arg = ${state}->this_arg;`);
+            out.open(`if (tsc_promise_is_pending(${fallSourceVar}))`);
+            out.line(`tsc_promise_add_callback(${fallSourceVar}, ${terminalAdapter}, ${fallEnv});`);
+            out.close();
+            out.open("else");
+            out.line(`${terminalAdapter}(${fallEnv});`);
+            out.close();
+        };
         for (let index = 0; index < names.length; index++) {
             const bodyBuf = new CBuf();
             const name = names[index]!;
@@ -39655,37 +39684,17 @@ class Emitter {
                     bodyBuf.line(`${names[nextIndex]}(${nextEnv});`);
                     bodyBuf.close();
                 } else {
-                    bodyBuf.line("state->index++;");
-                    bodyBuf.open("if (state->index < state->items->len)");
-                    emitNextIteration(bodyBuf, "state");
-                    bodyBuf.close();
-                    bodyBuf.open("else");
-                    const fallScope = new Map<ts.Symbol, string>();
-                    for (const param of params) fallScope.set(param.symbol, `state->${param.field}`);
-                    this.argumentValueScopes.push(fallScope);
-                    if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
-                    let fallSource: EmitResult;
-                    try {
-                        fallSource = this.emitExpr(fallthroughAwait.expression);
-                    } finally {
-                        if (thisValue) this.functionThisStack.pop();
-                        this.argumentValueScopes.pop();
+                    if (continues) {
+                        bodyBuf.line("state->index++;");
+                        bodyBuf.open("if (state->index < state->items->len)");
+                        emitNextIteration(bodyBuf, "state");
+                        bodyBuf.close();
+                        bodyBuf.open("else");
+                        emitFallthrough(bodyBuf, "state");
+                        bodyBuf.close();
+                    } else {
+                        emitFallthrough(bodyBuf, "state");
                     }
-                    const fallSourceVar = this.freshTemp("_async_iter_continue_fall_source");
-                    const fallEnv = this.freshTemp("_async_iter_continue_fall_env");
-                    bodyBuf.line(`tsc_promise_t* const ${fallSourceVar} = ${this.coerce(fallSource, fallthroughPromiseType, fallthroughAwait.expression)};`);
-                    bodyBuf.line(`${terminalAdapter}_env_t* const ${fallEnv} = (${terminalAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${terminalAdapter}_env_t));`);
-                    bodyBuf.line(`${fallEnv}->receiver = ${fallSourceVar};`);
-                    bodyBuf.line(`${fallEnv}->result_promise = _ret;`);
-                    for (const param of params) bodyBuf.line(`${fallEnv}->${param.field} = state->${param.field};`);
-                    if (thisValue) bodyBuf.line(`${fallEnv}->this_arg = state->this_arg;`);
-                    bodyBuf.open(`if (tsc_promise_is_pending(${fallSourceVar}))`);
-                    bodyBuf.line(`tsc_promise_add_callback(${fallSourceVar}, ${terminalAdapter}, ${fallEnv});`);
-                    bodyBuf.close();
-                    bodyBuf.open("else");
-                    bodyBuf.line(`${terminalAdapter}(${fallEnv});`);
-                    bodyBuf.close();
-                    bodyBuf.close();
                 }
             } finally {
                 if (thisValue) this.functionThisStack.pop();
