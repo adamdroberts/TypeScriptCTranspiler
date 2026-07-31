@@ -39432,15 +39432,20 @@ class Emitter {
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         const controlStatement = loopBody[loopBody.length - 1];
         if (!controlStatement) return false;
-        type ControlAction = "continue" | "break" | "return";
+        type ControlAction = "continue" | "break" | "return" | "throw";
         const actionForStatement = (statement: ts.Statement | undefined): ControlAction | null =>
             statement && ts.isContinueStatement(statement) && !statement.label ? "continue" :
                 statement && ts.isBreakStatement(statement) && !statement.label ? "break" :
                     statement && ts.isReturnStatement(statement) && statement.expression &&
-                    this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "return" : null;
+                    this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "return" :
+                    statement && ts.isThrowStatement(statement) && statement.expression &&
+                    this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "throw" : null;
         let directAction = actionForStatement(controlStatement);
         const directReturnExpression = directAction === "return" && ts.isReturnStatement(controlStatement)
             ? controlStatement.expression ?? null
+            : null;
+        const directThrowExpression = directAction === "throw" && ts.isThrowStatement(controlStatement)
+            ? controlStatement.expression
             : null;
         let branchCondition: ts.Expression | null = null;
         let switchStatement: ts.SwitchStatement | null = null;
@@ -39463,6 +39468,7 @@ class Emitter {
             postAwaitStatements: readonly ts.Statement[];
             action: ControlAction;
             returnExpression: ts.Expression | null;
+            throwExpression: ts.Expression | null;
         };
         let branchThenRoute: ControlRoute | null = null;
         let branchElseRoute: ControlRoute | null = null;
@@ -39512,6 +39518,9 @@ class Emitter {
             const returnExpression = action === "return" && ts.isReturnStatement(terminalStatement)
                 ? terminalStatement.expression ?? null
                 : null;
+            const throwExpression = action === "throw" && ts.isThrowStatement(terminalStatement)
+                ? terminalStatement.expression
+                : null;
             const prelude = statements.slice(0, -1);
             const awaitEntries: { index: number; expression: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
             for (let index = 0; index < prelude.length; index++) {
@@ -39545,7 +39554,7 @@ class Emitter {
             }
             if (awaitEntries.length === 0) {
                 if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action, returnExpression };
+                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action, returnExpression, throwExpression };
             }
             const awaitIndices = awaitEntries.map(({ index }) => index);
             const betweenAwaitStatements: (readonly ts.Statement[])[] = [];
@@ -39571,6 +39580,7 @@ class Emitter {
                 postAwaitStatements,
                 action,
                 returnExpression,
+                throwExpression,
             };
         };
         if (!directAction && ts.isIfStatement(controlStatement)) {
@@ -39584,7 +39594,7 @@ class Emitter {
                 if (!elseRoute) return false;
                 branchElseRoute = elseRoute;
             } else {
-                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null };
+                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, throwExpression: null };
             }
             if (!branchThenRoute || !branchElseRoute) return false;
             branchCondition = controlStatement.expression;
@@ -39619,8 +39629,9 @@ class Emitter {
                             postAwaitStatements: nextRoute.postAwaitStatements,
                             action: nextRoute.action,
                             returnExpression: nextRoute.returnExpression,
+                            throwExpression: nextRoute.throwExpression,
                         }
-                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null });
+                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, throwExpression: null });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }
@@ -39637,10 +39648,11 @@ class Emitter {
                     postAwaitStatements: route.postAwaitStatements,
                     action: route.action,
                     returnExpression: route.returnExpression,
+                    throwExpression: route.throwExpression,
                 });
             }
             if (!switchRoutes.some((route) => route.caseExpression === null)) {
-                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null });
+                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, throwExpression: null });
             }
         }
         if (!directAction && !branchCondition && !switchStatement) return false;
@@ -39989,7 +40001,13 @@ class Emitter {
             if (action === "continue") emitContinue(out, state);
             else emitFallthrough(out, state);
         };
-        const emitRouteAction = (out: CBuf, state: string, action: ControlAction, returnExpression: ts.Expression | null): void => {
+        const emitRouteAction = (
+            out: CBuf,
+            state: string,
+            action: ControlAction,
+            returnExpression: ts.Expression | null,
+            throwExpression: ts.Expression | null,
+        ): void => {
             if (action === "return") {
                 if (!returnExpression) return;
                 const returned = this.emitExpr(returnExpression);
@@ -39997,6 +40015,13 @@ class Emitter {
                     ? returned.c
                     : this.promiseResolveResult(returned, returnExpression);
                 out.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
+                out.line("return;");
+                return;
+            }
+            if (action === "throw") {
+                if (!throwExpression) return;
+                const thrown = this.emitExpr(throwExpression);
+                out.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${this.coerceToString(thrown, throwExpression)}));`);
                 out.line("return;");
                 return;
             }
@@ -40068,7 +40093,7 @@ class Emitter {
                         routeBuf.close();
                     } else {
                         for (const statement of route.postAwaitStatements) this.emitStmt(routeBuf, statement);
-                        emitRouteAction(routeBuf, "state", route.action, route.returnExpression);
+                        emitRouteAction(routeBuf, "state", route.action, route.returnExpression, route.throwExpression);
                     }
                 } finally {
                     if (thisValue) this.functionThisStack.pop();
@@ -40086,7 +40111,7 @@ class Emitter {
                 out.line(`${state}->${alias.field} = ${this.coerce(value, alias.type, alias.identifier)};`);
             }
             if (route.awaitSteps.length === 0) {
-                emitRouteAction(out, state, route.action, route.returnExpression);
+                emitRouteAction(out, state, route.action, route.returnExpression, route.throwExpression);
                 return;
             }
             const awaitExpr = route.awaitSteps[0]!.awaitExpr;
@@ -40279,7 +40304,7 @@ class Emitter {
                             emitSwitchRouting(bodyBuf, "state", discriminator);
                         }
                     } else {
-                        emitRouteAction(bodyBuf, "state", directAction!, directReturnExpression);
+                        emitRouteAction(bodyBuf, "state", directAction!, directReturnExpression, directThrowExpression);
                     }
                 }
             } finally {
