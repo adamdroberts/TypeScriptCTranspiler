@@ -39433,14 +39433,30 @@ class Emitter {
         const controlStatement = loopBody[loopBody.length - 1];
         if (!controlStatement) return false;
         type ControlAction = "continue" | "break" | "return" | "throw";
-        const actionForStatement = (statement: ts.Statement | undefined): ControlAction | null =>
+        const returnAwaitExpressionFor = (statement: ts.Statement | undefined): ts.AwaitExpression | null => {
+            if (!statement || !ts.isReturnStatement(statement) || !statement.expression) return null;
+            const expression = this.unwrapTransparentExpression(statement.expression);
+            if (!ts.isAwaitExpression(expression)) return null;
+            const promiseType = this.prepareType(mapTsType(
+                expression.expression,
+                this.checker.getTypeAtLocation(expression.expression),
+                this.checker,
+            ));
+            const awaitedType = this.prepareType(mapTsType(
+                expression,
+                this.checker.getTypeAtLocation(expression),
+                this.checker,
+            ));
+            return promiseType.kind === "promise" && awaitedType.kind !== "never" ? expression : null;
+        };
+        const actionForStatement = (statement: ts.Statement | undefined, allowAwaitedReturn = true): ControlAction | null =>
                 statement && ts.isContinueStatement(statement) && !statement.label ? "continue" :
                 statement && ts.isBreakStatement(statement) && !statement.label ? "break" :
                     statement && ts.isReturnStatement(statement) &&
-                    (!statement.expression || this.asyncAwaitSyncReturnExpressionSupported(statement.expression)) ? "return" :
+                    (!statement.expression || this.asyncAwaitSyncReturnExpressionSupported(statement.expression) || (allowAwaitedReturn && returnAwaitExpressionFor(statement) !== null)) ? "return" :
                     statement && ts.isThrowStatement(statement) && statement.expression &&
                     this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "throw" : null;
-        let directAction = actionForStatement(controlStatement);
+        let directAction = actionForStatement(controlStatement, false);
         const directReturnExpression = directAction === "return" && ts.isReturnStatement(controlStatement)
             ? controlStatement.expression ?? null
             : null;
@@ -39468,6 +39484,7 @@ class Emitter {
             postAwaitStatements: readonly ts.Statement[];
             action: ControlAction;
             returnExpression: ts.Expression | null;
+            returnAwaitExpression: ts.AwaitExpression | null;
             throwExpression: ts.Expression | null;
         };
         let branchThenRoute: ControlRoute | null = null;
@@ -39515,7 +39532,10 @@ class Emitter {
             const action = actionForStatement(statements[statements.length - 1]);
             if (!action) return null;
             const terminalStatement = statements[statements.length - 1]!;
-            const returnExpression = action === "return" && ts.isReturnStatement(terminalStatement)
+            const returnAwaitExpression = action === "return"
+                ? returnAwaitExpressionFor(terminalStatement)
+                : null;
+            const returnExpression = action === "return" && !returnAwaitExpression && ts.isReturnStatement(terminalStatement)
                 ? terminalStatement.expression ?? null
                 : null;
             const throwExpression = action === "throw" && ts.isThrowStatement(terminalStatement)
@@ -39552,9 +39572,12 @@ class Emitter {
                     awaitEntries.push({ index: index + 1, expression, alias: declaration.name });
                 }
             }
+            if (returnAwaitExpression) {
+                awaitEntries.push({ index: prelude.length, expression: returnAwaitExpression, alias: null });
+            }
             if (awaitEntries.length === 0) {
                 if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action, returnExpression, throwExpression };
+                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action, returnExpression, returnAwaitExpression: null, throwExpression };
             }
             const awaitIndices = awaitEntries.map(({ index }) => index);
             const betweenAwaitStatements: (readonly ts.Statement[])[] = [];
@@ -39580,6 +39603,7 @@ class Emitter {
                 postAwaitStatements,
                 action,
                 returnExpression,
+                returnAwaitExpression,
                 throwExpression,
             };
         };
@@ -39594,7 +39618,7 @@ class Emitter {
                 if (!elseRoute) return false;
                 branchElseRoute = elseRoute;
             } else {
-                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, throwExpression: null };
+                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, returnAwaitExpression: null, throwExpression: null };
             }
             if (!branchThenRoute || !branchElseRoute) return false;
             branchCondition = controlStatement.expression;
@@ -39629,9 +39653,10 @@ class Emitter {
                             postAwaitStatements: nextRoute.postAwaitStatements,
                             action: nextRoute.action,
                             returnExpression: nextRoute.returnExpression,
+                            returnAwaitExpression: nextRoute.returnAwaitExpression,
                             throwExpression: nextRoute.throwExpression,
                         }
-                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, throwExpression: null });
+                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, returnAwaitExpression: null, throwExpression: null });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }
@@ -39648,11 +39673,12 @@ class Emitter {
                     postAwaitStatements: route.postAwaitStatements,
                     action: route.action,
                     returnExpression: route.returnExpression,
+                    returnAwaitExpression: route.returnAwaitExpression,
                     throwExpression: route.throwExpression,
                 });
             }
             if (!switchRoutes.some((route) => route.caseExpression === null)) {
-                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, throwExpression: null });
+                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue", returnExpression: null, returnAwaitExpression: null, throwExpression: null });
             }
         }
         if (!directAction && !branchCondition && !switchStatement) return false;
@@ -40006,9 +40032,15 @@ class Emitter {
             state: string,
             action: ControlAction,
             returnExpression: ts.Expression | null,
+            returnAwaitExpression: ts.AwaitExpression | null,
             throwExpression: ts.Expression | null,
         ): void => {
             if (action === "return") {
+                if (returnAwaitExpression) {
+                    out.line("tsc_promise_adopt_into(_ret, _p);");
+                    out.line("return;");
+                    return;
+                }
                 if (!returnExpression) {
                     out.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
                     out.line("return;");
@@ -40097,7 +40129,7 @@ class Emitter {
                         routeBuf.close();
                     } else {
                         for (const statement of route.postAwaitStatements) this.emitStmt(routeBuf, statement);
-                        emitRouteAction(routeBuf, "state", route.action, route.returnExpression, route.throwExpression);
+                        emitRouteAction(routeBuf, "state", route.action, route.returnExpression, route.returnAwaitExpression, route.throwExpression);
                     }
                 } finally {
                     if (thisValue) this.functionThisStack.pop();
@@ -40115,7 +40147,7 @@ class Emitter {
                 out.line(`${state}->${alias.field} = ${this.coerce(value, alias.type, alias.identifier)};`);
             }
             if (route.awaitSteps.length === 0) {
-                emitRouteAction(out, state, route.action, route.returnExpression, route.throwExpression);
+                emitRouteAction(out, state, route.action, route.returnExpression, route.returnAwaitExpression, route.throwExpression);
                 return;
             }
             const awaitExpr = route.awaitSteps[0]!.awaitExpr;
@@ -40308,7 +40340,7 @@ class Emitter {
                             emitSwitchRouting(bodyBuf, "state", discriminator);
                         }
                     } else {
-                        emitRouteAction(bodyBuf, "state", directAction!, directReturnExpression, directThrowExpression);
+                        emitRouteAction(bodyBuf, "state", directAction!, directReturnExpression, null, directThrowExpression);
                     }
                 }
             } finally {
