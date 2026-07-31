@@ -37,7 +37,8 @@ async function runOf(): Promise<string> {
                 switchContinueSuffix = "-between";
                 const switchContinueValue = await laterControl(lastOf);
                 lastOf = switchContinueValue + switchContinueSuffix;
-                const switchPostSuffix = "-post";
+                var switchPostSuffix: string;
+                switchPostSuffix = "-post";
                 await laterControl(lastOf);
                 lastOf = lastOf + switchPostSuffix;
                 continue;
@@ -48,7 +49,8 @@ async function runOf(): Promise<string> {
                 var switchBreakValue: string;
                 switchBreakValue = await laterControl(lastOf);
                 lastOf = switchBreakValue + switchBreakSuffix;
-                const switchBreakPostSuffix = "-post";
+                var switchBreakPostSuffix: string;
+                switchBreakPostSuffix = "-post";
                 await laterControl(lastOf);
                 lastOf = lastOf + switchBreakPostSuffix;
                 break;
@@ -72,7 +74,8 @@ async function runIn(): Promise<string> {
                 switchContinueSuffix = "-between";
                 const switchContinueValue = await laterControl(lastIn);
                 lastIn = switchContinueValue + switchContinueSuffix;
-                const switchPostSuffix = "-post";
+                var switchPostSuffix: string;
+                switchPostSuffix = "-post";
                 await laterControl(lastIn);
                 lastIn = lastIn + switchPostSuffix;
                 continue;
@@ -83,7 +86,8 @@ async function runIn(): Promise<string> {
                 var switchBreakValue: string;
                 switchBreakValue = await laterControl(lastIn);
                 lastIn = switchBreakValue + switchBreakSuffix;
-                const switchBreakPostSuffix = "-post";
+                var switchBreakPostSuffix: string;
+                switchBreakPostSuffix = "-post";
                 await laterControl(lastIn);
                 lastIn = lastIn + switchBreakPostSuffix;
                 break;
