@@ -39453,6 +39453,7 @@ class Emitter {
             preludeAliases?: readonly ControlPreludeAlias[];
             awaitSteps: readonly ControlAwaitStep[];
             betweenAwaitStatements: readonly (readonly ts.Statement[])[];
+            betweenAwaitAliases?: readonly (readonly ControlPreludeAlias[])[];
             postAwaitStatements: readonly ts.Statement[];
             action: "continue" | "break";
         };
@@ -39542,6 +39543,7 @@ class Emitter {
                 if (!between.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
                 betweenAwaitStatements.push(between);
             }
+            const betweenAwaitAliases = betweenAwaitStatements.map((statements) => controlPreludeAliasesFor(statements));
             const firstAwaitIndex = awaitIndices[0]!;
             const lastAwaitIndex = awaitIndices[awaitIndices.length - 1]!;
             const preludeStatements = prelude.slice(0, firstAwaitIndex);
@@ -39554,6 +39556,7 @@ class Emitter {
                 preludeAliases,
                 awaitSteps: awaitEntries.map(({ expression, alias }) => ({ awaitExpr: expression, alias })),
                 betweenAwaitStatements,
+                betweenAwaitAliases,
                 postAwaitStatements,
                 action,
             };
@@ -39600,6 +39603,7 @@ class Emitter {
                             ],
                             awaitSteps: nextRoute.awaitSteps,
                             betweenAwaitStatements: nextRoute.betweenAwaitStatements,
+                            betweenAwaitAliases: nextRoute.betweenAwaitAliases,
                             postAwaitStatements: nextRoute.postAwaitStatements,
                             action: nextRoute.action,
                         }
@@ -39616,6 +39620,7 @@ class Emitter {
                     preludeAliases: route.preludeAliases,
                     awaitSteps: route.awaitSteps,
                     betweenAwaitStatements: route.betweenAwaitStatements,
+                    betweenAwaitAliases: route.betweenAwaitAliases,
                     postAwaitStatements: route.postAwaitStatements,
                     action: route.action,
                 });
@@ -39832,6 +39837,13 @@ class Emitter {
                 controlPreludeAliasSymbols.add(alias.symbol);
                 controlPreludeAliasEntries.push(alias);
             }
+            for (const aliases of route.betweenAwaitAliases ?? []) {
+                for (const alias of aliases) {
+                    if (controlPreludeAliasSymbols.has(alias.symbol)) continue;
+                    controlPreludeAliasSymbols.add(alias.symbol);
+                    controlPreludeAliasEntries.push(alias);
+                }
+            }
         }
         const names = steps.map(() => `tsc_async_await_iterator_multi_continue_${this.asyncAwaitReturnContinuationAdapters++}`);
         const envTypes = names.map((name) => `${name}_env_t`);
@@ -39985,6 +39997,11 @@ class Emitter {
                 for (const alias of route.preludeAliases ?? []) {
                     routeScope.set(alias.symbol, `state->${alias.field}`);
                 }
+                for (let priorSegment = 0; priorSegment < index; priorSegment++) {
+                    for (const alias of route.betweenAwaitAliases?.[priorSegment] ?? []) {
+                        routeScope.set(alias.symbol, `state->${alias.field}`);
+                    }
+                }
                 for (let priorIndex = 0; priorIndex < index; priorIndex++) {
                     const priorAlias = route.awaitSteps[priorIndex]!.alias;
                     const priorSymbol = priorAlias ? this.symbolForIdentifier(priorAlias) : null;
@@ -40005,6 +40022,10 @@ class Emitter {
                     }
                     if (index + 1 < route.awaitSteps.length) {
                         for (const statement of route.betweenAwaitStatements[index] ?? []) this.emitStmt(routeBuf, statement);
+                        for (const alias of route.betweenAwaitAliases?.[index] ?? []) {
+                            const value = this.emitExpr(alias.identifier);
+                            routeBuf.line(`state->${alias.field} = ${this.coerce(value, alias.type, alias.identifier)};`);
+                        }
                         const nextAwait = route.awaitSteps[index + 1]!.awaitExpr;
                         const nextSource = this.emitExpr(nextAwait.expression);
                         const nextSourceVar = this.freshTemp("_async_iter_control_source");
