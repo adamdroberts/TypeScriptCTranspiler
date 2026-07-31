@@ -40,11 +40,25 @@ async function runOf(): Promise<string> {
         let nestedWhileCount = 0;
         while (nestedWhileCount < 3) {
             nestedWhileCount += 1;
+            for (let nestedForCount = 0; nestedForCount < 3; nestedForCount++) {
+                if (nestedForCount === 0) {
+                    continue;
+                }
+                break;
+            }
             if (nestedWhileCount === 1) {
                 continue;
             }
             break;
         }
+        let nestedDoCount = 0;
+        do {
+            nestedDoCount += 1;
+            if (nestedDoCount === 1) {
+                continue;
+            }
+            break;
+        } while (nestedDoCount < 3);
         for (const nested of ["nested"]) {
             ofCount += nested.length;
         }
@@ -113,11 +127,25 @@ async function runIn(): Promise<string> {
         let nestedWhileCount = 0;
         while (nestedWhileCount < 3) {
             nestedWhileCount += 1;
+            for (let nestedForCount = 0; nestedForCount < 3; nestedForCount++) {
+                if (nestedForCount === 0) {
+                    continue;
+                }
+                break;
+            }
             if (nestedWhileCount === 1) {
                 continue;
             }
             break;
         }
+        let nestedDoCount = 0;
+        do {
+            nestedDoCount += 1;
+            if (nestedDoCount === 1) {
+                continue;
+            }
+            break;
+        } while (nestedDoCount < 3);
         for (const nestedKey in { nested: "value" }) {
             inCount += nestedKey.length;
         }
