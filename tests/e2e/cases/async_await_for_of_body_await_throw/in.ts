@@ -12,7 +12,7 @@ function laterReason(value: string): Promise<string> {
 async function forOfBodyAwaitThrow(): Promise<string> {
     for (const item of ["a", "b"]) {
         await laterBody(item);
-        throw await laterReason("of-throw-" + bodyCount);
+        throw await laterReason("of-throw-" + item + "-" + bodyCount);
     }
     return await Promise.resolve("fallthrough");
 }

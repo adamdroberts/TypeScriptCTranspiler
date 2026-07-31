@@ -13,7 +13,7 @@ async function forInBodyAwaitThrow(): Promise<string> {
     const values: Record<string, string> = { first: "a", second: "b" };
     for (const key in values) {
         await laterBody(key);
-        throw await laterReason("in-throw-" + bodyCount);
+        throw await laterReason("in-throw-" + key + "-" + bodyCount);
     }
     return await Promise.resolve("fallthrough");
 }

@@ -12,7 +12,7 @@ function laterResult(value: string): Promise<string> {
 async function forOfBodyAwaitReturn(): Promise<string> {
     for (const item of ["a", "b"]) {
         await laterBody(item);
-        return await laterResult(bodyCount + "|returned");
+        return await laterResult(bodyCount + "|" + item + "|returned");
     }
     return await laterResult("fallthrough");
 }

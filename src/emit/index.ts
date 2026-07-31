@@ -38941,20 +38941,6 @@ class Emitter {
         const bindingSymbol = this.symbolForIdentifier(binding);
         if (!bindingSymbol) return false;
         const params = this.asyncAwaitContinuationParameters(parameters);
-        const paramSymbols = new Set(params.map((param) => param.symbol));
-        if (terminalAwait) {
-            let usesBinding = false;
-            const visit = (node: ts.Node): void => {
-                if (usesBinding || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
-                if (ts.isIdentifier(node) && this.isValueReferenceIdentifier(node) && this.symbolForIdentifier(node) === bindingSymbol) {
-                    usesBinding = true;
-                    return;
-                }
-                ts.forEachChild(node, visit);
-            };
-            visit(terminalAwait.expression);
-            if (usesBinding) return false;
-        }
         const iter = this.emitExpr(loop.expression);
         let itemsExpr: string;
         let itemType: CType;
@@ -38985,6 +38971,7 @@ class Emitter {
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
+        if (terminalAwait) this.structDecls.line(`${itemType.c} iteration_value;`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${envType};`);
@@ -38993,6 +38980,9 @@ class Emitter {
         const targetAwait = isBreak ? fallthroughAwait : terminalAwait!;
         const targetPromiseType = isBreak ? fallthroughPromiseType : terminalPromiseType!;
         const targetAwaitedType = isBreak ? fallthroughAwaitedType : terminalAwaitedType!;
+        const terminalCarriedAliases = terminalAwait
+            ? [{ symbol: bindingSymbol, type: itemType, field: "iteration_value" }]
+            : [];
         const targetAdapter = isBreak
             ? this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
                 fallthroughPromiseType,
@@ -39010,6 +39000,9 @@ class Emitter {
                 params,
                 thisValue,
                 isThrow,
+                [],
+                [],
+                terminalCarriedAliases,
             );
         const bodyScope = (state: string, item: string | null): Map<ts.Symbol, string> => {
             const scope = new Map<ts.Symbol, string>();
@@ -39029,7 +39022,7 @@ class Emitter {
         bodyBuf.open("if (!tsc_promise_is_fulfilled(_p))");
         bodyBuf.line("return;");
         bodyBuf.close();
-        const targetScope = bodyScope("state", null);
+        const targetScope = bodyScope("state", terminalAwait ? "state->iteration_value" : null);
         this.argumentValueScopes.push(targetScope);
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         let targetSource: EmitResult;
@@ -39044,6 +39037,7 @@ class Emitter {
         bodyBuf.line("_target_env->receiver = _target_source;");
         bodyBuf.line("_target_env->result_promise = _ret;");
         for (const param of params) bodyBuf.line(`_target_env->${param.field} = state->${param.field};`);
+        for (const alias of terminalCarriedAliases) bodyBuf.line(`_target_env->${alias.field} = state->${alias.field};`);
         if (thisValue) bodyBuf.line("_target_env->this_arg = state->this_arg;");
         bodyBuf.open("if (tsc_promise_is_pending(_target_source))");
         bodyBuf.line(`tsc_promise_add_callback(_target_source, ${targetAdapter}, _target_env);`);
@@ -39077,6 +39071,7 @@ class Emitter {
         buf.close();
         buf.line(`${envType}* const _iter_env = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`_iter_env->result_promise = ${resultVar};`);
+        if (terminalAwait) buf.line(`_iter_env->iteration_value = TSC_ARR(${itemType.c}, ${itemsVar}, 0);`);
         for (const param of params) buf.line(`_iter_env->${param.field} = ${param.name};`);
         if (thisValue) buf.line(`_iter_env->this_arg = ${thisValue.c};`);
         const initialScope = new Map<ts.Symbol, string>();
