@@ -33012,8 +33012,7 @@ class Emitter {
             return supported;
         };
         const switchClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
-            if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                node.declarations.length === 0) return false;
+            if (node.declarations.length === 0) return false;
             const variableStatement = node.parent;
             if (!ts.isVariableStatement(variableStatement)) return false;
             const clauseParent = variableStatement.parent;
@@ -33040,8 +33039,7 @@ class Emitter {
             return supported;
         };
         const tryClauseDeclarationSupported = (node: ts.VariableDeclarationList): boolean => {
-            if ((node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                node.declarations.length === 0) return false;
+            if (node.declarations.length === 0) return false;
             const variableStatement = node.parent;
             if (!ts.isVariableStatement(variableStatement) || !ts.isBlock(variableStatement.parent)) return false;
             const owner = variableStatement.parent.parent;
