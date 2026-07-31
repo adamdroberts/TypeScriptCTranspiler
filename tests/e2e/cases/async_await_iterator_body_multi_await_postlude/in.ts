@@ -65,7 +65,7 @@ async function runOf(): Promise<string> {
         if (ofCount < 0) {
             ofCount += 100;
         } else {
-            var branchBump: number;
+            let branchBump: number;
             branchBump = 2;
             ofCount += branchBump;
         }
@@ -127,7 +127,7 @@ async function runIn(): Promise<string> {
         if (inCount < 0) {
             inCount += 100;
         } else {
-            var branchBump: number;
+            let branchBump: number;
             branchBump = 2;
             inCount += branchBump;
         }
