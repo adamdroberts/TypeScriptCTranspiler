@@ -38935,7 +38935,11 @@ class Emitter {
             if (!ts.isIdentifier(declaration.name)) return false;
             if (declaration.initializer) {
                 const expression = this.unwrapTransparentExpression(declaration.initializer);
-                if (!ts.isAwaitExpression(expression)) return false;
+                if (!ts.isAwaitExpression(expression)) {
+                    if (steps.length === 0 || !this.asyncAwaitLoopPostStatementSupported(statement)) return false;
+                    pendingBetween.push(statement);
+                    continue;
+                }
                 if (steps.length > 0) between.push(pendingBetween);
                 pendingBetween = [];
                 steps.push({ awaitExpr: expression, alias: declaration.name });

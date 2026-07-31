@@ -19,7 +19,8 @@ async function runOf(): Promise<string> {
     for (const item of ["of"]) {
         const first = await laterOf(item);
         ofCount += 10;
-        const second = await laterOf(first + "-second");
+        const suffix = "-second";
+        const second = await laterOf(first + suffix);
         return await later(ofCount + "|" + second);
     }
     return await later("fallthrough");
@@ -30,7 +31,8 @@ async function runIn(): Promise<string> {
     for (const key in values) {
         const first = await laterIn(key);
         inCount += 10;
-        const second = await laterIn(first + "-second");
+        const suffix = "-second";
+        const second = await laterIn(first + suffix);
         throw await later("in-" + inCount + "|" + second);
     }
     return await later("fallthrough");
