@@ -39464,10 +39464,20 @@ class Emitter {
         let controlPreludeAliasCounter = 0;
         const controlPreludeAliasesFor = (statements: readonly ts.Statement[]): ControlPreludeAlias[] => {
             const aliases: ControlPreludeAlias[] = [];
-            for (const statement of statements) {
+            for (let index = 0; index < statements.length; index++) {
+                const statement = statements[index]!;
                 if (!ts.isVariableStatement(statement)) continue;
                 for (const declaration of statement.declarationList.declarations) {
-                    if (!declaration.initializer || !ts.isIdentifier(declaration.name)) continue;
+                    if (!ts.isIdentifier(declaration.name)) continue;
+                    if (!declaration.initializer) {
+                        const assignmentStatement = statements[index + 1];
+                        if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) continue;
+                        const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                        if (!ts.isBinaryExpression(assignment) ||
+                            assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                            !ts.isIdentifier(assignment.left) ||
+                            this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) continue;
+                    }
                     const symbol = this.symbolForIdentifier(declaration.name);
                     const type = this.prepareType(mapTsType(
                         declaration.name,
