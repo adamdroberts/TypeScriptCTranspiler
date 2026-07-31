@@ -39441,17 +39441,19 @@ class Emitter {
         let branchElseAction: "continue" | "break" | null = null;
         let branchThenPrelude: readonly ts.Statement[] = [];
         let branchElsePrelude: readonly ts.Statement[] = [];
+        let switchStatement: ts.SwitchStatement | null = null;
+        let switchRoutes: { caseExpression: ts.Expression | null; prelude: readonly ts.Statement[]; action: "continue" | "break" }[] = [];
+        const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
+            ts.isBlock(statement) ? statement.statements : [statement];
+        const branchRoute = (statements: readonly ts.Statement[]): { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null => {
+            if (statements.length === 0) return null;
+            const action = actionForStatement(statements[statements.length - 1]);
+            if (!action) return null;
+            const prelude = statements.slice(0, -1);
+            if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+            return { prelude, action };
+        };
         if (!directAction && ts.isIfStatement(controlStatement)) {
-            const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
-                ts.isBlock(statement) ? statement.statements : [statement];
-            const branchRoute = (statements: readonly ts.Statement[]): { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null => {
-                if (statements.length === 0) return null;
-                const action = actionForStatement(statements[statements.length - 1]);
-                if (!action) return null;
-                const prelude = statements.slice(0, -1);
-                if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-                return { prelude, action };
-            };
             const thenStatements = branchStatements(controlStatement.thenStatement);
             const thenRoute = branchRoute(thenStatements);
             if (!thenRoute) return false;
@@ -39469,7 +39471,22 @@ class Emitter {
             if (!branchThenAction || !branchElseAction) return false;
             branchCondition = controlStatement.expression;
         }
-        if (!directAction && !branchCondition) return false;
+        if (!directAction && !branchCondition && ts.isSwitchStatement(controlStatement)) {
+            switchStatement = controlStatement;
+            for (const clause of switchStatement.caseBlock.clauses) {
+                const route = branchRoute(clause.statements);
+                if (!route) return false;
+                switchRoutes.push({
+                    caseExpression: ts.isCaseClause(clause) ? clause.expression : null,
+                    prelude: route.prelude,
+                    action: route.action,
+                });
+            }
+            if (!switchRoutes.some((route) => route.caseExpression === null)) {
+                switchRoutes.push({ caseExpression: null, prelude: [], action: "continue" });
+            }
+        }
+        if (!directAction && !branchCondition && !switchStatement) return false;
         const branchConditionAwait = branchCondition
             ? this.unwrapTransparentExpression(branchCondition)
             : null;
@@ -39584,11 +39601,19 @@ class Emitter {
                 this.checker,
             ))
             : null;
+        const switchType = switchStatement
+            ? this.prepareType(mapTsType(
+                switchStatement.expression,
+                this.checker.getTypeAtLocation(switchStatement.expression),
+                this.checker,
+            ))
+            : null;
         if (bodyPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never" ||
             (branchConditionPromiseType && branchConditionPromiseType.kind !== "promise") ||
-            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never")) return false;
+            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never") ||
+            (switchType && switchType.kind !== "string" && switchType.kind !== "boolean" && switchType.kind !== "number")) return false;
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
 
         const bodyAliasEntries = steps.flatMap(({ alias }, index) => {
@@ -39818,6 +39843,28 @@ class Emitter {
                             for (const statement of branchElsePrelude) this.emitStmt(bodyBuf, statement);
                             emitAction(bodyBuf, "state", branchElseAction!);
                             bodyBuf.close();
+                        }
+                    } else if (switchStatement) {
+                        const discriminator = this.emitExpr(switchStatement.expression);
+                        const isString = discriminator.ty.kind === "string";
+                        const isBoolean = discriminator.ty.kind === "boolean";
+                        const discriminatorVar = this.freshTemp("_async_iter_switch_value");
+                        bodyBuf.line(`${discriminator.ty.c} ${discriminatorVar} = ${discriminator.c};`);
+                        let emittedRoute = false;
+                        for (const route of switchRoutes) {
+                            let condition = "1";
+                            if (route.caseExpression) {
+                                const caseValue = this.emitExpr(route.caseExpression);
+                                const coercedCase = this.coerce(caseValue, discriminator.ty, route.caseExpression);
+                                condition = isString
+                                    ? `tsc_str_eq(${discriminatorVar}, ${coercedCase})`
+                                    : `(${discriminatorVar} == ${coercedCase})`;
+                            }
+                            bodyBuf.open(emittedRoute ? `else if (${condition})` : `if (${condition})`);
+                            for (const statement of route.prelude) this.emitStmt(bodyBuf, statement);
+                            emitAction(bodyBuf, "state", route.action);
+                            bodyBuf.close();
+                            emittedRoute = true;
                         }
                     } else {
                         emitAction(bodyBuf, "state", directAction!);
