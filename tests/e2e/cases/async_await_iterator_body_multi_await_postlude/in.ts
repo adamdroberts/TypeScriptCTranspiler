@@ -45,6 +45,11 @@ async function runOf(): Promise<string> {
         } finally {
             ofCount += 1;
         }
+        if (ofCount < 0) {
+            ofCount += 100;
+        } else {
+            ofCount += 1;
+        }
         const suffix = "-second";
         const second = await laterOf(first + suffix);
         return await later(ofCount + "|" + second);
@@ -81,6 +86,11 @@ async function runIn(): Promise<string> {
         try {
             inCount += 1;
         } finally {
+            inCount += 1;
+        }
+        if (inCount < 0) {
+            inCount += 100;
+        } else {
             inCount += 1;
         }
         const suffix = "-second";
