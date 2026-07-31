@@ -156,7 +156,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
   - Lazy generators now cover bounded `for...in` loops over typed arrays, strings, Buffers, and dynamic values with suspension-safe key positions; async iteration and broader enumerable-source lowering remain deferred.
 
 - **Phase 9 — `Proxy` + `Reflect`**
-  - Remaining work: broader ECMAScript proxy edge-case validation beyond the currently covered callable/newable/object/array/function identity and forwarding paths, revocation paths, handler and inherited-trap lookup, nullish/accessor trap forwarding and validation, receiver identity, Object helper / JSON / Object.assign integration, own-key and descriptor result validation, non-configurable/non-extensible target invariants, array/function/prototype/integrity invariant subsets, construct `newTarget` identity/default/prototype paths, Reflect first-class method/missing-argument/ignored-argument validation, Reflect apply/construct arguments-list validation, and Reflect object/property target validation paths.
+  - Remaining work: broader ECMAScript Proxy edge-case validation beyond the currently covered callable/newable/object/array/function identity and forwarding paths, revocation paths, handler and inherited-trap lookup, nullish/accessor trap forwarding and validation, receiver identity, Object helper / JSON / Object.assign integration, own-key and descriptor result validation, non-configurable/non-extensible target invariants, array/function/prototype/integrity invariant subsets, and construct `newTarget` identity/default/prototype paths.
 
 ---
 
