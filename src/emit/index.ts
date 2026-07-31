@@ -39430,11 +39430,32 @@ class Emitter {
         const fallthroughAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
-        if (loopBody.length !== 2 || !ts.isContinueStatement(loopBody[1]!) || loopBody[1]!.label) return false;
+        const continueStatement = loopBody[loopBody.length - 1];
+        if ((loopBody.length !== 2 && loopBody.length !== 3) || !continueStatement || !ts.isContinueStatement(continueStatement) || continueStatement.label) return false;
         const bodyStatement = loopBody[0];
-        if (!ts.isExpressionStatement(bodyStatement)) return false;
-        const bodyAwait = this.unwrapTransparentExpression(bodyStatement.expression);
-        if (!ts.isAwaitExpression(bodyAwait)) return false;
+        let bodyAwait: ts.AwaitExpression;
+        if (ts.isExpressionStatement(bodyStatement)) {
+            const candidate = this.unwrapTransparentExpression(bodyStatement.expression);
+            if (!ts.isAwaitExpression(candidate)) return false;
+            bodyAwait = candidate;
+        } else if (ts.isVariableStatement(bodyStatement) && bodyStatement.declarationList.declarations.length === 1) {
+            const declaration = bodyStatement.declarationList.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name)) return false;
+            if (declaration.initializer) {
+                const candidate = this.unwrapTransparentExpression(declaration.initializer);
+                if (!ts.isAwaitExpression(candidate)) return false;
+                bodyAwait = candidate;
+            } else {
+                const assignmentStatement = loopBody[1]!;
+                if (loopBody.length !== 3 || !ts.isExpressionStatement(assignmentStatement)) return false;
+                const assignment = assignmentStatement.expression;
+                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                    !ts.isIdentifier(assignment.left) || this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return false;
+                const candidate = this.unwrapTransparentExpression(assignment.right);
+                if (!ts.isAwaitExpression(candidate)) return false;
+                bodyAwait = candidate;
+            }
+        } else return false;
 
         let binding: ts.Identifier;
         if (ts.isForInStatement(loop)) {
