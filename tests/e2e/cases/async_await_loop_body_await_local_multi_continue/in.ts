@@ -7,15 +7,21 @@ function laterCondition(value: boolean): Promise<boolean> {
 }
 
 let count = 0;
+let lastValue = "";
+
+function laterBody(value: string): Promise<string> {
+    lastValue = value;
+    return later(value);
+}
 
 async function run(): Promise<string> {
     for (; await laterCondition(count < 2);) {
-        const first = await later("first-" + count);
-        await later("second-" + count);
+        const first = await laterBody("first-" + count);
+        await laterBody(first + "-second");
         count++;
         continue;
     }
-    return await later(count + "|done");
+    return await later(lastValue + "|" + count);
 }
 
 run().then((value) => console.log(value));

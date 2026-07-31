@@ -35768,17 +35768,17 @@ class Emitter {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
             if (bodyContinueCondition && !bodyContinueConditionAwaitExpr && !bodySynchronousExpressionSupported(bodyContinueCondition)) return false;
-            const bodyAwaitStatements = bodyContinueStatements.flatMap((statement) => {
+            const bodyAwaitStatements: { statement: ts.Statement; expression: ts.AwaitExpression; symbol?: ts.Symbol }[] = bodyContinueStatements.flatMap((statement) => {
                 if (!ts.isExpressionStatement(statement)) return [];
                 const expression = this.unwrapTransparentExpression(statement.expression);
                 return ts.isAwaitExpression(expression) ? [{ statement, expression, symbol: undefined }] : [];
             });
-            const bodyAwaitLocalStatements = bodyContinueStatements.flatMap((statement) => {
+            const bodyAwaitLocalStatements: { statement: ts.Statement; expression: ts.AwaitExpression; symbol?: ts.Symbol }[] = bodyContinueStatements.flatMap((statement) => {
                 if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return [];
                 const declaration = statement.declarationList.declarations[0]!;
                 if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return [];
                 const expression = this.unwrapTransparentExpression(declaration.initializer);
-                return ts.isAwaitExpression(expression) ? [{ statement, expression }] : [];
+                return ts.isAwaitExpression(expression) ? [{ statement, expression, symbol: this.symbolForIdentifier(declaration.name) }] : [];
             });
             const bodyAwaitableStatements = [...bodyAwaitStatements, ...bodyAwaitLocalStatements]
                 .sort((left, right) => bodyContinueStatements.indexOf(left.statement) - bodyContinueStatements.indexOf(right.statement));
@@ -35936,6 +35936,8 @@ class Emitter {
                 if (bodyContinueStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
                 bodyAwaitExpr = bodyAwaitableStatements[0]!.expression;
                 bodyAwaitExprs = bodyAwaitableStatements.map(({ expression }) => expression);
+                if (bodyAwaitableStatements.some(({ symbol }, index) => symbol && index !== 0)) return false;
+                if (bodyAwaitableStatements[0]!.symbol) bodyAwaitedAliasSymbols = [bodyAwaitableStatements[0]!.symbol];
                 bodyPreludeStatements = bodyContinueStatements.slice(0, firstAwaitIndex);
                 bodyPostAwaitStatements = bodyContinueStatements.slice(lastAwaitIndex + 1);
             } else {
@@ -36695,6 +36697,10 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
+        const awaitedAliasSymbol = continuation.bodyAwaitedAliasSymbols[0];
+        const awaitedAliasType = awaitedAliasSymbol && awaitedTypes[0]!.kind !== "void" && awaitedTypes[0]!.kind !== "never"
+            ? awaitedTypes[0]
+            : null;
         for (let index = 0; index < names.length; index++) {
             const name = names[index]!;
             const envType = `${name}_env_t`;
@@ -36705,6 +36711,7 @@ class Emitter {
                 this.structDecls.line("bool reject_after_success;");
                 this.structDecls.line("tsc_value_t rejection_reason;");
             }
+            if (awaitedAliasType) this.structDecls.line(`${awaitedAliasType.c} awaited_alias_value;`);
             for (const param of continuation.params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (continuation.thisValue) this.structDecls.line(`${continuation.thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -36730,6 +36737,9 @@ class Emitter {
                 );
             const scope = new Map<ts.Symbol, string>();
             for (const param of continuation.params) scope.set(param.symbol, `state->${param.field}`);
+            if (awaitedAliasSymbol && awaitedAliasType && index > 0) {
+                scope.set(awaitedAliasSymbol, "state->awaited_alias_value");
+            }
             const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
             awaitScope.set(awaitExpr, { c: bodyValueVar, ty: awaitedTypes[index]! });
             const buf = new CBuf();
@@ -36852,6 +36862,9 @@ class Emitter {
                 if (bodyValue) {
                     buf.line(`${awaitedTypes[index]!.c} ${bodyValueVar} = ${bodyValue};`);
                     buf.line(`(void)${bodyValueVar};`);
+                    if (awaitedAliasSymbol && awaitedAliasType && index === 0) {
+                        scope.set(awaitedAliasSymbol, bodyValueVar);
+                    }
                 }
                 for (const statement of continuation.bodyAwaitFinallyStatements ?? []) this.emitStmt(buf, statement);
                 if (index + 1 < names.length) {
@@ -36862,6 +36875,9 @@ class Emitter {
                     buf.line(`${nextEnvVar}->result_promise = _ret;`);
                     if (continuation.bodyAwaitFinallyAwaitExpr) {
                         buf.line(`${nextEnvVar}->reject_after_success = false;`);
+                    }
+                    if (awaitedAliasType) {
+                        buf.line(`${nextEnvVar}->awaited_alias_value = ${index === 0 ? bodyValueVar : "state->awaited_alias_value"};`);
                     }
                     for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
