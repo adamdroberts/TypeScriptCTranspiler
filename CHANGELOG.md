@@ -9,6 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Nested awaited loop return arms now carry prelude awaited locals into the terminal `return await` expression. Test: `async_await_loop_body_if_await_assignment_return`.
 - Nested awaited loop return arms now recognize declaration- and assignment-form awaited locals, including await-free statements between prelude suspensions before the final `return await`. Test: `async_await_loop_body_if_await_assignment_return`.
 - Nested awaited loop `break` arms now carry assigned-before-use aliases through multiple awaited body steps into post-loop fallthrough. Test: `async_await_loop_body_if_await_assignment_break`.
 - Added regression coverage confirming awaited assigned aliases survive multiple loop-body awaits into `break` and the post-loop awaited fallthrough. Test: `async_await_loop_body_await_assignment_break`.

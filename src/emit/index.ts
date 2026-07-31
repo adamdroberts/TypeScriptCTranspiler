@@ -36581,6 +36581,13 @@ class Emitter {
                 bodyContinueElseBreakAwaitExprs,
             );
         }
+        const returnCarriedAliases = (continuation.bodyContinueElseReturnAwaitedAliasIndices ?? []).flatMap((index, aliasIndex) => {
+            const symbol = continuation.bodyContinueElseReturnAwaitedAliasSymbols?.[aliasIndex];
+            const type = bodyContinueElseReturnPreludeAwaitedTypes[index];
+            return symbol && type && type.kind !== "void" && type.kind !== "never"
+                ? [{ symbol, type, field: `awaited_alias_value_${aliasIndex}` }]
+                : [];
+        });
         if (bodyContinueElseReturnAwaitExpr) {
             const returnPromiseType = this.prepareType(mapTsType(
                 bodyContinueElseReturnAwaitExpr.expression,
@@ -36601,6 +36608,9 @@ class Emitter {
                 continuation.params,
                 continuation.thisValue,
                 continuation.bodyContinueElseReturnRejectResult,
+                [],
+                [],
+                returnCarriedAliases,
             );
         }
         if (bodyContinueElseReturnAwaitPreludeExprs.length > 0) {
@@ -36649,6 +36659,7 @@ class Emitter {
                 bodyContinueElseReturnAwaitPreludeExprs,
                 bodyContinueElseReturnSynchronousExpr,
                 continuation.bodyContinueElseReturnRejectResult,
+                true,
             );
         }
         if (bodyContinueConditionAwaitExpr && bodyContinueConditionPromiseType && bodyContinueConditionAwaitedType) {
@@ -36806,6 +36817,7 @@ class Emitter {
         bodyAwaitExprs: readonly ts.AwaitExpression[],
         terminalSynchronousExpr: ts.Expression | null = null,
         terminalRejectResult = false,
+        carryAwaitedAliasesToLoopAdapter = false,
     ): string {
         if (bodyAwaitExprs.length === 0) throw new Error("missing loop body await continuation types");
         const names = bodyAwaitExprs.map(() =>
@@ -36867,6 +36879,8 @@ class Emitter {
             for (const alias of awaitedAliasEntries) {
                 if (alias.index < index) scope.set(alias.symbol, `state->${alias.field}`);
             }
+            const rejectionScope = new Map(scope);
+            for (const alias of awaitedAliasEntries) rejectionScope.set(alias.symbol, `state->${alias.field}`);
             const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
             awaitScope.set(awaitExpr, { c: bodyValueVar, ty: awaitedTypes[index]! });
             const buf = new CBuf();
@@ -36885,7 +36899,7 @@ class Emitter {
                     this.checker,
                 ));
                 if (continuation.bodyAwaitCatchSymbol) scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
-                this.argumentValueScopes.push(scope);
+                this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 let catchSource: EmitResult;
                 try {
@@ -36908,7 +36922,7 @@ class Emitter {
                 buf.close();
             } else if (index === 0 && continuation.bodyAwaitCatchStatements) {
                 if (continuation.bodyAwaitCatchSymbol) scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
-                this.argumentValueScopes.push(scope);
+                this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 this.asyncAwaitContinuationAdapterDepth++;
                 try {
@@ -36937,7 +36951,7 @@ class Emitter {
                 const rejectedFinallySourceVar = this.freshTemp("_await_rejected_finally_source");
                 const rejectedFinallyEnvVar = this.freshTemp("_await_rejected_finally_env");
                 const rejectedFinallyEnvType = `${names[1]!}_env_t`;
-                this.argumentValueScopes.push(scope);
+                this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 let rejectedFinallySource: EmitResult;
                 try {
@@ -36961,7 +36975,7 @@ class Emitter {
                 buf.line(`${names[1]}(${rejectedFinallyEnvVar});`);
                 buf.close();
             } else if (index === 0 && continuation.bodyAwaitFinallyStatements && continuation.bodyAwaitFinallyStatements.length > 0) {
-                this.argumentValueScopes.push(scope);
+                this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 try {
                     for (const statement of continuation.bodyAwaitFinallyStatements) this.emitStmt(buf, statement);
@@ -37049,6 +37063,9 @@ class Emitter {
                         buf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
                         buf.line(`${nextEnvVar}->result_promise = _ret;`);
                         for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
+                        if (carryAwaitedAliasesToLoopAdapter) {
+                            for (const alias of awaitedAliasEntries) buf.line(`${nextEnvVar}->${alias.field} = state->${alias.field};`);
+                        }
                         if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
                         buf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
                         buf.line(`tsc_promise_add_callback(${nextSourceVar}, ${loopAdapterName}, ${nextEnvVar});`);
@@ -38786,6 +38803,7 @@ class Emitter {
         rejectResult = false,
         awaitedAliasSymbols: readonly ts.Symbol[] = [],
         postAwaitStatements: readonly ts.Statement[] = [],
+        carriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string }[] = [],
     ): string {
         const name = `tsc_async_await_expression_return_continuation_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -38799,6 +38817,7 @@ class Emitter {
         if (thisValue) {
             this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         }
+        for (const alias of carriedAliases) this.structDecls.line(`${alias.type.c} ${alias.field};`);
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
         this.protos.line(`void ${name}(void* env);`);
@@ -38815,6 +38834,7 @@ class Emitter {
             scope.set(param.symbol, `state->${param.field}`);
         }
         for (const symbol of awaitedAliasSymbols) scope.set(symbol, valueVar);
+        for (const alias of carriedAliases) scope.set(alias.symbol, `state->${alias.field}`);
         const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
         awaitScope.set(awaitExpr, awaitedValue
             ? { c: valueVar, ty: awaitedType }

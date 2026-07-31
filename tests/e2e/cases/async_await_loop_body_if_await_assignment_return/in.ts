@@ -24,7 +24,7 @@ async function run(): Promise<string> {
             let first: string;
             first = await laterBody("first-" + count);
             const second = await laterBody(first + "-second");
-            return await later(last + "-return");
+            return await later(second + "-return");
         }
     }
     return await later("done");
