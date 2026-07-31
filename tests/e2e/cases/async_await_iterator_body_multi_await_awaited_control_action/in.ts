@@ -44,6 +44,8 @@ async function runOf(): Promise<string> {
             const postSuffix = "-post";
             const postValue = await laterOfControl(lastOf);
             lastOf = postValue + postSuffix;
+            const finalValue = await laterOfControl(lastOf);
+            lastOf = finalValue;
             continue;
         } else {
             lastOf = second + "-break";
@@ -55,6 +57,9 @@ async function runOf(): Promise<string> {
             var breakPostValue: string;
             breakPostValue = await laterOfControl(lastOf);
             lastOf = breakPostValue + breakPostSuffix;
+            var finalValue: string;
+            finalValue = await laterOfControl(lastOf);
+            lastOf = finalValue;
             break;
         }
     }
@@ -77,6 +82,8 @@ async function runIn(): Promise<string> {
             const postSuffix = "-post";
             const postValue = await laterInControl(lastIn);
             lastIn = postValue + postSuffix;
+            const finalValue = await laterInControl(lastIn);
+            lastIn = finalValue;
             continue;
         } else {
             lastIn = second + "-break";
@@ -88,6 +95,9 @@ async function runIn(): Promise<string> {
             var breakPostValue: string;
             breakPostValue = await laterInControl(lastIn);
             lastIn = breakPostValue + breakPostSuffix;
+            var finalValue: string;
+            finalValue = await laterInControl(lastIn);
+            lastIn = finalValue;
             break;
         }
     }
