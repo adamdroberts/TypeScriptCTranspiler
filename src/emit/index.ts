@@ -49249,13 +49249,11 @@ class Emitter {
         const isBool = disc.ty.kind === "boolean";
         if (!isStr && !isBool) requireNumber(sw.expression, disc.ty);
         const dv = this.freshTemp("_sw");
+        const start = this.freshTemp("_switch_start");
         const endLabel = this.freshTemp("_switch_end");
         buf.open("");
         buf.line(`${disc.ty.c} ${dv} = ${disc.c};`);
-        // Group consecutive empty cases so `case A: case B: <body>` emits as
-        // `if (_sw == A || _sw == B) { <body> }`.
-        let pending: string[] = [];
-        let first = true;
+        buf.line(`int ${start} = -1;`);
         const buildCond = (caseExpr: ts.Expression): string => {
             const caseVal = this.emitExpr(caseExpr);
             if (isStr) {
@@ -49268,38 +49266,30 @@ class Emitter {
         };
         this.activeBreakTargets.push(endLabel);
         try {
-            for (const clause of sw.caseBlock.clauses) {
+            for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
+                const clause = sw.caseBlock.clauses[index]!;
                 if (clause.kind === ts.SyntaxKind.CaseClause) {
-                    pending.push(buildCond(clause.expression));
-                    if (clause.statements.length > 0) {
-                        const cond = pending.join(" || ");
-                        if (first) buf.open(`if (${cond})`);
-                        else buf.open(`else if (${cond})`);
-                        first = false;
-                        for (const s of clause.statements) this.emitStmt(buf, s);
-                        buf.close();
-                        pending = [];
-                    }
+                    const cond = buildCond(clause.expression);
+                    buf.open(`if (${start} < 0 && (${cond}))`);
+                    buf.line(`${start} = ${index};`);
+                    buf.close();
                 }
             }
-            const dflt = sw.caseBlock.clauses.find(
-                (c) => c.kind === ts.SyntaxKind.DefaultClause,
-            ) as ts.DefaultClause | undefined;
-            if (dflt) {
-                // If there are still-pending empty cases before the default, merge
-                // them into the default (they fall through to it).
-                if (pending.length > 0) {
-                    const cond = pending.join(" || ");
-                    if (first) buf.open(`if (${cond} || true)`);
-                    else buf.open(`else if (${cond} || true)`);
-                } else {
-                    if (first) buf.open("if (true)");
-                    else buf.open("else");
-                }
-                for (const s of dflt.statements) this.emitStmt(buf, s);
+            const defaultIndex = sw.caseBlock.clauses.findIndex(
+                (clause) => clause.kind === ts.SyntaxKind.DefaultClause,
+            );
+            if (defaultIndex >= 0) {
+                buf.open(`if (${start} < 0)`);
+                buf.line(`${start} = ${defaultIndex};`);
                 buf.close();
-            } else if (pending.length > 0) {
-                // Trailing empty cases with no default — they have no effect.
+            }
+            for (let index = 0; index < sw.caseBlock.clauses.length; index++) {
+                const clause = sw.caseBlock.clauses[index]!;
+                buf.open(`if (${start} >= 0 && ${start} <= ${index})`);
+                if (clause.kind === ts.SyntaxKind.CaseClause || clause.kind === ts.SyntaxKind.DefaultClause) {
+                    for (const s of clause.statements) this.emitStmt(buf, s);
+                }
+                buf.close();
             }
         } finally {
             this.activeBreakTargets.pop();

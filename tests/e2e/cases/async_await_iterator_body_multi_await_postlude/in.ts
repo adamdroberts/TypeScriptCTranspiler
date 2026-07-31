@@ -40,6 +40,15 @@ async function runOf(): Promise<string> {
         for (const nested of ["nested"]) {
             ofCount += nested.length;
         }
+        switch (ofCount) {
+            case 21:
+                ofCount += 1;
+            case 22:
+                ofCount += 1;
+                break;
+            default:
+                break;
+        }
         try {
             ofCount += 1;
         } finally {
@@ -82,6 +91,15 @@ async function runIn(): Promise<string> {
         }
         for (const nestedKey in { nested: "value" }) {
             inCount += nestedKey.length;
+        }
+        switch (inCount) {
+            case 21:
+                inCount += 1;
+            case 22:
+                inCount += 1;
+                break;
+            default:
+                break;
         }
         try {
             inCount += 1;
