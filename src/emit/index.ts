@@ -39437,18 +39437,16 @@ class Emitter {
                 statement && ts.isBreakStatement(statement) && !statement.label ? "break" : null;
         let directAction = actionForStatement(controlStatement);
         let branchCondition: ts.Expression | null = null;
-        let branchThenAction: "continue" | "break" | null = null;
-        let branchElseAction: "continue" | "break" | null = null;
-        let branchThenPrelude: readonly ts.Statement[] = [];
-        let branchElsePrelude: readonly ts.Statement[] = [];
-        let branchThenAwaitExpr: ts.AwaitExpression | null = null;
-        let branchElseAwaitExpr: ts.AwaitExpression | null = null;
         let switchStatement: ts.SwitchStatement | null = null;
         type ControlRoute = {
             prelude: readonly ts.Statement[];
-            awaitExpr: ts.AwaitExpression | null;
+            awaitExprs: readonly ts.AwaitExpression[];
+            betweenAwaitStatements: readonly (readonly ts.Statement[])[];
+            postAwaitStatements: readonly ts.Statement[];
             action: "continue" | "break";
         };
+        let branchThenRoute: ControlRoute | null = null;
+        let branchElseRoute: ControlRoute | null = null;
         let switchRoutes: Array<ControlRoute & { caseExpression: ts.Expression | null }> = [];
         const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
             ts.isBlock(statement) ? statement.statements : [statement];
@@ -39457,39 +39455,50 @@ class Emitter {
             const action = actionForStatement(statements[statements.length - 1]);
             if (!action) return null;
             const prelude = statements.slice(0, -1);
-            const finalPrelude = prelude[prelude.length - 1];
-            const finalPreludeExpression = finalPrelude && ts.isExpressionStatement(finalPrelude)
-                ? this.unwrapTransparentExpression(finalPrelude.expression)
-                : null;
-            const awaitExpr = finalPreludeExpression && ts.isAwaitExpression(finalPreludeExpression)
-                ? finalPreludeExpression
-                : null;
-            const synchronousPrelude = awaitExpr ? prelude.slice(0, -1) : prelude;
-            if (awaitExpr) {
-                if (!synchronousPrelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-                return { prelude: synchronousPrelude, awaitExpr, action };
+            const awaitEntries = prelude.flatMap((statement, index) => {
+                if (!ts.isExpressionStatement(statement)) return [];
+                const expression = this.unwrapTransparentExpression(statement.expression);
+                return ts.isAwaitExpression(expression) ? [{ index, expression }] : [];
+            });
+            if (awaitEntries.length === 0) {
+                if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+                return { prelude, awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action };
             }
-            if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-            return { prelude, awaitExpr: null, action };
+            const awaitIndices = awaitEntries.map(({ index }) => index);
+            const betweenAwaitStatements: (readonly ts.Statement[])[] = [];
+            for (let index = 0; index + 1 < awaitIndices.length; index++) {
+                const between = prelude.slice(awaitIndices[index]! + 1, awaitIndices[index + 1]!);
+                if (!between.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+                betweenAwaitStatements.push(between);
+            }
+            const firstAwaitIndex = awaitIndices[0]!;
+            const lastAwaitIndex = awaitIndices[awaitIndices.length - 1]!;
+            const preludeStatements = prelude.slice(0, firstAwaitIndex);
+            const postAwaitStatements = prelude.slice(lastAwaitIndex + 1);
+            if (!preludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) ||
+                !postAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+            return {
+                prelude: preludeStatements,
+                awaitExprs: awaitEntries.map(({ expression }) => expression),
+                betweenAwaitStatements,
+                postAwaitStatements,
+                action,
+            };
         };
         if (!directAction && ts.isIfStatement(controlStatement)) {
             const thenStatements = branchStatements(controlStatement.thenStatement);
             const thenRoute = branchRoute(thenStatements);
             if (!thenRoute) return false;
-            branchThenPrelude = thenRoute.prelude;
-            branchThenAwaitExpr = thenRoute.awaitExpr;
-            branchThenAction = thenRoute.action;
+            branchThenRoute = thenRoute;
             if (controlStatement.elseStatement) {
                 const elseStatements = branchStatements(controlStatement.elseStatement);
                 const elseRoute = branchRoute(elseStatements);
                 if (!elseRoute) return false;
-                branchElsePrelude = elseRoute.prelude;
-                branchElseAwaitExpr = elseRoute.awaitExpr;
-                branchElseAction = elseRoute.action;
+                branchElseRoute = elseRoute;
             } else {
-                branchElseAction = "continue";
+                branchElseRoute = { prelude: [], awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" };
             }
-            if (!branchThenAction || !branchElseAction) return false;
+            if (!branchThenRoute || !branchElseRoute) return false;
             branchCondition = controlStatement.expression;
         }
         if (!directAction && !branchCondition && ts.isSwitchStatement(controlStatement)) {
@@ -39510,8 +39519,14 @@ class Emitter {
                 const clause = switchStatement.caseBlock.clauses[index]!;
                 const route: ControlRoute = parsedRoutes[index]
                     ?? (nextRoute
-                        ? { prelude: [...clause.statements, ...nextRoute.prelude], awaitExpr: nextRoute.awaitExpr, action: nextRoute.action }
-                        : { prelude: [...clause.statements], awaitExpr: null, action: "continue" });
+                        ? {
+                            prelude: [...clause.statements, ...nextRoute.prelude],
+                            awaitExprs: nextRoute.awaitExprs,
+                            betweenAwaitStatements: nextRoute.betweenAwaitStatements,
+                            postAwaitStatements: nextRoute.postAwaitStatements,
+                            action: nextRoute.action,
+                        }
+                        : { prelude: [...clause.statements], awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }
@@ -39521,12 +39536,14 @@ class Emitter {
                 switchRoutes.push({
                     caseExpression: ts.isCaseClause(clause) ? clause.expression : null,
                     prelude: route.prelude,
-                    awaitExpr: route.awaitExpr,
+                    awaitExprs: route.awaitExprs,
+                    betweenAwaitStatements: route.betweenAwaitStatements,
+                    postAwaitStatements: route.postAwaitStatements,
                     action: route.action,
                 });
             }
             if (!switchRoutes.some((route) => route.caseExpression === null)) {
-                switchRoutes.push({ caseExpression: null, prelude: [], awaitExpr: null, action: "continue" });
+                switchRoutes.push({ caseExpression: null, prelude: [], awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
             }
         }
         if (!directAction && !branchCondition && !switchStatement) return false;
@@ -39637,25 +39654,30 @@ class Emitter {
             this.checker,
         ));
         const awaitedControlRoutes: ControlRoute[] = [];
-        if (branchCondition && branchThenAction && branchThenAwaitExpr) {
-            awaitedControlRoutes.push({ prelude: branchThenPrelude, awaitExpr: branchThenAwaitExpr, action: branchThenAction });
+        if (branchCondition && branchThenRoute && branchThenRoute.awaitExprs.length > 0) {
+            awaitedControlRoutes.push(branchThenRoute);
         }
-        if (branchCondition && branchElseAction && branchElseAwaitExpr) {
-            awaitedControlRoutes.push({ prelude: branchElsePrelude, awaitExpr: branchElseAwaitExpr, action: branchElseAction });
+        if (branchCondition && branchElseRoute && branchElseRoute.awaitExprs.length > 0) {
+            awaitedControlRoutes.push(branchElseRoute);
         }
         for (const route of switchRoutes) {
-            if (route.awaitExpr) awaitedControlRoutes.push(route);
+            if (route.awaitExprs.length > 0) awaitedControlRoutes.push(route);
         }
-        const controlPromiseTypes = awaitedControlRoutes.map(({ awaitExpr }) => this.prepareType(mapTsType(
-            awaitExpr!.expression,
-            this.checker.getTypeAtLocation(awaitExpr!.expression),
-            this.checker,
-        )));
-        const controlAwaitedTypes = awaitedControlRoutes.map(({ awaitExpr }) => this.prepareType(mapTsType(
-            awaitExpr!,
-            this.checker.getTypeAtLocation(awaitExpr!),
-            this.checker,
-        )));
+        const controlAwaitData = awaitedControlRoutes.flatMap((route) => route.awaitExprs.map((awaitExpr) => ({
+            awaitExpr,
+            promiseType: this.prepareType(mapTsType(
+                awaitExpr.expression,
+                this.checker.getTypeAtLocation(awaitExpr.expression),
+                this.checker,
+            )),
+            awaitedType: this.prepareType(mapTsType(
+                awaitExpr,
+                this.checker.getTypeAtLocation(awaitExpr),
+                this.checker,
+            )),
+        })));
+        const controlPromiseTypes = controlAwaitData.map(({ promiseType }) => promiseType);
+        const controlAwaitedTypes = controlAwaitData.map(({ awaitedType }) => awaitedType);
         const branchConditionPromiseType = branchConditionAwaitExpr
             ? this.prepareType(mapTsType(
                 branchConditionAwaitExpr.expression,
@@ -39721,10 +39743,9 @@ class Emitter {
             : null;
         const controlAdapterNames = new Map<ts.AwaitExpression, string>();
         const controlPromiseTypeByAwait = new Map<ts.AwaitExpression, CType>();
-        for (const [index, route] of awaitedControlRoutes.entries()) {
-            const awaitExpr = route.awaitExpr!;
+        for (const { awaitExpr, promiseType } of controlAwaitData) {
             controlAdapterNames.set(awaitExpr, `tsc_async_await_iterator_multi_continue_control_${this.asyncAwaitReturnContinuationAdapters++}`);
-            controlPromiseTypeByAwait.set(awaitExpr, controlPromiseTypes[index]!);
+            controlPromiseTypeByAwait.set(awaitExpr, promiseType);
         }
         for (const envType of envTypes) {
             this.structDecls.open(`typedef struct ${envType}`);
@@ -39839,38 +39860,67 @@ class Emitter {
             else emitFallthrough(out, state);
         };
         for (const route of awaitedControlRoutes) {
-            const awaitExpr = route.awaitExpr!;
-            const name = controlAdapterNames.get(awaitExpr)!;
-            const routeBuf = new CBuf();
-            const routeEnvType = envTypes[envTypes.length - 1]!;
-            routeBuf.open(`void ${name}(void* env)`);
-            routeBuf.line(`${routeEnvType}* state = (${routeEnvType}*)env;`);
-            routeBuf.line("tsc_promise_t* _p = state->receiver;");
-            routeBuf.line("tsc_promise_t* _ret = state->result_promise;");
-            routeBuf.open("if (tsc_promise_is_rejected(_p))");
-            routeBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
-            routeBuf.line("return;");
-            routeBuf.close();
-            routeBuf.open("if (!tsc_promise_is_fulfilled(_p))");
-            routeBuf.line("return;");
-            routeBuf.close();
-            emitAction(routeBuf, "state", route.action);
-            routeBuf.close();
-            routeBuf.line();
-            this.closureDefs.write(routeBuf.toString());
+            for (let index = 0; index < route.awaitExprs.length; index++) {
+                const awaitExpr = route.awaitExprs[index]!;
+                const name = controlAdapterNames.get(awaitExpr)!;
+                const routeBuf = new CBuf();
+                const routeEnvType = envTypes[envTypes.length - 1]!;
+                routeBuf.open(`void ${name}(void* env)`);
+                routeBuf.line(`${routeEnvType}* state = (${routeEnvType}*)env;`);
+                routeBuf.line("tsc_promise_t* _p = state->receiver;");
+                routeBuf.line("tsc_promise_t* _ret = state->result_promise;");
+                routeBuf.open("if (tsc_promise_is_rejected(_p))");
+                routeBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+                routeBuf.line("return;");
+                routeBuf.close();
+                routeBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+                routeBuf.line("return;");
+                routeBuf.close();
+                const routeScope = scopeFor("state", steps.length);
+                this.argumentValueScopes.push(routeScope);
+                if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+                try {
+                    if (index + 1 < route.awaitExprs.length) {
+                        for (const statement of route.betweenAwaitStatements[index] ?? []) this.emitStmt(routeBuf, statement);
+                        const nextAwait = route.awaitExprs[index + 1]!;
+                        const nextSource = this.emitExpr(nextAwait.expression);
+                        const nextSourceVar = this.freshTemp("_async_iter_control_source");
+                        const nextAdapter = controlAdapterNames.get(nextAwait)!;
+                        const nextPromiseType = controlPromiseTypeByAwait.get(nextAwait)!;
+                        routeBuf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(nextSource, nextPromiseType, nextAwait.expression)};`);
+                        routeBuf.line(`state->receiver = ${nextSourceVar};`);
+                        routeBuf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
+                        routeBuf.line(`tsc_promise_add_callback(${nextSourceVar}, ${nextAdapter}, state);`);
+                        routeBuf.close();
+                        routeBuf.open("else");
+                        routeBuf.line(`${nextAdapter}(state);`);
+                        routeBuf.close();
+                    } else {
+                        for (const statement of route.postAwaitStatements) this.emitStmt(routeBuf, statement);
+                        emitAction(routeBuf, "state", route.action);
+                    }
+                } finally {
+                    if (thisValue) this.functionThisStack.pop();
+                    this.argumentValueScopes.pop();
+                }
+                routeBuf.close();
+                routeBuf.line();
+                this.closureDefs.write(routeBuf.toString());
+            }
         }
         const emitControlRoute = (out: CBuf, state: string, route: ControlRoute): void => {
             for (const statement of route.prelude) this.emitStmt(out, statement);
-            if (!route.awaitExpr) {
+            if (route.awaitExprs.length === 0) {
                 emitAction(out, state, route.action);
                 return;
             }
-            const adapter = controlAdapterNames.get(route.awaitExpr);
-            const promiseType = controlPromiseTypeByAwait.get(route.awaitExpr);
+            const awaitExpr = route.awaitExprs[0]!;
+            const adapter = controlAdapterNames.get(awaitExpr);
+            const promiseType = controlPromiseTypeByAwait.get(awaitExpr);
             if (!adapter || !promiseType) return;
-            const source = this.emitExpr(route.awaitExpr.expression);
+            const source = this.emitExpr(awaitExpr.expression);
             const sourceVar = this.freshTemp("_async_iter_control_source");
-            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, route.awaitExpr.expression)};`);
+            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, awaitExpr.expression)};`);
             out.line(`${state}->receiver = ${sourceVar};`);
             out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
             out.line(`tsc_promise_add_callback(${sourceVar}, ${adapter}, ${state});`);
@@ -39921,18 +39971,10 @@ class Emitter {
             try {
                 const truth = this.truthyExprFromEmitResult({ c: conditionValue, ty: branchConditionAwaitedType }, branchConditionAwaitExpr);
                 conditionBuf.open(`if (${truth})`);
-                emitControlRoute(conditionBuf, "state", {
-                    prelude: branchThenPrelude,
-                    awaitExpr: branchThenAwaitExpr,
-                    action: branchThenAction!,
-                });
+                emitControlRoute(conditionBuf, "state", branchThenRoute!);
                 conditionBuf.close();
                 conditionBuf.open("else");
-                emitControlRoute(conditionBuf, "state", {
-                    prelude: branchElsePrelude,
-                    awaitExpr: branchElseAwaitExpr,
-                    action: branchElseAction!,
-                });
+                emitControlRoute(conditionBuf, "state", branchElseRoute!);
                 conditionBuf.close();
             } finally {
                 if (thisValue) this.functionThisStack.pop();
@@ -40039,18 +40081,10 @@ class Emitter {
                         } else {
                             const condition = this.emitExpr(branchCondition);
                             bodyBuf.open(`if (${this.truthyC(condition, branchCondition)})`);
-                            emitControlRoute(bodyBuf, "state", {
-                                prelude: branchThenPrelude,
-                                awaitExpr: branchThenAwaitExpr,
-                                action: branchThenAction!,
-                            });
+                            emitControlRoute(bodyBuf, "state", branchThenRoute!);
                             bodyBuf.close();
                             bodyBuf.open("else");
-                            emitControlRoute(bodyBuf, "state", {
-                                prelude: branchElsePrelude,
-                                awaitExpr: branchElseAwaitExpr,
-                                action: branchElseAction!,
-                            });
+                            emitControlRoute(bodyBuf, "state", branchElseRoute!);
                             bodyBuf.close();
                         }
                     } else if (switchStatement) {

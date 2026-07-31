@@ -39,10 +39,16 @@ async function runOf(): Promise<string> {
         if (item === "of-a") {
             lastOf = second + "-continue";
             await laterOfControl(lastOf);
+            lastOf = lastOf + "-between";
+            await laterOfControl(lastOf);
+            lastOf = lastOf + "-post";
             continue;
         } else {
             lastOf = second + "-break";
             await laterOfControl(lastOf);
+            lastOf = lastOf + "-between";
+            await laterOfControl(lastOf);
+            lastOf = lastOf + "-post";
             break;
         }
     }
@@ -60,10 +66,16 @@ async function runIn(): Promise<string> {
         if (key === "in-a") {
             lastIn = second + "-continue";
             await laterInControl(lastIn);
+            lastIn = lastIn + "-between";
+            await laterInControl(lastIn);
+            lastIn = lastIn + "-post";
             continue;
         } else {
             lastIn = second + "-break";
             await laterInControl(lastIn);
+            lastIn = lastIn + "-between";
+            await laterInControl(lastIn);
+            lastIn = lastIn + "-post";
             break;
         }
     }
