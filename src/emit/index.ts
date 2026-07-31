@@ -291,6 +291,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitExprs: readonly ts.AwaitExpression[];
     bodyReturnExpr: ts.Expression;
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
+    bodyBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyPostAwaitStatements: readonly ts.Statement[];
     bodyAwaitFinallyStatements?: readonly ts.Statement[];
     bodyAwaitFinallyAwaitExpr?: ts.AwaitExpression;
@@ -35703,6 +35704,7 @@ class Emitter {
         let bodyAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyReturnExpr: ts.Expression | null = null;
         let bodyAwaitedAliasSymbols: readonly ts.Symbol[] = [];
+        let bodyBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyPostAwaitStatements: readonly ts.Statement[] = [];
         let bodyPreludeStatements: readonly ts.Statement[];
         let bodyRejectResult = ts.isThrowStatement(bodyAction);
@@ -35932,12 +35934,18 @@ class Emitter {
             } else if (bodyAwaitableStatements.length > 0 && bodyHasOtherAwait) {
                 const firstAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitableStatements[0]!.statement);
                 const lastAwaitIndex = bodyContinueStatements.indexOf(bodyAwaitableStatements[bodyAwaitableStatements.length - 1]!.statement);
-                const awaitStatements = new Set<ts.Statement>(bodyAwaitableStatements.map(({ statement }) => statement));
-                if (bodyContinueStatements.slice(firstAwaitIndex, lastAwaitIndex + 1).some((statement) => !awaitStatements.has(statement))) return false;
+                const awaitIndices = bodyAwaitableStatements.map(({ statement }) => bodyContinueStatements.indexOf(statement));
+                const betweenAwaitStatements: ts.Statement[][] = [];
+                for (let index = 0; index + 1 < awaitIndices.length; index++) {
+                    const between = bodyContinueStatements.slice(awaitIndices[index]! + 1, awaitIndices[index + 1]!);
+                    if (!between.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+                    betweenAwaitStatements.push(between);
+                }
                 bodyAwaitExpr = bodyAwaitableStatements[0]!.expression;
                 bodyAwaitExprs = bodyAwaitableStatements.map(({ expression }) => expression);
                 if (bodyAwaitableStatements.some(({ symbol }, index) => symbol && index !== 0)) return false;
                 if (bodyAwaitableStatements[0]!.symbol) bodyAwaitedAliasSymbols = [bodyAwaitableStatements[0]!.symbol];
+                bodyBetweenAwaitStatements = betweenAwaitStatements;
                 bodyPreludeStatements = bodyContinueStatements.slice(0, firstAwaitIndex);
                 bodyPostAwaitStatements = bodyContinueStatements.slice(lastAwaitIndex + 1);
             } else {
@@ -36288,6 +36296,9 @@ class Emitter {
         };
         visitReferences(condition);
         for (const statement of bodyPreludeStatements) visitReferences(statement);
+        for (const statements of bodyBetweenAwaitStatements) {
+            for (const statement of statements) visitReferences(statement);
+        }
         for (const statement of bodyPostAwaitStatements) visitReferences(statement);
         for (const statement of bodyAwaitFinallyStatements) visitReferences(statement);
         for (const statement of bodyAwaitCatchStatements) visitReferences(statement);
@@ -36323,6 +36334,7 @@ class Emitter {
             bodyAwaitExprs,
             bodyReturnExpr,
             bodyAwaitedAliasSymbols,
+            bodyBetweenAwaitStatements,
             bodyPostAwaitStatements,
             bodyAwaitFinallyStatements,
             bodyAwaitFinallyAwaitExpr: continuationBodyAwaitFinallyAwaitExpr,
@@ -36867,6 +36879,7 @@ class Emitter {
                     }
                 }
                 for (const statement of continuation.bodyAwaitFinallyStatements ?? []) this.emitStmt(buf, statement);
+                for (const statement of continuation.bodyBetweenAwaitStatements?.[index] ?? []) this.emitStmt(buf, statement);
                 if (index + 1 < names.length) {
                     const nextSource = this.emitExpr(bodyAwaitExprs[index + 1]!.expression);
                     buf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(nextSource, promiseTypes[index + 1]!, bodyAwaitExprs[index + 1]!.expression)};`);

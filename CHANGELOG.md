@@ -9,7 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
-- Async loop-body continuations now carry one local variable initialized by `await` through subsequent awaited body work before `continue`. Test: `async_await_loop_body_await_local_multi_continue`.
+- Async loop-body continuations now carry one local variable initialized by `await` through await-free postlude statements and subsequent awaited body work before `continue`. Test: `async_await_loop_body_await_local_multi_continue`.
 - `Promise.withResolvers<T>()` now preserves the statically typed `Promise<T>` member through boxed resolver-record storage, including typed assignment and thenable resolution. Test: `promise_with_resolvers`.
 - Lazy finite multi-yield returns now preserve no-capture inline arrow/function-expression calls with simple typed parameters and yield-free bodies at the final resume. Test: `generator_lazy_multi_yield_return`.
 - Lazy finite multi-yield returns now inline captured zero-argument arrow/function-expression calls with a single yield-free return, preserving outer-capture values across suspension. Test: `generator_lazy_inline_captured_closure`.
