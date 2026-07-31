@@ -33167,7 +33167,7 @@ class Emitter {
         if (ts.isVariableStatement(stmt)) {
             if (stmt.declarationList.declarations.length === 0) return false;
         } else if (!ts.isExpressionStatement(stmt)) {
-            return this.asyncAwaitLoopBodyControlPreludeSupported(stmt, true);
+            return this.asyncAwaitLoopBodyControlPreludeSupported(stmt, true, false, true);
         }
         let ok = true;
         const visit = (node: ts.Node): void => {

@@ -54,6 +54,13 @@ async function runOf(): Promise<string> {
         } finally {
             ofCount += 1;
         }
+        try {
+            throw "postlude";
+        } catch (reason) {
+            ofCount += 2;
+        } finally {
+            ofCount += 1;
+        }
         if (ofCount < 0) {
             ofCount += 100;
         } else {
@@ -103,6 +110,13 @@ async function runIn(): Promise<string> {
         }
         try {
             inCount += 1;
+        } finally {
+            inCount += 1;
+        }
+        try {
+            throw "postlude";
+        } catch (reason) {
+            inCount += 2;
         } finally {
             inCount += 1;
         }
