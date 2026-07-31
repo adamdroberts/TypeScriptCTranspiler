@@ -38930,7 +38930,12 @@ class Emitter {
                 steps.push({ awaitExpr: expression, alias: null });
                 continue;
             }
-            if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return false;
+            if (!ts.isVariableStatement(statement)) {
+                if (steps.length === 0 || !this.asyncAwaitLoopPostStatementSupported(statement)) return false;
+                pendingBetween.push(statement);
+                continue;
+            }
+            if (statement.declarationList.declarations.length !== 1) return false;
             const declaration = statement.declarationList.declarations[0]!;
             if (!ts.isIdentifier(declaration.name)) return false;
             if (declaration.initializer) {

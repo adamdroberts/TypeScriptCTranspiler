@@ -18,7 +18,9 @@ function laterIn(value: string): Promise<string> {
 async function runOf(): Promise<string> {
     for (const item of ["of"]) {
         const first = await laterOf(item);
-        ofCount += 10;
+        if (ofCount > 0) {
+            ofCount += 10;
+        }
         const suffix = "-second";
         const second = await laterOf(first + suffix);
         return await later(ofCount + "|" + second);
@@ -30,7 +32,9 @@ async function runIn(): Promise<string> {
     const values: Record<string, string> = { in: "value" };
     for (const key in values) {
         const first = await laterIn(key);
-        inCount += 10;
+        if (inCount > 0) {
+            inCount += 10;
+        }
         const suffix = "-second";
         const second = await laterIn(first + suffix);
         throw await later("in-" + inCount + "|" + second);
