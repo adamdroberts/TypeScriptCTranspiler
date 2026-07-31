@@ -37,6 +37,12 @@ async function runOf(): Promise<string> {
         for (; ofCount === 14;) {
             ofCount += 1;
         }
+        for (let topLevelForCount = 0; topLevelForCount < 3; topLevelForCount++) {
+            if (topLevelForCount === 0) {
+                continue;
+            }
+            break;
+        }
         let nestedWhileCount = 0;
         while (nestedWhileCount < 3) {
             nestedWhileCount += 1;
@@ -123,6 +129,12 @@ async function runIn(): Promise<string> {
         } while (inCount === 13);
         for (; inCount === 14;) {
             inCount += 1;
+        }
+        for (let topLevelForCount = 0; topLevelForCount < 3; topLevelForCount++) {
+            if (topLevelForCount === 0) {
+                continue;
+            }
+            break;
         }
         let nestedWhileCount = 0;
         while (nestedWhileCount < 3) {
