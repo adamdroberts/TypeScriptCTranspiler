@@ -39439,16 +39439,30 @@ class Emitter {
         let branchCondition: ts.Expression | null = null;
         let branchThenAction: "continue" | "break" | null = null;
         let branchElseAction: "continue" | "break" | null = null;
+        let branchThenPrelude: readonly ts.Statement[] = [];
+        let branchElsePrelude: readonly ts.Statement[] = [];
         if (!directAction && ts.isIfStatement(controlStatement)) {
             const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
                 ts.isBlock(statement) ? statement.statements : [statement];
+            const branchRoute = (statements: readonly ts.Statement[]): { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null => {
+                if (statements.length === 0) return null;
+                const action = actionForStatement(statements[statements.length - 1]);
+                if (!action) return null;
+                const prelude = statements.slice(0, -1);
+                if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+                return { prelude, action };
+            };
             const thenStatements = branchStatements(controlStatement.thenStatement);
-            if (thenStatements.length !== 1) return false;
-            branchThenAction = actionForStatement(thenStatements[0]);
+            const thenRoute = branchRoute(thenStatements);
+            if (!thenRoute) return false;
+            branchThenPrelude = thenRoute.prelude;
+            branchThenAction = thenRoute.action;
             if (controlStatement.elseStatement) {
                 const elseStatements = branchStatements(controlStatement.elseStatement);
-                if (elseStatements.length !== 1) return false;
-                branchElseAction = actionForStatement(elseStatements[0]);
+                const elseRoute = branchRoute(elseStatements);
+                if (!elseRoute) return false;
+                branchElsePrelude = elseRoute.prelude;
+                branchElseAction = elseRoute.action;
             } else {
                 branchElseAction = "continue";
             }
@@ -39722,9 +39736,11 @@ class Emitter {
                     if (branchCondition) {
                         const condition = this.emitExpr(branchCondition);
                         bodyBuf.open(`if (${this.truthyC(condition, branchCondition)})`);
+                        for (const statement of branchThenPrelude) this.emitStmt(bodyBuf, statement);
                         emitAction(bodyBuf, "state", branchThenAction!);
                         bodyBuf.close();
                         bodyBuf.open("else");
+                        for (const statement of branchElsePrelude) this.emitStmt(bodyBuf, statement);
                         emitAction(bodyBuf, "state", branchElseAction!);
                         bodyBuf.close();
                     } else {

@@ -20,8 +20,12 @@ async function runOf(): Promise<string> {
         second = await laterBody(marker);
         lastOf = second;
         if (item === "of-a") {
+            const branchMarker = second + "-continue";
+            lastOf = branchMarker;
             continue;
         } else {
+            const branchMarker = second + "-break";
+            lastOf = branchMarker;
             break;
         }
     }
@@ -38,8 +42,12 @@ async function runIn(): Promise<string> {
         second = await laterBody(marker);
         lastIn = second;
         if (key === "in-a") {
+            const branchMarker = second + "-continue";
+            lastIn = branchMarker;
             continue;
         } else {
+            const branchMarker = second + "-break";
+            lastIn = branchMarker;
             break;
         }
     }
