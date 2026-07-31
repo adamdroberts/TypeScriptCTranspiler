@@ -39473,9 +39473,18 @@ class Emitter {
         }
         if (!directAction && !branchCondition && ts.isSwitchStatement(controlStatement)) {
             switchStatement = controlStatement;
-            for (const clause of switchStatement.caseBlock.clauses) {
-                const route = branchRoute(clause.statements);
-                if (!route) return false;
+            const parsedRoutes: ({ prelude: readonly ts.Statement[]; action: "continue" | "break" } | null)[] =
+                switchStatement.caseBlock.clauses.map((clause) => branchRoute(clause.statements));
+            let nextRoute: { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null = null;
+            for (let index = parsedRoutes.length - 1; index >= 0; index--) {
+                const route: { prelude: readonly ts.Statement[]; action: "continue" | "break" } =
+                    parsedRoutes[index] ?? nextRoute ?? { prelude: [], action: "continue" };
+                parsedRoutes[index] = route;
+                nextRoute = route;
+            }
+            for (let index = 0; index < switchStatement.caseBlock.clauses.length; index++) {
+                const clause = switchStatement.caseBlock.clauses[index]!;
+                const route = parsedRoutes[index]!;
                 switchRoutes.push({
                     caseExpression: ts.isCaseClause(clause) ? clause.expression : null,
                     prelude: route.prelude,
