@@ -38914,11 +38914,19 @@ class Emitter {
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         if (loopBody.length < 3) return false;
         const steps: { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
+        const between: ts.Statement[][] = [];
+        let pendingBetween: ts.Statement[] = [];
         for (let index = 0; index < loopBody.length - 1; index++) {
             const statement = loopBody[index]!;
             if (ts.isExpressionStatement(statement)) {
                 const expression = this.unwrapTransparentExpression(statement.expression);
-                if (!ts.isAwaitExpression(expression)) return false;
+                if (!ts.isAwaitExpression(expression)) {
+                    if (steps.length === 0 || !this.asyncAwaitLoopPostStatementSupported(statement)) return false;
+                    pendingBetween.push(statement);
+                    continue;
+                }
+                if (steps.length > 0) between.push(pendingBetween);
+                pendingBetween = [];
                 steps.push({ awaitExpr: expression, alias: null });
                 continue;
             }
@@ -38928,6 +38936,8 @@ class Emitter {
             if (declaration.initializer) {
                 const expression = this.unwrapTransparentExpression(declaration.initializer);
                 if (!ts.isAwaitExpression(expression)) return false;
+                if (steps.length > 0) between.push(pendingBetween);
+                pendingBetween = [];
                 steps.push({ awaitExpr: expression, alias: declaration.name });
                 continue;
             }
@@ -38938,8 +38948,11 @@ class Emitter {
                 !ts.isIdentifier(assignment.left) || this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return false;
             const expression = this.unwrapTransparentExpression(assignment.right);
             if (!ts.isAwaitExpression(expression)) return false;
+            if (steps.length > 0) between.push(pendingBetween);
+            pendingBetween = [];
             steps.push({ awaitExpr: expression, alias: declaration.name });
         }
+        if (steps.length > 0) between.push(pendingBetween);
         if (steps.length < 2) return false;
         const terminal = loopBody[loopBody.length - 1]!;
         const isThrow = ts.isThrowStatement(terminal);
@@ -39087,6 +39100,7 @@ class Emitter {
             if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
             let source: EmitResult;
             try {
+                for (const statement of between[index] ?? []) this.emitStmt(bodyBuf, statement);
                 source = this.emitExpr(nextAwait.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
