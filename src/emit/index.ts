@@ -39438,9 +39438,13 @@ class Emitter {
         let directAction = actionForStatement(controlStatement);
         let branchCondition: ts.Expression | null = null;
         let switchStatement: ts.SwitchStatement | null = null;
+        type ControlAwaitStep = {
+            awaitExpr: ts.AwaitExpression;
+            alias: ts.Identifier | null;
+        };
         type ControlRoute = {
             prelude: readonly ts.Statement[];
-            awaitExprs: readonly ts.AwaitExpression[];
+            awaitSteps: readonly ControlAwaitStep[];
             betweenAwaitStatements: readonly (readonly ts.Statement[])[];
             postAwaitStatements: readonly ts.Statement[];
             action: "continue" | "break";
@@ -39455,14 +39459,39 @@ class Emitter {
             const action = actionForStatement(statements[statements.length - 1]);
             if (!action) return null;
             const prelude = statements.slice(0, -1);
-            const awaitEntries = prelude.flatMap((statement, index) => {
-                if (!ts.isExpressionStatement(statement)) return [];
-                const expression = this.unwrapTransparentExpression(statement.expression);
-                return ts.isAwaitExpression(expression) ? [{ index, expression }] : [];
-            });
+            const awaitEntries: { index: number; expression: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
+            for (let index = 0; index < prelude.length; index++) {
+                const statement = prelude[index]!;
+                if (ts.isExpressionStatement(statement)) {
+                    const expression = this.unwrapTransparentExpression(statement.expression);
+                    if (ts.isAwaitExpression(expression)) {
+                        awaitEntries.push({ index, expression, alias: null });
+                    }
+                    continue;
+                }
+                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) continue;
+                const declaration = statement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name)) continue;
+                if (declaration.initializer) {
+                    const expression = this.unwrapTransparentExpression(declaration.initializer);
+                    if (ts.isAwaitExpression(expression)) {
+                        awaitEntries.push({ index, expression, alias: declaration.name });
+                    }
+                    continue;
+                }
+                const assignmentStatement = prelude[index + 1];
+                if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) continue;
+                const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                    !ts.isIdentifier(assignment.left) || this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) continue;
+                const expression = this.unwrapTransparentExpression(assignment.right);
+                if (ts.isAwaitExpression(expression)) {
+                    awaitEntries.push({ index: index + 1, expression, alias: declaration.name });
+                }
+            }
             if (awaitEntries.length === 0) {
                 if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-                return { prelude, awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action };
+                return { prelude, awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action };
             }
             const awaitIndices = awaitEntries.map(({ index }) => index);
             const betweenAwaitStatements: (readonly ts.Statement[])[] = [];
@@ -39479,7 +39508,7 @@ class Emitter {
                 !postAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
             return {
                 prelude: preludeStatements,
-                awaitExprs: awaitEntries.map(({ expression }) => expression),
+                awaitSteps: awaitEntries.map(({ expression, alias }) => ({ awaitExpr: expression, alias })),
                 betweenAwaitStatements,
                 postAwaitStatements,
                 action,
@@ -39496,7 +39525,7 @@ class Emitter {
                 if (!elseRoute) return false;
                 branchElseRoute = elseRoute;
             } else {
-                branchElseRoute = { prelude: [], awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" };
+                branchElseRoute = { prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" };
             }
             if (!branchThenRoute || !branchElseRoute) return false;
             branchCondition = controlStatement.expression;
@@ -39521,12 +39550,12 @@ class Emitter {
                     ?? (nextRoute
                         ? {
                             prelude: [...clause.statements, ...nextRoute.prelude],
-                            awaitExprs: nextRoute.awaitExprs,
+                            awaitSteps: nextRoute.awaitSteps,
                             betweenAwaitStatements: nextRoute.betweenAwaitStatements,
                             postAwaitStatements: nextRoute.postAwaitStatements,
                             action: nextRoute.action,
                         }
-                        : { prelude: [...clause.statements], awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
+                        : { prelude: [...clause.statements], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }
@@ -39536,14 +39565,14 @@ class Emitter {
                 switchRoutes.push({
                     caseExpression: ts.isCaseClause(clause) ? clause.expression : null,
                     prelude: route.prelude,
-                    awaitExprs: route.awaitExprs,
+                    awaitSteps: route.awaitSteps,
                     betweenAwaitStatements: route.betweenAwaitStatements,
                     postAwaitStatements: route.postAwaitStatements,
                     action: route.action,
                 });
             }
             if (!switchRoutes.some((route) => route.caseExpression === null)) {
-                switchRoutes.push({ caseExpression: null, prelude: [], awaitExprs: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
+                switchRoutes.push({ caseExpression: null, prelude: [], awaitSteps: [], betweenAwaitStatements: [], postAwaitStatements: [], action: "continue" });
             }
         }
         if (!directAction && !branchCondition && !switchStatement) return false;
@@ -39654,25 +39683,26 @@ class Emitter {
             this.checker,
         ));
         const awaitedControlRoutes: ControlRoute[] = [];
-        if (branchCondition && branchThenRoute && branchThenRoute.awaitExprs.length > 0) {
+        if (branchCondition && branchThenRoute && branchThenRoute.awaitSteps.length > 0) {
             awaitedControlRoutes.push(branchThenRoute);
         }
-        if (branchCondition && branchElseRoute && branchElseRoute.awaitExprs.length > 0) {
+        if (branchCondition && branchElseRoute && branchElseRoute.awaitSteps.length > 0) {
             awaitedControlRoutes.push(branchElseRoute);
         }
         for (const route of switchRoutes) {
-            if (route.awaitExprs.length > 0) awaitedControlRoutes.push(route);
+            if (route.awaitSteps.length > 0) awaitedControlRoutes.push(route);
         }
-        const controlAwaitData = awaitedControlRoutes.flatMap((route) => route.awaitExprs.map((awaitExpr) => ({
-            awaitExpr,
+        const controlAwaitData = awaitedControlRoutes.flatMap((route) => route.awaitSteps.map((awaitStep) => ({
+            awaitStep,
+            awaitExpr: awaitStep.awaitExpr,
             promiseType: this.prepareType(mapTsType(
-                awaitExpr.expression,
-                this.checker.getTypeAtLocation(awaitExpr.expression),
+                awaitStep.awaitExpr.expression,
+                this.checker.getTypeAtLocation(awaitStep.awaitExpr.expression),
                 this.checker,
             )),
             awaitedType: this.prepareType(mapTsType(
-                awaitExpr,
-                this.checker.getTypeAtLocation(awaitExpr),
+                awaitStep.awaitExpr,
+                this.checker.getTypeAtLocation(awaitStep.awaitExpr),
                 this.checker,
             )),
         })));
@@ -39733,6 +39763,18 @@ class Emitter {
                 ? [{ symbol, index, type, field: `awaited_body_value_${index}` }]
                 : [];
         });
+        const controlAliasEntries: { symbol: ts.Symbol; type: CType; field: string }[] = [];
+        const controlAliasBySymbol = new Map<ts.Symbol, { symbol: ts.Symbol; type: CType; field: string }>();
+        for (const { awaitStep, awaitedType } of controlAwaitData) {
+            const symbol = awaitStep.alias ? this.symbolForIdentifier(awaitStep.alias) : null;
+            if (!symbol || awaitedType.kind === "void" || awaitedType.kind === "never") continue;
+            let entry = controlAliasBySymbol.get(symbol);
+            if (!entry) {
+                entry = { symbol, type: awaitedType, field: `awaited_control_value_${controlAliasEntries.length}` };
+                controlAliasEntries.push(entry);
+                controlAliasBySymbol.set(symbol, entry);
+            }
+        }
         const names = steps.map(() => `tsc_async_await_iterator_multi_continue_${this.asyncAwaitReturnContinuationAdapters++}`);
         const envTypes = names.map((name) => `${name}_env_t`);
         const conditionName = branchConditionAwaitExpr
@@ -39743,9 +39785,11 @@ class Emitter {
             : null;
         const controlAdapterNames = new Map<ts.AwaitExpression, string>();
         const controlPromiseTypeByAwait = new Map<ts.AwaitExpression, CType>();
-        for (const { awaitExpr, promiseType } of controlAwaitData) {
+        const controlAwaitedTypeByAwait = new Map<ts.AwaitExpression, CType>();
+        for (const { awaitExpr, promiseType, awaitedType } of controlAwaitData) {
             controlAdapterNames.set(awaitExpr, `tsc_async_await_iterator_multi_continue_control_${this.asyncAwaitReturnContinuationAdapters++}`);
             controlPromiseTypeByAwait.set(awaitExpr, promiseType);
+            controlAwaitedTypeByAwait.set(awaitExpr, awaitedType);
         }
         for (const envType of envTypes) {
             this.structDecls.open(`typedef struct ${envType}`);
@@ -39755,6 +39799,7 @@ class Emitter {
             this.structDecls.line("size_t index;");
             this.structDecls.line(`${itemType.c} iteration_value;`);
             for (const alias of bodyAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
+            for (const alias of controlAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
             for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -39860,8 +39905,9 @@ class Emitter {
             else emitFallthrough(out, state);
         };
         for (const route of awaitedControlRoutes) {
-            for (let index = 0; index < route.awaitExprs.length; index++) {
-                const awaitExpr = route.awaitExprs[index]!;
+            for (let index = 0; index < route.awaitSteps.length; index++) {
+                const awaitStep = route.awaitSteps[index]!;
+                const awaitExpr = awaitStep.awaitExpr;
                 const name = controlAdapterNames.get(awaitExpr)!;
                 const routeBuf = new CBuf();
                 const routeEnvType = envTypes[envTypes.length - 1]!;
@@ -39877,12 +39923,27 @@ class Emitter {
                 routeBuf.line("return;");
                 routeBuf.close();
                 const routeScope = scopeFor("state", steps.length);
+                for (let priorIndex = 0; priorIndex < index; priorIndex++) {
+                    const priorAlias = route.awaitSteps[priorIndex]!.alias;
+                    const priorSymbol = priorAlias ? this.symbolForIdentifier(priorAlias) : null;
+                    const priorEntry = priorSymbol ? controlAliasBySymbol.get(priorSymbol) : undefined;
+                    if (priorEntry) routeScope.set(priorEntry.symbol, `state->${priorEntry.field}`);
+                }
                 this.argumentValueScopes.push(routeScope);
                 if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
                 try {
-                    if (index + 1 < route.awaitExprs.length) {
+                    const currentSymbol = awaitStep.alias ? this.symbolForIdentifier(awaitStep.alias) : null;
+                    const currentAlias = currentSymbol ? controlAliasBySymbol.get(currentSymbol) : undefined;
+                    if (currentAlias) {
+                        const currentValueVar = this.freshTemp("_async_iter_control_value");
+                        const currentAwaitedType = controlAwaitedTypeByAwait.get(awaitExpr)!;
+                        routeBuf.line(`${currentAlias.type.c} ${currentValueVar} = ${this.coerce(this.promiseFulfilledValue(controlPromiseTypeByAwait.get(awaitExpr)!.elem, "_p"), currentAwaitedType, awaitExpr)};`);
+                        routeBuf.line(`state->${currentAlias.field} = ${currentValueVar};`);
+                        routeScope.set(currentAlias.symbol, currentValueVar);
+                    }
+                    if (index + 1 < route.awaitSteps.length) {
                         for (const statement of route.betweenAwaitStatements[index] ?? []) this.emitStmt(routeBuf, statement);
-                        const nextAwait = route.awaitExprs[index + 1]!;
+                        const nextAwait = route.awaitSteps[index + 1]!.awaitExpr;
                         const nextSource = this.emitExpr(nextAwait.expression);
                         const nextSourceVar = this.freshTemp("_async_iter_control_source");
                         const nextAdapter = controlAdapterNames.get(nextAwait)!;
@@ -39910,11 +39971,11 @@ class Emitter {
         }
         const emitControlRoute = (out: CBuf, state: string, route: ControlRoute): void => {
             for (const statement of route.prelude) this.emitStmt(out, statement);
-            if (route.awaitExprs.length === 0) {
+            if (route.awaitSteps.length === 0) {
                 emitAction(out, state, route.action);
                 return;
             }
-            const awaitExpr = route.awaitExprs[0]!;
+            const awaitExpr = route.awaitSteps[0]!.awaitExpr;
             const adapter = controlAdapterNames.get(awaitExpr);
             const promiseType = controlPromiseTypeByAwait.get(awaitExpr);
             if (!adapter || !promiseType) return;
