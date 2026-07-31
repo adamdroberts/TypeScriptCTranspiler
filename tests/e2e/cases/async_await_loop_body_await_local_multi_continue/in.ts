@@ -19,7 +19,8 @@ async function run(): Promise<string> {
     for (; await laterCondition(count < 2);) {
         const first = await laterBody("first-" + count);
         middleValue = first + "-middle";
-        await laterBody(first + "-second");
+        const second = await laterBody(first + "-second");
+        await laterBody(second + "-third");
         count++;
         continue;
     }

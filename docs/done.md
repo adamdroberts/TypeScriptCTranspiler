@@ -3682,7 +3682,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_commonjs_module_exports_this` | CommonJS whole-value module.exports = this materializes the top-level exports object through AOT package-source lowering |
 | `node_modules_commonjs_module_exports_instanceof_default` | CommonJS whole-value module.exports instanceof defaults lower through the boxed AOT package-source path |
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |
-| `async_await_loop_body_await_local_multi_continue` | bounded awaited loop-body continuations carry one awaited local through await-free statements and later awaited body work before `continue` |
+| `async_await_loop_body_await_local_multi_continue` | bounded awaited loop-body continuations carry ordered awaited locals through await-free statements and later awaited body work before `continue` |
 - Direct branch `return await` now carries an assigned-before-use uninitialized `var` through an await-free `while` prelude across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Direct branch `return await` now carries assigned-before-use uninitialized `var` state through await-free `while`, `do while`, ordinary `for`, `for-of`, and `for-in` preludes across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Direct branch `return await` now hoists simple `var` declarations inside all five await-free loop-prelude body shapes, preserves their assignments through the suspension, and retains JavaScript `undefined` on the `while` false fallthrough across async declarations, class methods, and function values. Test: `async_await_while_condition`.

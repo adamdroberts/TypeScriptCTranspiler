@@ -291,6 +291,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitExprs: readonly ts.AwaitExpression[];
     bodyReturnExpr: ts.Expression;
     bodyAwaitedAliasSymbols: readonly ts.Symbol[];
+    bodyAwaitedAliasIndices?: readonly number[];
     bodyBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyPostAwaitStatements: readonly ts.Statement[];
     bodyAwaitFinallyStatements?: readonly ts.Statement[];
@@ -35704,6 +35705,7 @@ class Emitter {
         let bodyAwaitExprs: readonly ts.AwaitExpression[] = [];
         let bodyReturnExpr: ts.Expression | null = null;
         let bodyAwaitedAliasSymbols: readonly ts.Symbol[] = [];
+        let bodyAwaitedAliasIndices: readonly number[] = [];
         let bodyBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyPostAwaitStatements: readonly ts.Statement[] = [];
         let bodyPreludeStatements: readonly ts.Statement[];
@@ -35943,8 +35945,11 @@ class Emitter {
                 }
                 bodyAwaitExpr = bodyAwaitableStatements[0]!.expression;
                 bodyAwaitExprs = bodyAwaitableStatements.map(({ expression }) => expression);
-                if (bodyAwaitableStatements.some(({ symbol }, index) => symbol && index !== 0)) return false;
-                if (bodyAwaitableStatements[0]!.symbol) bodyAwaitedAliasSymbols = [bodyAwaitableStatements[0]!.symbol];
+                const awaitedAliasEntries = bodyAwaitableStatements.flatMap(({ symbol }, index) =>
+                    symbol ? [{ symbol, index }] : []
+                );
+                bodyAwaitedAliasSymbols = awaitedAliasEntries.map(({ symbol }) => symbol);
+                bodyAwaitedAliasIndices = awaitedAliasEntries.map(({ index }) => index);
                 bodyBetweenAwaitStatements = betweenAwaitStatements;
                 bodyPreludeStatements = bodyContinueStatements.slice(0, firstAwaitIndex);
                 bodyPostAwaitStatements = bodyContinueStatements.slice(lastAwaitIndex + 1);
@@ -36334,6 +36339,7 @@ class Emitter {
             bodyAwaitExprs,
             bodyReturnExpr,
             bodyAwaitedAliasSymbols,
+            bodyAwaitedAliasIndices,
             bodyBetweenAwaitStatements,
             bodyPostAwaitStatements,
             bodyAwaitFinallyStatements,
@@ -36709,10 +36715,13 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitExpr),
             this.checker,
         )));
-        const awaitedAliasSymbol = continuation.bodyAwaitedAliasSymbols[0];
-        const awaitedAliasType = awaitedAliasSymbol && awaitedTypes[0]!.kind !== "void" && awaitedTypes[0]!.kind !== "never"
-            ? awaitedTypes[0]
-            : null;
+        const awaitedAliasEntries = (continuation.bodyAwaitedAliasIndices ?? []).flatMap((index, aliasIndex) => {
+            const symbol = continuation.bodyAwaitedAliasSymbols[aliasIndex];
+            const type = awaitedTypes[index];
+            return symbol && type && type.kind !== "void" && type.kind !== "never"
+                ? [{ symbol, index, type, field: `awaited_alias_value_${aliasIndex}` }]
+                : [];
+        });
         for (let index = 0; index < names.length; index++) {
             const name = names[index]!;
             const envType = `${name}_env_t`;
@@ -36723,7 +36732,7 @@ class Emitter {
                 this.structDecls.line("bool reject_after_success;");
                 this.structDecls.line("tsc_value_t rejection_reason;");
             }
-            if (awaitedAliasType) this.structDecls.line(`${awaitedAliasType.c} awaited_alias_value;`);
+            for (const alias of awaitedAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
             for (const param of continuation.params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (continuation.thisValue) this.structDecls.line(`${continuation.thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -36749,8 +36758,8 @@ class Emitter {
                 );
             const scope = new Map<ts.Symbol, string>();
             for (const param of continuation.params) scope.set(param.symbol, `state->${param.field}`);
-            if (awaitedAliasSymbol && awaitedAliasType && index > 0) {
-                scope.set(awaitedAliasSymbol, "state->awaited_alias_value");
+            for (const alias of awaitedAliasEntries) {
+                if (alias.index < index) scope.set(alias.symbol, `state->${alias.field}`);
             }
             const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
             awaitScope.set(awaitExpr, { c: bodyValueVar, ty: awaitedTypes[index]! });
@@ -36874,8 +36883,8 @@ class Emitter {
                 if (bodyValue) {
                     buf.line(`${awaitedTypes[index]!.c} ${bodyValueVar} = ${bodyValue};`);
                     buf.line(`(void)${bodyValueVar};`);
-                    if (awaitedAliasSymbol && awaitedAliasType && index === 0) {
-                        scope.set(awaitedAliasSymbol, bodyValueVar);
+                    for (const alias of awaitedAliasEntries) {
+                        if (alias.index === index) scope.set(alias.symbol, bodyValueVar);
                     }
                 }
                 for (const statement of continuation.bodyAwaitFinallyStatements ?? []) this.emitStmt(buf, statement);
@@ -36889,8 +36898,9 @@ class Emitter {
                     if (continuation.bodyAwaitFinallyAwaitExpr) {
                         buf.line(`${nextEnvVar}->reject_after_success = false;`);
                     }
-                    if (awaitedAliasType) {
-                        buf.line(`${nextEnvVar}->awaited_alias_value = ${index === 0 ? bodyValueVar : "state->awaited_alias_value"};`);
+                    for (const alias of awaitedAliasEntries) {
+                        const value = alias.index === index ? bodyValueVar : `state->${alias.field}`;
+                        buf.line(`${nextEnvVar}->${alias.field} = ${value};`);
                     }
                     for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
