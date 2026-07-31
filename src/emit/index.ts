@@ -38899,12 +38899,230 @@ class Emitter {
         return name;
     }
 
+    private emitAsyncAwaitIteratorBodyMultiAwaitTerminalContinuation(
+        buf: CBuf,
+        body: ts.Block,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+    ): boolean {
+        const result = body.statements[body.statements.length - 1];
+        const loop = body.statements[body.statements.length - 2];
+        if (!result || !loop || !ts.isReturnStatement(result) || !result.expression ||
+            (!ts.isForInStatement(loop) && !ts.isForOfStatement(loop))) return false;
+        const fallthroughAwait = this.unwrapTransparentExpression(result.expression);
+        if (!ts.isAwaitExpression(fallthroughAwait)) return false;
+        const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
+        if (loopBody.length < 3) return false;
+        const bodyAwaits = loopBody.slice(0, -1).map((statement) => {
+            if (!ts.isExpressionStatement(statement)) return null;
+            const expression = this.unwrapTransparentExpression(statement.expression);
+            return ts.isAwaitExpression(expression) ? expression : null;
+        });
+        if (bodyAwaits.length < 2 || bodyAwaits.some((awaitExpr) => !awaitExpr)) return false;
+        const terminal = loopBody[loopBody.length - 1]!;
+        const isThrow = ts.isThrowStatement(terminal);
+        const terminalAwaitCandidate = ts.isReturnStatement(terminal) || isThrow
+            ? terminal.expression ? this.unwrapTransparentExpression(terminal.expression) : null
+            : null;
+        if (!terminalAwaitCandidate || !ts.isAwaitExpression(terminalAwaitCandidate)) return false;
+        const terminalAwait = terminalAwaitCandidate;
+
+        let binding: ts.Identifier;
+        if (ts.isForInStatement(loop)) {
+            if (ts.isVariableDeclarationList(loop.initializer)) {
+                const declaration = loop.initializer.declarations[0];
+                if (!declaration || !ts.isIdentifier(declaration.name)) return false;
+                binding = declaration.name;
+            } else if (ts.isIdentifier(loop.initializer)) binding = loop.initializer;
+            else return false;
+        } else {
+            if (!ts.isVariableDeclarationList(loop.initializer)) return false;
+            const declaration = loop.initializer.declarations[0];
+            if (!declaration || !ts.isIdentifier(declaration.name)) return false;
+            binding = declaration.name;
+        }
+        const bindingSymbol = this.symbolForIdentifier(binding);
+        if (!bindingSymbol) return false;
+        const params = this.asyncAwaitContinuationParameters(parameters);
+        const iter = this.emitExpr(loop.expression);
+        let itemsExpr: string;
+        let itemType: CType;
+        if (ts.isForInStatement(loop)) {
+            if (iter.ty.kind !== "value") return false;
+            itemsExpr = `tsc_value_object_keys(${iter.c})`;
+            itemType = T_STRING;
+        } else {
+            if (iter.ty.kind !== "array" || !iter.ty.elem) return false;
+            itemsExpr = iter.c;
+            itemType = iter.ty.elem;
+        }
+        const bodyPromiseTypes = bodyAwaits.map((awaitExpr) => this.prepareType(mapTsType(
+            awaitExpr!.expression,
+            this.checker.getTypeAtLocation(awaitExpr!.expression),
+            this.checker,
+        )));
+        if (bodyPromiseTypes.some((type) => type.kind !== "promise")) return false;
+        const fallthroughPromiseType = this.prepareType(mapTsType(
+            fallthroughAwait.expression,
+            this.checker.getTypeAtLocation(fallthroughAwait.expression),
+            this.checker,
+        ));
+        const fallthroughAwaitedType = this.prepareType(mapTsType(
+            fallthroughAwait,
+            this.checker.getTypeAtLocation(fallthroughAwait),
+            this.checker,
+        ));
+        const terminalPromiseType = this.prepareType(mapTsType(
+            terminalAwait.expression,
+            this.checker.getTypeAtLocation(terminalAwait.expression),
+            this.checker,
+        ));
+        const terminalAwaitedType = this.prepareType(mapTsType(
+            terminalAwait,
+            this.checker.getTypeAtLocation(terminalAwait),
+            this.checker,
+        ));
+        if (fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never" ||
+            terminalPromiseType.kind !== "promise" || terminalAwaitedType.kind === "never") return false;
+        for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
+
+        const names = bodyAwaits.map(() => `tsc_async_await_iterator_multi_body_${this.asyncAwaitReturnContinuationAdapters++}`);
+        const envTypes = names.map((name) => `${name}_env_t`);
+        for (const envType of envTypes) {
+            this.structDecls.open(`typedef struct ${envType}`);
+            this.structDecls.line("tsc_promise_t* receiver;");
+            this.structDecls.line("tsc_promise_t* result_promise;");
+            this.structDecls.line(`${itemType.c} iteration_value;`);
+            for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+            if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+            this.structDecls.close(` ${envType};`);
+            this.structDecls.line();
+        }
+        names.forEach((name) => this.protos.line(`void ${name}(void* env);`));
+        const terminalAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+            terminalPromiseType,
+            terminalAwaitedType,
+            terminalAwait,
+            isThrow ? terminalAwait : terminalAwait.expression,
+            params,
+            thisValue,
+            isThrow,
+            [],
+            [],
+            [{ symbol: bindingSymbol, type: itemType, field: "iteration_value" }],
+        );
+        const scopeFor = (state: string): Map<ts.Symbol, string> => {
+            const scope = new Map<ts.Symbol, string>();
+            for (const param of params) scope.set(param.symbol, `${state}->${param.field}`);
+            scope.set(bindingSymbol!, `${state}->iteration_value`);
+            return scope;
+        };
+        for (let index = 0; index < names.length; index++) {
+            const bodyBuf = new CBuf();
+            const name = names[index]!;
+            const envType = envTypes[index]!;
+            bodyBuf.open(`void ${name}(void* env)`);
+            bodyBuf.line(`${envType}* state = (${envType}*)env;`);
+            bodyBuf.line("tsc_promise_t* _p = state->receiver;");
+            bodyBuf.line("tsc_promise_t* _ret = state->result_promise;");
+            bodyBuf.open("if (tsc_promise_is_rejected(_p))");
+            bodyBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            bodyBuf.line("return;");
+            bodyBuf.close();
+            bodyBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+            bodyBuf.line("return;");
+            bodyBuf.close();
+            const nextScope = scopeFor("state");
+            const nextAwait = index + 1 < names.length ? bodyAwaits[index + 1]! : terminalAwait;
+            const nextPromiseType = index + 1 < names.length ? bodyPromiseTypes[index + 1]! : terminalPromiseType;
+            const nextAdapter = index + 1 < names.length ? names[index + 1]! : terminalAdapter;
+            this.argumentValueScopes.push(nextScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            try {
+                source = this.emitExpr(nextAwait.expression);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_async_iter_multi_source");
+            const envVar = this.freshTemp("_async_iter_multi_env");
+            bodyBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, nextPromiseType, nextAwait.expression)};`);
+            bodyBuf.line(`${nextAdapter}_env_t* const ${envVar} = (${nextAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${nextAdapter}_env_t));`);
+            bodyBuf.line(`${envVar}->receiver = ${sourceVar};`);
+            bodyBuf.line(`${envVar}->result_promise = _ret;`);
+            if (nextAdapter === terminalAdapter) bodyBuf.line(`${envVar}->iteration_value = state->iteration_value;`);
+            else bodyBuf.line(`${envVar}->iteration_value = state->iteration_value;`);
+            for (const param of params) bodyBuf.line(`${envVar}->${param.field} = state->${param.field};`);
+            if (thisValue) bodyBuf.line(`${envVar}->this_arg = state->this_arg;`);
+            bodyBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+            bodyBuf.line(`tsc_promise_add_callback(${sourceVar}, ${nextAdapter}, ${envVar});`);
+            bodyBuf.close();
+            bodyBuf.open("else");
+            bodyBuf.line(`${nextAdapter}(${envVar});`);
+            bodyBuf.close();
+            bodyBuf.close();
+            bodyBuf.line();
+            this.closureDefs.write(bodyBuf.toString());
+        }
+
+        const itemsVar = this.freshTemp("_async_iter_multi_items");
+        buf.line(`tsc_array_t* const ${itemsVar} = ${itemsExpr};`);
+        if (ts.isForOfStatement(loop)) buf.line(`tsc_array_materialize_all(${itemsVar});`);
+        const resultVar = this.freshTemp("_async_iter_multi_result");
+        buf.line(`tsc_promise_t* const ${resultVar} = tsc_promise_pending();`);
+        buf.open(`if (${itemsVar}->len == 0)`);
+        const emptyScope = new Map<ts.Symbol, string>();
+        for (const param of params) emptyScope.set(param.symbol, param.name);
+        this.argumentValueScopes.push(emptyScope);
+        if (thisValue) this.functionThisStack.push(thisValue);
+        let emptySource: EmitResult;
+        try {
+            emptySource = this.emitExpr(fallthroughAwait.expression);
+        } finally {
+            if (thisValue) this.functionThisStack.pop();
+            this.argumentValueScopes.pop();
+        }
+        buf.line(`tsc_promise_adopt_into(${resultVar}, ${this.coerce(emptySource, fallthroughPromiseType, fallthroughAwait.expression)});`);
+        buf.line(`return ${resultVar};`);
+        buf.close();
+        const initialEnvType = envTypes[0]!;
+        const initialEnv = this.freshTemp("_async_iter_multi_env");
+        buf.line(`${initialEnvType}* const ${initialEnv} = (${initialEnvType}*)TSC_GC_MALLOC(sizeof(${initialEnvType}));`);
+        buf.line(`${initialEnv}->iteration_value = TSC_ARR(${itemType.c}, ${itemsVar}, 0);`);
+        buf.line(`${initialEnv}->result_promise = ${resultVar};`);
+        for (const param of params) buf.line(`${initialEnv}->${param.field} = ${param.name};`);
+        if (thisValue) buf.line(`${initialEnv}->this_arg = ${thisValue.c};`);
+        const initialScope = new Map<ts.Symbol, string>();
+        for (const param of params) initialScope.set(param.symbol, param.name);
+        initialScope.set(bindingSymbol, `TSC_ARR(${itemType.c}, ${itemsVar}, 0)`);
+        this.argumentValueScopes.push(initialScope);
+        if (thisValue) this.functionThisStack.push(thisValue);
+        let initialSource: EmitResult;
+        try {
+            initialSource = this.emitExpr(bodyAwaits[0]!.expression);
+        } finally {
+            if (thisValue) this.functionThisStack.pop();
+            this.argumentValueScopes.pop();
+        }
+        buf.line(`${initialEnv}->receiver = ${this.coerce(initialSource, bodyPromiseTypes[0]!, bodyAwaits[0]!.expression)};`);
+        buf.open(`if (tsc_promise_is_pending(${initialEnv}->receiver))`);
+        buf.line(`tsc_promise_add_callback(${initialEnv}->receiver, ${names[0]}, ${initialEnv});`);
+        buf.close();
+        buf.open("else");
+        buf.line(`${names[0]}(${initialEnv});`);
+        buf.close();
+        buf.line(`return ${resultVar};`);
+        return true;
+    }
+
     private emitAsyncAwaitIteratorBodyTerminalReturnContinuation(
         buf: CBuf,
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
+        if (this.emitAsyncAwaitIteratorBodyMultiAwaitTerminalContinuation(buf, body, parameters, thisValue)) return true;
         const result = body.statements[body.statements.length - 1];
         const loop = body.statements[body.statements.length - 2];
         if (!result || !loop || !ts.isReturnStatement(result) || !result.expression ||
