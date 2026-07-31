@@ -38913,21 +38913,34 @@ class Emitter {
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         if (loopBody.length < 3) return false;
-        const bodySteps = loopBody.slice(0, -1).map((statement) => {
+        const steps: { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[] = [];
+        for (let index = 0; index < loopBody.length - 1; index++) {
+            const statement = loopBody[index]!;
             if (ts.isExpressionStatement(statement)) {
                 const expression = this.unwrapTransparentExpression(statement.expression);
-                return ts.isAwaitExpression(expression) ? { awaitExpr: expression, alias: null as ts.Identifier | null } : null;
+                if (!ts.isAwaitExpression(expression)) return false;
+                steps.push({ awaitExpr: expression, alias: null });
+                continue;
             }
-            if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
-                const declaration = statement.declarationList.declarations[0]!;
-                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return null;
+            if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return false;
+            const declaration = statement.declarationList.declarations[0]!;
+            if (!ts.isIdentifier(declaration.name)) return false;
+            if (declaration.initializer) {
                 const expression = this.unwrapTransparentExpression(declaration.initializer);
-                return ts.isAwaitExpression(expression) ? { awaitExpr: expression, alias: declaration.name } : null;
+                if (!ts.isAwaitExpression(expression)) return false;
+                steps.push({ awaitExpr: expression, alias: declaration.name });
+                continue;
             }
-            return null;
-        });
-        if (bodySteps.length < 2 || bodySteps.some((step) => !step)) return false;
-        const steps = bodySteps as { awaitExpr: ts.AwaitExpression; alias: ts.Identifier | null }[];
+            const assignmentStatement = loopBody[++index];
+            if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return false;
+            const assignment = assignmentStatement.expression;
+            if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                !ts.isIdentifier(assignment.left) || this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return false;
+            const expression = this.unwrapTransparentExpression(assignment.right);
+            if (!ts.isAwaitExpression(expression)) return false;
+            steps.push({ awaitExpr: expression, alias: declaration.name });
+        }
+        if (steps.length < 2) return false;
         const terminal = loopBody[loopBody.length - 1]!;
         const isThrow = ts.isThrowStatement(terminal);
         const terminalAwaitCandidate = ts.isReturnStatement(terminal) || isThrow
