@@ -39441,29 +39441,50 @@ class Emitter {
         let branchElseAction: "continue" | "break" | null = null;
         let branchThenPrelude: readonly ts.Statement[] = [];
         let branchElsePrelude: readonly ts.Statement[] = [];
+        let branchThenAwaitExpr: ts.AwaitExpression | null = null;
+        let branchElseAwaitExpr: ts.AwaitExpression | null = null;
         let switchStatement: ts.SwitchStatement | null = null;
-        let switchRoutes: { caseExpression: ts.Expression | null; prelude: readonly ts.Statement[]; action: "continue" | "break" }[] = [];
+        type ControlRoute = {
+            prelude: readonly ts.Statement[];
+            awaitExpr: ts.AwaitExpression | null;
+            action: "continue" | "break";
+        };
+        let switchRoutes: Array<ControlRoute & { caseExpression: ts.Expression | null }> = [];
         const branchStatements = (statement: ts.Statement): readonly ts.Statement[] =>
             ts.isBlock(statement) ? statement.statements : [statement];
-        const branchRoute = (statements: readonly ts.Statement[]): { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null => {
+        const branchRoute = (statements: readonly ts.Statement[]): ControlRoute | null => {
             if (statements.length === 0) return null;
             const action = actionForStatement(statements[statements.length - 1]);
             if (!action) return null;
             const prelude = statements.slice(0, -1);
+            const finalPrelude = prelude[prelude.length - 1];
+            const finalPreludeExpression = finalPrelude && ts.isExpressionStatement(finalPrelude)
+                ? this.unwrapTransparentExpression(finalPrelude.expression)
+                : null;
+            const awaitExpr = finalPreludeExpression && ts.isAwaitExpression(finalPreludeExpression)
+                ? finalPreludeExpression
+                : null;
+            const synchronousPrelude = awaitExpr ? prelude.slice(0, -1) : prelude;
+            if (awaitExpr) {
+                if (!synchronousPrelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
+                return { prelude: synchronousPrelude, awaitExpr, action };
+            }
             if (!prelude.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return null;
-            return { prelude, action };
+            return { prelude, awaitExpr: null, action };
         };
         if (!directAction && ts.isIfStatement(controlStatement)) {
             const thenStatements = branchStatements(controlStatement.thenStatement);
             const thenRoute = branchRoute(thenStatements);
             if (!thenRoute) return false;
             branchThenPrelude = thenRoute.prelude;
+            branchThenAwaitExpr = thenRoute.awaitExpr;
             branchThenAction = thenRoute.action;
             if (controlStatement.elseStatement) {
                 const elseStatements = branchStatements(controlStatement.elseStatement);
                 const elseRoute = branchRoute(elseStatements);
                 if (!elseRoute) return false;
                 branchElsePrelude = elseRoute.prelude;
+                branchElseAwaitExpr = elseRoute.awaitExpr;
                 branchElseAction = elseRoute.action;
             } else {
                 branchElseAction = "continue";
@@ -39474,7 +39495,7 @@ class Emitter {
         if (!directAction && !branchCondition && ts.isSwitchStatement(controlStatement)) {
             switchStatement = controlStatement;
             let invalidSwitchClause = false;
-            const parsedRoutes: ({ prelude: readonly ts.Statement[]; action: "continue" | "break" } | null)[] =
+            const parsedRoutes: (ControlRoute | null)[] =
                 switchStatement.caseBlock.clauses.map((clause) => {
                     const route = branchRoute(clause.statements);
                     if (route) return route;
@@ -39484,13 +39505,13 @@ class Emitter {
                     return null;
                 });
             if (invalidSwitchClause) return false;
-            let nextRoute: { prelude: readonly ts.Statement[]; action: "continue" | "break" } | null = null;
+            let nextRoute: ControlRoute | null = null;
             for (let index = parsedRoutes.length - 1; index >= 0; index--) {
                 const clause = switchStatement.caseBlock.clauses[index]!;
-                const route: { prelude: readonly ts.Statement[]; action: "continue" | "break" } = parsedRoutes[index]
+                const route: ControlRoute = parsedRoutes[index]
                     ?? (nextRoute
-                        ? { prelude: [...clause.statements, ...nextRoute.prelude], action: nextRoute.action }
-                        : { prelude: [...clause.statements], action: "continue" });
+                        ? { prelude: [...clause.statements, ...nextRoute.prelude], awaitExpr: nextRoute.awaitExpr, action: nextRoute.action }
+                        : { prelude: [...clause.statements], awaitExpr: null, action: "continue" });
                 parsedRoutes[index] = route;
                 nextRoute = route;
             }
@@ -39500,11 +39521,12 @@ class Emitter {
                 switchRoutes.push({
                     caseExpression: ts.isCaseClause(clause) ? clause.expression : null,
                     prelude: route.prelude,
+                    awaitExpr: route.awaitExpr,
                     action: route.action,
                 });
             }
             if (!switchRoutes.some((route) => route.caseExpression === null)) {
-                switchRoutes.push({ caseExpression: null, prelude: [], action: "continue" });
+                switchRoutes.push({ caseExpression: null, prelude: [], awaitExpr: null, action: "continue" });
             }
         }
         if (!directAction && !branchCondition && !switchStatement) return false;
@@ -39614,6 +39636,26 @@ class Emitter {
             this.checker.getTypeAtLocation(fallthroughAwait),
             this.checker,
         ));
+        const awaitedControlRoutes: ControlRoute[] = [];
+        if (branchCondition && branchThenAction && branchThenAwaitExpr) {
+            awaitedControlRoutes.push({ prelude: branchThenPrelude, awaitExpr: branchThenAwaitExpr, action: branchThenAction });
+        }
+        if (branchCondition && branchElseAction && branchElseAwaitExpr) {
+            awaitedControlRoutes.push({ prelude: branchElsePrelude, awaitExpr: branchElseAwaitExpr, action: branchElseAction });
+        }
+        for (const route of switchRoutes) {
+            if (route.awaitExpr) awaitedControlRoutes.push(route);
+        }
+        const controlPromiseTypes = awaitedControlRoutes.map(({ awaitExpr }) => this.prepareType(mapTsType(
+            awaitExpr!.expression,
+            this.checker.getTypeAtLocation(awaitExpr!.expression),
+            this.checker,
+        )));
+        const controlAwaitedTypes = awaitedControlRoutes.map(({ awaitExpr }) => this.prepareType(mapTsType(
+            awaitExpr!,
+            this.checker.getTypeAtLocation(awaitExpr!),
+            this.checker,
+        )));
         const branchConditionPromiseType = branchConditionAwaitExpr
             ? this.prepareType(mapTsType(
                 branchConditionAwaitExpr.expression,
@@ -39657,7 +39699,9 @@ class Emitter {
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never" ||
             (branchConditionPromiseType && branchConditionPromiseType.kind !== "promise") ||
-            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never")) return false;
+            (branchConditionAwaitedType && branchConditionAwaitedType.kind === "never") ||
+            controlPromiseTypes.some((type) => type.kind !== "promise") ||
+            controlAwaitedTypes.some((type) => type.kind === "never")) return false;
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
 
         const bodyAliasEntries = steps.flatMap(({ alias }, index) => {
@@ -39675,6 +39719,13 @@ class Emitter {
         const switchConditionName = switchAwaitExpr
             ? `tsc_async_await_iterator_multi_continue_switch_${this.asyncAwaitReturnContinuationAdapters++}`
             : null;
+        const controlAdapterNames = new Map<ts.AwaitExpression, string>();
+        const controlPromiseTypeByAwait = new Map<ts.AwaitExpression, CType>();
+        for (const [index, route] of awaitedControlRoutes.entries()) {
+            const awaitExpr = route.awaitExpr!;
+            controlAdapterNames.set(awaitExpr, `tsc_async_await_iterator_multi_continue_control_${this.asyncAwaitReturnContinuationAdapters++}`);
+            controlPromiseTypeByAwait.set(awaitExpr, controlPromiseTypes[index]!);
+        }
         for (const envType of envTypes) {
             this.structDecls.open(`typedef struct ${envType}`);
             this.structDecls.line("tsc_promise_t* receiver;");
@@ -39691,6 +39742,7 @@ class Emitter {
         names.forEach((name) => this.protos.line(`void ${name}(void* env);`));
         if (conditionName) this.protos.line(`void ${conditionName}(void* env);`);
         if (switchConditionName) this.protos.line(`void ${switchConditionName}(void* env);`);
+        for (const name of controlAdapterNames.values()) this.protos.line(`void ${name}(void* env);`);
         const terminalAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
             fallthroughPromiseType,
             fallthroughAwaitedType,
@@ -39698,6 +39750,10 @@ class Emitter {
             fallthroughAwait.expression,
             params,
             thisValue,
+            false,
+            [],
+            [],
+            bodyAliasEntries,
         );
         const itemExpr = (state: string): string => `TSC_ARR(${itemType.c}, ${state}->items, ${state}->index)`;
         const scopeFor = (state: string, index: number): Map<ts.Symbol, string> => {
@@ -39743,6 +39799,7 @@ class Emitter {
         const emitFallthrough = (out: CBuf, state: string): void => {
             const fallScope = new Map<ts.Symbol, string>();
             for (const param of params) fallScope.set(param.symbol, `${state}->${param.field}`);
+            for (const alias of bodyAliasEntries) fallScope.set(alias.symbol, `${state}->${alias.field}`);
             this.argumentValueScopes.push(fallScope);
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let fallSource: EmitResult;
@@ -39758,6 +39815,7 @@ class Emitter {
             out.line(`${terminalAdapter}_env_t* const ${fallEnv} = (${terminalAdapter}_env_t*)TSC_GC_MALLOC(sizeof(${terminalAdapter}_env_t));`);
             out.line(`${fallEnv}->receiver = ${fallSourceVar};`);
             out.line(`${fallEnv}->result_promise = ${state}->result_promise;`);
+            for (const alias of bodyAliasEntries) out.line(`${fallEnv}->${alias.field} = ${state}->${alias.field};`);
             for (const param of params) out.line(`${fallEnv}->${param.field} = ${state}->${param.field};`);
             if (thisValue) out.line(`${fallEnv}->this_arg = ${state}->this_arg;`);
             out.open(`if (tsc_promise_is_pending(${fallSourceVar}))`);
@@ -39780,6 +39838,47 @@ class Emitter {
             if (action === "continue") emitContinue(out, state);
             else emitFallthrough(out, state);
         };
+        for (const route of awaitedControlRoutes) {
+            const awaitExpr = route.awaitExpr!;
+            const name = controlAdapterNames.get(awaitExpr)!;
+            const routeBuf = new CBuf();
+            const routeEnvType = envTypes[envTypes.length - 1]!;
+            routeBuf.open(`void ${name}(void* env)`);
+            routeBuf.line(`${routeEnvType}* state = (${routeEnvType}*)env;`);
+            routeBuf.line("tsc_promise_t* _p = state->receiver;");
+            routeBuf.line("tsc_promise_t* _ret = state->result_promise;");
+            routeBuf.open("if (tsc_promise_is_rejected(_p))");
+            routeBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            routeBuf.line("return;");
+            routeBuf.close();
+            routeBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+            routeBuf.line("return;");
+            routeBuf.close();
+            emitAction(routeBuf, "state", route.action);
+            routeBuf.close();
+            routeBuf.line();
+            this.closureDefs.write(routeBuf.toString());
+        }
+        const emitControlRoute = (out: CBuf, state: string, route: ControlRoute): void => {
+            for (const statement of route.prelude) this.emitStmt(out, statement);
+            if (!route.awaitExpr) {
+                emitAction(out, state, route.action);
+                return;
+            }
+            const adapter = controlAdapterNames.get(route.awaitExpr);
+            const promiseType = controlPromiseTypeByAwait.get(route.awaitExpr);
+            if (!adapter || !promiseType) return;
+            const source = this.emitExpr(route.awaitExpr.expression);
+            const sourceVar = this.freshTemp("_async_iter_control_source");
+            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, route.awaitExpr.expression)};`);
+            out.line(`${state}->receiver = ${sourceVar};`);
+            out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+            out.line(`tsc_promise_add_callback(${sourceVar}, ${adapter}, ${state});`);
+            out.close();
+            out.open("else");
+            out.line(`${adapter}(${state});`);
+            out.close();
+        };
         const emitSwitchRouting = (out: CBuf, state: string, discriminator: EmitResult): void => {
             const isString = discriminator.ty.kind === "string";
             const discriminatorVar = this.freshTemp("_async_iter_switch_value");
@@ -39795,8 +39894,7 @@ class Emitter {
                         : `(${discriminatorVar} == ${coercedCase})`;
                 }
                 out.open(emittedRoute ? `else if (${condition})` : `if (${condition})`);
-                for (const statement of route.prelude) this.emitStmt(out, statement);
-                emitAction(out, state, route.action);
+                emitControlRoute(out, state, route);
                 out.close();
                 emittedRoute = true;
             }
@@ -39823,12 +39921,18 @@ class Emitter {
             try {
                 const truth = this.truthyExprFromEmitResult({ c: conditionValue, ty: branchConditionAwaitedType }, branchConditionAwaitExpr);
                 conditionBuf.open(`if (${truth})`);
-                for (const statement of branchThenPrelude) this.emitStmt(conditionBuf, statement);
-                emitAction(conditionBuf, "state", branchThenAction!);
+                emitControlRoute(conditionBuf, "state", {
+                    prelude: branchThenPrelude,
+                    awaitExpr: branchThenAwaitExpr,
+                    action: branchThenAction!,
+                });
                 conditionBuf.close();
                 conditionBuf.open("else");
-                for (const statement of branchElsePrelude) this.emitStmt(conditionBuf, statement);
-                emitAction(conditionBuf, "state", branchElseAction!);
+                emitControlRoute(conditionBuf, "state", {
+                    prelude: branchElsePrelude,
+                    awaitExpr: branchElseAwaitExpr,
+                    action: branchElseAction!,
+                });
                 conditionBuf.close();
             } finally {
                 if (thisValue) this.functionThisStack.pop();
@@ -39935,12 +40039,18 @@ class Emitter {
                         } else {
                             const condition = this.emitExpr(branchCondition);
                             bodyBuf.open(`if (${this.truthyC(condition, branchCondition)})`);
-                            for (const statement of branchThenPrelude) this.emitStmt(bodyBuf, statement);
-                            emitAction(bodyBuf, "state", branchThenAction!);
+                            emitControlRoute(bodyBuf, "state", {
+                                prelude: branchThenPrelude,
+                                awaitExpr: branchThenAwaitExpr,
+                                action: branchThenAction!,
+                            });
                             bodyBuf.close();
                             bodyBuf.open("else");
-                            for (const statement of branchElsePrelude) this.emitStmt(bodyBuf, statement);
-                            emitAction(bodyBuf, "state", branchElseAction!);
+                            emitControlRoute(bodyBuf, "state", {
+                                prelude: branchElsePrelude,
+                                awaitExpr: branchElseAwaitExpr,
+                                action: branchElseAction!,
+                            });
                             bodyBuf.close();
                         }
                     } else if (switchStatement) {
