@@ -39,8 +39,8 @@ async function runOf(): Promise<string> {
                 lastOf = switchContinueValue + switchContinueSuffix;
                 var switchPostSuffix: string;
                 switchPostSuffix = "-post";
-                await laterControl(lastOf);
-                lastOf = lastOf + switchPostSuffix;
+                const switchPostValue = await laterControl(lastOf);
+                lastOf = switchPostValue + switchPostSuffix;
                 continue;
             default:
                 lastOf = second + "-break";
@@ -51,8 +51,9 @@ async function runOf(): Promise<string> {
                 lastOf = switchBreakValue + switchBreakSuffix;
                 var switchBreakPostSuffix: string;
                 switchBreakPostSuffix = "-post";
-                await laterControl(lastOf);
-                lastOf = lastOf + switchBreakPostSuffix;
+                var switchBreakPostValue: string;
+                switchBreakPostValue = await laterControl(lastOf);
+                lastOf = switchBreakPostValue + switchBreakPostSuffix;
                 break;
         }
     }
@@ -76,8 +77,8 @@ async function runIn(): Promise<string> {
                 lastIn = switchContinueValue + switchContinueSuffix;
                 var switchPostSuffix: string;
                 switchPostSuffix = "-post";
-                await laterControl(lastIn);
-                lastIn = lastIn + switchPostSuffix;
+                const switchPostValue = await laterControl(lastIn);
+                lastIn = switchPostValue + switchPostSuffix;
                 continue;
             default:
                 lastIn = second + "-break";
@@ -88,8 +89,9 @@ async function runIn(): Promise<string> {
                 lastIn = switchBreakValue + switchBreakSuffix;
                 var switchBreakPostSuffix: string;
                 switchBreakPostSuffix = "-post";
-                await laterControl(lastIn);
-                lastIn = lastIn + switchBreakPostSuffix;
+                var switchBreakPostValue: string;
+                switchBreakPostValue = await laterControl(lastIn);
+                lastIn = switchBreakPostValue + switchBreakPostSuffix;
                 break;
         }
     }
