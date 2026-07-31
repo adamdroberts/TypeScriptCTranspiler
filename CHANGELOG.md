@@ -9,7 +9,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
-- Bounded awaited `for...of` and `for...in` return/throw arms now carry one declaration-form awaited local into terminal expressions. Tests: `async_await_for_of_body_await_return`, `async_await_for_in_body_await_return`, `async_await_for_of_body_await_throw`, `async_await_for_in_body_await_throw`.
+- Bounded awaited `for...of` and `for...in` return/throw arms now carry one assigned-before-use awaited local into terminal expressions. Tests: `async_await_for_of_body_await_return`, `async_await_for_in_body_await_return`, `async_await_for_of_body_await_throw`, `async_await_for_in_body_await_throw`.
 - Bounded awaited `for...of` and `for...in` return arms now carry the current iteration value into terminal `return await` expressions. Tests: `async_await_for_of_body_await_return`, `async_await_for_in_body_await_return`.
 - Nested awaited loop return arms now carry prelude awaited locals into the terminal `return await` expression. Test: `async_await_loop_body_if_await_assignment_return`.
 - Nested awaited loop return arms now recognize declaration- and assignment-form awaited locals, including await-free statements between prelude suspensions before the final `return await`. Test: `async_await_loop_body_if_await_assignment_return`.

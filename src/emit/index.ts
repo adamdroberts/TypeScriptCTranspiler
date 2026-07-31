@@ -38912,29 +38912,42 @@ class Emitter {
         const fallthroughAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
-        if (loopBody.length !== 2) return false;
-        const bodyStatement = loopBody[0]!;
+        if (loopBody.length !== 2 && loopBody.length !== 3) return false;
+        let bodyStatement = loopBody[0]!;
         let bodyAlias: ts.Identifier | null = null;
         let bodyAwait: ts.AwaitExpression;
+        let terminal: ts.Statement;
         if (ts.isExpressionStatement(bodyStatement)) {
             const candidate = this.unwrapTransparentExpression(bodyStatement.expression);
             if (!ts.isAwaitExpression(candidate)) return false;
             bodyAwait = candidate;
         } else if (ts.isVariableStatement(bodyStatement) && bodyStatement.declarationList.declarations.length === 1) {
             const declaration = bodyStatement.declarationList.declarations[0]!;
-            if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
-            const candidate = this.unwrapTransparentExpression(declaration.initializer);
-            if (!ts.isAwaitExpression(candidate)) return false;
+            if (!ts.isIdentifier(declaration.name)) return false;
             bodyAlias = declaration.name;
-            bodyAwait = candidate;
+            if (declaration.initializer) {
+                const candidate = this.unwrapTransparentExpression(declaration.initializer);
+                if (!ts.isAwaitExpression(candidate)) return false;
+                bodyAwait = candidate;
+            } else {
+                const assignmentStatement = loopBody[1]!;
+                if (loopBody.length !== 3 || !ts.isExpressionStatement(assignmentStatement)) return false;
+                const assignment = assignmentStatement.expression;
+                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                    !ts.isIdentifier(assignment.left) || this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(bodyAlias)) return false;
+                const candidate = this.unwrapTransparentExpression(assignment.right);
+                if (!ts.isAwaitExpression(candidate)) return false;
+                bodyStatement = assignmentStatement;
+                bodyAwait = candidate;
+            }
         } else {
             return false;
         }
-        const terminal = loopBody[1]!;
+        terminal = loopBody[loopBody.length - 1]!;
         const isBreak = ts.isBreakStatement(terminal) && !terminal.label;
         const isThrow = ts.isThrowStatement(terminal);
-        const terminalAwaitCandidate = (ts.isReturnStatement(terminal) || isThrow) && terminal.expression
-            ? this.unwrapTransparentExpression(terminal.expression)
+        const terminalAwaitCandidate = ts.isReturnStatement(terminal) || ts.isThrowStatement(terminal)
+            ? terminal.expression ? this.unwrapTransparentExpression(terminal.expression) : null
             : null;
         if (!isBreak && (!terminalAwaitCandidate || !ts.isAwaitExpression(terminalAwaitCandidate))) return false;
         const terminalAwait: ts.AwaitExpression | null = isBreak ? null : terminalAwaitCandidate as ts.AwaitExpression;
@@ -38981,7 +38994,6 @@ class Emitter {
             : null;
         if (terminalAwait && (!terminalPromiseType || terminalPromiseType.kind !== "promise" || !terminalAwaitedType || terminalAwaitedType.kind === "never")) return false;
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
-
         const bodyName = `tsc_async_await_iterator_terminal_body_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${bodyName}_env_t`;
         this.structDecls.open(`typedef struct ${envType}`);

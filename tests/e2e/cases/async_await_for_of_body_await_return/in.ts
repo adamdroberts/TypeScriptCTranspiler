@@ -11,7 +11,8 @@ function laterResult(value: string): Promise<string> {
 
 async function forOfBodyAwaitReturn(): Promise<string> {
     for (const item of ["a", "b"]) {
-        const bodyValue = await laterBody(item);
+        let bodyValue: string;
+        bodyValue = await laterBody(item);
         return await laterResult(bodyCount + "|" + bodyValue + "|returned");
     }
     return await laterResult("fallthrough");

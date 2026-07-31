@@ -11,7 +11,8 @@ function laterReason(value: string): Promise<string> {
 
 async function forOfBodyAwaitThrow(): Promise<string> {
     for (const item of ["a", "b"]) {
-        const bodyValue = await laterBody(item);
+        let bodyValue: string;
+        bodyValue = await laterBody(item);
         throw await laterReason("of-throw-" + bodyValue + "-" + bodyCount);
     }
     return await Promise.resolve("fallthrough");
