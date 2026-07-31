@@ -65,7 +65,8 @@ async function runOf(): Promise<string> {
         if (ofCount < 0) {
             ofCount += 100;
         } else {
-            var branchBump = 2;
+            var branchBump: number;
+            branchBump = 2;
             ofCount += branchBump;
         }
         const suffix = "-second";
@@ -126,7 +127,8 @@ async function runIn(): Promise<string> {
         if (inCount < 0) {
             inCount += 100;
         } else {
-            var branchBump = 2;
+            var branchBump: number;
+            branchBump = 2;
             inCount += branchBump;
         }
         const suffix = "-second";
