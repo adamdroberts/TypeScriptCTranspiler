@@ -44,7 +44,7 @@ async function runOf(): Promise<string> {
             case 21:
                 ofCount += 1;
             case 22:
-                var clauseBump: number;
+                let clauseBump: number;
                 clauseBump = 1;
                 ofCount += clauseBump;
                 break;
@@ -107,7 +107,7 @@ async function runIn(): Promise<string> {
             case 21:
                 inCount += 1;
             case 22:
-                var clauseBump: number;
+                let clauseBump: number;
                 clauseBump = 1;
                 inCount += clauseBump;
                 break;
