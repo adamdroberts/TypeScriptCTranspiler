@@ -35784,7 +35784,21 @@ class Emitter {
                 const expression = this.unwrapTransparentExpression(declaration.initializer);
                 return ts.isAwaitExpression(expression) ? [{ statement, expression, symbol: this.symbolForIdentifier(declaration.name) }] : [];
             });
-            const bodyAwaitableStatements = [...bodyAwaitStatements, ...bodyAwaitLocalStatements]
+            const bodyAwaitAssignmentStatements: { statement: ts.Statement; expression: ts.AwaitExpression; symbol?: ts.Symbol }[] = bodyContinueStatements.flatMap((statement, statementIndex) => {
+                if (!ts.isExpressionStatement(statement)) return [];
+                const assignment = this.unwrapTransparentExpression(statement.expression);
+                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                    !ts.isIdentifier(assignment.left)) return [];
+                const expression = this.unwrapTransparentExpression(assignment.right);
+                const declarationStatement = bodyContinueStatements[statementIndex - 1];
+                if (!ts.isVariableStatement(declarationStatement) ||
+                    (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                    declarationStatement.declarationList.declarations.length !== 1) return [];
+                const declaration = declarationStatement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name) || declaration.initializer || declaration.name.text !== assignment.left.text) return [];
+                return ts.isAwaitExpression(expression) ? [{ statement, expression, symbol: this.symbolForIdentifier(assignment.left) }] : [];
+            });
+            const bodyAwaitableStatements = [...bodyAwaitStatements, ...bodyAwaitLocalStatements, ...bodyAwaitAssignmentStatements]
                 .sort((left, right) => bodyContinueStatements.indexOf(left.statement) - bodyContinueStatements.indexOf(right.statement));
             const bodyHasOtherAwait = bodyContinueStatements.some((statement) => {
                 let found = false;

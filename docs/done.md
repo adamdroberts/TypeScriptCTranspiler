@@ -3684,6 +3684,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `wordcount` | real-world: fs + regex + Map + sort + captures + env |
 | `async_await_loop_body_await_local_multi_continue` | bounded awaited loop-body continuations carry ordered awaited locals through await-free statements and later awaited body work before `continue` |
 | `async_await_loop_body_if_await_local_continue` | nested awaited loop-body branches carry multiple awaited locals through await-free statements and later awaits before `continue` |
+| `async_await_loop_body_await_assignment_multi_continue` | awaited assigned-before-use `let` aliases carry through multiple loop-body awaits before `continue` |
 - Direct branch `return await` now carries an assigned-before-use uninitialized `var` through an await-free `while` prelude across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Direct branch `return await` now carries assigned-before-use uninitialized `var` state through await-free `while`, `do while`, ordinary `for`, `for-of`, and `for-in` preludes across async declarations, class methods, and function values. Test: `async_await_while_condition`.
 - Direct branch `return await` now hoists simple `var` declarations inside all five await-free loop-prelude body shapes, preserves their assignments through the suspension, and retains JavaScript `undefined` on the `while` false fallthrough across async declarations, class methods, and function values. Test: `async_await_while_condition`.
