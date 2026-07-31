@@ -39434,10 +39434,10 @@ class Emitter {
         if (!controlStatement) return false;
         type ControlAction = "continue" | "break" | "return" | "throw";
         const actionForStatement = (statement: ts.Statement | undefined): ControlAction | null =>
-            statement && ts.isContinueStatement(statement) && !statement.label ? "continue" :
+                statement && ts.isContinueStatement(statement) && !statement.label ? "continue" :
                 statement && ts.isBreakStatement(statement) && !statement.label ? "break" :
-                    statement && ts.isReturnStatement(statement) && statement.expression &&
-                    this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "return" :
+                    statement && ts.isReturnStatement(statement) &&
+                    (!statement.expression || this.asyncAwaitSyncReturnExpressionSupported(statement.expression)) ? "return" :
                     statement && ts.isThrowStatement(statement) && statement.expression &&
                     this.asyncAwaitSyncReturnExpressionSupported(statement.expression) ? "throw" : null;
         let directAction = actionForStatement(controlStatement);
@@ -40009,7 +40009,11 @@ class Emitter {
             throwExpression: ts.Expression | null,
         ): void => {
             if (action === "return") {
-                if (!returnExpression) return;
+                if (!returnExpression) {
+                    out.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
+                    out.line("return;");
+                    return;
+                }
                 const returned = this.emitExpr(returnExpression);
                 const resolved = returned.ty.kind === "promise"
                     ? returned.c
