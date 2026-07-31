@@ -37,6 +37,9 @@ async function runOf(): Promise<string> {
         for (; ofCount === 14;) {
             ofCount += 1;
         }
+        for (const nested of ["nested"]) {
+            ofCount += nested.length;
+        }
         const suffix = "-second";
         const second = await laterOf(first + suffix);
         return await later(ofCount + "|" + second);
@@ -66,6 +69,9 @@ async function runIn(): Promise<string> {
         } while (inCount === 13);
         for (; inCount === 14;) {
             inCount += 1;
+        }
+        for (const nestedKey in { nested: "value" }) {
+            inCount += nestedKey.length;
         }
         const suffix = "-second";
         const second = await laterIn(first + suffix);
