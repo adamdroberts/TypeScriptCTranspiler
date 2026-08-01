@@ -1,0 +1,15 @@
+of-a-finally-pre
+of-a-cleanup
+of-b-finally-pre
+of-b-cleanup
+of-b-return
+in-a-finally-pre
+in-a-cleanup
+in-b-finally-pre
+in-b-cleanup
+in-b-return
+body-rejected-finally-pre
+body-rejected-cleanup
+body-error-body-rejected-pre-rejected
+cleanup-rejected-finally-pre
+cleanup-error-cleanup-rejected-finally-rejected

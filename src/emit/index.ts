@@ -39943,13 +39943,17 @@ class Emitter {
                         ? this.unwrapTransparentExpression(awaitStatement.expression)
                         : null;
                     const finallyStatements = statement.finallyBlock?.statements ?? [];
-                    const finallyAwaitStatement = finallyStatements.length > 0 &&
-                        ts.isExpressionStatement(finallyStatements[0]!)
-                        ? finallyStatements[0] as ts.ExpressionStatement
+                    const finallyAwaitIndex = finallyStatements.findIndex((finallyStatement) =>
+                        ts.isExpressionStatement(finallyStatement) &&
+                        ts.isAwaitExpression(this.unwrapTransparentExpression(finallyStatement.expression)));
+                    const finallyAwaitExpression = finallyAwaitIndex >= 0
+                        ? this.unwrapTransparentExpression(
+                            (finallyStatements[finallyAwaitIndex]! as ts.ExpressionStatement).expression,
+                        )
                         : null;
-                    const finallyAwaitExpression = finallyAwaitStatement
-                        ? this.unwrapTransparentExpression(finallyAwaitStatement.expression)
-                        : null;
+                    const finallyPreAwaitStatements = finallyAwaitIndex >= 0
+                        ? finallyStatements.slice(0, finallyAwaitIndex)
+                        : [];
                     const hasFinallyAwait = finallyAwaitExpression !== null &&
                         ts.isAwaitExpression(finallyAwaitExpression);
                     const hasSupportedCatch = !statement.catchClause ||
@@ -39958,8 +39962,10 @@ class Emitter {
                             awaitFreeBranchStatementSupported(child, statement)));
                     const hasSupportedFinally = !statement.finallyBlock ||
                         (hasFinallyAwait
-                            ? finallyStatements.slice(1).every((child) =>
-                                awaitFreeBranchStatementSupported(child, statement))
+                            ? finallyPreAwaitStatements.every((child) =>
+                                awaitFreeBranchStatementSupported(child, statement)) &&
+                                finallyStatements.slice(finallyAwaitIndex + 1).every((child) =>
+                                    awaitFreeBranchStatementSupported(child, statement))
                             : finallyStatements.every((child) =>
                                 awaitFreeBranchStatementSupported(child, statement)));
                     if ((statement.catchClause || statement.finallyBlock) &&
@@ -39990,14 +39996,17 @@ class Emitter {
                                 catchIndex === catchAwaitSteps.length - 1,
                             )) return null;
                         }
-                        if (finalizerAwait && !addAwait(
-                            finalizerAwait,
-                            null,
-                            null,
-                            null,
-                            finallyStatements.slice(1),
-                            true,
-                        )) return null;
+                        if (finalizerAwait) {
+                            pendingStatements = finallyPreAwaitStatements;
+                            if (!addAwait(
+                                finalizerAwait,
+                                null,
+                                null,
+                                null,
+                                finallyStatements.slice(finallyAwaitIndex + 1),
+                                true,
+                            )) return null;
+                        }
                         continue;
                     }
                 }
