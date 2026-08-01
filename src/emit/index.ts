@@ -39883,7 +39883,15 @@ class Emitter {
                             ? { steps: [{ expression, alias: declaration.name, postStatements: [] }], nextIndex: catchIndex + 2 }
                             : null;
                     };
-                    const firstCatchStep = catchAwaitStepAt(0);
+                    const catchPreAwaitStatements: ts.Statement[] = [];
+                    let firstCatchIndex = 0;
+                    while (catchStatements[firstCatchIndex] && !catchAwaitStepAt(firstCatchIndex)) {
+                        const catchPreAwaitStatement = catchStatements[firstCatchIndex]!;
+                        if (!awaitFreeBranchStatementSupported(catchPreAwaitStatement, statement)) break;
+                        catchPreAwaitStatements.push(catchPreAwaitStatement);
+                        firstCatchIndex++;
+                    }
+                    const firstCatchStep = catchAwaitStepAt(firstCatchIndex);
                     if (firstCatchStep) {
                         let currentCatchAwait = firstCatchStep.steps[0]!.expression;
                         let currentCatchAlias = firstCatchStep.steps[0]!.alias;
@@ -39969,6 +39977,7 @@ class Emitter {
                         )) return null;
                         for (let catchIndex = 0; catchIndex < catchAwaitSteps.length; catchIndex++) {
                             const catchStep = catchAwaitSteps[catchIndex]!;
+                            if (catchIndex === 0) pendingStatements = catchPreAwaitStatements;
                             if (!addAwait(
                                 catchStep.expression,
                                 catchStep.alias,
@@ -40342,12 +40351,15 @@ class Emitter {
             state: string,
             statements: readonly ts.Statement[],
             captures: readonly NestedBranchCapture[],
+            extraScope: ReadonlyMap<ts.Symbol, string> = new Map<ts.Symbol, string>(),
         ): void => {
             const captureEntries = captures
                 .map((capture) => branchLocalBySymbol.get(capture.symbol))
                 .filter((entry): entry is NestedBranchLocal => !!entry);
             const captureSymbols = new Set(captureEntries.map((entry) => entry.symbol));
-            this.argumentValueScopes.push(stateScope(state, captureSymbols));
+            const scope = stateScope(state, captureSymbols);
+            for (const [symbol, value] of extraScope) scope.set(symbol, value);
+            this.argumentValueScopes.push(scope);
             try {
                 for (const statement of statements) {
                     const flattenNestedBlock = ts.isBlock(statement) && captureEntries.some((entry) =>
@@ -40402,7 +40414,9 @@ class Emitter {
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                emitCapturedBranchStatements(out, state, preludeAwait.before, preludeAwait.captures);
+                const beforeScope = new Map<ts.Symbol, string>();
+                if (catchSymbol) beforeScope.set(catchSymbol, `${state}->catch_reason`);
+                emitCapturedBranchStatements(out, state, preludeAwait.before, preludeAwait.captures, beforeScope);
                 const sourceScope = stateScope(state);
                 if (catchSymbol) sourceScope.set(catchSymbol, `${state}->catch_reason`);
                 this.argumentValueScopes.push(sourceScope);
@@ -40439,7 +40453,9 @@ class Emitter {
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                emitCapturedBranchStatements(out, state, beforeStatements, captures);
+                const beforeScope = new Map<ts.Symbol, string>();
+                if (catchSymbol) beforeScope.set(catchSymbol, `${state}->catch_reason`);
+                emitCapturedBranchStatements(out, state, beforeStatements, captures, beforeScope);
                 const sourceScope = stateScope(state);
                 if (catchSymbol) sourceScope.set(catchSymbol, `${state}->catch_reason`);
                 this.argumentValueScopes.push(sourceScope);
