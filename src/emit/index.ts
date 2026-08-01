@@ -39439,56 +39439,74 @@ class Emitter {
         type NestedBranchAwait = {
             expression: ts.AwaitExpression;
             alias: ts.Identifier | null;
+            before: readonly ts.Statement[];
         };
-        const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranchAwait[] | null => {
+        type NestedBranch = {
+            awaits: NestedBranchAwait[];
+            postlude: readonly ts.Statement[];
+        };
+        const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranch | null => {
             if (statements.length === 0) return null;
             const expressions: NestedBranchAwait[] = [];
+            let pendingStatements: ts.Statement[] = [];
+            const addAwait = (expression: ts.AwaitExpression, alias: ts.Identifier | null): void => {
+                expressions.push({ expression, alias, before: pendingStatements });
+                pendingStatements = [];
+            };
             for (let index = 0; index < statements.length; index++) {
                 const statement = statements[index]!;
                 if (ts.isExpressionStatement(statement)) {
                     const expression = this.unwrapTransparentExpression(statement.expression);
-                    if (!ts.isAwaitExpression(expression)) return null;
-                    expressions.push({ expression, alias: null });
+                    if (ts.isAwaitExpression(expression)) {
+                        addAwait(expression, null);
+                    } else if (this.asyncAwaitLoopPostStatementSupported(statement)) {
+                        pendingStatements.push(statement);
+                    } else return null;
                     continue;
                 }
-                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return null;
-                const declaration = statement.declarationList.declarations[0]!;
-                if (!ts.isIdentifier(declaration.name)) return null;
-                let expression: ts.AwaitExpression | null = null;
-                if (declaration.initializer) {
-                    const candidate = this.unwrapTransparentExpression(declaration.initializer);
-                    if (ts.isAwaitExpression(candidate)) expression = candidate;
-                } else {
-                    const assignmentStatement = statements[index + 1];
-                    if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return null;
-                    const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
-                    if (!ts.isBinaryExpression(assignment) ||
-                        assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-                        !ts.isIdentifier(assignment.left) ||
-                        this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return null;
-                    const candidate = this.unwrapTransparentExpression(assignment.right);
-                    if (ts.isAwaitExpression(candidate)) expression = candidate;
-                    index++;
+                if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
+                    const declaration = statement.declarationList.declarations[0]!;
+                    if (!ts.isIdentifier(declaration.name)) return null;
+                    let expression: ts.AwaitExpression | null = null;
+                    if (declaration.initializer) {
+                        const candidate = this.unwrapTransparentExpression(declaration.initializer);
+                        if (ts.isAwaitExpression(candidate)) expression = candidate;
+                    } else {
+                        const assignmentStatement = statements[index + 1];
+                        if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return null;
+                        const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                        if (!ts.isBinaryExpression(assignment) ||
+                            assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                            !ts.isIdentifier(assignment.left) ||
+                            this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return null;
+                        const candidate = this.unwrapTransparentExpression(assignment.right);
+                        if (ts.isAwaitExpression(candidate)) expression = candidate;
+                        index++;
+                    }
+                    if (!expression) return null;
+                    addAwait(expression, declaration.name);
+                    continue;
                 }
-                if (!expression) return null;
-                expressions.push({ expression, alias: declaration.name });
+                return null;
             }
-            return expressions;
+            return expressions.length > 0 ? { awaits: expressions, postlude: pendingStatements } : null;
         };
         const thenStatements = ts.isBlock(nestedIf.thenStatement)
             ? nestedIf.thenStatement.statements
             : [nestedIf.thenStatement];
-        const bodyAwaits = awaitedBranchExpressions(thenStatements);
-        if (!bodyAwaits) return false;
-        let elseAwaits: NestedBranchAwait[] = [];
+        const bodyBranch = awaitedBranchExpressions(thenStatements);
+        if (!bodyBranch) return false;
+        let elseBranch: NestedBranch = { awaits: [], postlude: [] };
         if (nestedIf.elseStatement) {
             const elseStatements = ts.isBlock(nestedIf.elseStatement)
                 ? nestedIf.elseStatement.statements
                 : [nestedIf.elseStatement];
             const candidateAwaits = awaitedBranchExpressions(elseStatements);
             if (!candidateAwaits) return false;
-            elseAwaits = candidateAwaits;
+            elseBranch = candidateAwaits;
         }
+        const bodyAwaits = bodyBranch.awaits;
+        const elseAwaits = elseBranch.awaits;
         const conditionAwait = this.unwrapTransparentExpression(nestedIf.expression);
         if (!ts.isAwaitExpression(conditionAwait)) return false;
         const preludeStatements = loopBody.slice(0, -2);
@@ -39691,11 +39709,13 @@ class Emitter {
             awaitExpression: ts.AwaitExpression,
             awaitPromiseType: CType,
             callbackName: string,
+            beforeStatements: readonly ts.Statement[] = [],
         ): void => {
             this.argumentValueScopes.push(stateScope(state));
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
+                for (const statement of beforeStatements) this.emitStmt(out, statement);
                 source = this.emitExpr(awaitExpression.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
@@ -39710,6 +39730,21 @@ class Emitter {
             out.open("else");
             out.line(`${callbackName}(${state});`);
             out.close();
+        };
+        const emitBranchStatements = (
+            out: CBuf,
+            state: string,
+            statements: readonly ts.Statement[],
+        ): void => {
+            if (statements.length === 0) return;
+            this.argumentValueScopes.push(stateScope(state));
+            if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
+            try {
+                for (const statement of statements) this.emitStmt(out, statement);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
         };
         const emitContinue = (out: CBuf, state: string): void => {
             out.line(`${state}->index++;`);
@@ -39779,11 +39814,25 @@ class Emitter {
         conditionBuf.line(`${conditionAwaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, conditionAwait)};`);
         const conditionTruth = this.truthyExprFromEmitResult({ c: conditionValue, ty: conditionAwaitedType }, conditionAwait);
         conditionBuf.open(`if (${conditionTruth})`);
-        emitControlSource(conditionBuf, "state", bodyAwaits[0]!.expression, bodyPromiseTypes[0]!, controlNames[0]!);
+        emitControlSource(
+            conditionBuf,
+            "state",
+            bodyAwaits[0]!.expression,
+            bodyPromiseTypes[0]!,
+            controlNames[0]!,
+            bodyAwaits[0]!.before,
+        );
         conditionBuf.close();
         conditionBuf.open("else");
         if (elseAwaits.length > 0) {
-            emitControlSource(conditionBuf, "state", elseAwaits[0]!.expression, elsePromiseTypes[0]!, elseControlNames[0]!);
+            emitControlSource(
+                conditionBuf,
+                "state",
+                elseAwaits[0]!.expression,
+                elsePromiseTypes[0]!,
+                elseControlNames[0]!,
+                elseAwaits[0]!.before,
+            );
         } else {
             emitContinue(conditionBuf, "state");
         }
@@ -39797,6 +39846,7 @@ class Emitter {
             branchAwaits: readonly NestedBranchAwait[],
             branchPromiseTypes: readonly CType[],
             branchControlNames: readonly string[],
+            branchPostlude: readonly ts.Statement[],
             index: number,
         ): void => {
             const controlBuf = new CBuf();
@@ -39827,8 +39877,10 @@ class Emitter {
                     nextAwait.expression,
                     branchPromiseTypes[index + 1]!,
                     branchControlNames[index + 1]!,
+                    nextAwait.before,
                 );
             } else {
+                emitBranchStatements(controlBuf, "state", branchPostlude);
                 emitContinue(controlBuf, "state");
             }
             controlBuf.close();
@@ -39836,10 +39888,10 @@ class Emitter {
             this.closureDefs.write(controlBuf.toString());
         };
         for (let index = 0; index < bodyAwaits.length; index++) {
-            emitControlCallback(controlNames[index]!, bodyAwaits, bodyPromiseTypes, controlNames, index);
+            emitControlCallback(controlNames[index]!, bodyAwaits, bodyPromiseTypes, controlNames, bodyBranch.postlude, index);
         }
         for (let index = 0; index < elseAwaits.length; index++) {
-            emitControlCallback(elseControlNames[index]!, elseAwaits, elsePromiseTypes, elseControlNames, index);
+            emitControlCallback(elseControlNames[index]!, elseAwaits, elsePromiseTypes, elseControlNames, elseBranch.postlude, index);
         }
 
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
