@@ -39518,7 +39518,7 @@ class Emitter {
                     const expression = this.unwrapTransparentExpression(statement.expression);
                     if (ts.isAwaitExpression(expression)) {
                         terminal = { action, awaitedExpression: expression, synchronousExpression: null };
-                    } else if (action === "return" && this.asyncAwaitSyncReturnExpressionSupported(expression)) {
+                    } else if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
                         terminal = { action, awaitedExpression: null, synchronousExpression: expression };
                     } else {
                         return null;
@@ -39896,6 +39896,23 @@ class Emitter {
                 this.argumentValueScopes.pop();
             }
         };
+        const emitBranchSynchronousThrow = (
+            out: CBuf,
+            state: string,
+            terminal: NestedBranchTerminal,
+            postlude: readonly ts.Statement[],
+        ): void => {
+            this.argumentValueScopes.push(stateScope(state));
+            if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
+            try {
+                for (const statement of postlude) this.emitStmt(out, statement);
+                const thrown = this.emitExpr(terminal.synchronousExpression!);
+                out.line(`tsc_promise_reject_in_place(${state}->result_promise, tsc_value_string(${this.coerceToString(thrown, terminal.synchronousExpression!)}));`);
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
+        };
         const emitBranchTerminalCallback = (
             callbackName: string,
             action: "return" | "throw",
@@ -40070,6 +40087,8 @@ class Emitter {
                     );
                 } else if (branchTerminal && branchTerminal.action === "return") {
                     emitBranchSynchronousReturn(controlBuf, "state", branchTerminal, branchPostlude);
+                } else if (branchTerminal && branchTerminal.action === "throw") {
+                    emitBranchSynchronousThrow(controlBuf, "state", branchTerminal, branchPostlude);
                 } else {
                     emitBranchStatements(controlBuf, "state", branchPostlude);
                     emitLoopAction(controlBuf, "state");
