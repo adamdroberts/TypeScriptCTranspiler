@@ -26279,7 +26279,7 @@ class Emitter {
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
                 );
-                if (sequenceContinuation && (ts.isThrowStatement(tryStatement) || sequenceContinuation.shortCircuitOperator === undefined)) {
+                if (sequenceContinuation) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
                     if (ts.isThrowStatement(tryStatement)) {
                         successThrowExpr = sequenceContinuation.returnExpr;
@@ -27508,7 +27508,7 @@ class Emitter {
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
                 );
-                if (sequenceContinuation && (ts.isThrowStatement(tryStatement) || sequenceContinuation.shortCircuitOperator === undefined)) {
+                if (sequenceContinuation) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
                     if (ts.isThrowStatement(tryStatement)) {
                         successThrowExpr = sequenceContinuation.returnExpr;
@@ -28104,7 +28104,7 @@ class Emitter {
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
                 );
-                if (sequenceContinuation && (ts.isThrowStatement(tryStatement) || sequenceContinuation.shortCircuitOperator === undefined)) {
+                if (sequenceContinuation) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
                     if (ts.isThrowStatement(tryStatement)) {
                         successThrowExpr = sequenceContinuation.returnExpr;
@@ -32073,6 +32073,55 @@ class Emitter {
             stageBuf.open("if (!tsc_promise_is_fulfilled(_p))");
             stageBuf.line("return;");
             stageBuf.close();
+            const emitSequenceReturnResolution = (result: EmitResult, resultExpr: ts.Expression): void => {
+                const resultType = this.prepareType(result.ty);
+                if (!sequenceReturnFinally) {
+                    stageBuf.line("tsc_try_pop();");
+                    stageBuf.line(`${resolvedVar} = ${resultType.kind === "void" || resultType.kind === "never"
+                        ? "tsc_promise_resolve(tsc_value_undefined())"
+                        : this.promiseResolveResult(result, resultExpr)};`);
+                    return;
+                }
+                const savedResult = this.freshTemp("_await_sequence_return");
+                if (resultType.kind === "void" || resultType.kind === "never") {
+                    stageBuf.line(`${result.c};`);
+                    stageBuf.line("tsc_try_pop();");
+                } else {
+                    stageBuf.line(`${resultType.c} ${savedResult} = ${result.c};`);
+                    stageBuf.line("tsc_try_pop();");
+                }
+                const successFinallyEh = this.freshTemp("_await_success_finally_eh");
+                stageBuf.line(`tsc_try_frame_t ${successFinallyEh};`);
+                stageBuf.line(`tsc_try_push(&${successFinallyEh});`);
+                stageBuf.open(`if (setjmp(${successFinallyEh}.jb) == 0)`);
+                const finallyScope = new Map<ts.Symbol, string>();
+                for (const param of sequenceReturnFinally.params) {
+                    finallyScope.set(param.symbol, `state->${param.field}`);
+                }
+                this.argumentValueScopes.push(finallyScope);
+                if (sequenceReturnFinally.thisValue) {
+                    this.functionThisStack.push({ c: "state->this_arg", ty: sequenceReturnFinally.thisValue.ty });
+                }
+                this.asyncAwaitContinuationAdapterDepth++;
+                try {
+                    for (const statement of sequenceReturnFinally.finallyStatements) {
+                        this.emitStmt(stageBuf, statement);
+                    }
+                } finally {
+                    this.asyncAwaitContinuationAdapterDepth--;
+                    if (sequenceReturnFinally.thisValue) this.functionThisStack.pop();
+                    this.argumentValueScopes.pop();
+                }
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line(`${resolvedVar} = ${resultType.kind === "void" || resultType.kind === "never"
+                    ? "tsc_promise_resolve(tsc_value_undefined())"
+                    : this.promiseResolveResult({ c: savedResult, ty: resultType }, resultExpr)};`);
+                stageBuf.close();
+                stageBuf.open("else");
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+                stageBuf.close();
+            };
             if (currentValueResult) stageBuf.line(`${storageTypes[stage]!.c} ${currentValue} = ${currentValueResult};`);
             if (shortCircuitOperator !== undefined && stage + 1 < stageNames.length) {
                 const currentResult: EmitResult = storageTypes[stage]!.kind === "void"
@@ -32086,7 +32135,9 @@ class Emitter {
                         ? truthy
                         : `!(${nullish})`;
                 stageBuf.open(`if (${shortCircuit})`);
-                if ((tryCatchContinuation || tryFinallyContinuation) && !sequenceReturns) {
+                if (sequenceReturns) {
+                    emitSequenceReturnResolution(currentResult, returnExpr);
+                } else if ((tryCatchContinuation || tryFinallyContinuation) && !sequenceReturns) {
                     stageBuf.line(`tsc_throw_str(${this.coerceToString(currentResult, returnExpr)});`);
                 } else if (rejectResult) {
                     stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${this.coerceToString(currentResult, returnExpr)}));`);
@@ -32149,54 +32200,14 @@ class Emitter {
                     this.argumentValueScopes.pop();
                 }
                 const returnedType = this.prepareType(returned.ty);
-                const sequenceReturnWithFinally = sequenceReturns && !!sequenceReturnFinally;
                 if ((tryCatchContinuation || tryFinallyContinuation) && !sequenceReturns) {
                     stageBuf.line(`tsc_throw_str(${this.coerceToString(returned, returnExpr)});`);
                 } else if (rejectResult) {
                     const rejected = this.coerceToString(returned, returnExpr);
                     stageBuf.line("tsc_try_pop();");
                     stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${rejected}));`);
-                } else if (sequenceReturnWithFinally) {
-                    if (returnedType.kind === "void" || returnedType.kind === "never") {
-                        stageBuf.line(`${returned.c};`);
-                        stageBuf.line("tsc_try_pop();");
-                    } else {
-                        stageBuf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
-                        stageBuf.line("tsc_try_pop();");
-                    }
-                    const successFinallyEh = this.freshTemp("_await_success_finally_eh");
-                    stageBuf.line(`tsc_try_frame_t ${successFinallyEh};`);
-                    stageBuf.line(`tsc_try_push(&${successFinallyEh});`);
-                    stageBuf.open(`if (setjmp(${successFinallyEh}.jb) == 0)`);
-                    const finallyScope = new Map<ts.Symbol, string>();
-                    for (const param of sequenceReturnFinally!.params) {
-                        finallyScope.set(param.symbol, `state->${param.field}`);
-                    }
-                    this.argumentValueScopes.push(finallyScope);
-                    if (sequenceReturnFinally!.thisValue) {
-                        this.functionThisStack.push({ c: "state->this_arg", ty: sequenceReturnFinally!.thisValue.ty });
-                    }
-                    this.asyncAwaitContinuationAdapterDepth++;
-                    try {
-                        for (const statement of sequenceReturnFinally!.finallyStatements) {
-                            this.emitStmt(stageBuf, statement);
-                        }
-                    } finally {
-                        this.asyncAwaitContinuationAdapterDepth--;
-                        if (sequenceReturnFinally!.thisValue) this.functionThisStack.pop();
-                        this.argumentValueScopes.pop();
-                    }
-                    stageBuf.line("tsc_try_pop();");
-                    if (returnedType.kind === "void" || returnedType.kind === "never") {
-                        stageBuf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
-                    } else {
-                        stageBuf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr)};`);
-                    }
-                    stageBuf.close();
-                    stageBuf.open("else");
-                    stageBuf.line(`tsc_try_pop();`);
-                    stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
-                    stageBuf.close();
+                } else if (sequenceReturns) {
+                    emitSequenceReturnResolution(returned, returnExpr);
                 } else if (returnedType.kind === "void" || returnedType.kind === "never") {
                     stageBuf.line(`${returned.c};`);
                     stageBuf.line("tsc_try_pop();");
@@ -32207,7 +32218,7 @@ class Emitter {
                     stageBuf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr)};`);
                 }
                 stageBuf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
-                if (sequenceReturnWithFinally) stageBuf.line("return;");
+                if (sequenceReturns && sequenceReturnFinally) stageBuf.line("return;");
             }
             stageBuf.close();
             stageBuf.open("else");
