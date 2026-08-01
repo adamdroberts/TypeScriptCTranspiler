@@ -1,0 +1,7 @@
+fn-inner fn-inner 
+fn-caught caught-fn-bad 
+fn-outer fn-outer 
+method-inner method-inner A
+method-caught rejected-method-bad AB
+arrow-caught caught-arrow-bad ABO
+arrow-outer arrow-outer ABOI
