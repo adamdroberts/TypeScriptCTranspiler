@@ -39448,6 +39448,7 @@ class Emitter {
             alias: ts.Identifier | null;
             before: readonly ts.Statement[];
             captures: readonly NestedBranchCapture[];
+            finallyStatements: readonly ts.Statement[];
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
@@ -39566,12 +39567,14 @@ class Emitter {
             const addAwait = (
                 expression: ts.AwaitExpression,
                 alias: ts.Identifier | null,
+                finallyStatements: readonly ts.Statement[] = [],
             ): boolean => {
                 expressions.push({
                     expression,
                     alias,
                     before: pendingStatements,
                     captures: pendingBranchCaptures(pendingStatements, branchContainer),
+                    finallyStatements,
                 });
                 pendingStatements = [];
                 return true;
@@ -39763,6 +39766,18 @@ class Emitter {
                         continue;
                     }
                     return null;
+                }
+                if (ts.isTryStatement(statement) && !statement.catchClause && statement.finallyBlock &&
+                    statement.tryBlock.statements.length === 1 &&
+                    ts.isExpressionStatement(statement.tryBlock.statements[0]!) &&
+                    ts.isAwaitExpression(this.unwrapTransparentExpression(statement.tryBlock.statements[0]!.expression)) &&
+                    statement.finallyBlock.statements.every((child) =>
+                        awaitFreeBranchStatementSupported(child, statement))) {
+                    const awaitExpression = this.unwrapTransparentExpression(
+                        statement.tryBlock.statements[0]!.expression,
+                    ) as ts.AwaitExpression;
+                    if (!addAwait(awaitExpression, null, statement.finallyBlock.statements)) return null;
+                    continue;
                 }
                 if (awaitFreeBranchStatementSupported(statement, branchContainer)) {
                     pendingStatements.push(statement);
@@ -40442,6 +40457,7 @@ class Emitter {
             preludeBuf.line("tsc_promise_t* _p = state->receiver;");
             preludeBuf.line("tsc_promise_t* _ret = state->result_promise;");
             preludeBuf.open("if (tsc_promise_is_rejected(_p))");
+            emitBranchStatements(preludeBuf, "state", preludeAwaits[index]!.finallyStatements);
             preludeBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
             preludeBuf.line("return;");
             preludeBuf.close();
@@ -40456,6 +40472,7 @@ class Emitter {
                 preludeBuf.line(`${preludeAlias.type.c} ${preludeValue} = ${this.coerce(this.promiseFulfilledValue(preludePromiseTypes[index]!.elem, "_p"), preludeAlias.type, preludeAwaits[index]!.expression)};`);
                 preludeBuf.line(`state->${preludeAlias.field} = ${preludeValue};`);
             }
+            emitBranchStatements(preludeBuf, "state", preludeAwaits[index]!.finallyStatements);
             if (index + 1 < preludeAwaits.length) emitPreludeSource(preludeBuf, "state", index + 1);
             else preludeBuf.line(`${bodyName}(state);`);
             preludeBuf.close();
@@ -40527,6 +40544,7 @@ class Emitter {
             controlBuf.line("tsc_promise_t* _p = state->receiver;");
             controlBuf.line("tsc_promise_t* _ret = state->result_promise;");
             controlBuf.open("if (tsc_promise_is_rejected(_p))");
+            emitBranchStatements(controlBuf, "state", branchAwaits[index]!.finallyStatements);
             controlBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
             controlBuf.line("return;");
             controlBuf.close();
@@ -40542,6 +40560,7 @@ class Emitter {
                 controlBuf.line(`${currentAlias.type.c} ${currentValue} = ${this.coerce(this.promiseFulfilledValue(branchPromiseTypes[index]!.elem, "_p"), currentAlias.type, branchAwaits[index]!.expression)};`);
                 controlBuf.line(`state->${currentAlias.field} = ${currentValue};`);
             }
+            emitBranchStatements(controlBuf, "state", branchAwaits[index]!.finallyStatements);
             if (nextAwait) {
                 emitControlSource(
                     controlBuf,
