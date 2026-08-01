@@ -39799,9 +39799,15 @@ class Emitter {
         const conditionAwait = this.unwrapTransparentExpression(nestedIf.expression);
         if (!ts.isAwaitExpression(conditionAwait)) return false;
         const preludeStatements = loopBody.slice(0, -2);
-        if (preludeStatements.length !== 1 || !ts.isExpressionStatement(preludeStatements[0]!)) return false;
-        const preludeAwait = this.unwrapTransparentExpression(preludeStatements[0]!.expression);
+        if (preludeStatements.length < 1) return false;
+        const preludeAwaitStatement = preludeStatements[preludeStatements.length - 1]!;
+        if (!ts.isExpressionStatement(preludeAwaitStatement)) return false;
+        const preludeAwait = this.unwrapTransparentExpression(preludeAwaitStatement.expression);
         if (!ts.isAwaitExpression(preludeAwait)) return false;
+        const preludePrefix = preludeStatements.slice(0, -1);
+        if (!preludePrefix.every((statement) =>
+            awaitFreeBranchStatementSupported(statement, loop.statement))) return false;
+        const preludeCaptures = pendingBranchCaptures(preludePrefix, loop.statement);
 
         let binding: ts.Identifier;
         if (ts.isForInStatement(loop)) {
@@ -39937,10 +39943,31 @@ class Emitter {
             }
             return true;
         };
+        const registerLocalCaptures = (captures: readonly NestedBranchCapture[]): boolean => {
+            for (const capture of captures) {
+                if (branchLocalBySymbol.has(capture.symbol)) continue;
+                const type = this.prepareType(mapTsType(
+                    capture.identifier,
+                    this.checker.getTypeAtLocation(capture.identifier),
+                    this.checker,
+                ));
+                if (type.kind === "void" || type.kind === "never") return false;
+                const entry = {
+                    identifier: capture.identifier,
+                    symbol: capture.symbol,
+                    type,
+                    field: `nested_if_prelude_local_${branchLocalEntries.length}`,
+                };
+                branchLocalEntries.push(entry);
+                branchLocalBySymbol.set(capture.symbol, entry);
+            }
+            return true;
+        };
         if (!registerBranchLocals(bodyAwaits, bodyBranch.terminal) ||
             !registerBranchLocals(bodyAwaits, bodyBranch.alternateTerminal) ||
             !registerBranchLocals(elseAwaits, elseBranch.terminal) ||
-            !registerBranchLocals(elseAwaits, elseBranch.alternateTerminal)) return false;
+            !registerBranchLocals(elseAwaits, elseBranch.alternateTerminal) ||
+            !registerLocalCaptures(preludeCaptures)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
             conditionPromiseType.kind !== "promise" || conditionAwaitedType.kind !== "boolean" ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
@@ -40075,14 +40102,18 @@ class Emitter {
             out.close();
         };
         const emitPreludeSource = (out: CBuf, state: string): void => {
-            this.argumentValueScopes.push(stateScope(state));
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                source = this.emitExpr(preludeAwait.expression);
+                emitCapturedBranchStatements(out, state, preludePrefix, preludeCaptures);
+                this.argumentValueScopes.push(stateScope(state));
+                try {
+                    source = this.emitExpr(preludeAwait.expression);
+                } finally {
+                    this.argumentValueScopes.pop();
+                }
             } finally {
                 if (thisValue) this.functionThisStack.pop();
-                this.argumentValueScopes.pop();
             }
             const sourceVar = this.freshTemp("_async_iter_nested_prelude_source");
             out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, preludePromiseType, preludeAwait.expression)};`);
@@ -40267,14 +40298,18 @@ class Emitter {
             out.line(`${nextEnv}->result_promise = ${state}->result_promise;`);
             for (const param of params) out.line(`${nextEnv}->${param.field} = ${state}->${param.field};`);
             if (thisValue) out.line(`${nextEnv}->this_arg = ${state}->this_arg;`);
-            this.argumentValueScopes.push(stateScope(nextEnv));
             if (thisValue) this.functionThisStack.push({ c: `${nextEnv}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                source = this.emitExpr(preludeAwait.expression);
+                emitCapturedBranchStatements(out, nextEnv, preludePrefix, preludeCaptures);
+                this.argumentValueScopes.push(stateScope(nextEnv));
+                try {
+                    source = this.emitExpr(preludeAwait.expression);
+                } finally {
+                    this.argumentValueScopes.pop();
+                }
             } finally {
                 if (thisValue) this.functionThisStack.pop();
-                this.argumentValueScopes.pop();
             }
             const sourceVar = this.freshTemp("_async_iter_nested_next_source");
             out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, preludePromiseType, preludeAwait.expression)};`);
@@ -40552,25 +40587,7 @@ class Emitter {
         buf.line(`${initialEnv}->result_promise = ${resultVar};`);
         for (const param of params) buf.line(`${initialEnv}->${param.field} = ${param.name};`);
         if (thisValue) buf.line(`${initialEnv}->this_arg = ${thisValue.c};`);
-        const initialScope = new Map<ts.Symbol, string>();
-        for (const param of params) initialScope.set(param.symbol, param.name);
-        initialScope.set(bindingSymbol, `TSC_ARR(${itemType.c}, ${itemsVar}, 0)`);
-        this.argumentValueScopes.push(initialScope);
-        if (thisValue) this.functionThisStack.push(thisValue);
-        let initialSource: EmitResult;
-        try {
-            initialSource = this.emitExpr(preludeAwait.expression);
-        } finally {
-            if (thisValue) this.functionThisStack.pop();
-            this.argumentValueScopes.pop();
-        }
-        buf.line(`${initialEnv}->receiver = ${this.coerce(initialSource, preludePromiseType, preludeAwait.expression)};`);
-        buf.open(`if (tsc_promise_is_pending(${initialEnv}->receiver))`);
-        buf.line(`tsc_promise_add_callback(${initialEnv}->receiver, ${bodyName}, ${initialEnv});`);
-        buf.close();
-        buf.open("else");
-        buf.line(`${bodyName}(${initialEnv});`);
-        buf.close();
+        emitPreludeSource(buf, initialEnv);
         buf.line(`return ${resultVar};`);
         return true;
     }
