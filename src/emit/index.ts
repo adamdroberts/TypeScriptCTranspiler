@@ -39460,6 +39460,8 @@ class Emitter {
             awaits: NestedBranchAwait[];
             postlude: readonly ts.Statement[];
             terminal: NestedBranchTerminal | null;
+            alternateTerminal: NestedBranchTerminal | null;
+            terminalCondition: ts.Expression | null;
         };
         const awaitFreeBranchStatementSupported = (
             statement: ts.Statement,
@@ -39558,6 +39560,8 @@ class Emitter {
             const expressions: NestedBranchAwait[] = [];
             let pendingStatements: ts.Statement[] = [];
             let terminal: NestedBranchTerminal | null = null;
+            let alternateTerminal: NestedBranchTerminal | null = null;
+            let terminalCondition: ts.Expression | null = null;
             const addAwait = (
                 expression: ts.AwaitExpression,
                 alias: ts.Identifier | null,
@@ -39574,6 +39578,7 @@ class Emitter {
             for (let index = 0; index < statements.length; index++) {
                 const statement = statements[index]!;
                 let terminalStatement: ts.ReturnStatement | ts.ThrowStatement | null = null;
+                let alternateTerminalStatement: ts.ReturnStatement | ts.ThrowStatement | null = null;
                 let terminalPrefix: readonly ts.Statement[] = [];
                 let terminalConditions: readonly ts.Expression[] = [];
                 if (index === statements.length - 1) {
@@ -39586,6 +39591,25 @@ class Emitter {
                             if (!terminalPrefix.every((child) =>
                                 awaitFreeBranchStatementSupported(child, statement))) return null;
                             terminalStatement = nestedTerminal;
+                        }
+                    } else if (ts.isIfStatement(statement) && statement.elseStatement &&
+                        this.asyncAwaitConditionExpressionSupported(statement.expression)) {
+                        const directTerminalFor = (candidate: ts.Statement): ts.ReturnStatement | ts.ThrowStatement | null => {
+                            const direct = ts.isBlock(candidate)
+                                ? candidate.statements.length === 1
+                                    ? candidate.statements[0]!
+                                    : null
+                                : candidate;
+                            return direct && (ts.isReturnStatement(direct) || ts.isThrowStatement(direct))
+                                ? direct
+                                : null;
+                        };
+                        const thenTerminal = directTerminalFor(statement.thenStatement);
+                        const elseTerminal = directTerminalFor(statement.elseStatement);
+                        if (thenTerminal && elseTerminal) {
+                            terminalStatement = thenTerminal;
+                            alternateTerminalStatement = elseTerminal;
+                            terminalCondition = statement.expression;
                         }
                     } else if (ts.isIfStatement(statement) && !statement.elseStatement &&
                         this.asyncAwaitConditionExpressionSupported(statement.expression)) {
@@ -39623,24 +39647,36 @@ class Emitter {
                         ...pendingBranchCaptures(pendingBeforeTerminal, branchContainer),
                         ...pendingBranchCaptures(terminalPrefix, statement),
                     ];
-                    if (!terminalStatement.expression) {
-                        if (action !== "return") return null;
-                        terminal = { action, conditions: terminalConditions, awaitedExpression: null, synchronousExpression: null, captures: [] };
-                        continue;
-                    }
-                    const expression = this.unwrapTransparentExpression(terminalStatement.expression);
-                    if (ts.isAwaitExpression(expression)) {
-                        terminal = {
-                            action,
-                            conditions: terminalConditions,
-                            awaitedExpression: expression,
-                            synchronousExpression: null,
-                            captures: terminalCaptures,
-                        };
-                    } else if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
-                        terminal = { action, conditions: terminalConditions, awaitedExpression: null, synchronousExpression: expression, captures: [] };
-                    } else {
-                        return null;
+                    const terminalFor = (
+                        selectedStatement: ts.ReturnStatement | ts.ThrowStatement,
+                        conditions: readonly ts.Expression[],
+                        captures: readonly NestedBranchCapture[],
+                    ): NestedBranchTerminal | null => {
+                        const selectedAction = ts.isReturnStatement(selectedStatement) ? "return" : "throw";
+                        if (!selectedStatement.expression) {
+                            return selectedAction === "return"
+                                ? { action: selectedAction, conditions, awaitedExpression: null, synchronousExpression: null, captures: [] }
+                                : null;
+                        }
+                        const expression = this.unwrapTransparentExpression(selectedStatement.expression);
+                        if (ts.isAwaitExpression(expression)) {
+                            return {
+                                action: selectedAction,
+                                conditions,
+                                awaitedExpression: expression,
+                                synchronousExpression: null,
+                                captures,
+                            };
+                        }
+                        return this.asyncAwaitSyncReturnExpressionSupported(expression)
+                            ? { action: selectedAction, conditions, awaitedExpression: null, synchronousExpression: expression, captures: [] }
+                            : null;
+                    };
+                    terminal = terminalFor(terminalStatement, terminalConditions, terminalCaptures);
+                    if (!terminal) return null;
+                    if (alternateTerminalStatement) {
+                        alternateTerminal = terminalFor(alternateTerminalStatement, [], terminalCaptures);
+                        if (!alternateTerminal) return null;
                     }
                     continue;
                 }
@@ -39692,14 +39728,22 @@ class Emitter {
                 }
                 return null;
             }
-            return expressions.length > 0 ? { awaits: expressions, postlude: pendingStatements, terminal } : null;
+            return expressions.length > 0
+                ? { awaits: expressions, postlude: pendingStatements, terminal, alternateTerminal, terminalCondition }
+                : null;
         };
         const thenStatements = ts.isBlock(nestedIf.thenStatement)
             ? nestedIf.thenStatement.statements
             : [nestedIf.thenStatement];
         const bodyBranch = awaitedBranchExpressions(thenStatements, nestedIf.thenStatement);
         if (!bodyBranch) return false;
-        let elseBranch: NestedBranch = { awaits: [], postlude: [], terminal: null };
+        let elseBranch: NestedBranch = {
+            awaits: [],
+            postlude: [],
+            terminal: null,
+            alternateTerminal: null,
+            terminalCondition: null,
+        };
         if (nestedIf.elseStatement) {
             const elseStatements = ts.isBlock(nestedIf.elseStatement)
                 ? nestedIf.elseStatement.statements
@@ -39769,11 +39813,23 @@ class Emitter {
         const bodyTerminalAwaitedType = bodyBranch.terminal?.awaitedExpression
             ? awaitedTypeFor(bodyBranch.terminal.awaitedExpression)
             : null;
+        const bodyAlternateTerminalPromiseType = bodyBranch.alternateTerminal?.awaitedExpression
+            ? promiseTypeFor(bodyBranch.alternateTerminal.awaitedExpression)
+            : null;
+        const bodyAlternateTerminalAwaitedType = bodyBranch.alternateTerminal?.awaitedExpression
+            ? awaitedTypeFor(bodyBranch.alternateTerminal.awaitedExpression)
+            : null;
         const elseTerminalPromiseType = elseBranch.terminal?.awaitedExpression
             ? promiseTypeFor(elseBranch.terminal.awaitedExpression)
             : null;
         const elseTerminalAwaitedType = elseBranch.terminal?.awaitedExpression
             ? awaitedTypeFor(elseBranch.terminal.awaitedExpression)
+            : null;
+        const elseAlternateTerminalPromiseType = elseBranch.alternateTerminal?.awaitedExpression
+            ? promiseTypeFor(elseBranch.alternateTerminal.awaitedExpression)
+            : null;
+        const elseAlternateTerminalAwaitedType = elseBranch.alternateTerminal?.awaitedExpression
+            ? awaitedTypeFor(elseBranch.alternateTerminal.awaitedExpression)
             : null;
         const fallthroughPromiseType = promiseTypeFor(fallthroughAwait);
         const fallthroughAwaitedType = awaitedTypeFor(fallthroughAwait);
@@ -39840,7 +39896,9 @@ class Emitter {
             return true;
         };
         if (!registerBranchLocals(bodyAwaits, bodyBranch.terminal) ||
-            !registerBranchLocals(elseAwaits, elseBranch.terminal)) return false;
+            !registerBranchLocals(bodyAwaits, bodyBranch.alternateTerminal) ||
+            !registerBranchLocals(elseAwaits, elseBranch.terminal) ||
+            !registerBranchLocals(elseAwaits, elseBranch.alternateTerminal)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
             conditionPromiseType.kind !== "promise" || conditionAwaitedType.kind !== "boolean" ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
@@ -39849,8 +39907,12 @@ class Emitter {
             elseAwaitedTypes.some((type) => type.kind === "never") ||
             (bodyBranch.terminal?.awaitedExpression &&
                 (bodyTerminalPromiseType!.kind !== "promise" || bodyTerminalAwaitedType!.kind === "never")) ||
+            (bodyBranch.alternateTerminal?.awaitedExpression &&
+                (bodyAlternateTerminalPromiseType!.kind !== "promise" || bodyAlternateTerminalAwaitedType!.kind === "never")) ||
             (elseBranch.terminal?.awaitedExpression &&
                 (elseTerminalPromiseType!.kind !== "promise" || elseTerminalAwaitedType!.kind === "never")) ||
+            (elseBranch.alternateTerminal?.awaitedExpression &&
+                (elseAlternateTerminalPromiseType!.kind !== "promise" || elseAlternateTerminalAwaitedType!.kind === "never")) ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
 
         const params = this.asyncAwaitContinuationParameters(parameters);
@@ -39865,8 +39927,14 @@ class Emitter {
         const bodyTerminalName = bodyBranch.terminal?.awaitedExpression
             ? `tsc_async_await_iterator_nested_if_body_terminal_${this.asyncAwaitReturnContinuationAdapters++}`
             : null;
+        const bodyAlternateTerminalName = bodyBranch.alternateTerminal?.awaitedExpression
+            ? `tsc_async_await_iterator_nested_if_body_alternate_terminal_${this.asyncAwaitReturnContinuationAdapters++}`
+            : null;
         const elseTerminalName = elseBranch.terminal?.awaitedExpression
             ? `tsc_async_await_iterator_nested_if_else_terminal_${this.asyncAwaitReturnContinuationAdapters++}`
+            : null;
+        const elseAlternateTerminalName = elseBranch.alternateTerminal?.awaitedExpression
+            ? `tsc_async_await_iterator_nested_if_else_alternate_terminal_${this.asyncAwaitReturnContinuationAdapters++}`
             : null;
         const envType = `${bodyName}_env_t`;
         const terminalAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
@@ -39894,7 +39962,9 @@ class Emitter {
         for (const name of controlNames) this.protos.line(`void ${name}(void* env);`);
         for (const name of elseControlNames) this.protos.line(`void ${name}(void* env);`);
         if (bodyTerminalName) this.protos.line(`void ${bodyTerminalName}(void* env);`);
+        if (bodyAlternateTerminalName) this.protos.line(`void ${bodyAlternateTerminalName}(void* env);`);
         if (elseTerminalName) this.protos.line(`void ${elseTerminalName}(void* env);`);
+        if (elseAlternateTerminalName) this.protos.line(`void ${elseAlternateTerminalName}(void* env);`);
 
         const stateScope = (state: string, excludedSymbols: ReadonlySet<ts.Symbol> = new Set()): Map<ts.Symbol, string> => {
             const scope = new Map<ts.Symbol, string>();
@@ -40254,6 +40324,10 @@ class Emitter {
             branchTerminal: NestedBranchTerminal | null,
             branchTerminalPromiseType: CType | null,
             branchTerminalName: string | null,
+            branchAlternateTerminal: NestedBranchTerminal | null,
+            branchAlternateTerminalPromiseType: CType | null,
+            branchAlternateTerminalName: string | null,
+            branchTerminalCondition: ts.Expression | null,
             index: number,
         ): void => {
             const controlBuf = new CBuf();
@@ -40288,30 +40362,39 @@ class Emitter {
                     nextAwait.captures,
                 );
             } else {
-                const emitTerminalOrAction = (): void => {
-                    if (branchTerminal && branchTerminal.awaitedExpression && branchTerminalPromiseType && branchTerminalName) {
+                const emitTerminalRoute = (
+                    terminal: NestedBranchTerminal | null,
+                    terminalPromiseType: CType | null,
+                    terminalName: string | null,
+                ): void => {
+                    if (terminal && terminal.awaitedExpression && terminalPromiseType && terminalName) {
                         emitBranchTerminalSource(
                             controlBuf,
                             "state",
-                            branchTerminal,
-                            branchTerminalPromiseType,
-                            branchTerminalName,
+                            terminal,
+                            terminalPromiseType,
+                            terminalName,
                             branchPostlude,
-                            branchTerminal.captures,
+                            terminal.captures,
                         );
-                    } else if (branchTerminal && branchTerminal.action === "return") {
-                        emitBranchSynchronousReturn(controlBuf, "state", branchTerminal, branchPostlude);
-                    } else if (branchTerminal && branchTerminal.action === "throw") {
-                        emitBranchSynchronousThrow(controlBuf, "state", branchTerminal, branchPostlude);
+                    } else if (terminal && terminal.action === "return") {
+                        emitBranchSynchronousReturn(controlBuf, "state", terminal, branchPostlude);
+                    } else if (terminal && terminal.action === "throw") {
+                        emitBranchSynchronousThrow(controlBuf, "state", terminal, branchPostlude);
                     } else {
                         emitBranchStatements(controlBuf, "state", branchPostlude);
                         emitLoopAction(controlBuf, "state");
                     }
                 };
-                const emitConditionalTerminal = (conditionIndex: number): void => {
-                    const condition = branchTerminal?.conditions[conditionIndex];
+                const emitConditionalTerminal = (
+                    terminal: NestedBranchTerminal | null,
+                    terminalPromiseType: CType | null,
+                    terminalName: string | null,
+                    conditionIndex: number,
+                ): void => {
+                    const condition = terminal?.conditions[conditionIndex];
                     if (!condition) {
-                        emitTerminalOrAction();
+                        emitTerminalRoute(terminal, terminalPromiseType, terminalName);
                         return;
                     }
                     this.argumentValueScopes.push(stateScope("state"));
@@ -40325,13 +40408,32 @@ class Emitter {
                     }
                     const conditionTruth = this.truthyExprFromEmitResult(conditionValue, condition);
                     controlBuf.open(`if (${conditionTruth})`);
-                    emitConditionalTerminal(conditionIndex + 1);
+                    emitConditionalTerminal(terminal, terminalPromiseType, terminalName, conditionIndex + 1);
                     controlBuf.close();
                     controlBuf.open("else");
                     emitLoopAction(controlBuf, "state");
                     controlBuf.close();
                 };
-                emitConditionalTerminal(0);
+                if (branchTerminalCondition && branchAlternateTerminal) {
+                    this.argumentValueScopes.push(stateScope("state"));
+                    if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+                    let conditionValue: EmitResult;
+                    try {
+                        conditionValue = this.emitExpr(branchTerminalCondition);
+                    } finally {
+                        if (thisValue) this.functionThisStack.pop();
+                        this.argumentValueScopes.pop();
+                    }
+                    const conditionTruth = this.truthyExprFromEmitResult(conditionValue, branchTerminalCondition);
+                    controlBuf.open(`if (${conditionTruth})`);
+                    emitConditionalTerminal(branchTerminal, branchTerminalPromiseType, branchTerminalName, 0);
+                    controlBuf.close();
+                    controlBuf.open("else");
+                    emitConditionalTerminal(branchAlternateTerminal, branchAlternateTerminalPromiseType, branchAlternateTerminalName, 0);
+                    controlBuf.close();
+                } else {
+                    emitConditionalTerminal(branchTerminal, branchTerminalPromiseType, branchTerminalName, 0);
+                }
             }
             controlBuf.close();
             controlBuf.line();
@@ -40347,6 +40449,10 @@ class Emitter {
                 bodyBranch.terminal,
                 bodyTerminalPromiseType,
                 bodyTerminalName,
+                bodyBranch.alternateTerminal,
+                bodyAlternateTerminalPromiseType,
+                bodyAlternateTerminalName,
+                bodyBranch.terminalCondition,
                 index,
             );
         }
@@ -40360,11 +40466,17 @@ class Emitter {
                 elseBranch.terminal,
                 elseTerminalPromiseType,
                 elseTerminalName,
+                elseBranch.alternateTerminal,
+                elseAlternateTerminalPromiseType,
+                elseAlternateTerminalName,
+                elseBranch.terminalCondition,
                 index,
             );
         }
         if (bodyBranch.terminal && bodyTerminalName) emitBranchTerminalCallback(bodyTerminalName, bodyBranch.terminal.action);
+        if (bodyBranch.alternateTerminal && bodyAlternateTerminalName) emitBranchTerminalCallback(bodyAlternateTerminalName, bodyBranch.alternateTerminal.action);
         if (elseBranch.terminal && elseTerminalName) emitBranchTerminalCallback(elseTerminalName, elseBranch.terminal.action);
+        if (elseBranch.alternateTerminal && elseAlternateTerminalName) emitBranchTerminalCallback(elseAlternateTerminalName, elseBranch.alternateTerminal.action);
 
         for (const statement of body.statements.slice(0, -2)) this.emitStmt(buf, statement);
         const itemsVar = this.freshTemp("_async_iter_nested_items");
