@@ -39453,6 +39453,7 @@ class Emitter {
             action: "return" | "throw";
             awaitedExpression: ts.AwaitExpression | null;
             synchronousExpression: ts.Expression | null;
+            captures: readonly NestedBranchCapture[];
         };
         type NestedBranch = {
             awaits: NestedBranchAwait[];
@@ -39506,32 +39507,6 @@ class Emitter {
                 awaitFreeBranchStatementSupported(statement.thenStatement) &&
                 (!statement.elseStatement || awaitFreeBranchStatementSupported(statement.elseStatement));
         };
-        const pendingSuspensionSafe = (
-            pending: readonly ts.Statement[],
-            future: readonly ts.Statement[],
-        ): boolean => {
-            const symbols = new Set<ts.Symbol>();
-            const collectDeclarations = (node: ts.Node): void => {
-                if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
-                    const symbol = this.symbolForIdentifier(node.name);
-                    if (symbol) symbols.add(symbol);
-                }
-                ts.forEachChild(node, collectDeclarations);
-            };
-            for (const statement of pending) collectDeclarations(statement);
-            if (symbols.size === 0) return true;
-            let safe = true;
-            const visitFuture = (node: ts.Node): void => {
-                if (!safe) return;
-                if (ts.isIdentifier(node) && symbols.has(this.symbolForIdentifier(node)!)) {
-                    safe = false;
-                    return;
-                }
-                ts.forEachChild(node, visitFuture);
-            };
-            for (const statement of future) visitFuture(statement);
-            return safe;
-        };
         const pendingBranchCaptures = (
             pending: readonly ts.Statement[],
             branchContainer: ts.Statement,
@@ -39562,7 +39537,6 @@ class Emitter {
             const addAwait = (
                 expression: ts.AwaitExpression,
                 alias: ts.Identifier | null,
-                future: readonly ts.Statement[],
             ): boolean => {
                 expressions.push({
                     expression,
@@ -39577,18 +39551,21 @@ class Emitter {
                 const statement = statements[index]!;
                 if (index === statements.length - 1 && (ts.isReturnStatement(statement) || ts.isThrowStatement(statement))) {
                     const action = ts.isReturnStatement(statement) ? "return" : "throw";
-                    if (ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression ?? ts.factory.createVoidZero())) &&
-                        !pendingSuspensionSafe(pendingStatements, [statement])) return null;
                     if (!statement.expression) {
                         if (action !== "return") return null;
-                        terminal = { action, awaitedExpression: null, synchronousExpression: null };
+                        terminal = { action, awaitedExpression: null, synchronousExpression: null, captures: [] };
                         continue;
                     }
                     const expression = this.unwrapTransparentExpression(statement.expression);
                     if (ts.isAwaitExpression(expression)) {
-                        terminal = { action, awaitedExpression: expression, synchronousExpression: null };
+                        terminal = {
+                            action,
+                            awaitedExpression: expression,
+                            synchronousExpression: null,
+                            captures: pendingBranchCaptures(pendingStatements, branchContainer),
+                        };
                     } else if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
-                        terminal = { action, awaitedExpression: null, synchronousExpression: expression };
+                        terminal = { action, awaitedExpression: null, synchronousExpression: expression, captures: [] };
                     } else {
                         return null;
                     }
@@ -39597,7 +39574,7 @@ class Emitter {
                 if (ts.isExpressionStatement(statement)) {
                     const expression = this.unwrapTransparentExpression(statement.expression);
                     if (ts.isAwaitExpression(expression)) {
-                        if (!addAwait(expression, null, statements.slice(index + 1))) return null;
+                        if (!addAwait(expression, null)) return null;
                     } else if (this.asyncAwaitLoopPostStatementSupported(statement)) {
                         pendingStatements.push(statement);
                     } else return null;
@@ -39627,7 +39604,7 @@ class Emitter {
                         }
                     }
                     if (expression) {
-                        if (!addAwait(expression, declaration.name, statements.slice(index + 1))) return null;
+                        if (!addAwait(expression, declaration.name)) return null;
                         continue;
                     }
                     if (awaitFreeBranchStatementSupported(statement)) {
@@ -39762,29 +39739,35 @@ class Emitter {
         };
         if (!registerBranchAliases(bodyAwaits, bodyAwaitedTypes) ||
             !registerBranchAliases(elseAwaits, elseAwaitedTypes)) return false;
-        const registerBranchLocals = (awaits: readonly NestedBranchAwait[]): boolean => {
-            for (const awaitStep of awaits) {
-                for (const capture of awaitStep.captures) {
-                    if (branchLocalBySymbol.has(capture.symbol)) continue;
-                    const type = this.prepareType(mapTsType(
-                        capture.identifier,
-                        this.checker.getTypeAtLocation(capture.identifier),
-                        this.checker,
-                    ));
-                    if (type.kind === "void" || type.kind === "never") return false;
-                    const entry = {
-                        identifier: capture.identifier,
-                        symbol: capture.symbol,
-                        type,
-                        field: `nested_if_branch_local_${branchLocalEntries.length}`,
-                    };
-                    branchLocalEntries.push(entry);
-                    branchLocalBySymbol.set(capture.symbol, entry);
-                }
+        const registerBranchLocals = (
+            awaits: readonly NestedBranchAwait[],
+            terminal: NestedBranchTerminal | null,
+        ): boolean => {
+            const captures = [
+                ...awaits.flatMap((awaitStep) => awaitStep.captures),
+                ...(terminal?.captures ?? []),
+            ];
+            for (const capture of captures) {
+                if (branchLocalBySymbol.has(capture.symbol)) continue;
+                const type = this.prepareType(mapTsType(
+                    capture.identifier,
+                    this.checker.getTypeAtLocation(capture.identifier),
+                    this.checker,
+                ));
+                if (type.kind === "void" || type.kind === "never") return false;
+                const entry = {
+                    identifier: capture.identifier,
+                    symbol: capture.symbol,
+                    type,
+                    field: `nested_if_branch_local_${branchLocalEntries.length}`,
+                };
+                branchLocalEntries.push(entry);
+                branchLocalBySymbol.set(capture.symbol, entry);
             }
             return true;
         };
-        if (!registerBranchLocals(bodyAwaits) || !registerBranchLocals(elseAwaits)) return false;
+        if (!registerBranchLocals(bodyAwaits, bodyBranch.terminal) ||
+            !registerBranchLocals(elseAwaits, elseBranch.terminal)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
             conditionPromiseType.kind !== "promise" || conditionAwaitedType.kind !== "boolean" ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
@@ -39982,16 +39965,33 @@ class Emitter {
             promiseType: CType,
             callbackName: string,
             postlude: readonly ts.Statement[],
+            captures: readonly NestedBranchCapture[],
         ): void => {
-            this.argumentValueScopes.push(stateScope(state));
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                for (const statement of postlude) this.emitStmt(out, statement);
-                source = this.emitExpr(terminal.awaitedExpression!.expression);
+                const captureEntries = captures
+                    .map((capture) => branchLocalBySymbol.get(capture.symbol))
+                    .filter((entry): entry is NestedBranchLocal => !!entry);
+                const captureSymbols = new Set(captureEntries.map((entry) => entry.symbol));
+                this.argumentValueScopes.push(stateScope(state, captureSymbols));
+                try {
+                    for (const statement of postlude) this.emitStmt(out, statement);
+                    for (const entry of captureEntries) {
+                        const value = this.emitExpr(entry.identifier);
+                        out.line(`${state}->${entry.field} = ${this.coerce(value, entry.type, entry.identifier)};`);
+                    }
+                } finally {
+                    this.argumentValueScopes.pop();
+                }
+                this.argumentValueScopes.push(stateScope(state));
+                try {
+                    source = this.emitExpr(terminal.awaitedExpression!.expression);
+                } finally {
+                    this.argumentValueScopes.pop();
+                }
             } finally {
                 if (thisValue) this.functionThisStack.pop();
-                this.argumentValueScopes.pop();
             }
             const sourceVar = this.freshTemp("_async_iter_nested_terminal_source");
             out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, terminal.awaitedExpression!.expression)};`);
@@ -40218,6 +40218,7 @@ class Emitter {
                         branchTerminalPromiseType,
                         branchTerminalName,
                         branchPostlude,
+                        branchTerminal.captures,
                     );
                 } else if (branchTerminal && branchTerminal.action === "return") {
                     emitBranchSynchronousReturn(controlBuf, "state", branchTerminal, branchPostlude);
