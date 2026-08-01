@@ -61,14 +61,14 @@ async function runOf(): Promise<string> {
             const directValue = item + "-direct";
             markOf(directValue);
             await laterOfControl(item);
-            markOf(item);
+            markOf(directValue);
         } else {
             await laterOfAlias(item);
             let directValue: string;
             directValue = item + "-direct";
             markOf(directValue);
             await laterOfControl(item);
-            markOf(item);
+            markOf(directValue);
         }
         continue;
     }
@@ -84,14 +84,14 @@ async function runIn(): Promise<string> {
             const directValue = key + "-direct";
             markIn(directValue);
             await laterInControl(key);
-            markIn(key);
+            markIn(directValue);
         } else {
             await laterInAlias(key);
             let directValue: string;
             directValue = key + "-direct";
             markIn(directValue);
             await laterInControl(key);
-            markIn(key);
+            markIn(directValue);
         }
         continue;
     }

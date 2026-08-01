@@ -39439,10 +39439,15 @@ class Emitter {
         if (!loopAction || loopBody.length < 2) return false;
         const nestedIf = loopBody[loopBody.length - 2];
         if (!nestedIf || !ts.isIfStatement(nestedIf)) return false;
+        type NestedBranchCapture = {
+            identifier: ts.Identifier;
+            symbol: ts.Symbol;
+        };
         type NestedBranchAwait = {
             expression: ts.AwaitExpression;
             alias: ts.Identifier | null;
             before: readonly ts.Statement[];
+            captures: readonly NestedBranchCapture[];
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
@@ -39527,7 +39532,29 @@ class Emitter {
             for (const statement of future) visitFuture(statement);
             return safe;
         };
-        const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranch | null => {
+        const pendingBranchCaptures = (
+            pending: readonly ts.Statement[],
+            branchContainer: ts.Statement,
+        ): NestedBranchCapture[] => {
+            const captures: NestedBranchCapture[] = [];
+            const seen = new Set<ts.Symbol>();
+            for (const statement of pending) {
+                if (!ts.isVariableStatement(statement) || statement.parent !== branchContainer) continue;
+                for (const declaration of statement.declarationList.declarations) {
+                    if (!ts.isIdentifier(declaration.name)) continue;
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    if (symbol && !seen.has(symbol)) {
+                        captures.push({ identifier: declaration.name, symbol });
+                        seen.add(symbol);
+                    }
+                }
+            }
+            return captures;
+        };
+        const awaitedBranchExpressions = (
+            statements: readonly ts.Statement[],
+            branchContainer: ts.Statement,
+        ): NestedBranch | null => {
             if (statements.length === 0) return null;
             const expressions: NestedBranchAwait[] = [];
             let pendingStatements: ts.Statement[] = [];
@@ -39537,8 +39564,12 @@ class Emitter {
                 alias: ts.Identifier | null,
                 future: readonly ts.Statement[],
             ): boolean => {
-                if (!pendingSuspensionSafe(pendingStatements, future)) return false;
-                expressions.push({ expression, alias, before: pendingStatements });
+                expressions.push({
+                    expression,
+                    alias,
+                    before: pendingStatements,
+                    captures: pendingBranchCaptures(pendingStatements, branchContainer),
+                });
                 pendingStatements = [];
                 return true;
             };
@@ -39616,14 +39647,14 @@ class Emitter {
         const thenStatements = ts.isBlock(nestedIf.thenStatement)
             ? nestedIf.thenStatement.statements
             : [nestedIf.thenStatement];
-        const bodyBranch = awaitedBranchExpressions(thenStatements);
+        const bodyBranch = awaitedBranchExpressions(thenStatements, nestedIf.thenStatement);
         if (!bodyBranch) return false;
         let elseBranch: NestedBranch = { awaits: [], postlude: [], terminal: null };
         if (nestedIf.elseStatement) {
             const elseStatements = ts.isBlock(nestedIf.elseStatement)
                 ? nestedIf.elseStatement.statements
                 : [nestedIf.elseStatement];
-            const candidateAwaits = awaitedBranchExpressions(elseStatements);
+            const candidateAwaits = awaitedBranchExpressions(elseStatements, nestedIf.elseStatement);
             if (!candidateAwaits) return false;
             elseBranch = candidateAwaits;
         }
@@ -39701,8 +39732,16 @@ class Emitter {
             type: CType;
             field: string;
         };
+        type NestedBranchLocal = {
+            identifier: ts.Identifier;
+            symbol: ts.Symbol;
+            type: CType;
+            field: string;
+        };
         const branchAliasEntries: NestedBranchAlias[] = [];
         const branchAliasBySymbol = new Map<ts.Symbol, NestedBranchAlias>();
+        const branchLocalEntries: NestedBranchLocal[] = [];
+        const branchLocalBySymbol = new Map<ts.Symbol, NestedBranchLocal>();
         const registerBranchAliases = (
             awaits: readonly NestedBranchAwait[],
             awaitedTypes: readonly CType[],
@@ -39723,6 +39762,29 @@ class Emitter {
         };
         if (!registerBranchAliases(bodyAwaits, bodyAwaitedTypes) ||
             !registerBranchAliases(elseAwaits, elseAwaitedTypes)) return false;
+        const registerBranchLocals = (awaits: readonly NestedBranchAwait[]): boolean => {
+            for (const awaitStep of awaits) {
+                for (const capture of awaitStep.captures) {
+                    if (branchLocalBySymbol.has(capture.symbol)) continue;
+                    const type = this.prepareType(mapTsType(
+                        capture.identifier,
+                        this.checker.getTypeAtLocation(capture.identifier),
+                        this.checker,
+                    ));
+                    if (type.kind === "void" || type.kind === "never") return false;
+                    const entry = {
+                        identifier: capture.identifier,
+                        symbol: capture.symbol,
+                        type,
+                        field: `nested_if_branch_local_${branchLocalEntries.length}`,
+                    };
+                    branchLocalEntries.push(entry);
+                    branchLocalBySymbol.set(capture.symbol, entry);
+                }
+            }
+            return true;
+        };
+        if (!registerBranchLocals(bodyAwaits) || !registerBranchLocals(elseAwaits)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
             conditionPromiseType.kind !== "promise" || conditionAwaitedType.kind !== "boolean" ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
@@ -39766,6 +39828,7 @@ class Emitter {
         this.structDecls.line("size_t index;");
         this.structDecls.line(`${itemType.c} iteration_value;`);
         for (const alias of branchAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
+        for (const local of branchLocalEntries) this.structDecls.line(`${local.type.c} ${local.field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${envType};`);
@@ -39777,11 +39840,14 @@ class Emitter {
         if (bodyTerminalName) this.protos.line(`void ${bodyTerminalName}(void* env);`);
         if (elseTerminalName) this.protos.line(`void ${elseTerminalName}(void* env);`);
 
-        const stateScope = (state: string): Map<ts.Symbol, string> => {
+        const stateScope = (state: string, excludedSymbols: ReadonlySet<ts.Symbol> = new Set()): Map<ts.Symbol, string> => {
             const scope = new Map<ts.Symbol, string>();
             for (const param of params) scope.set(param.symbol, `${state}->${param.field}`);
             scope.set(bindingSymbol, `${state}->iteration_value`);
             for (const alias of branchAliasEntries) scope.set(alias.symbol, `${state}->${alias.field}`);
+            for (const local of branchLocalEntries) {
+                if (!excludedSymbols.has(local.symbol)) scope.set(local.symbol, `${state}->${local.field}`);
+            }
             return scope;
         };
         const emitFallthrough = (out: CBuf, state: string): void => {
@@ -39856,16 +39922,33 @@ class Emitter {
             awaitPromiseType: CType,
             callbackName: string,
             beforeStatements: readonly ts.Statement[] = [],
+            captures: readonly NestedBranchCapture[] = [],
         ): void => {
-            this.argumentValueScopes.push(stateScope(state));
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                for (const statement of beforeStatements) this.emitStmt(out, statement);
-                source = this.emitExpr(awaitExpression.expression);
+                const captureEntries = captures
+                    .map((capture) => branchLocalBySymbol.get(capture.symbol))
+                    .filter((entry): entry is NestedBranchLocal => !!entry);
+                const captureSymbols = new Set(captureEntries.map((entry) => entry.symbol));
+                this.argumentValueScopes.push(stateScope(state, captureSymbols));
+                try {
+                    for (const statement of beforeStatements) this.emitStmt(out, statement);
+                    for (const entry of captureEntries) {
+                        const value = this.emitExpr(entry.identifier);
+                        out.line(`${state}->${entry.field} = ${this.coerce(value, entry.type, entry.identifier)};`);
+                    }
+                } finally {
+                    this.argumentValueScopes.pop();
+                }
+                this.argumentValueScopes.push(stateScope(state));
+                try {
+                    source = this.emitExpr(awaitExpression.expression);
+                } finally {
+                    this.argumentValueScopes.pop();
+                }
             } finally {
                 if (thisValue) this.functionThisStack.pop();
-                this.argumentValueScopes.pop();
             }
             const sourceVar = this.freshTemp("_async_iter_nested_control_source");
             out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, awaitPromiseType, awaitExpression.expression)};`);
@@ -40062,6 +40145,7 @@ class Emitter {
             bodyPromiseTypes[0]!,
             controlNames[0]!,
             bodyAwaits[0]!.before,
+            bodyAwaits[0]!.captures,
         );
         conditionBuf.close();
         conditionBuf.open("else");
@@ -40073,6 +40157,7 @@ class Emitter {
                 elsePromiseTypes[0]!,
                 elseControlNames[0]!,
                 elseAwaits[0]!.before,
+                elseAwaits[0]!.captures,
             );
         } else {
             emitLoopAction(conditionBuf, "state");
@@ -40122,6 +40207,7 @@ class Emitter {
                     branchPromiseTypes[index + 1]!,
                     branchControlNames[index + 1]!,
                     nextAwait.before,
+                    nextAwait.captures,
                 );
             } else {
                 if (branchTerminal && branchTerminal.awaitedExpression && branchTerminalPromiseType && branchTerminalName) {
