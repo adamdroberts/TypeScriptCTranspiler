@@ -1,0 +1,8 @@
+declaration-false: "declaration-fallthrough"
+method-false: "method-fallthrough"
+arrow-false: "arrow-fallthrough"
+declaration-true: [["declaration","one"],{"second":"two"}]
+finally: method
+method-true: {"label":"method","values":["method-one",{"second":"method-two"}]}
+finally: arrow
+arrow-true: "caught:arrow-rejection"

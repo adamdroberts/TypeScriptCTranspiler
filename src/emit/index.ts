@@ -30746,25 +30746,29 @@ class Emitter {
                     }
                     const elementExpression = this.unwrapTransparentExpression(element);
                     if (isLiteral(elementExpression)) continue;
-                    if (!ts.isAwaitExpression(elementExpression)) {
-                        ok = false;
-                        return;
-                    }
-                    let sourceOk = true;
-                    const visitSource = (source: ts.Node): void => {
-                        if (!sourceOk) return;
-                        if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
-                            sourceOk = false;
+                    if (ts.isAwaitExpression(elementExpression)) {
+                        let sourceOk = true;
+                        const visitSource = (source: ts.Node): void => {
+                            if (!sourceOk) return;
+                            if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
+                                sourceOk = false;
+                                return;
+                            }
+                            ts.forEachChild(source, visitSource);
+                        };
+                        visitSource(elementExpression.expression);
+                        if (!sourceOk) {
+                            ok = false;
                             return;
                         }
-                        ts.forEachChild(source, visitSource);
-                    };
-                    visitSource(elementExpression.expression);
-                    if (!sourceOk) {
+                        awaitExprs.push(elementExpression);
+                    } else if (ts.isArrayLiteralExpression(elementExpression) ||
+                        ts.isObjectLiteralExpression(elementExpression)) {
+                        flatten(elementExpression);
+                    } else {
                         ok = false;
                         return;
                     }
-                    awaitExprs.push(elementExpression);
                 }
                 return;
             }
@@ -30938,25 +30942,29 @@ class Emitter {
                     }
                     const propertyExpression = this.unwrapTransparentExpression(property.initializer);
                     if (isLiteral(propertyExpression)) continue;
-                    if (!ts.isAwaitExpression(propertyExpression)) {
-                        ok = false;
-                        return;
-                    }
-                    let sourceOk = true;
-                    const visitSource = (source: ts.Node): void => {
-                        if (!sourceOk) return;
-                        if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
-                            sourceOk = false;
+                    if (ts.isAwaitExpression(propertyExpression)) {
+                        let sourceOk = true;
+                        const visitSource = (source: ts.Node): void => {
+                            if (!sourceOk) return;
+                            if (ts.isAwaitExpression(source) || ts.isFunctionLike(source) || ts.isClassLike(source)) {
+                                sourceOk = false;
+                                return;
+                            }
+                            ts.forEachChild(source, visitSource);
+                        };
+                        visitSource(propertyExpression.expression);
+                        if (!sourceOk) {
+                            ok = false;
                             return;
                         }
-                        ts.forEachChild(source, visitSource);
-                    };
-                    visitSource(propertyExpression.expression);
-                    if (!sourceOk) {
+                        awaitExprs.push(propertyExpression);
+                    } else if (ts.isArrayLiteralExpression(propertyExpression) ||
+                        ts.isObjectLiteralExpression(propertyExpression)) {
+                        flatten(propertyExpression);
+                    } else {
                         ok = false;
                         return;
                     }
-                    awaitExprs.push(propertyExpression);
                 }
                 return;
             }
