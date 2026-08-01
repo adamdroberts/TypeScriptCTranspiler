@@ -39451,7 +39451,7 @@ class Emitter {
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
-            condition: ts.Expression | null;
+            conditions: readonly ts.Expression[];
             awaitedExpression: ts.AwaitExpression | null;
             synchronousExpression: ts.Expression | null;
             captures: readonly NestedBranchCapture[];
@@ -39575,7 +39575,7 @@ class Emitter {
                 const statement = statements[index]!;
                 let terminalStatement: ts.ReturnStatement | ts.ThrowStatement | null = null;
                 let terminalPrefix: readonly ts.Statement[] = [];
-                let terminalCondition: ts.Expression | null = null;
+                let terminalConditions: readonly ts.Expression[] = [];
                 if (index === statements.length - 1) {
                     if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
                         terminalStatement = statement;
@@ -39589,14 +39589,29 @@ class Emitter {
                         }
                     } else if (ts.isIfStatement(statement) && !statement.elseStatement &&
                         this.asyncAwaitConditionExpressionSupported(statement.expression)) {
-                        const nestedTerminal = ts.isBlock(statement.thenStatement)
-                            ? statement.thenStatement.statements.length === 1
-                                ? statement.thenStatement.statements[0]!
-                                : null
-                            : statement.thenStatement;
-                        if (nestedTerminal && (ts.isReturnStatement(nestedTerminal) || ts.isThrowStatement(nestedTerminal))) {
-                            terminalStatement = nestedTerminal;
-                            terminalCondition = statement.expression;
+                        const terminalSelection = (candidate: ts.Statement, depth: number): {
+                            statement: ts.ReturnStatement | ts.ThrowStatement;
+                            conditions: readonly ts.Expression[];
+                        } | null => {
+                            const direct = ts.isBlock(candidate)
+                                ? candidate.statements.length === 1
+                                    ? candidate.statements[0]!
+                                    : null
+                                : candidate;
+                            if (direct && (ts.isReturnStatement(direct) || ts.isThrowStatement(direct))) {
+                                return { statement: direct, conditions: [] };
+                            }
+                            if (depth >= 1 || !direct || !ts.isIfStatement(direct) || direct.elseStatement ||
+                                !this.asyncAwaitConditionExpressionSupported(direct.expression)) return null;
+                            const nested = terminalSelection(direct.thenStatement, depth + 1);
+                            return nested
+                                ? { statement: nested.statement, conditions: [direct.expression, ...nested.conditions] }
+                                : null;
+                        };
+                        const selected = terminalSelection(statement.thenStatement, 0);
+                        if (selected) {
+                            terminalStatement = selected.statement;
+                            terminalConditions = [statement.expression, ...selected.conditions];
                         }
                     }
                 }
@@ -39610,20 +39625,20 @@ class Emitter {
                     ];
                     if (!terminalStatement.expression) {
                         if (action !== "return") return null;
-                        terminal = { action, condition: terminalCondition, awaitedExpression: null, synchronousExpression: null, captures: [] };
+                        terminal = { action, conditions: terminalConditions, awaitedExpression: null, synchronousExpression: null, captures: [] };
                         continue;
                     }
                     const expression = this.unwrapTransparentExpression(terminalStatement.expression);
                     if (ts.isAwaitExpression(expression)) {
                         terminal = {
                             action,
-                            condition: terminalCondition,
+                            conditions: terminalConditions,
                             awaitedExpression: expression,
                             synchronousExpression: null,
                             captures: terminalCaptures,
                         };
                     } else if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
-                        terminal = { action, condition: terminalCondition, awaitedExpression: null, synchronousExpression: expression, captures: [] };
+                        terminal = { action, conditions: terminalConditions, awaitedExpression: null, synchronousExpression: expression, captures: [] };
                     } else {
                         return null;
                     }
@@ -40293,26 +40308,30 @@ class Emitter {
                         emitLoopAction(controlBuf, "state");
                     }
                 };
-                if (branchTerminal?.condition) {
+                const emitConditionalTerminal = (conditionIndex: number): void => {
+                    const condition = branchTerminal?.conditions[conditionIndex];
+                    if (!condition) {
+                        emitTerminalOrAction();
+                        return;
+                    }
                     this.argumentValueScopes.push(stateScope("state"));
                     if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
                     let conditionValue: EmitResult;
                     try {
-                        conditionValue = this.emitExpr(branchTerminal.condition);
+                        conditionValue = this.emitExpr(condition);
                     } finally {
                         if (thisValue) this.functionThisStack.pop();
                         this.argumentValueScopes.pop();
                     }
-                    const conditionTruth = this.truthyExprFromEmitResult(conditionValue, branchTerminal.condition);
+                    const conditionTruth = this.truthyExprFromEmitResult(conditionValue, condition);
                     controlBuf.open(`if (${conditionTruth})`);
-                    emitTerminalOrAction();
+                    emitConditionalTerminal(conditionIndex + 1);
                     controlBuf.close();
                     controlBuf.open("else");
                     emitLoopAction(controlBuf, "state");
                     controlBuf.close();
-                } else {
-                    emitTerminalOrAction();
-                }
+                };
+                emitConditionalTerminal(0);
             }
             controlBuf.close();
             controlBuf.line();
