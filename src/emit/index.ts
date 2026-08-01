@@ -39586,12 +39586,16 @@ class Emitter {
                 isLastFinallyAwait = false,
                 isTryBodyAwait = false,
                 isLastTryBodyAwait = false,
+                additionalCaptures: readonly NestedBranchCapture[] = [],
             ): boolean => {
                 expressions.push({
                     expression,
                     alias,
                     before: pendingStatements,
-                    captures: pendingBranchCaptures(pendingStatements, branchContainer),
+                    captures: [
+                        ...pendingBranchCaptures(pendingStatements, branchContainer),
+                        ...additionalCaptures,
+                    ],
                     catchStatements,
                     catchSymbol,
                     catchPostAwaitStatements,
@@ -39948,6 +39952,7 @@ class Emitter {
                         expression: ts.AwaitExpression;
                         before: readonly ts.Statement[];
                         alias: ts.Identifier | null;
+                        captures: readonly NestedBranchCapture[];
                     }[] = [];
                     let tryPendingStatements: ts.Statement[] = [];
                     let tryStatementsSupported = true;
@@ -39957,7 +39962,12 @@ class Emitter {
                             ? this.unwrapTransparentExpression(tryStatement.expression)
                             : null;
                         if (tryExpression && ts.isAwaitExpression(tryExpression)) {
-                            tryAwaitSteps.push({ expression: tryExpression, before: tryPendingStatements, alias: null });
+                            tryAwaitSteps.push({
+                                expression: tryExpression,
+                                before: tryPendingStatements,
+                                alias: null,
+                                captures: pendingBranchCaptures(tryPendingStatements, statement.tryBlock),
+                            });
                             tryPendingStatements = [];
                         } else if (ts.isVariableStatement(tryStatement) &&
                             tryStatement.declarationList.declarations.length === 1) {
@@ -39991,6 +40001,7 @@ class Emitter {
                                     expression: awaitedExpression,
                                     before: tryPendingStatements,
                                     alias: declaration.name,
+                                    captures: pendingBranchCaptures(tryPendingStatements, statement.tryBlock),
                                 });
                                 tryPendingStatements = [];
                             } else if (awaitFreeBranchStatementSupported(tryStatement, statement)) {
@@ -40065,6 +40076,7 @@ class Emitter {
                                 false,
                                 true,
                                 tryIndex === tryAwaitSteps.length - 1,
+                                tryAwaitStep.captures,
                             )) return null;
                         }
                         for (let catchIndex = 0; catchIndex < catchAwaitSteps.length; catchIndex++) {
