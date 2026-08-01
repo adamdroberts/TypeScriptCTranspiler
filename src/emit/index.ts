@@ -39457,10 +39457,7 @@ class Emitter {
         const awaitFreeBranchStatementSupported = (statement: ts.Statement): boolean => {
             if (ts.isExpressionStatement(statement)) return this.asyncAwaitLoopPostStatementSupported(statement);
             if (ts.isVariableStatement(statement)) {
-                if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                    !ts.isBlock(statement.parent) ||
-                    statement.parent === nestedIf.thenStatement ||
-                    statement.parent === nestedIf.elseStatement) return false;
+                if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) return false;
                 return this.asyncAwaitLoopPostStatementSupported(statement);
             }
             if (ts.isBlock(statement)) return statement.statements.every(awaitFreeBranchStatementSupported);
@@ -39504,19 +39501,53 @@ class Emitter {
                 awaitFreeBranchStatementSupported(statement.thenStatement) &&
                 (!statement.elseStatement || awaitFreeBranchStatementSupported(statement.elseStatement));
         };
+        const pendingSuspensionSafe = (
+            pending: readonly ts.Statement[],
+            future: readonly ts.Statement[],
+        ): boolean => {
+            const symbols = new Set<ts.Symbol>();
+            const collectDeclarations = (node: ts.Node): void => {
+                if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+                    const symbol = this.symbolForIdentifier(node.name);
+                    if (symbol) symbols.add(symbol);
+                }
+                ts.forEachChild(node, collectDeclarations);
+            };
+            for (const statement of pending) collectDeclarations(statement);
+            if (symbols.size === 0) return true;
+            let safe = true;
+            const visitFuture = (node: ts.Node): void => {
+                if (!safe) return;
+                if (ts.isIdentifier(node) && symbols.has(this.symbolForIdentifier(node)!)) {
+                    safe = false;
+                    return;
+                }
+                ts.forEachChild(node, visitFuture);
+            };
+            for (const statement of future) visitFuture(statement);
+            return safe;
+        };
         const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranch | null => {
             if (statements.length === 0) return null;
             const expressions: NestedBranchAwait[] = [];
             let pendingStatements: ts.Statement[] = [];
             let terminal: NestedBranchTerminal | null = null;
-            const addAwait = (expression: ts.AwaitExpression, alias: ts.Identifier | null): void => {
+            const addAwait = (
+                expression: ts.AwaitExpression,
+                alias: ts.Identifier | null,
+                future: readonly ts.Statement[],
+            ): boolean => {
+                if (!pendingSuspensionSafe(pendingStatements, future)) return false;
                 expressions.push({ expression, alias, before: pendingStatements });
                 pendingStatements = [];
+                return true;
             };
             for (let index = 0; index < statements.length; index++) {
                 const statement = statements[index]!;
                 if (index === statements.length - 1 && (ts.isReturnStatement(statement) || ts.isThrowStatement(statement))) {
                     const action = ts.isReturnStatement(statement) ? "return" : "throw";
+                    if (ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression ?? ts.factory.createVoidZero())) &&
+                        !pendingSuspensionSafe(pendingStatements, [statement])) return null;
                     if (!statement.expression) {
                         if (action !== "return") return null;
                         terminal = { action, awaitedExpression: null, synchronousExpression: null };
@@ -39535,7 +39566,7 @@ class Emitter {
                 if (ts.isExpressionStatement(statement)) {
                     const expression = this.unwrapTransparentExpression(statement.expression);
                     if (ts.isAwaitExpression(expression)) {
-                        addAwait(expression, null);
+                        if (!addAwait(expression, null, statements.slice(index + 1))) return null;
                     } else if (this.asyncAwaitLoopPostStatementSupported(statement)) {
                         pendingStatements.push(statement);
                     } else return null;
@@ -39550,19 +39581,29 @@ class Emitter {
                         if (ts.isAwaitExpression(candidate)) expression = candidate;
                     } else {
                         const assignmentStatement = statements[index + 1];
-                        if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return null;
-                        const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
-                        if (!ts.isBinaryExpression(assignment) ||
-                            assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-                            !ts.isIdentifier(assignment.left) ||
-                            this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return null;
-                        const candidate = this.unwrapTransparentExpression(assignment.right);
-                        if (ts.isAwaitExpression(candidate)) expression = candidate;
-                        index++;
+                        if (assignmentStatement && ts.isExpressionStatement(assignmentStatement)) {
+                            const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                            if (ts.isBinaryExpression(assignment) &&
+                                assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                                ts.isIdentifier(assignment.left) &&
+                                this.symbolForIdentifier(assignment.left) === this.symbolForIdentifier(declaration.name)) {
+                                const candidate = this.unwrapTransparentExpression(assignment.right);
+                                if (ts.isAwaitExpression(candidate)) {
+                                    expression = candidate;
+                                    index++;
+                                }
+                            }
+                        }
                     }
-                    if (!expression) return null;
-                    addAwait(expression, declaration.name);
-                    continue;
+                    if (expression) {
+                        if (!addAwait(expression, declaration.name, statements.slice(index + 1))) return null;
+                        continue;
+                    }
+                    if (awaitFreeBranchStatementSupported(statement)) {
+                        pendingStatements.push(statement);
+                        continue;
+                    }
+                    return null;
                 }
                 if (awaitFreeBranchStatementSupported(statement)) {
                     pendingStatements.push(statement);
