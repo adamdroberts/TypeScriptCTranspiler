@@ -39897,6 +39897,8 @@ class Emitter {
             this.checker.getTypeAtLocation(expression),
             this.checker,
         )));
+        const conditionTypeSupportsTruthiness = (type: CType): boolean =>
+            ["number", "bigint", "boolean", "string", "value"].includes(type.kind) || isPointerKind(type);
         const bodyPromiseTypes = bodyAwaits.map(({ expression }) => promiseTypeFor(expression));
         const bodyAwaitedTypes = bodyAwaits.map(({ expression }) => awaitedTypeFor(expression));
         const elsePromiseTypes = elseAwaits.map(({ expression }) => promiseTypeFor(expression));
@@ -40016,8 +40018,8 @@ class Emitter {
             !registerLocalCaptures(preludeCaptures)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
             conditionOperands.some((operand, index) => operand.awaitedExpression
-                ? conditionPromiseTypes[index]!.kind !== "promise" || conditionAwaitedTypes[index]!.kind !== "boolean"
-                : conditionOperandTypes[index]!.kind !== "boolean") ||
+                ? conditionPromiseTypes[index]!.kind !== "promise" || !conditionTypeSupportsTruthiness(conditionAwaitedTypes[index]!)
+                : !conditionTypeSupportsTruthiness(conditionOperandTypes[index]!)) ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             elsePromiseTypes.some((type) => type.kind !== "promise") ||
