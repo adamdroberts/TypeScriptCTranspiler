@@ -43,9 +43,25 @@ const value = async (flag: boolean): Promise<unknown> => {
     return "arrow-fallthrough";
 };
 
-declaration(true).then((result) => console.log("declaration-true:", JSON.stringify(result)));
-declaration(false).then((result) => console.log("declaration-false:", JSON.stringify(result)));
-new Worker().run(true).then((result) => console.log("method-true:", JSON.stringify(result)));
-new Worker().run(false).then((result) => console.log("method-false:", JSON.stringify(result)));
-value(true).then((result) => console.log("arrow-true:", JSON.stringify(result)));
-value(false).then((result) => console.log("arrow-false:", JSON.stringify(result)));
+declaration(false)
+    .then((result) => {
+        console.log("declaration-false:", JSON.stringify(result));
+        return new Worker().run(false);
+    })
+    .then((result) => {
+        console.log("method-false:", JSON.stringify(result));
+        return value(false);
+    })
+    .then((result) => {
+        console.log("arrow-false:", JSON.stringify(result));
+        return declaration(true);
+    })
+    .then((result) => {
+        console.log("declaration-true:", JSON.stringify(result));
+        return new Worker().run(true);
+    })
+    .then((result) => {
+        console.log("method-true:", JSON.stringify(result));
+        return value(true);
+    })
+    .then((result) => console.log("arrow-true:", JSON.stringify(result)));
