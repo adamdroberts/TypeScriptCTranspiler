@@ -39478,6 +39478,9 @@ class Emitter {
                 ts.isForOfStatement(statement) || ts.isForInStatement(statement)) {
                 return this.asyncAwaitLoopPostStatementSupported(statement);
             }
+            if (ts.isTryStatement(statement)) {
+                return this.asyncAwaitLoopPostStatementSupported(statement);
+            }
             if (!ts.isIfStatement(statement)) return false;
             let conditionSupported = true;
             const visitCondition = (node: ts.Node): void => {
