@@ -40078,7 +40078,8 @@ class Emitter {
                             awaitFreeBranchStatementSupported(child, statement)));
                     const hasSupportedFinally = !statement.finallyBlock || finallyStatementsSupported;
                     const hasSupportedTerminalTry = !tryAwaitSteps.some(({ terminalAction }) => !!terminalAction) ||
-                        (index === statements.length - 1 && finallyAwaitSteps.length === 0);
+                        (index === statements.length - 1 &&
+                            (!statement.catchClause || finallyAwaitSteps.length === 0));
                     const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
                         tryTrailingStatements.length === 0 &&
                         hasSupportedTerminalTry &&
@@ -40465,6 +40466,9 @@ class Emitter {
         this.structDecls.line("bool reject_after_success;");
         this.structDecls.line("tsc_value_t rejection_reason;");
         this.structDecls.line("tsc_value_t catch_reason;");
+        this.structDecls.line("bool terminal_pending;");
+        this.structDecls.line("bool terminal_throw;");
+        this.structDecls.line("tsc_promise_t* terminal_promise;");
         for (const alias of branchAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
         for (const local of branchLocalEntries) this.structDecls.line(`${local.type.c} ${local.field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
@@ -40757,6 +40761,9 @@ class Emitter {
             out.line(`${nextEnv}->index = ${state}->index;`);
             out.line(`${nextEnv}->iteration_value = TSC_ARR(${itemType.c}, ${state}->items, ${state}->index);`);
             out.line(`${nextEnv}->result_promise = ${state}->result_promise;`);
+            out.line(`${nextEnv}->terminal_pending = false;`);
+            out.line(`${nextEnv}->terminal_throw = false;`);
+            out.line(`${nextEnv}->terminal_promise = NULL;`);
             for (const param of params) out.line(`${nextEnv}->${param.field} = ${state}->${param.field};`);
             if (thisValue) out.line(`${nextEnv}->this_arg = ${state}->this_arg;`);
             emitPreludeSource(out, nextEnv, 0);
@@ -41146,9 +41153,32 @@ class Emitter {
                 controlBuf.line("tsc_promise_reject_in_place(_ret, state->rejection_reason);");
                 controlBuf.line("return;");
                 controlBuf.close();
+                controlBuf.open("if (state->terminal_pending)");
+                controlBuf.open("if (state->terminal_throw)");
+                controlBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(state->terminal_promise));");
+                controlBuf.close();
+                controlBuf.open("else");
+                controlBuf.line("tsc_promise_adopt_into(_ret, state->terminal_promise);");
+                controlBuf.close();
+                controlBuf.line("return;");
+                controlBuf.close();
             }
             if (currentAwait.terminalAction) {
-                if (currentAwait.terminalAction === "throw" && currentAwait.catchStatements && terminalCatchFlag) {
+                if (!currentAwait.catchStatements && finallyAwaitIndex >= 0) {
+                    const finallyAwait = branchAwaits[finallyAwaitIndex]!;
+                    controlBuf.line("state->terminal_pending = true;");
+                    controlBuf.line(`state->terminal_throw = ${currentAwait.terminalAction === "throw" ? "true" : "false"};`);
+                    controlBuf.line("state->terminal_promise = _p;");
+                    emitControlSource(
+                        controlBuf,
+                        "state",
+                        finallyAwait.expression,
+                        branchPromiseTypes[finallyAwaitIndex]!,
+                        branchControlNames[finallyAwaitIndex]!,
+                        finallyAwait.before,
+                        finallyAwait.captures,
+                    );
+                } else if (currentAwait.terminalAction === "throw" && currentAwait.catchStatements && terminalCatchFlag) {
                     controlBuf.open(`if (!${terminalCatchFlag})`);
                     const catchScope = new Map<ts.Symbol, string>();
                     if (currentAwait.catchSymbol) catchScope.set(currentAwait.catchSymbol, "tsc_promise_reason(_p)");
@@ -41359,6 +41389,9 @@ class Emitter {
         buf.line(`${initialEnv}->index = 0;`);
         buf.line(`${initialEnv}->iteration_value = TSC_ARR(${itemType.c}, ${itemsVar}, 0);`);
         buf.line(`${initialEnv}->result_promise = ${resultVar};`);
+        buf.line(`${initialEnv}->terminal_pending = false;`);
+        buf.line(`${initialEnv}->terminal_throw = false;`);
+        buf.line(`${initialEnv}->terminal_promise = NULL;`);
         for (const param of params) buf.line(`${initialEnv}->${param.field} = ${param.name};`);
         if (thisValue) buf.line(`${initialEnv}->this_arg = ${thisValue.c};`);
         emitPreludeSource(buf, initialEnv, 0);
