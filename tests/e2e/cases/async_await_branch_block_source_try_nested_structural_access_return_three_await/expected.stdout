@@ -1,0 +1,8 @@
+declaration-false: "declaration-fallthrough"
+method-false: "method-fallthrough"
+arrow-false: "arrow-fallthrough"
+declaration-true: {"joined":"declaration-left|declaration-right","templated":"declaration-template"}
+finally: method
+method-true: {"constructed":"method-right","length":12}
+finally: arrow
+arrow-true: "caught:arrow-rejection"

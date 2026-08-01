@@ -30577,6 +30577,17 @@ class Emitter {
             }
             return false;
         };
+        const isNestedStructuralExpression = (node: ts.Expression): boolean =>
+            ts.isTypeOfExpression(node) ||
+            ts.isPrefixUnaryExpression(node) ||
+            ts.isTemplateExpression(node) ||
+            ts.isTaggedTemplateExpression(node) ||
+            ts.isArrayLiteralExpression(node) ||
+            ts.isPropertyAccessExpression(node) ||
+            ts.isElementAccessExpression(node) ||
+            ts.isCallExpression(node) ||
+            ts.isNewExpression(node) ||
+            ts.isObjectLiteralExpression(node);
         const flatten = (node: ts.Expression): void => {
             if (!ok) return;
             const current = this.unwrapTransparentExpression(node);
@@ -30762,8 +30773,7 @@ class Emitter {
                             return;
                         }
                         awaitExprs.push(elementExpression);
-                    } else if (ts.isArrayLiteralExpression(elementExpression) ||
-                        ts.isObjectLiteralExpression(elementExpression)) {
+                    } else if (isNestedStructuralExpression(elementExpression)) {
                         flatten(elementExpression);
                     } else {
                         ok = false;
@@ -30958,8 +30968,7 @@ class Emitter {
                             return;
                         }
                         awaitExprs.push(propertyExpression);
-                    } else if (ts.isArrayLiteralExpression(propertyExpression) ||
-                        ts.isObjectLiteralExpression(propertyExpression)) {
+                    } else if (isNestedStructuralExpression(propertyExpression)) {
                         flatten(propertyExpression);
                     } else {
                         ok = false;
