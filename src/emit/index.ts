@@ -39997,7 +39997,8 @@ class Emitter {
                         (tryAwaitSteps.length === 1 ||
                             catchAwaitSteps.length > 0 ||
                             (!statement.catchClause && !!statement.finallyBlock) ||
-                            (!!statement.catchClause && !statement.finallyBlock));
+                            (!!statement.catchClause &&
+                                (!statement.finallyBlock || finallyAwaitSteps.length === 0)));
                     if ((statement.catchClause || statement.finallyBlock) &&
                         hasSupportedTry &&
                         hasSupportedCatch && hasSupportedFinally) {
