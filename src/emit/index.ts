@@ -39460,13 +39460,20 @@ class Emitter {
             postlude: readonly ts.Statement[];
             terminal: NestedBranchTerminal | null;
         };
-        const awaitFreeBranchStatementSupported = (statement: ts.Statement): boolean => {
+        const awaitFreeBranchStatementSupported = (
+            statement: ts.Statement,
+            branchContainer: ts.Statement | null = null,
+        ): boolean => {
             if (ts.isExpressionStatement(statement)) return this.asyncAwaitLoopPostStatementSupported(statement);
             if (ts.isVariableStatement(statement)) {
-                if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) return false;
+                if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
+                    statement.parent !== branchContainer) return false;
                 return this.asyncAwaitLoopPostStatementSupported(statement);
             }
-            if (ts.isBlock(statement)) return statement.statements.every(awaitFreeBranchStatementSupported);
+            if (ts.isBlock(statement)) {
+                return statement.statements.every((child) =>
+                    awaitFreeBranchStatementSupported(child, branchContainer));
+            }
             if (ts.isSwitchStatement(statement)) {
                 let expressionSupported = true;
                 const visitExpression = (node: ts.Node): void => {
@@ -39481,7 +39488,7 @@ class Emitter {
                 const clauseStatementSupported = (clauseStatement: ts.Statement): boolean =>
                     ts.isBreakStatement(clauseStatement) && !clauseStatement.label
                         ? true
-                        : awaitFreeBranchStatementSupported(clauseStatement);
+                        : awaitFreeBranchStatementSupported(clauseStatement, branchContainer);
                 return expressionSupported && statement.caseBlock.clauses.every((clause) =>
                     clause.statements.every(clauseStatementSupported));
             }
@@ -39504,8 +39511,8 @@ class Emitter {
             };
             visitCondition(statement.expression);
             return conditionSupported &&
-                awaitFreeBranchStatementSupported(statement.thenStatement) &&
-                (!statement.elseStatement || awaitFreeBranchStatementSupported(statement.elseStatement));
+                awaitFreeBranchStatementSupported(statement.thenStatement, branchContainer) &&
+                (!statement.elseStatement || awaitFreeBranchStatementSupported(statement.elseStatement, branchContainer));
         };
         const pendingBranchCaptures = (
             pending: readonly ts.Statement[],
@@ -39607,13 +39614,13 @@ class Emitter {
                         if (!addAwait(expression, declaration.name)) return null;
                         continue;
                     }
-                    if (awaitFreeBranchStatementSupported(statement)) {
+                    if (awaitFreeBranchStatementSupported(statement, branchContainer)) {
                         pendingStatements.push(statement);
                         continue;
                     }
                     return null;
                 }
-                if (awaitFreeBranchStatementSupported(statement)) {
+                if (awaitFreeBranchStatementSupported(statement, branchContainer)) {
                     pendingStatements.push(statement);
                     continue;
                 }
