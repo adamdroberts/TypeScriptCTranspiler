@@ -39815,22 +39815,17 @@ class Emitter {
                         const declarations = catchStatement.declarationList.declarations;
                         if (declarations.length > 1) {
                             const steps: { expression: ts.AwaitExpression; alias: ts.Identifier }[] = [];
-                            const allInitialized = declarations.every((declaration) => !!declaration.initializer);
-                            if (allInitialized) {
-                                for (const declaration of declarations) {
-                                    if (!ts.isIdentifier(declaration.name)) return null;
-                                    const expression = this.unwrapTransparentExpression(declaration.initializer!);
+                            let nextIndex = catchIndex + 1;
+                            for (const declaration of declarations) {
+                                if (!ts.isIdentifier(declaration.name)) return null;
+                                if (declaration.initializer) {
+                                    const expression = this.unwrapTransparentExpression(declaration.initializer);
                                     if (!ts.isAwaitExpression(expression)) return null;
                                     steps.push({ expression, alias: declaration.name });
+                                    continue;
                                 }
-                                return { steps, nextIndex: catchIndex + 1 };
-                            }
-                            if (declarations.some((declaration) => !!declaration.initializer)) return null;
-                            for (let declarationIndex = 0; declarationIndex < declarations.length; declarationIndex++) {
-                                const declaration = declarations[declarationIndex]!;
-                                const assignmentStatement = catchStatements[catchIndex + 1 + declarationIndex];
-                                if (!ts.isIdentifier(declaration.name) ||
-                                    !assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return null;
+                                const assignmentStatement = catchStatements[nextIndex];
+                                if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return null;
                                 const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
                                 if (!ts.isBinaryExpression(assignment) ||
                                     assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
@@ -39839,8 +39834,9 @@ class Emitter {
                                 const expression = this.unwrapTransparentExpression(assignment.right);
                                 if (!ts.isAwaitExpression(expression)) return null;
                                 steps.push({ expression, alias: declaration.name });
+                                nextIndex++;
                             }
-                            return { steps, nextIndex: catchIndex + 1 + declarations.length };
+                            return { steps, nextIndex };
                         }
                         if (declarations.length !== 1) return null;
                         const declaration = declarations[0]!;
