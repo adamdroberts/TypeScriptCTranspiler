@@ -39446,7 +39446,8 @@ class Emitter {
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
-            expression: ts.AwaitExpression;
+            awaitedExpression: ts.AwaitExpression | null;
+            synchronousExpression: ts.Expression | null;
         };
         type NestedBranch = {
             awaits: NestedBranchAwait[];
@@ -39508,10 +39509,20 @@ class Emitter {
             for (let index = 0; index < statements.length; index++) {
                 const statement = statements[index]!;
                 if (index === statements.length - 1 && (ts.isReturnStatement(statement) || ts.isThrowStatement(statement))) {
-                    if (!statement.expression) return null;
+                    const action = ts.isReturnStatement(statement) ? "return" : "throw";
+                    if (!statement.expression) {
+                        if (action !== "return") return null;
+                        terminal = { action, awaitedExpression: null, synchronousExpression: null };
+                        continue;
+                    }
                     const expression = this.unwrapTransparentExpression(statement.expression);
-                    if (!ts.isAwaitExpression(expression)) return null;
-                    terminal = { action: ts.isReturnStatement(statement) ? "return" : "throw", expression };
+                    if (ts.isAwaitExpression(expression)) {
+                        terminal = { action, awaitedExpression: expression, synchronousExpression: null };
+                    } else if (action === "return" && this.asyncAwaitSyncReturnExpressionSupported(expression)) {
+                        terminal = { action, awaitedExpression: null, synchronousExpression: expression };
+                    } else {
+                        return null;
+                    }
                     continue;
                 }
                 if (ts.isExpressionStatement(statement)) {
@@ -39623,10 +39634,18 @@ class Emitter {
         const bodyAwaitedTypes = bodyAwaits.map(({ expression }) => awaitedTypeFor(expression));
         const elsePromiseTypes = elseAwaits.map(({ expression }) => promiseTypeFor(expression));
         const elseAwaitedTypes = elseAwaits.map(({ expression }) => awaitedTypeFor(expression));
-        const bodyTerminalPromiseType = bodyBranch.terminal ? promiseTypeFor(bodyBranch.terminal.expression) : null;
-        const bodyTerminalAwaitedType = bodyBranch.terminal ? awaitedTypeFor(bodyBranch.terminal.expression) : null;
-        const elseTerminalPromiseType = elseBranch.terminal ? promiseTypeFor(elseBranch.terminal.expression) : null;
-        const elseTerminalAwaitedType = elseBranch.terminal ? awaitedTypeFor(elseBranch.terminal.expression) : null;
+        const bodyTerminalPromiseType = bodyBranch.terminal?.awaitedExpression
+            ? promiseTypeFor(bodyBranch.terminal.awaitedExpression)
+            : null;
+        const bodyTerminalAwaitedType = bodyBranch.terminal?.awaitedExpression
+            ? awaitedTypeFor(bodyBranch.terminal.awaitedExpression)
+            : null;
+        const elseTerminalPromiseType = elseBranch.terminal?.awaitedExpression
+            ? promiseTypeFor(elseBranch.terminal.awaitedExpression)
+            : null;
+        const elseTerminalAwaitedType = elseBranch.terminal?.awaitedExpression
+            ? awaitedTypeFor(elseBranch.terminal.awaitedExpression)
+            : null;
         const fallthroughPromiseType = promiseTypeFor(fallthroughAwait);
         const fallthroughAwaitedType = awaitedTypeFor(fallthroughAwait);
         type NestedBranchAlias = {
@@ -39662,8 +39681,10 @@ class Emitter {
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             elsePromiseTypes.some((type) => type.kind !== "promise") ||
             elseAwaitedTypes.some((type) => type.kind === "never") ||
-            (bodyTerminalPromiseType && (bodyTerminalPromiseType.kind !== "promise" || bodyTerminalAwaitedType!.kind === "never")) ||
-            (elseTerminalPromiseType && (elseTerminalPromiseType.kind !== "promise" || elseTerminalAwaitedType!.kind === "never")) ||
+            (bodyBranch.terminal?.awaitedExpression &&
+                (bodyTerminalPromiseType!.kind !== "promise" || bodyTerminalAwaitedType!.kind === "never")) ||
+            (elseBranch.terminal?.awaitedExpression &&
+                (elseTerminalPromiseType!.kind !== "promise" || elseTerminalAwaitedType!.kind === "never")) ||
             fallthroughPromiseType.kind !== "promise" || fallthroughAwaitedType.kind === "never") return false;
 
         const params = this.asyncAwaitContinuationParameters(parameters);
@@ -39675,10 +39696,10 @@ class Emitter {
         const elseControlNames = elseAwaits.map((_, index) =>
             `tsc_async_await_iterator_nested_if_else_control_${index}_${this.asyncAwaitReturnContinuationAdapters++}`,
         );
-        const bodyTerminalName = bodyBranch.terminal
+        const bodyTerminalName = bodyBranch.terminal?.awaitedExpression
             ? `tsc_async_await_iterator_nested_if_body_terminal_${this.asyncAwaitReturnContinuationAdapters++}`
             : null;
-        const elseTerminalName = elseBranch.terminal
+        const elseTerminalName = elseBranch.terminal?.awaitedExpression
             ? `tsc_async_await_iterator_nested_if_else_terminal_${this.asyncAwaitReturnContinuationAdapters++}`
             : null;
         const envType = `${bodyName}_env_t`;
@@ -39836,13 +39857,13 @@ class Emitter {
             let source: EmitResult;
             try {
                 for (const statement of postlude) this.emitStmt(out, statement);
-                source = this.emitExpr(terminal.expression.expression);
+                source = this.emitExpr(terminal.awaitedExpression!.expression);
             } finally {
                 if (thisValue) this.functionThisStack.pop();
                 this.argumentValueScopes.pop();
             }
             const sourceVar = this.freshTemp("_async_iter_nested_terminal_source");
-            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, terminal.expression.expression)};`);
+            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, terminal.awaitedExpression!.expression)};`);
             out.line(`${state}->receiver = ${sourceVar};`);
             out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
             out.line(`tsc_promise_add_callback(${sourceVar}, ${callbackName}, ${state});`);
@@ -39850,6 +39871,30 @@ class Emitter {
             out.open("else");
             out.line(`${callbackName}(${state});`);
             out.close();
+        };
+        const emitBranchSynchronousReturn = (
+            out: CBuf,
+            state: string,
+            terminal: NestedBranchTerminal,
+            postlude: readonly ts.Statement[],
+        ): void => {
+            this.argumentValueScopes.push(stateScope(state));
+            if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
+            try {
+                for (const statement of postlude) this.emitStmt(out, statement);
+                if (!terminal.synchronousExpression) {
+                    out.line(`tsc_promise_adopt_into(${state}->result_promise, tsc_promise_resolve(tsc_value_undefined()));`);
+                } else {
+                    const returned = this.emitExpr(terminal.synchronousExpression);
+                    const resolved = returned.ty.kind === "promise"
+                        ? returned.c
+                        : this.promiseResolveResult(returned, terminal.synchronousExpression);
+                    out.line(`tsc_promise_adopt_into(${state}->result_promise, ${resolved});`);
+                }
+            } finally {
+                if (thisValue) this.functionThisStack.pop();
+                this.argumentValueScopes.pop();
+            }
         };
         const emitBranchTerminalCallback = (
             callbackName: string,
@@ -40014,7 +40059,7 @@ class Emitter {
                     nextAwait.before,
                 );
             } else {
-                if (branchTerminal && branchTerminalPromiseType && branchTerminalName) {
+                if (branchTerminal && branchTerminal.awaitedExpression && branchTerminalPromiseType && branchTerminalName) {
                     emitBranchTerminalSource(
                         controlBuf,
                         "state",
@@ -40023,6 +40068,8 @@ class Emitter {
                         branchTerminalName,
                         branchPostlude,
                     );
+                } else if (branchTerminal && branchTerminal.action === "return") {
+                    emitBranchSynchronousReturn(controlBuf, "state", branchTerminal, branchPostlude);
                 } else {
                     emitBranchStatements(controlBuf, "state", branchPostlude);
                     emitLoopAction(controlBuf, "state");
