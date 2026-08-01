@@ -39445,6 +39445,24 @@ class Emitter {
             awaits: NestedBranchAwait[];
             postlude: readonly ts.Statement[];
         };
+        const awaitFreeBranchStatementSupported = (statement: ts.Statement): boolean => {
+            if (ts.isExpressionStatement(statement)) return this.asyncAwaitLoopPostStatementSupported(statement);
+            if (ts.isBlock(statement)) return statement.statements.every(awaitFreeBranchStatementSupported);
+            if (!ts.isIfStatement(statement)) return false;
+            let conditionSupported = true;
+            const visitCondition = (node: ts.Node): void => {
+                if (!conditionSupported) return;
+                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                    conditionSupported = false;
+                    return;
+                }
+                ts.forEachChild(node, visitCondition);
+            };
+            visitCondition(statement.expression);
+            return conditionSupported &&
+                awaitFreeBranchStatementSupported(statement.thenStatement) &&
+                (!statement.elseStatement || awaitFreeBranchStatementSupported(statement.elseStatement));
+        };
         const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranch | null => {
             if (statements.length === 0) return null;
             const expressions: NestedBranchAwait[] = [];
@@ -39485,6 +39503,10 @@ class Emitter {
                     }
                     if (!expression) return null;
                     addAwait(expression, declaration.name);
+                    continue;
+                }
+                if (awaitFreeBranchStatementSupported(statement)) {
+                    pendingStatements.push(statement);
                     continue;
                 }
                 return null;

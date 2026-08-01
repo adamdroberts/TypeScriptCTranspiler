@@ -58,14 +58,30 @@ async function runOf(): Promise<string> {
         await laterOf(item);
         if (await laterBoolean(item === "of-a")) {
             const branchValue = await laterOfAlias(item);
-            markOf(branchValue);
+            if (item === "of-a") {
+                markOf(branchValue);
+            } else {
+                markOf(branchValue);
+            }
             await laterOfControl(branchValue);
-            markOf(branchValue);
+            if (item === "of-a") {
+                markOf(branchValue);
+            } else {
+                markOf(branchValue);
+            }
         } else {
             const branchValue = await laterOfAlias(item);
-            markOf(branchValue);
+            if (item === "of-a") {
+                markOf(branchValue);
+            } else {
+                markOf(branchValue);
+            }
             await laterOfControl(branchValue);
-            markOf(branchValue);
+            if (item === "of-a") {
+                markOf(branchValue);
+            } else {
+                markOf(branchValue);
+            }
         }
         continue;
     }
@@ -78,14 +94,30 @@ async function runIn(): Promise<string> {
         await laterIn(key);
         if (await laterBoolean(key === "in-a")) {
             const branchValue = await laterInAlias(key);
-            markIn(branchValue);
+            if (key === "in-a") {
+                markIn(branchValue);
+            } else {
+                markIn(branchValue);
+            }
             await laterInControl(branchValue);
-            markIn(branchValue);
+            if (key === "in-a") {
+                markIn(branchValue);
+            } else {
+                markIn(branchValue);
+            }
         } else {
             const branchValue = await laterInAlias(key);
-            markIn(branchValue);
+            if (key === "in-a") {
+                markIn(branchValue);
+            } else {
+                markIn(branchValue);
+            }
             await laterInControl(branchValue);
-            markIn(branchValue);
+            if (key === "in-a") {
+                markIn(branchValue);
+            } else {
+                markIn(branchValue);
+            }
         }
         continue;
     }
