@@ -39454,6 +39454,7 @@ class Emitter {
             finallyStatements: readonly ts.Statement[];
             isFinallyAwait: boolean;
             isLastFinallyAwait: boolean;
+            isTryBodyAwait: boolean;
             isCatchAwait: boolean;
             isLastCatchAwait: boolean;
         };
@@ -39582,6 +39583,7 @@ class Emitter {
                 catchPostAwaitStatements: readonly ts.Statement[] | null = null,
                 isLastCatchAwait = false,
                 isLastFinallyAwait = false,
+                isTryBodyAwait = false,
             ): boolean => {
                 expressions.push({
                     expression,
@@ -39594,6 +39596,7 @@ class Emitter {
                     finallyStatements,
                     isFinallyAwait,
                     isLastFinallyAwait,
+                    isTryBodyAwait,
                     isCatchAwait,
                     isLastCatchAwait,
                 });
@@ -39938,13 +39941,27 @@ class Emitter {
                         }
                     }
                     const catchAwait = catchAwaitSteps[0]?.expression ?? null;
-                    const awaitStatement = statement.tryBlock.statements.length === 1 &&
-                        ts.isExpressionStatement(statement.tryBlock.statements[0]!)
-                        ? statement.tryBlock.statements[0] as ts.ExpressionStatement
-                        : null;
-                    const awaitExpression = awaitStatement
-                        ? this.unwrapTransparentExpression(awaitStatement.expression)
-                        : null;
+                    const tryAwaitSteps: {
+                        expression: ts.AwaitExpression;
+                        before: readonly ts.Statement[];
+                    }[] = [];
+                    let tryPendingStatements: ts.Statement[] = [];
+                    let tryStatementsSupported = true;
+                    for (const tryStatement of statement.tryBlock.statements) {
+                        const tryExpression = ts.isExpressionStatement(tryStatement)
+                            ? this.unwrapTransparentExpression(tryStatement.expression)
+                            : null;
+                        if (tryExpression && ts.isAwaitExpression(tryExpression)) {
+                            tryAwaitSteps.push({ expression: tryExpression, before: tryPendingStatements });
+                            tryPendingStatements = [];
+                        } else if (awaitFreeBranchStatementSupported(tryStatement, statement)) {
+                            tryPendingStatements.push(tryStatement);
+                        } else {
+                            tryStatementsSupported = false;
+                            break;
+                        }
+                    }
+                    const tryTrailingStatements = tryPendingStatements;
                     const finallyStatements = statement.finallyBlock?.statements ?? [];
                     const finallyAwaitSteps: {
                         expression: ts.AwaitExpression;
@@ -39972,16 +39989,29 @@ class Emitter {
                         (catchAwaitSteps.length > 0 || catchStatements.every((child) =>
                             awaitFreeBranchStatementSupported(child, statement)));
                     const hasSupportedFinally = !statement.finallyBlock || finallyStatementsSupported;
+                    const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
+                        tryTrailingStatements.length === 0 &&
+                        (tryAwaitSteps.length === 1 || (!statement.catchClause && finallyAwaitSteps.length > 0));
                     if ((statement.catchClause || statement.finallyBlock) &&
-                        awaitExpression !== null && ts.isAwaitExpression(awaitExpression) &&
+                        hasSupportedTry &&
                         hasSupportedCatch && hasSupportedFinally) {
-                        if (!addAwait(
-                            awaitExpression,
-                            null,
-                            statement.catchClause && !catchAwait ? catchStatements : null,
-                            catchAwait ? null : catchSymbol,
-                            finallyAwaitSteps.length > 0 ? [] : finallyStatements,
-                        )) return null;
+                        for (let tryIndex = 0; tryIndex < tryAwaitSteps.length; tryIndex++) {
+                            const tryAwaitStep = tryAwaitSteps[tryIndex]!;
+                            pendingStatements = [...tryAwaitStep.before];
+                            if (!addAwait(
+                                tryAwaitStep.expression,
+                                null,
+                                tryAwaitSteps.length === 1 && statement.catchClause && !catchAwait ? catchStatements : null,
+                                tryAwaitSteps.length === 1 && !catchAwait ? catchSymbol : null,
+                                finallyAwaitSteps.length > 0 ? [] : finallyStatements,
+                                false,
+                                false,
+                                null,
+                                false,
+                                false,
+                                true,
+                            )) return null;
+                        }
                         for (let catchIndex = 0; catchIndex < catchAwaitSteps.length; catchIndex++) {
                             const catchStep = catchAwaitSteps[catchIndex]!;
                             if (catchIndex === 0) pendingStatements = catchPreAwaitStatements;
@@ -40013,6 +40043,7 @@ class Emitter {
                                 null,
                                 false,
                                 finallyIndex === finallyAwaitSteps.length - 1,
+                                false,
                             )) return null;
                         }
                         continue;
@@ -40730,7 +40761,7 @@ class Emitter {
             preludeBuf.line("tsc_promise_t* _ret = state->result_promise;");
             const preludeAwait = preludeAwaits[index]!;
             const nextPreludeAwait = preludeAwaits[index + 1];
-            const finallyPreludeIndex = preludeAwait.isCatchAwait
+            const finallyPreludeIndex = (preludeAwait.isCatchAwait || preludeAwait.isTryBodyAwait)
                 ? preludeAwaits.findIndex((candidate, candidateIndex) =>
                     candidateIndex > index && candidate.isFinallyAwait)
                 : -1;
@@ -40874,7 +40905,7 @@ class Emitter {
             controlBuf.line("tsc_promise_t* _ret = state->result_promise;");
             const currentAwait = branchAwaits[index]!;
             const nextAwait = branchAwaits[index + 1];
-            const finallyAwaitIndex = currentAwait.isCatchAwait
+            const finallyAwaitIndex = (currentAwait.isCatchAwait || currentAwait.isTryBodyAwait)
                 ? branchAwaits.findIndex((candidate, candidateIndex) =>
                     candidateIndex > index && candidate.isFinallyAwait)
                 : -1;
