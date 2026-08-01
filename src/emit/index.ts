@@ -39796,6 +39796,12 @@ class Emitter {
         }
         const bodyAwaits = bodyBranch.awaits;
         const elseAwaits = elseBranch.awaits;
+        const preludeStatements = loopBody.slice(0, -2);
+        const preludeBranch = awaitedBranchExpressions(preludeStatements, loop.statement);
+        if (!preludeBranch || preludeBranch.postlude.length > 0 || preludeBranch.terminal ||
+            preludeBranch.alternateTerminal || preludeBranch.awaits.length === 0) return false;
+        const preludeAwaits = preludeBranch.awaits;
+        const preludeCaptures = preludeAwaits.flatMap(({ captures }) => captures);
         const conditionExpression = this.unwrapTransparentExpression(nestedIf.expression);
         type NestedConditionOperand = {
             expression: ts.Expression;
@@ -39835,17 +39841,6 @@ class Emitter {
         };
         if (!collectConditionOperands(conditionExpression) ||
             !conditionOperands.some(({ awaitedExpression }) => !!awaitedExpression)) return false;
-        const preludeStatements = loopBody.slice(0, -2);
-        if (preludeStatements.length < 1) return false;
-        const preludeAwaitStatement = preludeStatements[preludeStatements.length - 1]!;
-        if (!ts.isExpressionStatement(preludeAwaitStatement)) return false;
-        const preludeAwait = this.unwrapTransparentExpression(preludeAwaitStatement.expression);
-        if (!ts.isAwaitExpression(preludeAwait)) return false;
-        const preludePrefix = preludeStatements.slice(0, -1);
-        if (!preludePrefix.every((statement) =>
-            awaitFreeBranchStatementSupported(statement, loop.statement))) return false;
-        const preludeCaptures = pendingBranchCaptures(preludePrefix, loop.statement);
-
         let binding: ts.Identifier;
         if (ts.isForInStatement(loop)) {
             if (ts.isVariableDeclarationList(loop.initializer)) {
@@ -39884,8 +39879,8 @@ class Emitter {
             this.checker.getTypeAtLocation(expression),
             this.checker,
         ));
-        const preludePromiseType = promiseTypeFor(preludeAwait);
-        const preludeAwaitedType = awaitedTypeFor(preludeAwait);
+        const preludePromiseTypes = preludeAwaits.map(({ expression }) => promiseTypeFor(expression));
+        const preludeAwaitedTypes = preludeAwaits.map(({ expression }) => awaitedTypeFor(expression));
         const conditionPromiseTypes = conditionOperands.map(({ awaitedExpression }) =>
             awaitedExpression ? promiseTypeFor(awaitedExpression) : null,
         );
@@ -40016,7 +40011,8 @@ class Emitter {
             !registerBranchLocals(elseAwaits, elseBranch.terminal) ||
             !registerBranchLocals(elseAwaits, elseBranch.alternateTerminal) ||
             !registerLocalCaptures(preludeCaptures)) return false;
-        if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
+        if (preludePromiseTypes.some((type) => type.kind !== "promise") ||
+            preludeAwaitedTypes.some((type) => type.kind === "never") ||
             conditionOperands.some((operand, index) => operand.awaitedExpression
                 ? conditionPromiseTypes[index]!.kind !== "promise" || !conditionTypeSupportsTruthiness(conditionAwaitedTypes[index]!)
                 : !conditionTypeSupportsTruthiness(conditionOperandTypes[index]!)) ||
@@ -40036,6 +40032,9 @@ class Emitter {
 
         const params = this.asyncAwaitContinuationParameters(parameters);
         const bodyName = `tsc_async_await_iterator_nested_if_body_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const preludeNames = preludeAwaits.map((_, index) =>
+            `tsc_async_await_iterator_nested_if_prelude_${index}_${this.asyncAwaitReturnContinuationAdapters++}`,
+        );
         const conditionNames = conditionOperands.map((operand, index) => operand.awaitedExpression
             ? `tsc_async_await_iterator_nested_if_condition_${index}_${this.asyncAwaitReturnContinuationAdapters++}`
             : null,
@@ -40080,6 +40079,7 @@ class Emitter {
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
         this.protos.line(`void ${bodyName}(void* env);`);
+        for (const name of preludeNames) this.protos.line(`void ${name}(void* env);`);
         for (const name of conditionNames) {
             if (name) this.protos.line(`void ${name}(void* env);`);
         }
@@ -40156,14 +40156,17 @@ class Emitter {
             out.line(`${terminalAdapter}(${envVar});`);
             out.close();
         };
-        const emitPreludeSource = (out: CBuf, state: string): void => {
+        const emitPreludeSource = (out: CBuf, state: string, index: number): void => {
+            const preludeAwait = preludeAwaits[index]!;
+            const preludePromiseType = preludePromiseTypes[index]!;
+            const preludeName = preludeNames[index]!;
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                emitCapturedBranchStatements(out, state, preludePrefix, preludeCaptures);
+                emitCapturedBranchStatements(out, state, preludeAwait.before, preludeAwait.captures);
                 this.argumentValueScopes.push(stateScope(state));
                 try {
-                    source = this.emitExpr(preludeAwait.expression);
+                    source = this.emitExpr(preludeAwait.expression.expression);
                 } finally {
                     this.argumentValueScopes.pop();
                 }
@@ -40171,13 +40174,13 @@ class Emitter {
                 if (thisValue) this.functionThisStack.pop();
             }
             const sourceVar = this.freshTemp("_async_iter_nested_prelude_source");
-            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, preludePromiseType, preludeAwait.expression)};`);
+            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, preludePromiseType, preludeAwait.expression.expression)};`);
             out.line(`${state}->receiver = ${sourceVar};`);
             out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-            out.line(`tsc_promise_add_callback(${sourceVar}, ${bodyName}, ${state});`);
+            out.line(`tsc_promise_add_callback(${sourceVar}, ${preludeName}, ${state});`);
             out.close();
             out.open("else");
-            out.line(`${bodyName}(${state});`);
+            out.line(`${preludeName}(${state});`);
             out.close();
         };
         const emitControlSource = (
@@ -40333,28 +40336,7 @@ class Emitter {
             out.line(`${nextEnv}->result_promise = ${state}->result_promise;`);
             for (const param of params) out.line(`${nextEnv}->${param.field} = ${state}->${param.field};`);
             if (thisValue) out.line(`${nextEnv}->this_arg = ${state}->this_arg;`);
-            if (thisValue) this.functionThisStack.push({ c: `${nextEnv}->this_arg`, ty: thisValue.ty });
-            let source: EmitResult;
-            try {
-                emitCapturedBranchStatements(out, nextEnv, preludePrefix, preludeCaptures);
-                this.argumentValueScopes.push(stateScope(nextEnv));
-                try {
-                    source = this.emitExpr(preludeAwait.expression);
-                } finally {
-                    this.argumentValueScopes.pop();
-                }
-            } finally {
-                if (thisValue) this.functionThisStack.pop();
-            }
-            const sourceVar = this.freshTemp("_async_iter_nested_next_source");
-            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, preludePromiseType, preludeAwait.expression)};`);
-            out.line(`${nextEnv}->receiver = ${sourceVar};`);
-            out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-            out.line(`tsc_promise_add_callback(${sourceVar}, ${bodyName}, ${nextEnv});`);
-            out.close();
-            out.open("else");
-            out.line(`${bodyName}(${nextEnv});`);
-            out.close();
+            emitPreludeSource(out, nextEnv, 0);
             out.close();
             out.open("else");
             emitFallthrough(out, state);
@@ -40451,6 +40433,26 @@ class Emitter {
             out.line(`${conditionName}(${state});`);
             out.close();
         };
+
+        for (let index = 0; index < preludeAwaits.length; index++) {
+            const preludeBuf = new CBuf();
+            preludeBuf.open(`void ${preludeNames[index]}(void* env)`);
+            preludeBuf.line(`${envType}* state = (${envType}*)env;`);
+            preludeBuf.line("tsc_promise_t* _p = state->receiver;");
+            preludeBuf.line("tsc_promise_t* _ret = state->result_promise;");
+            preludeBuf.open("if (tsc_promise_is_rejected(_p))");
+            preludeBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            preludeBuf.line("return;");
+            preludeBuf.close();
+            preludeBuf.open("if (!tsc_promise_is_fulfilled(_p))");
+            preludeBuf.line("return;");
+            preludeBuf.close();
+            if (index + 1 < preludeAwaits.length) emitPreludeSource(preludeBuf, "state", index + 1);
+            else preludeBuf.line(`${bodyName}(state);`);
+            preludeBuf.close();
+            preludeBuf.line();
+            this.closureDefs.write(preludeBuf.toString());
+        }
 
         const bodyBuf = new CBuf();
         bodyBuf.open(`void ${bodyName}(void* env)`);
@@ -40690,7 +40692,7 @@ class Emitter {
         buf.line(`${initialEnv}->result_promise = ${resultVar};`);
         for (const param of params) buf.line(`${initialEnv}->${param.field} = ${param.name};`);
         if (thisValue) buf.line(`${initialEnv}->this_arg = ${thisValue.c};`);
-        emitPreludeSource(buf, initialEnv);
+        emitPreludeSource(buf, initialEnv, 0);
         buf.line(`return ${resultVar};`);
         return true;
     }
