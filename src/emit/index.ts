@@ -39992,8 +39992,7 @@ class Emitter {
                     const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
                         tryTrailingStatements.length === 0 &&
                         (tryAwaitSteps.length === 1 ||
-                            (catchAwaitSteps.length > 0 &&
-                                (!statement.finallyBlock || finallyAwaitSteps.length > 0)) ||
+                            catchAwaitSteps.length > 0 ||
                             (!statement.catchClause && finallyAwaitSteps.length > 0));
                     if ((statement.catchClause || statement.finallyBlock) &&
                         hasSupportedTry &&
@@ -40006,7 +40005,9 @@ class Emitter {
                                 null,
                                 tryAwaitSteps.length === 1 && statement.catchClause && !catchAwait ? catchStatements : null,
                                 tryAwaitSteps.length === 1 && !catchAwait ? catchSymbol : null,
-                                finallyAwaitSteps.length > 0 ? [] : finallyStatements,
+                                finallyAwaitSteps.length > 0 || tryIndex < tryAwaitSteps.length - 1
+                                    ? []
+                                    : finallyStatements,
                                 false,
                                 false,
                                 null,
