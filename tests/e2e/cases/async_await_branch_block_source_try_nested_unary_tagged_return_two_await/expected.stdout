@@ -1,0 +1,8 @@
+declaration-false: "declaration-fallthrough"
+method-false: "method-fallthrough"
+arrow-false: "arrow-fallthrough"
+declaration-true: {"kind":"string","negated":-7}
+finally: method
+method-true: ["method-tagged","string"]
+finally: arrow
+arrow-true: "caught:7"
