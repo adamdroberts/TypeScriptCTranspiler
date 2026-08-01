@@ -39797,22 +39797,44 @@ class Emitter {
         const bodyAwaits = bodyBranch.awaits;
         const elseAwaits = elseBranch.awaits;
         const conditionExpression = this.unwrapTransparentExpression(nestedIf.expression);
-        const conditionAwaits: ts.AwaitExpression[] = [];
+        type NestedConditionOperand = {
+            expression: ts.Expression;
+            awaitedExpression: ts.AwaitExpression | null;
+        };
+        const conditionOperands: NestedConditionOperand[] = [];
         const conditionOperators: ts.SyntaxKind[] = [];
-        const collectConditionAwaits = (expression: ts.Expression): boolean => {
+        const containsAwait = (expression: ts.Expression): boolean => {
+            let found = false;
+            const visit = (node: ts.Node): void => {
+                if (found || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                if (ts.isAwaitExpression(node)) {
+                    found = true;
+                    return;
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(expression);
+            return found;
+        };
+        const collectConditionOperands = (expression: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(expression);
             if (ts.isAwaitExpression(unwrapped)) {
-                conditionAwaits.push(unwrapped);
+                conditionOperands.push({ expression: unwrapped, awaitedExpression: unwrapped });
                 return true;
             }
-            if (!ts.isBinaryExpression(unwrapped) ||
-                (unwrapped.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
-                    unwrapped.operatorToken.kind !== ts.SyntaxKind.BarBarToken)) return false;
-            if (!collectConditionAwaits(unwrapped.left)) return false;
-            conditionOperators.push(unwrapped.operatorToken.kind);
-            return collectConditionAwaits(unwrapped.right);
+            if (ts.isBinaryExpression(unwrapped) &&
+                (unwrapped.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken ||
+                    unwrapped.operatorToken.kind === ts.SyntaxKind.BarBarToken)) {
+                if (!collectConditionOperands(unwrapped.left)) return false;
+                conditionOperators.push(unwrapped.operatorToken.kind);
+                return collectConditionOperands(unwrapped.right);
+            }
+            if (containsAwait(unwrapped)) return false;
+            conditionOperands.push({ expression: unwrapped, awaitedExpression: null });
+            return true;
         };
-        if (!collectConditionAwaits(conditionExpression)) return false;
+        if (!collectConditionOperands(conditionExpression) ||
+            !conditionOperands.some(({ awaitedExpression }) => !!awaitedExpression)) return false;
         const preludeStatements = loopBody.slice(0, -2);
         if (preludeStatements.length < 1) return false;
         const preludeAwaitStatement = preludeStatements[preludeStatements.length - 1]!;
@@ -39864,8 +39886,17 @@ class Emitter {
         ));
         const preludePromiseType = promiseTypeFor(preludeAwait);
         const preludeAwaitedType = awaitedTypeFor(preludeAwait);
-        const conditionPromiseTypes = conditionAwaits.map((awaitExpression) => promiseTypeFor(awaitExpression));
-        const conditionAwaitedTypes = conditionAwaits.map((awaitExpression) => awaitedTypeFor(awaitExpression));
+        const conditionPromiseTypes = conditionOperands.map(({ awaitedExpression }) =>
+            awaitedExpression ? promiseTypeFor(awaitedExpression) : null,
+        );
+        const conditionAwaitedTypes = conditionOperands.map(({ awaitedExpression }) =>
+            awaitedExpression ? awaitedTypeFor(awaitedExpression) : null,
+        );
+        const conditionOperandTypes = conditionOperands.map(({ expression }) => this.prepareType(mapTsType(
+            expression,
+            this.checker.getTypeAtLocation(expression),
+            this.checker,
+        )));
         const bodyPromiseTypes = bodyAwaits.map(({ expression }) => promiseTypeFor(expression));
         const bodyAwaitedTypes = bodyAwaits.map(({ expression }) => awaitedTypeFor(expression));
         const elsePromiseTypes = elseAwaits.map(({ expression }) => promiseTypeFor(expression));
@@ -39984,8 +40015,9 @@ class Emitter {
             !registerBranchLocals(elseAwaits, elseBranch.alternateTerminal) ||
             !registerLocalCaptures(preludeCaptures)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
-            conditionPromiseTypes.some((type) => type.kind !== "promise") ||
-            conditionAwaitedTypes.some((type) => type.kind !== "boolean") ||
+            conditionOperands.some((operand, index) => operand.awaitedExpression
+                ? conditionPromiseTypes[index]!.kind !== "promise" || conditionAwaitedTypes[index]!.kind !== "boolean"
+                : conditionOperandTypes[index]!.kind !== "boolean") ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
             bodyAwaitedTypes.some((type) => type.kind === "never") ||
             elsePromiseTypes.some((type) => type.kind !== "promise") ||
@@ -40002,8 +40034,9 @@ class Emitter {
 
         const params = this.asyncAwaitContinuationParameters(parameters);
         const bodyName = `tsc_async_await_iterator_nested_if_body_${this.asyncAwaitReturnContinuationAdapters++}`;
-        const conditionNames = conditionAwaits.map((_, index) =>
-            `tsc_async_await_iterator_nested_if_condition_${index}_${this.asyncAwaitReturnContinuationAdapters++}`,
+        const conditionNames = conditionOperands.map((operand, index) => operand.awaitedExpression
+            ? `tsc_async_await_iterator_nested_if_condition_${index}_${this.asyncAwaitReturnContinuationAdapters++}`
+            : null,
         );
         const controlNames = bodyAwaits.map((_, index) =>
             `tsc_async_await_iterator_nested_if_control_${index}_${this.asyncAwaitReturnContinuationAdapters++}`,
@@ -40045,7 +40078,9 @@ class Emitter {
         this.structDecls.close(` ${envType};`);
         this.structDecls.line();
         this.protos.line(`void ${bodyName}(void* env);`);
-        for (const name of conditionNames) this.protos.line(`void ${name}(void* env);`);
+        for (const name of conditionNames) {
+            if (name) this.protos.line(`void ${name}(void* env);`);
+        }
         for (const name of controlNames) this.protos.line(`void ${name}(void* env);`);
         for (const name of elseControlNames) this.protos.line(`void ${name}(void* env);`);
         if (bodyTerminalName) this.protos.line(`void ${bodyTerminalName}(void* env);`);
@@ -40344,8 +40379,55 @@ class Emitter {
                 emitLoopAction(out, state);
             }
         };
-        const emitConditionSource = (out: CBuf, state: string, index: number): void => {
-            const conditionAwait = conditionAwaits[index]!;
+        let emitConditionSource: (out: CBuf, state: string, index: number) => void;
+        const emitConditionResult = (
+            out: CBuf,
+            state: string,
+            index: number,
+            conditionTruth: string,
+        ): void => {
+            if (index + 1 < conditionOperands.length) {
+                const nextOperator = conditionOperators[index]!;
+                if (nextOperator === ts.SyntaxKind.AmpersandAmpersandToken) {
+                    out.open(`if (${conditionTruth})`);
+                    emitConditionSource(out, state, index + 1);
+                    out.close();
+                    out.open("else");
+                    emitConditionOutcome(out, state, false);
+                    out.close();
+                } else {
+                    out.open(`if (${conditionTruth})`);
+                    emitConditionOutcome(out, state, true);
+                    out.close();
+                    out.open("else");
+                    emitConditionSource(out, state, index + 1);
+                    out.close();
+                }
+            } else {
+                out.open(`if (${conditionTruth})`);
+                emitConditionOutcome(out, state, true);
+                out.close();
+                out.open("else");
+                emitConditionOutcome(out, state, false);
+                out.close();
+            }
+        };
+        emitConditionSource = (out: CBuf, state: string, index: number): void => {
+            const operand = conditionOperands[index]!;
+            if (!operand.awaitedExpression) {
+                this.argumentValueScopes.push(stateScope(state));
+                if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
+                let source: EmitResult;
+                try {
+                    source = this.emitExpr(operand.expression);
+                } finally {
+                    if (thisValue) this.functionThisStack.pop();
+                    this.argumentValueScopes.pop();
+                }
+                emitConditionResult(out, state, index, this.truthyExprFromEmitResult(source, operand.expression));
+                return;
+            }
+            const conditionAwait = operand.awaitedExpression;
             const conditionPromiseType = conditionPromiseTypes[index]!;
             const conditionName = conditionNames[index]!;
             this.argumentValueScopes.push(stateScope(state));
@@ -40385,12 +40467,13 @@ class Emitter {
         bodyBuf.line();
         this.closureDefs.write(bodyBuf.toString());
 
-        for (let index = 0; index < conditionAwaits.length; index++) {
-            const conditionAwait = conditionAwaits[index]!;
+        for (let index = 0; index < conditionOperands.length; index++) {
+            const conditionAwait = conditionOperands[index]!.awaitedExpression;
+            if (!conditionAwait) continue;
             const conditionAwaitedType = conditionAwaitedTypes[index]!;
             const conditionPromiseType = conditionPromiseTypes[index]!;
             const conditionBuf = new CBuf();
-            conditionBuf.open(`void ${conditionNames[index]}(void* env)`);
+            conditionBuf.open(`void ${conditionNames[index]!}(void* env)`);
             conditionBuf.line(`${envType}* state = (${envType}*)env;`);
             conditionBuf.line("tsc_promise_t* _p = state->receiver;");
             conditionBuf.line("tsc_promise_t* _ret = state->result_promise;");
@@ -40404,31 +40487,7 @@ class Emitter {
             const conditionValue = this.freshTemp("_async_iter_nested_condition_value");
             conditionBuf.line(`${conditionAwaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, conditionAwait)};`);
             const conditionTruth = this.truthyExprFromEmitResult({ c: conditionValue, ty: conditionAwaitedType }, conditionAwait);
-            if (index + 1 < conditionAwaits.length) {
-                const nextOperator = conditionOperators[index]!;
-                if (nextOperator === ts.SyntaxKind.AmpersandAmpersandToken) {
-                    conditionBuf.open(`if (${conditionTruth})`);
-                    emitConditionSource(conditionBuf, "state", index + 1);
-                    conditionBuf.close();
-                    conditionBuf.open("else");
-                    emitConditionOutcome(conditionBuf, "state", false);
-                    conditionBuf.close();
-                } else {
-                    conditionBuf.open(`if (${conditionTruth})`);
-                    emitConditionOutcome(conditionBuf, "state", true);
-                    conditionBuf.close();
-                    conditionBuf.open("else");
-                    emitConditionSource(conditionBuf, "state", index + 1);
-                    conditionBuf.close();
-                }
-            } else {
-                conditionBuf.open(`if (${conditionTruth})`);
-                emitConditionOutcome(conditionBuf, "state", true);
-                conditionBuf.close();
-                conditionBuf.open("else");
-                emitConditionOutcome(conditionBuf, "state", false);
-                conditionBuf.close();
-            }
+            emitConditionResult(conditionBuf, "state", index, conditionTruth);
             conditionBuf.close();
             conditionBuf.line();
             this.closureDefs.write(conditionBuf.toString());
