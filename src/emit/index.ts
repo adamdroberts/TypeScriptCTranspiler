@@ -384,6 +384,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
     successReturnExpr: ts.Expression | null;
     successThrowExpr?: ts.Expression | null;
     successSequenceContinuation?: AsyncAwaitExpressionSequenceReturnContinuation;
+    successSequenceReturns?: boolean;
     successReturnsAwaited: boolean;
     catchClause: ts.CatchClause;
     catchPreludeStatements: readonly ts.Statement[];
@@ -402,6 +403,7 @@ interface AsyncAwaitTryFinallyReturnContinuation {
     successReturnExpr: ts.Expression | null;
     successThrowExpr?: ts.Expression | null;
     successSequenceContinuation?: AsyncAwaitExpressionSequenceReturnContinuation;
+    successSequenceReturns?: boolean;
     successReturnsAwaited: boolean;
     successReturnAfterFinally: boolean;
     finallyStatements: readonly ts.Statement[];
@@ -22176,7 +22178,7 @@ class Emitter {
         while (index < block.statements.length) {
             const stmt = block.statements[index]!;
             if (this.awaitedContinuationStep(stmt) || this.awaitedReturnContinuationStep(stmt)) break;
-            if (ts.isThrowStatement(stmt) && stmt.expression) {
+            if ((ts.isThrowStatement(stmt) || ts.isReturnStatement(stmt)) && stmt.expression) {
                 let containsAwait = false;
                 const visit = (node: ts.Node): void => {
                     if (containsAwait || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
@@ -26262,13 +26264,14 @@ class Emitter {
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
         let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
+        let successSequenceReturns = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited && remainingTryStatements === 1) {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
-            if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
+            if ((ts.isThrowStatement(tryStatement) || ts.isReturnStatement(tryStatement)) && tryStatement.expression) {
                 const expression = this.unwrapTransparentExpression(tryStatement.expression);
                 const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                     expression,
@@ -26276,9 +26279,13 @@ class Emitter {
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
                 );
-                if (sequenceContinuation) {
+                if (sequenceContinuation && (ts.isThrowStatement(tryStatement) || sequenceContinuation.shortCircuitOperator === undefined)) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
-                    successThrowExpr = sequenceContinuation.returnExpr;
+                    if (ts.isThrowStatement(tryStatement)) {
+                        successThrowExpr = sequenceContinuation.returnExpr;
+                    } else {
+                        successSequenceReturns = true;
+                    }
                     successSequenceContinuation = sequenceContinuation;
                 }
                 const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
@@ -26301,6 +26308,8 @@ class Emitter {
         const catchThrowExpr = ts.isThrowStatement(catchStmt) ? catchStmt.expression : null;
         let successReturnExpr: ts.Expression | null = null;
         if (successThrowExpr) {
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
+        } else if (successSequenceReturns) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else if (successReturnsAwaited) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
@@ -26461,6 +26470,7 @@ class Emitter {
             successReturnExpr,
             successThrowExpr,
             successSequenceContinuation,
+            successSequenceReturns,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
             catchPreludeStatements,
@@ -27483,13 +27493,14 @@ class Emitter {
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
         let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
+        let successSequenceReturns = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited && remainingTryStatements === 1) {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
-            if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
+            if ((ts.isThrowStatement(tryStatement) || ts.isReturnStatement(tryStatement)) && tryStatement.expression) {
                 const expression = this.unwrapTransparentExpression(tryStatement.expression);
                 const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                     expression,
@@ -27497,9 +27508,13 @@ class Emitter {
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
                 );
-                if (sequenceContinuation) {
+                if (sequenceContinuation && (ts.isThrowStatement(tryStatement) || sequenceContinuation.shortCircuitOperator === undefined)) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
-                    successThrowExpr = sequenceContinuation.returnExpr;
+                    if (ts.isThrowStatement(tryStatement)) {
+                        successThrowExpr = sequenceContinuation.returnExpr;
+                    } else {
+                        successSequenceReturns = true;
+                    }
                     successSequenceContinuation = sequenceContinuation;
                 }
                 const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
@@ -27517,6 +27532,8 @@ class Emitter {
         if (!awaited) return null;
         let successReturnExpr: ts.Expression | null = null;
         if (successThrowExpr) {
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
+        } else if (successSequenceReturns) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else if (successReturnsAwaited) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
@@ -27644,6 +27661,7 @@ class Emitter {
             successReturnExpr,
             successThrowExpr,
             successSequenceContinuation,
+            successSequenceReturns,
             successReturnsAwaited,
             successReturnAfterFinally: remainingStatements === 2,
             finallyStatements: tryStmt.finallyBlock.statements,
@@ -28071,13 +28089,14 @@ class Emitter {
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
         let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
+        let successSequenceReturns = false;
         if (!awaited) {
             awaited = this.awaitedReturnContinuationStep(firstTryStatement);
             successReturnsAwaited = !!awaited;
         }
         if (!awaited && remainingTryStatements === 1) {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
-            if (ts.isThrowStatement(tryStatement) && tryStatement.expression) {
+            if ((ts.isThrowStatement(tryStatement) || ts.isReturnStatement(tryStatement)) && tryStatement.expression) {
                 const expression = this.unwrapTransparentExpression(tryStatement.expression);
                 const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                     expression,
@@ -28085,9 +28104,13 @@ class Emitter {
                     thisValue,
                     [...prelude.captures, ...tryPrelude.captures],
                 );
-                if (sequenceContinuation) {
+                if (sequenceContinuation && (ts.isThrowStatement(tryStatement) || sequenceContinuation.shortCircuitOperator === undefined)) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
-                    successThrowExpr = sequenceContinuation.returnExpr;
+                    if (ts.isThrowStatement(tryStatement)) {
+                        successThrowExpr = sequenceContinuation.returnExpr;
+                    } else {
+                        successSequenceReturns = true;
+                    }
                     successSequenceContinuation = sequenceContinuation;
                 }
                 const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
@@ -28110,6 +28133,8 @@ class Emitter {
         const catchThrowExpr = ts.isThrowStatement(catchStmt) ? catchStmt.expression : null;
         let successReturnExpr: ts.Expression | null = null;
         if (successThrowExpr) {
+            if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
+        } else if (successSequenceReturns) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
         } else if (successReturnsAwaited) {
             if (remainingStatements !== 1 || remainingTryStatements !== 1) return null;
@@ -28348,6 +28373,7 @@ class Emitter {
             successReturnExpr,
             successThrowExpr,
             successSequenceContinuation,
+            successSequenceReturns,
             successReturnsAwaited,
             catchClause: tryStmt.catchClause,
             catchPreludeStatements,
@@ -31978,6 +32004,16 @@ class Emitter {
         tryCatchFinallyContinuation?: AsyncAwaitTryCatchFinallyReturnContinuation,
         tryFinallyContinuation?: AsyncAwaitTryFinallyReturnContinuation,
     ): string {
+        const sequenceReturns = !!(
+            tryCatchContinuation?.successSequenceReturns ||
+            tryCatchFinallyContinuation?.successSequenceReturns ||
+            tryFinallyContinuation?.successSequenceReturns
+        );
+        const sequenceReturnFinally = tryCatchFinallyContinuation?.successSequenceReturns
+            ? tryCatchFinallyContinuation
+            : tryFinallyContinuation?.successSequenceReturns
+                ? tryFinallyContinuation
+                : null;
         const storageTypes = awaitedTypes.map((type, index) =>
             this.asyncAwaitContinuationStorageType(awaitExprs[index]!, type));
         const stageNames = awaitExprs.map((_, index) =>
@@ -32050,7 +32086,7 @@ class Emitter {
                         ? truthy
                         : `!(${nullish})`;
                 stageBuf.open(`if (${shortCircuit})`);
-                if (tryCatchContinuation || tryFinallyContinuation) {
+                if ((tryCatchContinuation || tryFinallyContinuation) && !sequenceReturns) {
                     stageBuf.line(`tsc_throw_str(${this.coerceToString(currentResult, returnExpr)});`);
                 } else if (rejectResult) {
                     stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${this.coerceToString(currentResult, returnExpr)}));`);
@@ -32113,12 +32149,54 @@ class Emitter {
                     this.argumentValueScopes.pop();
                 }
                 const returnedType = this.prepareType(returned.ty);
-                if (tryCatchContinuation || tryFinallyContinuation) {
+                const sequenceReturnWithFinally = sequenceReturns && !!sequenceReturnFinally;
+                if ((tryCatchContinuation || tryFinallyContinuation) && !sequenceReturns) {
                     stageBuf.line(`tsc_throw_str(${this.coerceToString(returned, returnExpr)});`);
                 } else if (rejectResult) {
                     const rejected = this.coerceToString(returned, returnExpr);
                     stageBuf.line("tsc_try_pop();");
                     stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(${rejected}));`);
+                } else if (sequenceReturnWithFinally) {
+                    if (returnedType.kind === "void" || returnedType.kind === "never") {
+                        stageBuf.line(`${returned.c};`);
+                        stageBuf.line("tsc_try_pop();");
+                    } else {
+                        stageBuf.line(`${returnedType.c} ${returnVar} = ${returned.c};`);
+                        stageBuf.line("tsc_try_pop();");
+                    }
+                    const successFinallyEh = this.freshTemp("_await_success_finally_eh");
+                    stageBuf.line(`tsc_try_frame_t ${successFinallyEh};`);
+                    stageBuf.line(`tsc_try_push(&${successFinallyEh});`);
+                    stageBuf.open(`if (setjmp(${successFinallyEh}.jb) == 0)`);
+                    const finallyScope = new Map<ts.Symbol, string>();
+                    for (const param of sequenceReturnFinally!.params) {
+                        finallyScope.set(param.symbol, `state->${param.field}`);
+                    }
+                    this.argumentValueScopes.push(finallyScope);
+                    if (sequenceReturnFinally!.thisValue) {
+                        this.functionThisStack.push({ c: "state->this_arg", ty: sequenceReturnFinally!.thisValue.ty });
+                    }
+                    this.asyncAwaitContinuationAdapterDepth++;
+                    try {
+                        for (const statement of sequenceReturnFinally!.finallyStatements) {
+                            this.emitStmt(stageBuf, statement);
+                        }
+                    } finally {
+                        this.asyncAwaitContinuationAdapterDepth--;
+                        if (sequenceReturnFinally!.thisValue) this.functionThisStack.pop();
+                        this.argumentValueScopes.pop();
+                    }
+                    stageBuf.line("tsc_try_pop();");
+                    if (returnedType.kind === "void" || returnedType.kind === "never") {
+                        stageBuf.line(`${resolvedVar} = tsc_promise_resolve(tsc_value_undefined());`);
+                    } else {
+                        stageBuf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr)};`);
+                    }
+                    stageBuf.close();
+                    stageBuf.open("else");
+                    stageBuf.line(`tsc_try_pop();`);
+                    stageBuf.line(`${resolvedVar} = tsc_promise_reject(tsc_value_string(tsc_current_error()));`);
+                    stageBuf.close();
                 } else if (returnedType.kind === "void" || returnedType.kind === "never") {
                     stageBuf.line(`${returned.c};`);
                     stageBuf.line("tsc_try_pop();");
@@ -32129,6 +32207,7 @@ class Emitter {
                     stageBuf.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, returnExpr)};`);
                 }
                 stageBuf.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                if (sequenceReturnWithFinally) stageBuf.line("return;");
             }
             stageBuf.close();
             stageBuf.open("else");
