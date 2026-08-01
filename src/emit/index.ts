@@ -39957,7 +39957,8 @@ class Emitter {
             }
             return true;
         };
-        if (!registerBranchAliases(bodyAwaits, bodyAwaitedTypes) ||
+        if (!registerBranchAliases(preludeAwaits, preludeAwaitedTypes) ||
+            !registerBranchAliases(bodyAwaits, bodyAwaitedTypes) ||
             !registerBranchAliases(elseAwaits, elseAwaitedTypes)) return false;
         const registerBranchLocals = (
             awaits: readonly NestedBranchAwait[],
@@ -40447,6 +40448,14 @@ class Emitter {
             preludeBuf.open("if (!tsc_promise_is_fulfilled(_p))");
             preludeBuf.line("return;");
             preludeBuf.close();
+            const preludeAlias = preludeAwaits[index]!.alias
+                ? branchAliasBySymbol.get(this.symbolForIdentifier(preludeAwaits[index]!.alias!)!)
+                : undefined;
+            if (preludeAlias) {
+                const preludeValue = this.freshTemp("_async_iter_nested_prelude_value");
+                preludeBuf.line(`${preludeAlias.type.c} ${preludeValue} = ${this.coerce(this.promiseFulfilledValue(preludePromiseTypes[index]!.elem, "_p"), preludeAlias.type, preludeAwaits[index]!.expression)};`);
+                preludeBuf.line(`state->${preludeAlias.field} = ${preludeValue};`);
+            }
             if (index + 1 < preludeAwaits.length) emitPreludeSource(preludeBuf, "state", index + 1);
             else preludeBuf.line(`${bodyName}(state);`);
             preludeBuf.close();
