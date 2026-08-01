@@ -39467,7 +39467,8 @@ class Emitter {
             if (ts.isExpressionStatement(statement)) return this.asyncAwaitLoopPostStatementSupported(statement);
             if (ts.isVariableStatement(statement)) {
                 if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
-                    statement.parent !== branchContainer) return false;
+                    statement.parent !== branchContainer &&
+                    !(ts.isBlock(statement.parent) && statement.parent.parent === branchContainer)) return false;
                 return this.asyncAwaitLoopPostStatementSupported(statement);
             }
             if (ts.isBlock(statement)) {
@@ -39521,6 +39522,21 @@ class Emitter {
             const captures: NestedBranchCapture[] = [];
             const seen = new Set<ts.Symbol>();
             for (const statement of pending) {
+                if (ts.isBlock(statement) && statement.parent === branchContainer) {
+                    for (const child of statement.statements) {
+                        if (!ts.isVariableStatement(child) ||
+                            (child.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0) continue;
+                        for (const declaration of child.declarationList.declarations) {
+                            if (!ts.isIdentifier(declaration.name)) continue;
+                            const symbol = this.symbolForIdentifier(declaration.name);
+                            if (symbol && !seen.has(symbol)) {
+                                captures.push({ identifier: declaration.name, symbol });
+                                seen.add(symbol);
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if (!ts.isVariableStatement(statement) || statement.parent !== branchContainer) continue;
                 for (const declaration of statement.declarationList.declarations) {
                     if (!ts.isIdentifier(declaration.name)) continue;
@@ -39840,6 +39856,37 @@ class Emitter {
             }
             return scope;
         };
+        const variableStatementForCapture = (capture: NestedBranchCapture): ts.VariableStatement | null => {
+            const declaration = capture.identifier.parent;
+            if (!ts.isVariableDeclaration(declaration) || !ts.isVariableDeclarationList(declaration.parent)) return null;
+            return ts.isVariableStatement(declaration.parent.parent) ? declaration.parent.parent : null;
+        };
+        const emitCapturedBranchStatements = (
+            out: CBuf,
+            state: string,
+            statements: readonly ts.Statement[],
+            captures: readonly NestedBranchCapture[],
+        ): void => {
+            const captureEntries = captures
+                .map((capture) => branchLocalBySymbol.get(capture.symbol))
+                .filter((entry): entry is NestedBranchLocal => !!entry);
+            const captureSymbols = new Set(captureEntries.map((entry) => entry.symbol));
+            this.argumentValueScopes.push(stateScope(state, captureSymbols));
+            try {
+                for (const statement of statements) {
+                    const flattenNestedBlock = ts.isBlock(statement) && captureEntries.some((entry) =>
+                        variableStatementForCapture(entry)?.parent === statement);
+                    if (flattenNestedBlock) this.emitStmtInBlock(out, statement);
+                    else this.emitStmt(out, statement);
+                }
+                for (const entry of captureEntries) {
+                    const value = this.emitExpr(entry.identifier);
+                    out.line(`${state}->${entry.field} = ${this.coerce(value, entry.type, entry.identifier)};`);
+                }
+            } finally {
+                this.argumentValueScopes.pop();
+            }
+        };
         const emitFallthrough = (out: CBuf, state: string): void => {
             this.argumentValueScopes.push(stateScope(state));
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
@@ -39917,20 +39964,7 @@ class Emitter {
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                const captureEntries = captures
-                    .map((capture) => branchLocalBySymbol.get(capture.symbol))
-                    .filter((entry): entry is NestedBranchLocal => !!entry);
-                const captureSymbols = new Set(captureEntries.map((entry) => entry.symbol));
-                this.argumentValueScopes.push(stateScope(state, captureSymbols));
-                try {
-                    for (const statement of beforeStatements) this.emitStmt(out, statement);
-                    for (const entry of captureEntries) {
-                        const value = this.emitExpr(entry.identifier);
-                        out.line(`${state}->${entry.field} = ${this.coerce(value, entry.type, entry.identifier)};`);
-                    }
-                } finally {
-                    this.argumentValueScopes.pop();
-                }
+                emitCapturedBranchStatements(out, state, beforeStatements, captures);
                 this.argumentValueScopes.push(stateScope(state));
                 try {
                     source = this.emitExpr(awaitExpression.expression);
@@ -39977,20 +40011,7 @@ class Emitter {
             if (thisValue) this.functionThisStack.push({ c: `${state}->this_arg`, ty: thisValue.ty });
             let source: EmitResult;
             try {
-                const captureEntries = captures
-                    .map((capture) => branchLocalBySymbol.get(capture.symbol))
-                    .filter((entry): entry is NestedBranchLocal => !!entry);
-                const captureSymbols = new Set(captureEntries.map((entry) => entry.symbol));
-                this.argumentValueScopes.push(stateScope(state, captureSymbols));
-                try {
-                    for (const statement of postlude) this.emitStmt(out, statement);
-                    for (const entry of captureEntries) {
-                        const value = this.emitExpr(entry.identifier);
-                        out.line(`${state}->${entry.field} = ${this.coerce(value, entry.type, entry.identifier)};`);
-                    }
-                } finally {
-                    this.argumentValueScopes.pop();
-                }
+                emitCapturedBranchStatements(out, state, postlude, captures);
                 this.argumentValueScopes.push(stateScope(state));
                 try {
                     source = this.emitExpr(terminal.awaitedExpression!.expression);
