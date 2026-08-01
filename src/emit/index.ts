@@ -39455,6 +39455,7 @@ class Emitter {
             isFinallyAwait: boolean;
             isLastFinallyAwait: boolean;
             isTryBodyAwait: boolean;
+            isLastTryBodyAwait: boolean;
             isCatchAwait: boolean;
             isLastCatchAwait: boolean;
         };
@@ -39584,6 +39585,7 @@ class Emitter {
                 isLastCatchAwait = false,
                 isLastFinallyAwait = false,
                 isTryBodyAwait = false,
+                isLastTryBodyAwait = false,
             ): boolean => {
                 expressions.push({
                     expression,
@@ -39597,6 +39599,7 @@ class Emitter {
                     isFinallyAwait,
                     isLastFinallyAwait,
                     isTryBodyAwait,
+                    isLastTryBodyAwait,
                     isCatchAwait,
                     isLastCatchAwait,
                 });
@@ -39993,7 +39996,7 @@ class Emitter {
                         tryTrailingStatements.length === 0 &&
                         (tryAwaitSteps.length === 1 ||
                             catchAwaitSteps.length > 0 ||
-                            (!statement.catchClause && finallyAwaitSteps.length > 0));
+                            (!statement.catchClause && !!statement.finallyBlock));
                     if ((statement.catchClause || statement.finallyBlock) &&
                         hasSupportedTry &&
                         hasSupportedCatch && hasSupportedFinally) {
@@ -40005,7 +40008,7 @@ class Emitter {
                                 null,
                                 tryAwaitSteps.length === 1 && statement.catchClause && !catchAwait ? catchStatements : null,
                                 tryAwaitSteps.length === 1 && !catchAwait ? catchSymbol : null,
-                                finallyAwaitSteps.length > 0 || tryIndex < tryAwaitSteps.length - 1
+                                finallyAwaitSteps.length > 0 || (statement.catchClause && tryIndex < tryAwaitSteps.length - 1)
                                     ? []
                                     : finallyStatements,
                                 false,
@@ -40014,6 +40017,7 @@ class Emitter {
                                 false,
                                 false,
                                 true,
+                                tryIndex === tryAwaitSteps.length - 1,
                             )) return null;
                         }
                         for (let catchIndex = 0; catchIndex < catchAwaitSteps.length; catchIndex++) {
@@ -40047,6 +40051,7 @@ class Emitter {
                                 null,
                                 false,
                                 finallyIndex === finallyAwaitSteps.length - 1,
+                                false,
                                 false,
                             )) return null;
                         }
@@ -40821,7 +40826,8 @@ class Emitter {
                 if (preludeAwait.catchSymbol) catchScope.set(preludeAwait.catchSymbol, "state->catch_reason");
                 emitBranchStatements(preludeBuf, "state", preludeAwait.catchPostAwaitStatements, catchScope);
             }
-            if (!preludeAwait.isCatchAwait || preludeAwait.isLastCatchAwait) {
+            if ((!preludeAwait.isTryBodyAwait || preludeAwait.isLastTryBodyAwait) &&
+                (!preludeAwait.isCatchAwait || preludeAwait.isLastCatchAwait)) {
                 emitBranchStatements(preludeBuf, "state", preludeAwait.finallyStatements);
             }
             if (preludeAwait.isFinallyAwait && preludeAwait.isLastFinallyAwait) {
@@ -41001,7 +41007,8 @@ class Emitter {
                 if (currentAwait.catchSymbol) catchScope.set(currentAwait.catchSymbol, "state->catch_reason");
                 emitBranchStatements(controlBuf, "state", currentAwait.catchPostAwaitStatements, catchScope);
             }
-            if (!currentAwait.isCatchAwait || currentAwait.isLastCatchAwait) {
+            if ((!currentAwait.isTryBodyAwait || currentAwait.isLastTryBodyAwait) &&
+                (!currentAwait.isCatchAwait || currentAwait.isLastCatchAwait)) {
                 emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
             }
             if (currentAwait.isFinallyAwait && currentAwait.isLastFinallyAwait) {

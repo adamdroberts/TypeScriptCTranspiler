@@ -1,0 +1,14 @@
+of-sync-a-try-between
+of-sync-a-cleanup-1
+of-sync-a-cleanup-done
+of-sync-b-try-between
+of-sync-b-cleanup-1
+of-sync-b-cleanup-done
+of-sync-b-return
+of-second-try-between
+of-second-cleanup-1
+of-second-cleanup-done
+second-error-of-second-try-2-rejected
+in-first-cleanup-1
+in-first-cleanup-done
+first-error-in-first-try-1-rejected
