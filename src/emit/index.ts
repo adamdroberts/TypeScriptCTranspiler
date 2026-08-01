@@ -39996,18 +39996,22 @@ class Emitter {
                         tryTrailingStatements.length === 0 &&
                         (tryAwaitSteps.length === 1 ||
                             catchAwaitSteps.length > 0 ||
-                            (!statement.catchClause && !!statement.finallyBlock));
+                            (!statement.catchClause && !!statement.finallyBlock) ||
+                            (!!statement.catchClause && !statement.finallyBlock));
                     if ((statement.catchClause || statement.finallyBlock) &&
                         hasSupportedTry &&
                         hasSupportedCatch && hasSupportedFinally) {
+                        const synchronousCatch = !!statement.catchClause && catchAwaitSteps.length === 0;
                         for (let tryIndex = 0; tryIndex < tryAwaitSteps.length; tryIndex++) {
                             const tryAwaitStep = tryAwaitSteps[tryIndex]!;
                             pendingStatements = [...tryAwaitStep.before];
                             if (!addAwait(
                                 tryAwaitStep.expression,
                                 null,
-                                tryAwaitSteps.length === 1 && statement.catchClause && !catchAwait ? catchStatements : null,
-                                tryAwaitSteps.length === 1 && !catchAwait ? catchSymbol : null,
+                                synchronousCatch ? catchStatements :
+                                    tryAwaitSteps.length === 1 && statement.catchClause && !catchAwait ? catchStatements : null,
+                                synchronousCatch ? catchSymbol :
+                                    tryAwaitSteps.length === 1 && !catchAwait ? catchSymbol : null,
                                 finallyAwaitSteps.length > 0 || (statement.catchClause && tryIndex < tryAwaitSteps.length - 1)
                                     ? []
                                     : finallyStatements,
@@ -40784,6 +40788,14 @@ class Emitter {
                 if (preludeAwait.catchSymbol) catchScope.set(preludeAwait.catchSymbol, "tsc_promise_reason(_p)");
                 emitBranchStatements(preludeBuf, "state", preludeAwait.catchStatements, catchScope);
                 preludeBuf.line("state->receiver = tsc_promise_resolve(tsc_value_undefined());");
+                if (preludeAwait.isTryBodyAwait && !preludeAwait.isLastTryBodyAwait) {
+                    const lastTryBodyAwaitIndex = preludeAwaits.findIndex((candidate, candidateIndex) =>
+                        candidateIndex > index && candidate.isLastTryBodyAwait);
+                    if (lastTryBodyAwaitIndex >= 0) {
+                        preludeBuf.line(`${preludeNames[lastTryBodyAwaitIndex]}(state);`);
+                        preludeBuf.line("return;");
+                    }
+                }
             } else if (!preludeAwait.isCatchAwait &&
                 (nextPreludeAwait?.isCatchAwait || catchPreludeIndex >= 0)) {
                 const catchIndex = nextPreludeAwait?.isCatchAwait ? index + 1 : catchPreludeIndex;
@@ -40936,6 +40948,14 @@ class Emitter {
                 if (currentAwait.catchSymbol) catchScope.set(currentAwait.catchSymbol, "tsc_promise_reason(_p)");
                 emitBranchStatements(controlBuf, "state", currentAwait.catchStatements, catchScope);
                 controlBuf.line("state->receiver = tsc_promise_resolve(tsc_value_undefined());");
+                if (currentAwait.isTryBodyAwait && !currentAwait.isLastTryBodyAwait) {
+                    const lastTryBodyAwaitIndex = branchAwaits.findIndex((candidate, candidateIndex) =>
+                        candidateIndex > index && candidate.isLastTryBodyAwait);
+                    if (lastTryBodyAwaitIndex >= 0) {
+                        controlBuf.line(`${branchControlNames[lastTryBodyAwaitIndex]}(state);`);
+                        controlBuf.line("return;");
+                    }
+                }
             } else if (!currentAwait.isCatchAwait &&
                 (nextAwait?.isCatchAwait || catchAwaitIndex >= 0)) {
                 const catchIndex = nextAwait?.isCatchAwait ? index + 1 : catchAwaitIndex;
