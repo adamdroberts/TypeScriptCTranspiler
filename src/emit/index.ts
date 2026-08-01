@@ -39436,14 +39436,26 @@ class Emitter {
         }
         const nestedIf = loopBody[loopBody.length - 2];
         if (!nestedIf || !ts.isIfStatement(nestedIf)) return false;
-        const awaitedBranchExpressions = (statements: readonly ts.Statement[]): ts.AwaitExpression[] | null => {
+        type NestedBranchAwait = {
+            expression: ts.AwaitExpression;
+            alias: ts.Identifier | null;
+        };
+        const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranchAwait[] | null => {
             if (statements.length === 0) return null;
-            const expressions: ts.AwaitExpression[] = [];
+            const expressions: NestedBranchAwait[] = [];
             for (const statement of statements) {
-                if (!ts.isExpressionStatement(statement)) return null;
-                const expression = this.unwrapTransparentExpression(statement.expression);
+                if (ts.isExpressionStatement(statement)) {
+                    const expression = this.unwrapTransparentExpression(statement.expression);
+                    if (!ts.isAwaitExpression(expression)) return null;
+                    expressions.push({ expression, alias: null });
+                    continue;
+                }
+                if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return null;
+                const declaration = statement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return null;
+                const expression = this.unwrapTransparentExpression(declaration.initializer);
                 if (!ts.isAwaitExpression(expression)) return null;
-                expressions.push(expression);
+                expressions.push({ expression, alias: declaration.name });
             }
             return expressions;
         };
@@ -39452,7 +39464,7 @@ class Emitter {
             : [nestedIf.thenStatement];
         const bodyAwaits = awaitedBranchExpressions(thenStatements);
         if (!bodyAwaits) return false;
-        let elseAwaits: ts.AwaitExpression[] = [];
+        let elseAwaits: NestedBranchAwait[] = [];
         if (nestedIf.elseStatement) {
             const elseStatements = ts.isBlock(nestedIf.elseStatement)
                 ? nestedIf.elseStatement.statements
@@ -39510,12 +39522,39 @@ class Emitter {
         const preludeAwaitedType = awaitedTypeFor(preludeAwait);
         const conditionPromiseType = promiseTypeFor(conditionAwait);
         const conditionAwaitedType = awaitedTypeFor(conditionAwait);
-        const bodyPromiseTypes = bodyAwaits.map((expression) => promiseTypeFor(expression));
-        const bodyAwaitedTypes = bodyAwaits.map((expression) => awaitedTypeFor(expression));
-        const elsePromiseTypes = elseAwaits.map((expression) => promiseTypeFor(expression));
-        const elseAwaitedTypes = elseAwaits.map((expression) => awaitedTypeFor(expression));
+        const bodyPromiseTypes = bodyAwaits.map(({ expression }) => promiseTypeFor(expression));
+        const bodyAwaitedTypes = bodyAwaits.map(({ expression }) => awaitedTypeFor(expression));
+        const elsePromiseTypes = elseAwaits.map(({ expression }) => promiseTypeFor(expression));
+        const elseAwaitedTypes = elseAwaits.map(({ expression }) => awaitedTypeFor(expression));
         const fallthroughPromiseType = promiseTypeFor(fallthroughAwait);
         const fallthroughAwaitedType = awaitedTypeFor(fallthroughAwait);
+        type NestedBranchAlias = {
+            symbol: ts.Symbol;
+            type: CType;
+            field: string;
+        };
+        const branchAliasEntries: NestedBranchAlias[] = [];
+        const branchAliasBySymbol = new Map<ts.Symbol, NestedBranchAlias>();
+        const registerBranchAliases = (
+            awaits: readonly NestedBranchAwait[],
+            awaitedTypes: readonly CType[],
+        ): boolean => {
+            for (let index = 0; index < awaits.length; index++) {
+                const identifier = awaits[index]!.alias;
+                if (!identifier) continue;
+                const symbol = this.symbolForIdentifier(identifier);
+                const type = awaitedTypes[index]!;
+                if (!symbol || type.kind === "void" || type.kind === "never") return false;
+                if (!branchAliasBySymbol.has(symbol)) {
+                    const entry = { symbol, type, field: `nested_if_branch_value_${branchAliasEntries.length}` };
+                    branchAliasEntries.push(entry);
+                    branchAliasBySymbol.set(symbol, entry);
+                }
+            }
+            return true;
+        };
+        if (!registerBranchAliases(bodyAwaits, bodyAwaitedTypes) ||
+            !registerBranchAliases(elseAwaits, elseAwaitedTypes)) return false;
         if (preludePromiseType.kind !== "promise" || preludeAwaitedType.kind === "never" ||
             conditionPromiseType.kind !== "promise" || conditionAwaitedType.kind !== "boolean" ||
             bodyPromiseTypes.some((type) => type.kind !== "promise") ||
@@ -39548,6 +39587,7 @@ class Emitter {
         this.structDecls.line("tsc_array_t* items;");
         this.structDecls.line("size_t index;");
         this.structDecls.line(`${itemType.c} iteration_value;`);
+        for (const alias of branchAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${envType};`);
@@ -39561,6 +39601,7 @@ class Emitter {
             const scope = new Map<ts.Symbol, string>();
             for (const param of params) scope.set(param.symbol, `${state}->${param.field}`);
             scope.set(bindingSymbol, `${state}->iteration_value`);
+            for (const alias of branchAliasEntries) scope.set(alias.symbol, `${state}->${alias.field}`);
             return scope;
         };
         const emitFallthrough = (out: CBuf, state: string): void => {
@@ -39722,11 +39763,11 @@ class Emitter {
         conditionBuf.line(`${conditionAwaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, conditionAwait)};`);
         const conditionTruth = this.truthyExprFromEmitResult({ c: conditionValue, ty: conditionAwaitedType }, conditionAwait);
         conditionBuf.open(`if (${conditionTruth})`);
-        emitControlSource(conditionBuf, "state", bodyAwaits[0]!, bodyPromiseTypes[0]!, controlNames[0]!);
+        emitControlSource(conditionBuf, "state", bodyAwaits[0]!.expression, bodyPromiseTypes[0]!, controlNames[0]!);
         conditionBuf.close();
         conditionBuf.open("else");
         if (elseAwaits.length > 0) {
-            emitControlSource(conditionBuf, "state", elseAwaits[0]!, elsePromiseTypes[0]!, elseControlNames[0]!);
+            emitControlSource(conditionBuf, "state", elseAwaits[0]!.expression, elsePromiseTypes[0]!, elseControlNames[0]!);
         } else {
             emitContinue(conditionBuf, "state");
         }
@@ -39737,7 +39778,7 @@ class Emitter {
 
         const emitControlCallback = (
             callbackName: string,
-            branchAwaits: readonly ts.AwaitExpression[],
+            branchAwaits: readonly NestedBranchAwait[],
             branchPromiseTypes: readonly CType[],
             branchControlNames: readonly string[],
             index: number,
@@ -39755,11 +39796,19 @@ class Emitter {
             controlBuf.line("return;");
             controlBuf.close();
             const nextAwait = branchAwaits[index + 1];
+            const currentAlias = branchAwaits[index]!.alias
+                ? branchAliasBySymbol.get(this.symbolForIdentifier(branchAwaits[index]!.alias!)!)
+                : undefined;
+            if (currentAlias) {
+                const currentValue = this.freshTemp("_async_iter_nested_branch_value");
+                controlBuf.line(`${currentAlias.type.c} ${currentValue} = ${this.coerce(this.promiseFulfilledValue(branchPromiseTypes[index]!.elem, "_p"), currentAlias.type, branchAwaits[index]!.expression)};`);
+                controlBuf.line(`state->${currentAlias.field} = ${currentValue};`);
+            }
             if (nextAwait) {
                 emitControlSource(
                     controlBuf,
                     "state",
-                    nextAwait,
+                    nextAwait.expression,
                     branchPromiseTypes[index + 1]!,
                     branchControlNames[index + 1]!,
                 );
