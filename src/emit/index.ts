@@ -39947,16 +39947,58 @@ class Emitter {
                     const tryAwaitSteps: {
                         expression: ts.AwaitExpression;
                         before: readonly ts.Statement[];
+                        alias: ts.Identifier | null;
                     }[] = [];
                     let tryPendingStatements: ts.Statement[] = [];
                     let tryStatementsSupported = true;
-                    for (const tryStatement of statement.tryBlock.statements) {
+                    for (let tryStatementIndex = 0; tryStatementIndex < statement.tryBlock.statements.length; tryStatementIndex++) {
+                        const tryStatement = statement.tryBlock.statements[tryStatementIndex]!;
                         const tryExpression = ts.isExpressionStatement(tryStatement)
                             ? this.unwrapTransparentExpression(tryStatement.expression)
                             : null;
                         if (tryExpression && ts.isAwaitExpression(tryExpression)) {
-                            tryAwaitSteps.push({ expression: tryExpression, before: tryPendingStatements });
+                            tryAwaitSteps.push({ expression: tryExpression, before: tryPendingStatements, alias: null });
                             tryPendingStatements = [];
+                        } else if (ts.isVariableStatement(tryStatement) &&
+                            tryStatement.declarationList.declarations.length === 1) {
+                            const declaration = tryStatement.declarationList.declarations[0]!;
+                            if (!ts.isIdentifier(declaration.name)) {
+                                tryStatementsSupported = false;
+                                break;
+                            }
+                            let awaitedExpression: ts.AwaitExpression | null = null;
+                            if (declaration.initializer) {
+                                const candidate = this.unwrapTransparentExpression(declaration.initializer);
+                                if (ts.isAwaitExpression(candidate)) awaitedExpression = candidate;
+                            } else {
+                                const assignmentStatement = statement.tryBlock.statements[tryStatementIndex + 1];
+                                if (assignmentStatement && ts.isExpressionStatement(assignmentStatement)) {
+                                    const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                                    if (ts.isBinaryExpression(assignment) &&
+                                        assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                                        ts.isIdentifier(assignment.left) &&
+                                        this.symbolForIdentifier(assignment.left) === this.symbolForIdentifier(declaration.name)) {
+                                        const candidate = this.unwrapTransparentExpression(assignment.right);
+                                        if (ts.isAwaitExpression(candidate)) {
+                                            awaitedExpression = candidate;
+                                            tryStatementIndex++;
+                                        }
+                                    }
+                                }
+                            }
+                            if (awaitedExpression) {
+                                tryAwaitSteps.push({
+                                    expression: awaitedExpression,
+                                    before: tryPendingStatements,
+                                    alias: declaration.name,
+                                });
+                                tryPendingStatements = [];
+                            } else if (awaitFreeBranchStatementSupported(tryStatement, statement)) {
+                                tryPendingStatements.push(tryStatement);
+                            } else {
+                                tryStatementsSupported = false;
+                                break;
+                            }
                         } else if (awaitFreeBranchStatementSupported(tryStatement, statement)) {
                             tryPendingStatements.push(tryStatement);
                         } else {
@@ -40008,7 +40050,7 @@ class Emitter {
                             pendingStatements = [...tryAwaitStep.before];
                             if (!addAwait(
                                 tryAwaitStep.expression,
-                                null,
+                                tryAwaitStep.alias,
                                 synchronousCatch ? catchStatements :
                                     tryAwaitSteps.length === 1 && statement.catchClause && !catchAwait ? catchStatements : null,
                                 synchronousCatch ? catchSymbol :
