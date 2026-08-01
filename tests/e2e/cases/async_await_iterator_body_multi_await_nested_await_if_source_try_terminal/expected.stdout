@@ -1,0 +1,12 @@
+of-return-cleanup
+of-return:of-return-value
+of-return-false:of-return-fallback
+of-throw-cleanup
+of-throw:of-throw-reason
+of-throw-false:of-throw-fallback
+in-return-cleanup
+in-return:in-return-value
+in-return-false:in-return-fallback
+in-throw-cleanup
+in-throw:in-throw-reason
+in-throw-false:in-throw-fallback

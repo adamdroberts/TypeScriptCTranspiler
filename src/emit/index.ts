@@ -39458,6 +39458,7 @@ class Emitter {
             isLastTryBodyAwait: boolean;
             isCatchAwait: boolean;
             isLastCatchAwait: boolean;
+            terminalAction: "return" | "throw" | null;
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
@@ -39587,6 +39588,7 @@ class Emitter {
                 isTryBodyAwait = false,
                 isLastTryBodyAwait = false,
                 additionalCaptures: readonly NestedBranchCapture[] = [],
+                terminalAction: "return" | "throw" | null = null,
             ): boolean => {
                 expressions.push({
                     expression,
@@ -39606,6 +39608,7 @@ class Emitter {
                     isLastTryBodyAwait,
                     isCatchAwait,
                     isLastCatchAwait,
+                    terminalAction,
                 });
                 pendingStatements = [];
                 return true;
@@ -39953,11 +39956,28 @@ class Emitter {
                         before: readonly ts.Statement[];
                         alias: ts.Identifier | null;
                         captures: readonly NestedBranchCapture[];
+                        terminalAction: "return" | "throw" | null;
                     }[] = [];
+                    const tryStatements = statement.tryBlock.statements;
+                    const tryTerminalStatement = tryStatements[tryStatements.length - 1];
+                    let tryTerminalAction: "return" | "throw" | null = null;
+                    let tryTerminalExpression: ts.AwaitExpression | null = null;
+                    let tryStatementCount = tryStatements.length;
+                    if (tryTerminalStatement &&
+                        (ts.isReturnStatement(tryTerminalStatement) || ts.isThrowStatement(tryTerminalStatement))) {
+                        const candidate = tryTerminalStatement.expression
+                            ? this.unwrapTransparentExpression(tryTerminalStatement.expression)
+                            : null;
+                        if (candidate && ts.isAwaitExpression(candidate)) {
+                            tryTerminalAction = ts.isReturnStatement(tryTerminalStatement) ? "return" : "throw";
+                            tryTerminalExpression = candidate;
+                            tryStatementCount--;
+                        }
+                    }
                     let tryPendingStatements: ts.Statement[] = [];
                     let tryStatementsSupported = true;
-                    for (let tryStatementIndex = 0; tryStatementIndex < statement.tryBlock.statements.length; tryStatementIndex++) {
-                        const tryStatement = statement.tryBlock.statements[tryStatementIndex]!;
+                    for (let tryStatementIndex = 0; tryStatementIndex < tryStatementCount; tryStatementIndex++) {
+                        const tryStatement = tryStatements[tryStatementIndex]!;
                         const tryExpression = ts.isExpressionStatement(tryStatement)
                             ? this.unwrapTransparentExpression(tryStatement.expression)
                             : null;
@@ -39967,6 +39987,7 @@ class Emitter {
                                 before: tryPendingStatements,
                                 alias: null,
                                 captures: pendingBranchCaptures(tryPendingStatements, statement.tryBlock),
+                                terminalAction: null,
                             });
                             tryPendingStatements = [];
                         } else if (ts.isVariableStatement(tryStatement) &&
@@ -40002,6 +40023,7 @@ class Emitter {
                                     before: tryPendingStatements,
                                     alias: declaration.name,
                                     captures: pendingBranchCaptures(tryPendingStatements, statement.tryBlock),
+                                    terminalAction: null,
                                 });
                                 tryPendingStatements = [];
                             } else if (awaitFreeBranchStatementSupported(tryStatement, statement)) {
@@ -40016,6 +40038,16 @@ class Emitter {
                             tryStatementsSupported = false;
                             break;
                         }
+                    }
+                    if (tryStatementsSupported && tryTerminalExpression && tryTerminalAction) {
+                        tryAwaitSteps.push({
+                            expression: tryTerminalExpression,
+                            before: tryPendingStatements,
+                            alias: null,
+                            captures: pendingBranchCaptures(tryPendingStatements, statement.tryBlock),
+                            terminalAction: tryTerminalAction,
+                        });
+                        tryPendingStatements = [];
                     }
                     const tryTrailingStatements = tryPendingStatements;
                     const finallyStatements = statement.finallyBlock?.statements ?? [];
@@ -40045,8 +40077,11 @@ class Emitter {
                         (catchAwaitSteps.length > 0 || catchStatements.every((child) =>
                             awaitFreeBranchStatementSupported(child, statement)));
                     const hasSupportedFinally = !statement.finallyBlock || finallyStatementsSupported;
+                    const hasSupportedTerminalTry = !tryAwaitSteps.some(({ terminalAction }) => !!terminalAction) ||
+                        (!statement.catchClause && finallyAwaitSteps.length === 0);
                     const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
                         tryTrailingStatements.length === 0 &&
+                        hasSupportedTerminalTry &&
                         (tryAwaitSteps.length === 1 ||
                             catchAwaitSteps.length > 0 ||
                             (!statement.catchClause && !!statement.finallyBlock) ||
@@ -40077,6 +40112,7 @@ class Emitter {
                                 true,
                                 tryIndex === tryAwaitSteps.length - 1,
                                 tryAwaitStep.captures,
+                                tryAwaitStep.terminalAction,
                             )) return null;
                         }
                         for (let catchIndex = 0; catchIndex < catchAwaitSteps.length; catchIndex++) {
@@ -41091,6 +41127,14 @@ class Emitter {
                 controlBuf.line("tsc_promise_reject_in_place(_ret, state->rejection_reason);");
                 controlBuf.line("return;");
                 controlBuf.close();
+            }
+            if (currentAwait.terminalAction) {
+                if (currentAwait.terminalAction === "return") {
+                    controlBuf.line("tsc_promise_adopt_into(_ret, _p);");
+                } else {
+                    controlBuf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+                }
+                controlBuf.line("return;");
             }
             let resumeAwaitIndex = index + 1;
             if (!currentAwait.isCatchAwait && nextAwait?.isCatchAwait) {
