@@ -39586,6 +39586,7 @@ class Emitter {
                 let terminalArmContainer: ts.Statement | null = null;
                 let alternateTerminalArmContainer: ts.Statement | null = null;
                 let terminalConditions: readonly ts.Expression[] = [];
+                let alternateTerminalConditions: readonly ts.Expression[] = [];
                 if (index === statements.length - 1) {
                     if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
                         terminalStatement = statement;
@@ -39599,18 +39600,26 @@ class Emitter {
                         }
                     } else if (ts.isIfStatement(statement) && statement.elseStatement &&
                         this.asyncAwaitConditionExpressionSupported(statement.expression)) {
-                        const terminalArmFor = (candidate: ts.Statement): {
+                        const terminalArmFor = (candidate: ts.Statement, depth = 0): {
                             statement: ts.ReturnStatement | ts.ThrowStatement;
                             prefix: readonly ts.Statement[];
                             container: ts.Statement;
+                            conditions: readonly ts.Expression[];
                         } | null => {
                             const direct = ts.isBlock(candidate)
                                 ? candidate.statements[candidate.statements.length - 1]
                                 : candidate;
-                            if (!direct || (!ts.isReturnStatement(direct) && !ts.isThrowStatement(direct))) return null;
                             const prefix = ts.isBlock(candidate) ? candidate.statements.slice(0, -1) : [];
                             if (!prefix.every((child) => awaitFreeBranchStatementSupported(child, candidate))) return null;
-                            return { statement: direct, prefix, container: candidate };
+                            if (direct && (ts.isReturnStatement(direct) || ts.isThrowStatement(direct))) {
+                                return { statement: direct, prefix, container: candidate, conditions: [] };
+                            }
+                            if (depth >= 1 || prefix.length > 0 || !direct || !ts.isIfStatement(direct) || direct.elseStatement ||
+                                !this.asyncAwaitConditionExpressionSupported(direct.expression)) return null;
+                            const nested = terminalArmFor(direct.thenStatement, depth + 1);
+                            return nested
+                                ? { ...nested, conditions: [direct.expression, ...nested.conditions] }
+                                : null;
                         };
                         const thenTerminal = terminalArmFor(statement.thenStatement);
                         const elseTerminal = terminalArmFor(statement.elseStatement);
@@ -39621,6 +39630,8 @@ class Emitter {
                             alternateTerminalArmPrefix = elseTerminal.prefix;
                             terminalArmContainer = thenTerminal.container;
                             alternateTerminalArmContainer = elseTerminal.container;
+                            terminalConditions = thenTerminal.conditions;
+                            alternateTerminalConditions = elseTerminal.conditions;
                             terminalCondition = statement.expression;
                         }
                     } else if (ts.isIfStatement(statement) && !statement.elseStatement &&
@@ -39702,7 +39713,7 @@ class Emitter {
                     if (alternateTerminalStatement) {
                         alternateTerminal = terminalFor(
                             alternateTerminalStatement,
-                            [],
+                            alternateTerminalConditions,
                             [...terminalCaptures, ...alternateTerminalArmCaptures],
                             alternateTerminalArmPrefix,
                         );
