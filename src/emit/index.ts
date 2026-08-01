@@ -39791,22 +39791,48 @@ class Emitter {
                         ? this.symbolForIdentifier(catchVariable.name) ?? null
                         : null;
                     const catchStatements = statement.catchClause?.block.statements ?? [];
-                    const catchAwaitSteps: { expression: ts.AwaitExpression; postStatements: readonly ts.Statement[] }[] = [];
-                    const firstCatchStatement = catchStatements[0];
-                    const firstCatchExpression = firstCatchStatement && ts.isExpressionStatement(firstCatchStatement)
-                        ? this.unwrapTransparentExpression(firstCatchStatement.expression)
+                    const catchAwaitSteps: {
+                        expression: ts.AwaitExpression;
+                        alias: ts.Identifier | null;
+                        postStatements: readonly ts.Statement[];
+                    }[] = [];
+                    const catchAwaitStepFor = (catchStatement: ts.Statement): {
+                        expression: ts.AwaitExpression;
+                        alias: ts.Identifier | null;
+                    } | null => {
+                        if (ts.isExpressionStatement(catchStatement)) {
+                            const expression = this.unwrapTransparentExpression(catchStatement.expression);
+                            return ts.isAwaitExpression(expression)
+                                ? { expression, alias: null }
+                                : null;
+                        }
+                        if (!ts.isVariableStatement(catchStatement) ||
+                            catchStatement.declarationList.declarations.length !== 1) return null;
+                        const declaration = catchStatement.declarationList.declarations[0]!;
+                        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return null;
+                        const expression = this.unwrapTransparentExpression(declaration.initializer);
+                        return ts.isAwaitExpression(expression)
+                            ? { expression, alias: declaration.name }
+                            : null;
+                    };
+                    const firstCatchStep = catchStatements[0]
+                        ? catchAwaitStepFor(catchStatements[0]!)
                         : null;
-                    if (firstCatchExpression && ts.isAwaitExpression(firstCatchExpression)) {
-                        let currentCatchAwait = firstCatchExpression;
+                    if (firstCatchStep) {
+                        let currentCatchAwait = firstCatchStep.expression;
+                        let currentCatchAlias = firstCatchStep.alias;
                         let postStatements: ts.Statement[] = [];
                         let catchAwaitChainSupported = true;
                         for (const catchStatement of catchStatements.slice(1)) {
-                            const catchExpression = ts.isExpressionStatement(catchStatement)
-                                ? this.unwrapTransparentExpression(catchStatement.expression)
-                                : null;
-                            if (catchExpression && ts.isAwaitExpression(catchExpression)) {
-                                catchAwaitSteps.push({ expression: currentCatchAwait, postStatements });
-                                currentCatchAwait = catchExpression;
+                            const catchStep = catchAwaitStepFor(catchStatement);
+                            if (catchStep) {
+                                catchAwaitSteps.push({
+                                    expression: currentCatchAwait,
+                                    alias: currentCatchAlias,
+                                    postStatements,
+                                });
+                                currentCatchAwait = catchStep.expression;
+                                currentCatchAlias = catchStep.alias;
                                 postStatements = [];
                             } else if (awaitFreeBranchStatementSupported(catchStatement, statement)) {
                                 postStatements.push(catchStatement);
@@ -39816,7 +39842,11 @@ class Emitter {
                             }
                         }
                         if (catchAwaitChainSupported) {
-                            catchAwaitSteps.push({ expression: currentCatchAwait, postStatements });
+                            catchAwaitSteps.push({
+                                expression: currentCatchAwait,
+                                alias: currentCatchAlias,
+                                postStatements,
+                            });
                         } else {
                             catchAwaitSteps.length = 0;
                         }
@@ -39866,7 +39896,7 @@ class Emitter {
                             const catchStep = catchAwaitSteps[catchIndex]!;
                             if (!addAwait(
                                 catchStep.expression,
-                                null,
+                                catchStep.alias,
                                 null,
                                 catchSymbol,
                                 finalizerAwait ? [] : finallyStatements,
