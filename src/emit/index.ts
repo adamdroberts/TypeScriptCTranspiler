@@ -383,6 +383,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression | null;
     successThrowExpr?: ts.Expression | null;
+    successConditionalContinuation?: AsyncAwaitTryConditionalReturnBranch;
     successSequenceContinuation?: AsyncAwaitExpressionSequenceReturnContinuation;
     successSequenceReturns?: boolean;
     successReturnsAwaited: boolean;
@@ -402,6 +403,7 @@ interface AsyncAwaitTryFinallyReturnContinuation {
     awaitExpr: ts.AwaitExpression;
     successReturnExpr: ts.Expression | null;
     successThrowExpr?: ts.Expression | null;
+    successConditionalContinuation?: AsyncAwaitTryConditionalReturnBranch;
     successSequenceContinuation?: AsyncAwaitExpressionSequenceReturnContinuation;
     successSequenceReturns?: boolean;
     successReturnsAwaited: boolean;
@@ -503,6 +505,12 @@ interface AsyncAwaitIfExpressionReturnBranch {
     thenBranch: AsyncAwaitIfExpressionReturnNode;
     elseBranch: AsyncAwaitIfExpressionReturnNode | null;
     fallthroughBranch: AsyncAwaitIfExpressionReturnNode | null;
+}
+
+interface AsyncAwaitTryConditionalReturnBranch extends AsyncAwaitIfExpressionReturnBranch {
+    thenBranch: AsyncAwaitIfExpressionReturnLeaf;
+    elseBranch: AsyncAwaitIfExpressionReturnLeaf;
+    fallthroughBranch: null;
 }
 
 interface AsyncAwaitSwitchExpressionReturnClause {
@@ -26263,6 +26271,7 @@ class Emitter {
         const catchPreludeInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
+        let successConditionalContinuation: AsyncAwaitTryConditionalReturnBranch | undefined;
         let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
         let successSequenceReturns = false;
         if (!awaited) {
@@ -26273,11 +26282,25 @@ class Emitter {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
             if ((ts.isThrowStatement(tryStatement) || ts.isReturnStatement(tryStatement)) && tryStatement.expression) {
                 const expression = this.unwrapTransparentExpression(tryStatement.expression);
-                const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                const tryCaptures = [...prelude.captures, ...tryPrelude.captures];
+                const conditionalContinuation = ts.isReturnStatement(tryStatement)
+                    ? this.asyncAwaitTryConditionalReturnBranchFromExpression(
+                        expression,
+                        parameters,
+                        thisValue,
+                        tryCaptures,
+                    )
+                    : null;
+                if (conditionalContinuation) {
+                    awaited = { variable: null, awaitExpr: conditionalContinuation.thenBranch.continuation.awaitExpr };
+                    successReturnsAwaited = true;
+                    successConditionalContinuation = conditionalContinuation;
+                }
+                const sequenceContinuation = successConditionalContinuation ? null : this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                     expression,
                     parameters,
                     thisValue,
-                    [...prelude.captures, ...tryPrelude.captures],
+                    tryCaptures,
                 );
                 if (sequenceContinuation) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
@@ -26288,11 +26311,11 @@ class Emitter {
                     }
                     successSequenceContinuation = sequenceContinuation;
                 }
-                const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
+                const expressionContinuation = successConditionalContinuation || successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
                     expression,
                     parameters,
                     thisValue,
-                    [...prelude.captures, ...tryPrelude.captures],
+                    tryCaptures,
                 );
                 if (expressionContinuation) {
                     awaited = { variable: null, awaitExpr: expressionContinuation.awaitExpr };
@@ -26333,7 +26356,9 @@ class Emitter {
             : null;
         if (catchDecl && !catchSymbol) return null;
 
-        const expressionParams = successSequenceContinuation
+        const expressionParams = successConditionalContinuation
+            ? this.asyncAwaitIfExpressionReturnBranchParams(successConditionalContinuation)
+            : successSequenceContinuation
             ? successSequenceContinuation.params
             : successThrowExpr
             ? this.asyncAwaitExpressionReturnContinuationForExpression(
@@ -26452,7 +26477,13 @@ class Emitter {
             }
         };
 
-        visit(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+        if (successConditionalContinuation) {
+            visit(successConditionalContinuation.condition, { allowAwaited: false, allowCatch: false });
+            visit(successConditionalContinuation.thenBranch.continuation.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+            visit(successConditionalContinuation.elseBranch!.continuation.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+        } else {
+            visit(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+        }
         if (successReturnExpr) visit(successReturnExpr, { allowAwaited: true, allowCatch: false });
         for (const stmt of catchPreludeStatements) visitCatchPreludeStatement(stmt);
         if (catchReturnExpr) visit(catchReturnExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
@@ -26469,6 +26500,7 @@ class Emitter {
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
             successThrowExpr,
+            successConditionalContinuation,
             successSequenceContinuation,
             successSequenceReturns,
             successReturnsAwaited,
@@ -26738,6 +26770,30 @@ class Emitter {
         buf: CBuf,
         continuation: AsyncAwaitTryCatchReturnContinuation,
     ): boolean {
+        if (continuation.successConditionalContinuation) {
+            const conditional = continuation.successConditionalContinuation;
+            if (conditional.kind !== "if" || !conditional.elseBranch || conditional.fallthroughBranch ||
+                conditional.thenBranch.kind !== "return" || conditional.elseBranch.kind !== "return") return false;
+            const condition = this.emitBoolExpr(conditional.condition);
+            const makeLeafContinuation = (branch: AsyncAwaitIfExpressionReturnLeaf): AsyncAwaitTryCatchReturnContinuation => ({
+                ...continuation,
+                awaitExpr: branch.continuation.awaitExpr,
+                successReturnExpr: branch.continuation.returnExpr,
+                successThrowExpr: null,
+                successConditionalContinuation: undefined,
+                successSequenceContinuation: undefined,
+                successSequenceReturns: false,
+                successReturnsAwaited: true,
+                variable: null,
+            });
+            buf.open(`if (${condition})`);
+            if (!this.emitAsyncAwaitTryCatchReturnContinuationResult(buf, makeLeafContinuation(conditional.thenBranch))) return false;
+            buf.close();
+            buf.open("else");
+            if (!this.emitAsyncAwaitTryCatchReturnContinuationResult(buf, makeLeafContinuation(conditional.elseBranch))) return false;
+            buf.close();
+            return true;
+        }
         if (continuation.successSequenceContinuation) {
             return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
                 buf,
@@ -27492,6 +27548,7 @@ class Emitter {
         let awaited = this.awaitedContinuationStep(firstTryStatement);
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
+        let successConditionalContinuation: AsyncAwaitTryConditionalReturnBranch | undefined;
         let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
         let successSequenceReturns = false;
         if (!awaited) {
@@ -27502,11 +27559,25 @@ class Emitter {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
             if ((ts.isThrowStatement(tryStatement) || ts.isReturnStatement(tryStatement)) && tryStatement.expression) {
                 const expression = this.unwrapTransparentExpression(tryStatement.expression);
-                const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                const tryCaptures = [...prelude.captures, ...tryPrelude.captures];
+                const conditionalContinuation = ts.isReturnStatement(tryStatement)
+                    ? this.asyncAwaitTryConditionalReturnBranchFromExpression(
+                        expression,
+                        parameters,
+                        thisValue,
+                        tryCaptures,
+                    )
+                    : null;
+                if (conditionalContinuation) {
+                    awaited = { variable: null, awaitExpr: conditionalContinuation.thenBranch.continuation.awaitExpr };
+                    successReturnsAwaited = true;
+                    successConditionalContinuation = conditionalContinuation;
+                }
+                const sequenceContinuation = successConditionalContinuation ? null : this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                     expression,
                     parameters,
                     thisValue,
-                    [...prelude.captures, ...tryPrelude.captures],
+                    tryCaptures,
                 );
                 if (sequenceContinuation) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
@@ -27517,11 +27588,11 @@ class Emitter {
                     }
                     successSequenceContinuation = sequenceContinuation;
                 }
-                const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
+                const expressionContinuation = successConditionalContinuation || successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
                     expression,
                     parameters,
                     thisValue,
-                    [...prelude.captures, ...tryPrelude.captures],
+                    tryCaptures,
                 );
                 if (expressionContinuation) {
                     awaited = { variable: null, awaitExpr: expressionContinuation.awaitExpr };
@@ -27553,6 +27624,7 @@ class Emitter {
             ...this.asyncAwaitContinuationParameters(parameters),
             ...prelude.captures,
             ...tryPrelude.captures,
+            ...(successConditionalContinuation ? this.asyncAwaitIfExpressionReturnBranchParams(successConditionalContinuation) : []),
             ...(successSequenceContinuation?.params ?? []),
         ];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -27648,7 +27720,13 @@ class Emitter {
             ts.forEachChild(stmt, (child) => visitExpr(child, false));
         };
 
-        visitExpr(awaited.awaitExpr.expression, false);
+        if (successConditionalContinuation) {
+            visitExpr(successConditionalContinuation.condition, false);
+            visitExpr(successConditionalContinuation.thenBranch.continuation.awaitExpr.expression, false);
+            visitExpr(successConditionalContinuation.elseBranch!.continuation.awaitExpr.expression, false);
+        } else {
+            visitExpr(awaited.awaitExpr.expression, false);
+        }
         if (successReturnExpr) visitExpr(successReturnExpr, remainingStatements === 1);
         for (const stmt of tryStmt.finallyBlock.statements) visitFinallyStatement(stmt);
         if (!ok) return null;
@@ -27660,6 +27738,7 @@ class Emitter {
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
             successThrowExpr,
+            successConditionalContinuation,
             successSequenceContinuation,
             successSequenceReturns,
             successReturnsAwaited,
@@ -27690,6 +27769,30 @@ class Emitter {
         buf: CBuf,
         continuation: AsyncAwaitTryFinallyReturnContinuation,
     ): boolean {
+        if (continuation.successConditionalContinuation) {
+            const conditional = continuation.successConditionalContinuation;
+            if (conditional.kind !== "if" || !conditional.elseBranch || conditional.fallthroughBranch ||
+                conditional.thenBranch.kind !== "return" || conditional.elseBranch.kind !== "return") return false;
+            const condition = this.emitBoolExpr(conditional.condition);
+            const makeLeafContinuation = (branch: AsyncAwaitIfExpressionReturnLeaf): AsyncAwaitTryFinallyReturnContinuation => ({
+                ...continuation,
+                awaitExpr: branch.continuation.awaitExpr,
+                successReturnExpr: branch.continuation.returnExpr,
+                successThrowExpr: null,
+                successConditionalContinuation: undefined,
+                successSequenceContinuation: undefined,
+                successSequenceReturns: false,
+                successReturnsAwaited: true,
+                variable: null,
+            });
+            buf.open(`if (${condition})`);
+            if (!this.emitAsyncAwaitTryFinallyReturnContinuationResult(buf, makeLeafContinuation(conditional.thenBranch))) return false;
+            buf.close();
+            buf.open("else");
+            if (!this.emitAsyncAwaitTryFinallyReturnContinuationResult(buf, makeLeafContinuation(conditional.elseBranch))) return false;
+            buf.close();
+            return true;
+        }
         if (continuation.successSequenceContinuation) {
             return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
                 buf,
@@ -28088,6 +28191,7 @@ class Emitter {
         const finallyInitializedLocals = new Set<ts.Symbol>();
         let successReturnsAwaited = false;
         let successThrowExpr: ts.Expression | null = null;
+        let successConditionalContinuation: AsyncAwaitTryConditionalReturnBranch | undefined;
         let successSequenceContinuation: AsyncAwaitExpressionSequenceReturnContinuation | undefined;
         let successSequenceReturns = false;
         if (!awaited) {
@@ -28098,11 +28202,25 @@ class Emitter {
             const tryStatement = tryStmt.tryBlock.statements[tryPrelude.nextIndex]!;
             if ((ts.isThrowStatement(tryStatement) || ts.isReturnStatement(tryStatement)) && tryStatement.expression) {
                 const expression = this.unwrapTransparentExpression(tryStatement.expression);
-                const sequenceContinuation = this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
+                const tryCaptures = [...prelude.captures, ...tryPrelude.captures];
+                const conditionalContinuation = ts.isReturnStatement(tryStatement)
+                    ? this.asyncAwaitTryConditionalReturnBranchFromExpression(
+                        expression,
+                        parameters,
+                        thisValue,
+                        tryCaptures,
+                    )
+                    : null;
+                if (conditionalContinuation) {
+                    awaited = { variable: null, awaitExpr: conditionalContinuation.thenBranch.continuation.awaitExpr };
+                    successReturnsAwaited = true;
+                    successConditionalContinuation = conditionalContinuation;
+                }
+                const sequenceContinuation = successConditionalContinuation ? null : this.asyncAwaitExpressionSequenceReturnContinuationForExpression(
                     expression,
                     parameters,
                     thisValue,
-                    [...prelude.captures, ...tryPrelude.captures],
+                    tryCaptures,
                 );
                 if (sequenceContinuation) {
                     awaited = { variable: null, awaitExpr: sequenceContinuation.awaitExprs[0]! };
@@ -28113,11 +28231,11 @@ class Emitter {
                     }
                     successSequenceContinuation = sequenceContinuation;
                 }
-                const expressionContinuation = successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
+                const expressionContinuation = successConditionalContinuation || successSequenceContinuation ? null : this.asyncAwaitExpressionReturnContinuationForExpression(
                     expression,
                     parameters,
                     thisValue,
-                    [...prelude.captures, ...tryPrelude.captures],
+                    tryCaptures,
                 );
                 if (expressionContinuation) {
                     awaited = { variable: null, awaitExpr: expressionContinuation.awaitExpr };
@@ -28157,6 +28275,7 @@ class Emitter {
             ...this.asyncAwaitContinuationParameters(parameters),
             ...prelude.captures,
             ...tryPrelude.captures,
+            ...(successConditionalContinuation ? this.asyncAwaitIfExpressionReturnBranchParams(successConditionalContinuation) : []),
             ...(successSequenceContinuation?.params ?? []),
         ];
         const paramsBySymbol = new Map<ts.Symbol, AsyncAwaitContinuationParam>();
@@ -28357,7 +28476,13 @@ class Emitter {
             ts.forEachChild(stmt, (child) => visitFinallyExpr(child, false));
         };
 
-        visitCatchExpr(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+        if (successConditionalContinuation) {
+            visitCatchExpr(successConditionalContinuation.condition, { allowAwaited: false, allowCatch: false });
+            visitCatchExpr(successConditionalContinuation.thenBranch.continuation.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+            visitCatchExpr(successConditionalContinuation.elseBranch!.continuation.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+        } else {
+            visitCatchExpr(awaited.awaitExpr.expression, { allowAwaited: false, allowCatch: false });
+        }
         if (successReturnExpr) visitCatchExpr(successReturnExpr, { allowAwaited: true, allowCatch: false });
         for (const stmt of catchPreludeStatements) visitCatchPreludeStatement(stmt);
         if (catchReturnExpr) visitCatchExpr(catchReturnExpr, { allowAwaited: false, allowCatch: !!catchSymbol });
@@ -28372,6 +28497,7 @@ class Emitter {
             awaitExpr: awaited.awaitExpr,
             successReturnExpr,
             successThrowExpr,
+            successConditionalContinuation,
             successSequenceContinuation,
             successSequenceReturns,
             successReturnsAwaited,
@@ -28405,6 +28531,30 @@ class Emitter {
         buf: CBuf,
         continuation: AsyncAwaitTryCatchFinallyReturnContinuation,
     ): boolean {
+        if (continuation.successConditionalContinuation) {
+            const conditional = continuation.successConditionalContinuation;
+            if (conditional.kind !== "if" || !conditional.elseBranch || conditional.fallthroughBranch ||
+                conditional.thenBranch.kind !== "return" || conditional.elseBranch.kind !== "return") return false;
+            const condition = this.emitBoolExpr(conditional.condition);
+            const makeLeafContinuation = (branch: AsyncAwaitIfExpressionReturnLeaf): AsyncAwaitTryCatchFinallyReturnContinuation => ({
+                ...continuation,
+                awaitExpr: branch.continuation.awaitExpr,
+                successReturnExpr: branch.continuation.returnExpr,
+                successThrowExpr: null,
+                successConditionalContinuation: undefined,
+                successSequenceContinuation: undefined,
+                successSequenceReturns: false,
+                successReturnsAwaited: true,
+                variable: null,
+            });
+            buf.open(`if (${condition})`);
+            if (!this.emitAsyncAwaitTryCatchFinallyReturnContinuationResult(buf, makeLeafContinuation(conditional.thenBranch))) return false;
+            buf.close();
+            buf.open("else");
+            if (!this.emitAsyncAwaitTryCatchFinallyReturnContinuationResult(buf, makeLeafContinuation(conditional.elseBranch))) return false;
+            buf.close();
+            return true;
+        }
         if (continuation.successSequenceContinuation) {
             return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
                 buf,
@@ -32874,6 +33024,31 @@ class Emitter {
             return { kind: "syncReturn", returnExpr: expression };
         }
         return null;
+    }
+
+    private asyncAwaitTryConditionalReturnBranchFromExpression(
+        expression: ts.Expression,
+        parameters: readonly ts.ParameterDeclaration[],
+        thisValue: EmitResult | null,
+        captures: readonly AsyncAwaitContinuationParam[],
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        if (!ts.isConditionalExpression(expression)) return null;
+        const condition = this.unwrapTransparentExpression(expression.condition);
+        if (!(ts.isIdentifier(condition) && this.isValueReferenceIdentifier(condition)) &&
+            condition.kind !== ts.SyntaxKind.TrueKeyword &&
+            condition.kind !== ts.SyntaxKind.FalseKeyword &&
+            condition.kind !== ts.SyntaxKind.NullKeyword) return null;
+        const branch = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
+            expression,
+            parameters,
+            thisValue,
+            captures,
+        );
+        if (!branch || branch.kind !== "if" || !branch.elseBranch || branch.fallthroughBranch) return null;
+        if (branch.thenBranch.kind !== "return" || branch.elseBranch.kind !== "return") return null;
+        if (!this.asyncAwaitExpressionReturnContinuationSupported(branch.thenBranch.continuation) ||
+            !this.asyncAwaitExpressionReturnContinuationSupported(branch.elseBranch.continuation)) return null;
+        return branch as AsyncAwaitTryConditionalReturnBranch;
     }
 
     private asyncAwaitInterstitialCaptures(

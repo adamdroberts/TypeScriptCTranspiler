@@ -1,0 +1,6 @@
+fn-true fn-true 
+fn-false caught-fn-bad 
+method-true method-true M
+method-false rejected-method-bad Mm
+arrow-true arrow-true MmV
+arrow-false caught-arrow-bad MmVV
