@@ -20,9 +20,12 @@ async function runOfReturn(): Promise<string> {
         if (await laterBoolean(item !== "of-a")) {
             await later(item + "-step");
             if (item !== "of-c") {
-                if (isOfB(item)) return await later(item + "-return");
+                const returnValue = item + "-return";
+                if (isOfB(item)) return await later(returnValue);
             } else {
-                if (isOfB(item)) throw await later(item + "-throw");
+                let throwValue: string;
+                throwValue = item + "-throw";
+                if (isOfB(item)) throw await later(throwValue);
             }
         } else {
             await later(item + "-step");
@@ -38,9 +41,12 @@ async function runOfFallthrough(): Promise<string> {
         if (await laterBoolean(item !== "of-a")) {
             await later(item + "-step");
             if (item !== "of-c") {
-                if (isOfB(item)) return await later(item + "-return");
+                const returnValue = item + "-return";
+                if (isOfB(item)) return await later(returnValue);
             } else {
-                if (isOfB(item)) throw await later(item + "-throw");
+                let throwValue: string;
+                throwValue = item + "-throw";
+                if (isOfB(item)) throw await later(throwValue);
             }
         } else {
             await later(item + "-step");
@@ -57,9 +63,12 @@ async function runInThrow(): Promise<string> {
         if (await laterBoolean(key !== "in-a")) {
             await later(key + "-step");
             if (key !== "in-c") {
-                if (isInB(key)) throw await later(key + "-throw");
+                const throwValue = key + "-throw";
+                if (isInB(key)) throw await later(throwValue);
             } else {
-                if (isInB(key)) return await later(key + "-return");
+                let returnValue: string;
+                returnValue = key + "-return";
+                if (isInB(key)) return await later(returnValue);
             }
         } else {
             await later(key + "-step");
@@ -76,9 +85,12 @@ async function runInFallthrough(): Promise<string> {
         if (await laterBoolean(key !== "in-a")) {
             await later(key + "-step");
             if (key !== "in-c") {
-                if (isInB(key)) throw await later(key + "-throw");
+                const throwValue = key + "-throw";
+                if (isInB(key)) throw await later(throwValue);
             } else {
-                if (isInB(key)) return await later(key + "-return");
+                let returnValue: string;
+                returnValue = key + "-return";
+                if (isInB(key)) return await later(returnValue);
             }
         } else {
             await later(key + "-step");

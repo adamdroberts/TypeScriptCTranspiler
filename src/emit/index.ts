@@ -39614,12 +39614,13 @@ class Emitter {
                             if (direct && (ts.isReturnStatement(direct) || ts.isThrowStatement(direct))) {
                                 return { statement: direct, prefix, container: candidate, conditions: [] };
                             }
-                            if (depth >= 1 || prefix.length > 0 || !direct || !ts.isIfStatement(direct) || direct.elseStatement ||
+                            if (depth >= 1 || !direct || !ts.isIfStatement(direct) || direct.elseStatement ||
                                 !this.asyncAwaitConditionExpressionSupported(direct.expression)) return null;
                             const nested = terminalArmFor(direct.thenStatement, depth + 1);
-                            return nested
-                                ? { ...nested, conditions: [direct.expression, ...nested.conditions] }
-                                : null;
+                            if (!nested || (prefix.length > 0 && nested.prefix.length > 0)) return null;
+                            return prefix.length > 0
+                                ? { ...nested, prefix, container: candidate, conditions: [direct.expression, ...nested.conditions] }
+                                : { ...nested, conditions: [direct.expression, ...nested.conditions] };
                         };
                         const thenTerminal = terminalArmFor(statement.thenStatement);
                         const elseTerminal = terminalArmFor(statement.elseStatement);
