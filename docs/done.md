@@ -3601,6 +3601,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_await_try_source_prelude` | async source try/catch and try/finally continuations capture initialized and later-assigned locals declared before the try statement |
 | `async_await_iterator_body_multi_await_nested_await_if_source_try_terminal` | nested awaited iterator source try/finally bodies route final direct return-await and throw-await terminals after preceding awaited try work |
 | `async_await_iterator_body_multi_await_nested_await_if_source_try_terminal_catch` | nested awaited iterator source try bodies route final return-await and throw-await terminals through synchronous or awaited catch recovery without finally |
+| `async_await_iterator_body_multi_await_nested_await_if_source_try_terminal_catch_finally` | nested awaited iterator source try bodies compose final return-await and throw-await terminals with catch recovery and synchronous finally cleanup |
 | `async_await_try_catch_prelude` | async try/catch pending continuations support synchronous catch preludes and initialized or later-assigned catch-local declarations before return or throw |
 | `async_await_pending_return_expr` | source try/catch preserves bounded leading multi-await chains across declarations, class methods, and function values, including receiver capture, pending chain rejection routing, and bounded catch rethrows |
 | `async_await_pending_return_expr` | leading source try/catch chains preserve initialized local catch preludes before the catch return/throw |
