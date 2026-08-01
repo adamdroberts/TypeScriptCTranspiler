@@ -39454,6 +39454,7 @@ class Emitter {
             finallyStatements: readonly ts.Statement[];
             isFinallyAwait: boolean;
             isCatchAwait: boolean;
+            isLastCatchAwait: boolean;
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
@@ -39578,6 +39579,7 @@ class Emitter {
                 isFinallyAwait = false,
                 isCatchAwait = false,
                 catchPostAwaitStatements: readonly ts.Statement[] | null = null,
+                isLastCatchAwait = false,
             ): boolean => {
                 expressions.push({
                     expression,
@@ -39590,6 +39592,7 @@ class Emitter {
                     finallyStatements,
                     isFinallyAwait,
                     isCatchAwait,
+                    isLastCatchAwait,
                 });
                 pendingStatements = [];
                 return true;
@@ -39788,19 +39791,37 @@ class Emitter {
                         ? this.symbolForIdentifier(catchVariable.name) ?? null
                         : null;
                     const catchStatements = statement.catchClause?.block.statements ?? [];
-                    const catchAwaitStatement = catchStatements.length > 0 &&
-                        ts.isExpressionStatement(catchStatements[0]!)
-                        ? catchStatements[0] as ts.ExpressionStatement
+                    const catchAwaitSteps: { expression: ts.AwaitExpression; postStatements: readonly ts.Statement[] }[] = [];
+                    const firstCatchStatement = catchStatements[0];
+                    const firstCatchExpression = firstCatchStatement && ts.isExpressionStatement(firstCatchStatement)
+                        ? this.unwrapTransparentExpression(firstCatchStatement.expression)
                         : null;
-                    const catchAwaitExpression = catchAwaitStatement
-                        ? this.unwrapTransparentExpression(catchAwaitStatement.expression)
-                        : null;
-                    const catchAwait = catchAwaitExpression && ts.isAwaitExpression(catchAwaitExpression)
-                        ? catchAwaitExpression
-                        : null;
-                    const catchPostAwaitStatements = catchAwait
-                        ? catchStatements.slice(1)
-                        : [];
+                    if (firstCatchExpression && ts.isAwaitExpression(firstCatchExpression)) {
+                        let currentCatchAwait = firstCatchExpression;
+                        let postStatements: ts.Statement[] = [];
+                        let catchAwaitChainSupported = true;
+                        for (const catchStatement of catchStatements.slice(1)) {
+                            const catchExpression = ts.isExpressionStatement(catchStatement)
+                                ? this.unwrapTransparentExpression(catchStatement.expression)
+                                : null;
+                            if (catchExpression && ts.isAwaitExpression(catchExpression)) {
+                                catchAwaitSteps.push({ expression: currentCatchAwait, postStatements });
+                                currentCatchAwait = catchExpression;
+                                postStatements = [];
+                            } else if (awaitFreeBranchStatementSupported(catchStatement, statement)) {
+                                postStatements.push(catchStatement);
+                            } else {
+                                catchAwaitChainSupported = false;
+                                break;
+                            }
+                        }
+                        if (catchAwaitChainSupported) {
+                            catchAwaitSteps.push({ expression: currentCatchAwait, postStatements });
+                        } else {
+                            catchAwaitSteps.length = 0;
+                        }
+                    }
+                    const catchAwait = catchAwaitSteps[0]?.expression ?? null;
                     const awaitStatement = statement.tryBlock.statements.length === 1 &&
                         ts.isExpressionStatement(statement.tryBlock.statements[0]!)
                         ? statement.tryBlock.statements[0] as ts.ExpressionStatement
@@ -39820,11 +39841,8 @@ class Emitter {
                         ts.isAwaitExpression(finallyAwaitExpression);
                     const hasSupportedCatch = !statement.catchClause ||
                         (!catchVariable || (ts.isIdentifier(catchVariable.name) && !!catchSymbol)) &&
-                        (catchAwait !== null
-                            ? catchPostAwaitStatements.every((child) =>
-                                awaitFreeBranchStatementSupported(child, statement))
-                            : catchStatements.every((child) =>
-                                awaitFreeBranchStatementSupported(child, statement)));
+                        (catchAwaitSteps.length > 0 || catchStatements.every((child) =>
+                            awaitFreeBranchStatementSupported(child, statement)));
                     const hasSupportedFinally = !statement.finallyBlock ||
                         (hasFinallyAwait
                             ? finallyStatements.slice(1).every((child) =>
@@ -39837,6 +39855,7 @@ class Emitter {
                         const finalizerAwait = hasFinallyAwait
                             ? finallyAwaitExpression
                             : null;
+                        if (finalizerAwait && catchAwaitSteps.length > 1) return null;
                         if (!addAwait(
                             awaitExpression,
                             null,
@@ -39844,16 +39863,20 @@ class Emitter {
                             catchAwait ? null : catchSymbol,
                             finalizerAwait ? [] : finallyStatements,
                         )) return null;
-                        if (catchAwait && !addAwait(
-                            catchAwait,
-                            null,
-                            null,
-                            catchSymbol,
-                            finalizerAwait ? [] : finallyStatements,
-                            false,
-                            true,
-                            catchPostAwaitStatements,
-                        )) return null;
+                        for (let catchIndex = 0; catchIndex < catchAwaitSteps.length; catchIndex++) {
+                            const catchStep = catchAwaitSteps[catchIndex]!;
+                            if (!addAwait(
+                                catchStep.expression,
+                                null,
+                                null,
+                                catchSymbol,
+                                finalizerAwait ? [] : finallyStatements,
+                                false,
+                                true,
+                                catchStep.postStatements,
+                                catchIndex === catchAwaitSteps.length - 1,
+                            )) return null;
+                        }
                         if (finalizerAwait && !addAwait(
                             finalizerAwait,
                             null,
@@ -40570,7 +40593,7 @@ class Emitter {
                 if (preludeAwait.catchSymbol) catchScope.set(preludeAwait.catchSymbol, "tsc_promise_reason(_p)");
                 emitBranchStatements(preludeBuf, "state", preludeAwait.catchStatements, catchScope);
                 preludeBuf.line("state->receiver = tsc_promise_resolve(tsc_value_undefined());");
-            } else if (nextPreludeAwait?.isCatchAwait) {
+            } else if (!preludeAwait.isCatchAwait && nextPreludeAwait?.isCatchAwait) {
                 preludeBuf.line("state->catch_reason = tsc_promise_reason(_p);");
                 emitPreludeSource(preludeBuf, "state", index + 1, false, nextPreludeAwait.catchSymbol);
                 preludeBuf.line("return;");
@@ -40604,16 +40627,28 @@ class Emitter {
                 if (preludeAwait.catchSymbol) catchScope.set(preludeAwait.catchSymbol, "state->catch_reason");
                 emitBranchStatements(preludeBuf, "state", preludeAwait.catchPostAwaitStatements, catchScope);
             }
-            emitBranchStatements(preludeBuf, "state", preludeAwait.finallyStatements);
+            if (!preludeAwait.isCatchAwait || preludeAwait.isLastCatchAwait) {
+                emitBranchStatements(preludeBuf, "state", preludeAwait.finallyStatements);
+            }
             if (preludeAwait.isFinallyAwait) {
                 preludeBuf.open("if (state->reject_after_success)");
                 preludeBuf.line("tsc_promise_reject_in_place(_ret, state->rejection_reason);");
                 preludeBuf.line("return;");
                 preludeBuf.close();
             }
-            const resumePreludeIndex = nextPreludeAwait?.isCatchAwait ? index + 2 : index + 1;
-            if (nextPreludeAwait && preludeAwaits[resumePreludeIndex]) {
-                emitPreludeSource(preludeBuf, "state", resumePreludeIndex);
+            let resumePreludeIndex = index + 1;
+            if (!preludeAwait.isCatchAwait && nextPreludeAwait?.isCatchAwait) {
+                while (preludeAwaits[resumePreludeIndex]?.isCatchAwait) resumePreludeIndex++;
+            }
+            const resumedPreludeAwait = preludeAwaits[resumePreludeIndex];
+            if (resumedPreludeAwait) {
+                emitPreludeSource(
+                    preludeBuf,
+                    "state",
+                    resumePreludeIndex,
+                    false,
+                    resumedPreludeAwait.isCatchAwait ? resumedPreludeAwait.catchSymbol : null,
+                );
             } else {
                 preludeBuf.line(`${bodyName}(state);`);
             }
@@ -40693,7 +40728,7 @@ class Emitter {
                 if (currentAwait.catchSymbol) catchScope.set(currentAwait.catchSymbol, "tsc_promise_reason(_p)");
                 emitBranchStatements(controlBuf, "state", currentAwait.catchStatements, catchScope);
                 controlBuf.line("state->receiver = tsc_promise_resolve(tsc_value_undefined());");
-            } else if (nextAwait?.isCatchAwait) {
+            } else if (!currentAwait.isCatchAwait && nextAwait?.isCatchAwait) {
                 controlBuf.line("state->catch_reason = tsc_promise_reason(_p);");
                 emitControlSource(
                     controlBuf,
@@ -40746,15 +40781,20 @@ class Emitter {
                 if (currentAwait.catchSymbol) catchScope.set(currentAwait.catchSymbol, "state->catch_reason");
                 emitBranchStatements(controlBuf, "state", currentAwait.catchPostAwaitStatements, catchScope);
             }
-            emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
+            if (!currentAwait.isCatchAwait || currentAwait.isLastCatchAwait) {
+                emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
+            }
             if (currentAwait.isFinallyAwait) {
                 controlBuf.open("if (state->reject_after_success)");
                 controlBuf.line("tsc_promise_reject_in_place(_ret, state->rejection_reason);");
                 controlBuf.line("return;");
                 controlBuf.close();
             }
-            const resumeAwaitIndex = nextAwait?.isCatchAwait ? index + 2 : index + 1;
-            const resumedAwait = nextAwait ? branchAwaits[resumeAwaitIndex] : undefined;
+            let resumeAwaitIndex = index + 1;
+            if (!currentAwait.isCatchAwait && nextAwait?.isCatchAwait) {
+                while (branchAwaits[resumeAwaitIndex]?.isCatchAwait) resumeAwaitIndex++;
+            }
+            const resumedAwait = branchAwaits[resumeAwaitIndex];
             if (resumedAwait) {
                 emitControlSource(
                     controlBuf,
@@ -40764,6 +40804,8 @@ class Emitter {
                     branchControlNames[resumeAwaitIndex]!,
                     resumedAwait.before,
                     resumedAwait.captures,
+                    false,
+                    resumedAwait.isCatchAwait ? resumedAwait.catchSymbol : null,
                 );
             } else {
                 const emitTerminalRoute = (
