@@ -39572,20 +39572,41 @@ class Emitter {
             };
             for (let index = 0; index < statements.length; index++) {
                 const statement = statements[index]!;
-                if (index === statements.length - 1 && (ts.isReturnStatement(statement) || ts.isThrowStatement(statement))) {
-                    const action = ts.isReturnStatement(statement) ? "return" : "throw";
-                    if (!statement.expression) {
+                let terminalStatement: ts.ReturnStatement | ts.ThrowStatement | null = null;
+                let terminalPrefix: readonly ts.Statement[] = [];
+                if (index === statements.length - 1) {
+                    if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
+                        terminalStatement = statement;
+                    } else if (ts.isBlock(statement) && statement.statements.length > 0) {
+                        const nestedTerminal = statement.statements[statement.statements.length - 1]!;
+                        if (ts.isReturnStatement(nestedTerminal) || ts.isThrowStatement(nestedTerminal)) {
+                            terminalPrefix = statement.statements.slice(0, -1);
+                            if (!terminalPrefix.every((child) =>
+                                awaitFreeBranchStatementSupported(child, statement))) return null;
+                            terminalStatement = nestedTerminal;
+                        }
+                    }
+                }
+                if (terminalStatement) {
+                    const action = ts.isReturnStatement(terminalStatement) ? "return" : "throw";
+                    const pendingBeforeTerminal = pendingStatements;
+                    if (terminalPrefix.length > 0) pendingStatements = [...pendingStatements, ...terminalPrefix];
+                    const terminalCaptures = [
+                        ...pendingBranchCaptures(pendingBeforeTerminal, branchContainer),
+                        ...pendingBranchCaptures(terminalPrefix, statement),
+                    ];
+                    if (!terminalStatement.expression) {
                         if (action !== "return") return null;
                         terminal = { action, awaitedExpression: null, synchronousExpression: null, captures: [] };
                         continue;
                     }
-                    const expression = this.unwrapTransparentExpression(statement.expression);
+                    const expression = this.unwrapTransparentExpression(terminalStatement.expression);
                     if (ts.isAwaitExpression(expression)) {
                         terminal = {
                             action,
                             awaitedExpression: expression,
                             synchronousExpression: null,
-                            captures: pendingBranchCaptures(pendingStatements, branchContainer),
+                            captures: terminalCaptures,
                         };
                     } else if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
                         terminal = { action, awaitedExpression: null, synchronousExpression: expression, captures: [] };
