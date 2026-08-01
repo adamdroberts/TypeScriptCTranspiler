@@ -30578,6 +30578,7 @@ class Emitter {
             return false;
         };
         const isNestedStructuralExpression = (node: ts.Expression): boolean =>
+            ts.isBinaryExpression(node) ||
             ts.isTypeOfExpression(node) ||
             ts.isPrefixUnaryExpression(node) ||
             ts.isTemplateExpression(node) ||

@@ -1,0 +1,8 @@
+declaration-false: "declaration-fallthrough"
+method-false: "method-fallthrough"
+arrow-false: "arrow-fallthrough"
+declaration-true: {"sum":30}
+finally: method
+method-true: ["method",60]
+finally: arrow
+arrow-true: "caught:7"
