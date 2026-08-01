@@ -40078,8 +40078,7 @@ class Emitter {
                             awaitFreeBranchStatementSupported(child, statement)));
                     const hasSupportedFinally = !statement.finallyBlock || finallyStatementsSupported;
                     const hasSupportedTerminalTry = !tryAwaitSteps.some(({ terminalAction }) => !!terminalAction) ||
-                        (index === statements.length - 1 &&
-                            (!statement.catchClause || finallyAwaitSteps.length === 0));
+                        index === statements.length - 1;
                     const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
                         tryTrailingStatements.length === 0 &&
                         hasSupportedTerminalTry &&
@@ -40087,7 +40086,8 @@ class Emitter {
                             catchAwaitSteps.length > 0 ||
                             (!statement.catchClause && !!statement.finallyBlock) ||
                             (!!statement.catchClause &&
-                                (!statement.finallyBlock || finallyAwaitSteps.length === 0)));
+                                (!statement.finallyBlock || finallyAwaitSteps.length === 0 ||
+                                    tryAwaitSteps.some(({ terminalAction }) => !!terminalAction))));
                     if ((statement.catchClause || statement.finallyBlock) &&
                         hasSupportedTry &&
                         hasSupportedCatch && hasSupportedFinally) {
@@ -41047,6 +41047,26 @@ class Emitter {
                 (!!currentAwait.catchStatements ||
                     (currentAwait.terminalAction === "throw" &&
                         (catchAwaitIndex >= 0 || nextAwait?.isCatchAwait)));
+            const emitFinallyAwaitSource = (): void => {
+                const finallyAwait = branchAwaits[finallyAwaitIndex]!;
+                emitControlSource(
+                    controlBuf,
+                    "state",
+                    finallyAwait.expression,
+                    branchPromiseTypes[finallyAwaitIndex]!,
+                    branchControlNames[finallyAwaitIndex]!,
+                    finallyAwait.before,
+                    finallyAwait.captures,
+                );
+            };
+            const emitTerminalCatchCompletion = (): void => {
+                if (finallyAwaitIndex >= 0) {
+                    emitFinallyAwaitSource();
+                } else {
+                    emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
+                    emitLoopAction(controlBuf, "state");
+                }
+            };
             if (terminalCatchFlag) controlBuf.line(`bool ${terminalCatchFlag} = false;`);
             controlBuf.open("if (tsc_promise_is_rejected(_p))");
             if (currentAwait.catchStatements) {
@@ -41060,12 +41080,16 @@ class Emitter {
                         candidateIndex > index && candidate.isLastTryBodyAwait);
                     if (lastTryBodyAwaitIndex >= 0) {
                         if (branchAwaits[lastTryBodyAwaitIndex]!.terminalAction) {
-                            emitBranchStatements(
-                                controlBuf,
-                                "state",
-                                branchAwaits[lastTryBodyAwaitIndex]!.finallyStatements,
-                            );
-                            emitLoopAction(controlBuf, "state");
+                            if (finallyAwaitIndex >= 0) {
+                                emitFinallyAwaitSource();
+                            } else {
+                                emitBranchStatements(
+                                    controlBuf,
+                                    "state",
+                                    branchAwaits[lastTryBodyAwaitIndex]!.finallyStatements,
+                                );
+                                emitLoopAction(controlBuf, "state");
+                            }
                         } else {
                             controlBuf.line(`${branchControlNames[lastTryBodyAwaitIndex]}(state);`);
                         }
@@ -41164,32 +41188,29 @@ class Emitter {
                 controlBuf.close();
             }
             if (currentAwait.terminalAction) {
-                if (!currentAwait.catchStatements && finallyAwaitIndex >= 0) {
-                    const finallyAwait = branchAwaits[finallyAwaitIndex]!;
+                if (currentAwait.terminalAction === "return" &&
+                    !currentAwait.catchStatements && finallyAwaitIndex >= 0) {
                     controlBuf.line("state->terminal_pending = true;");
-                    controlBuf.line(`state->terminal_throw = ${currentAwait.terminalAction === "throw" ? "true" : "false"};`);
+                    controlBuf.line("state->terminal_throw = false;");
                     controlBuf.line("state->terminal_promise = _p;");
-                    emitControlSource(
-                        controlBuf,
-                        "state",
-                        finallyAwait.expression,
-                        branchPromiseTypes[finallyAwaitIndex]!,
-                        branchControlNames[finallyAwaitIndex]!,
-                        finallyAwait.before,
-                        finallyAwait.captures,
-                    );
+                    emitFinallyAwaitSource();
+                } else if (currentAwait.terminalAction === "throw" &&
+                    !currentAwait.catchStatements && finallyAwaitIndex >= 0 &&
+                    catchAwaitIndex < 0 && !nextAwait?.isCatchAwait) {
+                    controlBuf.line("state->terminal_pending = true;");
+                    controlBuf.line("state->terminal_throw = true;");
+                    controlBuf.line("state->terminal_promise = _p;");
+                    emitFinallyAwaitSource();
                 } else if (currentAwait.terminalAction === "throw" && currentAwait.catchStatements && terminalCatchFlag) {
                     controlBuf.open(`if (!${terminalCatchFlag})`);
                     const catchScope = new Map<ts.Symbol, string>();
                     if (currentAwait.catchSymbol) catchScope.set(currentAwait.catchSymbol, "tsc_promise_reason(_p)");
                     emitBranchStatements(controlBuf, "state", currentAwait.catchStatements, catchScope);
                     controlBuf.line("state->receiver = tsc_promise_resolve(tsc_value_undefined());");
-                    if (deferTerminalFinally) emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
-                    emitLoopAction(controlBuf, "state");
+                    emitTerminalCatchCompletion();
                     controlBuf.close();
                     controlBuf.open("else");
-                    if (deferTerminalFinally) emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
-                    emitLoopAction(controlBuf, "state");
+                    emitTerminalCatchCompletion();
                     controlBuf.close();
                     controlBuf.line("return;");
                 } else if (currentAwait.terminalAction === "throw" &&
@@ -41210,12 +41231,18 @@ class Emitter {
                     );
                 } else if (terminalCatchFlag) {
                     controlBuf.open(`if (${terminalCatchFlag})`);
-                    if (deferTerminalFinally) emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
-                    emitLoopAction(controlBuf, "state");
+                    emitTerminalCatchCompletion();
                     controlBuf.line("return;");
                     controlBuf.close();
-                    if (deferTerminalFinally) emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
-                    controlBuf.line("tsc_promise_adopt_into(_ret, _p);");
+                    if (finallyAwaitIndex >= 0) {
+                        controlBuf.line("state->terminal_pending = true;");
+                        controlBuf.line("state->terminal_throw = false;");
+                        controlBuf.line("state->terminal_promise = _p;");
+                        emitFinallyAwaitSource();
+                    } else {
+                        if (deferTerminalFinally) emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
+                        controlBuf.line("tsc_promise_adopt_into(_ret, _p);");
+                    }
                 } else if (currentAwait.terminalAction === "return") {
                     if (deferTerminalFinally) emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
                     controlBuf.line("tsc_promise_adopt_into(_ret, _p);");
