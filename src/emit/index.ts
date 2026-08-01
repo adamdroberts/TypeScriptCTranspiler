@@ -39451,6 +39451,7 @@ class Emitter {
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
+            condition: ts.Expression | null;
             awaitedExpression: ts.AwaitExpression | null;
             synchronousExpression: ts.Expression | null;
             captures: readonly NestedBranchCapture[];
@@ -39574,6 +39575,7 @@ class Emitter {
                 const statement = statements[index]!;
                 let terminalStatement: ts.ReturnStatement | ts.ThrowStatement | null = null;
                 let terminalPrefix: readonly ts.Statement[] = [];
+                let terminalCondition: ts.Expression | null = null;
                 if (index === statements.length - 1) {
                     if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
                         terminalStatement = statement;
@@ -39584,6 +39586,17 @@ class Emitter {
                             if (!terminalPrefix.every((child) =>
                                 awaitFreeBranchStatementSupported(child, statement))) return null;
                             terminalStatement = nestedTerminal;
+                        }
+                    } else if (ts.isIfStatement(statement) && !statement.elseStatement &&
+                        this.asyncAwaitConditionExpressionSupported(statement.expression)) {
+                        const nestedTerminal = ts.isBlock(statement.thenStatement)
+                            ? statement.thenStatement.statements.length === 1
+                                ? statement.thenStatement.statements[0]!
+                                : null
+                            : statement.thenStatement;
+                        if (nestedTerminal && (ts.isReturnStatement(nestedTerminal) || ts.isThrowStatement(nestedTerminal))) {
+                            terminalStatement = nestedTerminal;
+                            terminalCondition = statement.expression;
                         }
                     }
                 }
@@ -39597,19 +39610,20 @@ class Emitter {
                     ];
                     if (!terminalStatement.expression) {
                         if (action !== "return") return null;
-                        terminal = { action, awaitedExpression: null, synchronousExpression: null, captures: [] };
+                        terminal = { action, condition: terminalCondition, awaitedExpression: null, synchronousExpression: null, captures: [] };
                         continue;
                     }
                     const expression = this.unwrapTransparentExpression(terminalStatement.expression);
                     if (ts.isAwaitExpression(expression)) {
                         terminal = {
                             action,
+                            condition: terminalCondition,
                             awaitedExpression: expression,
                             synchronousExpression: null,
                             captures: terminalCaptures,
                         };
                     } else if (this.asyncAwaitSyncReturnExpressionSupported(expression)) {
-                        terminal = { action, awaitedExpression: null, synchronousExpression: expression, captures: [] };
+                        terminal = { action, condition: terminalCondition, awaitedExpression: null, synchronousExpression: expression, captures: [] };
                     } else {
                         return null;
                     }
@@ -40259,23 +40273,45 @@ class Emitter {
                     nextAwait.captures,
                 );
             } else {
-                if (branchTerminal && branchTerminal.awaitedExpression && branchTerminalPromiseType && branchTerminalName) {
-                    emitBranchTerminalSource(
-                        controlBuf,
-                        "state",
-                        branchTerminal,
-                        branchTerminalPromiseType,
-                        branchTerminalName,
-                        branchPostlude,
-                        branchTerminal.captures,
-                    );
-                } else if (branchTerminal && branchTerminal.action === "return") {
-                    emitBranchSynchronousReturn(controlBuf, "state", branchTerminal, branchPostlude);
-                } else if (branchTerminal && branchTerminal.action === "throw") {
-                    emitBranchSynchronousThrow(controlBuf, "state", branchTerminal, branchPostlude);
-                } else {
-                    emitBranchStatements(controlBuf, "state", branchPostlude);
+                const emitTerminalOrAction = (): void => {
+                    if (branchTerminal && branchTerminal.awaitedExpression && branchTerminalPromiseType && branchTerminalName) {
+                        emitBranchTerminalSource(
+                            controlBuf,
+                            "state",
+                            branchTerminal,
+                            branchTerminalPromiseType,
+                            branchTerminalName,
+                            branchPostlude,
+                            branchTerminal.captures,
+                        );
+                    } else if (branchTerminal && branchTerminal.action === "return") {
+                        emitBranchSynchronousReturn(controlBuf, "state", branchTerminal, branchPostlude);
+                    } else if (branchTerminal && branchTerminal.action === "throw") {
+                        emitBranchSynchronousThrow(controlBuf, "state", branchTerminal, branchPostlude);
+                    } else {
+                        emitBranchStatements(controlBuf, "state", branchPostlude);
+                        emitLoopAction(controlBuf, "state");
+                    }
+                };
+                if (branchTerminal?.condition) {
+                    this.argumentValueScopes.push(stateScope("state"));
+                    if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+                    let conditionValue: EmitResult;
+                    try {
+                        conditionValue = this.emitExpr(branchTerminal.condition);
+                    } finally {
+                        if (thisValue) this.functionThisStack.pop();
+                        this.argumentValueScopes.pop();
+                    }
+                    const conditionTruth = this.truthyExprFromEmitResult(conditionValue, branchTerminal.condition);
+                    controlBuf.open(`if (${conditionTruth})`);
+                    emitTerminalOrAction();
+                    controlBuf.close();
+                    controlBuf.open("else");
                     emitLoopAction(controlBuf, "state");
+                    controlBuf.close();
+                } else {
+                    emitTerminalOrAction();
                 }
             }
             controlBuf.close();
