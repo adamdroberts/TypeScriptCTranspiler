@@ -39456,6 +39456,24 @@ class Emitter {
         const awaitFreeBranchStatementSupported = (statement: ts.Statement): boolean => {
             if (ts.isExpressionStatement(statement)) return this.asyncAwaitLoopPostStatementSupported(statement);
             if (ts.isBlock(statement)) return statement.statements.every(awaitFreeBranchStatementSupported);
+            if (ts.isSwitchStatement(statement)) {
+                let expressionSupported = true;
+                const visitExpression = (node: ts.Node): void => {
+                    if (!expressionSupported) return;
+                    if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                        expressionSupported = false;
+                        return;
+                    }
+                    ts.forEachChild(node, visitExpression);
+                };
+                visitExpression(statement.expression);
+                const clauseStatementSupported = (clauseStatement: ts.Statement): boolean =>
+                    ts.isBreakStatement(clauseStatement) && !clauseStatement.label
+                        ? true
+                        : awaitFreeBranchStatementSupported(clauseStatement);
+                return expressionSupported && statement.caseBlock.clauses.every((clause) =>
+                    clause.statements.every(clauseStatementSupported));
+            }
             if (!ts.isIfStatement(statement)) return false;
             let conditionSupported = true;
             const visitCondition = (node: ts.Node): void => {

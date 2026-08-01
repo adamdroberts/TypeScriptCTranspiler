@@ -58,10 +58,13 @@ async function runOf(): Promise<string> {
         await laterOf(item);
         if (await laterBoolean(item === "of-a")) {
             const branchValue = await laterOfAlias(item);
-            if (item === "of-a") {
-                markOf(branchValue);
-            } else {
-                markOf(branchValue);
+            switch (item) {
+                case "of-a":
+                    markOf(branchValue);
+                    break;
+                default:
+                    markOf(branchValue);
+                    break;
             }
             await laterOfControl(branchValue);
             if (item === "of-a") {
@@ -71,10 +74,13 @@ async function runOf(): Promise<string> {
             }
         } else {
             const branchValue = await laterOfAlias(item);
-            if (item === "of-a") {
-                markOf(branchValue);
-            } else {
-                markOf(branchValue);
+            switch (item) {
+                case "of-a":
+                    markOf(branchValue);
+                    break;
+                default:
+                    markOf(branchValue);
+                    break;
             }
             await laterOfControl(branchValue);
             if (item === "of-a") {
@@ -94,10 +100,13 @@ async function runIn(): Promise<string> {
         await laterIn(key);
         if (await laterBoolean(key === "in-a")) {
             const branchValue = await laterInAlias(key);
-            if (key === "in-a") {
-                markIn(branchValue);
-            } else {
-                markIn(branchValue);
+            switch (key) {
+                case "in-a":
+                    markIn(branchValue);
+                    break;
+                default:
+                    markIn(branchValue);
+                    break;
             }
             await laterInControl(branchValue);
             if (key === "in-a") {
@@ -107,10 +116,13 @@ async function runIn(): Promise<string> {
             }
         } else {
             const branchValue = await laterInAlias(key);
-            if (key === "in-a") {
-                markIn(branchValue);
-            } else {
-                markIn(branchValue);
+            switch (key) {
+                case "in-a":
+                    markIn(branchValue);
+                    break;
+                default:
+                    markIn(branchValue);
+                    break;
             }
             await laterInControl(branchValue);
             if (key === "in-a") {
