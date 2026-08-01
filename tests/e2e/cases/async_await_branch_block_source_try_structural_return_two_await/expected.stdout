@@ -1,0 +1,8 @@
+declaration-false: declaration-fallthrough
+method-false: method-fallthrough
+value-false: arrow-fallthrough
+declaration-true: caught:declaration-rejection
+finally: method
+method-true: method:method-one:method-two
+finally: arrow
+value-true: arrow-one|arrow-two
