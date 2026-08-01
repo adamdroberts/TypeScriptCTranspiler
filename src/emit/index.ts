@@ -39855,7 +39855,6 @@ class Emitter {
                         const finalizerAwait = hasFinallyAwait
                             ? finallyAwaitExpression
                             : null;
-                        if (finalizerAwait && catchAwaitSteps.length > 1) return null;
                         if (!addAwait(
                             awaitExpression,
                             null,
@@ -40587,6 +40586,10 @@ class Emitter {
             preludeBuf.line("tsc_promise_t* _ret = state->result_promise;");
             const preludeAwait = preludeAwaits[index]!;
             const nextPreludeAwait = preludeAwaits[index + 1];
+            const finallyPreludeIndex = preludeAwait.isCatchAwait
+                ? preludeAwaits.findIndex((candidate, candidateIndex) =>
+                    candidateIndex > index && candidate.isFinallyAwait)
+                : -1;
             preludeBuf.open("if (tsc_promise_is_rejected(_p))");
             if (preludeAwait.catchStatements) {
                 const catchScope = new Map<ts.Symbol, string>();
@@ -40596,6 +40599,11 @@ class Emitter {
             } else if (!preludeAwait.isCatchAwait && nextPreludeAwait?.isCatchAwait) {
                 preludeBuf.line("state->catch_reason = tsc_promise_reason(_p);");
                 emitPreludeSource(preludeBuf, "state", index + 1, false, nextPreludeAwait.catchSymbol);
+                preludeBuf.line("return;");
+            } else if (finallyPreludeIndex >= 0) {
+                preludeBuf.line("state->reject_after_success = true;");
+                preludeBuf.line("state->rejection_reason = tsc_promise_reason(_p);");
+                emitPreludeSource(preludeBuf, "state", finallyPreludeIndex, true);
                 preludeBuf.line("return;");
             } else if (nextPreludeAwait?.isFinallyAwait) {
                 preludeBuf.line("state->reject_after_success = true;");
@@ -40722,6 +40730,10 @@ class Emitter {
             controlBuf.line("tsc_promise_t* _ret = state->result_promise;");
             const currentAwait = branchAwaits[index]!;
             const nextAwait = branchAwaits[index + 1];
+            const finallyAwaitIndex = currentAwait.isCatchAwait
+                ? branchAwaits.findIndex((candidate, candidateIndex) =>
+                    candidateIndex > index && candidate.isFinallyAwait)
+                : -1;
             controlBuf.open("if (tsc_promise_is_rejected(_p))");
             if (currentAwait.catchStatements) {
                 const catchScope = new Map<ts.Symbol, string>();
@@ -40740,6 +40752,21 @@ class Emitter {
                     nextAwait.captures,
                     false,
                     nextAwait.catchSymbol,
+                );
+                controlBuf.line("return;");
+            } else if (finallyAwaitIndex >= 0) {
+                controlBuf.line("state->reject_after_success = true;");
+                controlBuf.line("state->rejection_reason = tsc_promise_reason(_p);");
+                const finallyAwait = branchAwaits[finallyAwaitIndex]!;
+                emitControlSource(
+                    controlBuf,
+                    "state",
+                    finallyAwait.expression,
+                    branchPromiseTypes[finallyAwaitIndex]!,
+                    branchControlNames[finallyAwaitIndex]!,
+                    finallyAwait.before,
+                    finallyAwait.captures,
+                    true,
                 );
                 controlBuf.line("return;");
             } else if (nextAwait?.isFinallyAwait) {
