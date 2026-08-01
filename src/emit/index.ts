@@ -39992,7 +39992,8 @@ class Emitter {
                     const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
                         tryTrailingStatements.length === 0 &&
                         (tryAwaitSteps.length === 1 ||
-                            (!statement.finallyBlock && catchAwaitSteps.length > 0) ||
+                            (catchAwaitSteps.length > 0 &&
+                                (!statement.finallyBlock || finallyAwaitSteps.length > 0)) ||
                             (!statement.catchClause && finallyAwaitSteps.length > 0));
                     if ((statement.catchClause || statement.finallyBlock) &&
                         hasSupportedTry &&
