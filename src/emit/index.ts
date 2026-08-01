@@ -39474,6 +39474,10 @@ class Emitter {
                 return expressionSupported && statement.caseBlock.clauses.every((clause) =>
                     clause.statements.every(clauseStatementSupported));
             }
+            if (ts.isWhileStatement(statement) || ts.isDoStatement(statement) || ts.isForStatement(statement) ||
+                ts.isForOfStatement(statement) || ts.isForInStatement(statement)) {
+                return this.asyncAwaitLoopPostStatementSupported(statement);
+            }
             if (!ts.isIfStatement(statement)) return false;
             let conditionSupported = true;
             const visitCondition = (node: ts.Node): void => {
