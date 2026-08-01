@@ -11,8 +11,14 @@ async function runOf(): Promise<string> {
         await later(item);
         if (await laterBoolean(item === "of-b")) {
             await later(item + "-step");
-            if (item === "of-b") return await later(item + "-return");
-            else throw await later(item + "-throw");
+            if (item === "of-b") {
+                const returnValue = item + "-return";
+                return await later(returnValue);
+            } else {
+                let throwValue: string;
+                throwValue = item + "-throw";
+                throw await later(throwValue);
+            }
         } else {
             await later(item + "-step");
         }
@@ -27,8 +33,14 @@ async function runIn(): Promise<string> {
         await later(key);
         if (await laterBoolean(key === "in-b")) {
             await later(key + "-step");
-            if (key === "in-b") throw await later(key + "-throw");
-            else return await later(key + "-return");
+            if (key === "in-b") {
+                const throwValue = key + "-throw";
+                throw await later(throwValue);
+            } else {
+                let returnValue: string;
+                returnValue = key + "-return";
+                return await later(returnValue);
+            }
         } else {
             await later(key + "-step");
         }
