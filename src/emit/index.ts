@@ -39798,17 +39798,21 @@ class Emitter {
         const elseAwaits = elseBranch.awaits;
         const conditionExpression = this.unwrapTransparentExpression(nestedIf.expression);
         const conditionAwaits: ts.AwaitExpression[] = [];
-        if (ts.isAwaitExpression(conditionExpression)) {
-            conditionAwaits.push(conditionExpression);
-        } else if (ts.isBinaryExpression(conditionExpression) &&
-            conditionExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken) {
-            const left = this.unwrapTransparentExpression(conditionExpression.left);
-            const right = this.unwrapTransparentExpression(conditionExpression.right);
-            if (!ts.isAwaitExpression(left) || !ts.isAwaitExpression(right)) return false;
-            conditionAwaits.push(left, right);
-        } else {
-            return false;
-        }
+        const conditionOperators: ts.SyntaxKind[] = [];
+        const collectConditionAwaits = (expression: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(expression);
+            if (ts.isAwaitExpression(unwrapped)) {
+                conditionAwaits.push(unwrapped);
+                return true;
+            }
+            if (!ts.isBinaryExpression(unwrapped) ||
+                (unwrapped.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
+                    unwrapped.operatorToken.kind !== ts.SyntaxKind.BarBarToken)) return false;
+            if (!collectConditionAwaits(unwrapped.left)) return false;
+            conditionOperators.push(unwrapped.operatorToken.kind);
+            return collectConditionAwaits(unwrapped.right);
+        };
+        if (!collectConditionAwaits(conditionExpression)) return false;
         const preludeStatements = loopBody.slice(0, -2);
         if (preludeStatements.length < 1) return false;
         const preludeAwaitStatement = preludeStatements[preludeStatements.length - 1]!;
@@ -40401,12 +40405,22 @@ class Emitter {
             conditionBuf.line(`${conditionAwaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, conditionAwait)};`);
             const conditionTruth = this.truthyExprFromEmitResult({ c: conditionValue, ty: conditionAwaitedType }, conditionAwait);
             if (index + 1 < conditionAwaits.length) {
-                conditionBuf.open(`if (${conditionTruth})`);
-                emitConditionSource(conditionBuf, "state", index + 1);
-                conditionBuf.close();
-                conditionBuf.open("else");
-                emitConditionOutcome(conditionBuf, "state", false);
-                conditionBuf.close();
+                const nextOperator = conditionOperators[index]!;
+                if (nextOperator === ts.SyntaxKind.AmpersandAmpersandToken) {
+                    conditionBuf.open(`if (${conditionTruth})`);
+                    emitConditionSource(conditionBuf, "state", index + 1);
+                    conditionBuf.close();
+                    conditionBuf.open("else");
+                    emitConditionOutcome(conditionBuf, "state", false);
+                    conditionBuf.close();
+                } else {
+                    conditionBuf.open(`if (${conditionTruth})`);
+                    emitConditionOutcome(conditionBuf, "state", true);
+                    conditionBuf.close();
+                    conditionBuf.open("else");
+                    emitConditionSource(conditionBuf, "state", index + 1);
+                    conditionBuf.close();
+                }
             } else {
                 conditionBuf.open(`if (${conditionTruth})`);
                 emitConditionOutcome(conditionBuf, "state", true);
