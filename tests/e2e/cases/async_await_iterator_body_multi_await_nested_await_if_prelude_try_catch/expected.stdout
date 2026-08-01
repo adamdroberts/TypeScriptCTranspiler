@@ -1,0 +1,16 @@
+of-a-caught
+of-a-pre-rejected
+of-a-finally
+of-b-caught
+of-b-pre-rejected
+of-b-finally
+of-b-return
+in-a-caught
+in-a-pre-rejected
+in-a-finally
+in-b-caught
+in-b-pre-rejected
+in-b-finally
+in-b-return
+fulfilled-finally
+fulfilled-return
