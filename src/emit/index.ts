@@ -39443,7 +39443,8 @@ class Emitter {
         const awaitedBranchExpressions = (statements: readonly ts.Statement[]): NestedBranchAwait[] | null => {
             if (statements.length === 0) return null;
             const expressions: NestedBranchAwait[] = [];
-            for (const statement of statements) {
+            for (let index = 0; index < statements.length; index++) {
+                const statement = statements[index]!;
                 if (ts.isExpressionStatement(statement)) {
                     const expression = this.unwrapTransparentExpression(statement.expression);
                     if (!ts.isAwaitExpression(expression)) return null;
@@ -39452,9 +39453,24 @@ class Emitter {
                 }
                 if (!ts.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1) return null;
                 const declaration = statement.declarationList.declarations[0]!;
-                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return null;
-                const expression = this.unwrapTransparentExpression(declaration.initializer);
-                if (!ts.isAwaitExpression(expression)) return null;
+                if (!ts.isIdentifier(declaration.name)) return null;
+                let expression: ts.AwaitExpression | null = null;
+                if (declaration.initializer) {
+                    const candidate = this.unwrapTransparentExpression(declaration.initializer);
+                    if (ts.isAwaitExpression(candidate)) expression = candidate;
+                } else {
+                    const assignmentStatement = statements[index + 1];
+                    if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return null;
+                    const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                    if (!ts.isBinaryExpression(assignment) ||
+                        assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                        !ts.isIdentifier(assignment.left) ||
+                        this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(declaration.name)) return null;
+                    const candidate = this.unwrapTransparentExpression(assignment.right);
+                    if (ts.isAwaitExpression(candidate)) expression = candidate;
+                    index++;
+                }
+                if (!expression) return null;
                 expressions.push({ expression, alias: declaration.name });
             }
             return expressions;
