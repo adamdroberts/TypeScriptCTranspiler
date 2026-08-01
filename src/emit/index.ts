@@ -39456,6 +39456,13 @@ class Emitter {
         };
         const awaitFreeBranchStatementSupported = (statement: ts.Statement): boolean => {
             if (ts.isExpressionStatement(statement)) return this.asyncAwaitLoopPostStatementSupported(statement);
+            if (ts.isVariableStatement(statement)) {
+                if ((statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                    !ts.isBlock(statement.parent) ||
+                    statement.parent === nestedIf.thenStatement ||
+                    statement.parent === nestedIf.elseStatement) return false;
+                return this.asyncAwaitLoopPostStatementSupported(statement);
+            }
             if (ts.isBlock(statement)) return statement.statements.every(awaitFreeBranchStatementSupported);
             if (ts.isSwitchStatement(statement)) {
                 let expressionSupported = true;
