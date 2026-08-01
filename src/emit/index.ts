@@ -39430,10 +39430,13 @@ class Emitter {
         const fallthroughAwait = this.unwrapTransparentExpression(result.expression);
         if (!ts.isAwaitExpression(fallthroughAwait)) return false;
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
-        const continueStatement = loopBody[loopBody.length - 1];
-        if (!continueStatement || !ts.isContinueStatement(continueStatement) || continueStatement.label || loopBody.length < 2) {
-            return false;
-        }
+        const loopControl = loopBody[loopBody.length - 1];
+        const loopAction = loopControl && ts.isContinueStatement(loopControl) && !loopControl.label
+            ? "continue"
+            : loopControl && ts.isBreakStatement(loopControl) && !loopControl.label
+                ? "break"
+                : null;
+        if (!loopAction || loopBody.length < 2) return false;
         const nestedIf = loopBody[loopBody.length - 2];
         if (!nestedIf || !ts.isIfStatement(nestedIf)) return false;
         type NestedBranchAwait = {
@@ -39802,6 +39805,10 @@ class Emitter {
             emitFallthrough(out, state);
             out.close();
         };
+        const emitLoopAction = (out: CBuf, state: string): void => {
+            if (loopAction === "continue") emitContinue(out, state);
+            else emitFallthrough(out, state);
+        };
 
         const bodyBuf = new CBuf();
         bodyBuf.open(`void ${bodyName}(void* env)`);
@@ -39856,7 +39863,7 @@ class Emitter {
                 elseAwaits[0]!.before,
             );
         } else {
-            emitContinue(conditionBuf, "state");
+            emitLoopAction(conditionBuf, "state");
         }
         conditionBuf.close();
         conditionBuf.close();
@@ -39903,7 +39910,7 @@ class Emitter {
                 );
             } else {
                 emitBranchStatements(controlBuf, "state", branchPostlude);
-                emitContinue(controlBuf, "state");
+                emitLoopAction(controlBuf, "state");
             }
             controlBuf.close();
             controlBuf.line();
