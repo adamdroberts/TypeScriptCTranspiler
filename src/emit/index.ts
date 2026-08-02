@@ -33163,7 +33163,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "Boolean" && name !== "Number" && name !== "String") ||
+        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "String") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
