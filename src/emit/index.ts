@@ -26848,7 +26848,7 @@ class Emitter {
                     buf.line(`tsc_try_frame_t ${syncEh};`);
                     buf.line(`tsc_try_push(&${syncEh});`);
                     buf.open(`if (setjmp(${syncEh}.jb) == 0)`);
-                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.promiseResolveResult(sync, branch.returnExpr)});`);
+                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.asyncAwaitTryConditionalSyncSourcePromise(sync, branch.returnExpr)});`);
                     buf.line("tsc_try_pop();");
                     buf.close();
                     buf.open("else");
@@ -27926,7 +27926,7 @@ class Emitter {
                     buf.line(`tsc_try_frame_t ${syncEh};`);
                     buf.line(`tsc_try_push(&${syncEh});`);
                     buf.open(`if (setjmp(${syncEh}.jb) == 0)`);
-                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.promiseResolveResult(sync, branch.returnExpr)});`);
+                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.asyncAwaitTryConditionalSyncSourcePromise(sync, branch.returnExpr)});`);
                     buf.line("tsc_try_pop();");
                     buf.close();
                     buf.open("else");
@@ -28763,7 +28763,7 @@ class Emitter {
                     buf.line(`tsc_try_frame_t ${syncEh};`);
                     buf.line(`tsc_try_push(&${syncEh});`);
                     buf.open(`if (setjmp(${syncEh}.jb) == 0)`);
-                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.promiseResolveResult(sync, branch.returnExpr)});`);
+                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.asyncAwaitTryConditionalSyncSourcePromise(sync, branch.returnExpr)});`);
                     buf.line("tsc_try_pop();");
                     buf.close();
                     buf.open("else");
@@ -33327,15 +33327,18 @@ class Emitter {
     }
 
     private asyncAwaitTryConditionalSyncReturnExpressionSupported(returnExpr: ts.Expression): boolean {
-        if (!this.asyncAwaitSyncReturnExpressionSupported(returnExpr)) return false;
-        const type = this.prepareType(mapTsType(
-            returnExpr,
-            this.checker.getTypeAtLocation(returnExpr),
-            this.checker,
-        ));
-        return type.kind === "number" || type.kind === "bigint" || type.kind === "symbol" ||
-            type.kind === "string" || type.kind === "boolean" || type.kind === "void" ||
-            type.kind === "array" || type.kind === "buffer" || type.kind === "fsstats";
+        return this.asyncAwaitSyncReturnExpressionSupported(returnExpr);
+    }
+
+    private asyncAwaitTryConditionalSyncSourcePromise(
+        sync: EmitResult,
+        node: ts.Expression,
+    ): string {
+        const type = this.prepareType(sync.ty);
+        if (type.kind === "array") return `tsc_promise_resolve_array(${sync.c})`;
+        if (type.kind === "buffer") return `tsc_promise_resolve_buffer(${sync.c})`;
+        if (type.kind === "fsstats") return `tsc_promise_resolve_fs_stats(${sync.c})`;
+        return `tsc_promise_resolve(${this.coerce(sync, T_VALUE, node)})`;
     }
 
     private asyncAwaitTryConditionalReturnSequenceContinuation(

@@ -1,0 +1,7 @@
+dynamic-sync {"kind":"sync-object","value":"ok"} 
+dynamic-await caught-await-bad 
+promise-sync rejected-promise-bad 
+promise-await await-ok 
+method-promise rejected-method-promise-bad P
+arrow-await caught-arrow-await-bad PV
+arrow-sync {"kind":"arrow-sync-object","value":"ok"} PVV
