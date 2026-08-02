@@ -6,3 +6,4 @@ body-return-after-await: post-return
 body-throw-after-await: post-throw
 body-two-awaits: two,done
 body-two-awaits-reject: second-body-failure
+body-await-if: keep,stop

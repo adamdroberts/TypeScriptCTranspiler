@@ -68,6 +68,20 @@ async function twoAwaitsReject(iterator: any): Promise<string> {
     return "empty";
 }
 
+async function awaitThenBranch(iterator: any, output: string[]): Promise<string> {
+    for await (const [item] of iterator) {
+        await Promise.resolve(item);
+        if (item === "stop") {
+            output.push(item);
+            break;
+        } else {
+            output.push(item);
+            continue;
+        }
+    }
+    return output.join(",");
+}
+
 const emitter = new EventEmitter();
 const iterator: any = on(emitter, "data");
 collect(iterator, []).then((value: string): void => {
@@ -113,6 +127,14 @@ collect(iterator, []).then((value: string): void => {
                                 console.log("body-two-awaits-reject-unexpected:", unexpectedValue);
                             }, (reason: any): void => {
                                 console.log("body-two-awaits-reject:", reason);
+
+                                const branchEmitter = new EventEmitter();
+                                const branchIterator: any = on(branchEmitter, "data");
+                                awaitThenBranch(branchIterator, []).then((branchValue: string): void => {
+                                    console.log("body-await-if:", branchValue);
+                                });
+                                branchEmitter.emit("data", "keep");
+                                branchEmitter.emit("data", "stop");
                             });
                             twoAwaitRejectEmitter.emit("data", "ignored");
                         });

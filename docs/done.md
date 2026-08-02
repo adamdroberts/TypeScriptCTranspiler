@@ -1611,6 +1611,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Bounded `for await...of` consumers can synchronously return a value after that one awaited loop-body expression, closing the iterator before settling the returned value while preserving captured loop bindings. Test: `async_for_await_events_on_body_await`
 - Bounded `for await...of` consumers can synchronously throw a captured value after that one awaited loop-body expression, closing the iterator before rejecting. Test: `async_for_await_events_on_body_await`
 - Bounded `for await...of` lowering now supports a terminal loop-body `return await`, closing the iterator before adopting the awaited return value into the enclosing async result. Test: `async_for_await_events_on_body_await`
+- Bounded `for await...of` consumers can route an awaited loop-body prefix into a final await-free `if` / `else` with direct `continue` or `break` control, including iterator close on the break path. Test: `async_for_await_events_on_body_await`
 - Aliased named imports for `EventEmitter` support `defaultMaxListeners` reads and assignments. Test: `event_emitter_default_max_listeners`
 
 ### `Event` / `EventTarget`
@@ -2441,7 +2442,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_for_await_events_on_array_binding` | bounded for-await unpacks simple array binding identifiers from dynamic iterator items |
 | `async_for_await_events_on_array_elision` | bounded for-await array bindings skip elided iterator-item positions |
 | `async_for_await_events_on_array_rest` | bounded for-await builds one terminal array rest binding from trailing dynamic iterator-item values |
-| `async_for_await_events_on_body_await` | bounded for-await sequences up to two direct body awaits with await-free interstitial/postlude statements, terminal return/throw routing, and iterator close |
+| `async_for_await_events_on_body_await` | bounded for-await sequences up to two direct body awaits with await-free interstitial/postlude statements, an awaited prefix before final await-free if/else continue/break routing, terminal return/throw routing, and iterator close |
 | `async_for_await_events_on_object_binding` | bounded for-await unpacks simple static-property object binding identifiers from dynamic iterator items |
 | `async_for_await_events_on_object_rest` | bounded for-await builds a dynamic object rest binding from unexcluded iterator-item properties |
 | `async_for_await_events_on_binding_defaults` | bounded for-await array/object binding defaults apply only to undefined extracted values |

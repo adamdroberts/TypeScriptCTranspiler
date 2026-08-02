@@ -45399,10 +45399,13 @@ class Emitter {
                 ? routeFor(bodyIf.elseStatement)
                 : { statements: [], control: null, expression: null }
             : null;
-        const bodyAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length > 0 &&
-            ts.isExpressionStatement(directRoute.statements[0]!)
-            ? this.unwrapTransparentExpression(directRoute.statements[0]!.expression)
-            : null;
+        const bodyAwaitCandidate = bodyIf
+            ? bodyPrefix.length > 0 && ts.isExpressionStatement(bodyPrefix[0]!)
+                ? this.unwrapTransparentExpression(bodyPrefix[0]!.expression)
+                : null
+            : directRoute && directRoute.statements.length > 0 && ts.isExpressionStatement(directRoute.statements[0]!)
+                ? this.unwrapTransparentExpression(directRoute.statements[0]!.expression)
+                : null;
         const bodyAwaitExpression = bodyAwaitCandidate && ts.isAwaitExpression(bodyAwaitCandidate)
             ? bodyAwaitCandidate
             : null;
@@ -45431,16 +45434,21 @@ class Emitter {
             ? directRoute!.statements.slice(1, bodyAwaitSecondIndex)
             : [];
         const bodyAwaitPostludeStatements = bodyAwaitExpression
-            ? bodyAwaitSecondExpression
-                ? directRoute!.statements.slice(bodyAwaitSecondIndex + 1)
-                : directRoute!.statements.slice(1)
+            ? bodyIf
+                ? bodyPrefix.slice(1)
+                : bodyAwaitSecondExpression
+                    ? directRoute!.statements.slice(bodyAwaitSecondIndex + 1)
+                    : directRoute!.statements.slice(1)
             : [];
         const awaitFreeBodyAwaitStatements = (statements: readonly ts.Statement[]): boolean => statements.every((statement) =>
             ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement));
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitPostludeStatements)) return false;
-        if (bodyAwaitExpression && directRoute!.control !== null &&
+        const bodyAwaitIfPrefix = Boolean(bodyIf && bodyAwaitExpression);
+        if (bodyAwaitExpression && directRoute && directRoute.control !== null &&
             directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return" && directRoute!.control !== "throw") return false;
+        if (bodyAwaitIfPrefix && [thenRoute, elseRoute].some((route) => route !== null && route.control !== null &&
+            route.control !== "continue" && route.control !== "break")) return false;
         let bodySupported = true;
         const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyReturnAwaitExpression]
             .filter((expression): expression is ts.AwaitExpression => expression !== null);
@@ -45731,6 +45739,30 @@ class Emitter {
             target.line("tsc_try_pop();");
             target.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(thrown, T_VALUE, expression)});`);
         };
+        const emitBodyAwaitIfRoutes = (): void => {
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                const condition = this.emitBoolExpr(bodyIf!.expression);
+                const emitRoute = (route: BodyRoute): void => {
+                    for (const statement of route.statements) this.emitStmt(callback, statement);
+                    if (route.control === "break") callback.line("state->body_break = true;");
+                };
+                callback.open(`if (${condition})`);
+                emitRoute(thenRoute!);
+                callback.close();
+                callback.open("else");
+                emitRoute(elseRoute!);
+                callback.close();
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+        };
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _p = state->receiver;");
@@ -45793,7 +45825,8 @@ class Emitter {
         }
         emitBodyAwaitPostlude();
         callback.line("state->body_await = false;");
-        if (bodyAwaitExpression && directRoute!.control === "return") {
+        if (bodyAwaitIfPrefix) emitBodyAwaitIfRoutes();
+        if (bodyAwaitExpression && directRoute && directRoute.control === "return") {
             callback.open("if (state->body_sync_return)");
             callback.line("state->body_sync_return = false;");
             callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
@@ -45801,7 +45834,7 @@ class Emitter {
             callback.line("return;");
             callback.close();
         }
-        if (bodyAwaitExpression && directRoute!.control === "throw") {
+        if (bodyAwaitExpression && directRoute && directRoute.control === "throw") {
             callback.open("if (state->body_sync_throw)");
             callback.line("state->body_sync_throw = false;");
             callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
@@ -45957,9 +45990,9 @@ class Emitter {
                 callback.line("state->body_await = true;");
                 callback.line("state->body_await_stage = 1;");
                 callback.line(`state->body_return = ${bodyReturnAwaitExpression ? "true" : "false"};`);
-                callback.line(`state->body_sync_return = ${bodyAwaitExpression && directRoute!.control === "return" ? "true" : "false"};`);
-                callback.line(`state->body_sync_throw = ${bodyAwaitExpression && directRoute!.control === "throw" ? "true" : "false"};`);
-                callback.line(`state->body_break = ${bodyReturnAwaitExpression ? "false" : directRoute!.control === "break" ? "true" : "false"};`);
+                callback.line(`state->body_sync_return = ${bodyAwaitExpression && directRoute && directRoute.control === "return" ? "true" : "false"};`);
+                callback.line(`state->body_sync_throw = ${bodyAwaitExpression && directRoute && directRoute.control === "throw" ? "true" : "false"};`);
+                callback.line(`state->body_break = ${bodyReturnAwaitExpression ? "false" : directRoute && directRoute.control === "break" ? "true" : "false"};`);
                 callback.line(`state->receiver = ${bodySourceVar};`);
                 callback.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
                 callback.line(`tsc_promise_add_callback(${bodySourceVar}, ${name}, state);`);
