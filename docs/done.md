@@ -1631,6 +1631,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Bounded `for await...of` body awaits can now be followed by synchronous `try` / `catch` / `finally` postludes before iterator close, preserving caught-throw recovery and finalization. Test: `async_for_await_events_on_body_await_try_postlude`
 - Bounded `for await...of` body awaits can now be followed by synchronous `switch` postludes with clause fallthrough and local `break` routing before iterator close. Test: `async_for_await_events_on_body_await_switch_postlude`
 - Bounded `for await...of` body awaits can now be followed by synchronous `while`, `for`, and `do...while` postludes with nested `continue` / `break` routing before iterator close. Test: `async_for_await_events_on_body_await_loop_postlude`
+- Bounded `for await...of` body awaits can now be followed by synchronous nested `for...of` and `for...in` postludes with local `break` routing before iterator close. Test: `async_for_await_events_on_body_await_nested_iterator_postlude`
 - Bounded `for await...of` abrupt paths now await pending dynamic iterator `.return()` results and reject with close failures before settling the original break/return/throw completion. Test: `async_for_await_events_on_iterator_close`
 - Bounded `for await...of` close continuations now reject fulfilled primitive iterator `.return()` results as invalid close results while preserving successful close when `return` is absent. Test: `async_for_await_events_on_iterator_close`
 - Bounded `for await...of` consumers now reject fulfilled primitive async iterator `.next()` results before body execution or binding. Test: `async_for_await_events_on_iterator_result`
@@ -2472,6 +2473,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_for_await_events_on_body_await_try_postlude` | bounded for-await runs synchronous try/catch/finally postludes after a direct body await before iterator close |
 | `async_for_await_events_on_body_await_switch_postlude` | bounded for-await runs synchronous switch fallthrough and clause-break postludes after a direct body await before iterator close |
 | `async_for_await_events_on_body_await_loop_postlude` | bounded for-await runs synchronous while/for/do-while postludes with nested loop controls after a direct body await |
+| `async_for_await_events_on_body_await_nested_iterator_postlude` | bounded for-await runs synchronous nested for-of/for-in postludes after a direct body await |
 | `async_for_await_events_on_body_await_condition` | bounded for-await suspends on a directly awaited final-if condition before continue/break routing and iterator close |
 | `async_for_await_events_on_body_await_prefix_condition` | bounded for-await sequences an awaited body prefix and awaited final-if condition before continue/break routing and iterator close |
 | `async_for_await_events_on_body_await_branch_control` | bounded for-await awaited-prefix and awaited final-if branches support synchronous return/throw routing and iterator close |

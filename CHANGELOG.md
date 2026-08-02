@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded nested synchronous `for...of` and `for...in` postludes after awaited `for await...of` body expressions, including local break and iterator-close sequencing. Test: `async_for_await_events_on_body_await_nested_iterator_postlude`.
 - Bounded synchronous `while`, `for`, and `do...while` postludes after awaited `for await...of` body expressions, including nested loop-control and iterator-close sequencing. Test: `async_for_await_events_on_body_await_loop_postlude`.
 - Bounded synchronous `switch` postludes after awaited `for await...of` body expressions, including clause fallthrough and iterator-close sequencing. Test: `async_for_await_events_on_body_await_switch_postlude`.
 - Bounded synchronous `try` / `catch` / `finally` postludes after awaited `for await...of` body expressions, including iterator-close sequencing. Test: `async_for_await_events_on_body_await_try_postlude`.

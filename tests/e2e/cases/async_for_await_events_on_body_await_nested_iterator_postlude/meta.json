@@ -1,0 +1,3 @@
+{
+    "description": "bounded for-await body awaits can be followed by synchronous nested for-of and for-in postludes before iterator close"
+}
