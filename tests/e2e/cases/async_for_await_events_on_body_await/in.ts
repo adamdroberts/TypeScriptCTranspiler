@@ -25,6 +25,13 @@ async function rejectBody(iterator: any): Promise<string> {
     return "fulfilled";
 }
 
+async function returnBody(iterator: any): Promise<string> {
+    for await (const item of iterator) {
+        return await Promise.resolve(item);
+    }
+    return "empty";
+}
+
 const emitter = new EventEmitter();
 const iterator: any = on(emitter, "data");
 collect(iterator, []).then((value: string): void => {
@@ -41,6 +48,13 @@ collect(iterator, []).then((value: string): void => {
             console.log("body-reject-unexpected:", rejectionValue);
         }, (reason: any): void => {
             console.log("body-reject:", reason);
+
+            const returnEmitter = new EventEmitter();
+            const returnIterator: any = on(returnEmitter, "data");
+            returnBody(returnIterator).then((returnValue: string): void => {
+                console.log("body-return-await:", returnValue);
+            });
+            returnEmitter.emit("data", "returned");
         });
         rejectionEmitter.emit("data", "ignored");
     });

@@ -45406,6 +45406,12 @@ class Emitter {
         const bodyAwaitExpression = bodyAwaitCandidate && ts.isAwaitExpression(bodyAwaitCandidate)
             ? bodyAwaitCandidate
             : null;
+        const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.control === "return" && directRoute.expression
+            ? this.unwrapTransparentExpression(directRoute.expression)
+            : null;
+        const bodyReturnAwaitExpression = bodyReturnAwaitCandidate && ts.isAwaitExpression(bodyReturnAwaitCandidate)
+            ? bodyReturnAwaitCandidate
+            : null;
         const bodyAwaitPostludeStatements = bodyAwaitExpression
             ? directRoute!.statements.slice(1)
             : [];
@@ -45414,10 +45420,11 @@ class Emitter {
         if (bodyAwaitExpression && directRoute!.control !== null &&
             directRoute!.control !== "continue" && directRoute!.control !== "break") return false;
         let bodySupported = true;
+        const allowedBodyAwaitExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression;
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
             if (
-                (ts.isAwaitExpression(node) && node !== bodyAwaitExpression) ||
+                (ts.isAwaitExpression(node) && node !== allowedBodyAwaitExpression) ||
                 ts.isFunctionLike(node) ||
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
@@ -45439,7 +45446,7 @@ class Emitter {
 
         const visitReturn = (node: ts.Node): void => {
             if (!bodySupported) return;
-            if ((ts.isAwaitExpression(node) && node !== bodyAwaitExpression) ||
+            if ((ts.isAwaitExpression(node) && node !== allowedBodyAwaitExpression) ||
                 ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 bodySupported = false;
                 return;
@@ -45456,14 +45463,23 @@ class Emitter {
         visitReturn(result.expression);
         if (!bodySupported) return false;
 
-        const bodyAwaitPromiseType = bodyAwaitExpression
+        const bodyAwaitSourceExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression;
+        const bodyAwaitPromiseType = bodyAwaitSourceExpression
             ? this.prepareType(mapTsType(
-                bodyAwaitExpression.expression,
-                this.checker.getTypeAtLocation(bodyAwaitExpression.expression),
+                bodyAwaitSourceExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitSourceExpression.expression),
                 this.checker,
             ))
             : null;
-        if (bodyAwaitExpression && bodyAwaitPromiseType?.kind !== "promise") return false;
+        const bodyReturnAwaitedType = bodyReturnAwaitExpression
+            ? this.prepareType(mapTsType(
+                bodyReturnAwaitExpression,
+                this.checker.getTypeAtLocation(bodyReturnAwaitExpression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitSourceExpression && bodyAwaitPromiseType?.kind !== "promise") return false;
+        if (bodyReturnAwaitExpression && bodyReturnAwaitedType?.kind === "never") return false;
 
         let usesThis = false;
         const visitThis = (node: ts.Node): void => {
@@ -45504,6 +45520,7 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line("tsc_value_t iterator;");
         this.structDecls.line("bool body_await;");
+        this.structDecls.line("bool body_return;");
         this.structDecls.line("bool body_break;");
         for (const { entry, field } of bodyBindingFields) this.structDecls.line(`${entry.type.c} ${field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
@@ -45518,6 +45535,7 @@ class Emitter {
         const nextVar = this.freshTemp("_for_await_next");
         const resolvedVar = this.freshTemp("_for_await_resolved");
         const returnedVar = this.freshTemp("_for_await_returned");
+        const bodyReturnValueVar = this.freshTemp("_for_await_body_returned");
         const eh = this.freshTemp("_for_await_eh");
         const scope = new Map<ts.Symbol, string>();
         const scopeTypes = new Map<ts.Symbol, CType>();
@@ -45639,6 +45657,22 @@ class Emitter {
         callback.line("tsc_try_pop();");
         callback.line("return;");
         callback.close();
+        if (bodyReturnAwaitExpression) {
+            callback.open("if (state->body_return)");
+            callback.line("state->body_await = false;");
+            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+            if (bodyReturnAwaitedType!.kind === "void") {
+                callback.line("tsc_try_pop();");
+                callback.line("tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());");
+            } else {
+                callback.line(`${bodyReturnAwaitedType!.c} ${bodyReturnValueVar} = ${this.coerce(this.promiseFulfilledValue(bodyAwaitPromiseType!.elem, "_p"), bodyReturnAwaitedType!, bodyReturnAwaitExpression)};`);
+                callback.line("tsc_try_pop();");
+                callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: bodyReturnValueVar, ty: bodyReturnAwaitedType! }, bodyReturnAwaitExpression)};`);
+                callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+            }
+            callback.line("return;");
+            callback.close();
+        }
         emitBodyAwaitPostlude();
         callback.line("state->body_await = false;");
         callback.open("if (state->body_break)");
@@ -45782,12 +45816,13 @@ class Emitter {
         if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            if (bodyAwaitExpression) {
-                const bodySource = this.emitExpr(bodyAwaitExpression.expression);
+            if (bodyAwaitSourceExpression) {
+                const bodySource = this.emitExpr(bodyAwaitSourceExpression.expression);
                 const bodySourceVar = this.freshTemp("_for_await_body_source");
-                callback.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyAwaitPromiseType!, bodyAwaitExpression.expression)};`);
+                callback.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyAwaitPromiseType!, bodyAwaitSourceExpression.expression)};`);
                 callback.line("state->body_await = true;");
-                callback.line(`state->body_break = ${directRoute!.control === "break" ? "true" : "false"};`);
+                callback.line(`state->body_return = ${bodyReturnAwaitExpression ? "true" : "false"};`);
+                callback.line(`state->body_break = ${bodyReturnAwaitExpression ? "false" : directRoute!.control === "break" ? "true" : "false"};`);
                 callback.line(`state->receiver = ${bodySourceVar};`);
                 callback.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
                 callback.line(`tsc_promise_add_callback(${bodySourceVar}, ${name}, state);`);
@@ -45849,6 +45884,7 @@ class Emitter {
         buf.line(`${env}->result_promise = ${resultPromise};`);
         buf.line(`${env}->iterator = tsc_async_iterator_get(${this.coerce(source, T_VALUE, loop.expression)});`);
         buf.line(`${env}->body_await = false;`);
+        buf.line(`${env}->body_return = false;`);
         buf.line(`${env}->body_break = false;`);
         for (const param of params) buf.line(`${env}->${param.field} = ${this.asyncAwaitContinuationParamValue(param)};`);
         if (usesThis && thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
