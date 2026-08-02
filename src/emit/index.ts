@@ -45286,16 +45286,20 @@ class Emitter {
 
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         const terminalBodyStatement = loopBody[loopBody.length - 1];
-        const bodyControl: "continue" | "break" | "return" | null = terminalBodyStatement && ts.isContinueStatement(terminalBodyStatement)
+        const bodyControl: "continue" | "break" | "return" | "throw" | null = terminalBodyStatement && ts.isContinueStatement(terminalBodyStatement)
             ? "continue"
             : terminalBodyStatement && ts.isBreakStatement(terminalBodyStatement)
                 ? "break"
                 : terminalBodyStatement && ts.isReturnStatement(terminalBodyStatement)
                     ? "return"
+                    : terminalBodyStatement && ts.isThrowStatement(terminalBodyStatement)
+                        ? "throw"
                 : null;
         if ((bodyControl === "continue" || bodyControl === "break") &&
             (terminalBodyStatement as ts.BreakOrContinueStatement).label) return false;
         const bodyReturn = bodyControl === "return" ? terminalBodyStatement as ts.ReturnStatement : null;
+        const bodyThrow = bodyControl === "throw" ? terminalBodyStatement as ts.ThrowStatement : null;
+        if (bodyControl === "throw" && !bodyThrow?.expression) return false;
         const bodyStatements = bodyControl ? loopBody.slice(0, -1) : loopBody;
         let bodySupported = true;
         const visitBody = (node: ts.Node): void => {
@@ -45327,6 +45331,7 @@ class Emitter {
         };
         visitReturn(result.expression);
         if (bodyReturn?.expression) visitReturn(bodyReturn.expression);
+        if (bodyThrow?.expression) visitReturn(bodyThrow.expression);
         if (!bodySupported) return false;
 
         let usesThis = false;
@@ -45340,6 +45345,7 @@ class Emitter {
         };
         for (const statement of bodyStatements) visitThis(statement);
         if (bodyReturn?.expression) visitThis(bodyReturn.expression);
+        if (bodyThrow?.expression) visitThis(bodyThrow.expression);
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
 
@@ -45437,6 +45443,18 @@ class Emitter {
                 callback.line("tsc_try_pop();");
                 callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
             }
+            callback.line("return;");
+        } else if (bodyControl === "throw") {
+            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+            let bodyThrown: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                bodyThrown = this.emitExpr(bodyThrow.expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+            }
+            callback.line("tsc_try_pop();");
+            callback.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(bodyThrown, T_VALUE, bodyThrow.expression)});`);
             callback.line("return;");
         }
         callback.close();
