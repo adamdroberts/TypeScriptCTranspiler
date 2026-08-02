@@ -92,7 +92,8 @@ async function declaration(): Promise<string> {
     const thirtyThree = await delay(33, thirtyTwo + "3");
     const thirtyFour = await delay(34, thirtyThree + "4");
     const thirtyFive = await delay(35, thirtyFour + "5");
-    return thirtyFive;
+    const thirtySix = await delay(36, thirtyFive + "6");
+    return thirtySix;
 }
 
 class Chain {
@@ -188,7 +189,8 @@ class Chain {
         const thirtyThree = await delay(33, thirtyTwo + "6");
         const thirtyFour = await delay(34, thirtyThree + "7");
         const thirtyFive = await delay(35, thirtyFour + "8");
-        return thirtyFive;
+        const thirtySix = await delay(36, thirtyFive + "9");
+        return thirtySix;
     }
 }
 
@@ -284,7 +286,8 @@ const value = async (): Promise<string> => {
     const thirtyThree = await delay(33, thirtyTwo + "6");
     const thirtyFour = await delay(34, thirtyThree + "7");
     const thirtyFive = await delay(35, thirtyFour + "8");
-    return thirtyFive;
+    const thirtySix = await delay(36, thirtyFive + "9");
+    return thirtySix;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -380,7 +383,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const thirtyThree = await delay(53, thirtyTwo + "2");
         const thirtyFour = await delay(54, thirtyThree + "3");
         const thirtyFive = await delay(55, thirtyFour + "4");
-        return thirtyFive;
+        const thirtySix = await delay(56, thirtyFive + "5");
+        return thirtySix;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -473,7 +477,8 @@ async function branchEight(flag: boolean): Promise<string> {
     const thirtyThree = await delay(61, thirtyTwo + "2");
     const thirtyFour = await delay(62, thirtyThree + "3");
     const thirtyFive = await delay(63, thirtyFour + "4");
-    return thirtyFive;
+    const thirtySix = await delay(64, thirtyFive + "5");
+    return thirtySix;
 }
 
 class BranchChain {
@@ -570,7 +575,8 @@ class BranchChain {
             const thirtyThree = await delay(69, thirtyTwo + "2");
             const thirtyFour = await delay(70, thirtyThree + "3");
             const thirtyFive = await delay(71, thirtyFour + "4");
-            return thirtyFive;
+            const thirtySix = await delay(72, thirtyFive + "5");
+            return thirtySix;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -663,7 +669,8 @@ class BranchChain {
         const thirtyThree = await delay(77, thirtyTwo + "2");
         const thirtyFour = await delay(78, thirtyThree + "3");
         const thirtyFive = await delay(79, thirtyFour + "4");
-        return thirtyFive;
+        const thirtySix = await delay(80, thirtyFive + "5");
+        return thirtySix;
     }
 }
 
@@ -760,7 +767,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
         const thirtyThree = await delay(85, thirtyTwo + "2");
         const thirtyFour = await delay(86, thirtyThree + "3");
         const thirtyFive = await delay(87, thirtyFour + "4");
-        return thirtyFive;
+        const thirtySix = await delay(88, thirtyFive + "5");
+        return thirtySix;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -853,7 +861,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const thirtyThree = await delay(93, thirtyTwo + "2");
     const thirtyFour = await delay(94, thirtyThree + "3");
     const thirtyFive = await delay(95, thirtyFour + "4");
-    return thirtyFive;
+    const thirtySix = await delay(96, thirtyFive + "5");
+    return thirtySix;
 };
 
 declaration().then((result) => console.log("declaration:", result));
