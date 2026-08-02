@@ -98,6 +98,8 @@ interface EventEmitterOnOptionSpecs {
     specs: SequencedCallArg[];
     signalIndex: number | null;
     closeIndex: number | null;
+    highWaterMarkIndex: number | null;
+    lowWaterMarkIndex: number | null;
 }
 
 interface TailFunctionContext {
@@ -66182,6 +66184,21 @@ class Emitter {
                     ([ee]) => `tsc_event_emitter_event_names(${ee})`,
                 );
             }
+            case "pause":
+            case "resume": {
+                return this.emitSequencedExpr(
+                    T_EVENT_EMITTER,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([ee]) => `({ tsc_event_emitter_${method}(${ee}); ${ee}; })`,
+                );
+            }
+            case "isPaused": {
+                return this.emitSequencedExpr(
+                    T_BOOLEAN,
+                    [{ value: recv }, ...this.ignoredArgumentSpecs(args, 0)],
+                    ([ee]) => `tsc_event_emitter_is_paused(${ee})`,
+                );
+            }
             case "setMaxListeners": {
                 if (args.length < 1) unsupported(call, "EventEmitter.setMaxListeners expects count");
                 const count = this.emitExpr(args[0]!);
@@ -66406,7 +66423,13 @@ class Emitter {
                     const close = optionSpecs.closeIndex === null
                         ? "NULL"
                         : values[optionOffset + optionSpecs.closeIndex]!;
-                    return `tsc_event_emitter_on_async_iterator(${values[0]}, ${values[1]}, ${signal}, ${close})`;
+                    const highWaterMark = optionSpecs.highWaterMarkIndex === null
+                        ? "9007199254740991.0"
+                        : values[optionOffset + optionSpecs.highWaterMarkIndex]!;
+                    const lowWaterMark = optionSpecs.lowWaterMarkIndex === null
+                        ? "1.0"
+                        : values[optionOffset + optionSpecs.lowWaterMarkIndex]!;
+                    return `tsc_event_emitter_on_async_iterator(${values[0]}, ${values[1]}, ${signal}, ${close}, ${highWaterMark}, ${lowWaterMark})`;
                 });
             }
             case "setMaxListeners": {
@@ -66514,11 +66537,11 @@ class Emitter {
         label: string,
     ): EventEmitterOnOptionSpecs {
         if (!options || this.isUndefinedLikeExpression(options)) {
-            return { specs: [], signalIndex: null, closeIndex: null };
+            return { specs: [], signalIndex: null, closeIndex: null, highWaterMarkIndex: null, lowWaterMarkIndex: null };
         }
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(options)) {
-            return { specs: [], signalIndex: null, closeIndex: null };
+            return { specs: [], signalIndex: null, closeIndex: null, highWaterMarkIndex: null, lowWaterMarkIndex: null };
         }
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
@@ -66526,6 +66549,8 @@ class Emitter {
         const specs: SequencedCallArg[] = [];
         let signalIndex: number | null = null;
         let closeIndex: number | null = null;
+        let highWaterMarkIndex: number | null = null;
+        let lowWaterMarkIndex: number | null = null;
         for (const prop of options.properties) {
             if (!ts.isPropertyAssignment(prop)) {
                 unsupported(prop, `${label} options only support property assignments`);
@@ -66543,11 +66568,15 @@ class Emitter {
             } else if (key === "close") {
                 closeIndex = index;
                 specs.push({ value: this.emitExpr(prop.initializer), target: arrayType(T_STRING), node: prop.initializer });
+            } else if (key === "highWaterMark") {
+                highWaterMarkIndex = index;
+                specs.push({ value: this.emitExpr(prop.initializer), target: T_NUMBER, node: prop.initializer });
             } else {
+                lowWaterMarkIndex = index;
                 specs.push({ value: this.emitExpr(prop.initializer), target: T_NUMBER, node: prop.initializer });
             }
         }
-        return { specs, signalIndex, closeIndex };
+        return { specs, signalIndex, closeIndex, highWaterMarkIndex, lowWaterMarkIndex };
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {

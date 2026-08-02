@@ -2149,6 +2149,18 @@ void tsc_event_emitter_set_default_max_listeners(double n) {
     g_event_emitter_default_max_listeners = n;
 }
 
+void tsc_event_emitter_pause(tsc_event_emitter_t* ee) {
+    if (ee) ee->paused = true;
+}
+
+void tsc_event_emitter_resume(tsc_event_emitter_t* ee) {
+    if (ee) ee->paused = false;
+}
+
+bool tsc_event_emitter_is_paused(const tsc_event_emitter_t* ee) {
+    return ee ? ee->paused : false;
+}
+
 bool tsc_event_emitter_emit(tsc_event_emitter_t* ee, const tsc_str_t* event, tsc_array_t* args) {
     if (!ee || !event) return false;
     bool called = false;

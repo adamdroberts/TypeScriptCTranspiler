@@ -196,6 +196,7 @@ struct tsc_event_emitter {
     uint64_t next_order;
     double max_listeners;
     bool has_own_max_listeners;
+    bool paused;
     tsc_event_listener_t* listeners;
 };
 

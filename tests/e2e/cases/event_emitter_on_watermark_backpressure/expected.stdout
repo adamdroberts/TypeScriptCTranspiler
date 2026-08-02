@@ -1,0 +1,7 @@
+manual-paused: true true
+manual-resumed: true false
+after-buffer: true
+first: false one true
+second: false two false
+before-return: true
+after-return: true false

@@ -841,8 +841,11 @@ double tsc_event_emitter_listener_count_identity(const tsc_event_emitter_t* ee, 
 tsc_array_t* tsc_event_emitter_listeners(const tsc_event_emitter_t* ee, const tsc_str_t* event);
 tsc_array_t* tsc_event_emitter_raw_listeners(const tsc_event_emitter_t* ee, const tsc_str_t* event);
 tsc_array_t* tsc_event_emitter_event_names(const tsc_event_emitter_t* ee);
+void tsc_event_emitter_pause(tsc_event_emitter_t* ee);
+void tsc_event_emitter_resume(tsc_event_emitter_t* ee);
+bool tsc_event_emitter_is_paused(const tsc_event_emitter_t* ee);
 tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_value_t signal);
-tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_value_t signal, tsc_array_t* close_events);
+tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_value_t signal, tsc_array_t* close_events, double high_water_mark, double low_water_mark);
 double tsc_event_emitter_get_default_max_listeners(void);
 void tsc_event_emitter_set_default_max_listeners(double n);
 void tsc_event_emitter_set_max_listeners(tsc_event_emitter_t* ee, double n);

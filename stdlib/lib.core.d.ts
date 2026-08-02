@@ -2119,6 +2119,9 @@ interface EventEmitter {
     eventNames(...ignored: any[]): string[];
     setMaxListeners(n: number, ...ignored: any[]): this;
     getMaxListeners(...ignored: any[]): number;
+    pause(...ignored: any[]): this;
+    resume(...ignored: any[]): this;
+    isPaused(...ignored: any[]): boolean;
 }
 interface EventEmitterConstructor {
     new(...ignored: any[]): EventEmitter;

@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Added bounded `events.on(...)` high/low watermark backpressure: the compiler `EventEmitter` pauses above `highWaterMark`, resumes below `lowWaterMark`, and releases iterator-owned pauses during cleanup. Test: `event_emitter_on_watermark_backpressure`.
 - The bounded `events.on(...)` async iterator now exposes a standard `[Symbol.asyncIterator]()` method that returns itself, while full `for await...of` and async-generator lowering remain deferred. Test: `event_emitter_on_async_iterator`.
 - Added bounded real `AbortSignal` cancellation to `events.on(...)` async iterators, including pending rejection, queued-event preservation, listener detachment, and pre-aborted handling. Test: `event_emitter_on_abort_signal`.
 - Added bounded real `AbortSignal` cancellation to `events.once(...)`, including pending/pre-aborted rejection, event/error listener cleanup, and late-abort isolation. Test: `event_emitter_once_abort_signal`.
