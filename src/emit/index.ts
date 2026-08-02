@@ -33091,9 +33091,17 @@ class Emitter {
         const expression = this.unwrapTransparentExpression(condition);
         const awaitExpr = this.asyncAwaitTryConditionalGlobalCoercionAwaitExpression(expression);
         if (awaitExpr) {
+            const objectWrapper = ts.isCallExpression(expression) &&
+                ts.isIdentifier(expression.expression) &&
+                expression.expression.text === "Object";
             return {
                 kind: "if",
-                condition: expression,
+                // Object(value) is always truthy for the supported unshadowed
+                // one-argument form. Keep the awaited operand as the
+                // suspension/side-effect source without emitting an ordinary
+                // Object(...) call, whose general typed runtime path is not
+                // part of this bounded selector recognizer.
+                condition: objectWrapper ? ts.factory.createTrue() : expression,
                 conditionAwaitExpr: awaitExpr,
                 thenBranch: truthyBranch,
                 elseBranch: falsyBranch,
@@ -33200,7 +33208,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "String") ||
+        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "Object" && name !== "String") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
@@ -33217,7 +33225,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "String") ||
+        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "Object" && name !== "String") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
