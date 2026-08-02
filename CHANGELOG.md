@@ -806,6 +806,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Added sixteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Added seventeen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Added eighteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
+- Added nineteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Leading awaited-local chains now cover await-free `switch` statements with simple assigned locals between suspension points across declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`.
 - Leading awaited-local chains now cover await-free `while` statements with simple assigned locals between suspension points across declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`.
 - Leading awaited-local chains now cover await-free `do…while` statements with simple assigned locals between suspension points across declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`.
