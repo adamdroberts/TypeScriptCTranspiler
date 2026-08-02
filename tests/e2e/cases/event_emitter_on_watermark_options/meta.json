@@ -1,0 +1,3 @@
+{
+    "description": "events.on evaluates highWaterMark and lowWaterMark options on a non-pausable EventEmitter while retaining ordinary delivery"
+}

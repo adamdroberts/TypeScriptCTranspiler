@@ -2132,6 +2132,8 @@ interface EventEmitterOnceOptions {
 interface EventEmitterOnOptions {
     signal?: any;
     close?: string[];
+    highWaterMark?: number;
+    lowWaterMark?: number;
 }
 interface EventsModule {
     EventEmitter: EventEmitterConstructor;

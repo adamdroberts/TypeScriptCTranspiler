@@ -66531,7 +66531,7 @@ class Emitter {
                 unsupported(prop, `${label} options only support property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
-            if (key !== "signal" && key !== "close") {
+            if (key !== "signal" && key !== "close" && key !== "highWaterMark" && key !== "lowWaterMark") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
             const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
@@ -66540,9 +66540,11 @@ class Emitter {
             if (key === "signal") {
                 signalIndex = index;
                 specs.push({ value: this.emitExpr(prop.initializer), target: T_VALUE, node: prop.initializer });
-            } else {
+            } else if (key === "close") {
                 closeIndex = index;
                 specs.push({ value: this.emitExpr(prop.initializer), target: arrayType(T_STRING), node: prop.initializer });
+            } else {
+                specs.push({ value: this.emitExpr(prop.initializer), target: T_NUMBER, node: prop.initializer });
             }
         }
         return { specs, signalIndex, closeIndex };
