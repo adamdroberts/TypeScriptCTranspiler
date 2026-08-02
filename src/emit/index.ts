@@ -74310,9 +74310,10 @@ class Emitter {
                     this.fsPathSpec(target, args[0]!, "fs.promises.symlink target"),
                     this.fsPathSpec(p, args[1]!, "fs.promises.symlink path"),
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
-                ], ([targetPath, linkPath]) =>
-                    settle(`({ tsc_fs_symlink_sync(${targetPath!}, ${linkPath!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([targetPath, linkPath]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_symlink_async(${targetPath!}, ${linkPath!})`);
+                });
             }
             case "link": {
                 if (args.length < 2) unsupported(call, "fs.promises.link needs existing path and new path");
@@ -74322,9 +74323,10 @@ class Emitter {
                     this.fsPathSpec(existingPath, args[0]!, "fs.promises.link existingPath"),
                     this.fsPathSpec(newPath, args[1]!, "fs.promises.link newPath"),
                     ...this.ignoredArgumentSpecs(args, 2),
-                ], ([oldPath, newPathValue]) =>
-                    settle(`({ tsc_fs_link_sync(${oldPath!}, ${newPathValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([oldPath, newPathValue]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_link_async(${oldPath!}, ${newPathValue!})`);
+                });
             }
             case "mkdtemp": {
                 if (args.length < 1) unsupported(call, "fs.promises.mkdtemp needs prefix and optional UTF-8/hex/base64/buffer encoding options");

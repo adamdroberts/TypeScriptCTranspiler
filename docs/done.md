@@ -1557,8 +1557,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Supported fs option objects treat explicit `undefined`, side-effect-free `void`, and earlier static `const` aliases to those default values as defaults across the bounded read/write/append/readdir/stat/mkdir/rm/rmdir/cp option subsets for sync and immediate-promise calls. Test: `fs_option_property_undefined`
 - `fs.realpathSync(path[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` and libuv-backed `fs.promises.realpath(path[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` resolve paths through the host filesystem for the bounded UTF-8/hex/base64 string encodings, explicit Buffer encodings, and direct/null-object default string encodings, treating explicit `undefined`, side-effect-free `void`, and side-effectful `void` options as defaults while evaluating options-slot and ignored-extra side effects. Tests: `fs_realpath`, `fs_link_path_encoding_options`, `fs_link_mkdtemp_ignored_arguments`, `fs_path_result_encoded_options`
 - `fs.readlinkSync(path[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` and libuv-backed `fs.promises.readlink(path[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` read symlink targets through the host filesystem for the bounded UTF-8/hex/base64 string encodings, explicit Buffer encodings, and direct/null-object default string encodings, treating explicit `undefined`, side-effect-free `void`, and side-effectful `void` options as defaults while evaluating options-slot and ignored-extra side effects. Tests: `fs_readlink`, `fs_link_path_encoding_options`, `fs_link_mkdtemp_ignored_arguments`, `fs_path_result_encoded_options`
-- `fs.symlinkSync(target, path[, "file" | "dir" | "junction"], ...ignored)` and immediate-settled `fs.promises.symlink(target, path[, "file" | "dir" | "junction"], ...ignored)` create host filesystem symlinks; the literal type argument is accepted for portable Node call sites and is POSIX-inert in this runtime. Tests: `fs_symlink`, `fs_symlink_type_options`, `fs_mutation_ignored_arguments`
-- `fs.linkSync(existingPath, newPath, ...ignored)` and immediate-settled `fs.promises.link(existingPath, newPath, ...ignored)` create host filesystem hard links. Tests: `fs_link`, `fs_mutation_ignored_arguments`
+- `fs.symlinkSync(target, path[, "file" | "dir" | "junction"], ...ignored)` and libuv-backed `fs.promises.symlink(target, path[, "file" | "dir" | "junction"], ...ignored)` create host filesystem symlinks; the literal type argument is accepted for portable Node call sites and is POSIX-inert in this runtime. Tests: `fs_symlink`, `fs_symlink_type_options`, `fs_mutation_ignored_arguments`
+- `fs.linkSync(existingPath, newPath, ...ignored)` and libuv-backed `fs.promises.link(existingPath, newPath, ...ignored)` create host filesystem hard links. Tests: `fs_link`, `fs_mutation_ignored_arguments`
 - `fs.mkdtempSync(prefix[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` and libuv-backed `fs.promises.mkdtemp(prefix[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` create temporary directories from a prefix for the bounded UTF-8/hex/base64 string encodings, explicit Buffer encodings, and direct/null-object default string encodings, treating explicit `undefined`, side-effect-free `void`, and side-effectful `void` options as defaults while evaluating options-slot and ignored-extra side effects. Tests: `fs_mkdtemp`, `fs_mkdtemp_encoding_options`, `fs_link_mkdtemp_ignored_arguments`, `fs_path_result_encoded_options`
 - `fs.truncateSync(path, len?, ...ignored)` and immediate-settled `fs.promises.truncate(path, len?, ...ignored)` truncate files by path; explicit `undefined`, side-effect-free `void`, and earlier static `const` aliases for `undefined` length values use the default zero-length truncate while ignored trailing arguments are still evaluated. Tests: `fs_truncate`, `fs_mutation_ignored_arguments`
 - `fs.utimesSync(path, atime, mtime, ...ignored)` and immediate-settled `fs.promises.utimes(path, atime, mtime, ...ignored)` update file access/modification timestamps for numeric seconds and `Date` values. Tests: `fs_utimes`, `fs_mutation_ignored_arguments`
@@ -2698,12 +2698,12 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_promises_stat_async_order` | fs.promises stat/lstat settle through the event-loop queue after earlier Promise microtasks |
 | `fs_encoding_options` | fs UTF-8 encoding string/object options for read/write/append sync and Promise calls |
 | `fs_lstat` | fs.lstatSync and event-loop-settled fs.promises lstat with symbolic-link Stats |
-| `fs_link` | fs.linkSync and immediate-settled fs.promises link |
+| `fs_link` | fs.linkSync and libuv-backed fs.promises link |
 | `fs_link_mkdtemp_ignored_arguments` | fs realpath/readlink/mkdtemp sync and promise explicit undefined options and ignored extra arguments |
 | `fs_link_path_encoding_options` | fs realpath/readlink UTF-8, explicit Buffer, and null-default encoding options for sync and promises |
 | `fs_mkdtemp` | fs.mkdtempSync and libuv-backed fs.promises mkdtemp |
 | `fs_mkdtemp_encoding_options` | fs mkdtemp UTF-8, explicit Buffer, and null-default encoding options for sync and promises |
-| `fs_promises` | libuv-backed UTF-8 fs.promises readFile, writeFile/appendFile, non-recursive UTF-8/Buffer readdir, access, stat, lstat, statfs, realpath, readlink, mkdtemp, copyFile, and rename |
+| `fs_promises` | libuv-backed UTF-8 fs.promises readFile, writeFile/appendFile, non-recursive UTF-8/Buffer readdir, access, stat, lstat, statfs, realpath, readlink, mkdtemp, symlink, link, copyFile, and rename |
 | `fs_promises_read_file_libuv` | libuv-backed fs.promises.readFile UTF-8, Buffer, completion ordering, and rejection |
 | `fs_promises_write_file_libuv` | libuv-backed fs.promises.writeFile/appendFile string, Buffer, encoded, append, mode, and exclusive flows |
 | `fs_promises_readdir_libuv` | libuv-backed fs.promises.readdir non-recursive UTF-8/Buffer results, completion ordering, and rejection |
@@ -2736,7 +2736,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_stats_metadata` | fs.Stats numeric metadata fields |
 | `fs_stats_object_methods` | FSStats numeric own-property and integrity Object and Reflect helper behavior |
 | `fs_stats_times` | fs.Stats numeric and Date timestamp fields |
-| `fs_symlink` | fs.symlinkSync and immediate-settled fs.promises symlink |
+| `fs_symlink` | fs.symlinkSync and libuv-backed fs.promises symlink |
 | `fs_symlink_type_options` | fs symlink literal type options for sync and promises |
 | `fs_sync_mutation` | fs mkdirSync/unlinkSync/rmSync/rmdirSync through node:fs namespace imports |
 | `fs_truncate` | fs.truncateSync and immediate-settled fs.promises truncate |

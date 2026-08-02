@@ -1218,6 +1218,8 @@ tsc_value_t tsc_fs_statfs_sync(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_statfs_async(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_copy_file_async(const tsc_str_t* src, const tsc_str_t* dest, double mode);
 tsc_promise_t* tsc_fs_promises_rename_async(const tsc_str_t* old_path, const tsc_str_t* new_path);
+tsc_promise_t* tsc_fs_promises_symlink_async(const tsc_str_t* target, const tsc_str_t* path);
+tsc_promise_t* tsc_fs_promises_link_async(const tsc_str_t* existing_path, const tsc_str_t* new_path);
 tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding);
 tsc_promise_t* tsc_fs_promises_readlink_async(const tsc_str_t* path, int encoding);
 tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encoding);

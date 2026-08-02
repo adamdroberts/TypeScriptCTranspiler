@@ -19,7 +19,6 @@ console.log("sync:", fs.readlinkSync(fileLink) === fileTarget, fs.lstatSync(file
 nodefs.promises.symlink(dirTarget, dirLink, DIR_TYPE).then((value: any): string => {
     value;
     console.log("promise:", fs.readlinkSync(dirLink) === dirTarget, fs.lstatSync(dirLink).isSymbolicLink());
+    fs.rmSync(root, { recursive: true, force: true });
     return "done";
 });
-
-fs.rmSync(root, { recursive: true, force: true });

@@ -1,2 +1,3 @@
 sync: linked
 promise: linked
+missing: fs.linkSync: could not create link

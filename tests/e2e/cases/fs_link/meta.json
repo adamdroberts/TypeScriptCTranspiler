@@ -1,3 +1,3 @@
 {
-  "description": "fs.linkSync and immediate-settled fs.promises.link"
+  "description": "fs.linkSync and libuv-backed fs.promises.link"
 }
