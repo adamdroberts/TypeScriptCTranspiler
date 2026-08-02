@@ -267,7 +267,7 @@ tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
         tsc_value_t close = tsc_value_get_prop(iterator, tsc_str_from_lit("return", 6));
         if (!tsc_value_is_callable(close)) {
             tsc_try_pop();
-            return tsc_promise_resolve(tsc_value_undefined());
+            return tsc_promise_resolve(tsc_value_object(tsc_object_new()));
         }
         tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
         tsc_value_t result = tsc_value_apply_function(close, iterator, tsc_value_array(args));

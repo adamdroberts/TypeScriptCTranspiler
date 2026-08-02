@@ -104,6 +104,14 @@ bool tsc_value_is_array(tsc_value_t v) {
     return tsc_value_is_array(o->proxy_target);
 }
 
+bool tsc_value_is_object(tsc_value_t v) {
+    if (!value_is_box(v)) return false;
+    tsc_value_tag_t tag = value_tag(v);
+    return tag == TSC_VALUE_TAG_OBJECT ||
+        tag == TSC_VALUE_TAG_ARRAY ||
+        tag == TSC_VALUE_TAG_FUNCTION;
+}
+
 void* tsc_value_as_class(tsc_value_t v) {
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_NULL) return NULL;
     if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {

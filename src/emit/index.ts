@@ -45933,6 +45933,12 @@ class Emitter {
         callback.line("return;");
         callback.close();
         callback.open("if (state->iterator_close)");
+        callback.open("if (!tsc_value_is_object(tsc_promise_value(_p)))");
+        callback.line("state->iterator_close = false;");
+        callback.line("tsc_try_pop();");
+        callback.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_str_from_cstr("async iterator return result is not an object")));`);
+        callback.line("return;");
+        callback.close();
         callback.line("state->iterator_close = false;");
         callback.open("if (state->iterator_close_action == 1)");
         emitLoopResult(callback);
