@@ -73680,15 +73680,16 @@ class Emitter {
         exclusive: string,
         update: string,
         mode: string,
+        signal: string,
     ): string {
         if (dataKind === "buffer") {
-            return `tsc_fs_promises_write_file_buffer_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode})`;
+            return `tsc_fs_promises_write_file_buffer_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${signal})`;
         }
         if (encoding === "utf8") {
-            return `tsc_fs_promises_write_file_string_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode})`;
+            return `tsc_fs_promises_write_file_string_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${signal})`;
         }
         const encoded = `tsc_buffer_from_str(${data}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
-        return `tsc_fs_promises_write_file_buffer_async(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode})`;
+        return `tsc_fs_promises_write_file_buffer_async(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode}, ${signal})`;
     }
 
     private validateFsWriteFileOptions(
@@ -74092,9 +74093,10 @@ class Emitter {
                     const path = values[0]!;
                     const data = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
-                    this.usesLibuv = true;
-                    const write = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode);
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    this.usesLibuv = true;
+                    const write = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode, requestSignal);
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${write})`
                         : write);
@@ -74124,9 +74126,10 @@ class Emitter {
                     const path = values[0]!;
                     const data = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
-                    this.usesLibuv = true;
-                    const append = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode);
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    this.usesLibuv = true;
+                    const append = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode, requestSignal);
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${append})`
                         : append);
