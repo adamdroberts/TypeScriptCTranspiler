@@ -2,6 +2,7 @@ import { constants } from "fs";
 
 const src = "/tmp/tsc2c-fs-copy-flags-src.txt";
 const dest = "/tmp/tsc2c-fs-copy-flags-dest.txt";
+const missing = "/tmp/tsc2c-fs-copy-flags-missing.txt";
 const DEFAULT_COPY_FLAGS = undefined;
 const EXCLUSIVE_COPY_FLAGS = constants.COPYFILE_EXCL;
 const events: string[] = [];
@@ -10,7 +11,7 @@ function note(label: string): void {
     events.push(label);
 }
 
-for (const file of [src, dest]) {
+for (const file of [src, dest, missing]) {
     if (fs.existsSync(file)) fs.rmSync(file);
 }
 
@@ -48,24 +49,35 @@ try {
 }
 
 fs.writeFileSync(dest, "promise-default");
-fs.promises.copyFile(src, dest, DEFAULT_COPY_FLAGS);
-console.log("promise default alias:", fs.readFileSync(dest));
+fs.promises.copyFile(src, dest, DEFAULT_COPY_FLAGS)
+    .then((_value: any): any => {
+        console.log("promise default alias:", fs.readFileSync(dest));
+        fs.writeFileSync(dest, "promise-void");
+        return fs.promises.copyFile(src, dest, void 0);
+    })
+    .then((_value: any): any => {
+        console.log("promise void default:", fs.readFileSync(dest));
+        fs.writeFileSync(dest, "promise-side");
+        return fs.promises.copyFile(src, dest, void note("promise-flags"));
+    })
+    .then((_value: any): any => {
+        console.log("promise side default:", fs.readFileSync(dest));
+        return fs.promises.copyFile(src, dest, EXCLUSIVE_COPY_FLAGS);
+    })
+    .then((_value: any): any => console.log("promise excl: copied"), (reason: string): any => {
+        console.log("promise excl:", reason);
+        return undefined;
+    })
+    .then((_value: any): any => fs.promises.copyFile(missing, dest)
+        .then((_copyValue: any): any => console.log("promise missing: copied"), (reason: string): any => {
+            console.log("promise missing:", reason);
+            return undefined;
+        }))
+    .then((_value: any): void => {
+        console.log("events:", events.join("|"));
+        console.log("constants:", fs.constants.COPYFILE_EXCL, constants.COPYFILE_FICLONE, constants.COPYFILE_FICLONE_FORCE);
 
-fs.writeFileSync(dest, "promise-void");
-fs.promises.copyFile(src, dest, void 0);
-console.log("promise void default:", fs.readFileSync(dest));
-
-fs.writeFileSync(dest, "promise-side");
-fs.promises.copyFile(src, dest, void note("promise-flags"));
-console.log("promise side default:", fs.readFileSync(dest));
-
-fs.promises.copyFile(src, dest, EXCLUSIVE_COPY_FLAGS).catch((reason: string): any => {
-    console.log("promise excl:", reason);
-});
-
-console.log("events:", events.join("|"));
-console.log("constants:", fs.constants.COPYFILE_EXCL, constants.COPYFILE_FICLONE, constants.COPYFILE_FICLONE_FORCE);
-
-for (const file of [src, dest]) {
-    if (fs.existsSync(file)) fs.rmSync(file);
-}
+        for (const file of [src, dest, missing]) {
+            if (fs.existsSync(file)) fs.rmSync(file);
+        }
+    });

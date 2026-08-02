@@ -9,5 +9,6 @@ promise default alias: source
 promise void default: source
 promise side default: source
 promise excl: fs.copyFileSync: destination already exists
+promise missing: fs.readFileSync: could not open file
 events: sync-flags|promise-flags
 constants: 1 2 4

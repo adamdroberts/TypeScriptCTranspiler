@@ -74592,7 +74592,11 @@ class Emitter {
                     const src = values[0]!;
                     const dest = values[1]!;
                     const flags = values[2 + (isCopy && args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2]) ? 1 : 0)];
-                    return settle(`({ ${isCopy ? `tsc_fs_copy_file_sync_mode(${src}, ${dest}, ${flags!})` : `tsc_fs_rename_sync(${src}, ${dest})`}; tsc_promise_resolve(tsc_value_undefined()); })`);
+                    if (isCopy) {
+                        this.usesLibuv = true;
+                        return settle(`tsc_fs_promises_copy_file_async(${src}, ${dest}, ${flags!})`);
+                    }
+                    return settle(`({ tsc_fs_rename_sync(${src}, ${dest}); tsc_promise_resolve(tsc_value_undefined()); })`);
                 });
             }
         }
