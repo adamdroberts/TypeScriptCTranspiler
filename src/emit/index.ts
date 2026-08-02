@@ -33222,6 +33222,8 @@ class Emitter {
                     "log1p", "log10", "log2", "max", "min", "round", "sign", "sin", "sinh", "sqrt",
                     "tan", "tanh", "trunc",
                 ]
+                : receiver === "Date"
+                    ? ["parse", "UTC"]
                 : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }

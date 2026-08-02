@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-empty-date declaration-false LF
+declaration-reject caught-date-static-bad L
+method-true method-true LTM
+method-epoch method-false LFM
+method-reject rejected-date-static-bad LM
+arrow-true arrow-true LTV
+arrow-empty-date arrow-false LFV
+arrow-reject caught-date-static-bad LV
+utc-true utc-true LT
+utc-epoch utc-false LF
+utc-reject caught-date-static-bad L
