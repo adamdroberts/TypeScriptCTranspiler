@@ -45266,14 +45266,21 @@ class Emitter {
         const result = body.statements[1];
         if (!loop || !result || !ts.isForOfStatement(loop) || !loop.awaitModifier ||
             !ts.isReturnStatement(result) || !result.expression) return false;
-        if (!ts.isVariableDeclarationList(loop.initializer) || loop.initializer.declarations.length !== 1) return false;
-        const binding = loop.initializer.declarations[0]!;
-        if (!ts.isIdentifier(binding.name)) return false;
-        const bindingSymbol = this.symbolForIdentifier(binding.name);
+        const initializer = loop.initializer;
+        const binding = ts.isVariableDeclarationList(initializer)
+            ? initializer.declarations.length === 1 && ts.isIdentifier(initializer.declarations[0]?.name)
+                ? initializer.declarations[0]!.name
+                : null
+            : ts.isIdentifier(initializer)
+                ? initializer
+                : null;
+        if (!binding) return false;
+        const bindingIsParameter = ts.isIdentifier(initializer);
+        const bindingSymbol = this.symbolForIdentifier(binding);
         if (!bindingSymbol) return false;
         const bindingType = this.prepareType(mapTsType(
-            binding.name,
-            this.checker.getTypeAtLocation(binding.name),
+            binding,
+            this.checker.getTypeAtLocation(binding),
             this.checker,
         ));
         if (bindingType.kind === "void" || bindingType.kind === "never") return false;
@@ -45390,6 +45397,10 @@ class Emitter {
         if (usesThis && !thisValue) return false;
 
         const params = this.asyncAwaitContinuationParameters(parameters);
+        const bindingParameter = bindingIsParameter
+            ? params.find((param) => param.symbol === bindingSymbol) ?? null
+            : null;
+        if (bindingIsParameter && !bindingParameter) return false;
         const name = `tsc_async_await_for_await_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
         this.structDecls.open(`typedef struct ${envType}`);
@@ -45415,8 +45426,8 @@ class Emitter {
             scope.set(param.symbol, `state->${param.field}`);
             scopeTypes.set(param.symbol, param.type);
         }
-        const bindingName = mangleIdent(binding.name.text);
-        scope.set(bindingSymbol, bindingName);
+        const bindingName = mangleIdent(binding.text);
+        if (!bindingIsParameter) scope.set(bindingSymbol, bindingName);
         scopeTypes.set(bindingSymbol, bindingType);
 
         const callback = new CBuf();
@@ -45441,8 +45452,9 @@ class Emitter {
         callback.line(`bool ${finishVar} = ${doneVar};`);
         callback.open(`if (!${doneVar})`);
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
-        const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, bindingType, binding.name);
-        callback.line(`${bindingType.c} ${bindingName} = ${bindingValue};`);
+        const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, bindingType, binding);
+        if (bindingParameter) callback.line(`state->${bindingParameter.field} = ${bindingValue};`);
+        else callback.line(`${bindingType.c} ${bindingName} = ${bindingValue};`);
         const emitBodyControl = (route: BodyRoute): void => {
             if (route.control === "break") {
                 callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
