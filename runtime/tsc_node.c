@@ -2869,6 +2869,7 @@ typedef struct {
     const char* name;
     int type;
 } tsc_uv_dirent_t;
+#define TSC_UV_DIRENT_DIR 2
 typedef struct {
     long tv_sec;
     long tv_nsec;
@@ -3372,6 +3373,206 @@ tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_bu
         task->error = tsc_str_from_cstr("fs.readdirSync: could not open dir");
         tsc_fs_readdir_async_finish(task, false);
     }
+    return promise;
+}
+
+typedef struct tsc_fs_readdir_recursive_work {
+    char* path;
+    char* relative;
+    struct tsc_fs_readdir_recursive_work* next;
+} tsc_fs_readdir_recursive_work_t;
+
+typedef struct tsc_fs_readdir_recursive_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    bool want_buffer;
+    tsc_array_t* entries;
+    tsc_fs_readdir_recursive_work_t* work;
+    char* current_path;
+    char* current_relative;
+    struct tsc_fs_readdir_recursive_async* next;
+} tsc_fs_readdir_recursive_async_t;
+
+static tsc_fs_readdir_recursive_async_t* g_tsc_fs_readdir_recursive_async = NULL;
+
+static void tsc_fs_readdir_recursive_async_remove(tsc_fs_readdir_recursive_async_t* task) {
+    tsc_fs_readdir_recursive_async_t** cursor = &g_tsc_fs_readdir_recursive_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_readdir_recursive_work_clear(tsc_fs_readdir_recursive_async_t* task) {
+    while (task->work) {
+        tsc_fs_readdir_recursive_work_t* item = task->work;
+        task->work = item->next;
+        free(item->path);
+        free(item->relative);
+        free(item);
+    }
+}
+
+static void tsc_fs_readdir_recursive_async_finish(tsc_fs_readdir_recursive_async_t* task, bool success) {
+    if (success) {
+        tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
+    } else {
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(tsc_str_from_cstr("fs.readdirSync: could not open dir"))
+        );
+    }
+    free(task->current_path);
+    free(task->current_relative);
+    tsc_fs_readdir_recursive_work_clear(task);
+    tsc_fs_readdir_recursive_async_remove(task);
+}
+
+static bool tsc_fs_readdir_recursive_push_work(
+    tsc_fs_readdir_recursive_work_t** work,
+    char* path,
+    char* relative
+) {
+    tsc_fs_readdir_recursive_work_t* item = (tsc_fs_readdir_recursive_work_t*)malloc(sizeof(tsc_fs_readdir_recursive_work_t));
+    if (!item) return false;
+    item->path = path;
+    item->relative = relative;
+    item->next = *work;
+    *work = item;
+    return true;
+}
+
+static void tsc_fs_readdir_recursive_async_start_next(tsc_fs_readdir_recursive_async_t* task);
+
+static void tsc_fs_readdir_recursive_async_release_current(tsc_fs_readdir_recursive_async_t* task) {
+    free(task->current_path);
+    free(task->current_relative);
+    task->current_path = NULL;
+    task->current_relative = NULL;
+}
+
+static void tsc_fs_readdir_recursive_async_scandir_cb(tsc_uv_fs_t* req) {
+    tsc_fs_readdir_recursive_async_t* task = (tsc_fs_readdir_recursive_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_readdir_recursive_async_finish(task, false);
+        return;
+    }
+
+    tsc_fs_readdir_recursive_work_t* child_directories = NULL;
+    tsc_uv_dirent_t ent;
+    while (uv_fs_scandir_next(req, &ent) == 0) {
+        if (!ent.name || strcmp(ent.name, ".") == 0 || strcmp(ent.name, "..") == 0) continue;
+        char* child_relative = task->current_relative[0] == '\0'
+            ? strdup(ent.name)
+            : fs_join_path_cstr(task->current_relative, ent.name);
+        char* child_path = fs_join_path_cstr(task->current_path, ent.name);
+        if (!child_relative || !child_path) {
+            free(child_relative);
+            free(child_path);
+            uv_fs_req_cleanup(req);
+            while (child_directories) {
+                tsc_fs_readdir_recursive_work_t* item = child_directories;
+                child_directories = item->next;
+                free(item->path);
+                free(item->relative);
+                free(item);
+            }
+            tsc_fs_readdir_recursive_async_finish(task, false);
+            return;
+        }
+
+        tsc_str_t* child_name = tsc_str_from_cstr(child_relative);
+        if (task->want_buffer) {
+            tsc_buffer_t* child_buffer = tsc_buffer_from_str(child_name, NULL);
+            tsc_array_push_raw(task->entries, &child_buffer);
+        } else {
+            tsc_array_push_raw(task->entries, &child_name);
+        }
+
+        if (ent.type == TSC_UV_DIRENT_DIR) {
+            if (!tsc_fs_readdir_recursive_push_work(&child_directories, child_path, child_relative)) {
+                free(child_path);
+                free(child_relative);
+                uv_fs_req_cleanup(req);
+                while (child_directories) {
+                    tsc_fs_readdir_recursive_work_t* item = child_directories;
+                    child_directories = item->next;
+                    free(item->path);
+                    free(item->relative);
+                    free(item);
+                }
+                tsc_fs_readdir_recursive_async_finish(task, false);
+                return;
+            }
+            child_path = NULL;
+            child_relative = NULL;
+        }
+        free(child_path);
+        free(child_relative);
+    }
+    uv_fs_req_cleanup(req);
+
+    /* Reverse the scan-order directory list onto the work stack so traversal
+     * remains depth-first in the same order as the synchronous helper. */
+    while (child_directories) {
+        tsc_fs_readdir_recursive_work_t* item = child_directories;
+        child_directories = item->next;
+        item->next = task->work;
+        task->work = item;
+    }
+    tsc_fs_readdir_recursive_async_release_current(task);
+    tsc_fs_readdir_recursive_async_start_next(task);
+}
+
+static void tsc_fs_readdir_recursive_async_start_next(tsc_fs_readdir_recursive_async_t* task) {
+    if (task->current_path != NULL) return;
+    tsc_fs_readdir_recursive_work_t* item = task->work;
+    if (!item) {
+        tsc_fs_readdir_recursive_async_finish(task, true);
+        return;
+    }
+    task->work = item->next;
+    task->current_path = item->path;
+    task->current_relative = item->relative;
+    free(item);
+    int rc = uv_fs_scandir(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->current_path,
+        0,
+        tsc_fs_readdir_recursive_async_scandir_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_readdir_recursive_async_finish(task, false);
+    }
+}
+
+tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_readdir_recursive_async_t* task = (tsc_fs_readdir_recursive_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_readdir_recursive_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->want_buffer = want_buffer;
+    task->entries = tsc_array_new(want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*), 16);
+    task->next = g_tsc_fs_readdir_recursive_async;
+    g_tsc_fs_readdir_recursive_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    char* root = cstr_dup(path);
+    char* relative = strdup("");
+    if (!root || !relative || !tsc_fs_readdir_recursive_push_work(&task->work, root, relative)) {
+        free(root);
+        free(relative);
+        tsc_fs_readdir_recursive_async_finish(task, false);
+        return promise;
+    }
+    tsc_fs_readdir_recursive_async_start_next(task);
     return promise;
 }
 
@@ -5398,7 +5599,7 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
 }
 
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {

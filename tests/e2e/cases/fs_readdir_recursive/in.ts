@@ -30,7 +30,6 @@ console.log("named:", summarize(namedNames));
 
 (nodefs.promises.readdir(root, { recursive: true, signal: (console.log("signal option"), undefined) } as any) as unknown as Promise<string[]>).then((names: string[]): string => {
     console.log("promise:", summarize(names));
+    fs.rmSync(root, { recursive: true, force: true });
     return "done";
 });
-
-fs.rmSync(root, { recursive: true, force: true });

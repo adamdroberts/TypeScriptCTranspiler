@@ -1,0 +1,5 @@
+queued: false
+completed: true
+strings: a|a/b|a/b/deep.txt|a/file.txt|link|top.txt
+buffers: a|a/b|a/b/deep.txt|a/file.txt|link|top.txt
+error: fs.readdirSync: could not open dir
