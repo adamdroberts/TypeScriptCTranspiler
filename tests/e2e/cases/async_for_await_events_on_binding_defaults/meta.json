@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await array and static-property object bindings apply lazy await-free defaults to undefined elements"
+}

@@ -45271,28 +45271,29 @@ class Emitter {
             identifier: ts.Identifier;
             index: number | null;
             property: string | null;
+            initializer: ts.Expression | null;
         };
         const bindingDescriptorsFor = (name: ts.BindingName): BindingDescriptor[] | null => {
-            if (ts.isIdentifier(name)) return [{ identifier: name, index: null, property: null }];
+            if (ts.isIdentifier(name)) return [{ identifier: name, index: null, property: null, initializer: null }];
             if (ts.isArrayBindingPattern(name)) {
                 if (name.elements.length === 0) return null;
                 const descriptors: BindingDescriptor[] = [];
                 for (let index = 0; index < name.elements.length; index++) {
                     const element = name.elements[index]!;
-                    if (!ts.isBindingElement(element) || element.dotDotDotToken || element.initializer || !ts.isIdentifier(element.name)) {
+                    if (!ts.isBindingElement(element) || element.dotDotDotToken || !ts.isIdentifier(element.name)) {
                         return null;
                     }
-                    descriptors.push({ identifier: element.name, index, property: null });
+                    descriptors.push({ identifier: element.name, index, property: null, initializer: element.initializer ?? null });
                 }
                 return descriptors;
             }
             if (!ts.isObjectBindingPattern(name) || name.elements.length === 0) return null;
             const descriptors: BindingDescriptor[] = [];
             for (const element of name.elements) {
-                if (element.dotDotDotToken || element.initializer || !ts.isIdentifier(element.name)) return null;
+                if (element.dotDotDotToken || !ts.isIdentifier(element.name)) return null;
                 const property = element.propertyName ? this.staticPropertyName(element.propertyName) : element.name.text;
                 if (property === null) return null;
-                descriptors.push({ identifier: element.name, index: null, property });
+                descriptors.push({ identifier: element.name, index: null, property, initializer: element.initializer ?? null });
             }
             return descriptors;
         };
@@ -45411,6 +45412,9 @@ class Emitter {
         for (const route of [directRoute, thenRoute, elseRoute]) {
             if (route?.expression) visitReturn(route.expression);
         }
+        for (const entry of bindingEntries) {
+            if (entry.initializer) visitReturn(entry.initializer);
+        }
         visitReturn(result.expression);
         if (!bodySupported) return false;
 
@@ -45429,6 +45433,9 @@ class Emitter {
             if (!route) continue;
             for (const statement of route.statements) visitThis(statement);
             if (route.expression) visitThis(route.expression);
+        }
+        for (const entry of bindingEntries) {
+            if (entry.initializer) visitThis(entry.initializer);
         }
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
@@ -45467,6 +45474,30 @@ class Emitter {
             if (!(bindingIsParameter && entry.symbol === bindingSymbol)) scope.set(entry.symbol, entry.name);
             scopeTypes.set(entry.symbol, entry.type);
         }
+        const defaultScope = new Map<ts.Symbol, string>();
+        const defaultScopeTypes = new Map<ts.Symbol, CType>();
+        for (const param of params) {
+            defaultScope.set(param.symbol, `state->${param.field}`);
+            defaultScopeTypes.set(param.symbol, param.type);
+        }
+        const bindingDefaults = new Map<typeof bindingEntries[number], string>();
+        for (const entry of bindingEntries) {
+            if (!entry.initializer) continue;
+            this.argumentValueScopes.push(defaultScope);
+            this.argumentValueTypeScopes.push(defaultScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let defaultResult: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                defaultResult = this.emitExpr(entry.initializer);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            bindingDefaults.set(entry, this.coerce(defaultResult, T_VALUE, entry.initializer));
+        }
 
         const callback = new CBuf();
         callback.open(`void ${name}(void* env)`);
@@ -45497,17 +45528,28 @@ class Emitter {
             }
             return itemVar;
         };
+        const bindingValueFor = (entry: typeof bindingEntries[number]): string => {
+            let source = bindingSource(entry);
+            const defaultValue = bindingDefaults.get(entry);
+            if (defaultValue !== undefined) {
+                const sourceVar = this.freshTemp("_for_await_binding");
+                callback.line(`${T_VALUE.c} ${sourceVar} = ${source};`);
+                callback.line(`if (tsc_value_is_undefined(${sourceVar})) ${sourceVar} = ${defaultValue};`);
+                source = sourceVar;
+            }
+            return source;
+        };
         if (bindingParameter) {
-            const source = bindingSource(binding);
+            const source = bindingValueFor(binding);
             const bindingValue = this.coerce({ c: source, ty: T_VALUE }, binding.type, binding.identifier);
             callback.line(`state->${bindingParameter.field} = ${bindingValue};`);
         } else if (bindingEntries.length === 1) {
-            const source = bindingSource(binding);
+            const source = bindingValueFor(binding);
             const bindingValue = this.coerce({ c: source, ty: T_VALUE }, binding.type, binding.identifier);
             callback.line(`${binding.type.c} ${binding.name} = ${bindingValue};`);
         } else {
             for (const entry of bindingEntries) {
-                const source = bindingSource(entry);
+                const source = bindingValueFor(entry);
                 const bindingValue = this.coerce({ c: source, ty: T_VALUE }, entry.type, entry.identifier);
                 callback.line(`${entry.type.c} ${entry.name} = ${bindingValue};`);
             }
