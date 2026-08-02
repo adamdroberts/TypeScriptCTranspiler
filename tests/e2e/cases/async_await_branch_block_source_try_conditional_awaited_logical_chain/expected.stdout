@@ -1,0 +1,16 @@
+fn-false-short fn-false -
+fn-false-second fn-false -
+fn-true fn-true -
+fn-first-reject caught-and-first-bad -
+fn-second-reject caught-and-second-bad -
+method-true-short method-true M
+method-true-second method-true MM
+method-false method-false MMM
+method-first-reject rejected-or-first-bad MMMM
+method-second-reject rejected-or-second-bad MMMMM
+arrow-third-true arrow-true MMMMMV
+arrow-third-false arrow-false MMMMMVV
+arrow-short-third arrow-true MMMMMVVV
+arrow-first-reject caught-mix-first-bad MMMMMVVVV
+arrow-second-reject caught-mix-second-bad MMMMMVVVVV
+arrow-third-reject caught-mix-third-bad MMMMMVVVVVV

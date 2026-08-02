@@ -34002,6 +34002,72 @@ class Emitter {
         return branch as AsyncAwaitTryConditionalReturnBranch;
     }
 
+    private asyncAwaitTryConditionalReturnBranchForCondition(
+        condition: ts.Expression,
+        thenBranch: AsyncAwaitTryConditionalReturnNode,
+        elseBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        const conditionAwaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
+        if (conditionAwaitExpr) {
+            return {
+                kind: "if",
+                condition: expression,
+                conditionAwaitExpr,
+                thenBranch,
+                elseBranch,
+                fallthroughBranch: null,
+            };
+        }
+        if (this.asyncAwaitConditionExpressionSupported(expression)) {
+            return {
+                kind: "if",
+                condition: expression,
+                thenBranch,
+                elseBranch,
+                fallthroughBranch: null,
+            };
+        }
+        if (!ts.isBinaryExpression(expression)) return null;
+        const operator = expression.operatorToken.kind;
+        const left = this.unwrapTransparentExpression(expression.left);
+        const right = this.unwrapTransparentExpression(expression.right);
+        if (operator === ts.SyntaxKind.QuestionQuestionToken &&
+            this.asyncAwaitTryConditionalNullishLeftSupported(left)) {
+            const awaitedRightBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
+                right,
+                thenBranch,
+                elseBranch,
+            );
+            if (!awaitedRightBranch) return null;
+            const nonNullishBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
+                left,
+                thenBranch,
+                elseBranch,
+            );
+            if (!nonNullishBranch) return null;
+            return {
+                kind: "if",
+                condition: left,
+                conditionMode: "nullish",
+                thenBranch: awaitedRightBranch,
+                elseBranch: nonNullishBranch,
+                fallthroughBranch: null,
+            };
+        }
+        if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
+            operator !== ts.SyntaxKind.BarBarToken) return null;
+        const rightBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
+            right,
+            thenBranch,
+            elseBranch,
+        );
+        if (!rightBranch) return null;
+        return operator === ts.SyntaxKind.AmpersandAmpersandToken
+            ? this.asyncAwaitTryConditionalReturnBranchForCondition(left, rightBranch, elseBranch)
+            : this.asyncAwaitTryConditionalReturnBranchForCondition(left, thenBranch, rightBranch);
+    }
+
     private asyncAwaitTryConditionalReturnNodeFromExpression(
         expression: ts.Expression,
         parameters: readonly ts.ParameterDeclaration[],
@@ -34020,7 +34086,6 @@ class Emitter {
             );
         }
         const condition = this.unwrapTransparentExpression(unwrapped.condition);
-        const conditionAwaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition) ?? undefined;
         const thenBranch = this.asyncAwaitTryConditionalReturnArmFromExpression(
             unwrapped.whenTrue,
             parameters,
@@ -34036,70 +34101,11 @@ class Emitter {
             returnContextType,
         );
         if (!thenBranch || !elseBranch) return null;
-        if (!conditionAwaitExpr) {
-            const shortCircuitOperator = ts.isBinaryExpression(condition)
-                ? condition.operatorToken.kind
-                : undefined;
-            const right = ts.isBinaryExpression(condition)
-                ? this.unwrapTransparentExpression(condition.right)
-                : null;
-            const left = ts.isBinaryExpression(condition)
-                ? this.unwrapTransparentExpression(condition.left)
-                : null;
-            if ((shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken ||
-                shortCircuitOperator === ts.SyntaxKind.BarBarToken ||
-                shortCircuitOperator === ts.SyntaxKind.QuestionQuestionToken) &&
-                left && right && ts.isAwaitExpression(right) &&
-                (shortCircuitOperator === ts.SyntaxKind.QuestionQuestionToken
-                    ? this.asyncAwaitTryConditionalNullishLeftSupported(left)
-                    : this.asyncAwaitConditionExpressionSupported(left))) {
-                const awaitedRightBranch: AsyncAwaitTryConditionalReturnBranch = {
-                    kind: "if",
-                    condition: right,
-                    conditionAwaitExpr: right,
-                    thenBranch,
-                    elseBranch,
-                    fallthroughBranch: null,
-                };
-                if (shortCircuitOperator === ts.SyntaxKind.QuestionQuestionToken) {
-                    const nonNullishBranch: AsyncAwaitTryConditionalReturnBranch = {
-                        kind: "if",
-                        condition: left,
-                        thenBranch,
-                        elseBranch,
-                        fallthroughBranch: null,
-                    };
-                    return {
-                        kind: "if",
-                        condition: left,
-                        conditionMode: "nullish",
-                        thenBranch: awaitedRightBranch,
-                        elseBranch: nonNullishBranch,
-                        fallthroughBranch: null,
-                    };
-                }
-                return {
-                    kind: "if",
-                    condition: left,
-                    thenBranch: shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
-                        ? awaitedRightBranch
-                        : thenBranch,
-                    elseBranch: shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
-                        ? elseBranch
-                        : awaitedRightBranch,
-                    fallthroughBranch: null,
-                };
-            }
-            if (!this.asyncAwaitConditionExpressionSupported(unwrapped.condition)) return null;
-        }
-        return {
-            kind: "if",
-            condition: unwrapped.condition,
-            conditionAwaitExpr,
+        return this.asyncAwaitTryConditionalReturnBranchForCondition(
+            condition,
             thenBranch,
             elseBranch,
-            fallthroughBranch: null,
-        };
+        );
     }
 
     private asyncAwaitTryConditionalReturnArmFromExpression(
