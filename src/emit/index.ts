@@ -394,6 +394,8 @@ interface AsyncAwaitTryCatchReturnContinuation {
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
     usesAwaited: boolean;
+    sourcePromise?: EmitResult;
+    sourceAwaitedType?: CType;
 }
 
 interface AsyncAwaitTryFinallyReturnContinuation {
@@ -412,6 +414,8 @@ interface AsyncAwaitTryFinallyReturnContinuation {
     params: AsyncAwaitContinuationParam[];
     thisValue: EmitResult | null;
     usesAwaited: boolean;
+    sourcePromise?: EmitResult;
+    sourceAwaitedType?: CType;
 }
 
 interface AsyncAwaitTryFinallyLeadingReturnContinuation {
@@ -511,6 +515,7 @@ type AsyncAwaitTryConditionalReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
     | AsyncAwaitIfTwoExpressionReturnLeaf
     | AsyncAwaitIfExpressionSequenceReturnLeaf
+    | AsyncAwaitIfExpressionSyncReturnLeaf
     | AsyncAwaitTryConditionalReturnBranch;
 
 interface AsyncAwaitTryConditionalReturnBranch extends AsyncAwaitIfExpressionReturnBranch {
@@ -26821,6 +26826,35 @@ class Emitter {
                         sequenceContinuation,
                     );
                 }
+                if (branch.kind === "syncReturn") {
+                    const sync = this.emitExpr(branch.returnExpr);
+                    const syncType = this.prepareType(sync.ty);
+                    const sourcePromise = this.freshTemp("_await_sync_source");
+                    const syncEh = this.freshTemp("_await_sync_eh");
+                    buf.line(`tsc_promise_t* const ${sourcePromise} = tsc_promise_pending();`);
+                    buf.line(`tsc_try_frame_t ${syncEh};`);
+                    buf.line(`tsc_try_push(&${syncEh});`);
+                    buf.open(`if (setjmp(${syncEh}.jb) == 0)`);
+                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.promiseResolveResult(sync, branch.returnExpr)});`);
+                    buf.line("tsc_try_pop();");
+                    buf.close();
+                    buf.open("else");
+                    buf.line("tsc_try_pop();");
+                    buf.line(`tsc_promise_reject_in_place(${sourcePromise}, tsc_value_string(tsc_current_error()));`);
+                    buf.close();
+                    return this.emitAsyncAwaitTryCatchReturnContinuationResult(buf, {
+                        ...continuation,
+                        successReturnExpr: null,
+                        successThrowExpr: null,
+                        successConditionalContinuation: undefined,
+                        successSequenceContinuation: undefined,
+                        successSequenceReturns: false,
+                        successReturnsAwaited: true,
+                        variable: null,
+                        sourcePromise: { c: sourcePromise, ty: promiseType(syncType) },
+                        sourceAwaitedType: syncType,
+                    });
+                }
                 const condition = this.emitBoolExpr(branch.condition);
                 buf.open(`if (${condition})`);
                 if (!emitBranch(branch.thenBranch)) return false;
@@ -26840,10 +26874,10 @@ class Emitter {
                 continuation,
             );
         }
-        const source = this.emitExpr(continuation.awaitExpr.expression);
+        const source = continuation.sourcePromise ?? this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
-        const awaitedType = this.prepareType(mapTsType(
+        const awaitedType = continuation.sourceAwaitedType ?? this.prepareType(mapTsType(
             continuation.awaitExpr,
             this.checker.getTypeAtLocation(continuation.awaitExpr),
             this.checker,
@@ -27852,6 +27886,35 @@ class Emitter {
                         sequenceContinuation,
                     );
                 }
+                if (branch.kind === "syncReturn") {
+                    const sync = this.emitExpr(branch.returnExpr);
+                    const syncType = this.prepareType(sync.ty);
+                    const sourcePromise = this.freshTemp("_await_sync_source");
+                    const syncEh = this.freshTemp("_await_sync_eh");
+                    buf.line(`tsc_promise_t* const ${sourcePromise} = tsc_promise_pending();`);
+                    buf.line(`tsc_try_frame_t ${syncEh};`);
+                    buf.line(`tsc_try_push(&${syncEh});`);
+                    buf.open(`if (setjmp(${syncEh}.jb) == 0)`);
+                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.promiseResolveResult(sync, branch.returnExpr)});`);
+                    buf.line("tsc_try_pop();");
+                    buf.close();
+                    buf.open("else");
+                    buf.line("tsc_try_pop();");
+                    buf.line(`tsc_promise_reject_in_place(${sourcePromise}, tsc_value_string(tsc_current_error()));`);
+                    buf.close();
+                    return this.emitAsyncAwaitTryFinallyReturnContinuationResult(buf, {
+                        ...continuation,
+                        successReturnExpr: null,
+                        successThrowExpr: null,
+                        successConditionalContinuation: undefined,
+                        successSequenceContinuation: undefined,
+                        successSequenceReturns: false,
+                        successReturnsAwaited: true,
+                        variable: null,
+                        sourcePromise: { c: sourcePromise, ty: promiseType(syncType) },
+                        sourceAwaitedType: syncType,
+                    });
+                }
                 const condition = this.emitBoolExpr(branch.condition);
                 buf.open(`if (${condition})`);
                 if (!emitBranch(branch.thenBranch)) return false;
@@ -27873,10 +27936,10 @@ class Emitter {
                 continuation,
             );
         }
-        const source = this.emitExpr(continuation.awaitExpr.expression);
+        const source = continuation.sourcePromise ?? this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
-        const awaitedType = this.prepareType(mapTsType(
+        const awaitedType = continuation.sourceAwaitedType ?? this.prepareType(mapTsType(
             continuation.awaitExpr,
             this.checker.getTypeAtLocation(continuation.awaitExpr),
             this.checker,
@@ -28649,6 +28712,35 @@ class Emitter {
                         sequenceContinuation,
                     );
                 }
+                if (branch.kind === "syncReturn") {
+                    const sync = this.emitExpr(branch.returnExpr);
+                    const syncType = this.prepareType(sync.ty);
+                    const sourcePromise = this.freshTemp("_await_sync_source");
+                    const syncEh = this.freshTemp("_await_sync_eh");
+                    buf.line(`tsc_promise_t* const ${sourcePromise} = tsc_promise_pending();`);
+                    buf.line(`tsc_try_frame_t ${syncEh};`);
+                    buf.line(`tsc_try_push(&${syncEh});`);
+                    buf.open(`if (setjmp(${syncEh}.jb) == 0)`);
+                    buf.line(`tsc_promise_adopt_into(${sourcePromise}, ${this.promiseResolveResult(sync, branch.returnExpr)});`);
+                    buf.line("tsc_try_pop();");
+                    buf.close();
+                    buf.open("else");
+                    buf.line("tsc_try_pop();");
+                    buf.line(`tsc_promise_reject_in_place(${sourcePromise}, tsc_value_string(tsc_current_error()));`);
+                    buf.close();
+                    return this.emitAsyncAwaitTryCatchFinallyReturnContinuationResult(buf, {
+                        ...continuation,
+                        successReturnExpr: null,
+                        successThrowExpr: null,
+                        successConditionalContinuation: undefined,
+                        successSequenceContinuation: undefined,
+                        successSequenceReturns: false,
+                        successReturnsAwaited: true,
+                        variable: null,
+                        sourcePromise: { c: sourcePromise, ty: promiseType(syncType) },
+                        sourceAwaitedType: syncType,
+                    });
+                }
                 const condition = this.emitBoolExpr(branch.condition);
                 buf.open(`if (${condition})`);
                 if (!emitBranch(branch.thenBranch)) return false;
@@ -28669,10 +28761,10 @@ class Emitter {
                 continuation,
             );
         }
-        const source = this.emitExpr(continuation.awaitExpr.expression);
+        const source = continuation.sourcePromise ?? this.emitExpr(continuation.awaitExpr.expression);
         const promise = this.prepareType(source.ty);
         if (promise.kind !== "promise") return false;
-        const awaitedType = this.prepareType(mapTsType(
+        const awaitedType = continuation.sourceAwaitedType ?? this.prepareType(mapTsType(
             continuation.awaitExpr,
             this.checker.getTypeAtLocation(continuation.awaitExpr),
             this.checker,
@@ -33161,6 +33253,9 @@ class Emitter {
         if (node.kind === "sequenceReturn") {
             return this.asyncAwaitThreeExpressionReturnContinuationSupported(node.continuation);
         }
+        if (node.kind === "syncReturn") {
+            return this.asyncAwaitTryConditionalSyncReturnExpressionSupported(node.returnExpr);
+        }
         if (node.kind !== "if" || !node.elseBranch || node.fallthroughBranch) return false;
         const condition = this.unwrapTransparentExpression(node.condition);
         if (!(ts.isIdentifier(condition) && this.isValueReferenceIdentifier(condition)) &&
@@ -33169,6 +33264,18 @@ class Emitter {
             condition.kind !== ts.SyntaxKind.NullKeyword) return false;
         return this.asyncAwaitTryConditionalReturnNodeSupported(node.thenBranch) &&
             this.asyncAwaitTryConditionalReturnNodeSupported(node.elseBranch);
+    }
+
+    private asyncAwaitTryConditionalSyncReturnExpressionSupported(returnExpr: ts.Expression): boolean {
+        if (!this.asyncAwaitSyncReturnExpressionSupported(returnExpr)) return false;
+        const type = this.prepareType(mapTsType(
+            returnExpr,
+            this.checker.getTypeAtLocation(returnExpr),
+            this.checker,
+        ));
+        return type.kind === "number" || type.kind === "bigint" || type.kind === "symbol" ||
+            type.kind === "string" || type.kind === "boolean" || type.kind === "void" ||
+            type.kind === "array" || type.kind === "buffer" || type.kind === "fsstats";
     }
 
     private asyncAwaitTryConditionalReturnSequenceContinuation(
@@ -33202,6 +33309,7 @@ class Emitter {
                 awaitExprs.push(...node.continuation.awaitExprs);
                 return;
             }
+            if (node.kind === "syncReturn") return;
             conditions.push(node.condition);
             visit(node.thenBranch);
             visit(node.elseBranch);

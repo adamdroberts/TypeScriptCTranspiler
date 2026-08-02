@@ -1,0 +1,9 @@
+fn-sync fn-sync 
+fn-await-reject caught-fn-bad 
+method-sync method-sync M
+method-await-reject rejected-method-bad Mm
+arrow-sync arrow-sync MmV
+arrow-await-reject caught-arrow-bad MmVV
+fn-sync-throw caught-fn-sync-bad MmVV
+method-sync-throw rejected-method-sync-bad MmVVE
+arrow-sync-throw caught-arrow-sync-bad MmVVEX
