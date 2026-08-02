@@ -32,6 +32,14 @@ async function returnBody(iterator: any): Promise<string> {
     return "empty";
 }
 
+async function returnAfterAwait(iterator: any): Promise<string> {
+    for await (const item of iterator) {
+        await Promise.resolve(item);
+        return item;
+    }
+    return "empty";
+}
+
 const emitter = new EventEmitter();
 const iterator: any = on(emitter, "data");
 collect(iterator, []).then((value: string): void => {
@@ -53,6 +61,13 @@ collect(iterator, []).then((value: string): void => {
             const returnIterator: any = on(returnEmitter, "data");
             returnBody(returnIterator).then((returnValue: string): void => {
                 console.log("body-return-await:", returnValue);
+
+                const postReturnEmitter = new EventEmitter();
+                const postReturnIterator: any = on(postReturnEmitter, "data");
+                returnAfterAwait(postReturnIterator).then((postReturnValue: string): void => {
+                    console.log("body-return-after-await:", postReturnValue);
+                });
+                postReturnEmitter.emit("data", "post-return");
             });
             returnEmitter.emit("data", "returned");
         });

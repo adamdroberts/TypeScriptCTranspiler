@@ -45406,7 +45406,7 @@ class Emitter {
         const bodyAwaitExpression = bodyAwaitCandidate && ts.isAwaitExpression(bodyAwaitCandidate)
             ? bodyAwaitCandidate
             : null;
-        const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.control === "return" && directRoute.expression
+        const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length === 0 && directRoute.control === "return" && directRoute.expression
             ? this.unwrapTransparentExpression(directRoute.expression)
             : null;
         const bodyReturnAwaitExpression = bodyReturnAwaitCandidate && ts.isAwaitExpression(bodyReturnAwaitCandidate)
@@ -45418,7 +45418,7 @@ class Emitter {
         if (bodyAwaitExpression && !bodyAwaitPostludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyAwaitExpression && directRoute!.control !== null &&
-            directRoute!.control !== "continue" && directRoute!.control !== "break") return false;
+            directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return") return false;
         let bodySupported = true;
         const allowedBodyAwaitExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression;
         const visitBody = (node: ts.Node): void => {
@@ -45521,6 +45521,7 @@ class Emitter {
         this.structDecls.line("tsc_value_t iterator;");
         this.structDecls.line("bool body_await;");
         this.structDecls.line("bool body_return;");
+        this.structDecls.line("bool body_sync_return;");
         this.structDecls.line("bool body_break;");
         for (const { entry, field } of bodyBindingFields) this.structDecls.line(`${entry.type.c} ${field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
@@ -45630,6 +45631,37 @@ class Emitter {
                 this.argumentValueScopes.pop();
             }
         };
+        const emitBodySynchronousReturn = (target: CBuf, expression: ts.Expression | null): void => {
+            if (!expression) {
+                target.line("tsc_try_pop();");
+                target.line("tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());");
+                return;
+            }
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let returned: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                returned = this.emitExpr(expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const returnedType = this.prepareType(returned.ty);
+            if (returnedType.kind === "void" || returnedType.kind === "never") {
+                target.line(`${returned.c};`);
+                target.line("tsc_try_pop();");
+                target.line("tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());");
+            } else {
+                target.line(`${returnedType.c} ${returnedVar} = ${returned.c};`);
+                target.line("tsc_try_pop();");
+                target.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: returnedType }, expression)};`);
+                target.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+            }
+        };
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _p = state->receiver;");
@@ -45675,6 +45707,14 @@ class Emitter {
         }
         emitBodyAwaitPostlude();
         callback.line("state->body_await = false;");
+        if (bodyAwaitExpression && directRoute!.control === "return") {
+            callback.open("if (state->body_sync_return)");
+            callback.line("state->body_sync_return = false;");
+            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+            emitBodySynchronousReturn(callback, directRoute!.expression);
+            callback.line("return;");
+            callback.close();
+        }
         callback.open("if (state->body_break)");
         callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
         emitLoopResult(callback);
@@ -45822,6 +45862,7 @@ class Emitter {
                 callback.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyAwaitPromiseType!, bodyAwaitSourceExpression.expression)};`);
                 callback.line("state->body_await = true;");
                 callback.line(`state->body_return = ${bodyReturnAwaitExpression ? "true" : "false"};`);
+                callback.line(`state->body_sync_return = ${bodyAwaitExpression && directRoute!.control === "return" ? "true" : "false"};`);
                 callback.line(`state->body_break = ${bodyReturnAwaitExpression ? "false" : directRoute!.control === "break" ? "true" : "false"};`);
                 callback.line(`state->receiver = ${bodySourceVar};`);
                 callback.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
@@ -45885,6 +45926,7 @@ class Emitter {
         buf.line(`${env}->iterator = tsc_async_iterator_get(${this.coerce(source, T_VALUE, loop.expression)});`);
         buf.line(`${env}->body_await = false;`);
         buf.line(`${env}->body_return = false;`);
+        buf.line(`${env}->body_sync_return = false;`);
         buf.line(`${env}->body_break = false;`);
         for (const param of params) buf.line(`${env}->${param.field} = ${this.asyncAwaitContinuationParamValue(param)};`);
         if (usesThis && thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);

@@ -2,3 +2,4 @@ body-await: first
 body-postlude: postlude
 body-reject: body-failure
 body-return-await: returned
+body-return-after-await: post-return
