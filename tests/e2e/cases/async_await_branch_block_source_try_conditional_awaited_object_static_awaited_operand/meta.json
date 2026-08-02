@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally Object.is with a leading awaited operand preserves comparison truthiness, NaN identity, and rejection cleanup"
+}

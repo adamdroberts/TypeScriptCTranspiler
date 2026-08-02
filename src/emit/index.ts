@@ -33141,6 +33141,8 @@ class Emitter {
     private asyncAwaitTryConditionalConditionAwaitExpression(
         condition: ts.Expression,
     ): ts.AwaitExpression | null {
+        const objectIsAwaitExpr = this.asyncAwaitTryConditionalObjectIsAwaitedFirstOperand(condition);
+        if (objectIsAwaitExpr) return objectIsAwaitExpr;
         const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition);
         if (leadingAwait) return leadingAwait;
         const globalCoercionAwait = this.asyncAwaitTryConditionalGlobalCoercionAwaitExpression(condition);
@@ -33234,8 +33236,32 @@ class Emitter {
                                     ? ["canParse"]
                                     : receiver === "JSON"
                                         ? ["parse", "stringify"]
-                                        : [];
+                                        : receiver === "Object"
+                                            ? ["is"]
+                                            : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
+    }
+
+    private asyncAwaitTryConditionalObjectIsAwaitedFirstOperand(
+        condition: ts.Expression,
+    ): ts.AwaitExpression | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (!ts.isCallExpression(expression) ||
+            expression.arguments.length !== 2 ||
+            !this.asyncAwaitTryConditionalBuiltinCallSupported(expression)) {
+            return null;
+        }
+        const callee = expression.expression;
+        if (!ts.isPropertyAccessExpression(callee) ||
+            !ts.isIdentifier(callee.expression) ||
+            callee.expression.text !== "Object" ||
+            callee.name.text !== "is") {
+            return null;
+        }
+        const first = this.unwrapTransparentExpression(expression.arguments[0]!);
+        if (!ts.isAwaitExpression(first)) return null;
+        if (!this.asyncAwaitConditionExpressionSupported(expression.arguments[1]!)) return null;
+        return first;
     }
 
     private asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(
@@ -34650,7 +34676,9 @@ class Emitter {
                 thenBranch,
             );
         if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
-        const conditionAwaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
+        const conditionAwaitExpr =
+            this.asyncAwaitTryConditionalObjectIsAwaitedFirstOperand(expression) ??
+            this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
         if (conditionAwaitExpr) {
             return {
                 kind: "if",
