@@ -1,0 +1,3 @@
+{
+    "description": "events.on close options finish pending iteration, preserve queued events, clean up listeners, and allow the close event as data"
+}

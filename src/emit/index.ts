@@ -94,6 +94,12 @@ interface SequencedCallArg {
     paramSymbol?: ts.Symbol;
 }
 
+interface EventEmitterOnOptionSpecs {
+    specs: SequencedCallArg[];
+    signalIndex: number | null;
+    closeIndex: number | null;
+}
+
 interface TailFunctionContext {
     name: string;
     label: string;
@@ -66379,21 +66385,28 @@ class Emitter {
             }
             case "on": {
                 if (args.length < 2) unsupported(call, "events.on expects emitter, eventName, and optional options");
-                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.on", T_VALUE);
+                const optionSpecs = this.eventEmitterOnOptions(args[2], "events.on");
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitEventEmitterEventName(args[1]!);
+                const sideEffectfulVoidOptions = Boolean(args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2]));
                 const specs: SequencedCallArg[] = [
                     { value: emitter, target: T_EVENT_EMITTER, node: args[0]! },
                     { value: eventName, target: T_STRING, node: args[1]! },
                 ];
-                if (args[2] && this.shouldEvaluateSideEffectfulVoidDefault(args[2])) {
+                if (sideEffectfulVoidOptions) {
                     specs.push({ value: this.emitExpr(args[2]), target: T_VOID, node: args[2] });
                 }
-                specs.push(...optionSpecs);
+                specs.push(...optionSpecs.specs);
                 specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
-                return this.emitSequencedExpr(T_VALUE, specs, ([ee, event, ...rest]) => {
-                    const signal = optionSpecs.length > 0 ? rest[0] : "tsc_value_undefined()";
-                    return `tsc_event_emitter_on_async_iterator(${ee}, ${event}, ${signal})`;
+                return this.emitSequencedExpr(T_VALUE, specs, (values) => {
+                    const optionOffset = 2 + (sideEffectfulVoidOptions ? 1 : 0);
+                    const signal = optionSpecs.signalIndex === null
+                        ? "tsc_value_undefined()"
+                        : values[optionOffset + optionSpecs.signalIndex]!;
+                    const close = optionSpecs.closeIndex === null
+                        ? "NULL"
+                        : values[optionOffset + optionSpecs.closeIndex]!;
+                    return `tsc_event_emitter_on_async_iterator(${values[0]}, ${values[1]}, ${signal}, ${close})`;
                 });
             }
             case "setMaxListeners": {
@@ -66494,6 +66507,45 @@ class Emitter {
             specs.push({ value: this.emitExpr(prop.initializer), target: signalTarget, node: prop.initializer });
         }
         return specs;
+    }
+
+    private eventEmitterOnOptions(
+        options: ts.Expression | undefined,
+        label: string,
+    ): EventEmitterOnOptionSpecs {
+        if (!options || this.isUndefinedLikeExpression(options)) {
+            return { specs: [], signalIndex: null, closeIndex: null };
+        }
+        options = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(options)) {
+            return { specs: [], signalIndex: null, closeIndex: null };
+        }
+        if (!ts.isObjectLiteralExpression(options)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        const specs: SequencedCallArg[] = [];
+        let signalIndex: number | null = null;
+        let closeIndex: number | null = null;
+        for (const prop of options.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "signal" && key !== "close") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) continue;
+            const index = specs.length;
+            if (key === "signal") {
+                signalIndex = index;
+                specs.push({ value: this.emitExpr(prop.initializer), target: T_VALUE, node: prop.initializer });
+            } else {
+                closeIndex = index;
+                specs.push({ value: this.emitExpr(prop.initializer), target: arrayType(T_STRING), node: prop.initializer });
+            }
+        }
+        return { specs, signalIndex, closeIndex };
     }
 
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
