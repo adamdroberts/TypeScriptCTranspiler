@@ -45297,8 +45297,16 @@ class Emitter {
             }
             if (!ts.isObjectBindingPattern(name) || name.elements.length === 0) return null;
             const descriptors: BindingDescriptor[] = [];
-            for (const element of name.elements) {
-                if (element.dotDotDotToken || !ts.isIdentifier(element.name)) return null;
+            let restSeen = false;
+            for (let index = 0; index < name.elements.length; index++) {
+                const element = name.elements[index]!;
+                if (element.dotDotDotToken) {
+                    if (restSeen || index !== name.elements.length - 1 || !ts.isIdentifier(element.name) || element.initializer) return null;
+                    descriptors.push({ identifier: element.name, index: null, property: null, initializer: null, rest: true });
+                    restSeen = true;
+                    continue;
+                }
+                if (restSeen || !ts.isIdentifier(element.name)) return null;
                 const property = element.propertyName ? this.staticPropertyName(element.propertyName) : element.name.text;
                 if (property === null) return null;
                 descriptors.push({ identifier: element.name, index: null, property, initializer: element.initializer ?? null, rest: false });
@@ -45330,6 +45338,7 @@ class Emitter {
         const bindingEntries = bindings as (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })[];
         if (bindingEntries.some((entry) => entry.rest && entry.type.kind !== "value" &&
             !(entry.type.kind === "array" && entry.type.elem?.kind === "value"))) return false;
+        if (bindingEntries.some((entry) => entry.rest && entry.index === null && entry.type.kind !== "value")) return false;
         const binding = bindingEntries[0]!;
         const bindingSymbol = binding.symbol;
         const sourceType = this.prepareType(mapTsType(
@@ -45533,17 +45542,36 @@ class Emitter {
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
         const bindingSource = (entry: (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })): EmitResult => {
             if (entry.rest) {
-                const restArray = this.freshTemp("_for_await_rest");
-                const restIndex = this.freshTemp("_for_await_rest_i");
-                const restValue = this.freshTemp("_for_await_rest_v");
-                callback.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
-                callback.open(`for (size_t ${restIndex} = ${entry.index}; ${restIndex} < (size_t)tsc_value_length(${itemVar}); ${restIndex}++)`);
-                callback.line(`tsc_value_t ${restValue} = tsc_value_get_index(${itemVar}, (double)${restIndex});`);
-                callback.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                if (entry.index !== null) {
+                    const restArray = this.freshTemp("_for_await_rest");
+                    const restIndex = this.freshTemp("_for_await_rest_i");
+                    const restValue = this.freshTemp("_for_await_rest_v");
+                    callback.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+                    callback.open(`for (size_t ${restIndex} = ${entry.index}; ${restIndex} < (size_t)tsc_value_length(${itemVar}); ${restIndex}++)`);
+                    callback.line(`tsc_value_t ${restValue} = tsc_value_get_index(${itemVar}, (double)${restIndex});`);
+                    callback.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                    callback.close();
+                    return entry.type.kind === "value"
+                        ? { c: `tsc_value_array(${restArray})`, ty: T_VALUE }
+                        : { c: restArray, ty: entry.type };
+                }
+                const restObject = this.freshTemp("_for_await_object_rest");
+                const restKeys = this.freshTemp("_for_await_object_rest_keys");
+                const restIndex = this.freshTemp("_for_await_object_rest_i");
+                const restKey = this.freshTemp("_for_await_object_rest_key");
+                const excluded = bindingEntries
+                    .filter((candidate) => !candidate.rest && candidate.property !== null)
+                    .map((candidate) => candidate.property!);
+                const skip = excluded
+                    .map((property) => `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`)
+                    .join(" || ");
+                callback.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
+                callback.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${itemVar});`);
+                callback.open(`for (size_t ${restIndex} = 0; ${restIndex} < ${restKeys}->len; ${restIndex}++)`);
+                callback.line(`tsc_str_t* ${restKey} = TSC_ARR(tsc_str_t*, ${restKeys}, ${restIndex});`);
+                callback.line(`${skip ? `if (!(${skip})) ` : ""}tsc_object_set(${restObject}, ${restKey}, tsc_value_get_prop(${itemVar}, ${restKey}));`);
                 callback.close();
-                return entry.type.kind === "value"
-                    ? { c: `tsc_value_array(${restArray})`, ty: T_VALUE }
-                    : { c: restArray, ty: entry.type };
+                return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
             }
             if (entry.index !== null) return { c: `tsc_value_get_index(${itemVar}, ${entry.index}.0)`, ty: T_VALUE };
             if (entry.property !== null) {
