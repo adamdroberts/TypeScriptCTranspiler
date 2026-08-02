@@ -16,7 +16,6 @@ console.log("sync:", fs.readFileSync(path.join(syncDest, "root.txt")) + "/" + fs
 
 nodefs.promises.cp(src, promiseDest, { recursive: true, force: true }).then((value: any): string => {
     console.log("promise:", fs.readFileSync(path.join(promiseDest, "root.txt")) + "/" + fs.readFileSync(path.join(promiseDest, "nested", "child.txt")));
+    fs.rmSync(root, { recursive: true, force: true });
     return "done";
 });
-
-fs.rmSync(root, { recursive: true, force: true });

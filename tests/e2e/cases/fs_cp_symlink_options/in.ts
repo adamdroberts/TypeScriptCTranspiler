@@ -8,6 +8,7 @@ const link = path.join(root, "link.txt");
 const copyDefault = path.join(root, "copy-default.txt");
 const copyVerbatim = path.join(root, "copy-verbatim.txt");
 const copyDeref = path.join(root, "copy-deref.txt");
+const copyPromiseDefault = path.join(root, "copy-promise-default.txt");
 const copyPromise = path.join(root, "copy-promise.txt");
 const VERBATIM_TRUE = true;
 const DEREFERENCE_TRUE = true;
@@ -29,9 +30,10 @@ console.log("verbatim link:", fs.readlinkSync(copyVerbatim));
 fs.cpSync(link, copyDeref, DEREFERENCE_OPTIONS);
 console.log("dereference file:", fs.lstatSync(copyDeref).isSymbolicLink(), fs.readFileSync(copyDeref));
 
-nodefs.promises.cp(link, copyPromise, VERBATIM_OPTIONS).then((value: any): string => {
+nodefs.promises.cp(link, copyPromiseDefault).then((value: any): Promise<any> => {
+    console.log("promise default:", fs.lstatSync(copyPromiseDefault).isSymbolicLink(), fs.readlinkSync(copyPromiseDefault));
+    return nodefs.promises.cp(link, copyPromise, VERBATIM_OPTIONS);
+}).then((value: any): void => {
     console.log("promise verbatim:", fs.readlinkSync(copyPromise));
-    return "done";
+    fs.rmSync(root, { recursive: true, force: true });
 });
-
-fs.rmSync(root, { recursive: true, force: true });

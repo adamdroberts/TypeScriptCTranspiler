@@ -2849,6 +2849,8 @@ char* cstr_dup(const tsc_str_t* s) {
 }
 
 #ifdef TSC_HAS_LIBUV
+int fs_cp_recursive_cstr(const char* src, const char* dest, bool recursive, bool force, bool error_on_exist, bool dereference, bool verbatim_symlinks, int copy_flags, bool preserve_timestamps);
+
 /* The build image provides libuv's SONAME but not its development headers.
  * These declarations cover only the stable fs request calls used here. The
  * opaque request storage is deliberately oversized and correctly aligned so
@@ -3716,6 +3718,129 @@ tsc_promise_t* tsc_fs_promises_copy_file_async(const tsc_str_t* src, const tsc_s
     return promise;
 }
 
+typedef struct tsc_fs_cp_libuv_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* src;
+    char* dest;
+    bool recursive;
+    bool force;
+    bool error_on_exist;
+    bool dereference;
+    bool verbatim_symlinks;
+    bool preserve_timestamps;
+    int flags;
+    struct tsc_fs_cp_libuv_async* next;
+} tsc_fs_cp_libuv_async_t;
+
+static tsc_fs_cp_libuv_async_t* g_tsc_fs_cp_libuv_async = NULL;
+
+static void tsc_fs_cp_libuv_remove(tsc_fs_cp_libuv_async_t* task) {
+    tsc_fs_cp_libuv_async_t** cursor = &g_tsc_fs_cp_libuv_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_cp_libuv_finish(tsc_fs_cp_libuv_async_t* task, tsc_str_t* error) {
+    if (error) {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+    } else {
+        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    }
+    free(task->src);
+    free(task->dest);
+    tsc_fs_cp_libuv_remove(task);
+}
+
+static void tsc_fs_cp_libuv_copy_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+        return;
+    }
+    tsc_fs_cp_libuv_finish(task, NULL);
+}
+
+static void tsc_fs_cp_libuv_stat_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+        return;
+    }
+
+    tsc_uv_stat_t* statbuf = uv_fs_get_statbuf(req);
+    bool regular = statbuf && S_ISREG((mode_t)statbuf->st_mode);
+    uv_fs_req_cleanup(req);
+    if (!regular) {
+        int fallback = fs_cp_recursive_cstr(
+            task->src,
+            task->dest,
+            task->recursive,
+            task->force,
+            task->error_on_exist,
+            task->dereference,
+            task->verbatim_symlinks,
+            task->flags,
+            task->preserve_timestamps
+        );
+        tsc_fs_cp_libuv_finish(task, fallback == 0 ? NULL : tsc_str_from_cstr("fs.cpSync: could not copy path"));
+        return;
+    }
+
+    int rc = uv_fs_copyfile(g_tsc_fs_uv_loop, &task->req, task->src, task->dest, task->flags, tsc_fs_cp_libuv_copy_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+    }
+}
+
+tsc_promise_t* tsc_fs_promises_cp_async(
+    const tsc_str_t* src,
+    const tsc_str_t* dest,
+    bool recursive,
+    bool force,
+    bool error_on_exist,
+    bool dereference,
+    bool verbatim_symlinks,
+    double mode,
+    bool preserve_timestamps
+) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_cp_libuv_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->src = cstr_dup(src);
+    task->dest = cstr_dup(dest);
+    task->recursive = recursive;
+    task->force = force;
+    task->error_on_exist = error_on_exist;
+    task->dereference = dereference;
+    task->verbatim_symlinks = verbatim_symlinks;
+    task->preserve_timestamps = preserve_timestamps;
+    task->flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
+    task->next = g_tsc_fs_cp_libuv_async;
+    g_tsc_fs_cp_libuv_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = dereference
+        ? uv_fs_stat(g_tsc_fs_uv_loop, &task->req, task->src, tsc_fs_cp_libuv_stat_cb)
+        : uv_fs_lstat(g_tsc_fs_uv_loop, &task->req, task->src, tsc_fs_cp_libuv_stat_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+    }
+    return promise;
+}
+
 typedef struct tsc_fs_rename_libuv_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
@@ -4456,7 +4581,7 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
 }
 
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {

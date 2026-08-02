@@ -11,6 +11,6 @@ promise force false: old-promise
 promise errorOnExist: fs.cpSync: could not copy path
 promise preserve: 12000
 promise mode excl: fs.cpSync: could not copy path
-promise side: new
 promise filter false: false
 promise filter true: new
+promise side: new
