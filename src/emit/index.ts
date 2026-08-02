@@ -26945,7 +26945,10 @@ class Emitter {
                 buf.line(`tsc_try_frame_t ${conditionEh};`);
                 buf.line(`tsc_try_push(&${conditionEh});`);
                 buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-                buf.line(`${conditionValue} = ${this.emitBoolExpr(branch.condition)};`);
+                const conditionExpression = branch.conditionMode === "nullish"
+                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
+                    : this.emitBoolExpr(branch.condition);
+                buf.line(`${conditionValue} = ${conditionExpression};`);
                 buf.line("tsc_try_pop();");
                 buf.close();
                 buf.open("else");
@@ -28242,7 +28245,10 @@ class Emitter {
                 buf.line(`tsc_try_frame_t ${conditionEh};`);
                 buf.line(`tsc_try_push(&${conditionEh});`);
                 buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-                buf.line(`${conditionValue} = ${this.emitBoolExpr(branch.condition)};`);
+                const conditionExpression = branch.conditionMode === "nullish"
+                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
+                    : this.emitBoolExpr(branch.condition);
+                buf.line(`${conditionValue} = ${conditionExpression};`);
                 buf.line("tsc_try_pop();");
                 buf.close();
                 buf.open("else");
@@ -29292,7 +29298,10 @@ class Emitter {
                 buf.line(`tsc_try_frame_t ${conditionEh};`);
                 buf.line(`tsc_try_push(&${conditionEh});`);
                 buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-                buf.line(`${conditionValue} = ${this.emitBoolExpr(branch.condition)};`);
+                const conditionExpression = branch.conditionMode === "nullish"
+                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
+                    : this.emitBoolExpr(branch.condition);
+                buf.line(`${conditionValue} = ${conditionExpression};`);
                 buf.line("tsc_try_pop();");
                 buf.close();
                 buf.open("else");
@@ -32680,6 +32689,11 @@ class Emitter {
         return leadingAwait;
     }
 
+    private asyncAwaitTryConditionalNullishLeftSupported(condition: ts.Expression): boolean {
+        const expression = this.unwrapTransparentExpression(condition);
+        return ts.isIdentifier(expression) && this.isValueReferenceIdentifier(expression);
+    }
+
     private asyncAwaitConditionExpressionSupported(condition: ts.Expression): boolean {
         let ok = true;
         const visitCondition = (node: ts.Node): void => {
@@ -34033,9 +34047,12 @@ class Emitter {
                 ? this.unwrapTransparentExpression(condition.left)
                 : null;
             if ((shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken ||
-                shortCircuitOperator === ts.SyntaxKind.BarBarToken) &&
+                shortCircuitOperator === ts.SyntaxKind.BarBarToken ||
+                shortCircuitOperator === ts.SyntaxKind.QuestionQuestionToken) &&
                 left && right && ts.isAwaitExpression(right) &&
-                this.asyncAwaitConditionExpressionSupported(left)) {
+                (shortCircuitOperator === ts.SyntaxKind.QuestionQuestionToken
+                    ? this.asyncAwaitTryConditionalNullishLeftSupported(left)
+                    : this.asyncAwaitConditionExpressionSupported(left))) {
                 const awaitedRightBranch: AsyncAwaitTryConditionalReturnBranch = {
                     kind: "if",
                     condition: right,
@@ -34044,6 +34061,23 @@ class Emitter {
                     elseBranch,
                     fallthroughBranch: null,
                 };
+                if (shortCircuitOperator === ts.SyntaxKind.QuestionQuestionToken) {
+                    const nonNullishBranch: AsyncAwaitTryConditionalReturnBranch = {
+                        kind: "if",
+                        condition: left,
+                        thenBranch,
+                        elseBranch,
+                        fallthroughBranch: null,
+                    };
+                    return {
+                        kind: "if",
+                        condition: left,
+                        conditionMode: "nullish",
+                        thenBranch: awaitedRightBranch,
+                        elseBranch: nonNullishBranch,
+                        fallthroughBranch: null,
+                    };
+                }
                 return {
                     kind: "if",
                     condition: left,
