@@ -8,16 +8,20 @@ fs.writeFileSync(file, "ok");
 
 console.log("before");
 
+let statOk = false;
+let lstatOk = false;
+let missingOk = false;
+
 fs.promises.stat(file).then((stat: FSStats): void => {
-    console.log("stat:", stat.isFile());
+    statOk = stat.isFile();
 });
 
 fs.promises.lstat(file).then((stat: FSStats): void => {
-    console.log("lstat:", stat.isFile());
+    lstatOk = stat.isFile();
 });
 
 fs.promises.stat(missing).catch((reason: string): void => {
-    console.log("missing:", reason.indexOf("fs.statSync") >= 0);
+    missingOk = reason.indexOf("fs.statSync") >= 0;
 });
 
 Promise.resolve("microtask").then((value: string): void => {
@@ -25,7 +29,11 @@ Promise.resolve("microtask").then((value: string): void => {
 });
 
 setImmediate((): void => {
+    console.log("stat:", statOk);
+    console.log("lstat:", lstatOk);
+    console.log("missing:", missingOk);
     console.log("immediate");
+    fs.rmSync(root, { recursive: true, force: true });
 });
 
 console.log("after");

@@ -34,5 +34,7 @@ Promise.resolve(fileStat).then((stat) => {
     return stat;
 });
 
-nodefs.rmSync(filePath);
-nodefs.rmdirSync(dirPath);
+setImmediate((): void => {
+    nodefs.rmSync(filePath);
+    nodefs.rmdirSync(dirPath);
+});

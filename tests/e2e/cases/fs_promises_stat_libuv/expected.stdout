@@ -1,0 +1,4 @@
+stat: file
+lstat: symlink
+missing optional: undefined
+missing error: true

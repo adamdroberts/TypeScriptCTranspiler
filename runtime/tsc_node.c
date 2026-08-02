@@ -2866,6 +2866,28 @@ typedef struct {
     const char* name;
     int type;
 } tsc_uv_dirent_t;
+typedef struct {
+    long tv_sec;
+    long tv_nsec;
+} tsc_uv_timespec_t;
+typedef struct {
+    uint64_t st_dev;
+    uint64_t st_mode;
+    uint64_t st_nlink;
+    uint64_t st_uid;
+    uint64_t st_gid;
+    uint64_t st_rdev;
+    uint64_t st_ino;
+    uint64_t st_size;
+    uint64_t st_blksize;
+    uint64_t st_blocks;
+    uint64_t st_flags;
+    uint64_t st_gen;
+    tsc_uv_timespec_t st_atim;
+    tsc_uv_timespec_t st_mtim;
+    tsc_uv_timespec_t st_ctim;
+    tsc_uv_timespec_t st_birthtim;
+} tsc_uv_stat_t;
 typedef void (*tsc_uv_fs_cb)(tsc_uv_fs_t* req);
 
 extern uv_loop_t* uv_default_loop(void);
@@ -2876,6 +2898,9 @@ extern int uv_fs_write(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv
 extern int uv_fs_scandir(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, tsc_uv_fs_cb cb);
 extern int uv_fs_scandir_next(const tsc_uv_fs_t* req, tsc_uv_dirent_t* ent);
 extern int uv_fs_access(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int mode, tsc_uv_fs_cb cb);
+extern int uv_fs_stat(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
+extern int uv_fs_lstat(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
+extern tsc_uv_stat_t* uv_fs_get_statbuf(tsc_uv_fs_t* req);
 extern int uv_fs_close(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
 extern void uv_fs_req_cleanup(tsc_uv_fs_t* req);
 extern ssize_t uv_fs_get_result(const tsc_uv_fs_t* req);
@@ -2900,6 +2925,8 @@ typedef struct tsc_fs_read_file_async {
 
 static tsc_fs_read_file_async_t* g_tsc_fs_read_file_async = NULL;
 static uv_loop_t* g_tsc_fs_uv_loop = NULL;
+static void tsc_fs_stats_fill_uv(tsc_fs_stats_t* out, const tsc_uv_stat_t* st);
+static tsc_fs_stats_t* tsc_fs_stats_new(void);
 
 static void tsc_fs_read_file_async_remove(tsc_fs_read_file_async_t* task) {
     tsc_fs_read_file_async_t** cursor = &g_tsc_fs_read_file_async;
@@ -3382,8 +3409,122 @@ tsc_promise_t* tsc_fs_promises_access_async(const tsc_str_t* path, double mode) 
     return promise;
 }
 
+typedef struct tsc_fs_stats_libuv_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    bool throw_if_no_entry;
+    bool lstat;
+    struct tsc_fs_stats_libuv_async* next;
+} tsc_fs_stats_libuv_async_t;
+
+static tsc_fs_stats_libuv_async_t* g_tsc_fs_stats_libuv_async = NULL;
+
+static void tsc_fs_stats_libuv_remove(tsc_fs_stats_libuv_async_t* task) {
+    tsc_fs_stats_libuv_async_t** cursor = &g_tsc_fs_stats_libuv_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_stats_libuv_finish(
+    tsc_fs_stats_libuv_async_t* task,
+    tsc_fs_stats_t* stats,
+    tsc_str_t* error
+) {
+    if (error) {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+    } else {
+        tsc_promise_fulfill_in_place_ptr(task->promise, stats);
+    }
+    free(task->path);
+    tsc_fs_stats_libuv_remove(task);
+}
+
+static void tsc_fs_stats_libuv_cb(tsc_uv_fs_t* req) {
+    tsc_fs_stats_libuv_async_t* task = (tsc_fs_stats_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        bool missing = result == -ENOENT || result == -ENOTDIR;
+        uv_fs_req_cleanup(req);
+        if (!task->throw_if_no_entry && missing) {
+            tsc_fs_stats_libuv_finish(task, NULL, NULL);
+        } else {
+            tsc_fs_stats_libuv_finish(
+                task,
+                NULL,
+                tsc_str_from_cstr(task->lstat
+                    ? "fs.lstatSync: could not stat path"
+                    : "fs.statSync: could not stat path")
+            );
+        }
+        return;
+    }
+
+    tsc_uv_stat_t* statbuf = uv_fs_get_statbuf(req);
+    if (!statbuf) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_stats_libuv_finish(
+            task,
+            NULL,
+            tsc_str_from_cstr(task->lstat
+                ? "fs.lstatSync: could not stat path"
+                : "fs.statSync: could not stat path")
+        );
+        return;
+    }
+    tsc_fs_stats_t* stats = tsc_fs_stats_new();
+    tsc_fs_stats_fill_uv(stats, statbuf);
+    uv_fs_req_cleanup(req);
+    tsc_fs_stats_libuv_finish(task, stats, NULL);
+}
+
+static tsc_promise_t* tsc_fs_promises_stats_libuv_async(
+    const tsc_str_t* path,
+    bool throw_if_no_entry,
+    bool lstat
+) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_stats_libuv_async_t* task = (tsc_fs_stats_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_libuv_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->throw_if_no_entry = throw_if_no_entry;
+    task->lstat = lstat;
+    task->next = g_tsc_fs_stats_libuv_async;
+    g_tsc_fs_stats_libuv_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = lstat
+        ? uv_fs_lstat(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_stats_libuv_cb)
+        : uv_fs_stat(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_stats_libuv_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_stats_libuv_finish(
+            task,
+            NULL,
+            tsc_str_from_cstr(lstat
+                ? "fs.lstatSync: could not stat path"
+                : "fs.statSync: could not stat path")
+        );
+    }
+    return promise;
+}
+
+tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry) {
+    return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, false);
+}
+
+tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry) {
+    return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, true);
+}
+
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {
@@ -3502,6 +3643,43 @@ void fs_stats_fill(tsc_fs_stats_t* out, const struct stat* st) {
         &out->is_socket
     );
 }
+
+#ifdef TSC_HAS_LIBUV
+static tsc_fs_stats_t* tsc_fs_stats_new(void) {
+    return (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
+}
+
+static double fs_uv_timespec_to_ms(const tsc_uv_timespec_t* value) {
+    return ((double)value->tv_sec * 1000.0) + ((double)value->tv_nsec / 1000000.0);
+}
+
+static void tsc_fs_stats_fill_uv(tsc_fs_stats_t* out, const tsc_uv_stat_t* st) {
+    out->dev = (double)st->st_dev;
+    out->ino = (double)st->st_ino;
+    out->size = (double)st->st_size;
+    out->mode = (double)st->st_mode;
+    out->nlink = (double)st->st_nlink;
+    out->uid = (double)st->st_uid;
+    out->gid = (double)st->st_gid;
+    out->rdev = (double)st->st_rdev;
+    out->blksize = (double)st->st_blksize;
+    out->blocks = (double)st->st_blocks;
+    out->atime_ms = fs_uv_timespec_to_ms(&st->st_atim);
+    out->mtime_ms = fs_uv_timespec_to_ms(&st->st_mtim);
+    out->ctime_ms = fs_uv_timespec_to_ms(&st->st_ctim);
+    out->birthtime_ms = fs_uv_timespec_to_ms(&st->st_birthtim);
+    fs_kind_from_mode(
+        (mode_t)st->st_mode,
+        &out->is_file,
+        &out->is_directory,
+        &out->is_symbolic_link,
+        &out->is_block_device,
+        &out->is_character_device,
+        &out->is_fifo,
+        &out->is_socket
+    );
+}
+#endif
 
 tsc_fs_dirent_t* fs_dirent_from_path(const char* dir_path, const char* name) {
     tsc_fs_dirent_t* out = (tsc_fs_dirent_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dirent_t));
@@ -3729,6 +3907,7 @@ tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path) {
     return out;
 }
 
+#ifndef TSC_HAS_LIBUV
 typedef struct {
     tsc_promise_t* promise;
     tsc_fs_stats_t* stats;
@@ -3772,6 +3951,7 @@ tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_n
 tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry) {
     return tsc_fs_promises_stats_async(path, throw_if_no_entry, true);
 }
+#endif
 
 tsc_str_t* tsc_fs_realpath_sync(const tsc_str_t* path) {
     char* p = cstr_dup(path);

@@ -74209,6 +74209,7 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
+                    this.usesLibuv = true;
                     const stat = `tsc_fs_promises_stat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return signal
@@ -74235,6 +74236,7 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
+                    this.usesLibuv = true;
                     const lstat = `tsc_fs_promises_lstat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return signal
