@@ -33337,7 +33337,15 @@ class Emitter {
         if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
             return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.operand);
         }
-        if (!ts.isBinaryExpression(expression) || !this.isAsyncAwaitShortCircuitBinary(expression)) return false;
+        if (!ts.isBinaryExpression(expression)) return false;
+        if (
+            expression.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+            expression.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken
+        ) {
+            return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.left) &&
+                this.asyncAwaitTryConditionalConditionExpressionSupported(expression.right);
+        }
+        if (!this.isAsyncAwaitShortCircuitBinary(expression)) return false;
         return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.left) &&
             this.asyncAwaitTryConditionalConditionExpressionSupported(expression.right);
     }
