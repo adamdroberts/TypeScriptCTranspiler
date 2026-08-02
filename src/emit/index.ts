@@ -33212,7 +33212,7 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(callee) ||
             !ts.isIdentifier(callee.expression) ||
             callee.expression.text !== "Number" ||
-            !["isFinite", "isInteger", "isNaN", "isSafeInteger"].includes(callee.name.text)) {
+            !["isFinite", "isInteger", "isNaN", "isSafeInteger", "parseFloat", "parseInt"].includes(callee.name.text)) {
             return false;
         }
         return this.isUnshadowedGlobalIdentifier(callee.expression, "Number");

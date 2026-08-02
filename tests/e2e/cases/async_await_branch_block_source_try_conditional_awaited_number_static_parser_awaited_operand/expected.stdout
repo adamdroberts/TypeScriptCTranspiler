@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-empty-number declaration-false LF
+declaration-reject caught-number-static-parser-bad L
+method-true method-true LTM
+method-empty-number method-false LFM
+method-reject rejected-number-static-parser-bad LM
+arrow-true arrow-true LTV
+arrow-empty-number arrow-false LFV
+arrow-reject caught-number-static-parser-bad LV
+parse-float-true parse-float-true LT
+parse-float-empty parse-float-false LF
+parse-float-reject caught-number-static-parser-bad L
