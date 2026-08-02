@@ -8,7 +8,7 @@ const pendingIterator: any = on(pendingEmitter, "data", { signal: pendingControl
 const pendingNext: Promise<any> = pendingIterator.next();
 pendingController.abort("pending-cancelled");
 pendingNext.catch((reason: any) => {
-    console.log("pending:", reason, pendingEmitter.listenerCount("data"));
+    console.log("pending:", reason, pendingEmitter.listenerCount("data"), pendingEmitter.listenerCount("error"));
     pendingIterator.next().then((result: any) => {
         console.log("pending-after:", result.done);
         runQueued();
@@ -22,7 +22,7 @@ function runQueued(): void {
     queuedEmitter.emit("data", "queued");
     queuedController.abort("queued-cancelled");
     queuedIterator.next().then((result: any) => {
-        console.log("queued:", result.done, result.value[0], queuedEmitter.listenerCount("data"));
+        console.log("queued:", result.done, result.value[0], queuedEmitter.listenerCount("data"), queuedEmitter.listenerCount("error"));
         queuedIterator.next().catch((reason: any) => {
             console.log("queued-abort:", reason);
             queuedIterator.next().then((after: any) => {
@@ -39,6 +39,6 @@ function runPreAborted(): void {
     const emitter = new EventEmitter();
     const iterator: any = on(emitter, "data", { signal: controller.signal });
     iterator.next().catch((reason: any) => {
-        console.log("pre:", reason, emitter.listenerCount("data"));
+        console.log("pre:", reason, emitter.listenerCount("data"), emitter.listenerCount("error"));
     });
 }

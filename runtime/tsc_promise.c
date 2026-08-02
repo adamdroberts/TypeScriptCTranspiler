@@ -1042,9 +1042,13 @@ typedef struct {
     tsc_value_t iterator;
     tsc_object_t* signal;
     tsc_function_identity_t* abort_listener;
+    bool error_listener_installed;
+    tsc_value_t error_reason;
     bool closed;
     bool aborted;
     bool abort_delivered;
+    bool errored;
+    bool error_delivered;
 } tsc_event_async_iterator_t;
 
 static tsc_value_t event_async_iterator_result(tsc_value_t value, bool done) {
@@ -1110,6 +1114,20 @@ static void event_async_iterator_remove_abort_listener(tsc_event_async_iterator_
     (void)tsc_value_apply_function(remove, signal, tsc_value_array(args));
 }
 
+static void event_async_iterator_error(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
+
+static void event_async_iterator_remove_error_listener(tsc_event_async_iterator_t* state) {
+    if (!state || !state->error_listener_installed || !state->emitter || !state->event) return;
+    if (str_lit_eq(state->event, "error")) return;
+    tsc_event_emitter_off(
+        state->emitter,
+        tsc_str_from_lit("error", 5),
+        event_async_iterator_error,
+        state
+    );
+    state->error_listener_installed = false;
+}
+
 static tsc_value_t event_async_iterator_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
@@ -1118,6 +1136,7 @@ static tsc_value_t event_async_iterator_abort(void* env, tsc_value_t this_arg, t
     state->aborted = true;
     state->closed = true;
     tsc_event_emitter_off(state->emitter, state->event, event_async_iterator_listener, state);
+    event_async_iterator_remove_error_listener(state);
     tsc_value_t reason = event_async_iterator_abort_reason(state);
     if (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
@@ -1131,6 +1150,30 @@ static tsc_value_t event_async_iterator_abort(void* env, tsc_value_t this_arg, t
         tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
     }
     return tsc_value_undefined();
+}
+
+static void event_async_iterator_error(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    (void)emitter;
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
+    if (!state || state->errored || state->aborted) return;
+    state->errored = true;
+    state->closed = true;
+    state->error_reason = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_event_emitter_off(state->emitter, state->event, event_async_iterator_listener, state);
+    tsc_event_emitter_off(state->emitter, tsc_str_from_lit("error", 5), event_async_iterator_error, state);
+    state->error_listener_installed = false;
+    event_async_iterator_remove_abort_listener(state);
+    if (state->pending->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        event_async_iterator_remove_first(state->pending);
+        tsc_promise_reject_in_place(promise, state->error_reason);
+        state->error_delivered = true;
+    }
+    while (state->pending->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        event_async_iterator_remove_first(state->pending);
+        tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
+    }
 }
 
 static void event_async_iterator_add_abort_listener(tsc_event_async_iterator_t* state, tsc_value_t signal) {
@@ -1157,6 +1200,7 @@ static void event_async_iterator_close(tsc_event_async_iterator_t* state) {
     if (!state->closed) {
         state->closed = true;
         tsc_event_emitter_off(state->emitter, state->event, event_async_iterator_listener, state);
+        event_async_iterator_remove_error_listener(state);
         if (!state->aborted) event_async_iterator_remove_abort_listener(state);
     }
     while (state->pending->len > 0) {
@@ -1178,6 +1222,18 @@ static tsc_value_t event_async_iterator_next(void* env, tsc_value_t this_arg, ts
         tsc_array_t* values = TSC_ARR(tsc_array_t*, state->queued, 0);
         event_async_iterator_remove_first(state->queued);
         return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_array(values), false)));
+    }
+    if (state->errored && state->queued->len > 0) {
+        tsc_array_t* values = TSC_ARR(tsc_array_t*, state->queued, 0);
+        event_async_iterator_remove_first(state->queued);
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_array(values), false)));
+    }
+    if (state->errored) {
+        if (!state->error_delivered) {
+            state->error_delivered = true;
+            return tsc_value_promise(tsc_promise_reject(state->error_reason));
+        }
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->aborted) {
         if (!state->abort_delivered) {
@@ -1223,9 +1279,13 @@ tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str
     state->pending = tsc_array_new(sizeof(tsc_promise_t*), 4);
     state->signal = NULL;
     state->abort_listener = NULL;
+    state->error_listener_installed = false;
+    state->error_reason = tsc_value_undefined();
     state->closed = false;
     state->aborted = false;
     state->abort_delivered = false;
+    state->errored = false;
+    state->error_delivered = false;
     tsc_object_t* iterator = tsc_object_new();
     state->iterator = tsc_value_object(iterator);
     tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(event_async_iterator_next, state, 0.0, tsc_str_from_lit("next", 4)));
@@ -1243,6 +1303,10 @@ tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str
     event_async_iterator_add_abort_listener(state, signal);
     if (!state->closed) {
         tsc_event_emitter_on(ee, event, event_async_iterator_listener, state, state, false, false);
+        if (!str_lit_eq(event, "error")) {
+            state->error_listener_installed = true;
+            tsc_event_emitter_on(ee, tsc_str_from_lit("error", 5), event_async_iterator_error, state, state, false, false);
+        }
     }
     return state->iterator;
 }

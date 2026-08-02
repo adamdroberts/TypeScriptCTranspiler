@@ -1,0 +1,3 @@
+{
+    "description": "events.on closes on error, preserves queued events, rejects pending iteration, and treats error as ordinary data when selected"
+}
