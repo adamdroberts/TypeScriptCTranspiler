@@ -25,17 +25,17 @@ const syncTempHex = fs.mkdtempSync(tempPrefix, { encoding: HEX });
 console.log("sync mkdtemp:", syncTempHex.startsWith(tempPrefixHex));
 fs.rmSync(Buffer.from(syncTempHex, HEX).toString(), { recursive: true, force: true });
 
-fs.promises.realpath(root, { encoding: BASE64 }).then((promiseRealpath: string): void => {
-    console.log("promise realpath:", promiseRealpath === rootBase64);
-});
-
-nodefs.promises.readlink(link, HEX).then((promiseReadlink: string): void => {
-    console.log("promise readlink:", promiseReadlink === targetHex);
-});
-
-nodefs.promises.mkdtemp(tempPrefix, BASE64).then((promiseTemp: string): void => {
-    console.log("promise mkdtemp:", promiseTemp.startsWith(tempPrefixBase64));
-    fs.rmSync(Buffer.from(promiseTemp, BASE64).toString(), { recursive: true, force: true });
-});
-
-fs.rmSync(root, { recursive: true, force: true });
+fs.promises.realpath(root, { encoding: BASE64 })
+    .then((promiseRealpath: string): any => {
+        console.log("promise realpath:", promiseRealpath === rootBase64);
+        return nodefs.promises.readlink(link, HEX);
+    })
+    .then((promiseReadlink: string): any => {
+        console.log("promise readlink:", promiseReadlink === targetHex);
+        return nodefs.promises.mkdtemp(tempPrefix, BASE64);
+    })
+    .then((promiseTemp: string): void => {
+        console.log("promise mkdtemp:", promiseTemp.startsWith(tempPrefixBase64));
+        fs.rmSync(Buffer.from(promiseTemp, BASE64).toString(), { recursive: true, force: true });
+        fs.rmSync(root, { recursive: true, force: true });
+    });

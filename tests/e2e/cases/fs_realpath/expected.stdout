@@ -1,2 +1,3 @@
 sync: true
 promise: true
+missing: fs.realpathSync: could not resolve path

@@ -74265,10 +74265,9 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
-                    const value = `tsc_fs_realpath_sync(${path!})`;
-                    const resolve = result === "buffer"
-                        ? `tsc_promise_resolve_buffer(tsc_buffer_from_str(${value}, NULL))`
-                        : `tsc_promise_resolve(tsc_value_string(${this.emitFsPathEncodingResult(value, result)}))`;
+                    this.usesLibuv = true;
+                    const encoding = result === "hex" ? "1" : result === "base64" ? "2" : result === "buffer" ? "3" : "0";
+                    const resolve = `tsc_fs_promises_realpath_async(${path!}, ${encoding})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`

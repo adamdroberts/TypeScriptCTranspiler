@@ -7,14 +7,15 @@ fs.rmSync(root, { recursive: true, force: true });
 fs.mkdirSync(nested, { recursive: true });
 
 const syncPath = fs.realpathSync(nested + "/..");
-let promisePath = "";
 
-nodefs.promises.realpath(root + "/sub/..").then((resolved: string): string => {
-    promisePath = resolved;
-    return resolved;
-});
-
-console.log("sync:", syncPath === root);
-console.log("promise:", promisePath === root);
-
-fs.rmSync(root, { recursive: true, force: true });
+nodefs.promises.realpath(root + "/sub/..")
+    .then((resolved: string) => {
+        console.log("sync:", syncPath === root);
+        console.log("promise:", resolved === root);
+        return nodefs.promises.realpath(root + "/missing")
+            .then((_missing: string): string => "unexpected success", (reason: string): string => reason);
+    })
+    .then((missing: string): void => {
+        console.log("missing:", missing);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
