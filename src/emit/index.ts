@@ -45272,18 +45272,26 @@ class Emitter {
             index: number | null;
             property: string | null;
             initializer: ts.Expression | null;
+            rest: boolean;
         };
         const bindingDescriptorsFor = (name: ts.BindingName): BindingDescriptor[] | null => {
-            if (ts.isIdentifier(name)) return [{ identifier: name, index: null, property: null, initializer: null }];
+            if (ts.isIdentifier(name)) return [{ identifier: name, index: null, property: null, initializer: null, rest: false }];
             if (ts.isArrayBindingPattern(name)) {
                 if (name.elements.length === 0) return null;
                 const descriptors: BindingDescriptor[] = [];
+                let restSeen = false;
                 for (let index = 0; index < name.elements.length; index++) {
                     const element = name.elements[index]!;
                     if (!ts.isBindingElement(element) || element.dotDotDotToken || !ts.isIdentifier(element.name)) {
-                        return null;
+                        if (!ts.isBindingElement(element) || !element.dotDotDotToken || !ts.isIdentifier(element.name) || element.initializer || restSeen || index !== name.elements.length - 1) {
+                            return null;
+                        }
+                        descriptors.push({ identifier: element.name, index, property: null, initializer: null, rest: true });
+                        restSeen = true;
+                        continue;
                     }
-                    descriptors.push({ identifier: element.name, index, property: null, initializer: element.initializer ?? null });
+                    if (restSeen) return null;
+                    descriptors.push({ identifier: element.name, index, property: null, initializer: element.initializer ?? null, rest: false });
                 }
                 return descriptors;
             }
@@ -45293,7 +45301,7 @@ class Emitter {
                 if (element.dotDotDotToken || !ts.isIdentifier(element.name)) return null;
                 const property = element.propertyName ? this.staticPropertyName(element.propertyName) : element.name.text;
                 if (property === null) return null;
-                descriptors.push({ identifier: element.name, index: null, property, initializer: element.initializer ?? null });
+                descriptors.push({ identifier: element.name, index: null, property, initializer: element.initializer ?? null, rest: false });
             }
             return descriptors;
         };
@@ -45320,6 +45328,8 @@ class Emitter {
         });
         if (bindings.some((binding) => binding === null)) return false;
         const bindingEntries = bindings as (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })[];
+        if (bindingEntries.some((entry) => entry.rest && entry.type.kind !== "value" &&
+            !(entry.type.kind === "array" && entry.type.elem?.kind === "value"))) return false;
         const binding = bindingEntries[0]!;
         const bindingSymbol = binding.symbol;
         const sourceType = this.prepareType(mapTsType(
@@ -45521,36 +45531,49 @@ class Emitter {
         callback.line(`bool ${finishVar} = ${doneVar};`);
         callback.open(`if (!${doneVar})`);
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
-        const bindingSource = (entry: (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })): string => {
-            if (entry.index !== null) return `tsc_value_get_index(${itemVar}, ${entry.index}.0)`;
-            if (entry.property !== null) {
-                return `tsc_value_get_prop(${itemVar}, tsc_str_from_lit("${escapeCString(entry.property)}", ${utf8ByteLen(entry.property)}))`;
+        const bindingSource = (entry: (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })): EmitResult => {
+            if (entry.rest) {
+                const restArray = this.freshTemp("_for_await_rest");
+                const restIndex = this.freshTemp("_for_await_rest_i");
+                const restValue = this.freshTemp("_for_await_rest_v");
+                callback.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+                callback.open(`for (size_t ${restIndex} = ${entry.index}; ${restIndex} < (size_t)tsc_value_length(${itemVar}); ${restIndex}++)`);
+                callback.line(`tsc_value_t ${restValue} = tsc_value_get_index(${itemVar}, (double)${restIndex});`);
+                callback.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                callback.close();
+                return entry.type.kind === "value"
+                    ? { c: `tsc_value_array(${restArray})`, ty: T_VALUE }
+                    : { c: restArray, ty: entry.type };
             }
-            return itemVar;
+            if (entry.index !== null) return { c: `tsc_value_get_index(${itemVar}, ${entry.index}.0)`, ty: T_VALUE };
+            if (entry.property !== null) {
+                return { c: `tsc_value_get_prop(${itemVar}, tsc_str_from_lit("${escapeCString(entry.property)}", ${utf8ByteLen(entry.property)}))`, ty: T_VALUE };
+            }
+            return { c: itemVar, ty: T_VALUE };
         };
-        const bindingValueFor = (entry: typeof bindingEntries[number]): string => {
+        const bindingValueFor = (entry: typeof bindingEntries[number]): EmitResult => {
             let source = bindingSource(entry);
             const defaultValue = bindingDefaults.get(entry);
             if (defaultValue !== undefined) {
                 const sourceVar = this.freshTemp("_for_await_binding");
-                callback.line(`${T_VALUE.c} ${sourceVar} = ${source};`);
+                callback.line(`${T_VALUE.c} ${sourceVar} = ${source.c};`);
                 callback.line(`if (tsc_value_is_undefined(${sourceVar})) ${sourceVar} = ${defaultValue};`);
-                source = sourceVar;
+                source = { c: sourceVar, ty: T_VALUE };
             }
             return source;
         };
         if (bindingParameter) {
             const source = bindingValueFor(binding);
-            const bindingValue = this.coerce({ c: source, ty: T_VALUE }, binding.type, binding.identifier);
+            const bindingValue = this.coerce(source, binding.type, binding.identifier);
             callback.line(`state->${bindingParameter.field} = ${bindingValue};`);
         } else if (bindingEntries.length === 1) {
             const source = bindingValueFor(binding);
-            const bindingValue = this.coerce({ c: source, ty: T_VALUE }, binding.type, binding.identifier);
+            const bindingValue = this.coerce(source, binding.type, binding.identifier);
             callback.line(`${binding.type.c} ${binding.name} = ${bindingValue};`);
         } else {
             for (const entry of bindingEntries) {
                 const source = bindingValueFor(entry);
-                const bindingValue = this.coerce({ c: source, ty: T_VALUE }, entry.type, entry.identifier);
+                const bindingValue = this.coerce(source, entry.type, entry.identifier);
                 callback.line(`${entry.type.c} ${entry.name} = ${bindingValue};`);
             }
         }

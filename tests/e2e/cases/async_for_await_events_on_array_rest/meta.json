@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await lowering builds one dynamic array rest binding from trailing iterator-item values"
+}
