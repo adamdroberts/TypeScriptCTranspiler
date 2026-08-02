@@ -1,0 +1,8 @@
+queued
+utf8 abort: readdir stop
+recursive abort: readdir stop
+hex abort: readdir stop
+recursive base64 abort: readdir stop
+dirents abort: readdir stop
+recursive dirents abort: readdir stop
+completed: 0

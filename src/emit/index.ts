@@ -74171,16 +74171,17 @@ class Emitter {
                             ? this.emitFsStringArrayEncodingResult(`${fn}(${path!})`, options.encoding)
                             : `${fn}(${path!})`;
                     if (useLibuv) this.usesLibuv = true;
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
                     const resolved = useLibuv
                         ? options.withFileTypes
-                            ? `${options.recursive ? "tsc_fs_promises_readdir_recursive_dirents_async" : "tsc_fs_promises_readdir_dirents_async"}(${path!}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}))`
+                            ? `${options.recursive ? "tsc_fs_promises_readdir_recursive_dirents_async" : "tsc_fs_promises_readdir_dirents_async"}(${path!}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${requestSignal})`
                             : options.encoding === "hex" || options.encoding === "base64"
-                            ? `${options.recursive ? "tsc_fs_promises_readdir_recursive_encoded_async" : "tsc_fs_promises_readdir_encoded_async"}(${path!}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}))`
-                            : `${options.recursive ? "tsc_fs_promises_readdir_recursive_async" : "tsc_fs_promises_readdir_async"}(${path!}, ${options.encoding === "buffer" ? "true" : "false"})`
+                            ? `${options.recursive ? "tsc_fs_promises_readdir_recursive_encoded_async" : "tsc_fs_promises_readdir_encoded_async"}(${path!}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${requestSignal})`
+                            : `${options.recursive ? "tsc_fs_promises_readdir_recursive_async" : "tsc_fs_promises_readdir_async"}(${path!}, ${options.encoding === "buffer" ? "true" : "false"}, ${requestSignal})`
                         : mapped.elem?.kind === "array"
                         ? `tsc_promise_resolve_array(${value})`
                         : `tsc_promise_resolve(tsc_value_array(${value}))`;
-                    const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolved})`
                         : resolved);

@@ -1193,12 +1193,12 @@ tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_
 tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_write_file_string_async(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double file_mode, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double file_mode, tsc_value_t signal);
-tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer);
-tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer);
-tsc_promise_t* tsc_fs_promises_readdir_encoded_async(const tsc_str_t* path, tsc_str_t* encoding);
-tsc_promise_t* tsc_fs_promises_readdir_recursive_encoded_async(const tsc_str_t* path, tsc_str_t* encoding);
-tsc_promise_t* tsc_fs_promises_readdir_dirents_async(const tsc_str_t* path, tsc_str_t* encoding);
-tsc_promise_t* tsc_fs_promises_readdir_recursive_dirents_async(const tsc_str_t* path, tsc_str_t* encoding);
+tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_readdir_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_readdir_dirents_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_dirents_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_access_async(const tsc_str_t* path, double mode);
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);

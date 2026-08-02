@@ -3415,6 +3415,9 @@ typedef struct tsc_fs_readdir_async {
     tsc_array_t* entries;
     bool want_buffer;
     bool want_dirents;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     tsc_str_t* result_encoding;
     tsc_str_t* error;
     struct tsc_fs_readdir_async* next;
@@ -3435,23 +3438,44 @@ static void tsc_fs_readdir_async_remove(tsc_fs_readdir_async_t* task) {
 }
 
 static void tsc_fs_readdir_async_finish(tsc_fs_readdir_async_t* task, bool success) {
-    if (success) {
-        if (task->want_dirents) tsc_fs_dirents_encode_names(task->entries, task->result_encoding);
-        else if (task->result_encoding) tsc_fs_readdir_encode_names(task->entries, task->result_encoding);
-        tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
-    } else {
-        tsc_promise_reject_in_place(
-            task->promise,
-            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.readdirSync: could not open dir"))
-        );
+    if (!task->aborted) {
+        if (success) {
+            if (task->want_dirents) tsc_fs_dirents_encode_names(task->entries, task->result_encoding);
+            else if (task->result_encoding) tsc_fs_readdir_encode_names(task->entries, task->result_encoding);
+            tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
+        } else {
+            tsc_promise_reject_in_place(
+                task->promise,
+                tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.readdirSync: could not open dir"))
+            );
+        }
     }
     free(task->path);
     tsc_fs_readdir_async_remove(task);
 }
 
+static void tsc_fs_readdir_async_abort(void* env) {
+    tsc_fs_readdir_async_t* task = (tsc_fs_readdir_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
+}
+
 static void tsc_fs_readdir_async_scandir_cb(tsc_uv_fs_t* req) {
     tsc_fs_readdir_async_t* task = (tsc_fs_readdir_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_readdir_async_finish(task, false);
+        return;
+    }
     if (result < 0) {
         uv_fs_req_cleanup(req);
         task->error = tsc_str_from_cstr("fs.readdirSync: could not open dir");
@@ -3482,7 +3506,8 @@ static tsc_promise_t* tsc_fs_promises_readdir_options_async(
     const tsc_str_t* path,
     bool want_buffer,
     bool want_dirents,
-    tsc_str_t* result_encoding
+    tsc_str_t* result_encoding,
+    tsc_value_t signal
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_readdir_async_t* task = (tsc_fs_readdir_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_readdir_async_t));
@@ -3491,6 +3516,7 @@ static tsc_promise_t* tsc_fs_promises_readdir_options_async(
     task->path = cstr_dup(path);
     task->want_buffer = want_buffer;
     task->want_dirents = want_dirents;
+    task->signal = signal;
     task->result_encoding = result_encoding;
     task->entries = tsc_array_new(
         want_dirents ? sizeof(tsc_fs_dirent_t*) : want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*),
@@ -3501,23 +3527,27 @@ static tsc_promise_t* tsc_fs_promises_readdir_options_async(
     g_tsc_fs_uv_loop = uv_default_loop();
     int rc = uv_fs_scandir(g_tsc_fs_uv_loop, &task->req, task->path, 0, tsc_fs_readdir_async_scandir_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         task->error = tsc_str_from_cstr("fs.readdirSync: could not open dir");
         tsc_fs_readdir_async_finish(task, false);
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_readdir_async_abort, task);
     }
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer) {
-    return tsc_fs_promises_readdir_options_async(path, want_buffer, false, NULL);
+tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal) {
+    return tsc_fs_promises_readdir_options_async(path, want_buffer, false, NULL, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_readdir_encoded_async(const tsc_str_t* path, tsc_str_t* encoding) {
-    return tsc_fs_promises_readdir_options_async(path, false, false, encoding);
+tsc_promise_t* tsc_fs_promises_readdir_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    return tsc_fs_promises_readdir_options_async(path, false, false, encoding, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_readdir_dirents_async(const tsc_str_t* path, tsc_str_t* encoding) {
-    return tsc_fs_promises_readdir_options_async(path, false, true, encoding);
+tsc_promise_t* tsc_fs_promises_readdir_dirents_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    return tsc_fs_promises_readdir_options_async(path, false, true, encoding, signal);
 }
 
 typedef struct tsc_fs_readdir_recursive_work {
@@ -3531,6 +3561,9 @@ typedef struct tsc_fs_readdir_recursive_async {
     tsc_promise_t* promise;
     bool want_buffer;
     bool want_dirents;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     tsc_str_t* result_encoding;
     tsc_array_t* entries;
     tsc_fs_readdir_recursive_work_t* work;
@@ -3564,20 +3597,35 @@ static void tsc_fs_readdir_recursive_work_clear(tsc_fs_readdir_recursive_async_t
 }
 
 static void tsc_fs_readdir_recursive_async_finish(tsc_fs_readdir_recursive_async_t* task, bool success) {
-    if (success) {
-        if (task->want_dirents) tsc_fs_dirents_encode_names(task->entries, task->result_encoding);
-        else if (task->result_encoding) tsc_fs_readdir_encode_names(task->entries, task->result_encoding);
-        tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
-    } else {
-        tsc_promise_reject_in_place(
-            task->promise,
-            tsc_value_string(tsc_str_from_cstr("fs.readdirSync: could not open dir"))
-        );
+    if (!task->aborted) {
+        if (success) {
+            if (task->want_dirents) tsc_fs_dirents_encode_names(task->entries, task->result_encoding);
+            else if (task->result_encoding) tsc_fs_readdir_encode_names(task->entries, task->result_encoding);
+            tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
+        } else {
+            tsc_promise_reject_in_place(
+                task->promise,
+                tsc_value_string(tsc_str_from_cstr("fs.readdirSync: could not open dir"))
+            );
+        }
     }
     free(task->current_path);
     free(task->current_relative);
     tsc_fs_readdir_recursive_work_clear(task);
     tsc_fs_readdir_recursive_async_remove(task);
+}
+
+static void tsc_fs_readdir_recursive_async_abort(void* env) {
+    tsc_fs_readdir_recursive_async_t* task = (tsc_fs_readdir_recursive_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
 }
 
 static bool tsc_fs_readdir_recursive_push_work(
@@ -3605,7 +3653,13 @@ static void tsc_fs_readdir_recursive_async_release_current(tsc_fs_readdir_recurs
 
 static void tsc_fs_readdir_recursive_async_scandir_cb(tsc_uv_fs_t* req) {
     tsc_fs_readdir_recursive_async_t* task = (tsc_fs_readdir_recursive_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_readdir_recursive_async_finish(task, false);
+        return;
+    }
     if (result < 0) {
         uv_fs_req_cleanup(req);
         tsc_fs_readdir_recursive_async_finish(task, false);
@@ -3672,7 +3726,6 @@ static void tsc_fs_readdir_recursive_async_scandir_cb(tsc_uv_fs_t* req) {
         free(child_relative);
     }
     uv_fs_req_cleanup(req);
-
     /* Reverse the scan-order directory list onto the work stack so traversal
      * remains depth-first in the same order as the synchronous helper. */
     while (child_directories) {
@@ -3686,6 +3739,10 @@ static void tsc_fs_readdir_recursive_async_scandir_cb(tsc_uv_fs_t* req) {
 }
 
 static void tsc_fs_readdir_recursive_async_start_next(tsc_fs_readdir_recursive_async_t* task) {
+    if (task->aborted) {
+        tsc_fs_readdir_recursive_async_finish(task, false);
+        return;
+    }
     if (task->current_path != NULL) return;
     tsc_fs_readdir_recursive_work_t* item = task->work;
     if (!item) {
@@ -3704,8 +3761,11 @@ static void tsc_fs_readdir_recursive_async_start_next(tsc_fs_readdir_recursive_a
         tsc_fs_readdir_recursive_async_scandir_cb
     );
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_readdir_recursive_async_finish(task, false);
+    } else {
+        task->req_pending = true;
     }
 }
 
@@ -3713,7 +3773,8 @@ static tsc_promise_t* tsc_fs_promises_readdir_recursive_options_async(
     const tsc_str_t* path,
     bool want_buffer,
     bool want_dirents,
-    tsc_str_t* result_encoding
+    tsc_str_t* result_encoding,
+    tsc_value_t signal
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_readdir_recursive_async_t* task = (tsc_fs_readdir_recursive_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_readdir_recursive_async_t));
@@ -3721,6 +3782,7 @@ static tsc_promise_t* tsc_fs_promises_readdir_recursive_options_async(
     task->promise = promise;
     task->want_buffer = want_buffer;
     task->want_dirents = want_dirents;
+    task->signal = signal;
     task->result_encoding = result_encoding;
     task->entries = tsc_array_new(
         want_dirents ? sizeof(tsc_fs_dirent_t*) : want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*),
@@ -3737,20 +3799,21 @@ static tsc_promise_t* tsc_fs_promises_readdir_recursive_options_async(
         tsc_fs_readdir_recursive_async_finish(task, false);
         return promise;
     }
+    tsc_abort_signal_add_callback(signal, tsc_fs_readdir_recursive_async_abort, task);
     tsc_fs_readdir_recursive_async_start_next(task);
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer) {
-    return tsc_fs_promises_readdir_recursive_options_async(path, want_buffer, false, NULL);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal) {
+    return tsc_fs_promises_readdir_recursive_options_async(path, want_buffer, false, NULL, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_readdir_recursive_encoded_async(const tsc_str_t* path, tsc_str_t* encoding) {
-    return tsc_fs_promises_readdir_recursive_options_async(path, false, false, encoding);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    return tsc_fs_promises_readdir_recursive_options_async(path, false, false, encoding, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_readdir_recursive_dirents_async(const tsc_str_t* path, tsc_str_t* encoding) {
-    return tsc_fs_promises_readdir_recursive_options_async(path, false, true, encoding);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_dirents_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
+    return tsc_fs_promises_readdir_recursive_options_async(path, false, true, encoding, signal);
 }
 
 typedef struct tsc_fs_access_async {
