@@ -1,0 +1,3 @@
+{
+  "description": "events.once AbortSignal cancellation rejects pending and pre-aborted promises, cleans listeners, and ignores late aborts after delivery"
+}

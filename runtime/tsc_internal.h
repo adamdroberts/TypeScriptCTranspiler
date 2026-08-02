@@ -226,6 +226,8 @@ typedef struct tsc_event_once_promise_env {
     tsc_event_emitter_t* emitter;
     tsc_str_t* event;
     tsc_promise_t* promise;
+    tsc_object_t* signal;
+    tsc_function_identity_t* abort_listener;
 } tsc_event_once_promise_env_t;
 
 

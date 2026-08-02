@@ -1,0 +1,6 @@
+pending: pending-cancelled 0 0
+pre: pre-cancelled 0 0
+event: delivered 0 0
+late: 0 0
+error: error-delivered 0 0
+error-late: 0 0

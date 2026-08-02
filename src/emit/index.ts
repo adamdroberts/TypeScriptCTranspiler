@@ -65431,7 +65431,7 @@ class Emitter {
             }
             case "once": {
                 if (args.length < 2) unsupported(call, "events.once expects emitter, eventName, and optional options");
-                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.once");
+                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.once", T_VALUE);
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitEventEmitterEventName(args[1]!);
                 const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
@@ -65445,7 +65445,10 @@ class Emitter {
                 }
                 specs.push(...optionSpecs);
                 specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
-                return this.emitSequencedExpr(mapped, specs, ([ee, event]) => `tsc_event_emitter_once_promise(${ee}, ${event})`);
+                return this.emitSequencedExpr(mapped, specs, ([ee, event, ...rest]) => {
+                    const signal = optionSpecs.length > 0 ? rest[0] : "tsc_value_undefined()";
+                    return `tsc_event_emitter_once_promise(${ee}, ${event}, ${signal})`;
+                });
             }
             case "on": {
                 if (args.length < 2) unsupported(call, "events.on expects emitter, eventName, and optional options");

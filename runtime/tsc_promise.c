@@ -891,32 +891,100 @@ tsc_array_t* event_args_copy_as_values(tsc_array_t* args) {
 void event_once_promise_resolve_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 void event_once_promise_reject_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args);
 
+static tsc_value_t event_once_promise_abort_reason(const tsc_event_once_promise_env_t* state) {
+    if (!state || !state->signal) return tsc_value_undefined();
+    return tsc_value_get_prop(
+        tsc_value_object(state->signal),
+        tsc_str_from_lit("reason", 6)
+    );
+}
+
+static tsc_value_t event_once_promise_abort_listener_value(const tsc_event_once_promise_env_t* state) {
+    if (!state || !state->abort_listener) return tsc_value_undefined();
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)state->abort_listener);
+}
+
+static void event_once_promise_remove_abort_listener(tsc_event_once_promise_env_t* state) {
+    if (!state || !state->signal || !state->abort_listener) return;
+    tsc_value_t signal = tsc_value_object(state->signal);
+    tsc_value_t remove = tsc_value_get_prop(
+        signal,
+        tsc_str_from_lit("removeEventListener", 19)
+    );
+    if (!tsc_value_is_callable(remove)) return;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_value_t type = tsc_value_string(tsc_str_from_lit("abort", 5));
+    tsc_value_t listener = event_once_promise_abort_listener_value(state);
+    tsc_array_push_raw(args, &type);
+    tsc_array_push_raw(args, &listener);
+    (void)tsc_value_apply_function(remove, signal, tsc_value_array(args));
+    state->abort_listener = NULL;
+}
+
+static tsc_value_t event_once_promise_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
+    if (!state || !state->promise || !tsc_promise_is_pending(state->promise)) {
+        return tsc_value_undefined();
+    }
+    tsc_event_emitter_off(state->emitter, state->event, event_once_promise_resolve_listener, state);
+    tsc_event_emitter_off(state->emitter, tsc_str_from_lit("error", 5), event_once_promise_reject_listener, state);
+    tsc_promise_reject_in_place(state->promise, event_once_promise_abort_reason(state));
+    return tsc_value_undefined();
+}
+
+static void event_once_promise_add_abort_listener(tsc_event_once_promise_env_t* state, tsc_value_t signal) {
+    if (!state || !value_is_box(signal) || value_tag(signal) != TSC_VALUE_TAG_OBJECT) return;
+    tsc_value_t add = tsc_value_get_prop(signal, tsc_str_from_lit("addEventListener", 16));
+    if (!tsc_value_is_callable(add)) return;
+    state->signal = (tsc_object_t*)value_ptr(signal);
+    tsc_value_t listener = tsc_value_function_builtin_named(
+        event_once_promise_abort,
+        state,
+        1.0,
+        tsc_str_from_lit("eventOncePromiseAbort", 21)
+    );
+    state->abort_listener = (tsc_function_identity_t*)value_ptr(listener);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_value_t type = tsc_value_string(tsc_str_from_lit("abort", 5));
+    tsc_array_push_raw(args, &type);
+    tsc_array_push_raw(args, &listener);
+    (void)tsc_value_apply_function(add, signal, tsc_value_array(args));
+}
+
 void event_once_promise_resolve_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
     (void)emitter;
     tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
-    if (!state || !state->promise) return;
+    if (!state || !state->promise || !tsc_promise_is_pending(state->promise)) return;
     tsc_event_emitter_off(state->emitter, tsc_str_from_lit("error", 5), event_once_promise_reject_listener, state);
+    event_once_promise_remove_abort_listener(state);
     tsc_promise_fulfill_in_place(state->promise, tsc_value_array(event_args_copy_as_values(args)));
 }
 
 void event_once_promise_reject_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
     (void)emitter;
     tsc_event_once_promise_env_t* state = (tsc_event_once_promise_env_t*)env;
-    if (!state || !state->promise) return;
+    if (!state || !state->promise || !tsc_promise_is_pending(state->promise)) return;
     tsc_event_emitter_off(state->emitter, state->event, event_once_promise_resolve_listener, state);
+    event_once_promise_remove_abort_listener(state);
     tsc_value_t reason = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
         : tsc_value_string(tsc_str_from_lit("Unhandled error event", 21));
     tsc_promise_reject_in_place(state->promise, reason);
 }
 
-tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t* event) {
+tsc_promise_t* tsc_event_emitter_once_promise(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_value_t signal) {
     tsc_promise_t* promise = tsc_promise_pending();
     if (!ee || !event) return promise;
     tsc_event_once_promise_env_t* env = (tsc_event_once_promise_env_t*)TSC_GC_MALLOC(sizeof(tsc_event_once_promise_env_t));
     env->emitter = ee;
     env->event = event;
     env->promise = promise;
+    env->signal = NULL;
+    env->abort_listener = NULL;
+    event_once_promise_add_abort_listener(env, signal);
+    if (tsc_promise_is_rejected(promise)) return promise;
     tsc_event_emitter_on(ee, event, event_once_promise_resolve_listener, env, env, true, false);
     if (!str_lit_eq(event, "error")) {
         tsc_event_emitter_on(ee, tsc_str_from_lit("error", 5), event_once_promise_reject_listener, env, env, true, false);
