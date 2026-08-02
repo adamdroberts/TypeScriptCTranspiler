@@ -34007,9 +34007,6 @@ class Emitter {
         }
         const condition = this.unwrapTransparentExpression(unwrapped.condition);
         const conditionAwaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition) ?? undefined;
-        if (!conditionAwaitExpr && !this.asyncAwaitConditionExpressionSupported(unwrapped.condition)) {
-            return null;
-        }
         const thenBranch = this.asyncAwaitTryConditionalReturnArmFromExpression(
             unwrapped.whenTrue,
             parameters,
@@ -34025,6 +34022,42 @@ class Emitter {
             returnContextType,
         );
         if (!thenBranch || !elseBranch) return null;
+        if (!conditionAwaitExpr) {
+            const shortCircuitOperator = ts.isBinaryExpression(condition)
+                ? condition.operatorToken.kind
+                : undefined;
+            const right = ts.isBinaryExpression(condition)
+                ? this.unwrapTransparentExpression(condition.right)
+                : null;
+            const left = ts.isBinaryExpression(condition)
+                ? this.unwrapTransparentExpression(condition.left)
+                : null;
+            if ((shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken ||
+                shortCircuitOperator === ts.SyntaxKind.BarBarToken) &&
+                left && right && ts.isAwaitExpression(right) &&
+                this.asyncAwaitConditionExpressionSupported(left)) {
+                const awaitedRightBranch: AsyncAwaitTryConditionalReturnBranch = {
+                    kind: "if",
+                    condition: right,
+                    conditionAwaitExpr: right,
+                    thenBranch,
+                    elseBranch,
+                    fallthroughBranch: null,
+                };
+                return {
+                    kind: "if",
+                    condition: left,
+                    thenBranch: shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
+                        ? awaitedRightBranch
+                        : thenBranch,
+                    elseBranch: shortCircuitOperator === ts.SyntaxKind.AmpersandAmpersandToken
+                        ? elseBranch
+                        : awaitedRightBranch,
+                    fallthroughBranch: null,
+                };
+            }
+            if (!this.asyncAwaitConditionExpressionSupported(unwrapped.condition)) return null;
+        }
         return {
             kind: "if",
             condition: unwrapped.condition,
