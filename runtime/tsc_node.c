@@ -3730,6 +3730,8 @@ typedef struct tsc_fs_cp_libuv_async {
     bool verbatim_symlinks;
     bool preserve_timestamps;
     int flags;
+    double source_atime;
+    double source_mtime;
     struct tsc_fs_cp_libuv_async* next;
 } tsc_fs_cp_libuv_async_t;
 
@@ -3758,6 +3760,23 @@ static void tsc_fs_cp_libuv_finish(tsc_fs_cp_libuv_async_t* task, tsc_str_t* err
     tsc_fs_cp_libuv_remove(task);
 }
 
+static void tsc_fs_cp_libuv_utime_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_cp_libuv_start_utime(tsc_fs_cp_libuv_async_t* task) {
+    int rc = uv_fs_utime(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->dest,
+        task->source_atime,
+        task->source_mtime,
+        tsc_fs_cp_libuv_utime_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+    }
+}
+
 static void tsc_fs_cp_libuv_copy_cb(tsc_uv_fs_t* req) {
     tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)req;
     ssize_t result = uv_fs_get_result(req);
@@ -3766,7 +3785,58 @@ static void tsc_fs_cp_libuv_copy_cb(tsc_uv_fs_t* req) {
         tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
         return;
     }
-    tsc_fs_cp_libuv_finish(task, NULL);
+    if (task->preserve_timestamps) {
+        tsc_fs_cp_libuv_start_utime(task);
+    } else {
+        tsc_fs_cp_libuv_finish(task, NULL);
+    }
+}
+
+static void tsc_fs_cp_libuv_utime_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    tsc_fs_cp_libuv_finish(task, result < 0
+        ? tsc_str_from_cstr("fs.cpSync: could not copy path")
+        : NULL);
+}
+
+static void tsc_fs_cp_libuv_start_copy(tsc_fs_cp_libuv_async_t* task) {
+    int rc = uv_fs_copyfile(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->src,
+        task->dest,
+        task->flags,
+        tsc_fs_cp_libuv_copy_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+    }
+}
+
+static void tsc_fs_cp_libuv_dest_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    bool exists = result >= 0;
+    bool missing = result == -ENOENT || result == -ENOTDIR;
+    uv_fs_req_cleanup(req);
+    if (exists) {
+        if ((task->flags & TSC_UV_FS_COPYFILE_EXCL) != 0 || (!task->force && task->error_on_exist)) {
+            tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+        } else if (!task->force) {
+            tsc_fs_cp_libuv_finish(task, NULL);
+        } else {
+            tsc_fs_cp_libuv_start_copy(task);
+        }
+        return;
+    }
+    if (!missing) {
+        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+        return;
+    }
+    tsc_fs_cp_libuv_start_copy(task);
 }
 
 static void tsc_fs_cp_libuv_stat_cb(tsc_uv_fs_t* req) {
@@ -3780,6 +3850,10 @@ static void tsc_fs_cp_libuv_stat_cb(tsc_uv_fs_t* req) {
 
     tsc_uv_stat_t* statbuf = uv_fs_get_statbuf(req);
     bool regular = statbuf && S_ISREG((mode_t)statbuf->st_mode);
+    if (regular && task->preserve_timestamps) {
+        task->source_atime = (double)statbuf->st_atim.tv_sec + (double)statbuf->st_atim.tv_nsec / 1000000000.0;
+        task->source_mtime = (double)statbuf->st_mtim.tv_sec + (double)statbuf->st_mtim.tv_nsec / 1000000000.0;
+    }
     uv_fs_req_cleanup(req);
     if (!regular) {
         int fallback = fs_cp_recursive_cstr(
@@ -3797,11 +3871,15 @@ static void tsc_fs_cp_libuv_stat_cb(tsc_uv_fs_t* req) {
         return;
     }
 
-    int rc = uv_fs_copyfile(g_tsc_fs_uv_loop, &task->req, task->src, task->dest, task->flags, tsc_fs_cp_libuv_copy_cb);
-    if (rc < 0) {
-        uv_fs_req_cleanup(&task->req);
-        tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+    if (!task->force || (task->flags & TSC_UV_FS_COPYFILE_EXCL) != 0) {
+        int rc = uv_fs_lstat(g_tsc_fs_uv_loop, &task->req, task->dest, tsc_fs_cp_libuv_dest_cb);
+        if (rc < 0) {
+            uv_fs_req_cleanup(&task->req);
+            tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+        }
+        return;
     }
+    tsc_fs_cp_libuv_start_copy(task);
 }
 
 tsc_promise_t* tsc_fs_promises_cp_async(

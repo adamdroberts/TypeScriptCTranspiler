@@ -69,40 +69,41 @@ console.log("sync filter false:", fs.existsSync(filteredSkipDest));
 fs.cpSync(src, filteredCopyDest, FILTER_COPY_OPTIONS as any);
 console.log("sync filter true:", fs.readFileSync(filteredCopyDest));
 
-nodefs.promises.cp(src, promiseDest, SKIP_OPTIONS).then((value: any): string => {
+note("promise-options");
+let promiseCompletion: Promise<any> = nodefs.promises.cp(src, promiseDest, SKIP_OPTIONS).then((value: any): string => {
     console.log("promise force false:", fs.readFileSync(promiseDest));
     return "done";
 });
-
-nodefs.promises.cp(src, promiseDest, ERROR_OPTIONS).catch((reason: string): any => {
-    console.log("promise errorOnExist:", reason);
-    return "done";
-});
-
-nodefs.promises.cp(src, promisePreservedDest, PRESERVE_OPTIONS).then((value: any): string => {
+promiseCompletion = promiseCompletion.then((_value: any) => nodefs.promises.cp(src, promiseDest, ERROR_OPTIONS).then(
+    (value: any): string => "unexpected success",
+).catch((reason: string): string => {
+        console.log("promise errorOnExist:", reason);
+        return "done";
+    }));
+promiseCompletion = promiseCompletion.then((_value: any) => nodefs.promises.cp(src, promisePreservedDest, PRESERVE_OPTIONS).then((value: any): string => {
     console.log("promise preserve:", Math.round(fs.statSync(promisePreservedDest).mtimeMs));
     return "done";
-});
-
-nodefs.promises.cp(src, promiseDest, EXCL_OPTIONS).catch((reason: string): any => {
-    console.log("promise mode excl:", reason);
-    return "done";
-});
-
-nodefs.promises.cp(src, promiseSideDest, void note("promise-options")).then((value: any): void => {
+}));
+promiseCompletion = promiseCompletion.then((_value: any) => nodefs.promises.cp(src, promiseDest, EXCL_OPTIONS).then(
+    (value: any): string => "unexpected success",
+).catch((reason: string): string => {
+        console.log("promise mode excl:", reason);
+        return "done";
+    }));
+promiseCompletion = promiseCompletion.then((_value: any) => nodefs.promises.cp(src, promiseSideDest, undefined).then((value: any): string => {
     console.log("promise side:", fs.readFileSync(promiseSideDest));
-});
-
-nodefs.promises.cp(src, promiseFilteredSkipDest, FILTER_SKIP_OPTIONS as any).then((value: any): void => {
+    return "done";
+}));
+promiseCompletion = promiseCompletion.then((_value: any) => nodefs.promises.cp(src, promiseFilteredSkipDest, FILTER_SKIP_OPTIONS as any).then((value: any): string => {
     console.log("promise filter false:", fs.existsSync(promiseFilteredSkipDest));
-});
-
-nodefs.promises.cp(src, promiseFilteredCopyDest, FILTER_COPY_OPTIONS as any).then((value: any): void => {
+    return "done";
+}));
+promiseCompletion = promiseCompletion.then((_value: any) => nodefs.promises.cp(src, promiseFilteredCopyDest, FILTER_COPY_OPTIONS as any).then((value: any): string => {
     console.log("promise filter true:", fs.readFileSync(promiseFilteredCopyDest));
+    return "done";
+}));
+promiseCompletion.then((_value: any): void => {
+    fs.rmSync(root, { recursive: true, force: true });
 });
 
 console.log("events:", events.join("|"));
-
-setImmediate((): void => {
-    fs.rmSync(root, { recursive: true, force: true });
-});

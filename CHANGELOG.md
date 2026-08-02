@@ -12,7 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
-- Added a libuv-preflighted `fs.promises.cp` subset that copies regular files asynchronously and preserves the existing synchronous fallback for symlinks, directories, recursive copies, filters, timestamp preservation, and broader options. Tests: `fs_promises_cp_libuv`, `fs_cp_symlink_options`.
+- Expanded the libuv-preflighted `fs.promises.cp` subset across supported nonrecursive options, including destination-existence semantics, `COPYFILE_*` modes, timestamp preservation, and static filters; recursive copies retain the existing synchronous fallback. Tests: `fs_promises_cp_libuv`, `fs_cp_options`, `fs_cp_symlink_options`.
 - Added libuv-backed nonrecursive `fs.promises.rm` requests with asynchronous file/symlink removal and `force: true` missing-path handling; recursive forms remain on the existing sync-backed Promise path. Test: `fs_promises_rm_libuv`.
 - Added a libuv-backed `fs.promises.truncate` open/ftruncate/close request with asynchronous completion and sync-compatible rejection handling. Test: `fs_truncate`.
 - Added libuv-backed nonrecursive `fs.promises.mkdir`, `unlink`, and `rmdir` requests with asynchronous completion and sync-compatible rejection handling; recursive forms remain on the existing sync-backed Promise paths. Tests: `fs_mkdir_mode_options`, `fs_promises_mutation`.

@@ -73358,8 +73358,8 @@ class Emitter {
         return { recursive, mode: modeArg };
     }
 
-    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; copy: boolean; hasFilter: boolean; mode: SequencedCallArg } {
-        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false, copy: true, hasFilter: false };
+    private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; copy: boolean; mode: SequencedCallArg } {
+        const out = { recursive: false, force: true, errorOnExist: false, dereference: false, verbatimSymlinks: false, preserveTimestamps: false, copy: true };
         let mode: SequencedCallArg = { value: { c: "0.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
@@ -73389,7 +73389,6 @@ class Emitter {
                     unsupported(prop.initializer, `${label}.filter must be a side-effect-free function returning a boolean literal in this subset`);
                 }
                 out.copy = value;
-                out.hasFilter = true;
                 continue;
             }
             if (key !== "recursive" && key !== "force" && key !== "errorOnExist" && key !== "dereference" && key !== "verbatimSymlinks" && key !== "preserveTimestamps") {
@@ -74577,10 +74576,10 @@ class Emitter {
                     const destPath = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
                     if (!options.copy) return settle("tsc_promise_resolve(tsc_value_undefined())");
-                    const useLibuv = !options.recursive && options.force && !options.errorOnExist && !options.preserveTimestamps && !options.hasFilter && options.mode.value.c === "0.0";
+                    const useLibuv = !options.recursive;
                     if (useLibuv) {
                         this.usesLibuv = true;
-                        return settle(`tsc_fs_promises_cp_async(${srcPath}, ${destPath}, false, true, false, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, false)`);
+                        return settle(`tsc_fs_promises_cp_async(${srcPath}, ${destPath}, false, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"})`);
                     }
                     return settle(`({ tsc_fs_cp_sync_opts(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`);
                 });
