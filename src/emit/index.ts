@@ -74502,7 +74502,12 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
-                    const rm = `({ tsc_fs_rm_sync_opts(${path!}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`;
+                    const rm = options.recursive
+                        ? `({ tsc_fs_rm_sync_opts(${path!}, true, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`
+                        : (() => {
+                            this.usesLibuv = true;
+                            return `tsc_fs_promises_rm_async(${path!}, ${options.force ? "true" : "false"})`;
+                        })();
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${rm})`

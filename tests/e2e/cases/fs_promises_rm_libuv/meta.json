@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed nonrecursive fs.promises.rm with force-missing handling"
+}

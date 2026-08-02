@@ -4095,6 +4095,7 @@ typedef struct tsc_fs_simple_mutation_libuv_async {
     char* path;
     int mode;
     int operation;
+    bool force;
     struct tsc_fs_simple_mutation_libuv_async* next;
 } tsc_fs_simple_mutation_libuv_async_t;
 
@@ -4102,6 +4103,7 @@ enum {
     TSC_FS_SIMPLE_MKDIR = 1,
     TSC_FS_SIMPLE_UNLINK = 2,
     TSC_FS_SIMPLE_RMDIR = 3,
+    TSC_FS_SIMPLE_RM = 4,
 };
 
 static tsc_fs_simple_mutation_libuv_async_t* g_tsc_fs_simple_mutation_libuv_async = NULL;
@@ -4133,14 +4135,16 @@ static const char* tsc_fs_simple_mutation_error(int operation) {
         ? "fs.mkdirSync: could not create directory"
         : operation == TSC_FS_SIMPLE_UNLINK
             ? "fs.unlinkSync: could not remove file"
-            : "fs.rmdirSync: could not remove directory";
+            : operation == TSC_FS_SIMPLE_RMDIR
+                ? "fs.rmdirSync: could not remove directory"
+                : "fs.rmSync: could not remove path";
 }
 
 static void tsc_fs_simple_mutation_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_simple_mutation_libuv_async_t* task = (tsc_fs_simple_mutation_libuv_async_t*)req;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
-    if (result < 0) {
+    if (result < 0 && !(task->operation == TSC_FS_SIMPLE_RM && task->force && result == -ENOENT)) {
         tsc_fs_simple_mutation_libuv_finish(task, tsc_str_from_cstr(tsc_fs_simple_mutation_error(task->operation)));
         return;
     }
@@ -4150,7 +4154,8 @@ static void tsc_fs_simple_mutation_libuv_cb(tsc_uv_fs_t* req) {
 static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
     const tsc_str_t* path,
     double mode,
-    int operation
+    int operation,
+    bool force
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_simple_mutation_libuv_async_t* task = (tsc_fs_simple_mutation_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_simple_mutation_libuv_async_t));
@@ -4159,6 +4164,7 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
     task->path = cstr_dup(path);
     task->mode = (isnan(mode) || isinf(mode) || mode < 0) ? 0777 : (int)mode;
     task->operation = operation;
+    task->force = force;
     task->next = g_tsc_fs_simple_mutation_libuv_async;
     g_tsc_fs_simple_mutation_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -4166,7 +4172,9 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
         ? uv_fs_mkdir(g_tsc_fs_uv_loop, &task->req, task->path, task->mode, tsc_fs_simple_mutation_libuv_cb)
         : operation == TSC_FS_SIMPLE_UNLINK
             ? uv_fs_unlink(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_simple_mutation_libuv_cb)
-            : uv_fs_rmdir(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_simple_mutation_libuv_cb);
+            : operation == TSC_FS_SIMPLE_RM
+                ? uv_fs_unlink(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_simple_mutation_libuv_cb)
+                : uv_fs_rmdir(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_simple_mutation_libuv_cb);
     if (rc < 0) {
         uv_fs_req_cleanup(&task->req);
         tsc_fs_simple_mutation_libuv_finish(task, tsc_str_from_cstr(tsc_fs_simple_mutation_error(operation)));
@@ -4175,15 +4183,19 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
 }
 
 tsc_promise_t* tsc_fs_promises_mkdir_async(const tsc_str_t* path, double mode) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, mode, TSC_FS_SIMPLE_MKDIR);
+    return tsc_fs_promises_simple_mutation_libuv_async(path, mode, TSC_FS_SIMPLE_MKDIR, false);
 }
 
 tsc_promise_t* tsc_fs_promises_unlink_async(const tsc_str_t* path) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_UNLINK);
+    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_UNLINK, false);
 }
 
 tsc_promise_t* tsc_fs_promises_rmdir_async(const tsc_str_t* path) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RMDIR);
+    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RMDIR, false);
+}
+
+tsc_promise_t* tsc_fs_promises_rm_async(const tsc_str_t* path, bool force) {
+    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RM, force);
 }
 
 typedef struct tsc_fs_truncate_libuv_async {

@@ -56,11 +56,12 @@ fs.promises.rmdir(root, REMOVE_OPTIONS);
 console.log("rmdir promise removed:", fs.existsSync(root));
 
 fs.promises.mkdir(root, { recursive: true });
-fs.promises.writeFile(promiseSideFile, "promise-side");
-fs.promises.mkdir(promiseSideDir);
-fs.promises.rm(promiseSideFile, void note("prm-options"));
-fs.promises.rmdir(promiseSideDir, void note("prmdir-options"));
-console.log("promise default removed:", fs.existsSync(promiseSideFile), fs.existsSync(promiseSideDir));
-console.log("events:", events.join("|"));
-
-fs.rmSync(root, CLEANUP_OPTIONS);
+let promiseDefaultCleanup: Promise<any> = fs.promises.writeFile(promiseSideFile, "promise-side");
+promiseDefaultCleanup = promiseDefaultCleanup.then((_value: any) => fs.promises.mkdir(promiseSideDir));
+promiseDefaultCleanup = promiseDefaultCleanup.then((_value: any) => fs.promises.rm(promiseSideFile, void note("prm-options")));
+promiseDefaultCleanup = promiseDefaultCleanup.then((_value: any) => fs.promises.rmdir(promiseSideDir, void note("prmdir-options")));
+promiseDefaultCleanup.then((_value: any): void => {
+    console.log("promise default removed:", fs.existsSync(promiseSideFile), fs.existsSync(promiseSideDir));
+    console.log("events:", events.join("|"));
+    fs.rmSync(root, CLEANUP_OPTIONS);
+});

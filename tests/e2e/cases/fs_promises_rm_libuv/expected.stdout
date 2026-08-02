@@ -1,0 +1,5 @@
+queued: true
+removed: false
+missing: fs.rmSync: could not remove path
+force: false
+events: rm|force
