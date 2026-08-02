@@ -15,14 +15,11 @@ console.log("namespace base64:", nodefs.readFileSync(path, { encoding: "base64" 
 
 fs.promises.readFile(path, "hex").then((text: string): void => {
     console.log("promise hex:", text);
+    fsp.readFile(path, { encoding: BASE64 }).then((text: string): void => {
+        console.log("named promise base64:", text);
+        nodefs.promises.readFile(path, { encoding: "base64" }).then((text: string): void => {
+            console.log("namespace promise base64:", text);
+            fs.rmSync(path, { force: true });
+        });
+    });
 });
-
-fsp.readFile(path, { encoding: BASE64 }).then((text: string): void => {
-    console.log("named promise base64:", text);
-});
-
-nodefs.promises.readFile(path, { encoding: "base64" }).then((text: string): void => {
-    console.log("namespace promise base64:", text);
-});
-
-fs.rmSync(path, { force: true });

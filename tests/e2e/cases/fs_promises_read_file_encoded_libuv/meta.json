@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed fs.promises.readFile hex/base64 results and rejection"
+}

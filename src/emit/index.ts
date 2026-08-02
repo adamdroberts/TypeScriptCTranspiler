@@ -74054,10 +74054,12 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
-                    const useLibuv = result === "utf8" || result === "buffer";
+                    const useLibuv = result === "utf8" || result === "buffer" || result === "hex" || result === "base64";
                     if (useLibuv) this.usesLibuv = true;
                     const read = useLibuv
-                        ? `tsc_fs_promises_read_file_async(${path!}, ${result === "buffer" ? "true" : "false"})`
+                        ? result === "hex" || result === "base64"
+                            ? `tsc_fs_promises_read_file_encoded_async(${path!}, tsc_str_from_lit("${result}", ${result.length}))`
+                            : `tsc_fs_promises_read_file_async(${path!}, ${result === "buffer" ? "true" : "false"})`
                         : `tsc_promise_resolve(tsc_value_string(${this.emitFsReadFileResult(path!, result)}))`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal

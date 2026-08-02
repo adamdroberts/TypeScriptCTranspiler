@@ -1,0 +1,5 @@
+queued: false
+completed: true
+hex: 410042ff
+base64: QQBC/w==
+error: fs.readFileSync: could not open file

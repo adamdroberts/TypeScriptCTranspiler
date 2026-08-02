@@ -2958,6 +2958,7 @@ typedef struct tsc_fs_read_file_async {
     size_t cap;
     tsc_uv_buf_t read_buf;
     bool want_buffer;
+    tsc_str_t* result_encoding;
     tsc_str_t* error;
     struct tsc_fs_read_file_async* next;
 } tsc_fs_read_file_async_t;
@@ -2990,6 +2991,9 @@ static void tsc_fs_read_file_async_finish(tsc_fs_read_file_async_t* task, bool s
             if (task->len > 0) memcpy((char*)out->data, task->bytes, task->len);
             ((char*)out->data)[task->len] = '\0';
             out->len = task->len;
+            if (task->result_encoding) {
+                out = tsc_buffer_to_string(tsc_buffer_from_str(out, NULL), task->result_encoding);
+            }
             tsc_promise_fulfill_in_place(task->promise, tsc_value_string(out));
         }
     } else {
@@ -3082,7 +3086,11 @@ static void tsc_fs_read_file_async_open_cb(tsc_uv_fs_t* req) {
     tsc_fs_read_file_async_read_next(task);
 }
 
-tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer) {
+static tsc_promise_t* tsc_fs_promises_read_file_options_async(
+    const tsc_str_t* path,
+    bool want_buffer,
+    tsc_str_t* result_encoding
+) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_read_file_async_t));
     memset(task, 0, sizeof(*task));
@@ -3090,6 +3098,7 @@ tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_
     task->path = cstr_dup(path);
     task->fd = -1;
     task->want_buffer = want_buffer;
+    task->result_encoding = result_encoding;
     task->next = g_tsc_fs_read_file_async;
     g_tsc_fs_read_file_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -3100,6 +3109,14 @@ tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_
         tsc_fs_read_file_async_finish(task, false);
     }
     return promise;
+}
+
+tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer) {
+    return tsc_fs_promises_read_file_options_async(path, want_buffer, NULL);
+}
+
+tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding) {
+    return tsc_fs_promises_read_file_options_async(path, false, encoding);
 }
 
 typedef struct tsc_fs_write_file_async {
