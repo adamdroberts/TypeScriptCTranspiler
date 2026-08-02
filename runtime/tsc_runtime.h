@@ -1228,6 +1228,7 @@ tsc_promise_t* tsc_fs_promises_chmod_async(const tsc_str_t* path, double mode);
 tsc_promise_t* tsc_fs_promises_chown_async(const tsc_str_t* path, double uid, double gid);
 tsc_promise_t* tsc_fs_promises_lchown_async(const tsc_str_t* path, double uid, double gid);
 tsc_promise_t* tsc_fs_promises_mkdir_async(const tsc_str_t* path, double mode);
+tsc_promise_t* tsc_fs_promises_mkdir_recursive_async(const tsc_str_t* path, double mode);
 tsc_promise_t* tsc_fs_promises_unlink_async(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_rmdir_async(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_rmdir_recursive_async(const tsc_str_t* path);

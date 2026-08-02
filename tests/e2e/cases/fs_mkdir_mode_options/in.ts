@@ -25,26 +25,26 @@ nodefs.mkdirSync(syncDir, SYNC_OPTIONS);
 nodefs.mkdirSync(sideSyncDir, void note("sync-options"));
 console.log("sync:", fs.statSync(syncDir).mode % 512);
 
-fs.promises.mkdir(promiseDir, PROMISE_OPTIONS).then((value: any): string => {
-    console.log(
-        "promise: " +
-            (fs.statSync(path.join(root, "promise")).mode % 512).toString() +
-            "/" +
-            (fs.statSync(promiseDir).mode % 512).toString(),
-    );
-    return "done";
-});
-
-fs.promises.mkdir(sidePromiseDir, PROMISE_SIMPLE_OPTIONS, void note("promise-options")).then((_value: any): Promise<string> => {
-    console.log("side:", fs.statSync(sideSyncDir).isDirectory(), fs.statSync(sidePromiseDir).mode % 512);
-    return fs.promises.mkdir(path.join(root, "missing", "leaf"), 0o755).then(
-        (_unexpected: any): string => "unexpected success",
-        (reason: string): string => reason,
-    );
-}).then((reason: string): void => {
-    console.log("missing:", reason);
-    process.umask(oldUmask);
-    fs.rmSync(root, { recursive: true, force: true });
-});
-
-console.log("events:", events.join("|"));
+fs.promises.mkdir(promiseDir, PROMISE_OPTIONS)
+    .then((_value: any): Promise<any> => {
+        console.log(
+            "promise: " +
+                (fs.statSync(path.join(root, "promise")).mode % 512).toString() +
+                "/" +
+                (fs.statSync(promiseDir).mode % 512).toString(),
+        );
+        return fs.promises.mkdir(sidePromiseDir, PROMISE_SIMPLE_OPTIONS, void note("promise-options"));
+    })
+    .then((_value: any): Promise<string> => {
+        console.log("side:", fs.statSync(sideSyncDir).isDirectory(), fs.statSync(sidePromiseDir).mode % 512);
+        return fs.promises.mkdir(path.join(root, "missing", "leaf"), 0o755).then(
+            (_unexpected: any): string => "unexpected success",
+            (reason: string): string => reason,
+        );
+    })
+    .then((reason: string): void => {
+        console.log("missing:", reason);
+        console.log("events:", events.join("|"));
+        process.umask(oldUmask);
+        fs.rmSync(root, { recursive: true, force: true });
+    });

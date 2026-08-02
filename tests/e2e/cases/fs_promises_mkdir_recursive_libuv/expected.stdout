@@ -1,0 +1,5 @@
+queued: false
+completed: true
+mode: 755
+existing: ok
+error: fs.mkdirSync: could not create directory recursively

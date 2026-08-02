@@ -44,10 +44,12 @@ fs.unlinkSync(syncHard, mark("unlink"));
 fs.rmdirSync(syncEmpty, void 0, mark("rmdir"));
 fs.rmSync(copyRoot, { recursive: true, force: true }, mark("rm"));
 
-fs.promises.mkdir(promiseDir, { recursive: true }, mark("pmkdir"));
-fs.promises.mkdir(promiseEmpty);
-fs.writeFileSync(promiseFile, "abcdef");
-let completion: Promise<any> = fs.promises.copyFile(promiseFile, promiseCopy, void 0, mark("pcopy"));
+let completion: Promise<any> = fs.promises.mkdir(promiseDir, { recursive: true }, mark("pmkdir"));
+completion = completion.then((_value: any) => fs.promises.mkdir(promiseEmpty));
+completion = completion.then((_value: any): Promise<any> => {
+    fs.writeFileSync(promiseFile, "abcdef");
+    return fs.promises.copyFile(promiseFile, promiseCopy, void 0, mark("pcopy"));
+});
 completion = completion.then((_value: any) => fs.promises.rename(promiseCopy, promiseRenamed, mark("prename")));
 completion = completion.then((_value: any) => fs.promises.link(promiseRenamed, promiseHard, mark("plink")));
 completion = completion.then((_value: any) => fs.promises.symlink(promiseRenamed, promiseLink, void 0, mark("psymlink")));

@@ -74473,7 +74473,10 @@ class Emitter {
                     const path = values[0]!;
                     const mode = values[1 + optionSpecs.length]!;
                     const mkdir = options.recursive
-                        ? `({ tsc_fs_mkdir_sync_opts(${path}, true, ${mode}); tsc_promise_resolve(tsc_value_undefined()); })`
+                        ? (() => {
+                            this.usesLibuv = true;
+                            return `tsc_fs_promises_mkdir_recursive_async(${path}, ${mode})`;
+                        })()
                         : (() => {
                             this.usesLibuv = true;
                             return `tsc_fs_promises_mkdir_async(${path}, ${mode})`;

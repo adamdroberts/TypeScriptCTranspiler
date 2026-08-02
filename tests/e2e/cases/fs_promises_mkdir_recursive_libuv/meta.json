@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed recursive fs.promises.mkdir for nested paths, existing directories, modes, and rejection"
+}
