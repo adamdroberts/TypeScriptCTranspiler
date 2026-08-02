@@ -45399,11 +45399,18 @@ class Emitter {
                 ? routeFor(bodyIf.elseStatement)
                 : { statements: [], control: null, expression: null }
             : null;
-        const bodyAwait = !bodyIf && directRoute && directRoute.statements.length === 1 &&
+        const bodyAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length > 0 &&
             ts.isExpressionStatement(directRoute.statements[0]!)
             ? this.unwrapTransparentExpression(directRoute.statements[0]!.expression)
             : null;
-        const bodyAwaitExpression = bodyAwait && ts.isAwaitExpression(bodyAwait) ? bodyAwait : null;
+        const bodyAwaitExpression = bodyAwaitCandidate && ts.isAwaitExpression(bodyAwaitCandidate)
+            ? bodyAwaitCandidate
+            : null;
+        const bodyAwaitPostludeStatements = bodyAwaitExpression
+            ? directRoute!.statements.slice(1)
+            : [];
+        if (bodyAwaitExpression && !bodyAwaitPostludeStatements.every((statement) =>
+            ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyAwaitExpression && directRoute!.control !== null &&
             directRoute!.control !== "continue" && directRoute!.control !== "break") return false;
         let bodySupported = true;
@@ -45485,6 +45492,11 @@ class Emitter {
             ? params.find((param) => param.symbol === bindingSymbol) ?? null
             : null;
         if (bindingIsParameter && !bindingParameter) return false;
+        const bodyBindingFields = bodyAwaitExpression
+            ? bindingEntries
+                .filter((entry) => !(bindingParameter && entry.symbol === bindingSymbol))
+                .map((entry, index) => ({ entry, field: `body_binding_${index}` }))
+            : [];
         const name = `tsc_async_await_for_await_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
         this.structDecls.open(`typedef struct ${envType}`);
@@ -45493,6 +45505,7 @@ class Emitter {
         this.structDecls.line("tsc_value_t iterator;");
         this.structDecls.line("bool body_await;");
         this.structDecls.line("bool body_break;");
+        for (const { entry, field } of bodyBindingFields) this.structDecls.line(`${entry.type.c} ${field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (usesThis && thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${envType};`);
@@ -45541,6 +45554,7 @@ class Emitter {
             bindingDefaults.set(entry, this.coerce(defaultResult, T_VALUE, entry.initializer));
         }
 
+        const bodyBindingFieldBySymbol = new Map(bodyBindingFields.map(({ entry, field }) => [entry.symbol, field]));
         const emitLoopResult = (target: CBuf): void => {
             this.argumentValueScopes.push(new Map(params.map((param) => [param.symbol, `state->${param.field}`])));
             this.argumentValueTypeScopes.push(new Map(params.map((param) => [param.symbol, param.type])));
@@ -45569,6 +45583,35 @@ class Emitter {
         };
 
         const callback = new CBuf();
+        const bodyAwaitPostludeScope = new Map<ts.Symbol, string>();
+        const bodyAwaitPostludeScopeTypes = new Map<ts.Symbol, CType>();
+        for (const param of params) {
+            bodyAwaitPostludeScope.set(param.symbol, `state->${param.field}`);
+            bodyAwaitPostludeScopeTypes.set(param.symbol, param.type);
+        }
+        for (const entry of bindingEntries) {
+            const field = bindingParameter && entry.symbol === bindingSymbol
+                ? bindingParameter.field
+                : bodyBindingFieldBySymbol.get(entry.symbol);
+            if (!field) continue;
+            bodyAwaitPostludeScope.set(entry.symbol, `state->${field}`);
+            bodyAwaitPostludeScopeTypes.set(entry.symbol, entry.type);
+        }
+        const emitBodyAwaitPostlude = (): void => {
+            if (bodyAwaitPostludeStatements.length === 0) return;
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                for (const statement of bodyAwaitPostludeStatements) this.emitStmt(callback, statement);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+        };
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _p = state->receiver;");
@@ -45585,8 +45628,8 @@ class Emitter {
         callback.line(`tsc_try_push(&${eh});`);
         callback.open(`if (setjmp(${eh}.jb) == 0)`);
         callback.open("if (state->body_await)");
-        callback.line("state->body_await = false;");
         callback.open("if (tsc_promise_is_rejected(_p))");
+        callback.line("state->body_await = false;");
         callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
         callback.line("tsc_try_pop();");
         callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
@@ -45596,6 +45639,8 @@ class Emitter {
         callback.line("tsc_try_pop();");
         callback.line("return;");
         callback.close();
+        emitBodyAwaitPostlude();
+        callback.line("state->body_await = false;");
         callback.open("if (state->body_break)");
         callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
         emitLoopResult(callback);
@@ -45682,6 +45727,9 @@ class Emitter {
                 const bindingValue = this.coerce(source, entry.type, entry.identifier);
                 callback.line(`${entry.type.c} ${entry.name} = ${bindingValue};`);
             }
+        }
+        for (const { entry, field } of bodyBindingFields) {
+            callback.line(`state->${field} = ${entry.name};`);
         }
         const emitBodyControl = (route: BodyRoute): void => {
             if (route.control === "break") {
