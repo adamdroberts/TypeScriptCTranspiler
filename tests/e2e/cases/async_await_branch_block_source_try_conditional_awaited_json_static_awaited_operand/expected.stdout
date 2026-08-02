@@ -1,0 +1,11 @@
+parse-true parse-true LT
+parse-false parse-false LF
+parse-invalid caught-parse L
+parse-reject caught-parse L
+stringify-true stringify-true LTM
+stringify-null stringify-true LTM
+stringify-reject rejected-json-static-bad LM
+arrow-true arrow-true LTV
+arrow-false arrow-false LFV
+arrow-invalid caught-parse LV
+arrow-reject caught-parse LV

@@ -33232,7 +33232,9 @@ class Emitter {
                                 ? ["escape"]
                                 : receiver === "URL"
                                     ? ["canParse"]
-                                    : [];
+                                    : receiver === "JSON"
+                                        ? ["parse", "stringify"]
+                                        : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
 
