@@ -1,0 +1,9 @@
+is-array-true is-array-true LT
+is-array-string is-array-false LF
+is-array-reject caught-array-static-bad L
+array-of-true array-of-true LTM
+array-of-reject rejected-array-static-bad LM
+array-from-true array-from-true LTV
+array-from-reject caught-array-static-bad LV
+array-from-async-true array-from-async-true LT
+array-from-async-reject caught-array-static-bad L
