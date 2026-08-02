@@ -1,0 +1,2 @@
+try-success: try:ok,finally
+try-throw: catch:try-failure,finally

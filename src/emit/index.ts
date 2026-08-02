@@ -45468,7 +45468,7 @@ class Emitter {
                     : directRoute!.statements.slice(1)
             : [];
         const awaitFreeBodyAwaitStatements = (statements: readonly ts.Statement[]): boolean => statements.every((statement) =>
-            ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement));
+            this.asyncAwaitLoopPostStatementSupported(statement));
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitPostludeStatements)) return false;
         const bodyAwaitIfPrefix = Boolean(bodyIf && bodyAwaitExpression && !bodyAwaitConditionExpression);
@@ -45478,6 +45478,9 @@ class Emitter {
         if ((bodyAwaitIfPrefix || bodyAwaitConditionExpression) && [thenRoute, elseRoute].some((route) => route !== null && route.control !== null &&
             route.control !== "continue" && route.control !== "break" && route.control !== "return" && route.control !== "throw")) return false;
         let bodySupported = true;
+        let caughtThrowDepth = 0;
+        let catchThrowDepth = 0;
+        let finalizerDepth = 0;
         const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyReturnAwaitExpression, bodyAwaitConditionExpression]
             .filter((expression): expression is ts.AwaitExpression => expression !== null);
         const visitBody = (node: ts.Node): void => {
@@ -45487,11 +45490,27 @@ class Emitter {
                 ts.isFunctionLike(node) ||
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
-                ts.isThrowStatement(node) ||
+                (ts.isThrowStatement(node) && !(caughtThrowDepth > 0 || catchThrowDepth > 0 || finalizerDepth > 0)) ||
                 ts.isBreakStatement(node) ||
                 ts.isContinueStatement(node)
             ) {
                 bodySupported = false;
+                return;
+            }
+            if (ts.isTryStatement(node)) {
+                if (node.catchClause) caughtThrowDepth++;
+                visitBody(node.tryBlock);
+                if (node.catchClause) caughtThrowDepth--;
+                if (node.catchClause) {
+                    catchThrowDepth++;
+                    visitBody(node.catchClause);
+                    catchThrowDepth--;
+                }
+                if (node.finallyBlock) {
+                    finalizerDepth++;
+                    visitBody(node.finallyBlock);
+                    finalizerDepth--;
+                }
                 return;
             }
             ts.forEachChild(node, visitBody);
