@@ -45399,11 +45399,18 @@ class Emitter {
                 ? routeFor(bodyIf.elseStatement)
                 : { statements: [], control: null, expression: null }
             : null;
+        const bodyAwait = !bodyIf && directRoute && directRoute.statements.length === 1 &&
+            ts.isExpressionStatement(directRoute.statements[0]!)
+            ? this.unwrapTransparentExpression(directRoute.statements[0]!.expression)
+            : null;
+        const bodyAwaitExpression = bodyAwait && ts.isAwaitExpression(bodyAwait) ? bodyAwait : null;
+        if (bodyAwaitExpression && directRoute!.control !== null &&
+            directRoute!.control !== "continue" && directRoute!.control !== "break") return false;
         let bodySupported = true;
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
             if (
-                ts.isAwaitExpression(node) ||
+                (ts.isAwaitExpression(node) && node !== bodyAwaitExpression) ||
                 ts.isFunctionLike(node) ||
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
@@ -45425,7 +45432,8 @@ class Emitter {
 
         const visitReturn = (node: ts.Node): void => {
             if (!bodySupported) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+            if ((ts.isAwaitExpression(node) && node !== bodyAwaitExpression) ||
+                ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 bodySupported = false;
                 return;
             }
@@ -45440,6 +45448,15 @@ class Emitter {
         }
         visitReturn(result.expression);
         if (!bodySupported) return false;
+
+        const bodyAwaitPromiseType = bodyAwaitExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitExpression.expression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitExpression && bodyAwaitPromiseType?.kind !== "promise") return false;
 
         let usesThis = false;
         const visitThis = (node: ts.Node): void => {
@@ -45474,6 +45491,8 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line("tsc_value_t iterator;");
+        this.structDecls.line("bool body_await;");
+        this.structDecls.line("bool body_break;");
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (usesThis && thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${envType};`);
@@ -45522,22 +45541,77 @@ class Emitter {
             bindingDefaults.set(entry, this.coerce(defaultResult, T_VALUE, entry.initializer));
         }
 
+        const emitLoopResult = (target: CBuf): void => {
+            this.argumentValueScopes.push(new Map(params.map((param) => [param.symbol, `state->${param.field}`])));
+            this.argumentValueTypeScopes.push(new Map(params.map((param) => [param.symbol, param.type])));
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let returned: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                returned = this.emitExpr(result.expression!);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const returnedType = this.prepareType(returned.ty);
+            if (returnedType.kind === "void" || returnedType.kind === "never") {
+                target.line(`${returned.c};`);
+                target.line("tsc_try_pop();");
+                target.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+            } else {
+                target.line(`${returnedType.c} ${returnedVar} = ${returned.c};`);
+                target.line("tsc_try_pop();");
+                target.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: returnedType }, result.expression!)};`);
+                target.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+            }
+        };
+
         const callback = new CBuf();
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _p = state->receiver;");
         callback.line("tsc_promise_t* _ret = state->result_promise;");
-        callback.open("if (tsc_promise_is_rejected(_p))");
+        callback.open("if (!state->body_await && tsc_promise_is_rejected(_p))");
         callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
         callback.line("return;");
         callback.close();
-        callback.open("if (!tsc_promise_is_fulfilled(_p))");
+        callback.open("if (!state->body_await && !tsc_promise_is_fulfilled(_p))");
         callback.line("return;");
         callback.close();
         callback.line(`tsc_try_frame_t ${eh};`);
         callback.line(`tsc_promise_t* ${resolvedVar};`);
         callback.line(`tsc_try_push(&${eh});`);
         callback.open(`if (setjmp(${eh}.jb) == 0)`);
+        callback.open("if (state->body_await)");
+        callback.line("state->body_await = false;");
+        callback.open("if (tsc_promise_is_rejected(_p))");
+        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+        callback.line("tsc_try_pop();");
+        callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+        callback.line("return;");
+        callback.close();
+        callback.open("if (!tsc_promise_is_fulfilled(_p))");
+        callback.line("tsc_try_pop();");
+        callback.line("return;");
+        callback.close();
+        callback.open("if (state->body_break)");
+        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+        emitLoopResult(callback);
+        callback.line("return;");
+        callback.close();
+        callback.line(`tsc_promise_t* ${nextVar} = tsc_async_iterator_next(state->iterator);`);
+        callback.line(`state->receiver = ${nextVar};`);
+        callback.line("tsc_try_pop();");
+        callback.open(`if (tsc_promise_is_pending(${nextVar}))`);
+        callback.line(`tsc_promise_add_callback(${nextVar}, ${name}, state);`);
+        callback.close();
+        callback.open("else");
+        callback.line(`tsc_queue_microtask(${name}, state);`);
+        callback.close();
+        callback.line("return;");
+        callback.close();
         callback.line(`tsc_value_t ${stepVar} = tsc_promise_value(_p);`);
         callback.line(`bool ${doneVar} = tsc_value_is_truthy(tsc_value_get_prop(${stepVar}, tsc_str_from_lit("done", 4)));`);
         const finishVar = this.freshTemp("_for_await_finish");
@@ -45660,7 +45734,22 @@ class Emitter {
         if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            if (bodyIf && thenRoute && elseRoute) {
+            if (bodyAwaitExpression) {
+                const bodySource = this.emitExpr(bodyAwaitExpression.expression);
+                const bodySourceVar = this.freshTemp("_for_await_body_source");
+                callback.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyAwaitPromiseType!, bodyAwaitExpression.expression)};`);
+                callback.line("state->body_await = true;");
+                callback.line(`state->body_break = ${directRoute!.control === "break" ? "true" : "false"};`);
+                callback.line(`state->receiver = ${bodySourceVar};`);
+                callback.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
+                callback.line(`tsc_promise_add_callback(${bodySourceVar}, ${name}, state);`);
+                callback.close();
+                callback.open("else");
+                callback.line(`tsc_queue_microtask(${name}, state);`);
+                callback.close();
+                callback.line("tsc_try_pop();");
+                callback.line("return;");
+            } else if (bodyIf && thenRoute && elseRoute) {
                 for (const statement of bodyPrefix) this.emitStmt(callback, statement);
                 const condition = this.emitBoolExpr(bodyIf.expression);
                 callback.open(`if (${condition})`);
@@ -45680,30 +45769,7 @@ class Emitter {
         }
         callback.close();
         callback.open(`if (${finishVar})`);
-        this.argumentValueScopes.push(new Map(params.map((param) => [param.symbol, `state->${param.field}`])));
-        this.argumentValueTypeScopes.push(new Map(params.map((param) => [param.symbol, param.type])));
-        if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
-        let returned: EmitResult;
-        this.asyncAwaitContinuationAdapterDepth++;
-        try {
-            returned = this.emitExpr(result.expression);
-        } finally {
-            this.asyncAwaitContinuationAdapterDepth--;
-            if (usesThis && thisValue) this.functionThisStack.pop();
-            this.argumentValueTypeScopes.pop();
-            this.argumentValueScopes.pop();
-        }
-        const returnedType = this.prepareType(returned.ty);
-        if (returnedType.kind === "void" || returnedType.kind === "never") {
-            callback.line(`${returned.c};`);
-            callback.line("tsc_try_pop();");
-            callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
-        } else {
-            callback.line(`${returnedType.c} ${returnedVar} = ${returned.c};`);
-            callback.line("tsc_try_pop();");
-            callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: returnedType }, result.expression)};`);
-            callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
-        }
+        emitLoopResult(callback);
         callback.line("return;");
         callback.close();
         callback.line(`tsc_promise_t* ${nextVar} = tsc_async_iterator_next(state->iterator);`);
@@ -45734,6 +45800,8 @@ class Emitter {
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->result_promise = ${resultPromise};`);
         buf.line(`${env}->iterator = tsc_async_iterator_get(${this.coerce(source, T_VALUE, loop.expression)});`);
+        buf.line(`${env}->body_await = false;`);
+        buf.line(`${env}->body_break = false;`);
         for (const param of params) buf.line(`${env}->${param.field} = ${this.asyncAwaitContinuationParamValue(param)};`);
         if (usesThis && thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
         buf.line(`tsc_try_frame_t ${initialEh};`);

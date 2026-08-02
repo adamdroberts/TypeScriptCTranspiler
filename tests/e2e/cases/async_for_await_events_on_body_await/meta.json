@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await awaits one direct loop-body expression before closing on break"
+}

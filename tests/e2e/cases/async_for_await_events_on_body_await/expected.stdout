@@ -1,0 +1,2 @@
+body-await: first
+body-reject: body-failure
