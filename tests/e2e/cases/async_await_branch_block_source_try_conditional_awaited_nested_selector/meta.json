@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally conditional selectors preserve nested conditional awaited-arm laziness and rejection routing"
+}

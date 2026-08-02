@@ -34586,6 +34586,25 @@ class Emitter {
         elseBranch: AsyncAwaitTryConditionalReturnNode,
     ): AsyncAwaitTryConditionalReturnBranch | null {
         const expression = this.unwrapTransparentExpression(condition);
+        if (ts.isConditionalExpression(expression)) {
+            const thenSelectorBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
+                expression.whenTrue,
+                thenBranch,
+                elseBranch,
+            );
+            if (!thenSelectorBranch) return null;
+            const elseSelectorBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
+                expression.whenFalse,
+                thenBranch,
+                elseBranch,
+            );
+            if (!elseSelectorBranch) return null;
+            return this.asyncAwaitTryConditionalReturnBranchForCondition(
+                expression.condition,
+                thenSelectorBranch,
+                elseSelectorBranch,
+            );
+        }
         const nullishRightAwaitBranch =
             this.asyncAwaitTryConditionalNullishRightAwaitBranchForExpression(
                 expression,

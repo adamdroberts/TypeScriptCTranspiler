@@ -1,0 +1,15 @@
+declaration-left-true declaration-true L
+declaration-right-false fallback RF
+declaration-left-reject caught-left-bad L
+declaration-right-reject caught-right-bad R
+declaration-fallback-reject caught-fallback-bad RF
+method-left-true method-true LM
+method-right-false fallback RFM
+method-left-reject rejected-left-bad LM
+method-right-reject rejected-right-bad RM
+method-fallback-reject rejected-fallback-bad RFM
+arrow-left-true arrow-true LV
+arrow-right-false fallback RFV
+arrow-left-reject caught-left-bad LV
+arrow-right-reject caught-right-bad RV
+arrow-fallback-reject caught-fallback-bad RFV
