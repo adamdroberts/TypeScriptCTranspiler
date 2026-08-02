@@ -3822,6 +3822,9 @@ typedef struct tsc_fs_access_async {
     char* path;
     int mode;
     tsc_str_t* error;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     struct tsc_fs_access_async* next;
 } tsc_fs_access_async_t;
 
@@ -3840,22 +3843,42 @@ static void tsc_fs_access_async_remove(tsc_fs_access_async_t* task) {
 }
 
 static void tsc_fs_access_async_finish(tsc_fs_access_async_t* task, bool success) {
-    if (success) {
-        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
-    } else {
-        tsc_promise_reject_in_place(
-            task->promise,
-            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.access: path is not accessible"))
-        );
+    if (!task->aborted) {
+        if (success) {
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+        } else {
+            tsc_promise_reject_in_place(
+                task->promise,
+                tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.access: path is not accessible"))
+            );
+        }
     }
     free(task->path);
     tsc_fs_access_async_remove(task);
 }
 
+static void tsc_fs_access_async_abort(void* env) {
+    tsc_fs_access_async_t* task = (tsc_fs_access_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
+}
+
 static void tsc_fs_access_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_access_async_t* task = (tsc_fs_access_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
+    if (task->aborted) {
+        tsc_fs_access_async_finish(task, false);
+        return;
+    }
     if (result < 0) {
         task->error = tsc_str_from_cstr("fs.access: path is not accessible");
         tsc_fs_access_async_finish(task, false);
@@ -3864,21 +3887,26 @@ static void tsc_fs_access_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_access_async_finish(task, true);
 }
 
-tsc_promise_t* tsc_fs_promises_access_async(const tsc_str_t* path, double mode) {
+tsc_promise_t* tsc_fs_promises_access_async(const tsc_str_t* path, double mode, tsc_value_t signal) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_access_async_t* task = (tsc_fs_access_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_access_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->path = cstr_dup(path);
     task->mode = isnan(mode) ? F_OK : (int)mode;
+    task->signal = signal;
     task->next = g_tsc_fs_access_async;
     g_tsc_fs_access_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
     int rc = uv_fs_access(g_tsc_fs_uv_loop, &task->req, task->path, task->mode, tsc_fs_access_async_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         task->error = tsc_str_from_cstr("fs.access: path is not accessible");
         tsc_fs_access_async_finish(task, false);
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_access_async_abort, task);
     }
     return promise;
 }
@@ -4031,6 +4059,9 @@ typedef struct tsc_fs_statfs_libuv_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
     char* path;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     struct tsc_fs_statfs_libuv_async* next;
 } tsc_fs_statfs_libuv_async_t;
 
@@ -4053,18 +4084,39 @@ static void tsc_fs_statfs_libuv_finish(
     tsc_value_t value,
     tsc_str_t* error
 ) {
-    if (error) {
-        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
-    } else {
-        tsc_promise_fulfill_in_place(task->promise, value);
+    if (!task->aborted) {
+        if (error) {
+            tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+        } else {
+            tsc_promise_fulfill_in_place(task->promise, value);
+        }
     }
     free(task->path);
     tsc_fs_statfs_libuv_remove(task);
 }
 
+static void tsc_fs_statfs_libuv_abort(void* env) {
+    tsc_fs_statfs_libuv_async_t* task = (tsc_fs_statfs_libuv_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
+}
+
 static void tsc_fs_statfs_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_statfs_libuv_async_t* task = (tsc_fs_statfs_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_statfs_libuv_finish(task, tsc_value_undefined(), NULL);
+        return;
+    }
     if (result < 0) {
         uv_fs_req_cleanup(req);
         tsc_fs_statfs_libuv_finish(
@@ -4099,23 +4151,28 @@ static void tsc_fs_statfs_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_statfs_libuv_finish(task, value, NULL);
 }
 
-tsc_promise_t* tsc_fs_promises_statfs_async(const tsc_str_t* path) {
+tsc_promise_t* tsc_fs_promises_statfs_async(const tsc_str_t* path, tsc_value_t signal) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_statfs_libuv_async_t* task = (tsc_fs_statfs_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_statfs_libuv_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->path = cstr_dup(path);
+    task->signal = signal;
     task->next = g_tsc_fs_statfs_libuv_async;
     g_tsc_fs_statfs_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
     int rc = uv_fs_statfs(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_statfs_libuv_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_statfs_libuv_finish(
             task,
             tsc_value_undefined(),
             tsc_str_from_cstr("fs.statfsSync: could not statfs path")
         );
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_statfs_libuv_abort, task);
     }
     return promise;
 }

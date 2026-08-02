@@ -73920,7 +73920,7 @@ class Emitter {
         return { withFileTypes, recursive, encoding };
     }
 
-    private validateFsStatFsOptions(options: ts.Expression | undefined, label: string): void {
+    private validateFsStatFsOptions(options: ts.Expression | undefined, label: string, allowSignal = false): void {
         if (!options) return;
         if (this.isUndefinedLikeExpression(options)) return;
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
@@ -73930,7 +73930,7 @@ class Emitter {
         }
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support bigint property assignments`);
+                unsupported(prop, `${label} options only support bigint${allowSignal ? " and signal" : ""} property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
             if (key === "bigint") {
@@ -73944,8 +73944,27 @@ class Emitter {
                 }
                 continue;
             }
+            if (allowSignal && key === "signal") {
+                continue;
+            }
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
+    }
+
+    private validateFsAccessOptions(options: ts.Expression | undefined, label: string): boolean {
+        if (!options || this.isUndefinedLikeExpression(options)) return false;
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions)) return false;
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) return false;
+        for (const prop of resolvedOptions.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support signal property assignments`);
+            }
+            if (this.staticPropertyName(prop.name) !== "signal") {
+                unsupported(prop.name, `${label} unsupported option ${this.staticPropertyName(prop.name) ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+        }
+        return true;
     }
 
     private validateFsStatsOptions(
@@ -74188,20 +74207,30 @@ class Emitter {
                 });
             }
             case "statfs": {
-                if (args.length < 1) unsupported(call, "fs.promises.statfs needs path and optional { bigint: false } options");
-                this.validateFsStatFsOptions(args[1], "fs.promises.statfs");
+                if (args.length < 1) unsupported(call, "fs.promises.statfs needs path and optional { bigint: false, signal } options");
+                this.validateFsStatFsOptions(args[1], "fs.promises.statfs", true);
                 const p = this.emitExpr(args[0]!);
+                const signalValue = this.fsSignalOptionValue(args[1]);
                 const optionSpecs: SequencedCallArg[] = [];
                 if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                const signalSpecIndex = 1 + optionSpecs.length;
+                if (signalValue) optionSpecs.push({ value: signalValue, target: T_VALUE, node: args[1] });
+                else optionSpecs.push(...this.fsSignalOptionSpecs(args[1]));
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, "fs.promises.statfs path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => {
+                ], (values) => {
+                    const path = values[0]!;
                     this.usesLibuv = true;
-                    return settle(`tsc_fs_promises_statfs_async(${path!})`);
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const statfs = `tsc_fs_promises_statfs_async(${path!}, ${requestSignal})`;
+                    return signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${statfs})`
+                        : settle(statfs);
                 });
             }
             case "stat": {
@@ -74451,21 +74480,44 @@ class Emitter {
                 });
             }
             case "access": {
-                if (args.length < 1) unsupported(call, "fs.promises.access needs path and optional mode");
+                if (args.length < 1) unsupported(call, "fs.promises.access needs path and optional mode or { signal } options");
                 const p = this.emitExpr(args[0]!);
                 const specs: SequencedCallArg[] = [
                     this.fsPathSpec(p, args[0]!, "fs.promises.access path"),
                 ];
-                const modeArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
-                if (modeArg && !this.isUndefinedExpression(modeArg)) {
-                    specs.push({ value: this.emitExpr(modeArg), target: T_NUMBER, node: args[1] });
+                const objectOptions = this.validateFsAccessOptions(args[1], "fs.promises.access");
+                const signalValue = objectOptions ? this.fsSignalOptionValue(args[1]) : null;
+                const evaluateObjectOptions = objectOptions && !!args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1]);
+                const signalSpecIndex = 1 + (evaluateObjectOptions ? 1 : 0);
+                if (objectOptions) {
+                    if (evaluateObjectOptions) {
+                        specs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                    }
+                    if (signalValue) specs.push({ value: signalValue, target: T_VALUE, node: args[1] });
+                    else specs.push(...this.fsSignalOptionSpecs(args[1]));
                     specs.push(...this.ignoredArgumentSpecs(args, 2));
                 } else {
-                    specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
+                    const modeArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                    if (modeArg && !this.isUndefinedExpression(modeArg)) {
+                        specs.push({ value: this.emitExpr(modeArg), target: T_NUMBER, node: args[1] });
+                        specs.push(...this.ignoredArgumentSpecs(args, 2));
+                    } else {
+                        specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
+                    }
                 }
-                return this.emitSequencedExpr(mapped, specs, ([path, mode]) => {
+                return this.emitSequencedExpr(mapped, specs, (values) => {
+                    const path = values[0]!;
                     this.usesLibuv = true;
-                    return settle(`tsc_fs_promises_access_async(${path!}, ${mode ?? "0.0"})`);
+                    if (!objectOptions) {
+                        const mode = values[1];
+                        return settle(`tsc_fs_promises_access_async(${path!}, ${mode ?? "0.0"}, tsc_value_undefined())`);
+                    }
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const access = `tsc_fs_promises_access_async(${path!}, 0.0, ${requestSignal})`;
+                    return signal
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${access})`
+                        : settle(access);
                 });
             }
             case "mkdir": {

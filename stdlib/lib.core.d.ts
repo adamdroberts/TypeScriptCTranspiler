@@ -1363,6 +1363,12 @@ interface FSDirent {
 interface FSStatFsOptions {
     bigint?: false;
 }
+interface FSPromisesStatFsOptions extends FSStatFsOptions {
+    signal?: any;
+}
+interface FSPromisesAccessOptions {
+    signal?: any;
+}
 interface FSStatFs {
     readonly bsize: number;
     readonly frsize: number;
@@ -1588,7 +1594,7 @@ interface FSPromises {
     readdir(path: FSPathLike, options: FSBufferEncoding | FSPromisesReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
     readdir(path: FSPathLike, options: FSPromisesReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSPromisesReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
-    statfs(path: FSPathLike, options?: FSStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
+    statfs(path: FSPathLike, options?: FSPromisesStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
     stat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
     lstat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSBufferEncoding | FSPromisesFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
@@ -1605,7 +1611,7 @@ interface FSPromises {
     chown(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): Promise<void>;
     lchown(path: FSPathLike, uid: number, gid: number, ...ignored: any[]): Promise<void>;
     chmod(path: FSPathLike, mode: number, ...ignored: any[]): Promise<void>;
-    access(path: FSPathLike, mode?: number, ...ignored: any[]): Promise<void>;
+    access(path: FSPathLike, mode?: number | FSPromisesAccessOptions, ...ignored: any[]): Promise<void>;
     mkdir(path: FSPathLike, options?: number | FSPromisesMkdirOptions | null, ...ignored: any[]): Promise<void>;
     unlink(path: FSPathLike, ...ignored: any[]): Promise<void>;
     rm(path: FSPathLike, options?: FSPromisesRmOptions, ...ignored: any[]): Promise<void>;
