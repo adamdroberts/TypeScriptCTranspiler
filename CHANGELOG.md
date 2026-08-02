@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Arbitrary-length leading awaited-local continuation lowering is covered beyond the fifty-five-await boundary with fifty-six awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the fifty-four-await boundary with fifty-five awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the fifty-three-await boundary with fifty-four awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the fifty-two-await boundary with fifty-three awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
