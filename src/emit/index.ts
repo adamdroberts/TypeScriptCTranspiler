@@ -45267,28 +45267,46 @@ class Emitter {
         if (!loop || !result || !ts.isForOfStatement(loop) || !loop.awaitModifier ||
             !ts.isReturnStatement(result) || !result.expression) return false;
         const initializer = loop.initializer;
-        const bindingIdentifiersFor = (name: ts.BindingName): ts.Identifier[] | null => {
-            if (ts.isIdentifier(name)) return [name];
-            if (!ts.isArrayBindingPattern(name) || name.elements.length === 0) return null;
-            const identifiers: ts.Identifier[] = [];
-            for (const element of name.elements) {
-                if (!ts.isBindingElement(element) || element.dotDotDotToken || element.initializer || !ts.isIdentifier(element.name)) {
-                    return null;
-                }
-                identifiers.push(element.name);
-            }
-            return identifiers;
+        type BindingDescriptor = {
+            identifier: ts.Identifier;
+            index: number | null;
+            property: string | null;
         };
-        const bindingIdentifiers = ts.isVariableDeclarationList(initializer)
+        const bindingDescriptorsFor = (name: ts.BindingName): BindingDescriptor[] | null => {
+            if (ts.isIdentifier(name)) return [{ identifier: name, index: null, property: null }];
+            if (ts.isArrayBindingPattern(name)) {
+                if (name.elements.length === 0) return null;
+                const descriptors: BindingDescriptor[] = [];
+                for (let index = 0; index < name.elements.length; index++) {
+                    const element = name.elements[index]!;
+                    if (!ts.isBindingElement(element) || element.dotDotDotToken || element.initializer || !ts.isIdentifier(element.name)) {
+                        return null;
+                    }
+                    descriptors.push({ identifier: element.name, index, property: null });
+                }
+                return descriptors;
+            }
+            if (!ts.isObjectBindingPattern(name) || name.elements.length === 0) return null;
+            const descriptors: BindingDescriptor[] = [];
+            for (const element of name.elements) {
+                if (element.dotDotDotToken || element.initializer || !ts.isIdentifier(element.name)) return null;
+                const property = element.propertyName ? this.staticPropertyName(element.propertyName) : element.name.text;
+                if (property === null) return null;
+                descriptors.push({ identifier: element.name, index: null, property });
+            }
+            return descriptors;
+        };
+        const bindingDescriptors = ts.isVariableDeclarationList(initializer)
             ? initializer.declarations.length === 1
-                ? bindingIdentifiersFor(initializer.declarations[0]!.name)
+                ? bindingDescriptorsFor(initializer.declarations[0]!.name)
                 : null
             : ts.isIdentifier(initializer)
-                ? [initializer]
+                ? bindingDescriptorsFor(initializer)
                 : null;
-        if (!bindingIdentifiers || bindingIdentifiers.length === 0) return false;
+        if (!bindingDescriptors || bindingDescriptors.length === 0) return false;
         const bindingIsParameter = ts.isIdentifier(initializer);
-        const bindings = bindingIdentifiers.map((identifier) => {
+        const bindings = bindingDescriptors.map((descriptor) => {
+            const { identifier } = descriptor;
             const symbol = this.symbolForIdentifier(identifier);
             if (!symbol) return null;
             const type = this.prepareType(mapTsType(
@@ -45297,10 +45315,10 @@ class Emitter {
                 this.checker,
             ));
             if (type.kind === "void" || type.kind === "never") return null;
-            return { identifier, symbol, type, name: mangleIdent(identifier.text) };
+            return { ...descriptor, symbol, type, name: mangleIdent(identifier.text) };
         });
         if (bindings.some((binding) => binding === null)) return false;
-        const bindingEntries = bindings as { identifier: ts.Identifier; symbol: ts.Symbol; type: CType; name: string }[];
+        const bindingEntries = bindings as (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })[];
         const binding = bindingEntries[0]!;
         const bindingSymbol = binding.symbol;
         const sourceType = this.prepareType(mapTsType(
@@ -45472,17 +45490,25 @@ class Emitter {
         callback.line(`bool ${finishVar} = ${doneVar};`);
         callback.open(`if (!${doneVar})`);
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
+        const bindingSource = (entry: (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })): string => {
+            if (entry.index !== null) return `tsc_value_get_index(${itemVar}, ${entry.index}.0)`;
+            if (entry.property !== null) {
+                return `tsc_value_get_prop(${itemVar}, tsc_str_from_lit("${escapeCString(entry.property)}", ${utf8ByteLen(entry.property)}))`;
+            }
+            return itemVar;
+        };
         if (bindingParameter) {
-            const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, binding.type, binding.identifier);
+            const source = bindingSource(binding);
+            const bindingValue = this.coerce({ c: source, ty: T_VALUE }, binding.type, binding.identifier);
             callback.line(`state->${bindingParameter.field} = ${bindingValue};`);
         } else if (bindingEntries.length === 1) {
-            const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, binding.type, binding.identifier);
+            const source = bindingSource(binding);
+            const bindingValue = this.coerce({ c: source, ty: T_VALUE }, binding.type, binding.identifier);
             callback.line(`${binding.type.c} ${binding.name} = ${bindingValue};`);
         } else {
-            for (let index = 0; index < bindingEntries.length; index++) {
-                const entry = bindingEntries[index]!;
-                const element = `tsc_value_get_index(${itemVar}, ${index}.0)`;
-                const bindingValue = this.coerce({ c: element, ty: T_VALUE }, entry.type, entry.identifier);
+            for (const entry of bindingEntries) {
+                const source = bindingSource(entry);
+                const bindingValue = this.coerce({ c: source, ty: T_VALUE }, entry.type, entry.identifier);
                 callback.line(`${entry.type.c} ${entry.name} = ${bindingValue};`);
             }
         }

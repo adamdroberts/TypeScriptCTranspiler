@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await lowering unpacks a simple static-property object binding pattern from each dynamic iterator item"
+}
