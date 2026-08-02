@@ -12,11 +12,12 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Added a libuv-backed recursive `fs.promises.rmdir` state machine for nested directory removal, with root non-directory rejection and asynchronous `lstat` / `scandir` / `unlink` / `rmdir` requests. Test: `fs_promises_rmdir_recursive_libuv`.
 - Added a libuv-backed recursive `fs.promises.rm` state machine for nested file, symlink, and directory removal with asynchronous `lstat` / `scandir` / `unlink` / `rmdir` requests and `force: true` missing-path handling. Test: `fs_promises_rm_recursive_libuv`.
 - Expanded the libuv-preflighted `fs.promises.cp` subset across supported nonrecursive options, including destination-existence semantics, `COPYFILE_*` modes, timestamp preservation, and static filters; recursive copies retain the existing synchronous fallback. Tests: `fs_promises_cp_libuv`, `fs_cp_options`, `fs_cp_symlink_options`.
-- Added libuv-backed nonrecursive `fs.promises.rm` requests with asynchronous file/symlink removal and `force: true` missing-path handling; recursive forms remain on the existing sync-backed Promise path. Test: `fs_promises_rm_libuv`.
+- Added libuv-backed nonrecursive `fs.promises.rm` requests with asynchronous file/symlink removal and `force: true` missing-path handling; recursive rm/rmdir forms now use the shared libuv traversal state machine. Test: `fs_promises_rm_libuv`.
 - Added a libuv-backed `fs.promises.truncate` open/ftruncate/close request with asynchronous completion and sync-compatible rejection handling. Test: `fs_truncate`.
-- Added libuv-backed nonrecursive `fs.promises.mkdir`, `unlink`, and `rmdir` requests with asynchronous completion and sync-compatible rejection handling; recursive forms remain on the existing sync-backed Promise paths. Tests: `fs_mkdir_mode_options`, `fs_promises_mutation`.
+- Added libuv-backed nonrecursive `fs.promises.mkdir`, `unlink`, and `rmdir` requests with asynchronous completion and sync-compatible rejection handling; recursive mkdir remains on the existing sync-backed Promise path. Tests: `fs_mkdir_mode_options`, `fs_promises_mutation`.
 - Added libuv-backed `fs.promises.chown` and `fs.promises.lchown` requests with asynchronous ownership updates and rejection handling. Tests: `fs_chown`, `fs_lchown`.
 - Added a libuv-backed `fs.promises.chmod` request with asynchronous mode updates and rejection handling. Test: `fs_chmod`.
 - Added libuv-backed `fs.promises.utimes` and `fs.promises.lutimes` requests with Date/number timestamp conversion and asynchronous rejection handling. Tests: `fs_utimes`, `fs_lutimes`.

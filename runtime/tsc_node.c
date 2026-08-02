@@ -4405,6 +4405,7 @@ tsc_promise_t* tsc_fs_promises_rm_async(const tsc_str_t* path, bool force) {
 typedef struct tsc_fs_rm_recursive_work {
     char* path;
     bool remove_dir;
+    bool reject_non_dir;
     struct tsc_fs_rm_recursive_work* next;
 } tsc_fs_rm_recursive_work_t;
 
@@ -4412,8 +4413,10 @@ typedef struct tsc_fs_rm_recursive_libuv_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
     bool force;
+    bool rmdir;
     tsc_fs_rm_recursive_work_t* work;
     char* current_path;
+    bool current_reject_non_dir;
     struct tsc_fs_rm_recursive_libuv_async* next;
 } tsc_fs_rm_recursive_libuv_async_t;
 
@@ -4440,11 +4443,14 @@ static void tsc_fs_rm_recursive_work_clear(tsc_fs_rm_recursive_libuv_async_t* ta
     }
 }
 
-static void tsc_fs_rm_recursive_libuv_finish(tsc_fs_rm_recursive_libuv_async_t* task, tsc_str_t* error) {
-    if (error) {
-        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
-    } else {
+static void tsc_fs_rm_recursive_libuv_finish(tsc_fs_rm_recursive_libuv_async_t* task, bool success) {
+    if (success) {
         tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    } else {
+        const char* message = task->rmdir
+            ? "fs.rmdirSync: could not remove directory"
+            : "fs.rmSync: could not remove path";
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(tsc_str_from_cstr(message)));
     }
     free(task->current_path);
     tsc_fs_rm_recursive_work_clear(task);
@@ -4454,12 +4460,14 @@ static void tsc_fs_rm_recursive_libuv_finish(tsc_fs_rm_recursive_libuv_async_t* 
 static bool tsc_fs_rm_recursive_push_owned(
     tsc_fs_rm_recursive_libuv_async_t* task,
     char* path,
-    bool remove_dir
+    bool remove_dir,
+    bool reject_non_dir
 ) {
     tsc_fs_rm_recursive_work_t* item = (tsc_fs_rm_recursive_work_t*)malloc(sizeof(tsc_fs_rm_recursive_work_t));
     if (!item) return false;
     item->path = path;
     item->remove_dir = remove_dir;
+    item->reject_non_dir = reject_non_dir;
     item->next = task->work;
     task->work = item;
     return true;
@@ -4468,13 +4476,14 @@ static bool tsc_fs_rm_recursive_push_owned(
 static bool tsc_fs_rm_recursive_push(
     tsc_fs_rm_recursive_libuv_async_t* task,
     const char* path,
-    bool remove_dir
+    bool remove_dir,
+    bool reject_non_dir
 ) {
     size_t len = strlen(path);
     char* copy = (char*)malloc(len + 1);
     if (!copy) return false;
     memcpy(copy, path, len + 1);
-    if (!tsc_fs_rm_recursive_push_owned(task, copy, remove_dir)) {
+    if (!tsc_fs_rm_recursive_push_owned(task, copy, remove_dir, reject_non_dir)) {
         free(copy);
         return false;
     }
@@ -4493,7 +4502,7 @@ static void tsc_fs_rm_recursive_libuv_unlink_cb(tsc_uv_fs_t* req) {
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
     if (result < 0 && !(task->force && (result == -ENOENT || result == -ENOTDIR))) {
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
         return;
     }
     tsc_fs_rm_recursive_libuv_release_current(task);
@@ -4505,7 +4514,7 @@ static void tsc_fs_rm_recursive_libuv_rmdir_cb(tsc_uv_fs_t* req) {
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
     if (result < 0 && !(task->force && (result == -ENOENT || result == -ENOTDIR))) {
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
         return;
     }
     tsc_fs_rm_recursive_libuv_release_current(task);
@@ -4529,7 +4538,7 @@ static void tsc_fs_rm_recursive_libuv_start_current(tsc_fs_rm_recursive_libuv_as
     );
     if (rc < 0) {
         uv_fs_req_cleanup(&task->req);
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
     }
 }
 
@@ -4538,18 +4547,19 @@ static void tsc_fs_rm_recursive_libuv_start_next(tsc_fs_rm_recursive_libuv_async
     if (task->current_path != NULL) return;
     item = task->work;
     if (!item) {
-        tsc_fs_rm_recursive_libuv_finish(task, NULL);
+        tsc_fs_rm_recursive_libuv_finish(task, true);
         return;
     }
     task->work = item->next;
     task->current_path = item->path;
+    task->current_reject_non_dir = item->reject_non_dir;
     bool remove_dir = item->remove_dir;
     free(item);
     if (remove_dir) {
         int rc = uv_fs_rmdir(g_tsc_fs_uv_loop, &task->req, task->current_path, tsc_fs_rm_recursive_libuv_rmdir_cb);
         if (rc < 0) {
             uv_fs_req_cleanup(&task->req);
-            tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+            tsc_fs_rm_recursive_libuv_finish(task, false);
         }
     } else {
         tsc_fs_rm_recursive_libuv_start_current(task);
@@ -4561,23 +4571,23 @@ static void tsc_fs_rm_recursive_libuv_scandir_cb(tsc_uv_fs_t* req) {
     ssize_t result = uv_fs_get_result(req);
     if (result < 0) {
         uv_fs_req_cleanup(req);
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
         return;
     }
 
-    if (!tsc_fs_rm_recursive_push(task, task->current_path, true)) {
+    if (!tsc_fs_rm_recursive_push(task, task->current_path, true, false)) {
         uv_fs_req_cleanup(req);
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
         return;
     }
     tsc_uv_dirent_t ent;
     while (uv_fs_scandir_next(req, &ent) == 0) {
         if (!ent.name || strcmp(ent.name, ".") == 0 || strcmp(ent.name, "..") == 0) continue;
         char* child = fs_join_path_cstr(task->current_path, ent.name);
-        if (!child || !tsc_fs_rm_recursive_push_owned(task, child, false)) {
+        if (!child || !tsc_fs_rm_recursive_push_owned(task, child, false, false)) {
             free(child);
             uv_fs_req_cleanup(req);
-            tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+            tsc_fs_rm_recursive_libuv_finish(task, false);
             return;
         }
     }
@@ -4595,7 +4605,7 @@ static void tsc_fs_rm_recursive_libuv_lstat_cb(tsc_uv_fs_t* req) {
             tsc_fs_rm_recursive_libuv_release_current(task);
             tsc_fs_rm_recursive_libuv_start_next(task);
         } else {
-            tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+            tsc_fs_rm_recursive_libuv_finish(task, false);
         }
         return;
     }
@@ -4603,11 +4613,15 @@ static void tsc_fs_rm_recursive_libuv_lstat_cb(tsc_uv_fs_t* req) {
     tsc_uv_stat_t* statbuf = uv_fs_get_statbuf(req);
     bool is_directory = statbuf && S_ISDIR((mode_t)statbuf->st_mode);
     uv_fs_req_cleanup(req);
+    if (!is_directory && task->current_reject_non_dir) {
+        tsc_fs_rm_recursive_libuv_finish(task, false);
+        return;
+    }
     if (is_directory) {
         int rc = uv_fs_scandir(g_tsc_fs_uv_loop, &task->req, task->current_path, 0, tsc_fs_rm_recursive_libuv_scandir_cb);
         if (rc < 0) {
             uv_fs_req_cleanup(&task->req);
-            tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+            tsc_fs_rm_recursive_libuv_finish(task, false);
         }
         return;
     }
@@ -4615,27 +4629,36 @@ static void tsc_fs_rm_recursive_libuv_lstat_cb(tsc_uv_fs_t* req) {
     int rc = uv_fs_unlink(g_tsc_fs_uv_loop, &task->req, task->current_path, tsc_fs_rm_recursive_libuv_unlink_cb);
     if (rc < 0) {
         uv_fs_req_cleanup(&task->req);
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
     }
 }
 
-tsc_promise_t* tsc_fs_promises_rm_recursive_async(const tsc_str_t* path, bool force) {
+static tsc_promise_t* tsc_fs_promises_recursive_remove_async(const tsc_str_t* path, bool force, bool rmdir) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_rm_recursive_libuv_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->force = force;
+    task->rmdir = rmdir;
     task->next = g_tsc_fs_rm_recursive_libuv_async;
     g_tsc_fs_rm_recursive_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
     char* root = cstr_dup(path);
-    if (!tsc_fs_rm_recursive_push_owned(task, root, false)) {
+    if (!root || !tsc_fs_rm_recursive_push_owned(task, root, false, rmdir)) {
         free(root);
-        tsc_fs_rm_recursive_libuv_finish(task, tsc_str_from_cstr("fs.rmSync: could not remove path"));
+        tsc_fs_rm_recursive_libuv_finish(task, false);
         return promise;
     }
     tsc_fs_rm_recursive_libuv_start_next(task);
     return promise;
+}
+
+tsc_promise_t* tsc_fs_promises_rm_recursive_async(const tsc_str_t* path, bool force) {
+    return tsc_fs_promises_recursive_remove_async(path, force, false);
+}
+
+tsc_promise_t* tsc_fs_promises_rmdir_recursive_async(const tsc_str_t* path) {
+    return tsc_fs_promises_recursive_remove_async(path, false, true);
 }
 
 typedef struct tsc_fs_truncate_libuv_async {

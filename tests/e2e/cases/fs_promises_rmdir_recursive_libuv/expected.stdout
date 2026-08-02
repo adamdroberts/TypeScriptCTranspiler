@@ -1,0 +1,4 @@
+queued: false true
+removed: false false
+file: fs.rmdirSync: could not remove directory
+done: false false
