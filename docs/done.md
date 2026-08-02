@@ -1,5 +1,7 @@
 # Implemented features
 
+- Arbitrary-length leading awaited-local continuation lowering is covered beyond the ninety-eight-await boundary with ninety-nine awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
+
 Everything in this file compiles end-to-end to a native binary via `./bin/tsc2c file.ts -o out`. Each bullet points at the test case under `tests/e2e/cases/` that exercises it and, where useful, at the runtime symbol or emitter method that implements it.
 
 Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/run.ts`. Normal change rounds should prefer focused `--filter` slices.
