@@ -1,0 +1,6 @@
+fn-reject caught-fn-bad 
+fn-ok fn-ok 
+method-reject rejected-method-bad M
+method-ok method-ok MM
+arrow-reject caught-arrow-bad MMV
+arrow-ok arrow-ok MMVV

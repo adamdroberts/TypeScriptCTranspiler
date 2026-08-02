@@ -33337,6 +33337,12 @@ class Emitter {
         if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
             return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.operand);
         }
+        if (ts.isPropertyAccessExpression(expression)) {
+            return expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+                !!this.currentClass &&
+                !this.classAccessorForPropertyAccess(expression, "get") &&
+                this.propertyDeclaredType(expression) !== null;
+        }
         if (!ts.isBinaryExpression(expression)) return false;
         if (
             expression.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
