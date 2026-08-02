@@ -22,6 +22,5 @@ console.log("named base64:", names(namedBase64));
 
 nodefs.promises.readdir(root, { withFileTypes: true, encoding: HEX }).then((entries: FSDirent[]): void => {
     console.log("promise hex:", names(entries));
+    fs.rmSync(root, { recursive: true, force: true });
 });
-
-fs.rmSync(root, { recursive: true, force: true });

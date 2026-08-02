@@ -55,14 +55,12 @@ console.log("named:", summarize(namedEntries));
 const recursiveEntries = fs.readdirSync(root, { withFileTypes: true, recursive: true });
 console.log("recursive:", summarize(recursiveEntries));
 
-nodefs.promises.readdir(root, { withFileTypes: true }).then((entries: FSDirent[]): string => {
-    console.log("promise:", summarize(entries));
-    return "done";
-});
-
-nodefs.promises.readdir(root, { withFileTypes: true, recursive: true }).then((entries: FSDirent[]): string => {
-    console.log("promise recursive:", summarize(entries));
-    return "done";
-});
-
-fs.rmSync(root, { recursive: true, force: true });
+nodefs.promises.readdir(root, { withFileTypes: true })
+    .then((entries: FSDirent[]): Promise<FSDirent[]> => {
+        console.log("promise:", summarize(entries));
+        return nodefs.promises.readdir(root, { withFileTypes: true, recursive: true });
+    })
+    .then((entries: FSDirent[]): void => {
+        console.log("promise recursive:", summarize(entries));
+        fs.rmSync(root, { recursive: true, force: true });
+    });

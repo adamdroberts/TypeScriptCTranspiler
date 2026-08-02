@@ -1,0 +1,6 @@
+queued: false
+completed: true
+shallow: a:false:true:false|link:false:false:true|top.txt:true:false:false
+recursive: a:false:true:false|b:false:true:false|deep.txt:true:false:false|file.txt:true:false:false|link:false:false:true|top.txt:true:false:false
+encoded: 61:false:true:false|6c696e6b:false:false:true|746f702e747874:true:false:false
+error: fs.readdirSync: could not open dir
