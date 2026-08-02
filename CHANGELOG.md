@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Added a libuv-backed recursive `fs.promises.rm` state machine for nested file, symlink, and directory removal with asynchronous `lstat` / `scandir` / `unlink` / `rmdir` requests and `force: true` missing-path handling. Test: `fs_promises_rm_recursive_libuv`.
 - Expanded the libuv-preflighted `fs.promises.cp` subset across supported nonrecursive options, including destination-existence semantics, `COPYFILE_*` modes, timestamp preservation, and static filters; recursive copies retain the existing synchronous fallback. Tests: `fs_promises_cp_libuv`, `fs_cp_options`, `fs_cp_symlink_options`.
 - Added libuv-backed nonrecursive `fs.promises.rm` requests with asynchronous file/symlink removal and `force: true` missing-path handling; recursive forms remain on the existing sync-backed Promise path. Test: `fs_promises_rm_libuv`.
 - Added a libuv-backed `fs.promises.truncate` open/ftruncate/close request with asynchronous completion and sync-compatible rejection handling. Test: `fs_truncate`.

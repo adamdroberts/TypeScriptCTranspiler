@@ -1230,6 +1230,7 @@ tsc_promise_t* tsc_fs_promises_mkdir_async(const tsc_str_t* path, double mode);
 tsc_promise_t* tsc_fs_promises_unlink_async(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_rmdir_async(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_rm_async(const tsc_str_t* path, bool force);
+tsc_promise_t* tsc_fs_promises_rm_recursive_async(const tsc_str_t* path, bool force);
 tsc_promise_t* tsc_fs_promises_truncate_async(const tsc_str_t* path, double len);
 tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding);
 tsc_promise_t* tsc_fs_promises_readlink_async(const tsc_str_t* path, int encoding);

@@ -74503,7 +74503,10 @@ class Emitter {
                 ], (values) => {
                     const path = values[0]!;
                     const rm = options.recursive
-                        ? `({ tsc_fs_rm_sync_opts(${path!}, true, ${options.force ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`
+                        ? (() => {
+                            this.usesLibuv = true;
+                            return `tsc_fs_promises_rm_recursive_async(${path!}, ${options.force ? "true" : "false"})`;
+                        })()
                         : (() => {
                             this.usesLibuv = true;
                             return `tsc_fs_promises_rm_async(${path!}, ${options.force ? "true" : "false"})`;
