@@ -929,6 +929,7 @@ typedef struct {
     tsc_str_t* event;
     tsc_array_t* queued;
     tsc_array_t* pending;
+    tsc_value_t iterator;
     bool closed;
 } tsc_event_async_iterator_t;
 
@@ -1003,6 +1004,13 @@ static tsc_value_t event_async_iterator_return(void* env, tsc_value_t this_arg, 
     return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(value, true)));
 }
 
+static tsc_value_t event_async_iterator_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
+    return state ? state->iterator : tsc_value_undefined();
+}
+
 tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str_t* event) {
     if (!ee || !event) return tsc_value_undefined();
     tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_event_async_iterator_t));
@@ -1012,8 +1020,19 @@ tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str
     state->pending = tsc_array_new(sizeof(tsc_promise_t*), 4);
     state->closed = false;
     tsc_object_t* iterator = tsc_object_new();
+    state->iterator = tsc_value_object(iterator);
     tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(event_async_iterator_next, state, 0.0, tsc_str_from_lit("next", 4)));
     tsc_object_set(iterator, tsc_str_from_lit("return", 6), tsc_value_function_builtin_named(event_async_iterator_return, state, 0.0, tsc_str_from_lit("return", 6)));
+    tsc_value_set_symbol_prop(
+        state->iterator,
+        tsc_symbol_async_iterator(),
+        tsc_value_function_builtin_named(
+            event_async_iterator_async_iterator,
+            state,
+            0.0,
+            tsc_str_from_lit("[Symbol.asyncIterator]", 22)
+        )
+    );
     tsc_event_emitter_on(ee, event, event_async_iterator_listener, state, state, false, false);
-    return tsc_value_object(iterator);
+    return state->iterator;
 }

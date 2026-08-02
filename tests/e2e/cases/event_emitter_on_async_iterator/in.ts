@@ -2,7 +2,8 @@ import { EventEmitter, on } from "events";
 
 const emitter = new EventEmitter();
 const iterator: any = on(emitter, "data");
-console.log("methods", iterator.next.name, iterator.next.length, Object.hasOwn(iterator.next, "prototype"), iterator.return.name, iterator.return.length, Object.hasOwn(iterator.return, "prototype"));
+console.log("methods", iterator.next.name, iterator.next.length, Object.hasOwn(iterator.next, "prototype"), iterator.return.name, iterator.return.length, Object.hasOwn(iterator.return, "prototype"), iterator[Symbol.asyncIterator].name, iterator[Symbol.asyncIterator].length, Object.hasOwn(iterator[Symbol.asyncIterator], "prototype"));
+console.log("self", iterator[Symbol.asyncIterator]() === iterator);
 try {
     Reflect.construct(iterator.next, []);
     console.log("construct", "ok");

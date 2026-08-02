@@ -76133,6 +76133,13 @@ class Emitter {
             expr.name.text === "iterator";
     }
 
+    private isSymbolAsyncIteratorExpression(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "Symbol" &&
+            expr.name.text === "asyncIterator";
+    }
+
     private isSymbolUnscopablesExpression(expr: ts.Expression): boolean {
         return ts.isPropertyAccessExpression(expr) &&
             ts.isIdentifier(expr.expression) &&
@@ -76163,6 +76170,7 @@ class Emitter {
 
     private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
         return this.isSymbolIteratorExpression(expr) ||
+            this.isSymbolAsyncIteratorExpression(expr) ||
             this.isSymbolUnscopablesExpression(expr) ||
             this.isSymbolIsConcatSpreadableExpression(expr) ||
             this.isSymbolToStringTagExpression(expr) ||
@@ -81946,6 +81954,13 @@ class Emitter {
                 T_VALUE,
                 [{ value: recv, target: T_VALUE, node: ea.expression }],
                 ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_iterator())`,
+            );
+        }
+        if (this.isSymbolAsyncIteratorExpression(ea.argumentExpression) && recv.ty.kind === "value") {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: recv, target: T_VALUE, node: ea.expression }],
+                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_async_iterator())`,
             );
         }
         if (isArrayPrototypeReceiver && this.isSymbolUnscopablesExpression(ea.argumentExpression)) {
