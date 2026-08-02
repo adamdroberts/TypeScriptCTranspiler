@@ -65449,7 +65449,7 @@ class Emitter {
             }
             case "on": {
                 if (args.length < 2) unsupported(call, "events.on expects emitter, eventName, and optional options");
-                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.on");
+                const optionSpecs = this.eventEmitterOnceOptions(args[2], "events.on", T_VALUE);
                 const emitter = this.emitExpr(args[0]!);
                 const eventName = this.emitEventEmitterEventName(args[1]!);
                 const specs: SequencedCallArg[] = [
@@ -65461,9 +65461,10 @@ class Emitter {
                 }
                 specs.push(...optionSpecs);
                 specs.push(...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2));
-                return this.emitSequencedExpr(T_VALUE, specs, ([ee, event]) =>
-                    `tsc_event_emitter_on_async_iterator(${ee}, ${event})`,
-                );
+                return this.emitSequencedExpr(T_VALUE, specs, ([ee, event, ...rest]) => {
+                    const signal = optionSpecs.length > 0 ? rest[0] : "tsc_value_undefined()";
+                    return `tsc_event_emitter_on_async_iterator(${ee}, ${event}, ${signal})`;
+                });
             }
             case "setMaxListeners": {
                 if (args.length < 2) unsupported(call, "events.setMaxListeners expects count and at least one emitter");
@@ -65538,7 +65539,11 @@ class Emitter {
         );
     }
 
-    private eventEmitterOnceOptions(options: ts.Expression | undefined, label: string): SequencedCallArg[] {
+    private eventEmitterOnceOptions(
+        options: ts.Expression | undefined,
+        label: string,
+        signalTarget: CType = T_VOID,
+    ): SequencedCallArg[] {
         if (!options || this.isUndefinedLikeExpression(options)) return [];
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(options)) return [];
@@ -65556,7 +65561,7 @@ class Emitter {
             }
             const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
             if (this.isUndefinedExpression(valueNode)) continue;
-            specs.push({ value: this.emitExpr(prop.initializer), target: T_VOID, node: prop.initializer });
+            specs.push({ value: this.emitExpr(prop.initializer), target: signalTarget, node: prop.initializer });
         }
         return specs;
     }

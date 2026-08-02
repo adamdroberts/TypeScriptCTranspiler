@@ -1,0 +1,1 @@
+{"description":"events.on AbortSignal cancellation rejects pending next calls, preserves queued events, and handles pre-aborted signals"}

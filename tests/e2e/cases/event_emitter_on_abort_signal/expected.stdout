@@ -1,0 +1,6 @@
+pending: pending-cancelled 0
+pending-after: true
+queued: false queued 0
+queued-abort: queued-cancelled
+queued-after: true
+pre: pre-cancelled 0

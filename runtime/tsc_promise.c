@@ -930,7 +930,11 @@ typedef struct {
     tsc_array_t* queued;
     tsc_array_t* pending;
     tsc_value_t iterator;
+    tsc_object_t* signal;
+    tsc_function_identity_t* abort_listener;
     bool closed;
+    bool aborted;
+    bool abort_delivered;
 } tsc_event_async_iterator_t;
 
 static tsc_value_t event_async_iterator_result(tsc_value_t value, bool done) {
@@ -967,23 +971,112 @@ static void event_async_iterator_listener(void* env, tsc_event_emitter_t* emitte
     tsc_array_push_raw(state->queued, &copy);
 }
 
-static void event_async_iterator_close(tsc_event_async_iterator_t* state) {
-    if (!state || state->closed) return;
+static tsc_value_t event_async_iterator_abort_reason(const tsc_event_async_iterator_t* state) {
+    if (!state || !state->signal) return tsc_value_undefined();
+    return tsc_value_get_prop(
+        tsc_value_object(state->signal),
+        tsc_str_from_lit("reason", 6)
+    );
+}
+
+static tsc_value_t event_async_iterator_abort_listener_value(const tsc_event_async_iterator_t* state) {
+    if (!state || !state->abort_listener) return tsc_value_undefined();
+    return value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)state->abort_listener);
+}
+
+static void event_async_iterator_remove_abort_listener(tsc_event_async_iterator_t* state) {
+    if (!state || !state->signal || !state->abort_listener) return;
+    tsc_value_t signal = tsc_value_object(state->signal);
+    tsc_value_t remove = tsc_value_get_prop(
+        signal,
+        tsc_str_from_lit("removeEventListener", 19)
+    );
+    if (!tsc_value_is_callable(remove)) return;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_value_t type = tsc_value_string(tsc_str_from_lit("abort", 5));
+    tsc_value_t listener = event_async_iterator_abort_listener_value(state);
+    tsc_array_push_raw(args, &type);
+    tsc_array_push_raw(args, &listener);
+    (void)tsc_value_apply_function(remove, signal, tsc_value_array(args));
+}
+
+static tsc_value_t event_async_iterator_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
+    if (!state || state->aborted) return tsc_value_undefined();
+    state->aborted = true;
     state->closed = true;
     tsc_event_emitter_off(state->emitter, state->event, event_async_iterator_listener, state);
+    tsc_value_t reason = event_async_iterator_abort_reason(state);
+    if (state->pending->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        event_async_iterator_remove_first(state->pending);
+        tsc_promise_reject_in_place(promise, reason);
+        state->abort_delivered = true;
+    }
     while (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         event_async_iterator_remove_first(state->pending);
         tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
     }
-    state->queued->len = 0;
+    return tsc_value_undefined();
+}
+
+static void event_async_iterator_add_abort_listener(tsc_event_async_iterator_t* state, tsc_value_t signal) {
+    if (!state || !value_is_box(signal) || value_tag(signal) != TSC_VALUE_TAG_OBJECT) return;
+    tsc_value_t add = tsc_value_get_prop(signal, tsc_str_from_lit("addEventListener", 16));
+    if (!tsc_value_is_callable(add)) return;
+    state->signal = (tsc_object_t*)value_ptr(signal);
+    tsc_value_t listener = tsc_value_function_builtin_named(
+        event_async_iterator_abort,
+        state,
+        1.0,
+        tsc_str_from_lit("eventAsyncIteratorAbort", 24)
+    );
+    state->abort_listener = (tsc_function_identity_t*)value_ptr(listener);
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_value_t type = tsc_value_string(tsc_str_from_lit("abort", 5));
+    tsc_array_push_raw(args, &type);
+    tsc_array_push_raw(args, &listener);
+    (void)tsc_value_apply_function(add, signal, tsc_value_array(args));
+}
+
+static void event_async_iterator_close(tsc_event_async_iterator_t* state) {
+    if (!state) return;
+    if (!state->closed) {
+        state->closed = true;
+        tsc_event_emitter_off(state->emitter, state->event, event_async_iterator_listener, state);
+        if (!state->aborted) event_async_iterator_remove_abort_listener(state);
+    }
+    while (state->pending->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        event_async_iterator_remove_first(state->pending);
+        tsc_promise_fulfill_in_place(promise, event_async_iterator_result(tsc_value_undefined(), true));
+    }
+    if (!state->aborted) state->queued->len = 0;
 }
 
 static tsc_value_t event_async_iterator_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
     tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)env;
-    if (!state || state->closed) {
+    if (!state) {
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+    }
+    if (state->aborted && state->queued->len > 0) {
+        tsc_array_t* values = TSC_ARR(tsc_array_t*, state->queued, 0);
+        event_async_iterator_remove_first(state->queued);
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_array(values), false)));
+    }
+    if (state->aborted) {
+        if (!state->abort_delivered) {
+            state->abort_delivered = true;
+            return tsc_value_promise(tsc_promise_reject(event_async_iterator_abort_reason(state)));
+        }
+        return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
+    }
+    if (state->closed) {
         return tsc_value_promise(tsc_promise_resolve(event_async_iterator_result(tsc_value_undefined(), true)));
     }
     if (state->queued->len > 0) {
@@ -1011,14 +1104,18 @@ static tsc_value_t event_async_iterator_async_iterator(void* env, tsc_value_t th
     return state ? state->iterator : tsc_value_undefined();
 }
 
-tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str_t* event) {
+tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str_t* event, tsc_value_t signal) {
     if (!ee || !event) return tsc_value_undefined();
     tsc_event_async_iterator_t* state = (tsc_event_async_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_event_async_iterator_t));
     state->emitter = ee;
     state->event = event;
     state->queued = tsc_array_new(sizeof(tsc_array_t*), 4);
     state->pending = tsc_array_new(sizeof(tsc_promise_t*), 4);
+    state->signal = NULL;
+    state->abort_listener = NULL;
     state->closed = false;
+    state->aborted = false;
+    state->abort_delivered = false;
     tsc_object_t* iterator = tsc_object_new();
     state->iterator = tsc_value_object(iterator);
     tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(event_async_iterator_next, state, 0.0, tsc_str_from_lit("next", 4)));
@@ -1033,6 +1130,9 @@ tsc_value_t tsc_event_emitter_on_async_iterator(tsc_event_emitter_t* ee, tsc_str
             tsc_str_from_lit("[Symbol.asyncIterator]", 22)
         )
     );
-    tsc_event_emitter_on(ee, event, event_async_iterator_listener, state, state, false, false);
+    event_async_iterator_add_abort_listener(state, signal);
+    if (!state->closed) {
+        tsc_event_emitter_on(ee, event, event_async_iterator_listener, state, state, false, false);
+    }
     return state->iterator;
 }
