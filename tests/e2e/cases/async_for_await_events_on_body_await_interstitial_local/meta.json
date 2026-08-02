@@ -1,0 +1,3 @@
+{
+    "description": "bounded for-await body awaits preserve a simple local declared between two direct body awaits"
+}

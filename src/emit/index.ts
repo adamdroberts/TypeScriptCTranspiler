@@ -45477,6 +45477,50 @@ class Emitter {
             directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return" && directRoute!.control !== "throw") return false;
         if ((bodyAwaitIfPrefix || bodyAwaitConditionExpression) && [thenRoute, elseRoute].some((route) => route !== null && route.control !== null &&
             route.control !== "continue" && route.control !== "break" && route.control !== "return" && route.control !== "throw")) return false;
+        type BodyAwaitInterstageLocal = { symbol: ts.Symbol; type: CType; field: string };
+        const bodyAwaitInterstageStatements = bodyAwaitSecondExpression
+            ? bodyAwaitBetweenStatements
+            : bodyAwaitConditionAfterPrefix
+                ? bodyAwaitPostludeStatements
+                : [];
+        const bodyAwaitInterstageLocals: BodyAwaitInterstageLocal[] = [];
+        let bodyAwaitInterstageLocalsSupported = true;
+        const seenBodyAwaitInterstageLocals = new Set<ts.Symbol>();
+        for (const statement of bodyAwaitInterstageStatements) {
+            if (ts.isVariableStatement(statement)) {
+                for (const declaration of statement.declarationList.declarations) {
+                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+                        bodyAwaitInterstageLocalsSupported = false;
+                        break;
+                    }
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    const type = this.identifierDeclaredType(declaration.name);
+                    if (!symbol || seenBodyAwaitInterstageLocals.has(symbol) || !type || type.kind === "void" || type.kind === "never") {
+                        bodyAwaitInterstageLocalsSupported = false;
+                        break;
+                    }
+                    seenBodyAwaitInterstageLocals.add(symbol);
+                    bodyAwaitInterstageLocals.push({ symbol, type, field: `body_await_local_${bodyAwaitInterstageLocals.length}` });
+                }
+                if (!bodyAwaitInterstageLocalsSupported) break;
+                continue;
+            }
+            let nestedLocal = false;
+            const visitNestedLocal = (node: ts.Node): void => {
+                if (nestedLocal) return;
+                if (ts.isVariableDeclaration(node)) {
+                    nestedLocal = true;
+                    return;
+                }
+                ts.forEachChild(node, visitNestedLocal);
+            };
+            visitNestedLocal(statement);
+            if (nestedLocal) {
+                bodyAwaitInterstageLocalsSupported = false;
+                break;
+            }
+        }
+        if (!bodyAwaitInterstageLocalsSupported) return false;
         let bodySupported = true;
         let loopDepth = 0;
         let switchDepth = 0;
@@ -45647,6 +45691,7 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* iterator_close_value;");
         this.structDecls.line("tsc_value_t iterator_close_reason;");
         for (const { entry, field } of bodyBindingFields) this.structDecls.line(`${entry.type.c} ${field};`);
+        for (const { type, field } of bodyAwaitInterstageLocals) this.structDecls.line(`${type.c} ${field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (usesThis && thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
         this.structDecls.close(` ${envType};`);
@@ -45739,6 +45784,16 @@ class Emitter {
             bodyAwaitPostludeScope.set(entry.symbol, `state->${field}`);
             bodyAwaitPostludeScopeTypes.set(entry.symbol, entry.type);
         }
+        for (const { symbol, type, field } of bodyAwaitInterstageLocals) {
+            bodyAwaitPostludeScope.set(symbol, `state->${field}`);
+            bodyAwaitPostludeScopeTypes.set(symbol, type);
+        }
+        const bodyAwaitInterstageScope = new Map(bodyAwaitPostludeScope);
+        const bodyAwaitInterstageScopeTypes = new Map(bodyAwaitPostludeScopeTypes);
+        for (const { symbol } of bodyAwaitInterstageLocals) {
+            bodyAwaitInterstageScope.delete(symbol);
+            bodyAwaitInterstageScopeTypes.delete(symbol);
+        }
         const emitBodyAwaitStatements = (statements: readonly ts.Statement[]): void => {
             if (statements.length === 0) return;
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
@@ -45749,6 +45804,37 @@ class Emitter {
                 for (const statement of statements) this.emitStmt(callback, statement);
             } finally {
                 this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+        };
+        const emitBodyAwaitInterstageStatements = (statements: readonly ts.Statement[]): void => {
+            if (statements.length === 0) return;
+            this.argumentValueScopes.push(bodyAwaitInterstageScope);
+            this.argumentValueTypeScopes.push(bodyAwaitInterstageScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            try {
+                for (const statement of statements) {
+                    this.asyncAwaitContinuationAdapterDepth++;
+                    try {
+                        this.emitStmt(callback, statement);
+                    } finally {
+                        this.asyncAwaitContinuationAdapterDepth--;
+                    }
+                    if (!ts.isVariableStatement(statement)) continue;
+                    for (const declaration of statement.declarationList.declarations) {
+                        if (!ts.isIdentifier(declaration.name)) continue;
+                        const symbol = this.symbolForIdentifier(declaration.name);
+                        const local = bodyAwaitInterstageLocals.find((candidate) => candidate.symbol === symbol);
+                        if (!local) continue;
+                        const localValue = this.identifierRead(declaration.name);
+                        callback.line(`state->${local.field} = ${this.coerce({ c: localValue, ty: local.type }, local.type, declaration.name)};`);
+                        bodyAwaitInterstageScope.set(local.symbol, `state->${local.field}`);
+                        bodyAwaitInterstageScopeTypes.set(local.symbol, local.type);
+                    }
+                }
+            } finally {
                 if (usesThis && thisValue) this.functionThisStack.pop();
                 this.argumentValueTypeScopes.pop();
                 this.argumentValueScopes.pop();
@@ -45912,7 +45998,7 @@ class Emitter {
         callback.close();
         if (bodyAwaitSecondExpression) {
             callback.open("if (state->body_await_stage == 1)");
-            emitBodyAwaitStatements(bodyAwaitBetweenStatements);
+            emitBodyAwaitInterstageStatements(bodyAwaitBetweenStatements);
             const secondSourceVar = emitBodyAwaitSecondSource(callback);
             callback.line("state->body_await_stage = 2;");
             callback.line(`state->receiver = ${secondSourceVar};`);
@@ -45928,7 +46014,7 @@ class Emitter {
         }
         if (bodyAwaitConditionAfterPrefix) {
             callback.open("if (state->body_await_stage == 1)");
-            emitBodyAwaitPostlude();
+            emitBodyAwaitInterstageStatements(bodyAwaitPostludeStatements);
             const conditionSourceVar = emitBodyAwaitConditionSource(callback);
             callback.line("state->body_await_stage = 2;");
             callback.line(`state->receiver = ${conditionSourceVar};`);
