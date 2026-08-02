@@ -45409,6 +45409,12 @@ class Emitter {
         const bodyAwaitExpression = bodyAwaitCandidate && ts.isAwaitExpression(bodyAwaitCandidate)
             ? bodyAwaitCandidate
             : null;
+        const bodyAwaitConditionCandidate = bodyIf && bodyPrefix.length === 0 && !bodyAwaitExpression
+            ? this.unwrapTransparentExpression(bodyIf.expression)
+            : null;
+        const bodyAwaitConditionExpression = bodyAwaitConditionCandidate && ts.isAwaitExpression(bodyAwaitConditionCandidate)
+            ? bodyAwaitConditionCandidate
+            : null;
         const bodyAwaitSecondIndex = bodyAwaitExpression && directRoute
             ? directRoute.statements.findIndex((statement, index) => index > 0 &&
                 ts.isExpressionStatement(statement) &&
@@ -45450,7 +45456,7 @@ class Emitter {
         if (bodyAwaitIfPrefix && [thenRoute, elseRoute].some((route) => route !== null && route.control !== null &&
             route.control !== "continue" && route.control !== "break")) return false;
         let bodySupported = true;
-        const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyReturnAwaitExpression]
+        const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyReturnAwaitExpression, bodyAwaitConditionExpression]
             .filter((expression): expression is ts.AwaitExpression => expression !== null);
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
@@ -45494,7 +45500,7 @@ class Emitter {
         visitReturn(result.expression);
         if (!bodySupported) return false;
 
-        const bodyAwaitSourceExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression;
+        const bodyAwaitSourceExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression ?? bodyAwaitConditionExpression;
         const bodyAwaitPromiseType = bodyAwaitSourceExpression
             ? this.prepareType(mapTsType(
                 bodyAwaitSourceExpression.expression,
@@ -45510,6 +45516,22 @@ class Emitter {
             ))
             : null;
         if (bodyAwaitSourceExpression && bodyAwaitPromiseType?.kind !== "promise") return false;
+        const bodyAwaitConditionPromiseType = bodyAwaitConditionExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitConditionExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitConditionExpression.expression),
+                this.checker,
+            ))
+            : null;
+        const bodyAwaitConditionAwaitedType = bodyAwaitConditionExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitConditionExpression,
+                this.checker.getTypeAtLocation(bodyAwaitConditionExpression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitConditionExpression && bodyAwaitConditionPromiseType?.kind !== "promise") return false;
+        if (bodyAwaitConditionExpression && (bodyAwaitConditionAwaitedType?.kind === "void" || bodyAwaitConditionAwaitedType?.kind === "never")) return false;
         const bodyAwaitSecondPromiseType = bodyAwaitSecondExpression
             ? this.prepareType(mapTsType(
                 bodyAwaitSecondExpression.expression,
@@ -45547,7 +45569,7 @@ class Emitter {
             ? params.find((param) => param.symbol === bindingSymbol) ?? null
             : null;
         if (bindingIsParameter && !bindingParameter) return false;
-        const bodyBindingFields = bodyAwaitExpression
+        const bodyBindingFields = (bodyAwaitExpression || bodyAwaitConditionExpression)
             ? bindingEntries
                 .filter((entry) => !(bindingParameter && entry.symbol === bindingSymbol))
                 .map((entry, index) => ({ entry, field: `body_binding_${index}` }))
@@ -45739,18 +45761,18 @@ class Emitter {
             target.line("tsc_try_pop();");
             target.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(thrown, T_VALUE, expression)});`);
         };
-        const emitBodyAwaitIfRoutes = (): void => {
+        const emitBodyAwaitIfRoutes = (condition: string | (() => string)): void => {
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
             this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
             if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
             this.asyncAwaitContinuationAdapterDepth++;
             try {
-                const condition = this.emitBoolExpr(bodyIf!.expression);
+                const conditionExpression = typeof condition === "function" ? condition() : condition;
                 const emitRoute = (route: BodyRoute): void => {
                     for (const statement of route.statements) this.emitStmt(callback, statement);
                     if (route.control === "break") callback.line("state->body_break = true;");
                 };
-                callback.open(`if (${condition})`);
+                callback.open(`if (${conditionExpression})`);
                 emitRoute(thenRoute!);
                 callback.close();
                 callback.open("else");
@@ -45825,7 +45847,12 @@ class Emitter {
         }
         emitBodyAwaitPostlude();
         callback.line("state->body_await = false;");
-        if (bodyAwaitIfPrefix) emitBodyAwaitIfRoutes();
+        if (bodyAwaitIfPrefix) emitBodyAwaitIfRoutes(() => this.emitBoolExpr(bodyIf!.expression));
+        if (bodyAwaitConditionExpression) {
+            const conditionValue = this.freshTemp("_for_await_body_condition");
+            callback.line(`${bodyAwaitConditionAwaitedType!.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(bodyAwaitConditionPromiseType!.elem, "_p"), bodyAwaitConditionAwaitedType!, bodyAwaitConditionExpression)};`);
+            emitBodyAwaitIfRoutes(this.truthyC({ c: conditionValue, ty: bodyAwaitConditionAwaitedType! }, bodyAwaitConditionExpression));
+        }
         if (bodyAwaitExpression && directRoute && directRoute.control === "return") {
             callback.open("if (state->body_sync_return)");
             callback.line("state->body_sync_return = false;");

@@ -1,0 +1,2 @@
+body-await-if-condition-reject: condition-failure
+body-await-if-condition: keep,stop
