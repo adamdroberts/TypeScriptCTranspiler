@@ -11,26 +11,22 @@ let aliasRead = "";
 let namespaceRead = "";
 let defaultRead = "";
 
-writeFile(namedPath, "named import\n");
-readFile(namedPath).then((text: string): string => {
+writeFile(namedPath, "named import\n").then((_value: any) => readFile(namedPath)).then((text: string): string => {
     namedRead = text.trim();
     return namedRead;
 });
 
-writeFileAlias(aliasPath, "alias import\n");
-readFileAlias(aliasPath).then((text: string): string => {
+writeFileAlias(aliasPath, "alias import\n").then((_value: any) => readFileAlias(aliasPath)).then((text: string): string => {
     aliasRead = text.trim();
     return aliasRead;
 });
 
-nodeFsp.writeFile(namespacePath, "namespace import\n");
-nodeFsp.readFile(namespacePath).then((text: string): string => {
+nodeFsp.writeFile(namespacePath, "namespace import\n").then((_value: any) => nodeFsp.readFile(namespacePath)).then((text: string): string => {
     namespaceRead = text.trim();
     return namespaceRead;
 });
 
-fsp.writeFile(defaultPath, "default import\n");
-fsp.readFile(defaultPath).then((text: string): string => {
+fsp.writeFile(defaultPath, "default import\n").then((_value: any) => fsp.readFile(defaultPath)).then((text: string): string => {
     defaultRead = text.trim();
     return defaultRead;
 });

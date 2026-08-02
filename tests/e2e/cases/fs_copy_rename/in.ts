@@ -15,15 +15,16 @@ nodefs.writeFileSync(src, "sync copy");
 nodefs.copyFileSync(src, copied);
 nodefs.renameSync(copied, renamed);
 
-fs.promises.writeFile(promiseSrc, "promise copy");
-fs.promises.copyFile(promiseSrc, promiseCopied);
-fs.promises.rename(promiseCopied, promiseRenamed);
+fs.promises.writeFile(promiseSrc, "promise copy")
+    .then((_value: any) => fs.promises.copyFile(promiseSrc, promiseCopied))
+    .then((_value: any) => fs.promises.rename(promiseCopied, promiseRenamed))
+    .then((_value: any): void => {
+        console.log("sync:", nodefs.readFileSync(renamed));
+        console.log("promise:", nodefs.readFileSync(promiseRenamed));
+        console.log("old copy exists:", nodefs.existsSync(copied));
+        console.log("old promise copy exists:", nodefs.existsSync(promiseCopied));
 
-console.log("sync:", nodefs.readFileSync(renamed));
-console.log("promise:", nodefs.readFileSync(promiseRenamed));
-console.log("old copy exists:", nodefs.existsSync(copied));
-console.log("old promise copy exists:", nodefs.existsSync(promiseCopied));
-
-for (const file of [src, renamed, promiseSrc, promiseRenamed]) {
-    if (nodefs.existsSync(file)) nodefs.rmSync(file);
-}
+        for (const file of [src, renamed, promiseSrc, promiseRenamed]) {
+            if (nodefs.existsSync(file)) nodefs.rmSync(file);
+        }
+    });

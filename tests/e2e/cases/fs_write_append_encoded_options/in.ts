@@ -26,13 +26,14 @@ nodefs.appendFileSync(namedPath, "2e", HEX_OPTIONS);
 const named = fs.readFileSync(namedPath, "buffer");
 console.log("named:", named.length, named.readUInt8(0), named.readUInt8(1), named.readUInt8(2), named.readUInt8(3));
 
-fs.promises.writeFile(promisePath, "SGk=", BASE64);
-fsp.appendFile(promisePath, "21", HEX_OPTIONS);
-nodefs.promises.appendFile(promisePath, "Kw==", BASE64_OPTIONS);
+fs.promises.writeFile(promisePath, "SGk=", BASE64)
+    .then((_value: any) => fsp.appendFile(promisePath, "21", HEX_OPTIONS))
+    .then((_value: any) => nodefs.promises.appendFile(promisePath, "Kw==", BASE64_OPTIONS))
+    .then((_value: any) => {
+        const promise = fs.readFileSync(promisePath, "buffer");
+        console.log("promise:", promise.length, promise.readUInt8(0), promise.readUInt8(1), promise.readUInt8(2), promise.readUInt8(3));
 
-const promise = fs.readFileSync(promisePath, "buffer");
-console.log("promise:", promise.length, promise.readUInt8(0), promise.readUInt8(1), promise.readUInt8(2), promise.readUInt8(3));
-
-fs.rmSync(path, { force: true });
-fs.rmSync(namedPath, { force: true });
-fs.rmSync(promisePath, { force: true });
+        fs.rmSync(path, { force: true });
+        fs.rmSync(namedPath, { force: true });
+        fs.rmSync(promisePath, { force: true });
+    });

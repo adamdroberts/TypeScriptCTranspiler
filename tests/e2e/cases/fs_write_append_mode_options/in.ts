@@ -34,15 +34,21 @@ try {
     appendFileSync(syncAppendPath, "-two", SYNC_APPEND_LATER_OPTIONS);
     console.log("sync append:", fileMode(syncAppendPath), fs.readFileSync(syncAppendPath));
 
-    fs.promises.writeFile(promiseWritePath, Buffer.from("promise"), PROMISE_WRITE_OPTIONS);
-    console.log("promise write:", fileMode(promiseWritePath), fs.readFileSync(promiseWritePath));
-
-    fs.promises.appendFile(promiseAppendPath, "append", PROMISE_APPEND_OPTIONS);
-    fs.promises.appendFile(promiseAppendPath, "-again", PROMISE_APPEND_LATER_OPTIONS);
-    console.log("promise append:", fileMode(promiseAppendPath), fs.readFileSync(promiseAppendPath));
 } finally {
     process.umask(oldUmask);
-    for (const file of [syncWritePath, syncAppendPath, promiseWritePath, promiseAppendPath]) {
-        fs.rmSync(file, { force: true });
-    }
 }
+
+process.umask(0);
+fs.promises.writeFile(promiseWritePath, Buffer.from("promise"), PROMISE_WRITE_OPTIONS)
+    .then((_value: any) => {
+        console.log("promise write:", fileMode(promiseWritePath), fs.readFileSync(promiseWritePath));
+        return fs.promises.appendFile(promiseAppendPath, "append", PROMISE_APPEND_OPTIONS);
+    })
+    .then((_value: any) => fs.promises.appendFile(promiseAppendPath, "-again", PROMISE_APPEND_LATER_OPTIONS))
+    .then((_value: any) => {
+        console.log("promise append:", fileMode(promiseAppendPath), fs.readFileSync(promiseAppendPath));
+        process.umask(oldUmask);
+        for (const file of [syncWritePath, syncAppendPath, promiseWritePath, promiseAppendPath]) {
+            fs.rmSync(file, { force: true });
+        }
+    });

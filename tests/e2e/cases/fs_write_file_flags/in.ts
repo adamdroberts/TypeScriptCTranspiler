@@ -27,15 +27,17 @@ fs.writeFileSync(updatePath, "rst", { flag: "w+" });
 fs.writeFileSync(updatePath, "-uv", { flag: "as+" });
 console.log("sync plus flags:", fs.readFileSync(updatePath));
 
-fs.promises.writeFile(promisePath, "alpha");
-fs.promises.writeFile(promisePath, Buffer.from("-beta"), { flag: "a" });
-fs.promises.writeFile(promisePath, "Z", { flag: "r+" });
-fs.promises.writeFile(promisePath, "-tail", { flag: "a+" });
-fs.promises.writeFile(promisePath, "again", { flag: "wx+" }).catch((reason: string): any => {
-    console.log("promise exclusive:", reason);
-});
-console.log("promise append:", fs.readFileSync(promisePath));
-
-for (const file of [syncPath, promisePath, exclusivePath, updatePath]) {
-    if (fs.existsSync(file)) fs.rmSync(file);
-}
+fs.promises.writeFile(promisePath, "alpha")
+    .then((_value: any) => fs.promises.writeFile(promisePath, Buffer.from("-beta"), { flag: "a" }))
+    .then((_value: any) => fs.promises.writeFile(promisePath, "Z", { flag: "r+" }))
+    .then((_value: any) => fs.promises.writeFile(promisePath, "-tail", { flag: "a+" }))
+    .then((_value: any) => fs.promises.writeFile(promisePath, "again", { flag: "wx+" }))
+    .catch((reason: string): void => {
+        console.log("promise exclusive:", reason);
+    })
+    .then((_value: any): void => {
+        console.log("promise append:", fs.readFileSync(promisePath));
+        for (const file of [syncPath, promisePath, exclusivePath, updatePath]) {
+            if (fs.existsSync(file)) fs.rmSync(file);
+        }
+    });

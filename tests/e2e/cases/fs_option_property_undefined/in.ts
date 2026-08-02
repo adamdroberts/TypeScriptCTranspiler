@@ -8,9 +8,6 @@ const promiseFile = root + "/promise.txt";
 const defaultOption = undefined;
 const defaultVoid = void 0;
 
-setImmediate((): void => {
-    fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
-});
 fs.mkdirSync(root, { recursive: void 0, mode: undefined });
 
 fs.writeFileSync(file, "alpha", { encoding: void 0, flag: undefined, mode: void 0, flush: undefined });
@@ -30,13 +27,14 @@ fs.cpSync(file, copy, {
 console.log("sync copy:", fs.readFileSync(copy, { encoding: void 0 }));
 console.log("sync readdir:", fs.readdirSync(root, { encoding: defaultOption, recursive: defaultVoid, withFileTypes: defaultOption }).sort().join("|"));
 
-fs.promises.writeFile(promiseFile, "promise", { encoding: void 0, flag: undefined, mode: void 0, flush: undefined });
-fs.promises.appendFile(promiseFile, "-done", { encoding: undefined, flag: void 0, mode: undefined, flush: void 0 });
-fs.promises.readFile(promiseFile, { encoding: void 0, flag: undefined }).then((text: string): void => {
-    console.log("promise read:", text);
-});
-fs.promises.readdir(root, { encoding: defaultOption, recursive: defaultVoid, withFileTypes: defaultOption }).then((names: string[]): void => {
-    console.log("promise readdir:", names.sort().join("|"));
-});
-
-fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
+fs.promises.writeFile(promiseFile, "promise", { encoding: void 0, flag: undefined, mode: void 0, flush: undefined })
+    .then((_value: any) => fs.promises.appendFile(promiseFile, "-done", { encoding: undefined, flag: void 0, mode: undefined, flush: void 0 }))
+    .then((_value: any) => fs.promises.readdir(root, { encoding: defaultOption, recursive: defaultVoid, withFileTypes: defaultOption }))
+    .then((names: string[]) => {
+        console.log("promise readdir:", names.sort().join("|"));
+        return fs.promises.readFile(promiseFile, { encoding: void 0, flag: undefined });
+    })
+    .then((text: string): void => {
+        console.log("promise read:", text);
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
+    });

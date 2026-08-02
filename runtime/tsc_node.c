@@ -2868,6 +2868,7 @@ extern uv_loop_t* uv_default_loop(void);
 extern int uv_run(uv_loop_t* loop, int mode);
 extern int uv_fs_open(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, int mode, tsc_uv_fs_cb cb);
 extern int uv_fs_read(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
+extern int uv_fs_write(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
 extern int uv_fs_close(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
 extern void uv_fs_req_cleanup(tsc_uv_fs_t* req);
 extern ssize_t uv_fs_get_result(const tsc_uv_fs_t* req);
@@ -3028,12 +3029,209 @@ tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_
     return promise;
 }
 
+typedef struct tsc_fs_write_file_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    int fd;
+    const tsc_str_t* string_data;
+    const tsc_buffer_t* buffer_data;
+    const uint8_t* bytes;
+    size_t len;
+    size_t offset;
+    tsc_uv_buf_t write_buf;
+    bool append;
+    bool exclusive;
+    bool update;
+    double file_mode;
+    tsc_str_t* error;
+    struct tsc_fs_write_file_async* next;
+} tsc_fs_write_file_async_t;
+
+static tsc_fs_write_file_async_t* g_tsc_fs_write_file_async = NULL;
+
+static void tsc_fs_write_file_async_remove(tsc_fs_write_file_async_t* task) {
+    tsc_fs_write_file_async_t** cursor = &g_tsc_fs_write_file_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_write_file_async_finish(tsc_fs_write_file_async_t* task, bool success) {
+    if (success) {
+        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    } else {
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.writeFileSync: could not write file"))
+        );
+    }
+    free(task->path);
+    tsc_fs_write_file_async_remove(task);
+}
+
+static void tsc_fs_write_file_async_close_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_write_file_async_close_or_finish(tsc_fs_write_file_async_t* task, bool success) {
+    int rc = uv_fs_close(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_write_file_async_close_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        if (success) task->error = tsc_str_from_cstr("fs.writeFileSync: could not close file");
+        tsc_fs_write_file_async_finish(task, false);
+    }
+}
+
+static void tsc_fs_write_file_async_close_cb(tsc_uv_fs_t* req) {
+    tsc_fs_write_file_async_t* task = (tsc_fs_write_file_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.writeFileSync: could not close file");
+        tsc_fs_write_file_async_finish(task, false);
+        return;
+    }
+    tsc_fs_write_file_async_finish(task, task->error == NULL);
+}
+
+static void tsc_fs_write_file_async_write_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_write_file_async_write_next(tsc_fs_write_file_async_t* task) {
+    if (task->offset == task->len) {
+        tsc_fs_write_file_async_close_or_finish(task, true);
+        return;
+    }
+    task->write_buf.base = (char*)task->bytes + task->offset;
+    task->write_buf.len = task->len - task->offset;
+    int rc = uv_fs_write(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->fd,
+        &task->write_buf,
+        1,
+        task->append ? -1 : (int64_t)task->offset,
+        tsc_fs_write_file_async_write_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.writeFileSync: could not write file");
+        tsc_fs_write_file_async_close_or_finish(task, false);
+    }
+}
+
+static void tsc_fs_write_file_async_write_cb(tsc_uv_fs_t* req) {
+    tsc_fs_write_file_async_t* task = (tsc_fs_write_file_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.writeFileSync: could not write file");
+        tsc_fs_write_file_async_close_or_finish(task, false);
+        return;
+    }
+    if (result == 0) {
+        task->error = tsc_str_from_cstr("fs.writeFileSync: could not write file");
+        tsc_fs_write_file_async_close_or_finish(task, false);
+        return;
+    }
+    task->offset += (size_t)result;
+    tsc_fs_write_file_async_write_next(task);
+}
+
+static void tsc_fs_write_file_async_open_cb(tsc_uv_fs_t* req) {
+    tsc_fs_write_file_async_t* task = (tsc_fs_write_file_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        if (task->exclusive && access(task->path, F_OK) == 0) {
+            task->error = tsc_str_from_cstr("fs.writeFileSync: file already exists");
+        } else {
+            task->error = tsc_str_from_cstr("fs.writeFileSync: could not open");
+        }
+        tsc_fs_write_file_async_finish(task, false);
+        return;
+    }
+    task->fd = (int)result;
+    tsc_fs_write_file_async_write_next(task);
+}
+
+static tsc_promise_t* tsc_fs_promises_write_file_async(
+    const tsc_str_t* path,
+    const uint8_t* bytes,
+    size_t len,
+    const tsc_str_t* string_data,
+    const tsc_buffer_t* buffer_data,
+    bool append,
+    bool exclusive,
+    bool update,
+    double file_mode
+) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_write_file_async_t* task = (tsc_fs_write_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_write_file_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->fd = -1;
+    task->string_data = string_data;
+    task->buffer_data = buffer_data;
+    task->bytes = bytes;
+    task->len = len;
+    task->append = append;
+    task->exclusive = exclusive;
+    task->update = update;
+    task->file_mode = file_mode;
+    task->next = g_tsc_fs_write_file_async;
+    g_tsc_fs_write_file_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+
+    int flags = update ? O_RDWR : O_WRONLY;
+    if (!update) flags |= O_CREAT;
+    if (!append && !update) flags |= O_TRUNC;
+    if (append) flags |= O_APPEND;
+    if (exclusive) flags |= O_EXCL;
+    mode_t mode = (isnan(file_mode) || isinf(file_mode) || file_mode < 0.0)
+        ? (mode_t)0666
+        : (mode_t)file_mode;
+    int rc = uv_fs_open(g_tsc_fs_uv_loop, &task->req, task->path, flags, mode, tsc_fs_write_file_async_open_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.writeFileSync: could not open");
+        tsc_fs_write_file_async_finish(task, false);
+    }
+    return promise;
+}
+
+tsc_promise_t* tsc_fs_promises_write_file_string_async(
+    const tsc_str_t* path,
+    const tsc_str_t* data,
+    bool append,
+    bool exclusive,
+    bool update,
+    double file_mode
+) {
+    return tsc_fs_promises_write_file_async(path, (const uint8_t*)data->data, data->len, data, NULL, append, exclusive, update, file_mode);
+}
+
+tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
+    const tsc_str_t* path,
+    const tsc_buffer_t* data,
+    bool append,
+    bool exclusive,
+    bool update,
+    double file_mode
+) {
+    return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, append, exclusive, update, file_mode);
+}
+
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {
-    if (!g_tsc_fs_read_file_async) return;
+    if (!tsc_fs_libuv_pending()) return;
     (void)uv_run(g_tsc_fs_uv_loop, block ? TSC_UV_RUN_ONCE : TSC_UV_RUN_NOWAIT);
 }
 #else

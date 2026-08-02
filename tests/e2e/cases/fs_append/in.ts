@@ -10,12 +10,13 @@ fs.writeFileSync(syncPath, "a");
 nodefs.appendFileSync(syncPath, "b");
 fs.appendFileSync(syncPath, "c");
 
-fs.promises.writeFile(promisePath, "x");
-fs.promises.appendFile(promisePath, "y");
-fs.promises.appendFile(promisePath, "z");
+fs.promises.writeFile(promisePath, "x")
+    .then((_value: any) => fs.promises.appendFile(promisePath, "y"))
+    .then((_value: any) => fs.promises.appendFile(promisePath, "z"))
+    .then((_value: any): void => {
+        console.log("sync:", nodefs.readFileSync(syncPath));
+        console.log("promise:", nodefs.readFileSync(promisePath));
 
-console.log("sync:", nodefs.readFileSync(syncPath));
-console.log("promise:", nodefs.readFileSync(promisePath));
-
-nodefs.rmSync(syncPath);
-nodefs.rmSync(promisePath);
+        nodefs.rmSync(syncPath);
+        nodefs.rmSync(promisePath);
+    });

@@ -15,15 +15,18 @@ function mark(label: string): any {
     return { aborted: false };
 }
 
-writeFile(tmpPath, "signal ok\n", { encoding: "utf8", signal: mark("write") });
-appendFile(tmpPath, "append ok\n", { encoding: "utf8", signal: mark("append") });
+const writeSignal = mark("write");
+const appendSignal = mark("append");
+const readSignal = mark("read");
+writeFile(tmpPath, "signal ok\n", { encoding: "utf8", signal: writeSignal })
+    .then((_value: any) => appendFile(tmpPath, "append ok\n", { encoding: "utf8", signal: appendSignal }))
+    .then((_value: any) => readFile(tmpPath, { encoding: "utf8", signal: readSignal }))
+    .then((text: string): string => {
+        readBack = text;
+        return text;
+    })
+    .then((_value: any) => writeFile(tmpPath, "signal ok\n", { signal: void 0 }));
 
-readFile(tmpPath, { encoding: "utf8", signal: mark("read") }).then((text: string): string => {
-    readBack = text;
-    return text;
-});
-
-writeFile(tmpPath, "signal ok\n", { signal: void 0 });
 stat(tmpPath, { signal: mark("stat") });
 lstat(tmpPath, { signal: mark("lstat") });
 stat(tmpPath, { signal: void 0 });

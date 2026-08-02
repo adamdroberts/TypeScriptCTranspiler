@@ -38,20 +38,21 @@ try {
 }
 console.log("sync append exclusive content:", fs.readFileSync(exclusivePath));
 
-fs.promises.writeFile(promisePath, "one");
-fs.promises.readFile(promisePath, PROMISE_READ_OPTIONS).then((text) => {
-    console.log("promise read flag:", text);
-    return text;
-});
-fs.promises.appendFile(promisePath, "-two", { flag: APPEND });
-fs.promises.appendFile(promisePath, "-three", { flag: APPEND_PLUS });
-fs.promises.appendFile(promisePath, "-again", APPEND_EXCLUSIVE_OPTIONS).catch((reason: string): any => {
-    console.log("promise append exclusive:", reason);
-});
-console.log("promise append flag:", fs.readFileSync(promisePath));
-
-setImmediate((): void => {
-    for (const file of [syncPath, promisePath, exclusivePath]) {
-        fs.rmSync(file, { force: true });
-    }
-});
+fs.promises.writeFile(promisePath, "one")
+    .then((_value: any) => fs.promises.appendFile(promisePath, "-two", { flag: APPEND }))
+    .then((_value: any) => fs.promises.appendFile(promisePath, "-three", { flag: APPEND_PLUS }))
+    .then((_value: any) => fs.promises.readFile(promisePath, PROMISE_READ_OPTIONS))
+    .then((text: string) => {
+        console.log("promise append flag:", text);
+        return fs.promises.appendFile(promisePath, "-again", APPEND_EXCLUSIVE_OPTIONS);
+    })
+    .catch((reason: string): void => {
+        console.log("promise append exclusive:", reason);
+    })
+    .then((_value: any) => fs.promises.readFile(promisePath, PROMISE_READ_OPTIONS))
+    .then((text: string): void => {
+        console.log("promise read flag:", text);
+        for (const file of [syncPath, promisePath, exclusivePath]) {
+            fs.rmSync(file, { force: true });
+        }
+    });

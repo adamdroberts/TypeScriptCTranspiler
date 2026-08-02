@@ -1,0 +1,3 @@
+completed: true
+content: 10:one|two|34
+error: fs.writeFileSync: file already exists

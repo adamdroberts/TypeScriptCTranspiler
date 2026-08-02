@@ -8,19 +8,17 @@ let namedRead = "";
 let aliasRead = "";
 let namespaceRead = "";
 
-promises.writeFile(tmpPath, content);
-promises.readFile(tmpPath).then((text: string): string => {
+promises.writeFile(tmpPath, content).then((_value: any) => promises.readFile(tmpPath)).then((text: string): string => {
     namedRead = text.trim();
     return namedRead;
 });
 
-promisesAlias.writeFile(aliasPath, "aliased fs promises\n");
-promisesAlias.readFile(aliasPath).then((text: string): string => {
+promisesAlias.writeFile(aliasPath, "aliased fs promises\n").then((_value: any) => promisesAlias.readFile(aliasPath)).then((text: string): string => {
     aliasRead = text.trim();
     return aliasRead;
 });
 
-nodefs.promises.readFile(tmpPath).then((text: string): string => {
+promises.writeFile(tmpPath, content).then((_value: any) => nodefs.promises.readFile(tmpPath)).then((text: string): string => {
     namespaceRead = text.trim();
     return namespaceRead;
 });

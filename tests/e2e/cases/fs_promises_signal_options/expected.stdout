@@ -11,4 +11,4 @@ aborted mkdir: fs cancelled
 aborted rm: fs cancelled
 aborted rmdir: fs cancelled
 seen: write;append;read;stat;lstat;realpath;readlink;mkdtemp;mkdir;rmdir;rm;
-read: signal ok
+read: signal ok|append ok
