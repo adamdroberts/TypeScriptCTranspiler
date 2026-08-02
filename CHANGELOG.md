@@ -10,6 +10,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Source-`try` conditional structural return arms now receive the enclosing async return context, preserving homogeneous typed-array values instead of routing them through the pointer-only promise representation. Regression: `async_await_branch_block_source_try_structural_conditional_return_four_await`.
 - Typed lazy generators passed through a different `Generator<...>` element type now stay lazy during conversion, preserving per-yield element boxing/conversion and `.next(value)` delivery instead of materializing at the call site. Regression: `generator_lazy_yield_logical`.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
+- Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
 
@@ -801,6 +802,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Added twelve-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Added thirteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Added fourteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
+- Added fifteen-await branch/fallthrough regression coverage for async declarations, class methods, and function values. Test: `async_await_eight_step_chain`.
 - Leading awaited-local chains now cover await-free `switch` statements with simple assigned locals between suspension points across declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`.
 - Leading awaited-local chains now cover await-free `while` statements with simple assigned locals between suspension points across declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`.
 - Leading awaited-local chains now cover await-free `do…while` statements with simple assigned locals between suspension points across declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`.

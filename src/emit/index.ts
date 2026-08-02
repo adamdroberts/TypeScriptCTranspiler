@@ -41104,12 +41104,13 @@ class Emitter {
         const returnContextType = this.asyncAwaitReturnContextTypeForBody(body);
         if (!returnContextType) return this.emitAsyncAwaitIfExpressionReturnBranch(buf, branch, rejectResult);
         const expressions: ts.Expression[] = [];
-        const visit = (node: ts.Node): void => {
+        const visit = (node: ts.Node, inReturnExpression = false): void => {
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
-            if (ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node)) {
+            const isReturnExpression = inReturnExpression || ts.isReturnStatement(node);
+            if (isReturnExpression && (ts.isArrayLiteralExpression(node) || ts.isObjectLiteralExpression(node))) {
                 expressions.push(node);
             }
-            ts.forEachChild(node, visit);
+            ts.forEachChild(node, (child) => visit(child, isReturnExpression));
         };
         visit(body);
         for (const expression of expressions) {
