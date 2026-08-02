@@ -166,7 +166,8 @@ async function declaration(): Promise<string> {
     const oneHundredSeven = await delay(107, oneHundredSix + "7");
     const oneHundredEight = await delay(108, oneHundredSeven + "8");
     const oneHundredNine = await delay(109, oneHundredEight + "9");
-    return oneHundredNine;
+    const oneHundredTen = await delay(110, oneHundredNine + "0");
+    return oneHundredTen;
 }
 
 class Chain {
@@ -336,7 +337,8 @@ class Chain {
         const oneHundredSeven = await delay(107, oneHundredSix + "0");
         const oneHundredEight = await delay(108, oneHundredSeven + "1");
         const oneHundredNine = await delay(109, oneHundredEight + "2");
-        return oneHundredNine;
+        const oneHundredTen = await delay(110, oneHundredNine + "3");
+        return oneHundredTen;
     }
 }
 
@@ -506,7 +508,8 @@ const value = async (): Promise<string> => {
     const oneHundredSeven = await delay(107, oneHundredSix + "0");
     const oneHundredEight = await delay(108, oneHundredSeven + "1");
     const oneHundredNine = await delay(109, oneHundredEight + "2");
-    return oneHundredNine;
+    const oneHundredTen = await delay(110, oneHundredNine + "3");
+    return oneHundredTen;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -676,7 +679,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const oneHundredSeven = await delay(127, oneHundredSix + "6");
         const oneHundredEight = await delay(128, oneHundredSeven + "7");
         const oneHundredNine = await delay(129, oneHundredEight + "8");
-        return oneHundredNine;
+        const oneHundredTen = await delay(130, oneHundredNine + "9");
+        return oneHundredTen;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -843,7 +847,8 @@ async function branchEight(flag: boolean): Promise<string> {
     const oneHundredSeven = await delay(135, oneHundredSix + "6");
     const oneHundredEight = await delay(136, oneHundredSeven + "7");
     const oneHundredNine = await delay(137, oneHundredEight + "8");
-    return oneHundredNine;
+    const oneHundredTen = await delay(138, oneHundredNine + "9");
+    return oneHundredTen;
 }
 
 class BranchChain {
@@ -1014,7 +1019,8 @@ class BranchChain {
             const oneHundredSeven = await delay(143, oneHundredSix + "6");
             const oneHundredEight = await delay(144, oneHundredSeven + "7");
             const oneHundredNine = await delay(145, oneHundredEight + "8");
-            return oneHundredNine;
+            const oneHundredTen = await delay(146, oneHundredNine + "9");
+            return oneHundredTen;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -1181,7 +1187,8 @@ class BranchChain {
         const oneHundredSeven = await delay(151, oneHundredSix + "6");
         const oneHundredEight = await delay(152, oneHundredSeven + "7");
         const oneHundredNine = await delay(153, oneHundredEight + "8");
-        return oneHundredNine;
+        const oneHundredTen = await delay(154, oneHundredNine + "9");
+        return oneHundredTen;
     }
 }
 
@@ -1352,7 +1359,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const oneHundredSeven = await delay(159, oneHundredSix + "6");
     const oneHundredEight = await delay(160, oneHundredSeven + "7");
     const oneHundredNine = await delay(161, oneHundredEight + "8");
-    return oneHundredNine;
+    const oneHundredTen = await delay(162, oneHundredNine + "9");
+    return oneHundredTen;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -1519,7 +1527,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const oneHundredSeven = await delay(167, oneHundredSix + "6");
     const oneHundredEight = await delay(168, oneHundredSeven + "7");
     const oneHundredNine = await delay(169, oneHundredEight + "8");
-    return oneHundredNine;
+    const oneHundredTen = await delay(170, oneHundredNine + "9");
+    return oneHundredTen;
 };
 
 declaration().then((result) => console.log("declaration:", result));
