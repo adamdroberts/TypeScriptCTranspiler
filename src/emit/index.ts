@@ -32971,25 +32971,10 @@ class Emitter {
     private asyncAwaitTryConditionalSingleAwaitInExpression(
         expression: ts.Expression,
     ): ts.AwaitExpression | null {
-        let found: ts.AwaitExpression | null = null;
-        let valid = true;
-        const visit = (node: ts.Node): void => {
-            if (!valid) return;
-            if (ts.isAwaitExpression(node)) {
-                if (found) {
-                    valid = false;
-                    return;
-                }
-                found = node;
-            }
-            if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
-                valid = false;
-                return;
-            }
-            ts.forEachChild(node, visit);
-        };
-        visit(expression);
-        return valid ? found : null;
+        // Only a leading await is guaranteed to run before the rest of this
+        // operand. This rejects conditional and right-hand short-circuit
+        // awaits whose evaluation depends on a synchronous expression.
+        return this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
     }
 
     private asyncAwaitTryConditionalConditionAwaitExpression(
