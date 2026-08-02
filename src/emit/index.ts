@@ -33198,18 +33198,33 @@ class Emitter {
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(operand);
     }
 
+    private asyncAwaitTryConditionalGlobalCoercionCallSupported(
+        expression: ts.CallExpression,
+    ): boolean {
+        const callee = expression.expression;
+        if (ts.isIdentifier(callee)) {
+            return [
+                "AggregateError", "Array", "BigInt", "Boolean", "Date", "Error", "Number", "Object",
+                "RegExp", "String", "Symbol", "atob", "btoa", "decodeURI", "decodeURIComponent",
+                "encodeURI", "encodeURIComponent", "isFinite", "isNaN", "parseFloat", "parseInt",
+            ].includes(callee.text) && this.isUnshadowedGlobalIdentifier(callee, callee.text);
+        }
+        if (!ts.isPropertyAccessExpression(callee) ||
+            !ts.isIdentifier(callee.expression) ||
+            callee.expression.text !== "Number" ||
+            !["isFinite", "isInteger", "isNaN", "isSafeInteger"].includes(callee.name.text)) {
+            return false;
+        }
+        return this.isUnshadowedGlobalIdentifier(callee.expression, "Number");
+    }
+
     private asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(
         condition: ts.Expression,
     ): { awaitExpr: ts.AwaitExpression; capture: ts.Expression } | null {
         const expression = this.unwrapTransparentExpression(condition);
         if (!ts.isCallExpression(expression) ||
             expression.arguments.length !== 1 ||
-            !ts.isIdentifier(expression.expression)) {
-            return null;
-        }
-        const name = expression.expression.text;
-        if ((name !== "AggregateError" && name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol" && name !== "atob" && name !== "btoa" && name !== "decodeURI" && name !== "decodeURIComponent" && name !== "encodeURI" && name !== "encodeURIComponent" && name !== "isFinite" && name !== "isNaN" && name !== "parseFloat" && name !== "parseInt") ||
-            !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
+            !this.asyncAwaitTryConditionalGlobalCoercionCallSupported(expression)) {
             return null;
         }
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression.arguments[0]!);
@@ -33221,12 +33236,7 @@ class Emitter {
         const expression = this.unwrapTransparentExpression(condition);
         if (!ts.isCallExpression(expression) ||
             expression.arguments.length !== 1 ||
-            !ts.isIdentifier(expression.expression)) {
-            return null;
-        }
-        const name = expression.expression.text;
-        if ((name !== "AggregateError" && name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol" && name !== "atob" && name !== "btoa" && name !== "decodeURI" && name !== "decodeURIComponent" && name !== "encodeURI" && name !== "encodeURIComponent" && name !== "isFinite" && name !== "isNaN" && name !== "parseFloat" && name !== "parseInt") ||
-            !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
+            !this.asyncAwaitTryConditionalGlobalCoercionCallSupported(expression)) {
             return null;
         }
         const operand = this.unwrapTransparentExpression(expression.arguments[0]!);

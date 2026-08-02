@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally Number predicate members around direct awaits preserve numeric truthiness and rejection cleanup"
+}

@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-infinite declaration-false LF
+declaration-reject caught-number-static-bad L
+method-true method-true LTM
+method-number method-false LFM
+method-reject rejected-number-static-bad LM
+arrow-true arrow-true LTV
+arrow-number arrow-false LFV
+arrow-reject caught-number-static-bad LV
+safe-true safe-true LT
+safe-large safe-false LF
+safe-reject caught-number-static-bad L
