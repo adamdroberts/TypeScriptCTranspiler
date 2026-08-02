@@ -22,6 +22,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Bounded `for await...of` lowering now supports a final top-level synchronous `if` with await-free branch prefixes and direct branch `continue`, `break`, `return`, `throw`, or fallthrough paths. Test: `async_for_await_events_on_branch_control`.
 - Bounded `for await...of` lowering now accepts an existing async-function parameter as the loop binding and writes each fulfilled item back into the captured continuation environment. Test: `async_for_await_events_on_parameter_binding`.
 - Bounded `for await...of` lowering now accepts simple array binding patterns containing identifier elements and unpacks each dynamic iterator item into continuation-local bindings. Test: `async_for_await_events_on_array_binding`.
+- Bounded `for await...of` array binding patterns now skip elided iterator-item positions while retaining later identifier bindings. Test: `async_for_await_events_on_array_elision`.
 - Bounded `for await...of` lowering now accepts simple static-property object binding patterns and unpacks each dynamic iterator item through property reads. Test: `async_for_await_events_on_object_binding`.
 - Bounded `for await...of` array and static-property object binding elements now support lazy await-free defaults when the extracted value is `undefined`. Test: `async_for_await_events_on_binding_defaults`.
 - Bounded `for await...of` simple array bindings now support one terminal identifier rest element backed by a dynamic trailing-value array. Test: `async_for_await_events_on_array_rest`.

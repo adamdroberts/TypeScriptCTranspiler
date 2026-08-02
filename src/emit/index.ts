@@ -45282,6 +45282,10 @@ class Emitter {
                 let restSeen = false;
                 for (let index = 0; index < name.elements.length; index++) {
                     const element = name.elements[index]!;
+                    if (ts.isOmittedExpression(element)) {
+                        if (restSeen) return null;
+                        continue;
+                    }
                     if (!ts.isBindingElement(element) || element.dotDotDotToken || !ts.isIdentifier(element.name)) {
                         if (!ts.isBindingElement(element) || !element.dotDotDotToken || !ts.isIdentifier(element.name) || element.initializer || restSeen || index !== name.elements.length - 1) {
                             return null;
