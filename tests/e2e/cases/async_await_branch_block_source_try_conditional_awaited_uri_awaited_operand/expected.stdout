@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-empty-uri declaration-false LF
+declaration-reject caught-uri-bad L
+method-true method-true LTM
+method-empty-uri method-false LFM
+method-reject rejected-uri-bad LM
+arrow-true arrow-true LTV
+arrow-empty-uri arrow-false LFV
+arrow-reject caught-uri-bad LV
+component-true component-true LT
+component-empty-uri component-false LF
+component-reject caught-uri-bad L
