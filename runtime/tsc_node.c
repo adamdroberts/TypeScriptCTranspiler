@@ -2888,6 +2888,16 @@ typedef struct {
     tsc_uv_timespec_t st_ctim;
     tsc_uv_timespec_t st_birthtim;
 } tsc_uv_stat_t;
+typedef struct {
+    uint64_t f_type;
+    uint64_t f_bsize;
+    uint64_t f_blocks;
+    uint64_t f_bfree;
+    uint64_t f_bavail;
+    uint64_t f_files;
+    uint64_t f_ffree;
+    uint64_t f_spare[4];
+} tsc_uv_statfs_t;
 typedef void (*tsc_uv_fs_cb)(tsc_uv_fs_t* req);
 
 extern uv_loop_t* uv_default_loop(void);
@@ -2901,6 +2911,8 @@ extern int uv_fs_access(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int
 extern int uv_fs_stat(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_lstat(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern tsc_uv_stat_t* uv_fs_get_statbuf(tsc_uv_fs_t* req);
+extern int uv_fs_statfs(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
+extern void* uv_fs_get_ptr(const tsc_uv_fs_t* req);
 extern int uv_fs_close(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
 extern void uv_fs_req_cleanup(tsc_uv_fs_t* req);
 extern ssize_t uv_fs_get_result(const tsc_uv_fs_t* req);
@@ -3523,8 +3535,101 @@ tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_
     return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, true);
 }
 
+typedef struct tsc_fs_statfs_libuv_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    struct tsc_fs_statfs_libuv_async* next;
+} tsc_fs_statfs_libuv_async_t;
+
+static tsc_fs_statfs_libuv_async_t* g_tsc_fs_statfs_libuv_async = NULL;
+
+static void tsc_fs_statfs_libuv_remove(tsc_fs_statfs_libuv_async_t* task) {
+    tsc_fs_statfs_libuv_async_t** cursor = &g_tsc_fs_statfs_libuv_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_statfs_libuv_finish(
+    tsc_fs_statfs_libuv_async_t* task,
+    tsc_value_t value,
+    tsc_str_t* error
+) {
+    if (error) {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+    } else {
+        tsc_promise_fulfill_in_place(task->promise, value);
+    }
+    free(task->path);
+    tsc_fs_statfs_libuv_remove(task);
+}
+
+static void tsc_fs_statfs_libuv_cb(tsc_uv_fs_t* req) {
+    tsc_fs_statfs_libuv_async_t* task = (tsc_fs_statfs_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_statfs_libuv_finish(
+            task,
+            tsc_value_undefined(),
+            tsc_str_from_cstr("fs.statfsSync: could not statfs path")
+        );
+        return;
+    }
+
+    tsc_uv_statfs_t* statfs = (tsc_uv_statfs_t*)uv_fs_get_ptr(req);
+    if (!statfs) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_statfs_libuv_finish(
+            task,
+            tsc_value_undefined(),
+            tsc_str_from_cstr("fs.statfsSync: could not statfs path")
+        );
+        return;
+    }
+
+    tsc_object_t* out = tsc_object_new();
+    tsc_object_set(out, tsc_str_from_lit("bsize", 5), tsc_value_num((double)statfs->f_bsize));
+    tsc_object_set(out, tsc_str_from_lit("frsize", 6), tsc_value_num((double)statfs->f_bsize));
+    tsc_object_set(out, tsc_str_from_lit("blocks", 6), tsc_value_num((double)statfs->f_blocks));
+    tsc_object_set(out, tsc_str_from_lit("bfree", 5), tsc_value_num((double)statfs->f_bfree));
+    tsc_object_set(out, tsc_str_from_lit("bavail", 6), tsc_value_num((double)statfs->f_bavail));
+    tsc_object_set(out, tsc_str_from_lit("files", 5), tsc_value_num((double)statfs->f_files));
+    tsc_object_set(out, tsc_str_from_lit("ffree", 5), tsc_value_num((double)statfs->f_ffree));
+    tsc_value_t value = tsc_value_object(out);
+    uv_fs_req_cleanup(req);
+    tsc_fs_statfs_libuv_finish(task, value, NULL);
+}
+
+tsc_promise_t* tsc_fs_promises_statfs_async(const tsc_str_t* path) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_statfs_libuv_async_t* task = (tsc_fs_statfs_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_statfs_libuv_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->next = g_tsc_fs_statfs_libuv_async;
+    g_tsc_fs_statfs_libuv_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_statfs(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_statfs_libuv_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_statfs_libuv_finish(
+            task,
+            tsc_value_undefined(),
+            tsc_str_from_cstr("fs.statfsSync: could not statfs path")
+        );
+    }
+    return promise;
+}
+
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {

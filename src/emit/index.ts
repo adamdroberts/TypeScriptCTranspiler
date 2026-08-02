@@ -74188,7 +74188,10 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.statfs path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => settle(`tsc_promise_resolve(tsc_fs_statfs_sync(${path!}))`));
+                ], ([path]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_statfs_async(${path!})`);
+                });
             }
             case "stat": {
                 if (args.length < 1) unsupported(call, "fs.promises.stat needs path and optional { bigint: false, throwIfNoEntry } options");
