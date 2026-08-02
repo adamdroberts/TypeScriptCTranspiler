@@ -1,0 +1,14 @@
+fn-ready-true fn-true R
+fn-ready-false fn-false R
+fn-await-true fn-true RA
+fn-await-false fn-false RA
+fn-ready-throw caught-ready-bad R
+fn-selector-reject caught-selector-bad RA
+method-ready-true method-true RM
+method-await-true method-true RAM
+method-ready-throw rejected-ready-bad RM
+method-selector-reject rejected-selector-bad RAM
+arrow-ready-false arrow-false RV
+arrow-await-true arrow-true RAV
+arrow-ready-throw caught-ready-bad RV
+arrow-selector-reject caught-selector-bad RAV

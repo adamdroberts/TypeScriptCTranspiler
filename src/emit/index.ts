@@ -522,6 +522,7 @@ type AsyncAwaitTryConditionalReturnNode =
 
 interface AsyncAwaitTryConditionalReturnBranch extends AsyncAwaitIfExpressionReturnBranch {
     conditionAwaitExpr?: ts.AwaitExpression;
+    conditionValueCache?: boolean;
     thenBranch: AsyncAwaitTryConditionalReturnNode;
     elseBranch: AsyncAwaitTryConditionalReturnNode;
     fallthroughBranch: null;
@@ -755,6 +756,7 @@ class Emitter {
     private argumentValueScopes: Map<ts.Symbol, string>[] = [];
     private argumentValueTypeScopes: Map<ts.Symbol, CType>[] = [];
     private awaitExpressionValueScopes: Map<ts.AwaitExpression, EmitResult>[] = [];
+    private conditionValueScopes: Map<ts.Expression, EmitResult>[] = [];
     private asyncAwaitEscapingSymbols = new Set<ts.Symbol>();
     private asyncAwaitHoistedPreludeSymbols = new Set<ts.Symbol>();
     private asyncAwaitHoistedPreludeDeclaredSymbols = new Set<ts.Symbol>();
@@ -26941,14 +26943,14 @@ class Emitter {
                 const conditionEh = this.freshTemp("_await_condition_eh");
                 const conditionReason = this.freshTemp("_await_condition_reason");
                 const conditionSource = this.freshTemp("_await_condition_source");
+                const conditionCachedName = branch.conditionValueCache ? this.freshTemp("_await_condition_value") : null;
                 buf.line(`bool ${conditionValue} = false;`);
+                if (conditionCachedName) buf.line(`tsc_value_t ${conditionCachedName};`);
                 buf.line(`tsc_try_frame_t ${conditionEh};`);
                 buf.line(`tsc_try_push(&${conditionEh});`);
                 buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-                const conditionExpression = branch.conditionMode === "nullish"
-                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
-                    : this.emitBoolExpr(branch.condition);
-                buf.line(`${conditionValue} = ${conditionExpression};`);
+                const conditionEmission = this.asyncAwaitTryConditionalConditionEmission(buf, branch, conditionCachedName);
+                buf.line(`${conditionValue} = ${conditionEmission.expression};`);
                 buf.line("tsc_try_pop();");
                 buf.close();
                 buf.open("else");
@@ -26968,12 +26970,17 @@ class Emitter {
                     sourceAwaitedType: T_VALUE,
                 }, destination)) return false;
                 buf.close();
-                buf.open(`if (${conditionValue})`);
-                if (!emitBranch(buf, branch.thenBranch, destination)) return false;
-                buf.close();
-                buf.open("else");
-                if (!emitBranch(buf, branch.elseBranch, destination)) return false;
-                buf.close();
+                if (conditionEmission.valueScope) this.conditionValueScopes.push(conditionEmission.valueScope);
+                try {
+                    buf.open(`if (${conditionValue})`);
+                    if (!emitBranch(buf, branch.thenBranch, destination)) return false;
+                    buf.close();
+                    buf.open("else");
+                    if (!emitBranch(buf, branch.elseBranch, destination)) return false;
+                    buf.close();
+                } finally {
+                    if (conditionEmission.valueScope) this.conditionValueScopes.pop();
+                }
                 return true;
             };
             return emitBranch(buf, conditional);
@@ -28242,14 +28249,14 @@ class Emitter {
                 const conditionEh = this.freshTemp("_await_condition_eh");
                 const conditionReason = this.freshTemp("_await_condition_reason");
                 const conditionSource = this.freshTemp("_await_condition_source");
+                const conditionCachedName = branch.conditionValueCache ? this.freshTemp("_await_condition_value") : null;
                 buf.line(`bool ${conditionValue} = false;`);
+                if (conditionCachedName) buf.line(`tsc_value_t ${conditionCachedName};`);
                 buf.line(`tsc_try_frame_t ${conditionEh};`);
                 buf.line(`tsc_try_push(&${conditionEh});`);
                 buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-                const conditionExpression = branch.conditionMode === "nullish"
-                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
-                    : this.emitBoolExpr(branch.condition);
-                buf.line(`${conditionValue} = ${conditionExpression};`);
+                const conditionEmission = this.asyncAwaitTryConditionalConditionEmission(buf, branch, conditionCachedName);
+                buf.line(`${conditionValue} = ${conditionEmission.expression};`);
                 buf.line("tsc_try_pop();");
                 buf.close();
                 buf.open("else");
@@ -28269,12 +28276,17 @@ class Emitter {
                     sourceAwaitedType: T_VALUE,
                 }, destination)) return false;
                 buf.close();
-                buf.open(`if (${conditionValue})`);
-                if (!emitBranch(buf, branch.thenBranch, destination)) return false;
-                buf.close();
-                buf.open("else");
-                if (!emitBranch(buf, branch.elseBranch, destination)) return false;
-                buf.close();
+                if (conditionEmission.valueScope) this.conditionValueScopes.push(conditionEmission.valueScope);
+                try {
+                    buf.open(`if (${conditionValue})`);
+                    if (!emitBranch(buf, branch.thenBranch, destination)) return false;
+                    buf.close();
+                    buf.open("else");
+                    if (!emitBranch(buf, branch.elseBranch, destination)) return false;
+                    buf.close();
+                } finally {
+                    if (conditionEmission.valueScope) this.conditionValueScopes.pop();
+                }
                 return true;
             };
             return emitBranch(buf, conditional);
@@ -29296,14 +29308,14 @@ class Emitter {
                 const conditionEh = this.freshTemp("_await_condition_eh");
                 const conditionReason = this.freshTemp("_await_condition_reason");
                 const conditionSource = this.freshTemp("_await_condition_source");
+                const conditionCachedName = branch.conditionValueCache ? this.freshTemp("_await_condition_value") : null;
                 buf.line(`bool ${conditionValue} = false;`);
+                if (conditionCachedName) buf.line(`tsc_value_t ${conditionCachedName};`);
                 buf.line(`tsc_try_frame_t ${conditionEh};`);
                 buf.line(`tsc_try_push(&${conditionEh});`);
                 buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-                const conditionExpression = branch.conditionMode === "nullish"
-                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
-                    : this.emitBoolExpr(branch.condition);
-                buf.line(`${conditionValue} = ${conditionExpression};`);
+                const conditionEmission = this.asyncAwaitTryConditionalConditionEmission(buf, branch, conditionCachedName);
+                buf.line(`${conditionValue} = ${conditionEmission.expression};`);
                 buf.line("tsc_try_pop();");
                 buf.close();
                 buf.open("else");
@@ -29323,12 +29335,17 @@ class Emitter {
                     sourceAwaitedType: T_VALUE,
                 }, destination)) return false;
                 buf.close();
-                buf.open(`if (${conditionValue})`);
-                if (!emitBranch(buf, branch.thenBranch, destination)) return false;
-                buf.close();
-                buf.open("else");
-                if (!emitBranch(buf, branch.elseBranch, destination)) return false;
-                buf.close();
+                if (conditionEmission.valueScope) this.conditionValueScopes.push(conditionEmission.valueScope);
+                try {
+                    buf.open(`if (${conditionValue})`);
+                    if (!emitBranch(buf, branch.thenBranch, destination)) return false;
+                    buf.close();
+                    buf.open("else");
+                    if (!emitBranch(buf, branch.elseBranch, destination)) return false;
+                    buf.close();
+                } finally {
+                    if (conditionEmission.valueScope) this.conditionValueScopes.pop();
+                }
                 return true;
             };
             return emitBranch(buf, conditional);
@@ -32694,7 +32711,7 @@ class Emitter {
 
     private asyncAwaitTryConditionalNullishLeftSupported(condition: ts.Expression): boolean {
         const expression = this.unwrapTransparentExpression(condition);
-        return ts.isIdentifier(expression) && this.isValueReferenceIdentifier(expression);
+        return this.asyncAwaitConditionExpressionSupported(expression);
     }
 
     private asyncAwaitTryConditionalNullishChainOperands(condition: ts.Expression): ts.Expression[] | null {
@@ -32745,6 +32762,7 @@ class Emitter {
             condition: expression,
             conditionMode: "nullish",
             conditionAwaitExpr,
+            conditionValueCache: !conditionAwaitExpr,
             thenBranch: nullishBranch,
             elseBranch: nonNullishBranch,
             fallthroughBranch: null,
@@ -34146,6 +34164,7 @@ class Emitter {
                 kind: "if",
                 condition: left,
                 conditionMode: "nullish",
+                conditionValueCache: true,
                 thenBranch: awaitedRightBranch,
                 elseBranch: nonNullishBranch,
                 fallthroughBranch: null,
@@ -34438,6 +34457,31 @@ class Emitter {
             this.awaitExpressionValueScopes.pop();
             this.argumentValueScopes.pop();
         }
+    }
+
+    private asyncAwaitTryConditionalConditionEmission(
+        buf: CBuf,
+        branch: AsyncAwaitTryConditionalReturnBranch,
+        cachedName: string | null,
+    ): { expression: string; valueScope: Map<ts.Expression, EmitResult> | null } {
+        if (!branch.conditionValueCache) {
+            return {
+                expression: branch.conditionMode === "nullish"
+                    ? this.nullishExprFromEmitResult(this.emitExpr(branch.condition), branch.condition)
+                    : this.emitBoolExpr(branch.condition),
+                valueScope: null,
+            };
+        }
+        if (!cachedName) return { expression: this.emitBoolExpr(branch.condition), valueScope: null };
+        const emitted = this.emitExpr(branch.condition);
+        const cached: EmitResult = { c: cachedName, ty: T_VALUE };
+        buf.line(`${cachedName} = ${this.coerce(emitted, T_VALUE, branch.condition)};`);
+        return {
+            expression: branch.conditionMode === "nullish"
+                ? this.nullishExprFromEmitResult(cached, branch.condition)
+                : this.truthyExprFromEmitResult(cached, branch.condition),
+            valueScope: new Map([[branch.condition, cached]]),
+        };
     }
 
     private asyncAwaitInterstitialCaptures(
@@ -54234,6 +54278,10 @@ class Emitter {
     private emitExpr(expr: ts.Expression): EmitResult {
         if (this.lazyGeneratorResumeOverride?.expr === expr) {
             return this.lazyGeneratorResumeOverride.result;
+        }
+        for (let i = this.conditionValueScopes.length - 1; i >= 0; i--) {
+            const value = this.conditionValueScopes[i]!.get(expr);
+            if (value) return value;
         }
         if (ts.isNumericLiteral(expr)) {
             return { c: formatNumericLiteral(expr.text), ty: T_NUMBER };
