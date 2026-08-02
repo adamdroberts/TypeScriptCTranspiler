@@ -32939,18 +32939,13 @@ class Emitter {
         falsyBranch: AsyncAwaitTryConditionalReturnNode,
     ): AsyncAwaitTryConditionalReturnBranch | null {
         const expression = this.unwrapTransparentExpression(condition);
-        if (!ts.isBinaryExpression(expression) ||
-            !this.asyncAwaitTryConditionalNonNullishExpression(expression) ||
-            !this.asyncAwaitConditionExpressionSupported(expression.left)) {
-            return null;
-        }
-        const awaitExpr = this.asyncAwaitTryConditionalSingleAwaitInExpression(expression.right);
-        if (!awaitExpr) return null;
+        const parts = this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression);
+        if (!parts) return null;
         const awaitedBranch: AsyncAwaitTryConditionalReturnBranch = {
             kind: "if",
             condition: expression,
-            conditionAwaitExpr: awaitExpr,
-            conditionValueCapture: expression.left,
+            conditionAwaitExpr: parts.awaitExpr,
+            conditionValueCapture: parts.capture,
             thenBranch: truthyBranch,
             elseBranch: falsyBranch,
             fallthroughBranch: null,
@@ -32960,12 +32955,32 @@ class Emitter {
         // comparison; conditionValueScopes makes the inner comparison reuse it.
         return {
             kind: "if",
-            condition: expression.left,
+            condition: parts.capture,
             conditionValueCache: true,
             thenBranch: awaitedBranch,
             elseBranch: awaitedBranch,
             fallthroughBranch: null,
         };
+    }
+
+    private asyncAwaitTryConditionalNonNullishRightAwaitParts(
+        condition: ts.Expression,
+    ): { awaitExpr: ts.AwaitExpression; capture: ts.Expression } | null {
+        let expression = this.unwrapTransparentExpression(condition);
+        while (ts.isPrefixUnaryExpression(expression) ||
+            ts.isTypeOfExpression(expression) ||
+            ts.isDeleteExpression(expression)) {
+            expression = this.unwrapTransparentExpression(
+                ts.isPrefixUnaryExpression(expression) ? expression.operand : expression.expression,
+            );
+        }
+        if (!ts.isBinaryExpression(expression) ||
+            !this.asyncAwaitTryConditionalNonNullishExpression(expression) ||
+            !this.asyncAwaitConditionExpressionSupported(expression.left)) {
+            return null;
+        }
+        const awaitExpr = this.asyncAwaitTryConditionalSingleAwaitInExpression(expression.right);
+        return awaitExpr ? { awaitExpr, capture: expression.left } : null;
     }
 
     private asyncAwaitTryConditionalSingleAwaitInExpression(
@@ -32982,13 +32997,7 @@ class Emitter {
     ): ts.AwaitExpression | null {
         const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition);
         if (leadingAwait) return leadingAwait;
-        const expression = this.unwrapTransparentExpression(condition);
-        if (!ts.isBinaryExpression(expression) ||
-            !this.asyncAwaitTryConditionalNonNullishExpression(expression) ||
-            !this.asyncAwaitConditionExpressionSupported(expression.left)) {
-            return null;
-        }
-        return this.asyncAwaitTryConditionalSingleAwaitInExpression(expression.right);
+        return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(condition)?.awaitExpr ?? null;
     }
 
     private asyncAwaitTryConditionalValueForExpression(

@@ -12,7 +12,7 @@ function ready(flag: number): boolean {
 function left(flag: number): Promise<boolean> {
     trace += "L";
     if (flag === 6) return Promise.reject("left-bad");
-    return delay(1, flag !== 3);
+    return delay(1, true);
 }
 
 function maybe(flag: number): MaybeBoolean {
@@ -24,34 +24,36 @@ function maybe(flag: number): MaybeBoolean {
 function fallback(flag: number): Promise<boolean> {
     trace += "F";
     if (flag === 7) return Promise.reject("fallback-bad");
-    return delay(2, flag === 2);
+    return delay(2, true);
 }
 
-async function comparisonCatch(flag: number): Promise<string> {
+async function declaration(flag: number): Promise<string> {
     try {
-        return ((ready(flag) === await left(flag)) && maybe(flag)) ?? await fallback(flag)
-            ? await delay(3, "fn-true")
-            : await delay(4, "fn-false");
+        return ((!(ready(flag) === await left(flag)) || maybe(flag)) ?? await fallback(flag))
+            ? await delay(3, "declaration-true")
+            : await delay(4, "declaration-false");
     } catch (reason) {
         return "caught-" + reason;
     }
 }
 
-class RightAwaitRunner {
+class WrappedRunner {
     async method(flag: number): Promise<string> {
         try {
-            return ((!(ready(flag) === await left(flag))) || maybe(flag)) ?? await fallback(flag)
+            return ((typeof (ready(flag) === await left(flag)) && maybe(flag)) ?? await fallback(flag))
                 ? await delay(5, "method-true")
                 : await delay(6, "method-false");
         } finally {
-            trace += "M";
+            trace += "C";
         }
     }
 }
 
-const rightAwaitCatchFinally = async (flag: number): Promise<string> => {
+const runner = new WrappedRunner();
+
+const arrow = async (flag: number): Promise<string> => {
     try {
-        return ((ready(flag) === await left(flag)) && maybe(flag)) ?? await fallback(flag)
+        return ((!(ready(flag) === await left(flag)) || maybe(flag)) ?? await fallback(flag))
             ? await delay(7, "arrow-true")
             : await delay(8, "arrow-false");
     } catch (reason) {
@@ -61,51 +63,44 @@ const rightAwaitCatchFinally = async (flag: number): Promise<string> => {
     }
 };
 
-const runner = new RightAwaitRunner();
-
-comparisonCatch(1)
+declaration(1)
     .then((value) => {
-        console.log("fn-match-true", value, trace);
+        console.log("declaration-match", value, trace);
         trace = "";
-        return comparisonCatch(2);
+        return declaration(2);
     })
     .then((value) => {
-        console.log("fn-fallback-true", value, trace);
+        console.log("declaration-fallback", value, trace);
         trace = "";
-        return comparisonCatch(3);
+        return declaration(4);
     })
     .then((value) => {
-        console.log("fn-left-false", value, trace);
+        console.log("declaration-false", value, trace);
         trace = "";
-        return comparisonCatch(4);
+        return declaration(6);
     })
     .then((value) => {
-        console.log("fn-maybe-false", value, trace);
+        console.log("declaration-left-reject", value, trace);
         trace = "";
-        return comparisonCatch(6);
+        return declaration(7);
     })
     .then((value) => {
-        console.log("fn-left-reject", value, trace);
-        trace = "";
-        return comparisonCatch(7);
-    })
-    .then((value) => {
-        console.log("fn-fallback-reject", value, trace);
+        console.log("declaration-fallback-reject", value, trace);
         trace = "";
         return runner.method(1);
     })
     .then((value) => {
-        console.log("method-prefix-true", value, trace);
+        console.log("method-match", value, trace);
         trace = "";
         return runner.method(2);
     })
     .then((value) => {
-        console.log("method-fallback-true", value, trace);
+        console.log("method-fallback", value, trace);
         trace = "";
         return runner.method(4);
     })
     .then((value) => {
-        console.log("method-maybe-false", value, trace);
+        console.log("method-false", value, trace);
         trace = "";
         return runner.method(6).then(
             (result) => "unexpected-" + result,
@@ -123,26 +118,26 @@ comparisonCatch(1)
     .then((value) => {
         console.log("method-fallback-reject", value, trace);
         trace = "";
-        return rightAwaitCatchFinally(1);
+        return arrow(1);
     })
     .then((value) => {
-        console.log("arrow-match-true", value, trace);
+        console.log("arrow-match", value, trace);
         trace = "";
-        return rightAwaitCatchFinally(2);
+        return arrow(2);
     })
     .then((value) => {
-        console.log("arrow-fallback-true", value, trace);
+        console.log("arrow-fallback", value, trace);
         trace = "";
-        return rightAwaitCatchFinally(4);
+        return arrow(4);
     })
     .then((value) => {
-        console.log("arrow-maybe-false", value, trace);
+        console.log("arrow-false", value, trace);
         trace = "";
-        return rightAwaitCatchFinally(6);
+        return arrow(6);
     })
     .then((value) => {
         console.log("arrow-left-reject", value, trace);
         trace = "";
-        return rightAwaitCatchFinally(7);
+        return arrow(7);
     })
     .then((value) => console.log("arrow-fallback-reject", value, trace));

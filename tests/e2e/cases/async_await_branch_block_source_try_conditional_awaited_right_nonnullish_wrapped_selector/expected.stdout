@@ -1,0 +1,15 @@
+declaration-match declaration-true RLM
+declaration-fallback declaration-true RLMF
+declaration-false declaration-false RLM
+declaration-left-reject caught-left-bad RL
+declaration-fallback-reject caught-fallback-bad RLMF
+method-match method-true RLMC
+method-fallback method-true RLMFC
+method-false method-false RLMC
+method-left-reject rejected-left-bad RLC
+method-fallback-reject rejected-fallback-bad RLMFC
+arrow-match arrow-true RLMV
+arrow-fallback arrow-true RLMFV
+arrow-false arrow-false RLMV
+arrow-left-reject caught-left-bad RLV
+arrow-fallback-reject caught-fallback-bad RLMFV

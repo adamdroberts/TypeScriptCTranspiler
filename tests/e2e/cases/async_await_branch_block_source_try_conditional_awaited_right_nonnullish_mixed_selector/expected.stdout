@@ -4,7 +4,7 @@ fn-left-false fn-false RL
 fn-maybe-false fn-false RLM
 fn-left-reject caught-left-bad RL
 fn-fallback-reject caught-fallback-bad RLMF
-method-match-false method-true RLMM
+method-prefix-true method-true RLMM
 method-fallback-true method-true RLMFM
 method-maybe-false method-false RLMM
 method-left-reject rejected-left-bad RLM
