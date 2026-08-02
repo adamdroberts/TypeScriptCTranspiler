@@ -32799,6 +32799,61 @@ class Emitter {
         return branch;
     }
 
+    private asyncAwaitTryConditionalMixedNullishStateBranchForExpression(
+        condition: ts.Expression,
+        truthyBranch: AsyncAwaitTryConditionalReturnNode,
+        falsyBranch: AsyncAwaitTryConditionalReturnNode,
+        nullishBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (this.asyncAwaitConditionExpressionSupported(expression) || ts.isAwaitExpression(expression)) {
+            const nonNullishBranch = this.asyncAwaitTryConditionalResolvedValueBranch(
+                expression,
+                truthyBranch,
+                falsyBranch,
+            );
+            return this.asyncAwaitTryConditionalNullishOperandBranch(
+                expression,
+                nullishBranch,
+                nonNullishBranch,
+            );
+        }
+        if (!ts.isBinaryExpression(expression)) return null;
+        const operator = expression.operatorToken.kind;
+        if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
+            operator !== ts.SyntaxKind.BarBarToken &&
+            operator !== ts.SyntaxKind.QuestionQuestionToken) return null;
+        const rightBranch = this.asyncAwaitTryConditionalMixedNullishStateBranchForExpression(
+            expression.right,
+            truthyBranch,
+            falsyBranch,
+            nullishBranch,
+        );
+        if (!rightBranch) return null;
+        if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
+            return this.asyncAwaitTryConditionalMixedNullishStateBranchForExpression(
+                expression.left,
+                rightBranch,
+                falsyBranch,
+                nullishBranch,
+            );
+        }
+        if (operator === ts.SyntaxKind.BarBarToken) {
+            return this.asyncAwaitTryConditionalMixedNullishStateBranchForExpression(
+                expression.left,
+                truthyBranch,
+                rightBranch,
+                rightBranch,
+            );
+        }
+        return this.asyncAwaitTryConditionalMixedNullishStateBranchForExpression(
+            expression.left,
+            truthyBranch,
+            falsyBranch,
+            rightBranch,
+        );
+    }
+
     private asyncAwaitConditionExpressionSupported(condition: ts.Expression): boolean {
         let ok = true;
         const visitCondition = (node: ts.Node): void => {
@@ -34146,6 +34201,15 @@ class Emitter {
         const operator = expression.operatorToken.kind;
         const left = this.unwrapTransparentExpression(expression.left);
         const right = this.unwrapTransparentExpression(expression.right);
+        if (operator === ts.SyntaxKind.QuestionQuestionToken) {
+            const mixedNullishBranch = this.asyncAwaitTryConditionalMixedNullishStateBranchForExpression(
+                expression,
+                thenBranch,
+                elseBranch,
+                elseBranch,
+            );
+            if (mixedNullishBranch) return mixedNullishBranch;
+        }
         const leftAwaitExpr = ts.isAwaitExpression(left) ? left : null;
         if (operator === ts.SyntaxKind.QuestionQuestionToken &&
             (leftAwaitExpr || this.asyncAwaitTryConditionalNullishLeftSupported(left))) {

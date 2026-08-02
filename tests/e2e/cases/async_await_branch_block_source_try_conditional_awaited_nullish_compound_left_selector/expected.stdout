@@ -1,0 +1,16 @@
+fn-ready-false fn-false R
+fn-left-false fn-false RL
+fn-right-true fn-true RLT
+fn-right-false fn-false RLT
+fn-short-nullish fn-true RT
+fn-left-reject caught-left-bad RL
+fn-right-reject caught-right-bad RLT
+method-ready-false method-false RM
+method-right-true method-true RLTM
+method-left-reject rejected-left-bad RLM
+method-right-reject rejected-right-bad RLTM
+arrow-left-false arrow-false RLV
+arrow-right-true arrow-true RLTV
+arrow-short-nullish arrow-true RTV
+arrow-left-reject caught-left-bad RLV
+arrow-right-reject caught-right-bad RLTV
