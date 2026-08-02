@@ -163,7 +163,8 @@ async function declaration(): Promise<string> {
     const oneHundredFour = await delay(104, oneHundredThree + "4");
     const oneHundredFive = await delay(105, oneHundredFour + "5");
     const oneHundredSix = await delay(106, oneHundredFive + "6");
-    return oneHundredSix;
+    const oneHundredSeven = await delay(107, oneHundredSix + "7");
+    return oneHundredSeven;
 }
 
 class Chain {
@@ -330,7 +331,8 @@ class Chain {
         const oneHundredFour = await delay(104, oneHundredThree + "7");
         const oneHundredFive = await delay(105, oneHundredFour + "8");
         const oneHundredSix = await delay(106, oneHundredFive + "9");
-        return oneHundredSix;
+        const oneHundredSeven = await delay(107, oneHundredSix + "0");
+        return oneHundredSeven;
     }
 }
 
@@ -497,7 +499,8 @@ const value = async (): Promise<string> => {
     const oneHundredFour = await delay(104, oneHundredThree + "7");
     const oneHundredFive = await delay(105, oneHundredFour + "8");
     const oneHundredSix = await delay(106, oneHundredFive + "9");
-    return oneHundredSix;
+    const oneHundredSeven = await delay(107, oneHundredSix + "0");
+    return oneHundredSeven;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -664,7 +667,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const oneHundredFour = await delay(124, oneHundredThree + "3");
         const oneHundredFive = await delay(125, oneHundredFour + "4");
         const oneHundredSix = await delay(126, oneHundredFive + "5");
-        return oneHundredSix;
+        const oneHundredSeven = await delay(127, oneHundredSix + "6");
+        return oneHundredSeven;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -828,7 +832,8 @@ async function branchEight(flag: boolean): Promise<string> {
     const oneHundredFour = await delay(132, oneHundredThree + "3");
     const oneHundredFive = await delay(133, oneHundredFour + "4");
     const oneHundredSix = await delay(134, oneHundredFive + "5");
-    return oneHundredSix;
+    const oneHundredSeven = await delay(135, oneHundredSix + "6");
+    return oneHundredSeven;
 }
 
 class BranchChain {
@@ -996,7 +1001,8 @@ class BranchChain {
             const oneHundredFour = await delay(140, oneHundredThree + "3");
             const oneHundredFive = await delay(141, oneHundredFour + "4");
             const oneHundredSix = await delay(142, oneHundredFive + "5");
-            return oneHundredSix;
+            const oneHundredSeven = await delay(143, oneHundredSix + "6");
+            return oneHundredSeven;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -1160,7 +1166,8 @@ class BranchChain {
         const oneHundredFour = await delay(148, oneHundredThree + "3");
         const oneHundredFive = await delay(149, oneHundredFour + "4");
         const oneHundredSix = await delay(150, oneHundredFive + "5");
-        return oneHundredSix;
+        const oneHundredSeven = await delay(151, oneHundredSix + "6");
+        return oneHundredSeven;
     }
 }
 
@@ -1328,7 +1335,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const oneHundredFour = await delay(156, oneHundredThree + "3");
     const oneHundredFive = await delay(157, oneHundredFour + "4");
     const oneHundredSix = await delay(158, oneHundredFive + "5");
-    return oneHundredSix;
+    const oneHundredSeven = await delay(159, oneHundredSix + "6");
+    return oneHundredSeven;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -1492,7 +1500,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const oneHundredFour = await delay(164, oneHundredThree + "3");
     const oneHundredFive = await delay(165, oneHundredFour + "4");
     const oneHundredSix = await delay(166, oneHundredFive + "5");
-    return oneHundredSix;
+    const oneHundredSeven = await delay(167, oneHundredSix + "6");
+    return oneHundredSeven;
 };
 
 declaration().then((result) => console.log("declaration:", result));
