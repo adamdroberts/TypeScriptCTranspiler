@@ -45478,6 +45478,8 @@ class Emitter {
         if ((bodyAwaitIfPrefix || bodyAwaitConditionExpression) && [thenRoute, elseRoute].some((route) => route !== null && route.control !== null &&
             route.control !== "continue" && route.control !== "break" && route.control !== "return" && route.control !== "throw")) return false;
         let bodySupported = true;
+        let loopDepth = 0;
+        let switchDepth = 0;
         let caughtThrowDepth = 0;
         let catchThrowDepth = 0;
         let finalizerDepth = 0;
@@ -45491,8 +45493,8 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 (ts.isThrowStatement(node) && !(caughtThrowDepth > 0 || catchThrowDepth > 0 || finalizerDepth > 0)) ||
-                ts.isBreakStatement(node) ||
-                ts.isContinueStatement(node)
+                (ts.isBreakStatement(node) && loopDepth === 0 && switchDepth === 0) ||
+                (ts.isContinueStatement(node) && loopDepth === 0)
             ) {
                 bodySupported = false;
                 return;
@@ -45511,6 +45513,19 @@ class Emitter {
                     visitBody(node.finallyBlock);
                     finalizerDepth--;
                 }
+                return;
+            }
+            if (ts.isWhileStatement(node) || ts.isDoStatement(node) || ts.isForStatement(node) ||
+                ts.isForOfStatement(node) || ts.isForInStatement(node)) {
+                loopDepth++;
+                ts.forEachChild(node, visitBody);
+                loopDepth--;
+                return;
+            }
+            if (ts.isSwitchStatement(node)) {
+                switchDepth++;
+                ts.forEachChild(node, visitBody);
+                switchDepth--;
                 return;
             }
             ts.forEachChild(node, visitBody);

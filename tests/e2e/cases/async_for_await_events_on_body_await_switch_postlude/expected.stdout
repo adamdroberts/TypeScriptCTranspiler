@@ -1,0 +1,2 @@
+switch-fallthrough: first,second,after
+switch-default: default,after
