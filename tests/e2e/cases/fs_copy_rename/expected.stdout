@@ -2,3 +2,4 @@ sync: sync copy
 promise: promise copy
 old copy exists: false
 old promise copy exists: false
+missing rename: fs.renameSync: could not rename path

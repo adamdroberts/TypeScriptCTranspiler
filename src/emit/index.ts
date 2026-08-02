@@ -74596,7 +74596,8 @@ class Emitter {
                         this.usesLibuv = true;
                         return settle(`tsc_fs_promises_copy_file_async(${src}, ${dest}, ${flags!})`);
                     }
-                    return settle(`({ tsc_fs_rename_sync(${src}, ${dest}); tsc_promise_resolve(tsc_value_undefined()); })`);
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_rename_async(${src}, ${dest})`);
                 });
             }
         }
