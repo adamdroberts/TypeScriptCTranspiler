@@ -1,0 +1,4 @@
+await-prefix-return: return
+await-prefix-throw: throw
+await-condition-return: condition-return
+await-condition-throw: condition-throw

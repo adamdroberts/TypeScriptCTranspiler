@@ -45455,7 +45455,7 @@ class Emitter {
         if (bodyAwaitExpression && directRoute && directRoute.control !== null &&
             directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return" && directRoute!.control !== "throw") return false;
         if ((bodyAwaitIfPrefix || bodyAwaitConditionExpression) && [thenRoute, elseRoute].some((route) => route !== null && route.control !== null &&
-            route.control !== "continue" && route.control !== "break")) return false;
+            route.control !== "continue" && route.control !== "break" && route.control !== "return" && route.control !== "throw")) return false;
         let bodySupported = true;
         const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyReturnAwaitExpression, bodyAwaitConditionExpression]
             .filter((expression): expression is ts.AwaitExpression => expression !== null);
@@ -45789,7 +45789,17 @@ class Emitter {
                 const conditionExpression = typeof condition === "function" ? condition() : condition;
                 const emitRoute = (route: BodyRoute): void => {
                     for (const statement of route.statements) this.emitStmt(callback, statement);
-                    if (route.control === "break") callback.line("state->body_break = true;");
+                    if (route.control === "break") {
+                        callback.line("state->body_break = true;");
+                    } else if (route.control === "return") {
+                        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+                        emitBodySynchronousReturn(callback, route.expression);
+                        callback.line("return;");
+                    } else if (route.control === "throw") {
+                        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+                        emitBodySynchronousThrow(callback, route.expression!);
+                        callback.line("return;");
+                    }
                 };
                 callback.open(`if (${conditionExpression})`);
                 emitRoute(thenRoute!);

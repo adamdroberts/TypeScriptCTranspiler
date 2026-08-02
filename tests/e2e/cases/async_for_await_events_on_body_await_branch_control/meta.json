@@ -1,0 +1,3 @@
+{
+    "description": "bounded for-await awaited prefixes and awaited final-if conditions support synchronous return and throw branches with iterator close"
+}
