@@ -3889,6 +3889,9 @@ typedef struct tsc_fs_stats_libuv_async {
     char* path;
     bool throw_if_no_entry;
     bool lstat;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     struct tsc_fs_stats_libuv_async* next;
 } tsc_fs_stats_libuv_async_t;
 
@@ -3911,18 +3914,39 @@ static void tsc_fs_stats_libuv_finish(
     tsc_fs_stats_t* stats,
     tsc_str_t* error
 ) {
-    if (error) {
-        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
-    } else {
-        tsc_promise_fulfill_in_place_ptr(task->promise, stats);
+    if (!task->aborted) {
+        if (error) {
+            tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+        } else {
+            tsc_promise_fulfill_in_place_ptr(task->promise, stats);
+        }
     }
     free(task->path);
     tsc_fs_stats_libuv_remove(task);
 }
 
+static void tsc_fs_stats_libuv_abort(void* env) {
+    tsc_fs_stats_libuv_async_t* task = (tsc_fs_stats_libuv_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
+}
+
 static void tsc_fs_stats_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_stats_libuv_async_t* task = (tsc_fs_stats_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_stats_libuv_finish(task, NULL, NULL);
+        return;
+    }
     if (result < 0) {
         bool missing = result == -ENOENT || result == -ENOTDIR;
         uv_fs_req_cleanup(req);
@@ -3961,7 +3985,8 @@ static void tsc_fs_stats_libuv_cb(tsc_uv_fs_t* req) {
 static tsc_promise_t* tsc_fs_promises_stats_libuv_async(
     const tsc_str_t* path,
     bool throw_if_no_entry,
-    bool lstat
+    bool lstat,
+    tsc_value_t signal
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_stats_libuv_async_t* task = (tsc_fs_stats_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_libuv_async_t));
@@ -3970,6 +3995,7 @@ static tsc_promise_t* tsc_fs_promises_stats_libuv_async(
     task->path = cstr_dup(path);
     task->throw_if_no_entry = throw_if_no_entry;
     task->lstat = lstat;
+    task->signal = signal;
     task->next = g_tsc_fs_stats_libuv_async;
     g_tsc_fs_stats_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -3977,6 +4003,7 @@ static tsc_promise_t* tsc_fs_promises_stats_libuv_async(
         ? uv_fs_lstat(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_stats_libuv_cb)
         : uv_fs_stat(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_stats_libuv_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_stats_libuv_finish(
             task,
@@ -3985,16 +4012,19 @@ static tsc_promise_t* tsc_fs_promises_stats_libuv_async(
                 ? "fs.lstatSync: could not stat path"
                 : "fs.statSync: could not stat path")
         );
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_stats_libuv_abort, task);
     }
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry) {
-    return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, false);
+tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, false, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry) {
-    return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, true);
+tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    return tsc_fs_promises_stats_libuv_async(path, throw_if_no_entry, true, signal);
 }
 
 typedef struct tsc_fs_statfs_libuv_async {
@@ -5853,6 +5883,9 @@ typedef struct tsc_fs_realpath_libuv_async {
     int encoding;
     bool readlink;
     bool mkdtemp;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     struct tsc_fs_realpath_libuv_async* next;
 } tsc_fs_realpath_libuv_async_t;
 
@@ -5876,20 +5909,41 @@ static void tsc_fs_realpath_libuv_finish(
     void* ptr_value,
     tsc_str_t* error
 ) {
-    if (error) {
-        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
-    } else if (ptr_value) {
-        tsc_promise_fulfill_in_place_ptr(task->promise, ptr_value);
-    } else {
-        tsc_promise_fulfill_in_place(task->promise, value);
+    if (!task->aborted) {
+        if (error) {
+            tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+        } else if (ptr_value) {
+            tsc_promise_fulfill_in_place_ptr(task->promise, ptr_value);
+        } else {
+            tsc_promise_fulfill_in_place(task->promise, value);
+        }
     }
     free(task->path);
     tsc_fs_realpath_libuv_remove(task);
 }
 
+static void tsc_fs_realpath_libuv_abort(void* env) {
+    tsc_fs_realpath_libuv_async_t* task = (tsc_fs_realpath_libuv_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
+}
+
 static void tsc_fs_realpath_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_realpath_libuv_async_t* task = (tsc_fs_realpath_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_realpath_libuv_finish(task, tsc_value_undefined(), NULL, NULL);
+        return;
+    }
     if (result < 0) {
         uv_fs_req_cleanup(req);
         tsc_fs_realpath_libuv_finish(
@@ -5940,7 +5994,13 @@ static void tsc_fs_realpath_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_realpath_libuv_finish(task, value, ptr_value, NULL);
 }
 
-static tsc_promise_t* tsc_fs_promises_path_result_async(const tsc_str_t* path, int encoding, bool readlink, bool mkdtemp) {
+static tsc_promise_t* tsc_fs_promises_path_result_async(
+    const tsc_str_t* path,
+    int encoding,
+    bool readlink,
+    bool mkdtemp,
+    tsc_value_t signal
+) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_realpath_libuv_async_t* task = (tsc_fs_realpath_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_realpath_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -5949,6 +6009,7 @@ static tsc_promise_t* tsc_fs_promises_path_result_async(const tsc_str_t* path, i
     task->encoding = encoding;
     task->readlink = readlink;
     task->mkdtemp = mkdtemp;
+    task->signal = signal;
     if (mkdtemp) {
         size_t prefix_len = strlen(task->path);
         char* template = (char*)malloc(prefix_len + 7);
@@ -5966,6 +6027,7 @@ static tsc_promise_t* tsc_fs_promises_path_result_async(const tsc_str_t* path, i
             ? uv_fs_mkdtemp(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_realpath_libuv_cb)
             : uv_fs_realpath(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_realpath_libuv_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_realpath_libuv_finish(
             task,
@@ -5977,20 +6039,23 @@ static tsc_promise_t* tsc_fs_promises_path_result_async(const tsc_str_t* path, i
                     ? "fs.readlinkSync: could not read link"
                     : "fs.realpathSync: could not resolve path")
         );
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_realpath_libuv_abort, task);
     }
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding) {
-    return tsc_fs_promises_path_result_async(path, encoding, false, false);
+tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding, tsc_value_t signal) {
+    return tsc_fs_promises_path_result_async(path, encoding, false, false, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_readlink_async(const tsc_str_t* path, int encoding) {
-    return tsc_fs_promises_path_result_async(path, encoding, true, false);
+tsc_promise_t* tsc_fs_promises_readlink_async(const tsc_str_t* path, int encoding, tsc_value_t signal) {
+    return tsc_fs_promises_path_result_async(path, encoding, true, false, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encoding) {
-    return tsc_fs_promises_path_result_async(prefix, encoding, false, true);
+tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encoding, tsc_value_t signal) {
+    return tsc_fs_promises_path_result_async(prefix, encoding, false, true, signal);
 }
 
 bool tsc_fs_libuv_pending(void) {
@@ -6438,11 +6503,13 @@ static tsc_promise_t* tsc_fs_promises_stats_async(const tsc_str_t* path, bool th
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry) {
+tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    (void)signal;
     return tsc_fs_promises_stats_async(path, throw_if_no_entry, false);
 }
 
-tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry) {
+tsc_promise_t* tsc_fs_promises_lstat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal) {
+    (void)signal;
     return tsc_fs_promises_stats_async(path, throw_if_no_entry, true);
 }
 #endif

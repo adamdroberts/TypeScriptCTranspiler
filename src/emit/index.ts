@@ -74224,8 +74224,9 @@ class Emitter {
                 ], (values) => {
                     const path = values[0]!;
                     this.usesLibuv = true;
-                    const stat = `tsc_fs_promises_stat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const stat = `tsc_fs_promises_stat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"}, ${requestSignal})`;
                     return signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${stat})`
                         : settle(stat);
@@ -74251,8 +74252,9 @@ class Emitter {
                 ], (values) => {
                     const path = values[0]!;
                     this.usesLibuv = true;
-                    const lstat = `tsc_fs_promises_lstat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const lstat = `tsc_fs_promises_lstat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"}, ${requestSignal})`;
                     return signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${lstat})`
                         : settle(lstat);
@@ -74278,8 +74280,9 @@ class Emitter {
                     const path = values[0]!;
                     this.usesLibuv = true;
                     const encoding = result === "hex" ? "1" : result === "base64" ? "2" : result === "buffer" ? "3" : "0";
-                    const resolve = `tsc_fs_promises_realpath_async(${path!}, ${encoding})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const resolve = `tsc_fs_promises_realpath_async(${path!}, ${encoding}, ${requestSignal})`;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`
                         : resolve);
@@ -74305,8 +74308,9 @@ class Emitter {
                     const path = values[0]!;
                     this.usesLibuv = true;
                     const encoding = result === "hex" ? "1" : result === "base64" ? "2" : result === "buffer" ? "3" : "0";
-                    const resolve = `tsc_fs_promises_readlink_async(${path!}, ${encoding})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const resolve = `tsc_fs_promises_readlink_async(${path!}, ${encoding}, ${requestSignal})`;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`
                         : resolve);
@@ -74359,8 +74363,9 @@ class Emitter {
                     const path = values[0]!;
                     this.usesLibuv = true;
                     const encoding = result === "hex" ? "1" : result === "base64" ? "2" : result === "buffer" ? "3" : "0";
-                    const resolve = `tsc_fs_promises_mkdtemp_async(${path!}, ${encoding})`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
+                    const resolve = `tsc_fs_promises_mkdtemp_async(${path!}, ${encoding}, ${requestSignal})`;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`
                         : resolve);

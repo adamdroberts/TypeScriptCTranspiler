@@ -1,0 +1,7 @@
+queued
+stat abort: metadata stop
+lstat abort: metadata stop
+realpath abort: metadata stop
+readlink abort: metadata stop
+mkdtemp abort: metadata stop
+completed: 0
