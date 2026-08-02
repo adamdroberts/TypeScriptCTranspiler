@@ -45706,6 +45706,21 @@ class Emitter {
         const bodyAwaitNineteenthExpression = bodyAwaitNineteenthCandidate && ts.isAwaitExpression(bodyAwaitNineteenthCandidate)
             ? bodyAwaitNineteenthCandidate
             : null;
+        const bodyAwaitTwentiethIndex = bodyAwaitNineteenthExpression && directRoute
+            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNineteenthIndex &&
+                ts.isExpressionStatement(statement) &&
+                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
+            : -1;
+        const bodyAwaitTwentiethStatement = bodyAwaitTwentiethIndex >= 0 &&
+            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentiethIndex]!)
+            ? directRoute!.statements[bodyAwaitTwentiethIndex]
+            : null;
+        const bodyAwaitTwentiethCandidate = bodyAwaitTwentiethStatement && ts.isExpressionStatement(bodyAwaitTwentiethStatement)
+            ? this.unwrapTransparentExpression(bodyAwaitTwentiethStatement.expression)
+            : null;
+        const bodyAwaitTwentiethExpression = bodyAwaitTwentiethCandidate && ts.isAwaitExpression(bodyAwaitTwentiethCandidate)
+            ? bodyAwaitTwentiethCandidate
+            : null;
         const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length === 0 && directRoute.control === "return" && directRoute.expression
             ? this.unwrapTransparentExpression(directRoute.expression)
             : null;
@@ -45766,46 +45781,51 @@ class Emitter {
         const bodyAwaitBetweenEighteenthAndNineteenthStatements = bodyAwaitNineteenthExpression
             ? directRoute!.statements.slice(bodyAwaitEighteenthIndex + 1, bodyAwaitNineteenthIndex)
             : [];
+        const bodyAwaitBetweenNineteenthAndTwentiethStatements = bodyAwaitTwentiethExpression
+            ? directRoute!.statements.slice(bodyAwaitNineteenthIndex + 1, bodyAwaitTwentiethIndex)
+            : [];
         const bodyAwaitPostludeStatements = bodyAwaitExpression
             ? bodyIf
                 ? bodyPrefix.slice(1)
-                : bodyAwaitNineteenthExpression
-                    ? directRoute!.statements.slice(bodyAwaitNineteenthIndex + 1)
-                    : bodyAwaitEighteenthExpression
-                        ? directRoute!.statements.slice(bodyAwaitEighteenthIndex + 1)
-                        : bodyAwaitSeventeenthExpression
-                            ? directRoute!.statements.slice(bodyAwaitSeventeenthIndex + 1)
-                            : bodyAwaitSixteenthExpression
-                                ? directRoute!.statements.slice(bodyAwaitSixteenthIndex + 1)
-                                : bodyAwaitFifteenthExpression
-                                    ? directRoute!.statements.slice(bodyAwaitFifteenthIndex + 1)
-                                    : bodyAwaitFourteenthExpression
-                                        ? directRoute!.statements.slice(bodyAwaitFourteenthIndex + 1)
-                                        : bodyAwaitThirteenthExpression
-                                            ? directRoute!.statements.slice(bodyAwaitThirteenthIndex + 1)
-                                            : bodyAwaitTwelfthExpression
-                                                ? directRoute!.statements.slice(bodyAwaitTwelfthIndex + 1)
-                                                : bodyAwaitEleventhExpression
-                                                    ? directRoute!.statements.slice(bodyAwaitEleventhIndex + 1)
-                                                    : bodyAwaitTenthExpression
-                                                        ? directRoute!.statements.slice(bodyAwaitTenthIndex + 1)
-                                                        : bodyAwaitNinthExpression
-                                                            ? directRoute!.statements.slice(bodyAwaitNinthIndex + 1)
-                                                            : bodyAwaitEighthExpression
-                                                                ? directRoute!.statements.slice(bodyAwaitEighthIndex + 1)
-                                                                : bodyAwaitSeventhExpression
-                                                                    ? directRoute!.statements.slice(bodyAwaitSeventhIndex + 1)
-                                                                    : bodyAwaitSixthExpression
-                                                                        ? directRoute!.statements.slice(bodyAwaitSixthIndex + 1)
-                                                                        : bodyAwaitFifthExpression
-                                                                            ? directRoute!.statements.slice(bodyAwaitFifthIndex + 1)
-                                                                            : bodyAwaitFourthExpression
-                                                                                ? directRoute!.statements.slice(bodyAwaitFourthIndex + 1)
-                                                                                : bodyAwaitThirdExpression
-                                                                                    ? directRoute!.statements.slice(bodyAwaitThirdIndex + 1)
-                                                                                    : bodyAwaitSecondExpression
-                                                                                        ? directRoute!.statements.slice(bodyAwaitSecondIndex + 1)
-                                                                                        : directRoute!.statements.slice(1)
+                : bodyAwaitTwentiethExpression
+                    ? directRoute!.statements.slice(bodyAwaitTwentiethIndex + 1)
+                    : bodyAwaitNineteenthExpression
+                        ? directRoute!.statements.slice(bodyAwaitNineteenthIndex + 1)
+                        : bodyAwaitEighteenthExpression
+                            ? directRoute!.statements.slice(bodyAwaitEighteenthIndex + 1)
+                            : bodyAwaitSeventeenthExpression
+                                ? directRoute!.statements.slice(bodyAwaitSeventeenthIndex + 1)
+                                : bodyAwaitSixteenthExpression
+                                    ? directRoute!.statements.slice(bodyAwaitSixteenthIndex + 1)
+                                    : bodyAwaitFifteenthExpression
+                                        ? directRoute!.statements.slice(bodyAwaitFifteenthIndex + 1)
+                                        : bodyAwaitFourteenthExpression
+                                            ? directRoute!.statements.slice(bodyAwaitFourteenthIndex + 1)
+                                            : bodyAwaitThirteenthExpression
+                                                ? directRoute!.statements.slice(bodyAwaitThirteenthIndex + 1)
+                                                : bodyAwaitTwelfthExpression
+                                                    ? directRoute!.statements.slice(bodyAwaitTwelfthIndex + 1)
+                                                    : bodyAwaitEleventhExpression
+                                                        ? directRoute!.statements.slice(bodyAwaitEleventhIndex + 1)
+                                                        : bodyAwaitTenthExpression
+                                                            ? directRoute!.statements.slice(bodyAwaitTenthIndex + 1)
+                                                            : bodyAwaitNinthExpression
+                                                                ? directRoute!.statements.slice(bodyAwaitNinthIndex + 1)
+                                                                : bodyAwaitEighthExpression
+                                                                    ? directRoute!.statements.slice(bodyAwaitEighthIndex + 1)
+                                                                    : bodyAwaitSeventhExpression
+                                                                        ? directRoute!.statements.slice(bodyAwaitSeventhIndex + 1)
+                                                                        : bodyAwaitSixthExpression
+                                                                            ? directRoute!.statements.slice(bodyAwaitSixthIndex + 1)
+                                                                            : bodyAwaitFifthExpression
+                                                                                ? directRoute!.statements.slice(bodyAwaitFifthIndex + 1)
+                                                                                : bodyAwaitFourthExpression
+                                                                                    ? directRoute!.statements.slice(bodyAwaitFourthIndex + 1)
+                                                                                    : bodyAwaitThirdExpression
+                                                                                        ? directRoute!.statements.slice(bodyAwaitThirdIndex + 1)
+                                                                                        : bodyAwaitSecondExpression
+                                                                                            ? directRoute!.statements.slice(bodyAwaitSecondIndex + 1)
+                                                                                            : directRoute!.statements.slice(1)
             : [];
         const awaitFreeBodyAwaitStatements = (statements: readonly ts.Statement[]): boolean => statements.every((statement) =>
             this.asyncAwaitLoopPostStatementSupported(statement));
@@ -45827,6 +45847,7 @@ class Emitter {
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenSixteenthAndSeventeenthStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenSeventeenthAndEighteenthStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenEighteenthAndNineteenthStatements)) return false;
+        if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenNineteenthAndTwentiethStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitPostludeStatements)) return false;
         const bodyAwaitIfPrefix = Boolean(bodyIf && bodyAwaitExpression && !bodyAwaitConditionExpression);
         const bodyAwaitConditionAfterPrefix = Boolean(bodyIf && bodyAwaitExpression && bodyAwaitConditionExpression);
@@ -45836,7 +45857,7 @@ class Emitter {
             route.control !== "continue" && route.control !== "break" && route.control !== "return" && route.control !== "throw")) return false;
         type BodyAwaitInterstageLocal = { symbol: ts.Symbol; declaration: ts.VariableDeclaration; type: CType; field: string };
         const bodyAwaitInterstageStatements = bodyAwaitSecondExpression
-            ? [...bodyAwaitBetweenStatements, ...bodyAwaitBetweenSecondAndThirdStatements, ...bodyAwaitBetweenThirdAndFourthStatements, ...bodyAwaitBetweenFourthAndFifthStatements, ...bodyAwaitBetweenFifthAndSixthStatements, ...bodyAwaitBetweenSixthAndSeventhStatements, ...bodyAwaitBetweenSeventhAndEighthStatements, ...bodyAwaitBetweenEighthAndNinthStatements, ...bodyAwaitBetweenNinthAndTenthStatements, ...bodyAwaitBetweenTenthAndEleventhStatements, ...bodyAwaitBetweenEleventhAndTwelfthStatements, ...bodyAwaitBetweenTwelfthAndThirteenthStatements, ...bodyAwaitBetweenThirteenthAndFourteenthStatements, ...bodyAwaitBetweenFourteenthAndFifteenthStatements, ...bodyAwaitBetweenFifteenthAndSixteenthStatements, ...bodyAwaitBetweenSixteenthAndSeventeenthStatements, ...bodyAwaitBetweenSeventeenthAndEighteenthStatements, ...bodyAwaitBetweenEighteenthAndNineteenthStatements]
+            ? [...bodyAwaitBetweenStatements, ...bodyAwaitBetweenSecondAndThirdStatements, ...bodyAwaitBetweenThirdAndFourthStatements, ...bodyAwaitBetweenFourthAndFifthStatements, ...bodyAwaitBetweenFifthAndSixthStatements, ...bodyAwaitBetweenSixthAndSeventhStatements, ...bodyAwaitBetweenSeventhAndEighthStatements, ...bodyAwaitBetweenEighthAndNinthStatements, ...bodyAwaitBetweenNinthAndTenthStatements, ...bodyAwaitBetweenTenthAndEleventhStatements, ...bodyAwaitBetweenEleventhAndTwelfthStatements, ...bodyAwaitBetweenTwelfthAndThirteenthStatements, ...bodyAwaitBetweenThirteenthAndFourteenthStatements, ...bodyAwaitBetweenFourteenthAndFifteenthStatements, ...bodyAwaitBetweenFifteenthAndSixteenthStatements, ...bodyAwaitBetweenSixteenthAndSeventeenthStatements, ...bodyAwaitBetweenSeventeenthAndEighteenthStatements, ...bodyAwaitBetweenEighteenthAndNineteenthStatements, ...bodyAwaitBetweenNineteenthAndTwentiethStatements]
             : bodyAwaitConditionAfterPrefix
                 ? bodyAwaitPostludeStatements
                 : [];
@@ -45903,7 +45924,7 @@ class Emitter {
         let caughtThrowDepth = 0;
         let catchThrowDepth = 0;
         let finalizerDepth = 0;
-        const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyAwaitThirdExpression, bodyAwaitFourthExpression, bodyAwaitFifthExpression, bodyAwaitSixthExpression, bodyAwaitSeventhExpression, bodyAwaitEighthExpression, bodyAwaitNinthExpression, bodyAwaitTenthExpression, bodyAwaitEleventhExpression, bodyAwaitTwelfthExpression, bodyAwaitThirteenthExpression, bodyAwaitFourteenthExpression, bodyAwaitFifteenthExpression, bodyAwaitSixteenthExpression, bodyAwaitSeventeenthExpression, bodyAwaitEighteenthExpression, bodyAwaitNineteenthExpression, bodyReturnAwaitExpression, bodyAwaitConditionExpression]
+        const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyAwaitThirdExpression, bodyAwaitFourthExpression, bodyAwaitFifthExpression, bodyAwaitSixthExpression, bodyAwaitSeventhExpression, bodyAwaitEighthExpression, bodyAwaitNinthExpression, bodyAwaitTenthExpression, bodyAwaitEleventhExpression, bodyAwaitTwelfthExpression, bodyAwaitThirteenthExpression, bodyAwaitFourteenthExpression, bodyAwaitFifteenthExpression, bodyAwaitSixteenthExpression, bodyAwaitSeventeenthExpression, bodyAwaitEighteenthExpression, bodyAwaitNineteenthExpression, bodyAwaitTwentiethExpression, bodyReturnAwaitExpression, bodyAwaitConditionExpression]
             .filter((expression): expression is ts.AwaitExpression => expression !== null);
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
@@ -46152,6 +46173,14 @@ class Emitter {
             ))
             : null;
         if (bodyAwaitNineteenthExpression && bodyAwaitNineteenthPromiseType?.kind !== "promise") return false;
+        const bodyAwaitTwentiethPromiseType = bodyAwaitTwentiethExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitTwentiethExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitTwentiethExpression.expression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitTwentiethExpression && bodyAwaitTwentiethPromiseType?.kind !== "promise") return false;
         if (bodyReturnAwaitExpression && bodyReturnAwaitedType?.kind === "never") return false;
 
         let usesThis = false;
@@ -46696,6 +46725,24 @@ class Emitter {
             target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitNineteenthPromiseType!, bodyAwaitNineteenthExpression!.expression)};`);
             return sourceVar;
         };
+        const emitBodyAwaitTwentiethSource = (target: CBuf): string => {
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                source = this.emitExpr(bodyAwaitTwentiethExpression!.expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_for_await_body_source");
+            target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitTwentiethPromiseType!, bodyAwaitTwentiethExpression!.expression)};`);
+            return sourceVar;
+        };
         const emitBodyAwaitConditionSource = (target: CBuf): string => {
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
             this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
@@ -47113,6 +47160,22 @@ class Emitter {
             callback.line(`state->receiver = ${nineteenthSourceVar};`);
             callback.open(`if (tsc_promise_is_pending(${nineteenthSourceVar}))`);
             callback.line(`tsc_promise_add_callback(${nineteenthSourceVar}, ${name}, state);`);
+            callback.close();
+            callback.open("else");
+            callback.line(`tsc_queue_microtask(${name}, state);`);
+            callback.close();
+            callback.line("tsc_try_pop();");
+            callback.line("return;");
+            callback.close();
+        }
+        if (bodyAwaitTwentiethExpression) {
+            callback.open("if (state->body_await_stage == 19)");
+            emitBodyAwaitInterstageStatements(bodyAwaitBetweenNineteenthAndTwentiethStatements);
+            const twentiethSourceVar = emitBodyAwaitTwentiethSource(callback);
+            callback.line("state->body_await_stage = 20;");
+            callback.line(`state->receiver = ${twentiethSourceVar};`);
+            callback.open(`if (tsc_promise_is_pending(${twentiethSourceVar}))`);
+            callback.line(`tsc_promise_add_callback(${twentiethSourceVar}, ${name}, state);`);
             callback.close();
             callback.open("else");
             callback.line(`tsc_queue_microtask(${name}, state);`);
