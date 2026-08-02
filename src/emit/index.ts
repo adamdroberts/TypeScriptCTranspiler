@@ -33198,7 +33198,7 @@ class Emitter {
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(operand);
     }
 
-    private asyncAwaitTryConditionalGlobalCoercionCallSupported(
+    private asyncAwaitTryConditionalBuiltinCallSupported(
         expression: ts.CallExpression,
     ): boolean {
         const callee = expression.expression;
@@ -33209,13 +33209,21 @@ class Emitter {
                 "encodeURI", "encodeURIComponent", "isFinite", "isNaN", "parseFloat", "parseInt",
             ].includes(callee.text) && this.isUnshadowedGlobalIdentifier(callee, callee.text);
         }
-        if (!ts.isPropertyAccessExpression(callee) ||
-            !ts.isIdentifier(callee.expression) ||
-            callee.expression.text !== "Number" ||
-            !["isFinite", "isInteger", "isNaN", "isSafeInteger", "parseFloat", "parseInt"].includes(callee.name.text)) {
+        if (!ts.isPropertyAccessExpression(callee) || !ts.isIdentifier(callee.expression)) {
             return false;
         }
-        return this.isUnshadowedGlobalIdentifier(callee.expression, "Number");
+        const receiver = callee.expression.text;
+        const methods = receiver === "Number"
+            ? ["isFinite", "isInteger", "isNaN", "isSafeInteger", "parseFloat", "parseInt"]
+            : receiver === "Math"
+                ? [
+                    "abs", "acosh", "acos", "asinh", "asin", "atan", "atanh", "cbrt", "ceil", "clz32",
+                    "cos", "cosh", "exp", "expm1", "f16round", "floor", "fround", "hypot", "log",
+                    "log1p", "log10", "log2", "max", "min", "round", "sign", "sin", "sinh", "sqrt",
+                    "tan", "tanh", "trunc",
+                ]
+                : [];
+        return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
 
     private asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(
@@ -33224,7 +33232,7 @@ class Emitter {
         const expression = this.unwrapTransparentExpression(condition);
         if (!ts.isCallExpression(expression) ||
             expression.arguments.length !== 1 ||
-            !this.asyncAwaitTryConditionalGlobalCoercionCallSupported(expression)) {
+            !this.asyncAwaitTryConditionalBuiltinCallSupported(expression)) {
             return null;
         }
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression.arguments[0]!);
@@ -33236,7 +33244,7 @@ class Emitter {
         const expression = this.unwrapTransparentExpression(condition);
         if (!ts.isCallExpression(expression) ||
             expression.arguments.length !== 1 ||
-            !this.asyncAwaitTryConditionalGlobalCoercionCallSupported(expression)) {
+            !this.asyncAwaitTryConditionalBuiltinCallSupported(expression)) {
             return null;
         }
         const operand = this.unwrapTransparentExpression(expression.arguments[0]!);

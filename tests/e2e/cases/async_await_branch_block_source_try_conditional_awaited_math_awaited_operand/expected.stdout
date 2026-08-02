@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-zero declaration-false LF
+declaration-reject caught-math-bad L
+method-true method-true LTM
+method-zero method-false LFM
+method-reject rejected-math-bad LM
+arrow-true arrow-true LTV
+arrow-zero arrow-false LFV
+arrow-reject caught-math-bad LV
+sign-true sign-true LT
+sign-zero sign-false LF
+sign-reject caught-math-bad L
