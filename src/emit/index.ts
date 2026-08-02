@@ -33234,10 +33234,16 @@ class Emitter {
                                 ? ["escape"]
                                 : receiver === "URL"
                                     ? ["canParse"]
-                                    : receiver === "JSON"
-                                        ? ["parse", "stringify"]
-                                        : receiver === "Object"
-                                            ? ["is", "hasOwn"]
+                                        : receiver === "JSON"
+                                            ? ["parse", "stringify"]
+                                            : receiver === "Object"
+                                            ? [
+                                                "assign", "create", "defineProperties", "defineProperty", "entries",
+                                                "fromEntries", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors",
+                                                "getOwnPropertyNames", "getOwnPropertySymbols", "getPrototypeOf", "groupBy",
+                                                "is", "hasOwn", "isExtensible", "isFrozen", "isSealed", "keys",
+                                                "preventExtensions", "seal", "setPrototypeOf", "values", "freeze",
+                                            ]
                                             : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
@@ -33247,7 +33253,7 @@ class Emitter {
     ): ts.AwaitExpression | null {
         const expression = this.unwrapTransparentExpression(condition);
         if (!ts.isCallExpression(expression) ||
-            expression.arguments.length !== 2 ||
+            expression.arguments.length < 1 ||
             !this.asyncAwaitTryConditionalBuiltinCallSupported(expression)) {
             return null;
         }
@@ -33255,13 +33261,25 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(callee) ||
             !ts.isIdentifier(callee.expression) ||
             callee.expression.text !== "Object" ||
-            callee.name.text !== "is" && callee.name.text !== "hasOwn") {
+            !this.asyncAwaitTryConditionalObjectStaticMethodSupported(callee.name.text) ||
+            !expression.arguments.slice(1).every((argument) =>
+                this.asyncAwaitConditionExpressionSupported(argument)
+            )) {
             return null;
         }
         const first = this.unwrapTransparentExpression(expression.arguments[0]!);
         if (!ts.isAwaitExpression(first)) return null;
-        if (!this.asyncAwaitConditionExpressionSupported(expression.arguments[1]!)) return null;
         return first;
+    }
+
+    private asyncAwaitTryConditionalObjectStaticMethodSupported(name: string): boolean {
+        return [
+            "assign", "create", "defineProperties", "defineProperty", "entries", "fromEntries",
+            "getOwnPropertyDescriptor", "getOwnPropertyDescriptors", "getOwnPropertyNames",
+            "getOwnPropertySymbols", "getPrototypeOf", "groupBy", "is", "hasOwn", "isExtensible",
+            "isFrozen", "isSealed", "keys", "preventExtensions", "seal", "setPrototypeOf", "values",
+            "freeze",
+        ].includes(name);
     }
 
     private asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(

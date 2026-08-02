@@ -1,0 +1,12 @@
+descriptor-true descriptor-true LT
+descriptor-false descriptor-false LF
+descriptor-reject caught-descriptor L
+prototype-false prototype-false LFM
+prototype-true prototype-true LTM
+define-true define-true LTD
+define-reject rejected-object-helper-bad LD
+assign-true assign-true LTV
+assign-throw caught-assign LV
+assign-reject caught-assign LV
+integrity-throw extensible-false LF
+integrity-reject caught-integrity L

@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally Object property, prototype, mutation, and integrity helpers with a leading awaited operand preserve truthiness, synchronous throws, and rejection cleanup"
+}
