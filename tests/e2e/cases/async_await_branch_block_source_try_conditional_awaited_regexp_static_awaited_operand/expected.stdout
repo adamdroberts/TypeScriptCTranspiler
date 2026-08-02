@@ -1,0 +1,9 @@
+escape-true escape-true LT
+escape-empty escape-false LF
+escape-reject caught-regexp-static-bad L
+method-true method-true LTM
+method-empty method-false LFM
+method-reject rejected-regexp-static-bad LM
+arrow-true arrow-true LTV
+arrow-empty arrow-false LFV
+arrow-reject caught-regexp-static-bad LV
