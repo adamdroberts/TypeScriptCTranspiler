@@ -34146,25 +34146,25 @@ class Emitter {
         const operator = expression.operatorToken.kind;
         const left = this.unwrapTransparentExpression(expression.left);
         const right = this.unwrapTransparentExpression(expression.right);
+        const leftAwaitExpr = ts.isAwaitExpression(left) ? left : null;
         if (operator === ts.SyntaxKind.QuestionQuestionToken &&
-            this.asyncAwaitTryConditionalNullishLeftSupported(left)) {
+            (leftAwaitExpr || this.asyncAwaitTryConditionalNullishLeftSupported(left))) {
             const awaitedRightBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
                 right,
                 thenBranch,
                 elseBranch,
             );
             if (!awaitedRightBranch) return null;
-            const nonNullishBranch = this.asyncAwaitTryConditionalReturnBranchForCondition(
-                left,
-                thenBranch,
-                elseBranch,
-            );
+            const nonNullishBranch = leftAwaitExpr
+                ? this.asyncAwaitTryConditionalResolvedValueBranch(leftAwaitExpr, thenBranch, elseBranch)
+                : this.asyncAwaitTryConditionalReturnBranchForCondition(left, thenBranch, elseBranch);
             if (!nonNullishBranch) return null;
             return {
                 kind: "if",
                 condition: left,
                 conditionMode: "nullish",
-                conditionValueCache: true,
+                conditionAwaitExpr: leftAwaitExpr ?? undefined,
+                conditionValueCache: !leftAwaitExpr,
                 thenBranch: awaitedRightBranch,
                 elseBranch: nonNullishBranch,
                 fallthroughBranch: null,
