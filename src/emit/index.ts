@@ -45418,7 +45418,7 @@ class Emitter {
         if (bodyAwaitExpression && !bodyAwaitPostludeStatements.every((statement) =>
             ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         if (bodyAwaitExpression && directRoute!.control !== null &&
-            directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return") return false;
+            directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return" && directRoute!.control !== "throw") return false;
         let bodySupported = true;
         const allowedBodyAwaitExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression;
         const visitBody = (node: ts.Node): void => {
@@ -45522,6 +45522,7 @@ class Emitter {
         this.structDecls.line("bool body_await;");
         this.structDecls.line("bool body_return;");
         this.structDecls.line("bool body_sync_return;");
+        this.structDecls.line("bool body_sync_throw;");
         this.structDecls.line("bool body_break;");
         for (const { entry, field } of bodyBindingFields) this.structDecls.line(`${entry.type.c} ${field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
@@ -45662,6 +45663,23 @@ class Emitter {
                 target.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
             }
         };
+        const emitBodySynchronousThrow = (target: CBuf, expression: ts.Expression): void => {
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let thrown: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                thrown = this.emitExpr(expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            target.line("tsc_try_pop();");
+            target.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(thrown, T_VALUE, expression)});`);
+        };
         callback.open(`void ${name}(void* env)`);
         callback.line(`${envType}* state = (${envType}*)env;`);
         callback.line("tsc_promise_t* _p = state->receiver;");
@@ -45712,6 +45730,14 @@ class Emitter {
             callback.line("state->body_sync_return = false;");
             callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
             emitBodySynchronousReturn(callback, directRoute!.expression);
+            callback.line("return;");
+            callback.close();
+        }
+        if (bodyAwaitExpression && directRoute!.control === "throw") {
+            callback.open("if (state->body_sync_throw)");
+            callback.line("state->body_sync_throw = false;");
+            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+            emitBodySynchronousThrow(callback, directRoute!.expression!);
             callback.line("return;");
             callback.close();
         }
@@ -45863,6 +45889,7 @@ class Emitter {
                 callback.line("state->body_await = true;");
                 callback.line(`state->body_return = ${bodyReturnAwaitExpression ? "true" : "false"};`);
                 callback.line(`state->body_sync_return = ${bodyAwaitExpression && directRoute!.control === "return" ? "true" : "false"};`);
+                callback.line(`state->body_sync_throw = ${bodyAwaitExpression && directRoute!.control === "throw" ? "true" : "false"};`);
                 callback.line(`state->body_break = ${bodyReturnAwaitExpression ? "false" : directRoute!.control === "break" ? "true" : "false"};`);
                 callback.line(`state->receiver = ${bodySourceVar};`);
                 callback.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
@@ -45927,6 +45954,7 @@ class Emitter {
         buf.line(`${env}->body_await = false;`);
         buf.line(`${env}->body_return = false;`);
         buf.line(`${env}->body_sync_return = false;`);
+        buf.line(`${env}->body_sync_throw = false;`);
         buf.line(`${env}->body_break = false;`);
         for (const param of params) buf.line(`${env}->${param.field} = ${this.asyncAwaitContinuationParamValue(param)};`);
         if (usesThis && thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
