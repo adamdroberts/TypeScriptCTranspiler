@@ -33208,7 +33208,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol") ||
+        if ((name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
@@ -33225,7 +33225,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol") ||
+        if ((name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
