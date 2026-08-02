@@ -1,0 +1,11 @@
+declaration-true declaration-true RL
+declaration-false-string declaration-true RL
+declaration-left-reject caught-left-bad RL
+method-true method-true RLC
+method-false-number fallback RLFC
+method-left-reject rejected-left-bad RLC
+method-fallback-reject rejected-fallback-bad RLFC
+arrow-true arrow-true RLV
+arrow-false-boolean fallback RLFV
+arrow-left-reject caught-left-bad RLV
+arrow-fallback-reject caught-fallback-bad RLFV

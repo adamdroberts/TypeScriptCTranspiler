@@ -32902,6 +32902,13 @@ class Emitter {
                 falsyBranch,
             );
         if (booleanVoidRightAwaitBranch) return booleanVoidRightAwaitBranch;
+        const globalCoercionRightAwaitBranch =
+            this.asyncAwaitTryConditionalGlobalCoercionRightAwaitBranchForExpression(
+                expression,
+                truthyBranch,
+                falsyBranch,
+            );
+        if (globalCoercionRightAwaitBranch) return globalCoercionRightAwaitBranch;
         if (!ts.isBinaryExpression(expression)) return null;
         const operator = expression.operatorToken.kind;
         if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
@@ -33065,6 +33072,33 @@ class Emitter {
         };
     }
 
+    private asyncAwaitTryConditionalGlobalCoercionRightAwaitBranchForExpression(
+        condition: ts.Expression,
+        truthyBranch: AsyncAwaitTryConditionalReturnNode,
+        falsyBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        const parts = this.asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(expression);
+        if (!parts) return null;
+        const awaitedBranch: AsyncAwaitTryConditionalReturnBranch = {
+            kind: "if",
+            condition: expression,
+            conditionAwaitExpr: parts.awaitExpr,
+            conditionValueCapture: parts.capture,
+            thenBranch: truthyBranch,
+            elseBranch: falsyBranch,
+            fallthroughBranch: null,
+        };
+        return {
+            kind: "if",
+            condition: parts.capture,
+            conditionValueCache: true,
+            thenBranch: awaitedBranch,
+            elseBranch: awaitedBranch,
+            fallthroughBranch: null,
+        };
+    }
+
     private asyncAwaitTryConditionalSingleAwaitInExpression(
         expression: ts.Expression,
     ): ts.AwaitExpression | null {
@@ -33082,6 +33116,7 @@ class Emitter {
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(condition)?.awaitExpr ??
             this.asyncAwaitTryConditionalNullishRightAwaitParts(condition)?.awaitExpr ??
             this.asyncAwaitTryConditionalBooleanVoidRightAwaitParts(condition)?.awaitExpr ??
+            this.asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(condition)?.awaitExpr ??
             null;
     }
 
@@ -33116,6 +33151,23 @@ class Emitter {
         }
         if (!hasVoidWrapper) return null;
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(operand);
+    }
+
+    private asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(
+        condition: ts.Expression,
+    ): { awaitExpr: ts.AwaitExpression; capture: ts.Expression } | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (!ts.isCallExpression(expression) ||
+            expression.arguments.length !== 1 ||
+            !ts.isIdentifier(expression.expression)) {
+            return null;
+        }
+        const name = expression.expression.text;
+        if ((name !== "Boolean" && name !== "Number" && name !== "String") ||
+            !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
+            return null;
+        }
+        return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression.arguments[0]!);
     }
 
     private asyncAwaitTryConditionalValueForExpression(
@@ -34513,6 +34565,13 @@ class Emitter {
                 elseBranch,
             );
         if (booleanVoidRightAwaitBranch) return booleanVoidRightAwaitBranch;
+        const globalCoercionRightAwaitBranch =
+            this.asyncAwaitTryConditionalGlobalCoercionRightAwaitBranchForExpression(
+                expression,
+                thenBranch,
+                elseBranch,
+            );
+        if (globalCoercionRightAwaitBranch) return globalCoercionRightAwaitBranch;
         if (!ts.isBinaryExpression(expression)) return null;
         const nullishChainOperands = this.asyncAwaitTryConditionalNullishChainOperands(expression);
         if (nullishChainOperands) {
