@@ -2848,6 +2848,199 @@ char* cstr_dup(const tsc_str_t* s) {
     return c;
 }
 
+#ifdef TSC_HAS_LIBUV
+/* The build image provides libuv's SONAME but not its development headers.
+ * These declarations cover only the stable fs request calls used here. The
+ * opaque request storage is deliberately oversized and correctly aligned so
+ * libuv can use its public uv_fs_t layout without a distro-specific header. */
+typedef struct {
+    max_align_t alignment;
+    unsigned char opaque[1024];
+} tsc_uv_fs_t;
+typedef struct uv_loop_s uv_loop_t;
+typedef struct {
+    char* base;
+    size_t len;
+} tsc_uv_buf_t;
+typedef void (*tsc_uv_fs_cb)(tsc_uv_fs_t* req);
+
+extern uv_loop_t* uv_default_loop(void);
+extern int uv_run(uv_loop_t* loop, int mode);
+extern int uv_fs_open(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, int mode, tsc_uv_fs_cb cb);
+extern int uv_fs_read(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
+extern int uv_fs_close(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
+extern void uv_fs_req_cleanup(tsc_uv_fs_t* req);
+extern ssize_t uv_fs_get_result(const tsc_uv_fs_t* req);
+
+#define TSC_UV_RUN_ONCE 1
+#define TSC_UV_RUN_NOWAIT 2
+#define TSC_UV_READ_CHUNK ((size_t)65536)
+
+typedef struct tsc_fs_read_file_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    int fd;
+    uint8_t* bytes;
+    size_t len;
+    size_t cap;
+    tsc_uv_buf_t read_buf;
+    bool want_buffer;
+    tsc_str_t* error;
+    struct tsc_fs_read_file_async* next;
+} tsc_fs_read_file_async_t;
+
+static tsc_fs_read_file_async_t* g_tsc_fs_read_file_async = NULL;
+static uv_loop_t* g_tsc_fs_uv_loop = NULL;
+
+static void tsc_fs_read_file_async_remove(tsc_fs_read_file_async_t* task) {
+    tsc_fs_read_file_async_t** cursor = &g_tsc_fs_read_file_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_read_file_async_finish(tsc_fs_read_file_async_t* task, bool success) {
+    if (success) {
+        if (task->want_buffer) {
+            tsc_buffer_t* out = tsc_buffer_alloc((double)task->len, 0.0);
+            if (task->len > 0) memcpy(out->data, task->bytes, task->len);
+            tsc_promise_fulfill_in_place_ptr(task->promise, out);
+        } else {
+            tsc_str_t* out = str_alloc(task->len);
+            if (task->len > 0) memcpy((char*)out->data, task->bytes, task->len);
+            ((char*)out->data)[task->len] = '\0';
+            out->len = task->len;
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_string(out));
+        }
+    } else {
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.readFileSync: could not read file"))
+        );
+    }
+    free(task->path);
+    tsc_fs_read_file_async_remove(task);
+}
+
+static void tsc_fs_read_file_async_close_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_read_file_async_close_or_finish(tsc_fs_read_file_async_t* task, bool success) {
+    int rc = uv_fs_close(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_read_file_async_close_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        if (success) task->error = tsc_str_from_cstr("fs.readFileSync: could not close file");
+        tsc_fs_read_file_async_finish(task, false);
+    }
+}
+
+static void tsc_fs_read_file_async_close_cb(tsc_uv_fs_t* req) {
+    tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.readFileSync: could not close file");
+        tsc_fs_read_file_async_finish(task, false);
+        return;
+    }
+    tsc_fs_read_file_async_finish(task, task->error == NULL);
+}
+
+static void tsc_fs_read_file_async_read_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_read_file_async_read_next(tsc_fs_read_file_async_t* task) {
+    if (task->cap - task->len < TSC_UV_READ_CHUNK) {
+        size_t next_cap = task->cap == 0 ? TSC_UV_READ_CHUNK : task->cap * 2;
+        if (next_cap < task->len + TSC_UV_READ_CHUNK) next_cap = task->len + TSC_UV_READ_CHUNK;
+        task->bytes = (uint8_t*)TSC_GC_REALLOC(task->bytes, next_cap);
+        task->cap = next_cap;
+    }
+    task->read_buf.base = (char*)task->bytes + task->len;
+    task->read_buf.len = task->cap - task->len;
+    int rc = uv_fs_read(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->fd,
+        &task->read_buf,
+        1,
+        (int64_t)task->len,
+        tsc_fs_read_file_async_read_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.readFileSync: could not read file");
+        tsc_fs_read_file_async_close_or_finish(task, false);
+    }
+}
+
+static void tsc_fs_read_file_async_read_cb(tsc_uv_fs_t* req) {
+    tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.readFileSync: could not read file");
+        tsc_fs_read_file_async_close_or_finish(task, false);
+        return;
+    }
+    if (result == 0) {
+        tsc_fs_read_file_async_close_or_finish(task, true);
+        return;
+    }
+    task->len += (size_t)result;
+    tsc_fs_read_file_async_read_next(task);
+}
+
+static void tsc_fs_read_file_async_open_cb(tsc_uv_fs_t* req) {
+    tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.readFileSync: could not open file");
+        tsc_fs_read_file_async_finish(task, false);
+        return;
+    }
+    task->fd = (int)result;
+    tsc_fs_read_file_async_read_next(task);
+}
+
+tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_read_file_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->fd = -1;
+    task->want_buffer = want_buffer;
+    task->next = g_tsc_fs_read_file_async;
+    g_tsc_fs_read_file_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_open(g_tsc_fs_uv_loop, &task->req, task->path, O_RDONLY, 0, tsc_fs_read_file_async_open_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.readFileSync: could not open file");
+        tsc_fs_read_file_async_finish(task, false);
+    }
+    return promise;
+}
+
+bool tsc_fs_libuv_pending(void) {
+    return g_tsc_fs_read_file_async != NULL;
+}
+
+void tsc_fs_libuv_run_once(bool block) {
+    if (!g_tsc_fs_read_file_async) return;
+    (void)uv_run(g_tsc_fs_uv_loop, block ? TSC_UV_RUN_ONCE : TSC_UV_RUN_NOWAIT);
+}
+#else
+bool tsc_fs_libuv_pending(void) { return false; }
+void tsc_fs_libuv_run_once(bool block) { (void)block; }
+#endif
+
 struct tsc_fs_stats {
     double dev;
     double ino;

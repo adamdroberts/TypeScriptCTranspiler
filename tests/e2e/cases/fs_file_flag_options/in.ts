@@ -50,6 +50,8 @@ fs.promises.appendFile(promisePath, "-again", APPEND_EXCLUSIVE_OPTIONS).catch((r
 });
 console.log("promise append flag:", fs.readFileSync(promisePath));
 
-for (const file of [syncPath, promisePath, exclusivePath]) {
-    fs.rmSync(file, { force: true });
-}
+setImmediate((): void => {
+    for (const file of [syncPath, promisePath, exclusivePath]) {
+        fs.rmSync(file, { force: true });
+    }
+});

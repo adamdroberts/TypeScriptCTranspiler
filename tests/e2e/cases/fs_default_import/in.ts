@@ -12,4 +12,7 @@ fs.promises.readFile(tmpPath).then((text: string): string => {
     return promised;
 });
 
-console.log("default promise:", promised);
+setImmediate((): void => {
+    console.log("default promise:", promised);
+    fs.rmSync(tmpPath, { force: true });
+});

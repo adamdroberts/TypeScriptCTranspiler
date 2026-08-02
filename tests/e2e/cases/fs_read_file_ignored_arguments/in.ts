@@ -19,9 +19,8 @@ const buffer = readFileSync(file, { encoding: "buffer" }, mark("named"));
 
 fs.promises.readFile(file, void note("promise-options"), mark("promise")).then((value: string): void => {
     console.log("promise:", value.trim());
+    fs.rmSync(file, { force: true });
 });
 
 console.log("sync:", text, Buffer.isBuffer(buffer), buffer.toString().trim());
 console.log("events:", events.join("|"));
-
-fs.rmSync(file, { force: true });

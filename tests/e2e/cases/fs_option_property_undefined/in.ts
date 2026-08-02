@@ -8,7 +8,9 @@ const promiseFile = root + "/promise.txt";
 const defaultOption = undefined;
 const defaultVoid = void 0;
 
-fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
+setImmediate((): void => {
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: void 0, retryDelay: undefined });
+});
 fs.mkdirSync(root, { recursive: void 0, mode: undefined });
 
 fs.writeFileSync(file, "alpha", { encoding: void 0, flag: undefined, mode: void 0, flush: undefined });

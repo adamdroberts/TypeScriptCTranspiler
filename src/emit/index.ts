@@ -668,6 +668,8 @@ export interface EmittedProgram {
     diagnostics: string[];
     /** True when the program uses the dispatch API and must link libdispatch. */
     usesDispatch: boolean;
+    /** True when the program uses the libuv-backed filesystem API. */
+    usesLibuv: boolean;
 }
 
 export function emitProgram(
@@ -743,6 +745,7 @@ class Emitter {
     private timeoutAdapters = new Map<string, string>();
     private dispatchTaskAdapters = new Map<string, string>();
     private usesDispatch = false;
+    private usesLibuv = false;
     private dispatchCaptureClone = false;
     private timersPromisesSetTimeoutAdapters = 0;
     private timersPromisesSchedulerWaitAdapters = 0;
@@ -15189,7 +15192,12 @@ class Emitter {
         }
 
         if (this.diagnostics.length > 0) {
-            return { mainC: "", diagnostics: this.diagnostics, usesDispatch: this.usesDispatch };
+            return {
+                mainC: "",
+                diagnostics: this.diagnostics,
+                usesDispatch: this.usesDispatch,
+                usesLibuv: this.usesLibuv,
+            };
         }
 
         const out = new CBuf();
@@ -15247,7 +15255,12 @@ class Emitter {
         out.line("    tsc_run_event_loop();");
         out.line("    return 0;");
         out.line("}");
-        return { mainC: out.toString(), diagnostics: this.diagnostics, usesDispatch: this.usesDispatch };
+        return {
+            mainC: out.toString(),
+            diagnostics: this.diagnostics,
+            usesDispatch: this.usesDispatch,
+            usesLibuv: this.usesLibuv,
+        };
     }
 
     private emitModule(sf: ts.SourceFile, modId: string): void {
@@ -74021,8 +74034,10 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
-                    const read = result === "buffer"
-                        ? `tsc_promise_resolve_buffer(tsc_fs_read_file_buffer_sync(${path!}))`
+                    const useLibuv = result === "utf8" || result === "buffer";
+                    if (useLibuv) this.usesLibuv = true;
+                    const read = useLibuv
+                        ? `tsc_fs_promises_read_file_async(${path!}, ${result === "buffer" ? "true" : "false"})`
                         : `tsc_promise_resolve(tsc_value_string(${this.emitFsReadFileResult(path!, result)}))`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal

@@ -1404,6 +1404,9 @@ static void tsc_loop_idle_wait(double delay_ms) {
 
 void tsc_run_event_loop(void) {
     while (g_next_tick_len > 0 || g_microtask_len > 0 || tsc_has_active_timeout() || g_immediate_len > 0
+#ifdef TSC_HAS_LIBUV
+           || tsc_fs_libuv_pending()
+#endif
 #ifdef TSC_THREADS
            || tsc_dispatch_pending()
 #endif
@@ -1416,11 +1419,48 @@ void tsc_run_event_loop(void) {
             tsc_drain_timeouts();
             tsc_drain_microtasks_and_next_ticks();
         }
+#ifdef TSC_HAS_LIBUV
+        /* Give libuv filesystem completions a turn before immediates. With no
+         * runtime timer pending, UV_RUN_ONCE may wait for the completion; this
+         * preserves the existing ordering for a queued read while still
+         * allowing a timer to make progress through UV_RUN_NOWAIT. */
+        if (tsc_fs_libuv_pending()) {
+            if (!tsc_has_active_timeout()) {
+                while (tsc_fs_libuv_pending()) {
+                    tsc_fs_libuv_run_once(true);
+                    tsc_drain_microtasks_and_next_ticks();
+                }
+            } else {
+                tsc_fs_libuv_run_once(false);
+                tsc_drain_microtasks_and_next_ticks();
+            }
+        }
+#endif
         if (g_immediate_len > 0) {
             tsc_drain_immediates();
             tsc_drain_microtasks_and_next_ticks();
         }
         if (g_next_tick_len == 0 && g_microtask_len == 0 && g_immediate_len == 0) {
+#ifdef TSC_HAS_LIBUV
+            if (tsc_fs_libuv_pending()) {
+                if (!tsc_has_active_timeout()) {
+                    while (tsc_fs_libuv_pending()) {
+                        tsc_fs_libuv_run_once(true);
+                        tsc_drain_microtasks_and_next_ticks();
+                    }
+                    continue;
+                }
+                tsc_fs_libuv_run_once(false);
+                tsc_drain_microtasks_and_next_ticks();
+                if (tsc_fs_libuv_pending()) {
+#ifdef TSC_THREADS
+                    tsc_loop_idle_wait(1.0);
+#else
+                    tsc_sleep_ms(1.0);
+#endif
+                }
+            }
+#endif
 #ifdef TSC_THREADS
             if (tsc_dispatch_pending() || tsc_has_active_timeout()) {
                 tsc_loop_idle_wait(tsc_has_active_timeout() ? tsc_next_timeout_delay_ms() : -1.0);

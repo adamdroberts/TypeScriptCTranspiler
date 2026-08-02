@@ -1,0 +1,3 @@
+text: libuv read
+bytes: 11
+error: fs.readFileSync: could not open file

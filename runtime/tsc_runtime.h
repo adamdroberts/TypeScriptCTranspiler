@@ -1157,6 +1157,8 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay);
 void tsc_clear_timeout(double id);
 void tsc_drain_timeouts(void);
 void tsc_run_event_loop(void);
+bool tsc_fs_libuv_pending(void);
+void tsc_fs_libuv_run_once(bool block);
 
 /* ---------------- optional dispatch concurrency (TSC_THREADS) ----------------
  * Implemented in tsc_dispatch.c, which is compiled into the program only when
@@ -1182,9 +1184,10 @@ void tsc_cross_post_settle(tsc_promise_t* p, tsc_value_t value, bool is_error);
 /* Bump/drop the count of dispatch tasks the event loop must wait for. */
 void tsc_dispatch_task_scheduled(void);
 
-/* ------------- fs (sync subset) ------------- */
+/* ------------- fs (sync and bounded async subset) ------------- */
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
 tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path);
+tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer);
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 void tsc_fs_write_file_sync_opts(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive);

@@ -399,12 +399,13 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_set_timeout(fn, env)` / `tsc_clear_timeout(id)` / `tsc_drain_timeouts()` | `double` / `void` | Bounded before-exit zero-delay `setTimeout(callback, 0, ...args)` queue drained after next ticks and microtasks, with numeric handles cancellable before drain |
 | `tsc_set_immediate(fn, env)` / `tsc_clear_immediate(id)` / `tsc_drain_immediates()` | `double` / `void` | Bounded before-exit `setImmediate(callback, ...args)` queue drained after next ticks, microtasks, and zero-delay timeouts, with numeric handles cancellable before drain |
 
-## fs (sync subset)
+## fs (sync and bounded async subset)
 
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
-| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path[, utf8OrFlagOptions])` and immediate-settled `fs.promises.readFile(path[, utf8OrFlagOptions])` — throws via `tsc_throw_str` on error |
+| `tsc_fs_read_file_sync(path)` | `tsc_str_t*` | `fs.readFileSync(path[, utf8OrFlagOptions])` — throws via `tsc_throw_str` on error |
 | `tsc_fs_read_file_buffer_sync(path)` | `tsc_buffer_t*` | `fs.readFileSync(path, "buffer" | null | { encoding: "buffer" \| null[, flag] })` |
+| `tsc_fs_promises_read_file_async(path, want_buffer)` | `tsc_promise_t*` | Libuv-backed `fs.promises.readFile(path[, "utf8" \| "buffer" \| null \| { encoding, flag, signal }])` for UTF-8 and Buffer/null results; opens, reads in chunks, closes, then fulfills or rejects the pending Promise |
 | `tsc_fs_write_file_sync(path, data)` / `tsc_fs_write_file_sync_opts(_mode)(path, data, append, exclusive[, mode])` | `void` | `fs.writeFileSync(path, data[, utf8OrFlagOrModeOptions])` and immediate-settled `fs.promises.writeFile(path, data[, utf8OrFlagOrModeOptions])` |
 | `tsc_fs_append_file_sync(path, data)` / `tsc_fs_write_file_sync_opts(_mode)(path, data, true, exclusive[, mode])` | `void` | `fs.appendFileSync(path, data[, utf8OrAppendFlagOrModeOptions])` and immediate-settled `fs.promises.appendFile(path, data[, utf8OrAppendFlagOrModeOptions])` |
 | `tsc_fs_exists_sync(path)` | `bool` | `fs.existsSync(path)` |
@@ -448,7 +449,7 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_fs_copy_file_sync(src, dest)` | `void` | `fs.copyFileSync(src, dest)` and immediate-settled `fs.promises.copyFile(src, dest)` |
 | `tsc_fs_rename_sync(oldPath, newPath)` | `void` | `fs.renameSync(oldPath, newPath)` and immediate-settled `fs.promises.rename(oldPath, newPath)` |
 
-`fs.promises.readFile`, `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `utimes`, `lutimes`, `chown`, `lchown`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `cp`, `copyFile`, and `rename` are emitter-level wrappers over these sync runtime calls plus immediate Promise records. `fs.promises.stat` / `lstat` and Buffer-returning `fs.promises.readFile` / `realpath` / `readlink` / `mkdtemp` use typed promise side-channel records. They are not libuv-backed yet.
+`fs.promises.readFile` uses a libuv-backed open/read/close chain for default UTF-8 and explicit Buffer/null results; hex/base64 forms remain immediate wrappers over the sync runtime. `writeFile`, `appendFile`, `readdir`, `realpath`, `readlink`, `symlink`, `link`, `mkdtemp`, `truncate`, `utimes`, `lutimes`, `chown`, `lchown`, `chmod`, `access`, `mkdir`, `unlink`, `rm`, `rmdir`, `cp`, `copyFile`, and `rename` remain emitter-level wrappers over sync runtime calls plus immediate Promise records. `fs.promises.stat` / `lstat` and the libuv Buffer-returning read use typed promise side-channel records. Real AbortSignal cancellation and broader libuv-backed filesystem I/O remain deferred.
 
 Supported fs path arguments use a bounded `PathLike` subset: strings pass through directly, Buffer paths are coerced to UTF-8 strings, and `file:` URL objects are resolved to their filesystem pathname before calling the same runtime helpers. Non-file URLs are rejected at runtime.
 

@@ -1,4 +1,4 @@
 sync: true alpha true
 named: alpha source.txt
-after unlink: false
+after schedule: true
 promise read: alpha

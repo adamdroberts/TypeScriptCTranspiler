@@ -14,8 +14,6 @@ console.log("named:", readFileSync(file), fs.readdirSync(root).join(","));
 renameSync(file, renamed);
 fs.promises.readFile(renamed).then((text: string): void => {
     console.log("promise read:", text);
+    fs.rmSync(root, { recursive: true, force: true });
 });
-fs.promises.unlink(renamed);
-console.log("after unlink:", fs.existsSync(renamed));
-
-fs.rmSync(root, { recursive: true, force: true });
+console.log("after schedule:", fs.existsSync(renamed));

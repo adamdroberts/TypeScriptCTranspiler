@@ -382,6 +382,41 @@ interface NodeEmbedLinkOptions {
     rpath?: string;
 }
 
+interface LibuvLinkOptions {
+    library: string;
+    rpath?: string;
+}
+
+/** Locate a runtime libuv shared library. The distribution image may ship the
+ * SONAME without the development symlink, so this checks the versioned file
+ * directly instead of relying on `-luv`. */
+export function findLibuvLinkOptions(): LibuvLinkOptions | null {
+    const explicit = process.env.TSC2C_LIBUV;
+    const candidates = explicit
+        ? [explicit]
+        : [
+            "/usr/lib/x86_64-linux-gnu/libuv.so.1",
+            "/lib/x86_64-linux-gnu/libuv.so.1",
+            "/usr/lib64/libuv.so.1",
+            "/lib64/libuv.so.1",
+            "/usr/local/lib/libuv.so.1",
+        ];
+    const standardDirs = new Set([
+        "/lib",
+        "/lib64",
+        "/usr/lib",
+        "/usr/lib64",
+        "/lib/x86_64-linux-gnu",
+        "/usr/lib/x86_64-linux-gnu",
+    ]);
+    for (const candidate of candidates) {
+        if (!fsSync.existsSync(candidate)) continue;
+        const dir = path.dirname(candidate);
+        return { library: candidate, rpath: standardDirs.has(dir) ? undefined : dir };
+    }
+    return null;
+}
+
 function findNodeEmbedLinkOptions(): NodeEmbedLinkOptions | null {
     const includeDir =
         process.env.TSC2C_NODE_INCLUDE ??
@@ -715,7 +750,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
         console.error(`[tsc2c] topo: ${graph.topoOrder.join(" -> ")}`);
     }
 
-    const { mainC, diagnostics, usesDispatch } = emitProgram(graph, checker, {
+    const { mainC, diagnostics, usesDispatch, usesLibuv } = emitProgram(graph, checker, {
         nativeAddons,
         dynamicRequires,
         runtimeCode,
@@ -724,6 +759,15 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     if (diagnostics.length > 0) {
         for (const d of diagnostics) process.stderr.write(d + "\n");
         return { exitCode: 3, buildDir, mainC: "" };
+    }
+    const libuv = usesLibuv ? findLibuvLinkOptions() : null;
+    if (usesLibuv && !libuv) {
+        process.stderr.write(
+            "tsc2c: this program uses the libuv-backed fs.promises.readFile subset, but libuv was not found.\n" +
+            "tsc2c: install libuv or set TSC2C_LIBUV to an installed libuv shared library.\n",
+        );
+        if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });
+        return { exitCode: 3, buildDir, mainC };
     }
     const mainPath = path.join(buildDir, "main.c");
     await fs.writeFile(mainPath, mainC, "utf8");
@@ -780,6 +824,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
             ...(opts.noGc ? ["-DTSC_NO_GC"] : []),
             ...(opts.unsafeEval ? ["-DTSC_UNSAFE_EVAL"] : []),
             ...(usesNodeEmbed ? ["-DTSC_HAS_LIBNODE"] : []),
+            ...(usesLibuv ? ["-DTSC_HAS_LIBUV"] : []),
             ...(usesDispatch && dispatchMode === "serial" ? ["-DTSC_DISPATCH_SERIAL"] : []),
             ...(dispatchLink ? ["-DTSC_THREADS", "-pthread", `-I${dispatchLink.includeDir}`] : []),
             ...pcFlags.compileFlags,
@@ -791,6 +836,9 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
                 : []),
             ...(nodeEmbed
                 ? [nodeEmbed.libnode, ...(nodeEmbed.rpath ? [`-Wl,-rpath,${nodeEmbed.rpath}`] : [])]
+                : []),
+            ...(libuv
+                ? [libuv.library, ...(libuv.rpath ? [`-Wl,-rpath,${libuv.rpath}`] : [])]
                 : []),
         ],
         release: !!opts.release,

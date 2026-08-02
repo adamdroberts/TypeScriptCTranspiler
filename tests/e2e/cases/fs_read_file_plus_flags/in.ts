@@ -15,6 +15,5 @@ fs.promises.readFile(path, { flag: "r+" }).then((text: string): string => {
 
 fs.promises.readFile(path, { encoding: "buffer", flag: "rs+" }).then((data: Buffer): void => {
     console.log("promise rs+ buffer:", data.toString());
+    fs.rmSync(path, { force: true });
 });
-
-fs.rmSync(path, { force: true });
