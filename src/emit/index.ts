@@ -509,6 +509,8 @@ interface AsyncAwaitIfExpressionReturnBranch {
 
 type AsyncAwaitTryConditionalReturnNode =
     | AsyncAwaitIfExpressionReturnLeaf
+    | AsyncAwaitIfTwoExpressionReturnLeaf
+    | AsyncAwaitIfExpressionSequenceReturnLeaf
     | AsyncAwaitTryConditionalReturnBranch;
 
 interface AsyncAwaitTryConditionalReturnBranch extends AsyncAwaitIfExpressionReturnBranch {
@@ -26789,9 +26791,34 @@ class Emitter {
                 successReturnsAwaited: true,
                 variable: null,
             });
+            const makeSequenceContinuation = (
+                branch: AsyncAwaitIfTwoExpressionReturnLeaf | AsyncAwaitIfExpressionSequenceReturnLeaf,
+            ): AsyncAwaitTryCatchReturnContinuation => {
+                const sequence = this.asyncAwaitTryConditionalReturnSequenceContinuation(branch);
+                return {
+                    ...continuation,
+                    awaitExpr: sequence.awaitExprs[0]!,
+                    successReturnExpr: null,
+                    successThrowExpr: null,
+                    successConditionalContinuation: undefined,
+                    successSequenceContinuation: sequence,
+                    successSequenceReturns: true,
+                    successReturnsAwaited: false,
+                    variable: null,
+                };
+            };
             const emitBranch = (branch: AsyncAwaitTryConditionalReturnNode): boolean => {
                 if (branch.kind === "return") {
                     return this.emitAsyncAwaitTryCatchReturnContinuationResult(buf, makeLeafContinuation(branch));
+                }
+                if (branch.kind === "twoReturn" || branch.kind === "sequenceReturn") {
+                    const sequenceContinuation = makeSequenceContinuation(branch);
+                    return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
+                        buf,
+                        sequenceContinuation.successSequenceContinuation!,
+                        false,
+                        sequenceContinuation,
+                    );
                 }
                 const condition = this.emitBoolExpr(branch.condition);
                 buf.open(`if (${condition})`);
@@ -27792,9 +27819,36 @@ class Emitter {
                 successReturnsAwaited: true,
                 variable: null,
             });
+            const makeSequenceContinuation = (
+                branch: AsyncAwaitIfTwoExpressionReturnLeaf | AsyncAwaitIfExpressionSequenceReturnLeaf,
+            ): AsyncAwaitTryFinallyReturnContinuation => {
+                const sequence = this.asyncAwaitTryConditionalReturnSequenceContinuation(branch);
+                return {
+                    ...continuation,
+                    awaitExpr: sequence.awaitExprs[0]!,
+                    successReturnExpr: null,
+                    successThrowExpr: null,
+                    successConditionalContinuation: undefined,
+                    successSequenceContinuation: sequence,
+                    successSequenceReturns: true,
+                    successReturnsAwaited: false,
+                    variable: null,
+                };
+            };
             const emitBranch = (branch: AsyncAwaitTryConditionalReturnNode): boolean => {
                 if (branch.kind === "return") {
                     return this.emitAsyncAwaitTryFinallyReturnContinuationResult(buf, makeLeafContinuation(branch));
+                }
+                if (branch.kind === "twoReturn" || branch.kind === "sequenceReturn") {
+                    const sequenceContinuation = makeSequenceContinuation(branch);
+                    return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
+                        buf,
+                        sequenceContinuation.successSequenceContinuation!,
+                        false,
+                        undefined,
+                        undefined,
+                        sequenceContinuation,
+                    );
                 }
                 const condition = this.emitBoolExpr(branch.condition);
                 buf.open(`if (${condition})`);
@@ -28562,9 +28616,35 @@ class Emitter {
                 successReturnsAwaited: true,
                 variable: null,
             });
+            const makeSequenceContinuation = (
+                branch: AsyncAwaitIfTwoExpressionReturnLeaf | AsyncAwaitIfExpressionSequenceReturnLeaf,
+            ): AsyncAwaitTryCatchFinallyReturnContinuation => {
+                const sequence = this.asyncAwaitTryConditionalReturnSequenceContinuation(branch);
+                return {
+                    ...continuation,
+                    awaitExpr: sequence.awaitExprs[0]!,
+                    successReturnExpr: null,
+                    successThrowExpr: null,
+                    successConditionalContinuation: undefined,
+                    successSequenceContinuation: sequence,
+                    successSequenceReturns: true,
+                    successReturnsAwaited: false,
+                    variable: null,
+                };
+            };
             const emitBranch = (branch: AsyncAwaitTryConditionalReturnNode): boolean => {
                 if (branch.kind === "return") {
                     return this.emitAsyncAwaitTryCatchFinallyReturnContinuationResult(buf, makeLeafContinuation(branch));
+                }
+                if (branch.kind === "twoReturn" || branch.kind === "sequenceReturn") {
+                    const sequenceContinuation = makeSequenceContinuation(branch);
+                    return this.emitAsyncAwaitThreeExpressionReturnContinuationResult(
+                        buf,
+                        sequenceContinuation.successSequenceContinuation!,
+                        false,
+                        sequenceContinuation,
+                        sequenceContinuation,
+                    );
                 }
                 const condition = this.emitBoolExpr(branch.condition);
                 buf.open(`if (${condition})`);
@@ -33070,6 +33150,12 @@ class Emitter {
         if (node.kind === "return") {
             return this.asyncAwaitExpressionReturnContinuationSupported(node.continuation);
         }
+        if (node.kind === "twoReturn") {
+            return this.asyncAwaitTwoExpressionReturnContinuationSupported(node.continuation);
+        }
+        if (node.kind === "sequenceReturn") {
+            return this.asyncAwaitThreeExpressionReturnContinuationSupported(node.continuation);
+        }
         if (node.kind !== "if" || !node.elseBranch || node.fallthroughBranch) return false;
         const condition = this.unwrapTransparentExpression(node.condition);
         if (!(ts.isIdentifier(condition) && this.isValueReferenceIdentifier(condition)) &&
@@ -33080,6 +33166,19 @@ class Emitter {
             this.asyncAwaitTryConditionalReturnNodeSupported(node.elseBranch);
     }
 
+    private asyncAwaitTryConditionalReturnSequenceContinuation(
+        branch: AsyncAwaitIfTwoExpressionReturnLeaf | AsyncAwaitIfExpressionSequenceReturnLeaf,
+    ): AsyncAwaitExpressionSequenceReturnContinuation {
+        if (branch.kind === "sequenceReturn") return branch.continuation;
+        return {
+            awaitExprs: [branch.continuation.firstAwaitExpr, branch.continuation.secondAwaitExpr],
+            returnExpr: branch.continuation.returnExpr,
+            params: branch.continuation.params,
+            thisValue: branch.continuation.thisValue,
+            shortCircuitOperator: branch.continuation.shortCircuitOperator,
+        };
+    }
+
     private asyncAwaitTryConditionalReturnBranchParts(
         branch: AsyncAwaitTryConditionalReturnBranch,
     ): { conditions: ts.Expression[]; awaitExprs: ts.AwaitExpression[] } {
@@ -33088,6 +33187,14 @@ class Emitter {
         const visit = (node: AsyncAwaitTryConditionalReturnNode): void => {
             if (node.kind === "return") {
                 awaitExprs.push(node.continuation.awaitExpr);
+                return;
+            }
+            if (node.kind === "twoReturn") {
+                awaitExprs.push(node.continuation.firstAwaitExpr, node.continuation.secondAwaitExpr);
+                return;
+            }
+            if (node.kind === "sequenceReturn") {
+                awaitExprs.push(...node.continuation.awaitExprs);
                 return;
             }
             conditions.push(node.condition);

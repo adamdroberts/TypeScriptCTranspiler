@@ -1,0 +1,7 @@
+fn-inner {"first":"fn-inner-left","second":"fn-inner-right"} 
+fn-caught caught-fn-bad 
+fn-outer {"first":"fn-outer-first","second":"fn-outer-second"} 
+method-inner {"first":"method-inner-first","second":"method-inner-second"} I
+method-caught rejected-method-bad IC
+arrow-caught caught-arrow-bad ICo
+arrow-outer {"first":"arrow-outer-first","second":"arrow-outer-second"} ICoi
