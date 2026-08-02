@@ -1192,6 +1192,8 @@ tsc_promise_t* tsc_fs_promises_write_file_string_async(const tsc_str_t* path, co
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double file_mode);
 tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer);
 tsc_promise_t* tsc_fs_promises_readdir_recursive_async(const tsc_str_t* path, bool want_buffer);
+tsc_promise_t* tsc_fs_promises_readdir_encoded_async(const tsc_str_t* path, tsc_str_t* encoding);
+tsc_promise_t* tsc_fs_promises_readdir_recursive_encoded_async(const tsc_str_t* path, tsc_str_t* encoding);
 tsc_promise_t* tsc_fs_promises_readdir_dirents_async(const tsc_str_t* path, tsc_str_t* encoding);
 tsc_promise_t* tsc_fs_promises_readdir_recursive_dirents_async(const tsc_str_t* path, tsc_str_t* encoding);
 tsc_promise_t* tsc_fs_promises_access_async(const tsc_str_t* path, double mode);
@@ -1210,6 +1212,7 @@ tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_dirents_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_dirents_sync(const tsc_str_t* path);
+tsc_array_t* tsc_fs_readdir_encode_names(tsc_array_t* entries, const tsc_str_t* encoding);
 tsc_array_t* tsc_fs_dirents_encode_names(tsc_array_t* entries, const tsc_str_t* encoding);
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path);

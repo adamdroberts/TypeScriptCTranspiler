@@ -1,0 +1,7 @@
+queued: false
+completed: true
+shallow hex: 612e747874|737562
+shallow base64: YS50eHQ=|c3Vi
+recursive hex: 612e747874|737562|7375622f622e747874
+recursive base64: YS50eHQ=|c3Vi|c3ViL2IudHh0
+error: fs.readdirSync: could not open dir

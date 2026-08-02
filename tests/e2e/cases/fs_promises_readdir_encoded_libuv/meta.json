@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed fs.promises.readdir hex/base64 results for shallow, recursive, and rejection paths"
+}
