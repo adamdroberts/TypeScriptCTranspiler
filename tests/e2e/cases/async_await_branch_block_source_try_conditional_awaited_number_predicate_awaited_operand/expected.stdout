@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-infinite declaration-false LF
+declaration-reject caught-number-predicate-bad L
+method-true method-true LTM
+method-number method-false LFM
+method-reject rejected-number-predicate-bad LM
+arrow-true arrow-true LTV
+arrow-infinite arrow-false LFV
+arrow-reject caught-number-predicate-bad LV
+nan-true nan-true LT
+nan-number nan-false LF
+nan-reject caught-number-predicate-bad L

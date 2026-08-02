@@ -33208,7 +33208,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "AggregateError" && name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol" && name !== "atob" && name !== "btoa" && name !== "decodeURI" && name !== "decodeURIComponent" && name !== "encodeURI" && name !== "encodeURIComponent" && name !== "parseFloat" && name !== "parseInt") ||
+        if ((name !== "AggregateError" && name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol" && name !== "atob" && name !== "btoa" && name !== "decodeURI" && name !== "decodeURIComponent" && name !== "encodeURI" && name !== "encodeURIComponent" && name !== "isFinite" && name !== "isNaN" && name !== "parseFloat" && name !== "parseInt") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
@@ -33225,7 +33225,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "AggregateError" && name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol" && name !== "atob" && name !== "btoa" && name !== "decodeURI" && name !== "decodeURIComponent" && name !== "encodeURI" && name !== "encodeURIComponent" && name !== "parseFloat" && name !== "parseInt") ||
+        if ((name !== "AggregateError" && name !== "Array" && name !== "BigInt" && name !== "Boolean" && name !== "Date" && name !== "Error" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol" && name !== "atob" && name !== "btoa" && name !== "decodeURI" && name !== "decodeURIComponent" && name !== "encodeURI" && name !== "encodeURIComponent" && name !== "isFinite" && name !== "isNaN" && name !== "parseFloat" && name !== "parseInt") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
