@@ -1,0 +1,9 @@
+url-true url-true LT
+url-invalid url-false LF
+url-reject caught-url-static-bad L
+method-true method-true LTM
+method-invalid method-false LFM
+method-reject rejected-url-static-bad LM
+arrow-true arrow-true LTV
+arrow-invalid arrow-false LFV
+arrow-reject caught-url-static-bad LV

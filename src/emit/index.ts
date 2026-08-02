@@ -33230,7 +33230,9 @@ class Emitter {
                             ? ["isArray", "of", "from", "fromAsync"]
                             : receiver === "RegExp"
                                 ? ["escape"]
-                                : [];
+                                : receiver === "URL"
+                                    ? ["canParse"]
+                                    : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
 
