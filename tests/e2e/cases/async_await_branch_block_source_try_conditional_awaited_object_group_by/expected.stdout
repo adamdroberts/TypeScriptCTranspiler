@@ -1,0 +1,7 @@
+declaration-true declaration-true LKKT
+declaration-empty declaration-true LT
+declaration-reject caught-declaration L
+method-true method-true LKKTM
+method-reject rejected-method LM
+arrow-true arrow-true LKKTV
+arrow-reject caught-arrow LV
