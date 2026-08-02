@@ -33317,13 +33317,29 @@ class Emitter {
             return this.asyncAwaitTryConditionalSyncReturnExpressionSupported(node.returnExpr);
         }
         if (node.kind !== "if" || !node.elseBranch || node.fallthroughBranch) return false;
-        const condition = this.unwrapTransparentExpression(node.condition);
-        if (!(ts.isIdentifier(condition) && this.isValueReferenceIdentifier(condition)) &&
-            condition.kind !== ts.SyntaxKind.TrueKeyword &&
-            condition.kind !== ts.SyntaxKind.FalseKeyword &&
-            condition.kind !== ts.SyntaxKind.NullKeyword) return false;
+        if (!this.asyncAwaitTryConditionalConditionExpressionSupported(node.condition)) return false;
         return this.asyncAwaitTryConditionalReturnNodeSupported(node.thenBranch) &&
             this.asyncAwaitTryConditionalReturnNodeSupported(node.elseBranch);
+    }
+
+    private asyncAwaitTryConditionalConditionExpressionSupported(condition: ts.Expression): boolean {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (ts.isIdentifier(expression) && this.isValueReferenceIdentifier(expression)) return true;
+        if (
+            ts.isNumericLiteral(expression) ||
+            ts.isStringLiteral(expression) ||
+            ts.isNoSubstitutionTemplateLiteral(expression) ||
+            expression.kind === ts.SyntaxKind.TrueKeyword ||
+            expression.kind === ts.SyntaxKind.FalseKeyword ||
+            expression.kind === ts.SyntaxKind.NullKeyword ||
+            expression.kind === ts.SyntaxKind.ThisKeyword
+        ) return true;
+        if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
+            return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.operand);
+        }
+        if (!ts.isBinaryExpression(expression) || !this.isAsyncAwaitShortCircuitBinary(expression)) return false;
+        return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.left) &&
+            this.asyncAwaitTryConditionalConditionExpressionSupported(expression.right);
     }
 
     private asyncAwaitTryConditionalSyncReturnExpressionSupported(returnExpr: ts.Expression): boolean {
