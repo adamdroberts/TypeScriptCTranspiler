@@ -1,0 +1,9 @@
+declaration-fulfilled fallback RLF
+declaration-left-reject caught-left-bad RL
+declaration-fallback-reject caught-fallback-bad RLF
+method-fulfilled fallback RLFC
+method-left-reject rejected-left-bad RLC
+method-fallback-reject rejected-fallback-bad RLFC
+arrow-fulfilled fallback RLFV
+arrow-left-reject caught-left-bad RLV
+arrow-fallback-reject caught-fallback-bad RLFV

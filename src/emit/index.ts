@@ -32888,6 +32888,20 @@ class Emitter {
                 falsyBranch,
             );
         if (nonNullishRightAwaitBranch) return nonNullishRightAwaitBranch;
+        const nullishRightAwaitBranch =
+            this.asyncAwaitTryConditionalNullishRightAwaitBranchForExpression(
+                expression,
+                nullishBranch,
+                nullishBranch,
+            );
+        if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
+        const booleanVoidRightAwaitBranch =
+            this.asyncAwaitTryConditionalBooleanVoidRightAwaitBranchForExpression(
+                expression,
+                truthyBranch,
+                falsyBranch,
+            );
+        if (booleanVoidRightAwaitBranch) return booleanVoidRightAwaitBranch;
         if (!ts.isBinaryExpression(expression)) return null;
         const operator = expression.operatorToken.kind;
         if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
@@ -32983,6 +32997,74 @@ class Emitter {
         return awaitExpr ? { awaitExpr, capture: expression.left } : null;
     }
 
+    private asyncAwaitTryConditionalNullishRightAwaitBranchForExpression(
+        condition: ts.Expression,
+        nullishBranch: AsyncAwaitTryConditionalReturnNode,
+        nonNullishBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const wrappedExpression = this.unwrapTransparentExpression(condition);
+        let expression = wrappedExpression;
+        let hasVoidWrapper = false;
+        while (ts.isVoidExpression(expression)) {
+            hasVoidWrapper = true;
+            expression = this.unwrapTransparentExpression(expression.expression);
+        }
+        if (!hasVoidWrapper) return null;
+        const parts = this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression);
+        if (!parts) return null;
+        const awaitedBranch: AsyncAwaitTryConditionalReturnBranch = {
+            kind: "if",
+            condition: wrappedExpression,
+            conditionMode: "nullish",
+            conditionAwaitExpr: parts.awaitExpr,
+            conditionValueCapture: parts.capture,
+            thenBranch: nullishBranch,
+            elseBranch: nonNullishBranch,
+            fallthroughBranch: null,
+        };
+        return {
+            kind: "if",
+            condition: parts.capture,
+            conditionValueCache: true,
+            thenBranch: awaitedBranch,
+            elseBranch: awaitedBranch,
+            fallthroughBranch: null,
+        };
+    }
+
+    private asyncAwaitTryConditionalBooleanVoidRightAwaitBranchForExpression(
+        condition: ts.Expression,
+        truthyBranch: AsyncAwaitTryConditionalReturnNode,
+        falsyBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (!ts.isCallExpression(expression) ||
+            expression.arguments.length !== 1 ||
+            !ts.isIdentifier(expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(expression.expression, "Boolean")) {
+            return null;
+        }
+        const parts = this.asyncAwaitTryConditionalBooleanVoidRightAwaitParts(expression);
+        if (!parts) return null;
+        const awaitedBranch: AsyncAwaitTryConditionalReturnBranch = {
+            kind: "if",
+            condition: expression,
+            conditionAwaitExpr: parts.awaitExpr,
+            conditionValueCapture: parts.capture,
+            thenBranch: truthyBranch,
+            elseBranch: falsyBranch,
+            fallthroughBranch: null,
+        };
+        return {
+            kind: "if",
+            condition: parts.capture,
+            conditionValueCache: true,
+            thenBranch: awaitedBranch,
+            elseBranch: awaitedBranch,
+            fallthroughBranch: null,
+        };
+    }
+
     private asyncAwaitTryConditionalSingleAwaitInExpression(
         expression: ts.Expression,
     ): ts.AwaitExpression | null {
@@ -32997,7 +33079,43 @@ class Emitter {
     ): ts.AwaitExpression | null {
         const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition);
         if (leadingAwait) return leadingAwait;
-        return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(condition)?.awaitExpr ?? null;
+        return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(condition)?.awaitExpr ??
+            this.asyncAwaitTryConditionalNullishRightAwaitParts(condition)?.awaitExpr ??
+            this.asyncAwaitTryConditionalBooleanVoidRightAwaitParts(condition)?.awaitExpr ??
+            null;
+    }
+
+    private asyncAwaitTryConditionalNullishRightAwaitParts(
+        condition: ts.Expression,
+    ): { awaitExpr: ts.AwaitExpression; capture: ts.Expression } | null {
+        let expression = this.unwrapTransparentExpression(condition);
+        let hasVoidWrapper = false;
+        while (ts.isVoidExpression(expression)) {
+            hasVoidWrapper = true;
+            expression = this.unwrapTransparentExpression(expression.expression);
+        }
+        if (!hasVoidWrapper) return null;
+        return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression);
+    }
+
+    private asyncAwaitTryConditionalBooleanVoidRightAwaitParts(
+        condition: ts.Expression,
+    ): { awaitExpr: ts.AwaitExpression; capture: ts.Expression } | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (!ts.isCallExpression(expression) ||
+            expression.arguments.length !== 1 ||
+            !ts.isIdentifier(expression.expression) ||
+            !this.isUnshadowedGlobalIdentifier(expression.expression, "Boolean")) {
+            return null;
+        }
+        let operand = this.unwrapTransparentExpression(expression.arguments[0]!);
+        let hasVoidWrapper = false;
+        while (ts.isVoidExpression(operand)) {
+            hasVoidWrapper = true;
+            operand = this.unwrapTransparentExpression(operand.expression);
+        }
+        if (!hasVoidWrapper) return null;
+        return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(operand);
     }
 
     private asyncAwaitTryConditionalValueForExpression(
@@ -34381,6 +34499,20 @@ class Emitter {
                 fallthroughBranch: null,
             };
         }
+        const nullishRightAwaitBranch =
+            this.asyncAwaitTryConditionalNullishRightAwaitBranchForExpression(
+                expression,
+                elseBranch,
+                thenBranch,
+            );
+        if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
+        const booleanVoidRightAwaitBranch =
+            this.asyncAwaitTryConditionalBooleanVoidRightAwaitBranchForExpression(
+                expression,
+                thenBranch,
+                elseBranch,
+            );
+        if (booleanVoidRightAwaitBranch) return booleanVoidRightAwaitBranch;
         if (!ts.isBinaryExpression(expression)) return null;
         const nullishChainOperands = this.asyncAwaitTryConditionalNullishChainOperands(expression);
         if (nullishChainOperands) {
