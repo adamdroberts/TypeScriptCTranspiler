@@ -1,0 +1,3 @@
+{
+  "description": "Async source try/catch/finally conditional selectors can await the selector before choosing return arms"
+}

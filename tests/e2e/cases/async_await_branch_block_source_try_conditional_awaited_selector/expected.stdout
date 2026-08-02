@@ -1,0 +1,9 @@
+fn-false fn-false 
+fn-true fn-true 
+fn-reject caught-selector-bad 
+method-false method-false M
+method-true method-true MM
+method-reject rejected-selector-bad MMM
+arrow-false arrow-false MMMV
+arrow-true arrow-true MMMVV
+arrow-reject caught-selector-bad MMMVVV
