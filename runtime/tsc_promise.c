@@ -260,6 +260,24 @@ tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
     return tsc_promise_reject(tsc_value_string(tsc_current_error()));
 }
 
+tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator) {
+    tsc_try_frame_t eh;
+    tsc_try_push(&eh);
+    if (setjmp(eh.jb) == 0) {
+        tsc_value_t close = tsc_value_get_prop(iterator, tsc_str_from_lit("return", 6));
+        if (!tsc_value_is_callable(close)) {
+            tsc_try_pop();
+            return tsc_promise_resolve(tsc_value_undefined());
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+        tsc_value_t result = tsc_value_apply_function(close, iterator, tsc_value_array(args));
+        tsc_try_pop();
+        return tsc_promise_resolve_thenable(result);
+    }
+    tsc_try_pop();
+    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+}
+
 typedef struct {
     tsc_promise_t* result;
     tsc_array_t* values;

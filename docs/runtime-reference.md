@@ -172,6 +172,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_promise_resolve_buffer(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<Buffer>` side-channel record |
 | `tsc_async_iterator_get(value)` | `tsc_value_t` | Resolves a dynamic async iterator through `[Symbol.asyncIterator]()` when present |
 | `tsc_async_iterator_next(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.next()` and assimilates its result into a Promise |
+| `tsc_async_iterator_return(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.return()` and assimilates its result for bounded iterator close |
 | `tsc_promise_is_fulfilled/is_rejected(p)` | `bool` | State checks used by synchronous `then`/`catch`/`finally` lowering |
 | `tsc_promise_value/reason(p)` | `tsc_value_t` | Reads the stored fulfilled value or rejection reason |
 | `tsc_promise_fs_stats_value(p)` | `tsc_fs_stats_t*` | Reads the typed `FSStats` fulfilled value side-channel |

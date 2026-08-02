@@ -45285,6 +45285,14 @@ class Emitter {
         if (sourceType.kind !== "value") return false;
 
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
+        const terminalBodyStatement = loopBody[loopBody.length - 1];
+        const bodyControl = terminalBodyStatement && ts.isContinueStatement(terminalBodyStatement)
+            ? "continue"
+            : terminalBodyStatement && ts.isBreakStatement(terminalBodyStatement)
+                ? "break"
+                : null;
+        if (bodyControl && (terminalBodyStatement as ts.BreakOrContinueStatement).label) return false;
+        const bodyStatements = bodyControl ? loopBody.slice(0, -1) : loopBody;
         let bodySupported = true;
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
@@ -45302,7 +45310,7 @@ class Emitter {
             }
             ts.forEachChild(node, visitBody);
         };
-        for (const statement of loopBody) visitBody(statement);
+        for (const statement of bodyStatements) visitBody(statement);
         if (!bodySupported) return false;
 
         const visitReturn = (node: ts.Node): void => {
@@ -45325,7 +45333,7 @@ class Emitter {
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             ts.forEachChild(node, visitThis);
         };
-        for (const statement of loopBody) visitThis(statement);
+        for (const statement of bodyStatements) visitThis(statement);
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
 
@@ -45377,7 +45385,30 @@ class Emitter {
         callback.open(`if (setjmp(${eh}.jb) == 0)`);
         callback.line(`tsc_value_t ${stepVar} = tsc_promise_value(_p);`);
         callback.line(`bool ${doneVar} = tsc_value_is_truthy(tsc_value_get_prop(${stepVar}, tsc_str_from_lit("done", 4)));`);
-        callback.open(`if (${doneVar})`);
+        const finishVar = this.freshTemp("_for_await_finish");
+        callback.line(`bool ${finishVar} = ${doneVar};`);
+        callback.open(`if (!${doneVar})`);
+        callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
+        const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, bindingType, binding.name);
+        callback.line(`${bindingType.c} ${bindingName} = ${bindingValue};`);
+        this.argumentValueScopes.push(scope);
+        this.argumentValueTypeScopes.push(scopeTypes);
+        if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+        this.asyncAwaitContinuationAdapterDepth++;
+        try {
+            for (const statement of bodyStatements) this.emitStmt(callback, statement);
+        } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
+            if (usesThis && thisValue) this.functionThisStack.pop();
+            this.argumentValueTypeScopes.pop();
+            this.argumentValueScopes.pop();
+        }
+        if (bodyControl === "break") {
+            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+            callback.line(`${finishVar} = true;`);
+        }
+        callback.close();
+        callback.open(`if (${finishVar})`);
         this.argumentValueScopes.push(new Map(params.map((param) => [param.symbol, `state->${param.field}`])));
         this.argumentValueTypeScopes.push(new Map(params.map((param) => [param.symbol, param.type])));
         if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -45404,21 +45435,6 @@ class Emitter {
         }
         callback.line("return;");
         callback.close();
-        callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
-        const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, bindingType, binding.name);
-        callback.line(`${bindingType.c} ${bindingName} = ${bindingValue};`);
-        this.argumentValueScopes.push(scope);
-        this.argumentValueTypeScopes.push(scopeTypes);
-        if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
-        this.asyncAwaitContinuationAdapterDepth++;
-        try {
-            for (const statement of loopBody) this.emitStmt(callback, statement);
-        } finally {
-            this.asyncAwaitContinuationAdapterDepth--;
-            if (usesThis && thisValue) this.functionThisStack.pop();
-            this.argumentValueTypeScopes.pop();
-            this.argumentValueScopes.pop();
-        }
         callback.line(`tsc_promise_t* ${nextVar} = tsc_async_iterator_next(state->iterator);`);
         callback.line(`state->receiver = ${nextVar};`);
         callback.line("tsc_try_pop();");

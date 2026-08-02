@@ -806,6 +806,7 @@ tsc_promise_t* tsc_promise_resolve_array(tsc_array_t* value);
 tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value);
 tsc_value_t tsc_async_iterator_get(tsc_value_t value);
 tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator);
+tsc_promise_t* tsc_async_iterator_return(tsc_value_t iterator);
 tsc_promise_t* tsc_promise_all_dynamic(tsc_array_t* src);
 tsc_promise_t* tsc_promise_race_dynamic(tsc_array_t* src);
 tsc_promise_t* tsc_promise_any_dynamic(tsc_array_t* src);
