@@ -32870,17 +32870,6 @@ class Emitter {
                 nonNullishBranch,
             );
         }
-        const nonNullishAwaitExpr = this.asyncAwaitTryConditionalNonNullishAwaitInCondition(expression);
-        if (nonNullishAwaitExpr) {
-            return {
-                kind: "if",
-                condition: expression,
-                conditionAwaitExpr: nonNullishAwaitExpr,
-                thenBranch: truthyBranch,
-                elseBranch: falsyBranch,
-                fallthroughBranch: null,
-            };
-        }
         const nonNullishRightAwaitBranch =
             this.asyncAwaitTryConditionalNonNullishRightAwaitBranchForExpression(
                 expression,
@@ -32895,6 +32884,17 @@ class Emitter {
                 nullishBranch,
             );
         if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
+        const nonNullishAwaitExpr = this.asyncAwaitTryConditionalNonNullishAwaitInCondition(expression);
+        if (nonNullishAwaitExpr) {
+            return {
+                kind: "if",
+                condition: expression,
+                conditionAwaitExpr: nonNullishAwaitExpr,
+                thenBranch: truthyBranch,
+                elseBranch: falsyBranch,
+                fallthroughBranch: null,
+            };
+        }
         const booleanVoidRightAwaitBranch =
             this.asyncAwaitTryConditionalBooleanVoidRightAwaitBranchForExpression(
                 expression,
@@ -33017,6 +33017,17 @@ class Emitter {
             expression = this.unwrapTransparentExpression(expression.expression);
         }
         if (!hasVoidWrapper) return null;
+        if (ts.isAwaitExpression(expression)) {
+            return {
+                kind: "if",
+                condition: wrappedExpression,
+                conditionMode: "nullish",
+                conditionAwaitExpr: expression,
+                thenBranch: nullishBranch,
+                elseBranch: nonNullishBranch,
+                fallthroughBranch: null,
+            };
+        }
         const parts = this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression);
         if (!parts) return null;
         const awaitedBranch: AsyncAwaitTryConditionalReturnBranch = {
@@ -33127,6 +33138,7 @@ class Emitter {
         const globalCoercionAwait = this.asyncAwaitTryConditionalGlobalCoercionAwaitExpression(condition);
         if (globalCoercionAwait) return globalCoercionAwait;
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(condition)?.awaitExpr ??
+            this.asyncAwaitTryConditionalNullishRightAwaitExpression(condition) ??
             this.asyncAwaitTryConditionalNullishRightAwaitParts(condition)?.awaitExpr ??
             this.asyncAwaitTryConditionalBooleanVoidRightAwaitParts(condition)?.awaitExpr ??
             this.asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(condition)?.awaitExpr ??
@@ -33144,6 +33156,18 @@ class Emitter {
         }
         if (!hasVoidWrapper) return null;
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression);
+    }
+
+    private asyncAwaitTryConditionalNullishRightAwaitExpression(
+        condition: ts.Expression,
+    ): ts.AwaitExpression | null {
+        let expression = this.unwrapTransparentExpression(condition);
+        let hasVoidWrapper = false;
+        while (ts.isVoidExpression(expression)) {
+            hasVoidWrapper = true;
+            expression = this.unwrapTransparentExpression(expression.expression);
+        }
+        return hasVoidWrapper && ts.isAwaitExpression(expression) ? expression : null;
     }
 
     private asyncAwaitTryConditionalBooleanVoidRightAwaitParts(
@@ -34562,6 +34586,13 @@ class Emitter {
         elseBranch: AsyncAwaitTryConditionalReturnNode,
     ): AsyncAwaitTryConditionalReturnBranch | null {
         const expression = this.unwrapTransparentExpression(condition);
+        const nullishRightAwaitBranch =
+            this.asyncAwaitTryConditionalNullishRightAwaitBranchForExpression(
+                expression,
+                elseBranch,
+                thenBranch,
+            );
+        if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
         const conditionAwaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
         if (conditionAwaitExpr) {
             return {
@@ -34582,13 +34613,6 @@ class Emitter {
                 fallthroughBranch: null,
             };
         }
-        const nullishRightAwaitBranch =
-            this.asyncAwaitTryConditionalNullishRightAwaitBranchForExpression(
-                expression,
-                elseBranch,
-                thenBranch,
-            );
-        if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
         const booleanVoidRightAwaitBranch =
             this.asyncAwaitTryConditionalBooleanVoidRightAwaitBranchForExpression(
                 expression,

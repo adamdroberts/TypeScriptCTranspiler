@@ -1,0 +1,9 @@
+declaration-false fallback LF
+declaration-left-reject caught-left-bad L
+declaration-fallback-reject caught-fallback-bad LF
+method-false fallback LFC
+method-left-reject rejected-left-bad LC
+method-fallback-reject rejected-fallback-bad LFC
+arrow-false fallback LFV
+arrow-left-reject caught-left-bad LV
+arrow-fallback-reject caught-fallback-bad LFV
