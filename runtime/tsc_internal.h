@@ -558,7 +558,7 @@ double fs_stat_birthtime_ms(const struct stat* st);
 void fs_stats_fill(tsc_fs_stats_t* out, const struct stat* st);
 tsc_fs_dirent_t* fs_dirent_from_path(const char* dir_path, const char* name);
 char* fs_join_path(const char* left, const char* right);
-void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, const char* label);
+void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, bool flush, const char* label);
 void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label);
 void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label);
 struct timespec fs_seconds_to_timespec(double seconds);

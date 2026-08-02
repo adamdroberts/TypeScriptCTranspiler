@@ -72612,6 +72612,7 @@ class Emitter {
                     { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     { value: { c: options.update ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     options.mode,
+                    { value: { c: options.flush ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], (values) => {
                     const [path, data] = values;
@@ -72620,7 +72621,8 @@ class Emitter {
                     const exclusive = values[3 + offset]!;
                     const update = values[4 + offset]!;
                     const mode = values[5 + offset]!;
-                    return `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append, exclusive, update, mode)}; })`;
+                    const flush = values[6 + offset]!;
+                    return `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append, exclusive, update, mode, flush)}; })`;
                 });
             }
             case "appendFileSync": {
@@ -72641,6 +72643,7 @@ class Emitter {
                     { value: { c: options.exclusive ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     { value: { c: "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     options.mode,
+                    { value: { c: options.flush ? "true" : "false", ty: T_BOOLEAN }, target: T_BOOLEAN, node: args[2] ?? call },
                     ...this.ignoredArgumentSpecs(args, args[2] ? 3 : 2),
                 ], (values) => {
                     const [path, data] = values;
@@ -72649,7 +72652,8 @@ class Emitter {
                     const exclusive = values[3 + offset]!;
                     const update = values[4 + offset]!;
                     const mode = values[5 + offset]!;
-                    return `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append, exclusive, update, mode)}; })`;
+                    const flush = values[6 + offset]!;
+                    return `({ ${this.emitFsWriteFileCall(path!, data!, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, append, exclusive, update, mode, flush)}; })`;
                 });
             }
             case "existsSync": {
@@ -73660,15 +73664,16 @@ class Emitter {
         exclusive: string,
         update: string,
         mode: string,
+        flush: string,
     ): string {
         if (dataKind === "buffer") {
-            return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode})`;
+            return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${flush})`;
         }
         if (encoding === "utf8") {
-            return `tsc_fs_write_file_sync_opts_mode(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode})`;
+            return `tsc_fs_write_file_sync_opts_mode(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${flush})`;
         }
         const encoded = `tsc_buffer_from_str(${data}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
-        return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode})`;
+        return `tsc_fs_write_file_buffer_sync_opts_mode(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode}, ${flush})`;
     }
 
     private emitFsWriteFileAsyncCall(
@@ -73680,24 +73685,25 @@ class Emitter {
         exclusive: string,
         update: string,
         mode: string,
+        flush: string,
         signal: string,
     ): string {
         if (dataKind === "buffer") {
-            return `tsc_fs_promises_write_file_buffer_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${signal})`;
+            return `tsc_fs_promises_write_file_buffer_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${flush}, ${signal})`;
         }
         if (encoding === "utf8") {
-            return `tsc_fs_promises_write_file_string_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${signal})`;
+            return `tsc_fs_promises_write_file_string_async(${path}, ${data}, ${append}, ${exclusive}, ${update}, ${mode}, ${flush}, ${signal})`;
         }
         const encoded = `tsc_buffer_from_str(${data}, tsc_str_from_lit("${encoding}", ${encoding.length}))`;
-        return `tsc_fs_promises_write_file_buffer_async(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode}, ${signal})`;
+        return `tsc_fs_promises_write_file_buffer_async(${path}, ${encoded}, ${append}, ${exclusive}, ${update}, ${mode}, ${flush}, ${signal})`;
     }
 
     private validateFsWriteFileOptions(
         options: ts.Expression | undefined,
         label: string,
         allowSignal = false,
-    ): { append: boolean; exclusive: boolean; update: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
-        const out = { append: false, exclusive: false, update: false };
+    ): { append: boolean; exclusive: boolean; update: boolean; flush: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
+        const out = { append: false, exclusive: false, update: false, flush: false };
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
@@ -73757,9 +73763,11 @@ class Emitter {
                 if (this.isUndefinedExpression(flushNode)) {
                     continue;
                 }
-                if (this.fsBooleanOptionValue(flushNode) === null) {
+                const flush = this.fsBooleanOptionValue(flushNode);
+                if (flush === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
+                out.flush = flush;
             } else if (allowSignal && key === "signal") {
                 continue;
             } else {
@@ -73773,8 +73781,8 @@ class Emitter {
         options: ts.Expression | undefined,
         label: string,
         allowSignal = false,
-    ): { exclusive: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
-        const out = { exclusive: false };
+    ): { exclusive: boolean; flush: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
+        const out = { exclusive: false, flush: false };
         let encoding: "utf8" | "hex" | "base64" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
@@ -73832,9 +73840,11 @@ class Emitter {
                 if (this.isUndefinedExpression(flushNode)) {
                     continue;
                 }
-                if (this.fsBooleanOptionValue(flushNode) === null) {
+                const flush = this.fsBooleanOptionValue(flushNode);
+                if (flush === null) {
                     unsupported(prop.initializer, `${label}.flush must be a boolean literal in this subset`);
                 }
+                out.flush = flush;
             } else if (allowSignal && key === "signal") {
                 continue;
             } else {
@@ -74115,7 +74125,7 @@ class Emitter {
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     this.usesLibuv = true;
-                    const write = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode, requestSignal);
+                    const write = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode, options.flush ? "true" : "false", requestSignal);
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${write})`
                         : write);
@@ -74148,7 +74158,7 @@ class Emitter {
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     this.usesLibuv = true;
-                    const append = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode, requestSignal);
+                    const append = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode, options.flush ? "true" : "false", requestSignal);
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${append})`
                         : append);

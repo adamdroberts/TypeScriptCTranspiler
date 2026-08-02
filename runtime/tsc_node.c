@@ -2936,6 +2936,7 @@ extern int uv_fs_mkdir(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int 
 extern int uv_fs_unlink(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_rmdir(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_ftruncate(uv_loop_t* loop, tsc_uv_fs_t* req, int file, int64_t offset, tsc_uv_fs_cb cb);
+extern int uv_fs_fsync(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
 extern int uv_fs_readlink(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_realpath(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_mkdtemp(uv_loop_t* loop, tsc_uv_fs_t* req, const char* tpl, tsc_uv_fs_cb cb);
@@ -3176,6 +3177,8 @@ typedef struct tsc_fs_write_file_async {
     bool append;
     bool exclusive;
     bool update;
+    bool flush;
+    bool flush_done;
     double file_mode;
     tsc_value_t signal;
     bool aborted;
@@ -3227,8 +3230,22 @@ static void tsc_fs_write_file_async_abort(void* env) {
 }
 
 static void tsc_fs_write_file_async_close_cb(tsc_uv_fs_t* req);
+static void tsc_fs_write_file_async_fsync_cb(tsc_uv_fs_t* req);
 
 static void tsc_fs_write_file_async_close_or_finish(tsc_fs_write_file_async_t* task, bool success) {
+    if (success && task->flush && !task->flush_done && !task->aborted) {
+        task->flush_done = true;
+        int flush_rc = uv_fs_fsync(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_write_file_async_fsync_cb);
+        if (flush_rc < 0) {
+            task->req_pending = false;
+            uv_fs_req_cleanup(&task->req);
+            task->error = tsc_str_from_cstr("fs.writeFileSync: could not flush file");
+            tsc_fs_write_file_async_close_or_finish(task, false);
+        } else {
+            task->req_pending = true;
+        }
+        return;
+    }
     int rc = uv_fs_close(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_write_file_async_close_cb);
     if (rc < 0) {
         task->req_pending = false;
@@ -3251,6 +3268,19 @@ static void tsc_fs_write_file_async_close_cb(tsc_uv_fs_t* req) {
         return;
     }
     tsc_fs_write_file_async_finish(task, task->error == NULL);
+}
+
+static void tsc_fs_write_file_async_fsync_cb(tsc_uv_fs_t* req) {
+    tsc_fs_write_file_async_t* task = (tsc_fs_write_file_async_t*)req;
+    task->req_pending = false;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.writeFileSync: could not flush file");
+        tsc_fs_write_file_async_close_or_finish(task, false);
+        return;
+    }
+    tsc_fs_write_file_async_close_or_finish(task, true);
 }
 
 static void tsc_fs_write_file_async_write_cb(tsc_uv_fs_t* req);
@@ -3340,6 +3370,7 @@ static tsc_promise_t* tsc_fs_promises_write_file_async(
     bool exclusive,
     bool update,
     double file_mode,
+    bool flush,
     tsc_value_t signal
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
@@ -3355,6 +3386,7 @@ static tsc_promise_t* tsc_fs_promises_write_file_async(
     task->append = append;
     task->exclusive = exclusive;
     task->update = update;
+    task->flush = flush;
     task->file_mode = file_mode;
     task->signal = signal;
     task->next = g_tsc_fs_write_file_async;
@@ -3389,9 +3421,10 @@ tsc_promise_t* tsc_fs_promises_write_file_string_async(
     bool exclusive,
     bool update,
     double file_mode,
+    bool flush,
     tsc_value_t signal
 ) {
-    return tsc_fs_promises_write_file_async(path, (const uint8_t*)data->data, data->len, data, NULL, append, exclusive, update, file_mode, signal);
+    return tsc_fs_promises_write_file_async(path, (const uint8_t*)data->data, data->len, data, NULL, append, exclusive, update, file_mode, flush, signal);
 }
 
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
@@ -3401,9 +3434,10 @@ tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
     bool exclusive,
     bool update,
     double file_mode,
+    bool flush,
     tsc_value_t signal
 ) {
-    return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, append, exclusive, update, file_mode, signal);
+    return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, append, exclusive, update, file_mode, flush, signal);
 }
 
 tsc_fs_dirent_t* fs_dirent_from_uv(const char* dir_path, const char* name, int type);
@@ -6497,7 +6531,7 @@ tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path) {
     return tsc_buffer_from_str(tsc_fs_read_file_sync(path), NULL);
 }
 
-void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, const char* label) {
+void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, bool update, double file_mode, bool flush, const char* label) {
     char* p = cstr_dup(path);
     bool existed = access(p, F_OK) == 0;
     if (exclusive && existed) {
@@ -6509,6 +6543,12 @@ void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t
     FILE* f = fopen(p, open_mode);
     if (!f) { free(p); tsc_throw_str(tsc_str_from_cstr(label)); return; }
     fwrite(data, 1, len, f);
+    if (flush && (fflush(f) != 0 || fsync(fileno(f)) != 0)) {
+        fclose(f);
+        free(p);
+        tsc_throw_str(tsc_str_from_cstr("fs.writeFileSync: could not flush file"));
+        return;
+    }
     fclose(f);
     if (file_mode >= 0.0 && !existed) {
         if (chmod(p, (mode_t)file_mode) != 0) {
@@ -6521,7 +6561,7 @@ void fs_write_bytes_opts_mode(const tsc_str_t* path, const uint8_t* data, size_t
 }
 
 void fs_write_bytes_opts(const tsc_str_t* path, const uint8_t* data, size_t len, bool append, bool exclusive, const char* label) {
-    fs_write_bytes_opts_mode(path, data, len, append, exclusive, false, -1.0, label);
+    fs_write_bytes_opts_mode(path, data, len, append, exclusive, false, -1.0, false, label);
 }
 
 void fs_write_bytes(const tsc_str_t* path, const uint8_t* data, size_t len, const char* mode, const char* label) {
@@ -6544,12 +6584,12 @@ void tsc_fs_write_file_buffer_sync_opts(const tsc_str_t* path, const tsc_buffer_
     fs_write_bytes_opts(path, data->data, data->len, append, exclusive, "fs.writeFileSync: could not open");
 }
 
-void tsc_fs_write_file_sync_opts_mode(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double mode) {
-    fs_write_bytes_opts_mode(path, (const uint8_t*)data->data, data->len, append, exclusive, update, mode, "fs.writeFileSync: could not open");
+void tsc_fs_write_file_sync_opts_mode(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double mode, bool flush) {
+    fs_write_bytes_opts_mode(path, (const uint8_t*)data->data, data->len, append, exclusive, update, mode, flush, "fs.writeFileSync: could not open");
 }
 
-void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double mode) {
-    fs_write_bytes_opts_mode(path, data->data, data->len, append, exclusive, update, mode, "fs.writeFileSync: could not open");
+void tsc_fs_write_file_buffer_sync_opts_mode(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double mode, bool flush) {
+    fs_write_bytes_opts_mode(path, data->data, data->len, append, exclusive, update, mode, flush, "fs.writeFileSync: could not open");
 }
 
 void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data) {
