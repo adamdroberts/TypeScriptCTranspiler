@@ -5250,6 +5250,10 @@ typedef struct tsc_fs_simple_mutation_libuv_async {
     int mode;
     int operation;
     bool force;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
+    bool done;
     struct tsc_fs_simple_mutation_libuv_async* next;
 } tsc_fs_simple_mutation_libuv_async_t;
 
@@ -5275,13 +5279,32 @@ static void tsc_fs_simple_mutation_libuv_remove(tsc_fs_simple_mutation_libuv_asy
 }
 
 static void tsc_fs_simple_mutation_libuv_finish(tsc_fs_simple_mutation_libuv_async_t* task, tsc_str_t* error) {
-    if (error) {
-        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
-    } else {
-        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    if (task->done) return;
+    task->done = true;
+    if (!task->aborted) {
+        if (error) {
+            tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+        } else {
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+        }
     }
     free(task->path);
     tsc_fs_simple_mutation_libuv_remove(task);
+}
+
+static void tsc_fs_simple_mutation_libuv_abort(void* env) {
+    tsc_fs_simple_mutation_libuv_async_t* task = (tsc_fs_simple_mutation_libuv_async_t*)env;
+    if (!task || task->aborted || task->done) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    } else {
+        tsc_fs_simple_mutation_libuv_finish(task, NULL);
+    }
 }
 
 static const char* tsc_fs_simple_mutation_error(int operation) {
@@ -5296,8 +5319,13 @@ static const char* tsc_fs_simple_mutation_error(int operation) {
 
 static void tsc_fs_simple_mutation_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_simple_mutation_libuv_async_t* task = (tsc_fs_simple_mutation_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
+    if (task->aborted) {
+        tsc_fs_simple_mutation_libuv_finish(task, NULL);
+        return;
+    }
     if (result < 0 && !(task->operation == TSC_FS_SIMPLE_RM && task->force && result == -ENOENT)) {
         tsc_fs_simple_mutation_libuv_finish(task, tsc_str_from_cstr(tsc_fs_simple_mutation_error(task->operation)));
         return;
@@ -5309,7 +5337,8 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
     const tsc_str_t* path,
     double mode,
     int operation,
-    bool force
+    bool force,
+    tsc_value_t signal
 ) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_simple_mutation_libuv_async_t* task = (tsc_fs_simple_mutation_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_simple_mutation_libuv_async_t));
@@ -5319,6 +5348,7 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
     task->mode = (isnan(mode) || isinf(mode) || mode < 0) ? 0777 : (int)mode;
     task->operation = operation;
     task->force = force;
+    task->signal = signal;
     task->next = g_tsc_fs_simple_mutation_libuv_async;
     g_tsc_fs_simple_mutation_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -5330,14 +5360,18 @@ static tsc_promise_t* tsc_fs_promises_simple_mutation_libuv_async(
                 ? uv_fs_unlink(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_simple_mutation_libuv_cb)
                 : uv_fs_rmdir(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_simple_mutation_libuv_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_simple_mutation_libuv_finish(task, tsc_str_from_cstr(tsc_fs_simple_mutation_error(operation)));
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_simple_mutation_libuv_abort, task);
     }
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_mkdir_async(const tsc_str_t* path, double mode) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, mode, TSC_FS_SIMPLE_MKDIR, false);
+tsc_promise_t* tsc_fs_promises_mkdir_async(const tsc_str_t* path, double mode, tsc_value_t signal) {
+    return tsc_fs_promises_simple_mutation_libuv_async(path, mode, TSC_FS_SIMPLE_MKDIR, false, signal);
 }
 
 typedef struct tsc_fs_mkdir_recursive_work {
@@ -5349,6 +5383,10 @@ typedef struct tsc_fs_mkdir_recursive_libuv_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
     int mode;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
+    bool done;
     tsc_fs_mkdir_recursive_work_t* work;
     char* current_path;
     struct tsc_fs_mkdir_recursive_libuv_async* next;
@@ -5378,17 +5416,36 @@ static void tsc_fs_mkdir_recursive_work_clear(tsc_fs_mkdir_recursive_libuv_async
 }
 
 static void tsc_fs_mkdir_recursive_libuv_finish(tsc_fs_mkdir_recursive_libuv_async_t* task, bool success) {
-    if (success) {
-        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
-    } else {
-        tsc_promise_reject_in_place(
-            task->promise,
-            tsc_value_string(tsc_str_from_cstr("fs.mkdirSync: could not create directory recursively"))
-        );
+    if (task->done) return;
+    task->done = true;
+    if (!task->aborted) {
+        if (success) {
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+        } else {
+            tsc_promise_reject_in_place(
+                task->promise,
+                tsc_value_string(tsc_str_from_cstr("fs.mkdirSync: could not create directory recursively"))
+            );
+        }
     }
     free(task->current_path);
     tsc_fs_mkdir_recursive_work_clear(task);
     tsc_fs_mkdir_recursive_libuv_remove(task);
+}
+
+static void tsc_fs_mkdir_recursive_libuv_abort(void* env) {
+    tsc_fs_mkdir_recursive_libuv_async_t* task = (tsc_fs_mkdir_recursive_libuv_async_t*)env;
+    if (!task || task->aborted || task->done) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    } else {
+        tsc_fs_mkdir_recursive_libuv_finish(task, false);
+    }
 }
 
 static bool tsc_fs_mkdir_recursive_push_owned(
@@ -5441,8 +5498,13 @@ static void tsc_fs_mkdir_recursive_libuv_release_current(tsc_fs_mkdir_recursive_
 
 static void tsc_fs_mkdir_recursive_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_mkdir_recursive_libuv_async_t* task = (tsc_fs_mkdir_recursive_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
+    if (task->aborted) {
+        tsc_fs_mkdir_recursive_libuv_finish(task, false);
+        return;
+    }
     if (result < 0 && result != -EEXIST) {
         tsc_fs_mkdir_recursive_libuv_finish(task, false);
         return;
@@ -5453,6 +5515,7 @@ static void tsc_fs_mkdir_recursive_libuv_cb(tsc_uv_fs_t* req) {
 
 static void tsc_fs_mkdir_recursive_libuv_start_next(tsc_fs_mkdir_recursive_libuv_async_t* task) {
     tsc_fs_mkdir_recursive_work_t* item;
+    if (task->aborted || task->done) return;
     if (task->current_path != NULL) return;
     item = task->work;
     if (!item) {
@@ -5470,17 +5533,21 @@ static void tsc_fs_mkdir_recursive_libuv_start_next(tsc_fs_mkdir_recursive_libuv
         tsc_fs_mkdir_recursive_libuv_cb
     );
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_mkdir_recursive_libuv_finish(task, false);
+    } else {
+        task->req_pending = true;
     }
 }
 
-tsc_promise_t* tsc_fs_promises_mkdir_recursive_async(const tsc_str_t* path, double mode) {
+tsc_promise_t* tsc_fs_promises_mkdir_recursive_async(const tsc_str_t* path, double mode, tsc_value_t signal) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_mkdir_recursive_libuv_async_t* task = (tsc_fs_mkdir_recursive_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_mkdir_recursive_libuv_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->mode = (isnan(mode) || isinf(mode) || mode < 0) ? 0777 : (int)mode;
+    task->signal = signal;
     task->next = g_tsc_fs_mkdir_recursive_libuv_async;
     g_tsc_fs_mkdir_recursive_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -5491,20 +5558,22 @@ tsc_promise_t* tsc_fs_promises_mkdir_recursive_async(const tsc_str_t* path, doub
         return promise;
     }
     free(root);
+    tsc_abort_signal_add_callback(signal, tsc_fs_mkdir_recursive_libuv_abort, task);
+    if (task->aborted) return promise;
     tsc_fs_mkdir_recursive_libuv_start_next(task);
     return promise;
 }
 
 tsc_promise_t* tsc_fs_promises_unlink_async(const tsc_str_t* path) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_UNLINK, false);
+    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_UNLINK, false, tsc_value_undefined());
 }
 
-tsc_promise_t* tsc_fs_promises_rmdir_async(const tsc_str_t* path) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RMDIR, false);
+tsc_promise_t* tsc_fs_promises_rmdir_async(const tsc_str_t* path, tsc_value_t signal) {
+    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RMDIR, false, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_rm_async(const tsc_str_t* path, bool force) {
-    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RM, force);
+tsc_promise_t* tsc_fs_promises_rm_async(const tsc_str_t* path, bool force, tsc_value_t signal) {
+    return tsc_fs_promises_simple_mutation_libuv_async(path, 0.0, TSC_FS_SIMPLE_RM, force, signal);
 }
 
 typedef struct tsc_fs_rm_recursive_work {
@@ -5519,6 +5588,10 @@ typedef struct tsc_fs_rm_recursive_libuv_async {
     tsc_promise_t* promise;
     bool force;
     bool rmdir;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
+    bool done;
     tsc_fs_rm_recursive_work_t* work;
     char* current_path;
     bool current_reject_non_dir;
@@ -5549,17 +5622,36 @@ static void tsc_fs_rm_recursive_work_clear(tsc_fs_rm_recursive_libuv_async_t* ta
 }
 
 static void tsc_fs_rm_recursive_libuv_finish(tsc_fs_rm_recursive_libuv_async_t* task, bool success) {
-    if (success) {
-        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
-    } else {
-        const char* message = task->rmdir
-            ? "fs.rmdirSync: could not remove directory"
-            : "fs.rmSync: could not remove path";
-        tsc_promise_reject_in_place(task->promise, tsc_value_string(tsc_str_from_cstr(message)));
+    if (task->done) return;
+    task->done = true;
+    if (!task->aborted) {
+        if (success) {
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+        } else {
+            const char* message = task->rmdir
+                ? "fs.rmdirSync: could not remove directory"
+                : "fs.rmSync: could not remove path";
+            tsc_promise_reject_in_place(task->promise, tsc_value_string(tsc_str_from_cstr(message)));
+        }
     }
     free(task->current_path);
     tsc_fs_rm_recursive_work_clear(task);
     tsc_fs_rm_recursive_libuv_remove(task);
+}
+
+static void tsc_fs_rm_recursive_libuv_abort(void* env) {
+    tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)env;
+    if (!task || task->aborted || task->done) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    } else {
+        tsc_fs_rm_recursive_libuv_finish(task, false);
+    }
 }
 
 static bool tsc_fs_rm_recursive_push_owned(
@@ -5604,8 +5696,13 @@ static void tsc_fs_rm_recursive_libuv_release_current(tsc_fs_rm_recursive_libuv_
 
 static void tsc_fs_rm_recursive_libuv_unlink_cb(tsc_uv_fs_t* req) {
     tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
+    if (task->aborted) {
+        tsc_fs_rm_recursive_libuv_finish(task, false);
+        return;
+    }
     if (result < 0 && !(task->force && (result == -ENOENT || result == -ENOTDIR))) {
         tsc_fs_rm_recursive_libuv_finish(task, false);
         return;
@@ -5616,8 +5713,13 @@ static void tsc_fs_rm_recursive_libuv_unlink_cb(tsc_uv_fs_t* req) {
 
 static void tsc_fs_rm_recursive_libuv_rmdir_cb(tsc_uv_fs_t* req) {
     tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
+    if (task->aborted) {
+        tsc_fs_rm_recursive_libuv_finish(task, false);
+        return;
+    }
     if (result < 0 && !(task->force && (result == -ENOENT || result == -ENOTDIR))) {
         tsc_fs_rm_recursive_libuv_finish(task, false);
         return;
@@ -5631,6 +5733,7 @@ static void tsc_fs_rm_recursive_libuv_scandir_cb(tsc_uv_fs_t* req);
 
 static void tsc_fs_rm_recursive_libuv_start_current(tsc_fs_rm_recursive_libuv_async_t* task) {
     int rc;
+    if (task->aborted || task->done) return;
     if (task->current_path == NULL) {
         tsc_fs_rm_recursive_libuv_start_next(task);
         return;
@@ -5642,13 +5745,17 @@ static void tsc_fs_rm_recursive_libuv_start_current(tsc_fs_rm_recursive_libuv_as
         tsc_fs_rm_recursive_libuv_lstat_cb
     );
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_fs_rm_recursive_libuv_finish(task, false);
+    } else {
+        task->req_pending = true;
     }
 }
 
 static void tsc_fs_rm_recursive_libuv_start_next(tsc_fs_rm_recursive_libuv_async_t* task) {
     tsc_fs_rm_recursive_work_t* item;
+    if (task->aborted || task->done) return;
     if (task->current_path != NULL) return;
     item = task->work;
     if (!item) {
@@ -5663,8 +5770,11 @@ static void tsc_fs_rm_recursive_libuv_start_next(tsc_fs_rm_recursive_libuv_async
     if (remove_dir) {
         int rc = uv_fs_rmdir(g_tsc_fs_uv_loop, &task->req, task->current_path, tsc_fs_rm_recursive_libuv_rmdir_cb);
         if (rc < 0) {
+            task->req_pending = false;
             uv_fs_req_cleanup(&task->req);
             tsc_fs_rm_recursive_libuv_finish(task, false);
+        } else {
+            task->req_pending = true;
         }
     } else {
         tsc_fs_rm_recursive_libuv_start_current(task);
@@ -5673,7 +5783,13 @@ static void tsc_fs_rm_recursive_libuv_start_next(tsc_fs_rm_recursive_libuv_async
 
 static void tsc_fs_rm_recursive_libuv_scandir_cb(tsc_uv_fs_t* req) {
     tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_rm_recursive_libuv_finish(task, false);
+        return;
+    }
     if (result < 0) {
         uv_fs_req_cleanup(req);
         tsc_fs_rm_recursive_libuv_finish(task, false);
@@ -5703,7 +5819,13 @@ static void tsc_fs_rm_recursive_libuv_scandir_cb(tsc_uv_fs_t* req) {
 
 static void tsc_fs_rm_recursive_libuv_lstat_cb(tsc_uv_fs_t* req) {
     tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)req;
+    task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_rm_recursive_libuv_finish(task, false);
+        return;
+    }
     if (result < 0) {
         uv_fs_req_cleanup(req);
         if (task->force && (result == -ENOENT || result == -ENOTDIR)) {
@@ -5738,13 +5860,14 @@ static void tsc_fs_rm_recursive_libuv_lstat_cb(tsc_uv_fs_t* req) {
     }
 }
 
-static tsc_promise_t* tsc_fs_promises_recursive_remove_async(const tsc_str_t* path, bool force, bool rmdir) {
+static tsc_promise_t* tsc_fs_promises_recursive_remove_async(const tsc_str_t* path, bool force, bool rmdir, tsc_value_t signal) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_rm_recursive_libuv_async_t* task = (tsc_fs_rm_recursive_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_rm_recursive_libuv_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->force = force;
     task->rmdir = rmdir;
+    task->signal = signal;
     task->next = g_tsc_fs_rm_recursive_libuv_async;
     g_tsc_fs_rm_recursive_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -5754,16 +5877,18 @@ static tsc_promise_t* tsc_fs_promises_recursive_remove_async(const tsc_str_t* pa
         tsc_fs_rm_recursive_libuv_finish(task, false);
         return promise;
     }
+    tsc_abort_signal_add_callback(signal, tsc_fs_rm_recursive_libuv_abort, task);
+    if (task->aborted) return promise;
     tsc_fs_rm_recursive_libuv_start_next(task);
     return promise;
 }
 
-tsc_promise_t* tsc_fs_promises_rm_recursive_async(const tsc_str_t* path, bool force) {
-    return tsc_fs_promises_recursive_remove_async(path, force, false);
+tsc_promise_t* tsc_fs_promises_rm_recursive_async(const tsc_str_t* path, bool force, tsc_value_t signal) {
+    return tsc_fs_promises_recursive_remove_async(path, force, false, signal);
 }
 
-tsc_promise_t* tsc_fs_promises_rmdir_recursive_async(const tsc_str_t* path) {
-    return tsc_fs_promises_recursive_remove_async(path, false, true);
+tsc_promise_t* tsc_fs_promises_rmdir_recursive_async(const tsc_str_t* path, tsc_value_t signal) {
+    return tsc_fs_promises_recursive_remove_async(path, false, true, signal);
 }
 
 typedef struct tsc_fs_truncate_libuv_async {

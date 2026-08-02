@@ -1,0 +1,8 @@
+queued
+mkdir abort: mutation stop
+mkdir recursive abort: mutation stop
+rm abort: mutation stop
+rm recursive abort: mutation stop
+rmdir abort: mutation stop
+rmdir recursive abort: mutation stop
+completed: 0

@@ -74488,16 +74488,17 @@ class Emitter {
                 ], (values) => {
                     const path = values[0]!;
                     const mode = values[1 + optionSpecs.length]!;
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
                     const mkdir = options.recursive
                         ? (() => {
                             this.usesLibuv = true;
-                            return `tsc_fs_promises_mkdir_recursive_async(${path}, ${mode})`;
+                            return `tsc_fs_promises_mkdir_recursive_async(${path}, ${mode}, ${requestSignal})`;
                         })()
                         : (() => {
                             this.usesLibuv = true;
-                            return `tsc_fs_promises_mkdir_async(${path}, ${mode})`;
+                            return `tsc_fs_promises_mkdir_async(${path}, ${mode}, ${requestSignal})`;
                         })();
-                    const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${mkdir})`
                         : mkdir);
@@ -74521,16 +74522,17 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
+                    const signal = signalValue ? values[signalSpecIndex]! : null;
+                    const requestSignal = signal ?? "tsc_value_undefined()";
                     const rm = options.recursive
                         ? (() => {
                             this.usesLibuv = true;
-                            return `tsc_fs_promises_rm_recursive_async(${path!}, ${options.force ? "true" : "false"})`;
+                            return `tsc_fs_promises_rm_recursive_async(${path!}, ${options.force ? "true" : "false"}, ${requestSignal})`;
                         })()
                         : (() => {
                             this.usesLibuv = true;
-                            return `tsc_fs_promises_rm_async(${path!}, ${options.force ? "true" : "false"})`;
+                            return `tsc_fs_promises_rm_async(${path!}, ${options.force ? "true" : "false"}, ${requestSignal})`;
                         })();
-                    const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${rm})`
                         : rm);
@@ -74557,16 +74559,17 @@ class Emitter {
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], (values) => {
                         const path = values[0]!;
+                        const signal = signalValue ? values[signalSpecIndex]! : null;
+                        const requestSignal = signal ?? "tsc_value_undefined()";
                         const rmdir = options.recursive
                             ? (() => {
                                 this.usesLibuv = true;
-                                return `tsc_fs_promises_rmdir_recursive_async(${path!})`;
+                                return `tsc_fs_promises_rmdir_recursive_async(${path!}, ${requestSignal})`;
                             })()
                             : (() => {
                                 this.usesLibuv = true;
-                                return `tsc_fs_promises_rmdir_async(${path!})`;
+                                return `tsc_fs_promises_rmdir_async(${path!}, ${requestSignal})`;
                             })();
-                        const signal = signalValue ? values[signalSpecIndex]! : null;
                         return settle(signal
                             ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${rmdir})`
                             : rmdir);
