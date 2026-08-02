@@ -2915,6 +2915,7 @@ extern int uv_fs_statfs(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc
 extern void* uv_fs_get_ptr(const tsc_uv_fs_t* req);
 extern int uv_fs_copyfile(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, const char* new_path, int flags, tsc_uv_fs_cb cb);
 extern int uv_fs_rename(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, const char* new_path, tsc_uv_fs_cb cb);
+extern int uv_fs_readlink(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_realpath(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_close(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
 extern void uv_fs_req_cleanup(tsc_uv_fs_t* req);
@@ -3769,6 +3770,7 @@ typedef struct tsc_fs_realpath_libuv_async {
     tsc_promise_t* promise;
     char* path;
     int encoding;
+    bool readlink;
     struct tsc_fs_realpath_libuv_async* next;
 } tsc_fs_realpath_libuv_async_t;
 
@@ -3812,7 +3814,9 @@ static void tsc_fs_realpath_libuv_cb(tsc_uv_fs_t* req) {
             task,
             tsc_value_undefined(),
             NULL,
-            tsc_str_from_cstr("fs.realpathSync: could not resolve path")
+            tsc_str_from_cstr(task->readlink
+                ? "fs.readlinkSync: could not read link"
+                : "fs.realpathSync: could not resolve path")
         );
         return;
     }
@@ -3824,7 +3828,9 @@ static void tsc_fs_realpath_libuv_cb(tsc_uv_fs_t* req) {
             task,
             tsc_value_undefined(),
             NULL,
-            tsc_str_from_cstr("fs.realpathSync: could not resolve path")
+            tsc_str_from_cstr(task->readlink
+                ? "fs.readlinkSync: could not read link"
+                : "fs.realpathSync: could not resolve path")
         );
         return;
     }
@@ -3846,27 +3852,40 @@ static void tsc_fs_realpath_libuv_cb(tsc_uv_fs_t* req) {
     tsc_fs_realpath_libuv_finish(task, value, ptr_value, NULL);
 }
 
-tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding) {
+static tsc_promise_t* tsc_fs_promises_path_result_async(const tsc_str_t* path, int encoding, bool readlink) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_realpath_libuv_async_t* task = (tsc_fs_realpath_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_realpath_libuv_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->path = cstr_dup(path);
     task->encoding = encoding;
+    task->readlink = readlink;
     task->next = g_tsc_fs_realpath_libuv_async;
     g_tsc_fs_realpath_libuv_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
-    int rc = uv_fs_realpath(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_realpath_libuv_cb);
+    int rc = readlink
+        ? uv_fs_readlink(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_realpath_libuv_cb)
+        : uv_fs_realpath(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_realpath_libuv_cb);
     if (rc < 0) {
         uv_fs_req_cleanup(&task->req);
         tsc_fs_realpath_libuv_finish(
             task,
             tsc_value_undefined(),
             NULL,
-            tsc_str_from_cstr("fs.realpathSync: could not resolve path")
+            tsc_str_from_cstr(readlink
+                ? "fs.readlinkSync: could not read link"
+                : "fs.realpathSync: could not resolve path")
         );
     }
     return promise;
+}
+
+tsc_promise_t* tsc_fs_promises_realpath_async(const tsc_str_t* path, int encoding) {
+    return tsc_fs_promises_path_result_async(path, encoding, false);
+}
+
+tsc_promise_t* tsc_fs_promises_readlink_async(const tsc_str_t* path, int encoding) {
+    return tsc_fs_promises_path_result_async(path, encoding, true);
 }
 
 bool tsc_fs_libuv_pending(void) {

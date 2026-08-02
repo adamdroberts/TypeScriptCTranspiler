@@ -26,21 +26,30 @@ const real = fs.realpathSync(path.join(nested, ".."), void note("real-options"),
 const read = readlinkSync(link, void note("read-options"), mark("read"));
 const made = mkdtempSync(syncPrefix, void note("mkd-options"), mark("mkd"));
 
+let promiseReal = false;
+let promiseRead = false;
+let promiseMkd = false;
+let promiseMkdDirectory = false;
+let promiseMkdPath = "";
 fs.promises.realpath(path.join(nested, ".."), void note("preal-options"), mark("preal")).then((value: string): void => {
-    console.log("promise real:", value === root);
+    promiseReal = value === root;
 });
-
 fs.promises.readlink(link, void note("pread-options"), mark("pread")).then((value: string): void => {
-    console.log("promise read:", value === target);
+    promiseRead = value === target;
 });
-
 fs.promises.mkdtemp(promisePrefix, void note("pmkd-options"), mark("pmkd")).then((value: string): void => {
-    console.log("promise mkd:", value.indexOf(promisePrefix) === 0, fs.statSync(value).isDirectory());
-    fs.rmSync(value, { recursive: true, force: true });
+    promiseMkd = value.indexOf(promisePrefix) === 0;
+    promiseMkdDirectory = fs.statSync(value).isDirectory();
+    promiseMkdPath = value;
 });
 
-console.log("sync:", real === root, read === target, made.indexOf(syncPrefix) === 0, fs.statSync(made).isDirectory());
-console.log("events:", events.join("|"));
-
-fs.rmSync(root, { recursive: true, force: true });
-fs.rmSync(made, { recursive: true, force: true });
+setImmediate((): void => {
+    console.log("promise real:", promiseReal);
+    console.log("promise read:", promiseRead);
+    console.log("promise mkd:", promiseMkd, promiseMkdDirectory);
+    console.log("sync:", real === root, read === target, made.indexOf(syncPrefix) === 0, fs.statSync(made).isDirectory());
+    console.log("events:", events.join("|"));
+    if (promiseMkdPath) fs.rmSync(promiseMkdPath, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(made, { recursive: true, force: true });
+});
