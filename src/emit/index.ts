@@ -45484,12 +45484,14 @@ class Emitter {
                 ? bodyAwaitPostludeStatements
                 : [];
         const bodyAwaitInterstageLocals: BodyAwaitInterstageLocal[] = [];
+        const bodyAwaitInterstageLocalsBySymbol = new Map<ts.Symbol, BodyAwaitInterstageLocal>();
         let bodyAwaitInterstageLocalsSupported = true;
         const seenBodyAwaitInterstageLocals = new Set<ts.Symbol>();
+        const initializedBodyAwaitInterstageLocals = new Set<ts.Symbol>();
         for (const statement of bodyAwaitInterstageStatements) {
             if (ts.isVariableStatement(statement)) {
                 for (const declaration of statement.declarationList.declarations) {
-                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) {
+                    if (!ts.isIdentifier(declaration.name)) {
                         bodyAwaitInterstageLocalsSupported = false;
                         break;
                     }
@@ -45500,10 +45502,27 @@ class Emitter {
                         break;
                     }
                     seenBodyAwaitInterstageLocals.add(symbol);
-                    bodyAwaitInterstageLocals.push({ symbol, type, field: `body_await_local_${bodyAwaitInterstageLocals.length}` });
+                    const local = { symbol, type, field: `body_await_local_${bodyAwaitInterstageLocals.length}` };
+                    bodyAwaitInterstageLocals.push(local);
+                    bodyAwaitInterstageLocalsBySymbol.set(symbol, local);
+                    if (declaration.initializer) initializedBodyAwaitInterstageLocals.add(symbol);
                 }
                 if (!bodyAwaitInterstageLocalsSupported) break;
                 continue;
+            }
+            const assignment = ts.isExpressionStatement(statement)
+                ? this.unwrapTransparentExpression(statement.expression)
+                : null;
+            if (assignment && ts.isBinaryExpression(assignment) && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(assignment.left)) {
+                const symbol = this.symbolForIdentifier(assignment.left);
+                if (symbol && bodyAwaitInterstageLocalsBySymbol.has(symbol)) {
+                    if (initializedBodyAwaitInterstageLocals.has(symbol)) {
+                        bodyAwaitInterstageLocalsSupported = false;
+                        break;
+                    }
+                    initializedBodyAwaitInterstageLocals.add(symbol);
+                    continue;
+                }
             }
             let nestedLocal = false;
             const visitNestedLocal = (node: ts.Node): void => {
@@ -45520,7 +45539,7 @@ class Emitter {
                 break;
             }
         }
-        if (!bodyAwaitInterstageLocalsSupported) return false;
+        if (!bodyAwaitInterstageLocalsSupported || initializedBodyAwaitInterstageLocals.size !== bodyAwaitInterstageLocals.length) return false;
         let bodySupported = true;
         let loopDepth = 0;
         let switchDepth = 0;
@@ -45822,17 +45841,29 @@ class Emitter {
                     } finally {
                         this.asyncAwaitContinuationAdapterDepth--;
                     }
-                    if (!ts.isVariableStatement(statement)) continue;
-                    for (const declaration of statement.declarationList.declarations) {
-                        if (!ts.isIdentifier(declaration.name)) continue;
-                        const symbol = this.symbolForIdentifier(declaration.name);
-                        const local = bodyAwaitInterstageLocals.find((candidate) => candidate.symbol === symbol);
-                        if (!local) continue;
-                        const localValue = this.identifierRead(declaration.name);
-                        callback.line(`state->${local.field} = ${this.coerce({ c: localValue, ty: local.type }, local.type, declaration.name)};`);
-                        bodyAwaitInterstageScope.set(local.symbol, `state->${local.field}`);
-                        bodyAwaitInterstageScopeTypes.set(local.symbol, local.type);
+                    if (ts.isVariableStatement(statement)) {
+                        for (const declaration of statement.declarationList.declarations) {
+                            if (!ts.isIdentifier(declaration.name)) continue;
+                            const symbol = this.symbolForIdentifier(declaration.name);
+                            const local = symbol ? bodyAwaitInterstageLocalsBySymbol.get(symbol) : undefined;
+                            if (!local || !declaration.initializer) continue;
+                            const localValue = this.identifierRead(declaration.name);
+                            callback.line(`state->${local.field} = ${this.coerce({ c: localValue, ty: local.type }, local.type, declaration.name)};`);
+                            bodyAwaitInterstageScope.set(local.symbol, `state->${local.field}`);
+                            bodyAwaitInterstageScopeTypes.set(local.symbol, local.type);
+                        }
+                        continue;
                     }
+                    if (!ts.isExpressionStatement(statement)) continue;
+                    const assignment = this.unwrapTransparentExpression(statement.expression);
+                    if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken || !ts.isIdentifier(assignment.left)) continue;
+                    const symbol = this.symbolForIdentifier(assignment.left);
+                    const local = symbol ? bodyAwaitInterstageLocalsBySymbol.get(symbol) : undefined;
+                    if (!local) continue;
+                    const localValue = this.identifierRead(assignment.left);
+                    callback.line(`state->${local.field} = ${this.coerce({ c: localValue, ty: local.type }, local.type, assignment.left)};`);
+                    bodyAwaitInterstageScope.set(local.symbol, `state->${local.field}`);
+                    bodyAwaitInterstageScopeTypes.set(local.symbol, local.type);
                 }
             } finally {
                 if (usesThis && thisValue) this.functionThisStack.pop();
