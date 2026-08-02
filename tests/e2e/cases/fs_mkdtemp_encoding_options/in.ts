@@ -29,41 +29,41 @@ console.log("sync undefined object:", syncUndefinedObjectDir.indexOf(syncPrefix)
 const syncDefaultObjectDir = fs.mkdtempSync(syncPrefix, {});
 console.log("sync default object:", syncDefaultObjectDir.indexOf(syncPrefix) === 0, fs.statSync(syncDefaultObjectDir).isDirectory());
 
-nodefs.promises.mkdtemp(promisePrefix, UTF8_DASH_OPTIONS).then((promiseDir: string): string => {
+let promiseDir = "";
+let promiseBufferDir = "";
+let promiseNullDir = "";
+let promiseNullObjectDir = "";
+let promiseUndefinedObjectDir = "";
+let promiseDefaultObjectDir = "";
+nodefs.promises.mkdtemp(promisePrefix, UTF8_DASH_OPTIONS)
+    .then((value: string): any => {
+        promiseDir = value;
+        return nodefs.promises.mkdtemp(promisePrefix, NULL_OPTIONS);
+    })
+    .then((value: string): any => {
+        promiseNullDir = value;
+        return nodefs.promises.mkdtemp(promisePrefix, { encoding: null });
+    })
+    .then((value: string): any => {
+        promiseNullObjectDir = value;
+        return nodefs.promises.mkdtemp(promisePrefix, { encoding: undefined });
+    })
+    .then((value: string): any => {
+        promiseUndefinedObjectDir = value;
+        return nodefs.promises.mkdtemp(promisePrefix, {});
+    })
+    .then((value: string): void => {
+        promiseDefaultObjectDir = value;
+        nodefs.promises.mkdtemp(promisePrefix, BUFFER_ENCODING).then((bufferValue: Buffer): void => {
+            promiseBufferDir = bufferValue.toString();
     console.log("promise:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
-    fs.rmSync(promiseDir, { recursive: true, force: true });
-    return promiseDir;
-});
-
-nodefs.promises.mkdtemp(promisePrefix, BUFFER_ENCODING).then((promiseDir: Buffer): void => {
-    const promisePath = promiseDir.toString();
-    console.log("promise buffer:", Buffer.isBuffer(promiseDir), promisePath.indexOf(promisePrefix) === 0, fs.statSync(promisePath).isDirectory());
-    fs.rmSync(promisePath, { recursive: true, force: true });
-});
-
-nodefs.promises.mkdtemp(promisePrefix, NULL_OPTIONS).then((promiseDir: string): void => {
-    console.log("promise null:", Buffer.isBuffer(promiseDir as any), promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
-    fs.rmSync(promiseDir, { recursive: true, force: true });
-});
-
-nodefs.promises.mkdtemp(promisePrefix, { encoding: null }).then((promiseDir: string): void => {
-    console.log("promise null object:", Buffer.isBuffer(promiseDir as any), promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
-    fs.rmSync(promiseDir, { recursive: true, force: true });
-});
-
-nodefs.promises.mkdtemp(promisePrefix, { encoding: undefined }).then((promiseDir: string): void => {
-    console.log("promise undefined object:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
-    fs.rmSync(promiseDir, { recursive: true, force: true });
-});
-
-nodefs.promises.mkdtemp(promisePrefix, {}).then((promiseDir: string): void => {
-    console.log("promise default object:", promiseDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDir).isDirectory());
-    fs.rmSync(promiseDir, { recursive: true, force: true });
-});
-
-fs.rmSync(syncDir, { recursive: true, force: true });
-fs.rmSync(syncBufferPath, { recursive: true, force: true });
-fs.rmSync(syncNullDir, { recursive: true, force: true });
-fs.rmSync(syncNullObjectDir, { recursive: true, force: true });
-fs.rmSync(syncUndefinedObjectDir, { recursive: true, force: true });
-fs.rmSync(syncDefaultObjectDir, { recursive: true, force: true });
+    console.log("promise buffer:", true, promiseBufferDir.indexOf(promisePrefix) === 0, fs.statSync(promiseBufferDir).isDirectory());
+    console.log("promise null:", false, promiseNullDir.indexOf(promisePrefix) === 0, fs.statSync(promiseNullDir).isDirectory());
+    console.log("promise null object:", false, promiseNullObjectDir.indexOf(promisePrefix) === 0, fs.statSync(promiseNullObjectDir).isDirectory());
+    console.log("promise undefined object:", promiseUndefinedObjectDir.indexOf(promisePrefix) === 0, fs.statSync(promiseUndefinedObjectDir).isDirectory());
+    console.log("promise default object:", promiseDefaultObjectDir.indexOf(promisePrefix) === 0, fs.statSync(promiseDefaultObjectDir).isDirectory());
+    for (const dir of [syncDir, syncBufferPath, syncNullDir, syncNullObjectDir, syncUndefinedObjectDir, syncDefaultObjectDir, promiseDir, promiseBufferDir, promiseNullDir, promiseNullObjectDir, promiseUndefinedObjectDir, promiseDefaultObjectDir]) {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+        });
+    });

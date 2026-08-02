@@ -31,19 +31,20 @@ let promiseRead = false;
 let promiseMkd = false;
 let promiseMkdDirectory = false;
 let promiseMkdPath = "";
-fs.promises.realpath(path.join(nested, ".."), void note("preal-options"), mark("preal")).then((value: string): void => {
+const promiseRealResult = fs.promises.realpath(path.join(nested, ".."), void note("preal-options"), mark("preal"));
+const promiseReadResult = fs.promises.readlink(link, void note("pread-options"), mark("pread"));
+const promiseMkdResult = fs.promises.mkdtemp(promisePrefix, void note("pmkd-options"), mark("pmkd"));
+
+promiseRealResult.then((value: string): Promise<string> => {
     promiseReal = value === root;
-});
-fs.promises.readlink(link, void note("pread-options"), mark("pread")).then((value: string): void => {
+    return promiseReadResult;
+}).then((value: string): Promise<string> => {
     promiseRead = value === target;
-});
-fs.promises.mkdtemp(promisePrefix, void note("pmkd-options"), mark("pmkd")).then((value: string): void => {
+    return promiseMkdResult;
+}).then((value: string): void => {
     promiseMkd = value.indexOf(promisePrefix) === 0;
     promiseMkdDirectory = fs.statSync(value).isDirectory();
     promiseMkdPath = value;
-});
-
-setImmediate((): void => {
     console.log("promise real:", promiseReal);
     console.log("promise read:", promiseRead);
     console.log("promise mkd:", promiseMkd, promiseMkdDirectory);
