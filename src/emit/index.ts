@@ -74582,12 +74582,8 @@ class Emitter {
                     const destPath = values[1]!;
                     const mode = values[2 + optionSpecs.length]!;
                     if (!options.copy) return settle("tsc_promise_resolve(tsc_value_undefined())");
-                    const useLibuv = !options.recursive;
-                    if (useLibuv) {
-                        this.usesLibuv = true;
-                        return settle(`tsc_fs_promises_cp_async(${srcPath}, ${destPath}, false, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"})`);
-                    }
-                    return settle(`({ tsc_fs_cp_sync_opts(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`);
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_cp_async(${srcPath}, ${destPath}, ${options.recursive ? "true" : "false"}, ${options.force ? "true" : "false"}, ${options.errorOnExist ? "true" : "false"}, ${options.dereference ? "true" : "false"}, ${options.verbatimSymlinks ? "true" : "false"}, ${mode}, ${options.preserveTimestamps ? "true" : "false"})`);
                 });
             }
             case "copyFile":

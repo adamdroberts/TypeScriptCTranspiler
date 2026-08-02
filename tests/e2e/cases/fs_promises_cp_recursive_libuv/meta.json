@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed recursive fs.promises.cp for nested files, symlinks, overwrite, timestamps, and dereference options"
+}

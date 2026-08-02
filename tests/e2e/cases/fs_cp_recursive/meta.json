@@ -1,3 +1,3 @@
 {
-  "description": "fs.cpSync and immediate fs.promises.cp recursive regular file and directory copy"
+  "description": "fs.cpSync and libuv-backed fs.promises.cp recursive regular file and directory copy"
 }

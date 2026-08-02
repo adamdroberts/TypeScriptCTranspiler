@@ -3817,6 +3817,17 @@ static void tsc_fs_cp_libuv_start_copy(tsc_fs_cp_libuv_async_t* task) {
     }
 }
 
+static tsc_promise_t* tsc_fs_promises_cp_recursive_async(
+    const tsc_str_t* src,
+    const tsc_str_t* dest,
+    bool force,
+    bool error_on_exist,
+    bool dereference,
+    bool verbatim_symlinks,
+    double mode,
+    bool preserve_timestamps
+);
+
 static void tsc_fs_cp_libuv_dest_cb(tsc_uv_fs_t* req) {
     tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)req;
     ssize_t result = uv_fs_get_result(req);
@@ -3894,6 +3905,18 @@ tsc_promise_t* tsc_fs_promises_cp_async(
     double mode,
     bool preserve_timestamps
 ) {
+    if (recursive) {
+        return tsc_fs_promises_cp_recursive_async(
+            src,
+            dest,
+            force,
+            error_on_exist,
+            dereference,
+            verbatim_symlinks,
+            mode,
+            preserve_timestamps
+        );
+    }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_cp_libuv_async_t* task = (tsc_fs_cp_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_cp_libuv_async_t));
     memset(task, 0, sizeof(*task));
@@ -3917,6 +3940,462 @@ tsc_promise_t* tsc_fs_promises_cp_async(
         uv_fs_req_cleanup(&task->req);
         tsc_fs_cp_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
     }
+    return promise;
+}
+
+typedef struct tsc_fs_cp_recursive_work {
+    char* src;
+    char* dest;
+    struct tsc_fs_cp_recursive_work* next;
+} tsc_fs_cp_recursive_work_t;
+
+typedef struct tsc_fs_cp_recursive_libuv_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    bool force;
+    bool error_on_exist;
+    bool dereference;
+    bool verbatim_symlinks;
+    bool preserve_timestamps;
+    int flags;
+    tsc_fs_cp_recursive_work_t* work;
+    char* current_src;
+    char* current_dest;
+    bool source_is_directory;
+    bool source_is_symlink;
+    int source_dir_mode;
+    double source_atime;
+    double source_mtime;
+    char* link_target;
+    struct tsc_fs_cp_recursive_libuv_async* next;
+} tsc_fs_cp_recursive_libuv_async_t;
+
+static tsc_fs_cp_recursive_libuv_async_t* g_tsc_fs_cp_recursive_libuv_async = NULL;
+
+static void tsc_fs_cp_recursive_libuv_remove(tsc_fs_cp_recursive_libuv_async_t* task) {
+    tsc_fs_cp_recursive_libuv_async_t** cursor = &g_tsc_fs_cp_recursive_libuv_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_cp_recursive_work_clear(tsc_fs_cp_recursive_libuv_async_t* task) {
+    while (task->work) {
+        tsc_fs_cp_recursive_work_t* item = task->work;
+        task->work = item->next;
+        free(item->src);
+        free(item->dest);
+        free(item);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_finish(tsc_fs_cp_recursive_libuv_async_t* task, tsc_str_t* error) {
+    if (error) {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(error));
+    } else {
+        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    }
+    free(task->current_src);
+    free(task->current_dest);
+    free(task->link_target);
+    tsc_fs_cp_recursive_work_clear(task);
+    tsc_fs_cp_recursive_libuv_remove(task);
+}
+
+static bool tsc_fs_cp_recursive_push_owned(
+    tsc_fs_cp_recursive_libuv_async_t* task,
+    char* src,
+    char* dest
+) {
+    tsc_fs_cp_recursive_work_t* item = (tsc_fs_cp_recursive_work_t*)malloc(sizeof(tsc_fs_cp_recursive_work_t));
+    if (!item) return false;
+    item->src = src;
+    item->dest = dest;
+    item->next = task->work;
+    task->work = item;
+    return true;
+}
+
+static void tsc_fs_cp_recursive_libuv_start_next(tsc_fs_cp_recursive_libuv_async_t* task);
+static void tsc_fs_cp_recursive_libuv_start_source(tsc_fs_cp_recursive_libuv_async_t* task);
+static void tsc_fs_cp_recursive_libuv_source_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_dest_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_scandir_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_mkdir_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_copy_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_utime_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_unlink_dest_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_link_target_cb(tsc_uv_fs_t* req);
+static void tsc_fs_cp_recursive_libuv_symlink_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_cp_recursive_libuv_release_current(tsc_fs_cp_recursive_libuv_async_t* task) {
+    free(task->current_src);
+    free(task->current_dest);
+    free(task->link_target);
+    task->current_src = NULL;
+    task->current_dest = NULL;
+    task->link_target = NULL;
+    task->source_is_directory = false;
+    task->source_is_symlink = false;
+}
+
+static void tsc_fs_cp_recursive_libuv_fail(tsc_fs_cp_recursive_libuv_async_t* task) {
+    tsc_fs_cp_recursive_libuv_finish(task, tsc_str_from_cstr("fs.cpSync: could not copy path"));
+}
+
+static void tsc_fs_cp_recursive_libuv_start_source(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = task->dereference
+        ? uv_fs_stat(g_tsc_fs_uv_loop, &task->req, task->current_src, tsc_fs_cp_recursive_libuv_source_cb)
+        : uv_fs_lstat(g_tsc_fs_uv_loop, &task->req, task->current_src, tsc_fs_cp_recursive_libuv_source_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_dest_stat(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_lstat(g_tsc_fs_uv_loop, &task->req, task->current_dest, tsc_fs_cp_recursive_libuv_dest_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_scan(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_scandir(g_tsc_fs_uv_loop, &task->req, task->current_src, 0, tsc_fs_cp_recursive_libuv_scandir_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_mkdir(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_mkdir(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->current_dest,
+        task->source_dir_mode,
+        tsc_fs_cp_recursive_libuv_mkdir_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_copy(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_copyfile(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->current_src,
+        task->current_dest,
+        task->flags,
+        tsc_fs_cp_recursive_libuv_copy_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_utime(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_utime(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->current_dest,
+        task->source_atime,
+        task->source_mtime,
+        tsc_fs_cp_recursive_libuv_utime_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_unlink_dest(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_unlink(g_tsc_fs_uv_loop, &task->req, task->current_dest, tsc_fs_cp_recursive_libuv_unlink_dest_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_link_target(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = task->verbatim_symlinks
+        ? uv_fs_readlink(g_tsc_fs_uv_loop, &task->req, task->current_src, tsc_fs_cp_recursive_libuv_link_target_cb)
+        : uv_fs_realpath(g_tsc_fs_uv_loop, &task->req, task->current_src, tsc_fs_cp_recursive_libuv_link_target_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_start_symlink(tsc_fs_cp_recursive_libuv_async_t* task) {
+    int rc = uv_fs_symlink(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->link_target,
+        task->current_dest,
+        0,
+        tsc_fs_cp_recursive_libuv_symlink_cb
+    );
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_source_done(tsc_fs_cp_recursive_libuv_async_t* task) {
+    tsc_fs_cp_recursive_libuv_release_current(task);
+    tsc_fs_cp_recursive_libuv_start_next(task);
+}
+
+static void tsc_fs_cp_recursive_libuv_start_next(tsc_fs_cp_recursive_libuv_async_t* task) {
+    tsc_fs_cp_recursive_work_t* item;
+    if (task->current_src != NULL) return;
+    item = task->work;
+    if (!item) {
+        tsc_fs_cp_recursive_libuv_finish(task, NULL);
+        return;
+    }
+    task->work = item->next;
+    task->current_src = item->src;
+    task->current_dest = item->dest;
+    free(item);
+    tsc_fs_cp_recursive_libuv_start_source(task);
+}
+
+static void tsc_fs_cp_recursive_libuv_source_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+
+    tsc_uv_stat_t* statbuf = uv_fs_get_statbuf(req);
+    if (!statbuf) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    mode_t mode = (mode_t)statbuf->st_mode;
+    task->source_is_directory = S_ISDIR(mode);
+    task->source_is_symlink = !task->dereference && S_ISLNK(mode);
+    bool source_is_regular = S_ISREG(mode);
+    if (!task->source_is_directory && !task->source_is_symlink && !source_is_regular) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    task->source_dir_mode = (int)(mode & 0777);
+    if (source_is_regular && task->preserve_timestamps) {
+        task->source_atime = (double)statbuf->st_atim.tv_sec + (double)statbuf->st_atim.tv_nsec / 1000000000.0;
+        task->source_mtime = (double)statbuf->st_mtim.tv_sec + (double)statbuf->st_mtim.tv_nsec / 1000000000.0;
+    }
+    uv_fs_req_cleanup(req);
+    tsc_fs_cp_recursive_libuv_start_dest_stat(task);
+}
+
+static void tsc_fs_cp_recursive_libuv_dest_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    bool exists = result >= 0;
+    bool missing = result == -ENOENT;
+    bool dest_is_directory = false;
+    if (exists) {
+        tsc_uv_stat_t* statbuf = uv_fs_get_statbuf(req);
+        dest_is_directory = statbuf && S_ISDIR((mode_t)statbuf->st_mode);
+    }
+    uv_fs_req_cleanup(req);
+    if (!exists && !missing) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+
+    if (task->source_is_directory) {
+        if (exists && !dest_is_directory) {
+            tsc_fs_cp_recursive_libuv_fail(task);
+        } else if (exists) {
+            tsc_fs_cp_recursive_libuv_start_scan(task);
+        } else {
+            tsc_fs_cp_recursive_libuv_start_mkdir(task);
+        }
+        return;
+    }
+
+    if (task->source_is_symlink) {
+        if (exists && !task->force && task->error_on_exist) {
+            tsc_fs_cp_recursive_libuv_fail(task);
+        } else if (exists && !task->force) {
+            tsc_fs_cp_recursive_libuv_source_done(task);
+        } else if (exists) {
+            tsc_fs_cp_recursive_libuv_start_unlink_dest(task);
+        } else {
+            tsc_fs_cp_recursive_libuv_start_link_target(task);
+        }
+        return;
+    }
+
+    if (exists && ((task->flags & TSC_UV_FS_COPYFILE_EXCL) != 0 || (!task->force && task->error_on_exist))) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+    } else if (exists && !task->force) {
+        tsc_fs_cp_recursive_libuv_source_done(task);
+    } else {
+        tsc_fs_cp_recursive_libuv_start_copy(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_mkdir_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    tsc_fs_cp_recursive_libuv_start_scan(task);
+}
+
+static void tsc_fs_cp_recursive_libuv_scandir_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    tsc_uv_dirent_t ent;
+    while (uv_fs_scandir_next(req, &ent) == 0) {
+        if (!ent.name || strcmp(ent.name, ".") == 0 || strcmp(ent.name, "..") == 0) continue;
+        char* child_src = fs_join_path_cstr(task->current_src, ent.name);
+        char* child_dest = fs_join_path_cstr(task->current_dest, ent.name);
+        if (!child_src || !child_dest || !tsc_fs_cp_recursive_push_owned(task, child_src, child_dest)) {
+            free(child_src);
+            free(child_dest);
+            uv_fs_req_cleanup(req);
+            tsc_fs_cp_recursive_libuv_fail(task);
+            return;
+        }
+    }
+    uv_fs_req_cleanup(req);
+    tsc_fs_cp_recursive_libuv_source_done(task);
+}
+
+static void tsc_fs_cp_recursive_libuv_copy_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+    } else if (task->preserve_timestamps) {
+        tsc_fs_cp_recursive_libuv_start_utime(task);
+    } else {
+        tsc_fs_cp_recursive_libuv_source_done(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_utime_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+    } else {
+        tsc_fs_cp_recursive_libuv_source_done(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_unlink_dest_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+    } else {
+        tsc_fs_cp_recursive_libuv_start_link_target(task);
+    }
+}
+
+static void tsc_fs_cp_recursive_libuv_link_target_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    const char* target = task->verbatim_symlinks
+        ? (const char*)uv_fs_get_ptr(req)
+        : uv_fs_get_path(req);
+    if (!target) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    size_t len = strlen(target);
+    char* copy = (char*)malloc(len + 1);
+    if (!copy) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return;
+    }
+    memcpy(copy, target, len + 1);
+    uv_fs_req_cleanup(req);
+    task->link_target = copy;
+    tsc_fs_cp_recursive_libuv_start_symlink(task);
+}
+
+static void tsc_fs_cp_recursive_libuv_symlink_cb(tsc_uv_fs_t* req) {
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_fs_cp_recursive_libuv_fail(task);
+    } else {
+        tsc_fs_cp_recursive_libuv_source_done(task);
+    }
+}
+
+static tsc_promise_t* tsc_fs_promises_cp_recursive_async(
+    const tsc_str_t* src,
+    const tsc_str_t* dest,
+    bool force,
+    bool error_on_exist,
+    bool dereference,
+    bool verbatim_symlinks,
+    double mode,
+    bool preserve_timestamps
+) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_cp_recursive_libuv_async_t* task = (tsc_fs_cp_recursive_libuv_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_cp_recursive_libuv_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->force = force;
+    task->error_on_exist = error_on_exist;
+    task->dereference = dereference;
+    task->verbatim_symlinks = verbatim_symlinks;
+    task->preserve_timestamps = preserve_timestamps;
+    task->flags = (isnan(mode) || isinf(mode)) ? 0 : (int)mode;
+    task->next = g_tsc_fs_cp_recursive_libuv_async;
+    g_tsc_fs_cp_recursive_libuv_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    char* root_src = cstr_dup(src);
+    char* root_dest = cstr_dup(dest);
+    if (!root_src || !root_dest || !tsc_fs_cp_recursive_push_owned(task, root_src, root_dest)) {
+        free(root_src);
+        free(root_dest);
+        tsc_fs_cp_recursive_libuv_fail(task);
+        return promise;
+    }
+    tsc_fs_cp_recursive_libuv_start_next(task);
     return promise;
 }
 
@@ -4919,7 +5398,7 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
 }
 
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {
