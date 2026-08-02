@@ -33239,7 +33239,7 @@ class Emitter {
             methods = ["canParse"];
         } else if (receiver === "JSON") {
             methods = ["parse", "stringify"];
-        } else if (receiver === "Object" || receiver === "Reflect" || receiver === "Proxy" || receiver === "Promise") {
+        } else if (receiver === "Object" || receiver === "Reflect" || receiver === "Proxy" || receiver === "Promise" || receiver === "Map") {
             methods = this.asyncAwaitTryConditionalStaticMethodSupported(receiver, callee.name.text)
                 ? [callee.name.text]
                 : [];
@@ -33310,6 +33310,7 @@ class Emitter {
         if (receiver === "Promise") {
             return ["all", "allSettled", "any", "race", "reject", "resolve", "try", "withResolvers"].includes(name);
         }
+        if (receiver === "Map") return name === "groupBy";
         if (receiver === "Proxy") return name === "revocable";
         return false;
     }
