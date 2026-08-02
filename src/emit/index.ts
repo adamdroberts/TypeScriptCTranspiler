@@ -33224,7 +33224,9 @@ class Emitter {
                 ]
                 : receiver === "Date"
                     ? ["parse", "UTC"]
-                : [];
+                    : receiver === "String"
+                        ? ["fromCharCode", "fromCodePoint"]
+                        : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
 
