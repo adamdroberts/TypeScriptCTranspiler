@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Source-`try` conditional structural return arms now receive the enclosing async return context, preserving homogeneous typed-array values instead of routing them through the pointer-only promise representation. Regression: `async_await_branch_block_source_try_structural_conditional_return_four_await`.
 - Typed lazy generators passed through a different `Generator<...>` element type now stay lazy during conversion, preserving per-yield element boxing/conversion and `.next(value)` delivery instead of materializing at the call site. Regression: `generator_lazy_yield_logical`.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 

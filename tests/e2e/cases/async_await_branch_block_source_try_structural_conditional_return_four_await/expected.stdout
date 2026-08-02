@@ -1,6 +1,6 @@
-fn-inner {"first":"fn-inner-left","second":"fn-inner-right"} 
-fn-caught caught-fn-bad 
-fn-outer {"first":"fn-outer-first","second":"fn-outer-second"} 
+fn-inner ["fn-inner-left","fn-inner-right"] empty
+fn-caught caught-fn-bad empty
+fn-outer {"first":"fn-outer-first","second":"fn-outer-second"} empty
 method-inner {"first":"method-inner-first","second":"method-inner-second"} I
 method-caught rejected-method-bad IC
 arrow-caught caught-arrow-bad ICo

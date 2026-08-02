@@ -26295,6 +26295,7 @@ class Emitter {
                         parameters,
                         thisValue,
                         tryCaptures,
+                        this.asyncAwaitReturnContextTypeForBody(body),
                     )
                     : null;
                 if (conditionalContinuation) {
@@ -27603,6 +27604,7 @@ class Emitter {
                         parameters,
                         thisValue,
                         tryCaptures,
+                        this.asyncAwaitReturnContextTypeForBody(body),
                     )
                     : null;
                 if (conditionalContinuation) {
@@ -28277,6 +28279,7 @@ class Emitter {
                         parameters,
                         thisValue,
                         tryCaptures,
+                        this.asyncAwaitReturnContextTypeForBody(body),
                     )
                     : null;
                 if (conditionalContinuation) {
@@ -33133,6 +33136,7 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
         captures: readonly AsyncAwaitContinuationParam[],
+        returnContextType?: ts.Type,
     ): AsyncAwaitTryConditionalReturnBranch | null {
         if (!ts.isConditionalExpression(expression)) return null;
         const branch = this.asyncAwaitConditionalExpressionReturnBranchFromExpression(
@@ -33140,6 +33144,7 @@ class Emitter {
             parameters,
             thisValue,
             captures,
+            returnContextType,
         );
         if (!branch || branch.kind !== "if" || !branch.elseBranch || branch.fallthroughBranch ||
             !this.asyncAwaitTryConditionalReturnNodeSupported(branch)) return null;

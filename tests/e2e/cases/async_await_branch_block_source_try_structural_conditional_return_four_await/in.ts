@@ -12,7 +12,7 @@ async function declaration(flag: boolean, inner: boolean): Promise<unknown> {
     try {
         return flag
             ? (inner
-                ? { first: await delay(1, "fn-inner-left"), second: await delay(1, "fn-inner-right") }
+                ? [await delay(1, "fn-inner-left"), await delay(1, "fn-inner-right")]
                 : { first: await delay(1, "fn-caught-first"), second: await delayedRejectAfter(2, "fn-bad") })
             : { first: await delay(1, "fn-outer-first"), second: await delay(1, "fn-outer-second") };
     } catch (reason) {
@@ -52,15 +52,15 @@ const runner = new Runner();
 
 declaration(true, true)
     .then((value) => {
-        console.log("fn-inner", JSON.stringify(value), trace);
+        console.log("fn-inner", JSON.stringify(value), trace || "empty");
         return declaration(true, false);
     })
     .then((value) => {
-        console.log("fn-caught", value, trace);
+        console.log("fn-caught", value, trace || "empty");
         return declaration(false, false);
     })
     .then((value) => {
-        console.log("fn-outer", JSON.stringify(value), trace);
+        console.log("fn-outer", JSON.stringify(value), trace || "empty");
         return runner.method(true, true);
     })
     .then((value) => {
