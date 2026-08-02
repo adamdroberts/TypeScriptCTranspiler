@@ -1,0 +1,3 @@
+close-pending-before-release
+close-pending: completed
+close-reject: iterator-close-failure

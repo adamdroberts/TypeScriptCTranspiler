@@ -45587,6 +45587,10 @@ class Emitter {
         this.structDecls.line("bool body_sync_return;");
         this.structDecls.line("bool body_sync_throw;");
         this.structDecls.line("bool body_break;");
+        this.structDecls.line("bool iterator_close;");
+        this.structDecls.line("int iterator_close_action;");
+        this.structDecls.line("tsc_promise_t* iterator_close_value;");
+        this.structDecls.line("tsc_value_t iterator_close_reason;");
         for (const { entry, field } of bodyBindingFields) this.structDecls.line(`${entry.type.c} ${field};`);
         for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
         if (usesThis && thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
@@ -45732,10 +45736,9 @@ class Emitter {
             target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitConditionPromiseType!, bodyAwaitConditionExpression!.expression)};`);
             return sourceVar;
         };
-        const emitBodySynchronousReturn = (target: CBuf, expression: ts.Expression | null): void => {
+        const emitBodySynchronousReturnValue = (target: CBuf, expression: ts.Expression | null): void => {
             if (!expression) {
-                target.line("tsc_try_pop();");
-                target.line("tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());");
+                target.line("state->iterator_close_value = tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
@@ -45754,16 +45757,13 @@ class Emitter {
             const returnedType = this.prepareType(returned.ty);
             if (returnedType.kind === "void" || returnedType.kind === "never") {
                 target.line(`${returned.c};`);
-                target.line("tsc_try_pop();");
-                target.line("tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());");
+                target.line("state->iterator_close_value = tsc_promise_resolve(tsc_value_undefined());");
             } else {
                 target.line(`${returnedType.c} ${returnedVar} = ${returned.c};`);
-                target.line("tsc_try_pop();");
-                target.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: returnedType }, expression)};`);
-                target.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                target.line(`state->iterator_close_value = ${this.promiseResolveResult({ c: returnedVar, ty: returnedType }, expression)};`);
             }
         };
-        const emitBodySynchronousThrow = (target: CBuf, expression: ts.Expression): void => {
+        const emitBodySynchronousThrowValue = (target: CBuf, expression: ts.Expression): void => {
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
             this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
             if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
@@ -45777,8 +45777,22 @@ class Emitter {
                 this.argumentValueTypeScopes.pop();
                 this.argumentValueScopes.pop();
             }
-            target.line("tsc_try_pop();");
-            target.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(thrown, T_VALUE, expression)});`);
+            target.line(`state->iterator_close_reason = ${this.coerce(thrown, T_VALUE, expression)};`);
+        };
+        const emitIteratorClose = (action: number): void => {
+            const closeVar = this.freshTemp("_for_await_iterator_close");
+            callback.line(`state->iterator_close_action = ${action};`);
+            callback.line(`tsc_promise_t* const ${closeVar} = tsc_async_iterator_return(state->iterator);`);
+            callback.line("state->iterator_close = true;");
+            callback.line(`state->receiver = ${closeVar};`);
+            callback.open(`if (tsc_promise_is_pending(${closeVar}))`);
+            callback.line(`tsc_promise_add_callback(${closeVar}, ${name}, state);`);
+            callback.close();
+            callback.open("else");
+            callback.line(`tsc_queue_microtask(${name}, state);`);
+            callback.close();
+            callback.line("tsc_try_pop();");
+            callback.line("return;");
         };
         const emitBodyAwaitIfRoutes = (condition: string | (() => string)): void => {
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
@@ -45792,13 +45806,11 @@ class Emitter {
                     if (route.control === "break") {
                         callback.line("state->body_break = true;");
                     } else if (route.control === "return") {
-                        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-                        emitBodySynchronousReturn(callback, route.expression);
-                        callback.line("return;");
+                        emitBodySynchronousReturnValue(callback, route.expression);
+                        emitIteratorClose(2);
                     } else if (route.control === "throw") {
-                        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-                        emitBodySynchronousThrow(callback, route.expression!);
-                        callback.line("return;");
+                        emitBodySynchronousThrowValue(callback, route.expression!);
+                        emitIteratorClose(3);
                     }
                 };
                 callback.open(`if (${conditionExpression})`);
@@ -45832,10 +45844,8 @@ class Emitter {
         callback.open("if (state->body_await)");
         callback.open("if (tsc_promise_is_rejected(_p))");
         callback.line("state->body_await = false;");
-        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-        callback.line("tsc_try_pop();");
-        callback.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
-        callback.line("return;");
+        callback.line("state->iterator_close_reason = tsc_promise_reason(_p);");
+        emitIteratorClose(3);
         callback.close();
         callback.open("if (!tsc_promise_is_fulfilled(_p))");
         callback.line("tsc_try_pop();");
@@ -45877,17 +45887,13 @@ class Emitter {
         if (bodyReturnAwaitExpression) {
             callback.open("if (state->body_return)");
             callback.line("state->body_await = false;");
-            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
             if (bodyReturnAwaitedType!.kind === "void") {
-                callback.line("tsc_try_pop();");
-                callback.line("tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());");
+                callback.line("state->iterator_close_value = tsc_promise_resolve(tsc_value_undefined());");
             } else {
                 callback.line(`${bodyReturnAwaitedType!.c} ${bodyReturnValueVar} = ${this.coerce(this.promiseFulfilledValue(bodyAwaitPromiseType!.elem, "_p"), bodyReturnAwaitedType!, bodyReturnAwaitExpression)};`);
-                callback.line("tsc_try_pop();");
-                callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: bodyReturnValueVar, ty: bodyReturnAwaitedType! }, bodyReturnAwaitExpression)};`);
-                callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                callback.line(`state->iterator_close_value = ${this.promiseResolveResult({ c: bodyReturnValueVar, ty: bodyReturnAwaitedType! }, bodyReturnAwaitExpression)};`);
             }
-            callback.line("return;");
+            emitIteratorClose(2);
             callback.close();
         }
         if (!bodyAwaitConditionAfterPrefix) emitBodyAwaitPostlude();
@@ -45901,23 +45907,19 @@ class Emitter {
         if (bodyAwaitExpression && directRoute && directRoute.control === "return") {
             callback.open("if (state->body_sync_return)");
             callback.line("state->body_sync_return = false;");
-            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-            emitBodySynchronousReturn(callback, directRoute!.expression);
-            callback.line("return;");
+            emitBodySynchronousReturnValue(callback, directRoute!.expression);
+            emitIteratorClose(2);
             callback.close();
         }
         if (bodyAwaitExpression && directRoute && directRoute.control === "throw") {
             callback.open("if (state->body_sync_throw)");
             callback.line("state->body_sync_throw = false;");
-            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-            emitBodySynchronousThrow(callback, directRoute!.expression!);
-            callback.line("return;");
+            emitBodySynchronousThrowValue(callback, directRoute!.expression!);
+            emitIteratorClose(3);
             callback.close();
         }
         callback.open("if (state->body_break)");
-        callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-        emitLoopResult(callback);
-        callback.line("return;");
+        emitIteratorClose(1);
         callback.close();
         callback.line(`tsc_promise_t* ${nextVar} = tsc_async_iterator_next(state->iterator);`);
         callback.line(`state->receiver = ${nextVar};`);
@@ -45928,6 +45930,21 @@ class Emitter {
         callback.open("else");
         callback.line(`tsc_queue_microtask(${name}, state);`);
         callback.close();
+        callback.line("return;");
+        callback.close();
+        callback.open("if (state->iterator_close)");
+        callback.line("state->iterator_close = false;");
+        callback.open("if (state->iterator_close_action == 1)");
+        emitLoopResult(callback);
+        callback.line("return;");
+        callback.close();
+        callback.open("if (state->iterator_close_action == 3)");
+        callback.line("tsc_try_pop();");
+        callback.line("tsc_promise_reject_in_place(_ret, state->iterator_close_reason);");
+        callback.line("return;");
+        callback.close();
+        callback.line("tsc_try_pop();");
+        callback.line("tsc_promise_adopt_into(_ret, state->iterator_close_value);");
         callback.line("return;");
         callback.close();
         callback.line(`tsc_value_t ${stepVar} = tsc_promise_value(_p);`);
@@ -46006,12 +46023,10 @@ class Emitter {
         }
         const emitBodyControl = (route: BodyRoute): void => {
             if (route.control === "break") {
-                callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-                callback.line(`${finishVar} = true;`);
+                emitIteratorClose(1);
                 return;
             }
             if (route.control === "return") {
-                callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
                 if (route.expression) {
                     let bodyReturned: EmitResult;
                     this.asyncAwaitContinuationAdapterDepth++;
@@ -46023,27 +46038,21 @@ class Emitter {
                     const bodyReturnedType = this.prepareType(bodyReturned.ty);
                     if (bodyReturnedType.kind === "void" || bodyReturnedType.kind === "never") {
                         callback.line(`${bodyReturned.c};`);
-                        callback.line("tsc_try_pop();");
-                        callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+                        callback.line("state->iterator_close_value = tsc_promise_resolve(tsc_value_undefined());");
                     } else {
                         callback.line(`${bodyReturnedType.c} ${returnedVar} = ${bodyReturned.c};`);
-                        callback.line("tsc_try_pop();");
-                        callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: bodyReturnedType }, route.expression)};`);
-                        callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                        callback.line(`state->iterator_close_value = ${this.promiseResolveResult({ c: returnedVar, ty: bodyReturnedType }, route.expression)};`);
                     }
                 } else {
-                    callback.line("tsc_try_pop();");
-                    callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+                    callback.line("state->iterator_close_value = tsc_promise_resolve(tsc_value_undefined());");
                 }
-                callback.line("return;");
+                emitIteratorClose(2);
                 return;
             }
             if (route.control === "throw") {
-                callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
                 const bodyThrown = this.emitExpr(route.expression!);
-                callback.line("tsc_try_pop();");
-                callback.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(bodyThrown, T_VALUE, route.expression!)});`);
-                callback.line("return;");
+                callback.line(`state->iterator_close_reason = ${this.coerce(bodyThrown, T_VALUE, route.expression!)};`);
+                emitIteratorClose(3);
             }
         };
         const emitBodyRoute = (route: BodyRoute): void => {
@@ -46131,6 +46140,10 @@ class Emitter {
         buf.line(`${env}->body_sync_return = false;`);
         buf.line(`${env}->body_sync_throw = false;`);
         buf.line(`${env}->body_break = false;`);
+        buf.line(`${env}->iterator_close = false;`);
+        buf.line(`${env}->iterator_close_action = 0;`);
+        buf.line(`${env}->iterator_close_value = NULL;`);
+        buf.line(`${env}->iterator_close_reason = tsc_value_undefined();`);
         for (const param of params) buf.line(`${env}->${param.field} = ${this.asyncAwaitContinuationParamValue(param)};`);
         if (usesThis && thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
         buf.line(`tsc_try_frame_t ${initialEh};`);
