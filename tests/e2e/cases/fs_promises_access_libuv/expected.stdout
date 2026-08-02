@@ -1,0 +1,3 @@
+default: ok
+mode: ok
+missing: true

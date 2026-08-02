@@ -74438,9 +74438,10 @@ class Emitter {
                 } else {
                     specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
                 }
-                return this.emitSequencedExpr(mapped, specs, ([path, mode]) =>
-                    settle(`({ ${mode ? `tsc_fs_access_sync_mode(${path!}, ${mode})` : `tsc_fs_access_sync(${path!})`}; tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                return this.emitSequencedExpr(mapped, specs, ([path, mode]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_access_async(${path!}, ${mode ?? "0.0"})`);
+                });
             }
             case "mkdir": {
                 if (args.length < 1) unsupported(call, "fs.promises.mkdir needs path and optional options");

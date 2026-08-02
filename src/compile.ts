@@ -763,7 +763,7 @@ export async function compile(opts: CompileOptions): Promise<CompileResult> {
     const libuv = usesLibuv ? findLibuvLinkOptions() : null;
     if (usesLibuv && !libuv) {
         process.stderr.write(
-            "tsc2c: this program uses the libuv-backed fs.promises.readFile subset, but libuv was not found.\n" +
+            "tsc2c: this program uses a libuv-backed fs.promises subset, but libuv was not found.\n" +
             "tsc2c: install libuv or set TSC2C_LIBUV to an installed libuv shared library.\n",
         );
         if (opts.buildDir === undefined) fsSync.rmSync(buildDir, { recursive: true, force: true });

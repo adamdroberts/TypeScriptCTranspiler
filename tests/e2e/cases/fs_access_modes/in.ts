@@ -32,8 +32,9 @@ try {
     denied = err;
 }
 
-fs.unlinkSync(path);
-
-console.log("modes:", globalOk, namespaceOk, namedOk, promiseOk);
-console.log("denied:", denied);
-console.log("constants:", fs.constants.F_OK, constants.X_OK);
+setImmediate((): void => {
+    fs.unlinkSync(path);
+    console.log("modes:", globalOk, namespaceOk, namedOk, promiseOk);
+    console.log("denied:", denied);
+    console.log("constants:", fs.constants.F_OK, constants.X_OK);
+});
