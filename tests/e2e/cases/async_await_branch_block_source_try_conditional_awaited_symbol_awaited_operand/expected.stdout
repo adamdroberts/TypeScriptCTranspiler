@@ -1,0 +1,9 @@
+declaration-true declaration-true LT
+declaration-falsy-input declaration-true LT
+declaration-reject caught-value-bad L
+method-true method-true LTM
+method-falsy-input method-true LTM
+method-reject rejected-value-bad LM
+arrow-true arrow-true LTV
+arrow-falsy-input arrow-true LTV
+arrow-reject caught-value-bad LV
