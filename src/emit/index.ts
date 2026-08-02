@@ -396,6 +396,7 @@ interface AsyncAwaitTryCatchReturnContinuation {
     usesAwaited: boolean;
     sourcePromise?: EmitResult;
     sourceAwaitedType?: CType;
+    returnContextType?: ts.Type;
 }
 
 interface AsyncAwaitTryFinallyReturnContinuation {
@@ -416,6 +417,7 @@ interface AsyncAwaitTryFinallyReturnContinuation {
     usesAwaited: boolean;
     sourcePromise?: EmitResult;
     sourceAwaitedType?: CType;
+    returnContextType?: ts.Type;
 }
 
 interface AsyncAwaitTryFinallyLeadingReturnContinuation {
@@ -26525,6 +26527,9 @@ class Emitter {
             params: [...allParams.values()],
             thisValue: usesThis ? thisValue : null,
             usesAwaited,
+            returnContextType: successConditionalContinuation
+                ? this.asyncAwaitReturnContextTypeForBody(body)
+                : undefined,
         };
     }
 
@@ -26827,7 +26832,15 @@ class Emitter {
                     );
                 }
                 if (branch.kind === "syncReturn") {
-                    const sync = this.emitExpr(branch.returnExpr);
+                    if (continuation.returnContextType) {
+                        this.asyncAwaitReturnContextTypes.set(branch.returnExpr, continuation.returnContextType);
+                    }
+                    let sync: EmitResult;
+                    try {
+                        sync = this.emitExpr(branch.returnExpr);
+                    } finally {
+                        if (continuation.returnContextType) this.asyncAwaitReturnContextTypes.delete(branch.returnExpr);
+                    }
                     const syncType = this.prepareType(sync.ty);
                     const sourcePromise = this.freshTemp("_await_sync_source");
                     const syncEh = this.freshTemp("_await_sync_eh");
@@ -27034,7 +27047,14 @@ class Emitter {
             if (continuation.catchThrowExpr) {
                 catchThrown = this.emitExpr(continuation.catchThrowExpr);
             } else if (continuation.catchReturnExpr) {
-                catchReturned = this.emitExpr(continuation.catchReturnExpr);
+                if (continuation.returnContextType) {
+                    this.asyncAwaitReturnContextTypes.set(continuation.catchReturnExpr, continuation.returnContextType);
+                }
+                try {
+                    catchReturned = this.emitExpr(continuation.catchReturnExpr);
+                } finally {
+                    if (continuation.returnContextType) this.asyncAwaitReturnContextTypes.delete(continuation.catchReturnExpr);
+                }
             }
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
@@ -27820,6 +27840,9 @@ class Emitter {
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,
             usesAwaited,
+            returnContextType: successConditionalContinuation
+                ? this.asyncAwaitReturnContextTypeForBody(body)
+                : undefined,
         };
     }
 
@@ -27887,7 +27910,15 @@ class Emitter {
                     );
                 }
                 if (branch.kind === "syncReturn") {
-                    const sync = this.emitExpr(branch.returnExpr);
+                    if (continuation.returnContextType) {
+                        this.asyncAwaitReturnContextTypes.set(branch.returnExpr, continuation.returnContextType);
+                    }
+                    let sync: EmitResult;
+                    try {
+                        sync = this.emitExpr(branch.returnExpr);
+                    } finally {
+                        if (continuation.returnContextType) this.asyncAwaitReturnContextTypes.delete(branch.returnExpr);
+                    }
                     const syncType = this.prepareType(sync.ty);
                     const sourcePromise = this.freshTemp("_await_sync_source");
                     const syncEh = this.freshTemp("_await_sync_eh");
@@ -28647,6 +28678,9 @@ class Emitter {
             params: [...referenced.values()],
             thisValue: usesThis ? thisValue : null,
             usesAwaited,
+            returnContextType: successConditionalContinuation
+                ? this.asyncAwaitReturnContextTypeForBody(body)
+                : undefined,
         };
     }
 
@@ -28713,7 +28747,15 @@ class Emitter {
                     );
                 }
                 if (branch.kind === "syncReturn") {
-                    const sync = this.emitExpr(branch.returnExpr);
+                    if (continuation.returnContextType) {
+                        this.asyncAwaitReturnContextTypes.set(branch.returnExpr, continuation.returnContextType);
+                    }
+                    let sync: EmitResult;
+                    try {
+                        sync = this.emitExpr(branch.returnExpr);
+                    } finally {
+                        if (continuation.returnContextType) this.asyncAwaitReturnContextTypes.delete(branch.returnExpr);
+                    }
                     const syncType = this.prepareType(sync.ty);
                     const sourcePromise = this.freshTemp("_await_sync_source");
                     const syncEh = this.freshTemp("_await_sync_eh");
@@ -28932,7 +28974,14 @@ class Emitter {
                 if (continuation.catchThrowExpr) {
                     catchThrown = this.emitExpr(continuation.catchThrowExpr);
                 } else if (continuation.catchReturnExpr) {
-                    catchReturned = this.emitExpr(continuation.catchReturnExpr);
+                    if (continuation.returnContextType) {
+                        this.asyncAwaitReturnContextTypes.set(continuation.catchReturnExpr, continuation.returnContextType);
+                    }
+                    try {
+                        catchReturned = this.emitExpr(continuation.catchReturnExpr);
+                    } finally {
+                        if (continuation.returnContextType) this.asyncAwaitReturnContextTypes.delete(continuation.catchReturnExpr);
+                    }
                 }
             } finally {
                 if (catchSym) this.catchStringSymbols.delete(catchSym);
@@ -32611,7 +32660,18 @@ class Emitter {
                 try {
                     for (const stmt of tryCatchContinuation.catchPreludeStatements) this.emitStmt(stageBuf, stmt);
                     if (tryCatchContinuation.catchThrowExpr) catchThrown = this.emitExpr(tryCatchContinuation.catchThrowExpr);
-                    else if (tryCatchContinuation.catchReturnExpr) catchReturned = this.emitExpr(tryCatchContinuation.catchReturnExpr);
+                    else if (tryCatchContinuation.catchReturnExpr) {
+                        if (tryCatchContinuation.returnContextType) {
+                            this.asyncAwaitReturnContextTypes.set(tryCatchContinuation.catchReturnExpr, tryCatchContinuation.returnContextType);
+                        }
+                        try {
+                            catchReturned = this.emitExpr(tryCatchContinuation.catchReturnExpr);
+                        } finally {
+                            if (tryCatchContinuation.returnContextType) {
+                                this.asyncAwaitReturnContextTypes.delete(tryCatchContinuation.catchReturnExpr);
+                            }
+                        }
+                    }
                 } finally {
                     this.asyncAwaitContinuationAdapterDepth--;
                     this.argumentValueScopes.pop();
@@ -80430,6 +80490,7 @@ class Emitter {
 
     private emitArrayLiteral(al: ts.ArrayLiteralExpression): EmitResult {
         const litType =
+            this.asyncAwaitReturnContextTypes.get(al) ??
             this.checker.getContextualType(al) ??
             this.checker.getTypeAtLocation(al);
         const mapped = this.isUntypedJsArrayLiteral(al)

@@ -1,0 +1,6 @@
+fn-sync fn-sync-left|fn-sync-right 
+fn-await fn-await-left|fn-await-right 
+method-sync method-sync-left|method-sync-right M
+method-await rejected-method-await-bad Mm
+arrow-sync arrow-sync-left|arrow-sync-right MmV
+arrow-await caught-arrow-await-bad MmVV
