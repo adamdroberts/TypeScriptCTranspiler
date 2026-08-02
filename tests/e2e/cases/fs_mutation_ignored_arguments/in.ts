@@ -51,10 +51,8 @@ let completion: Promise<any> = fs.promises.copyFile(promiseFile, promiseCopy, vo
 completion = completion.then((_value: any) => fs.promises.rename(promiseCopy, promiseRenamed, mark("prename")));
 completion = completion.then((_value: any) => fs.promises.link(promiseRenamed, promiseHard, mark("plink")));
 completion = completion.then((_value: any) => fs.promises.symlink(promiseRenamed, promiseLink, void 0, mark("psymlink")));
-completion = completion.then((_value: any) => {
-    fs.promises.truncate(promiseRenamed, defaultLength, mark("ptruncate"));
-    return fs.promises.utimes(promiseRenamed, 500, new Date(600000), mark("putimes"));
-});
+completion = completion.then((_value: any) => fs.promises.truncate(promiseRenamed, defaultLength, mark("ptruncate")));
+completion = completion.then((_value: any) => fs.promises.utimes(promiseRenamed, 500, new Date(600000), mark("putimes")));
 completion = completion.then((_value: any) => fs.promises.lutimes(promiseLink, 700, new Date(800000), mark("plutimes")));
 completion = completion.then((_value: any) => fs.promises.chmod(promiseRenamed, 0o600, mark("pchmod")));
 completion.then((_value: any) => {

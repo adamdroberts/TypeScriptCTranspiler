@@ -1,2 +1,4 @@
 sync: 3
+queued: 3
 promise: 1
+missing: fs.truncateSync: could not truncate path

@@ -74369,9 +74369,10 @@ class Emitter {
                     },
                 ];
                 specs.push(...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1));
-                return this.emitSequencedExpr(mapped, specs, ([path, length]) =>
-                    settle(`({ tsc_fs_truncate_sync(${path!}, ${length!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                return this.emitSequencedExpr(mapped, specs, ([path, length]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_truncate_async(${path!}, ${length!})`);
+                });
             }
             case "utimes":
             case "lutimes": {
