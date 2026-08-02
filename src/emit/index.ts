@@ -45285,22 +45285,52 @@ class Emitter {
         if (sourceType.kind !== "value") return false;
 
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
+        type BodyControl = "continue" | "break" | "return" | "throw";
+        type BodyRoute = {
+            statements: readonly ts.Statement[];
+            control: BodyControl | null;
+            expression: ts.Expression | null;
+        };
+        const controlFor = (statement: ts.Statement | undefined): BodyControl | null => {
+            if (!statement) return null;
+            if (ts.isContinueStatement(statement)) return statement.label ? null : "continue";
+            if (ts.isBreakStatement(statement)) return statement.label ? null : "break";
+            if (ts.isReturnStatement(statement)) return "return";
+            if (ts.isThrowStatement(statement)) return "throw";
+            return null;
+        };
+        const routeFor = (statementOrStatements: ts.Statement | readonly ts.Statement[]): BodyRoute => {
+            let statements: readonly ts.Statement[];
+            if (Array.isArray(statementOrStatements)) {
+                statements = statementOrStatements;
+            } else {
+                const statement = statementOrStatements as ts.Statement;
+                statements = ts.isBlock(statement) ? statement.statements : [statement];
+            }
+            const terminal = statements[statements.length - 1];
+            const control = controlFor(terminal);
+            return {
+                statements: control ? statements.slice(0, -1) : statements,
+                control,
+                expression: control === "return" && terminal && ts.isReturnStatement(terminal)
+                    ? terminal.expression ?? null
+                    : control === "throw" && terminal && ts.isThrowStatement(terminal)
+                        ? terminal.expression ?? null
+                        : null,
+            };
+        };
         const terminalBodyStatement = loopBody[loopBody.length - 1];
-        const bodyControl: "continue" | "break" | "return" | "throw" | null = terminalBodyStatement && ts.isContinueStatement(terminalBodyStatement)
-            ? "continue"
-            : terminalBodyStatement && ts.isBreakStatement(terminalBodyStatement)
-                ? "break"
-                : terminalBodyStatement && ts.isReturnStatement(terminalBodyStatement)
-                    ? "return"
-                    : terminalBodyStatement && ts.isThrowStatement(terminalBodyStatement)
-                        ? "throw"
-                : null;
-        if ((bodyControl === "continue" || bodyControl === "break") &&
-            (terminalBodyStatement as ts.BreakOrContinueStatement).label) return false;
-        const bodyReturn = bodyControl === "return" ? terminalBodyStatement as ts.ReturnStatement : null;
-        const bodyThrow = bodyControl === "throw" ? terminalBodyStatement as ts.ThrowStatement : null;
-        if (bodyControl === "throw" && !bodyThrow?.expression) return false;
-        const bodyStatements = bodyControl ? loopBody.slice(0, -1) : loopBody;
+        const bodyIf = terminalBodyStatement && ts.isIfStatement(terminalBodyStatement)
+            ? terminalBodyStatement
+            : null;
+        const directRoute = bodyIf ? null : routeFor(loopBody);
+        const bodyPrefix = bodyIf ? loopBody.slice(0, -1) : directRoute!.statements;
+        const thenRoute = bodyIf ? routeFor(bodyIf.thenStatement) : null;
+        const elseRoute = bodyIf
+            ? bodyIf.elseStatement
+                ? routeFor(bodyIf.elseStatement)
+                : { statements: [], control: null, expression: null }
+            : null;
         let bodySupported = true;
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
@@ -45318,7 +45348,11 @@ class Emitter {
             }
             ts.forEachChild(node, visitBody);
         };
-        for (const statement of bodyStatements) visitBody(statement);
+        for (const statement of bodyPrefix) visitBody(statement);
+        for (const route of [thenRoute, elseRoute]) {
+            if (!route) continue;
+            for (const statement of route.statements) visitBody(statement);
+        }
         if (!bodySupported) return false;
 
         const visitReturn = (node: ts.Node): void => {
@@ -45329,9 +45363,11 @@ class Emitter {
             }
             ts.forEachChild(node, visitReturn);
         };
+        if (bodyIf) visitReturn(bodyIf.expression);
+        for (const route of [directRoute, thenRoute, elseRoute]) {
+            if (route?.expression) visitReturn(route.expression);
+        }
         visitReturn(result.expression);
-        if (bodyReturn?.expression) visitReturn(bodyReturn.expression);
-        if (bodyThrow?.expression) visitReturn(bodyThrow.expression);
         if (!bodySupported) return false;
 
         let usesThis = false;
@@ -45343,9 +45379,13 @@ class Emitter {
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
             ts.forEachChild(node, visitThis);
         };
-        for (const statement of bodyStatements) visitThis(statement);
-        if (bodyReturn?.expression) visitThis(bodyReturn.expression);
-        if (bodyThrow?.expression) visitThis(bodyThrow.expression);
+        for (const statement of bodyPrefix) visitThis(statement);
+        if (bodyIf) visitThis(bodyIf.expression);
+        for (const route of [directRoute, thenRoute, elseRoute]) {
+            if (!route) continue;
+            for (const statement of route.statements) visitThis(statement);
+            if (route.expression) visitThis(route.expression);
+        }
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
 
@@ -45403,59 +45443,74 @@ class Emitter {
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
         const bindingValue = this.coerce({ c: itemVar, ty: T_VALUE }, bindingType, binding.name);
         callback.line(`${bindingType.c} ${bindingName} = ${bindingValue};`);
+        const emitBodyControl = (route: BodyRoute): void => {
+            if (route.control === "break") {
+                callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+                callback.line(`${finishVar} = true;`);
+                return;
+            }
+            if (route.control === "return") {
+                callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+                if (route.expression) {
+                    let bodyReturned: EmitResult;
+                    this.asyncAwaitContinuationAdapterDepth++;
+                    try {
+                        bodyReturned = this.emitExpr(route.expression);
+                    } finally {
+                        this.asyncAwaitContinuationAdapterDepth--;
+                    }
+                    const bodyReturnedType = this.prepareType(bodyReturned.ty);
+                    if (bodyReturnedType.kind === "void" || bodyReturnedType.kind === "never") {
+                        callback.line(`${bodyReturned.c};`);
+                        callback.line("tsc_try_pop();");
+                        callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+                    } else {
+                        callback.line(`${bodyReturnedType.c} ${returnedVar} = ${bodyReturned.c};`);
+                        callback.line("tsc_try_pop();");
+                        callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: bodyReturnedType }, route.expression)};`);
+                        callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                    }
+                } else {
+                    callback.line("tsc_try_pop();");
+                    callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+                }
+                callback.line("return;");
+                return;
+            }
+            if (route.control === "throw") {
+                callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+                const bodyThrown = this.emitExpr(route.expression!);
+                callback.line("tsc_try_pop();");
+                callback.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(bodyThrown, T_VALUE, route.expression!)});`);
+                callback.line("return;");
+            }
+        };
+        const emitBodyRoute = (route: BodyRoute): void => {
+            for (const statement of route.statements) this.emitStmt(callback, statement);
+            emitBodyControl(route);
+        };
         this.argumentValueScopes.push(scope);
         this.argumentValueTypeScopes.push(scopeTypes);
         if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
-            for (const statement of bodyStatements) this.emitStmt(callback, statement);
+            if (bodyIf && thenRoute && elseRoute) {
+                for (const statement of bodyPrefix) this.emitStmt(callback, statement);
+                const condition = this.emitBoolExpr(bodyIf.expression);
+                callback.open(`if (${condition})`);
+                emitBodyRoute(thenRoute);
+                callback.close();
+                callback.open("else");
+                emitBodyRoute(elseRoute);
+                callback.close();
+            } else if (directRoute) {
+                emitBodyRoute(directRoute);
+            }
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
             if (usesThis && thisValue) this.functionThisStack.pop();
             this.argumentValueTypeScopes.pop();
             this.argumentValueScopes.pop();
-        }
-        if (bodyControl === "break") {
-            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-            callback.line(`${finishVar} = true;`);
-        } else if (bodyControl === "return") {
-            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-            if (bodyReturn?.expression) {
-                let bodyReturned: EmitResult;
-                this.asyncAwaitContinuationAdapterDepth++;
-                try {
-                    bodyReturned = this.emitExpr(bodyReturn.expression);
-                } finally {
-                    this.asyncAwaitContinuationAdapterDepth--;
-                }
-                const bodyReturnedType = this.prepareType(bodyReturned.ty);
-                if (bodyReturnedType.kind === "void" || bodyReturnedType.kind === "never") {
-                    callback.line(`${bodyReturned.c};`);
-                    callback.line("tsc_try_pop();");
-                    callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
-                } else {
-                    callback.line(`${bodyReturnedType.c} ${returnedVar} = ${bodyReturned.c};`);
-                    callback.line("tsc_try_pop();");
-                    callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: bodyReturnedType }, bodyReturn.expression)};`);
-                    callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
-                }
-            } else {
-                callback.line("tsc_try_pop();");
-                callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
-            }
-            callback.line("return;");
-        } else if (bodyControl === "throw") {
-            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
-            let bodyThrown: EmitResult;
-            this.asyncAwaitContinuationAdapterDepth++;
-            try {
-                bodyThrown = this.emitExpr(bodyThrow.expression);
-            } finally {
-                this.asyncAwaitContinuationAdapterDepth--;
-            }
-            callback.line("tsc_try_pop();");
-            callback.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(bodyThrown, T_VALUE, bodyThrow.expression)});`);
-            callback.line("return;");
         }
         callback.close();
         callback.open(`if (${finishVar})`);

@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await lowering supports a final synchronous if with branch continue, break, return, and throw paths"
+}
