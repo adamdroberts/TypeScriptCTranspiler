@@ -236,6 +236,30 @@ tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
     return tsc_promise_resolve_thenable_seen(value, NULL);
 }
 
+tsc_value_t tsc_async_iterator_get(tsc_value_t value) {
+    tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_async_iterator());
+    if (!tsc_value_is_callable(method)) return value;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+    return tsc_value_apply_function(method, value, tsc_value_array(args));
+}
+
+tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {
+    tsc_try_frame_t eh;
+    tsc_try_push(&eh);
+    if (setjmp(eh.jb) == 0) {
+        tsc_value_t next = tsc_value_get_prop(iterator, tsc_str_from_lit("next", 4));
+        if (!tsc_value_is_callable(next)) {
+            tsc_throw_str(tsc_str_from_lit("async iterator next is not callable", 35));
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+        tsc_value_t result = tsc_value_apply_function(next, iterator, tsc_value_array(args));
+        tsc_try_pop();
+        return tsc_promise_resolve_thenable(result);
+    }
+    tsc_try_pop();
+    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+}
+
 typedef struct {
     tsc_promise_t* result;
     tsc_array_t* values;

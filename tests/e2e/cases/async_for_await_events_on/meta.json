@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await lowering consumes a dynamic events.on async iterator, runs a synchronous body, completes after iterator return, and propagates next rejection"
+}

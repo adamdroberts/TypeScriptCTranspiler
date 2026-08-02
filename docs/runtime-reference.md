@@ -170,6 +170,8 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_promise_resolve/reject(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled/rejected Promise record used by the settled Promise subset |
 | `tsc_promise_resolve_fs_stats(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<FSStats>` side-channel record |
 | `tsc_promise_resolve_buffer(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<Buffer>` side-channel record |
+| `tsc_async_iterator_get(value)` | `tsc_value_t` | Resolves a dynamic async iterator through `[Symbol.asyncIterator]()` when present |
+| `tsc_async_iterator_next(iterator)` | `tsc_promise_t*` | Calls a dynamic async iterator's `.next()` and assimilates its result into a Promise |
 | `tsc_promise_is_fulfilled/is_rejected(p)` | `bool` | State checks used by synchronous `then`/`catch`/`finally` lowering |
 | `tsc_promise_value/reason(p)` | `tsc_value_t` | Reads the stored fulfilled value or rejection reason |
 | `tsc_promise_fs_stats_value(p)` | `tsc_fs_stats_t*` | Reads the typed `FSStats` fulfilled value side-channel |
@@ -497,6 +499,8 @@ Supported fs path arguments use a bounded `PathLike` subset: strings pass throug
 | `tsc_event_emitter_off(ee, event, fn, identity)` | `void` | `off` / `removeListener` |
 | `tsc_event_emitter_remove_all(ee, event)` | `void` | `removeAllListeners(event?)` |
 | `tsc_event_emitter_emit(ee, event, args)` | `bool` | `emit(event, ...args)`; `args` is a boxed `tsc_value_t` array; unhandled `"error"` emits throw |
+| `tsc_event_emitter_once_promise(ee, event, signal)` | `tsc_promise_t*` | `events.once(ee, event, { signal })`; settles on the event/error or rejects on AbortSignal cancellation |
+| `tsc_event_emitter_on_async_iterator(ee, event, signal)` | `tsc_value_t` | `events.on(ee, event, { signal })`; returns a dynamic queued/pending async iterator |
 | `tsc_event_emitter_listener_count(ee, event)` | `double` | `listenerCount(event)` |
 | `tsc_event_emitter_listener_count_identity(ee, event, identity)` | `double` | `listenerCount(event, listener)` filtered by preserved listener identity |
 | `tsc_event_emitter_event_names(ee)` | `tsc_array_t*` | `eventNames()` as a string array |
