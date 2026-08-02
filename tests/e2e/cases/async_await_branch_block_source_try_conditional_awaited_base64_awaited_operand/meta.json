@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally btoa/atob wrapped direct awaits preserve base64 string truthiness and rejection cleanup"
+}

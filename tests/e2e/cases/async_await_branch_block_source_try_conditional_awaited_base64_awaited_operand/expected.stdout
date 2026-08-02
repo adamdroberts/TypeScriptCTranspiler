@@ -1,0 +1,12 @@
+declaration-true declaration-true LT
+declaration-empty-base64 declaration-false LF
+declaration-reject caught-base64-bad L
+method-true method-true LTM
+method-empty-base64 method-false LFM
+method-reject rejected-base64-bad LM
+arrow-true arrow-true LTV
+arrow-empty-base64 arrow-false LFV
+arrow-reject caught-base64-bad LV
+decode-true decode-true LT
+decode-empty-base64 decode-false LF
+decode-reject caught-base64-bad L
