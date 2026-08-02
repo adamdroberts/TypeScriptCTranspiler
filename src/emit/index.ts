@@ -32818,6 +32818,17 @@ class Emitter {
                 nonNullishBranch,
             );
         }
+        const nonNullishAwaitExpr = this.asyncAwaitTryConditionalNonNullishAwaitInCondition(expression);
+        if (nonNullishAwaitExpr) {
+            return {
+                kind: "if",
+                condition: expression,
+                conditionAwaitExpr: nonNullishAwaitExpr,
+                thenBranch: truthyBranch,
+                elseBranch: falsyBranch,
+                fallthroughBranch: null,
+            };
+        }
         if (!ts.isBinaryExpression(expression)) return null;
         const operator = expression.operatorToken.kind;
         if (operator !== ts.SyntaxKind.AmpersandAmpersandToken &&
@@ -32852,6 +32863,52 @@ class Emitter {
             falsyBranch,
             rightBranch,
         );
+    }
+
+    private asyncAwaitTryConditionalNonNullishAwaitInCondition(
+        condition: ts.Expression,
+    ): ts.AwaitExpression | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        const awaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
+        if (!awaitExpr || !this.asyncAwaitTryConditionalNonNullishExpression(expression)) return null;
+        return awaitExpr;
+    }
+
+    private asyncAwaitTryConditionalNonNullishExpression(condition: ts.Expression): boolean {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (ts.isPrefixUnaryExpression(expression) ||
+            ts.isTypeOfExpression(expression) ||
+            ts.isDeleteExpression(expression)) {
+            return true;
+        }
+        if (!ts.isBinaryExpression(expression)) return false;
+        switch (expression.operatorToken.kind) {
+            case ts.SyntaxKind.PlusToken:
+            case ts.SyntaxKind.MinusToken:
+            case ts.SyntaxKind.AsteriskToken:
+            case ts.SyntaxKind.SlashToken:
+            case ts.SyntaxKind.PercentToken:
+            case ts.SyntaxKind.AsteriskAsteriskToken:
+            case ts.SyntaxKind.AmpersandToken:
+            case ts.SyntaxKind.BarToken:
+            case ts.SyntaxKind.CaretToken:
+            case ts.SyntaxKind.LessThanLessThanToken:
+            case ts.SyntaxKind.GreaterThanGreaterThanToken:
+            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+            case ts.SyntaxKind.LessThanToken:
+            case ts.SyntaxKind.LessThanEqualsToken:
+            case ts.SyntaxKind.GreaterThanToken:
+            case ts.SyntaxKind.GreaterThanEqualsToken:
+            case ts.SyntaxKind.EqualsEqualsToken:
+            case ts.SyntaxKind.EqualsEqualsEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+            case ts.SyntaxKind.InKeyword:
+            case ts.SyntaxKind.InstanceOfKeyword:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private asyncAwaitConditionExpressionSupported(condition: ts.Expression): boolean {

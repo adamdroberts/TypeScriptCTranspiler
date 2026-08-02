@@ -1,0 +1,16 @@
+fn-left-false fn-false L
+fn-right-true fn-true LRT
+fn-ready-false fn-false LR
+fn-ready-true fn-true LR
+fn-left-reject caught-left-bad L
+fn-right-reject caught-right-bad LRT
+method-left-false method-true LM
+method-right-true method-true LRTM
+method-ready-false method-false LRM
+method-left-reject rejected-left-bad LM
+method-right-reject rejected-right-bad LRTM
+arrow-left-false arrow-true LV
+arrow-right-true arrow-true LRTV
+arrow-ready-false arrow-false LRV
+arrow-left-reject caught-left-bad LV
+arrow-right-reject caught-right-bad LRTV
