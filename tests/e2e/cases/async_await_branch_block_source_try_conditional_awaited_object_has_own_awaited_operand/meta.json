@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally Object.hasOwn with a leading awaited operand preserves own-key truthiness and rejection cleanup"
+}

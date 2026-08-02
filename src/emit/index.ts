@@ -33141,8 +33141,8 @@ class Emitter {
     private asyncAwaitTryConditionalConditionAwaitExpression(
         condition: ts.Expression,
     ): ts.AwaitExpression | null {
-        const objectIsAwaitExpr = this.asyncAwaitTryConditionalObjectIsAwaitedFirstOperand(condition);
-        if (objectIsAwaitExpr) return objectIsAwaitExpr;
+        const objectStaticAwaitExpr = this.asyncAwaitTryConditionalObjectStaticAwaitedFirstOperand(condition);
+        if (objectStaticAwaitExpr) return objectStaticAwaitExpr;
         const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition);
         if (leadingAwait) return leadingAwait;
         const globalCoercionAwait = this.asyncAwaitTryConditionalGlobalCoercionAwaitExpression(condition);
@@ -33237,12 +33237,12 @@ class Emitter {
                                     : receiver === "JSON"
                                         ? ["parse", "stringify"]
                                         : receiver === "Object"
-                                            ? ["is"]
+                                            ? ["is", "hasOwn"]
                                             : [];
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
 
-    private asyncAwaitTryConditionalObjectIsAwaitedFirstOperand(
+    private asyncAwaitTryConditionalObjectStaticAwaitedFirstOperand(
         condition: ts.Expression,
     ): ts.AwaitExpression | null {
         const expression = this.unwrapTransparentExpression(condition);
@@ -33255,7 +33255,7 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(callee) ||
             !ts.isIdentifier(callee.expression) ||
             callee.expression.text !== "Object" ||
-            callee.name.text !== "is") {
+            callee.name.text !== "is" && callee.name.text !== "hasOwn") {
             return null;
         }
         const first = this.unwrapTransparentExpression(expression.arguments[0]!);
@@ -34677,7 +34677,7 @@ class Emitter {
             );
         if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
         const conditionAwaitExpr =
-            this.asyncAwaitTryConditionalObjectIsAwaitedFirstOperand(expression) ??
+            this.asyncAwaitTryConditionalObjectStaticAwaitedFirstOperand(expression) ??
             this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
         if (conditionAwaitExpr) {
             return {

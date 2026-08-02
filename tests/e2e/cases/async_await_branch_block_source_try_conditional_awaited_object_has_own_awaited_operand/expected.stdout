@@ -1,0 +1,9 @@
+declaration-true declaration-true LT
+declaration-false declaration-false LF
+declaration-reject caught-declaration L
+method-true method-true LTM
+method-false method-false LFM
+method-reject rejected-object-has-own-bad LM
+arrow-true arrow-true LTV
+arrow-false arrow-false LFV
+arrow-reject caught-arrow LV
