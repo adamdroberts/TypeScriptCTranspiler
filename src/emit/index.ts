@@ -74379,15 +74379,16 @@ class Emitter {
                 const p = this.emitExpr(args[0]!);
                 const atime = this.emitFsTimeArg(args[1]!, `fs.promises.${name} atime`);
                 const mtime = this.emitFsTimeArg(args[2]!, `fs.promises.${name} mtime`);
-                const fn = name === "lutimes" ? "tsc_fs_lutimes_sync" : "tsc_fs_utimes_sync";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     atime,
                     mtime,
                     ...this.ignoredArgumentSpecs(args, 3),
-                ], ([path, atimeValue, mtimeValue]) =>
-                    settle(`({ ${fn}(${path!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([path, atimeValue, mtimeValue]) => {
+                    this.usesLibuv = true;
+                    const times = `tsc_fs_promises_${name}_async(${path!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)})`;
+                    return settle(times);
+                });
             }
             case "chown": {
                 if (args.length < 3) unsupported(call, "fs.promises.chown needs path, uid, and gid");

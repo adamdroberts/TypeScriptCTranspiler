@@ -1,3 +1,3 @@
 {
-  "description": "fs.lutimesSync and immediate fs.promises.lutimes update symlink timestamps"
+  "description": "fs.lutimesSync and libuv-backed fs.promises.lutimes update symlink timestamps"
 }

@@ -1561,8 +1561,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - `fs.linkSync(existingPath, newPath, ...ignored)` and libuv-backed `fs.promises.link(existingPath, newPath, ...ignored)` create host filesystem hard links. Tests: `fs_link`, `fs_mutation_ignored_arguments`
 - `fs.mkdtempSync(prefix[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` and libuv-backed `fs.promises.mkdtemp(prefix[, "utf8" | "hex" | "base64" | "buffer" | null | { encoding }], ...ignored)` create temporary directories from a prefix for the bounded UTF-8/hex/base64 string encodings, explicit Buffer encodings, and direct/null-object default string encodings, treating explicit `undefined`, side-effect-free `void`, and side-effectful `void` options as defaults while evaluating options-slot and ignored-extra side effects. Tests: `fs_mkdtemp`, `fs_mkdtemp_encoding_options`, `fs_link_mkdtemp_ignored_arguments`, `fs_path_result_encoded_options`
 - `fs.truncateSync(path, len?, ...ignored)` and immediate-settled `fs.promises.truncate(path, len?, ...ignored)` truncate files by path; explicit `undefined`, side-effect-free `void`, and earlier static `const` aliases for `undefined` length values use the default zero-length truncate while ignored trailing arguments are still evaluated. Tests: `fs_truncate`, `fs_mutation_ignored_arguments`
-- `fs.utimesSync(path, atime, mtime, ...ignored)` and immediate-settled `fs.promises.utimes(path, atime, mtime, ...ignored)` update file access/modification timestamps for numeric seconds and `Date` values. Tests: `fs_utimes`, `fs_mutation_ignored_arguments`
-- `fs.lutimesSync(path, atime, mtime, ...ignored)` and immediate-settled `fs.promises.lutimes(path, atime, mtime, ...ignored)` update symlink access/modification timestamps without following the target. Tests: `fs_lutimes`, `fs_mutation_ignored_arguments`
+- `fs.utimesSync(path, atime, mtime, ...ignored)` and libuv-backed `fs.promises.utimes(path, atime, mtime, ...ignored)` update file access/modification timestamps for numeric seconds and `Date` values. Tests: `fs_utimes`, `fs_mutation_ignored_arguments`
+- `fs.lutimesSync(path, atime, mtime, ...ignored)` and libuv-backed `fs.promises.lutimes(path, atime, mtime, ...ignored)` update symlink access/modification timestamps without following the target. Tests: `fs_lutimes`, `fs_mutation_ignored_arguments`
 - `fs.chownSync(path, uid, gid, ...ignored)` and immediate-settled `fs.promises.chown(path, uid, gid, ...ignored)` change numeric uid/gid ownership through POSIX `chown`; `chownSync` also routes from named imports, and ignored trailing arguments are evaluated. Tests: `fs_chown`, `fs_chown_ignored_arguments`
 - `fs.lchownSync(path, uid, gid, ...ignored)` and immediate-settled `fs.promises.lchown(path, uid, gid, ...ignored)` change numeric uid/gid ownership on symlink paths through POSIX `lchown`, evaluating ignored trailing arguments. Tests: `fs_lchown`, `fs_chown_ignored_arguments`
 - `fs.chmodSync(path, mode, ...ignored)` and immediate-settled `fs.promises.chmod(path, mode, ...ignored)` change numeric file modes. Tests: `fs_chmod`, `fs_mutation_ignored_arguments`
@@ -2703,7 +2703,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_link_path_encoding_options` | fs realpath/readlink UTF-8, explicit Buffer, and null-default encoding options for sync and promises |
 | `fs_mkdtemp` | fs.mkdtempSync and libuv-backed fs.promises mkdtemp |
 | `fs_mkdtemp_encoding_options` | fs mkdtemp UTF-8, explicit Buffer, and null-default encoding options for sync and promises |
-| `fs_promises` | libuv-backed UTF-8 fs.promises readFile, writeFile/appendFile, non-recursive UTF-8/Buffer readdir, access, stat, lstat, statfs, realpath, readlink, mkdtemp, symlink, link, copyFile, and rename |
+| `fs_promises` | libuv-backed UTF-8 fs.promises readFile, writeFile/appendFile, non-recursive UTF-8/Buffer readdir, access, stat, lstat, statfs, realpath, readlink, mkdtemp, symlink, link, utimes, lutimes, copyFile, and rename |
 | `fs_promises_read_file_libuv` | libuv-backed fs.promises.readFile UTF-8, Buffer, completion ordering, and rejection |
 | `fs_promises_write_file_libuv` | libuv-backed fs.promises.writeFile/appendFile string, Buffer, encoded, append, mode, and exclusive flows |
 | `fs_promises_readdir_libuv` | libuv-backed fs.promises.readdir non-recursive UTF-8/Buffer results, completion ordering, and rejection |
@@ -2740,8 +2740,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_symlink_type_options` | fs symlink literal type options for sync and promises |
 | `fs_sync_mutation` | fs mkdirSync/unlinkSync/rmSync/rmdirSync through node:fs namespace imports |
 | `fs_truncate` | fs.truncateSync and immediate-settled fs.promises truncate |
-| `fs_utimes` | fs.utimesSync and immediate-settled fs.promises.utimes |
-| `fs_lutimes` | fs.lutimesSync and immediate-settled fs.promises.lutimes on symlinks |
+| `fs_utimes` | fs.utimesSync and libuv-backed fs.promises.utimes |
+| `fs_lutimes` | fs.lutimesSync and libuv-backed fs.promises.lutimes on symlinks |
 | `fs_mkdir_mode_options` | fs.mkdirSync and immediate-settled fs.promises.mkdir numeric mode and const recursive options |
 | `function_closures` | returned closures with function-scope captures and mutable captured state |
 | `function_integrity` | stable boxed direct function identity, own length/name/prototype metadata, typed function Object/Reflect helpers, function seal/freeze state, trapless function Proxy integrity forwarding, and function-target Proxy metadata/ownKeys invariant coverage |

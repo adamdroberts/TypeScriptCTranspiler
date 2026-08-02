@@ -1,3 +1,3 @@
 {
-  "description": "fs.utimesSync and immediate fs.promises.utimes with number and Date times"
+  "description": "fs.utimesSync and libuv-backed fs.promises.utimes with number and Date times"
 }
