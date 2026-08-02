@@ -1,0 +1,9 @@
+declaration-true declaration-true LT
+declaration-empty-number declaration-false LF
+declaration-reject caught-parse-bad L
+method-true method-true LTM
+method-empty-number method-false LFM
+method-reject rejected-parse-bad LM
+arrow-true arrow-true LTV
+arrow-empty-number arrow-false LFV
+arrow-reject caught-parse-bad LV
