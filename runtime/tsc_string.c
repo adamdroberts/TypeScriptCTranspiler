@@ -36,6 +36,28 @@ tsc_str_t* tsc_str_concat(const tsc_str_t* a, const tsc_str_t* b) {
     return s;
 }
 
+tsc_str_t* tsc_str_raw(tsc_value_t template_value, const tsc_array_t* substitutions) {
+    if (tsc_value_is_nullish(template_value)) {
+        tsc_throw_str(tsc_str_from_cstr("String.raw template must not be null or undefined"));
+    }
+    tsc_value_t raw = tsc_value_get_prop(template_value, tsc_str_from_lit("raw", 3));
+    tsc_value_t length_value = tsc_value_get_prop(raw, tsc_str_from_lit("length", 6));
+    double length_number = tsc_value_as_num(length_value);
+    size_t length = (isfinite(length_number) && length_number > 0.0)
+        ? (size_t)floor(length_number)
+        : 0;
+    tsc_str_t* result = tsc_str_from_lit("", 0);
+    for (size_t index = 0; index < length; index++) {
+        tsc_value_t segment = tsc_value_get_prop(raw, tsc_str_from_num((double)index));
+        result = tsc_str_concat(result, tsc_value_to_string(segment));
+        if (substitutions && index < substitutions->len) {
+            tsc_value_t substitution = TSC_ARR(tsc_value_t, substitutions, index);
+            result = tsc_str_concat(result, tsc_value_to_string(substitution));
+        }
+    }
+    return result;
+}
+
 tsc_str_t* tsc_str_concat_lit_int(const char* lit, size_t lit_len, int64_t n) {
     char num[21];
     size_t num_len = fast_itoa(num, n);

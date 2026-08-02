@@ -1,0 +1,7 @@
+declaration-true declaration-true LST
+declaration-false declaration-false LS
+declaration-reject caught-declaration L
+method-true method-true LSTM
+method-reject rejected-method LM
+arrow-true arrow-true LSTV
+arrow-reject caught-arrow LV

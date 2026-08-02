@@ -100,6 +100,7 @@ tsc_str_t* tsc_str_concat_int_lit(int64_t n, const char* lit, size_t lit_len);
 tsc_str_t* tsc_str_concat_lit_num(const char* lit, size_t lit_len, double n);
 tsc_str_t* tsc_str_concat_num_lit(double n, const char* lit, size_t lit_len);
 tsc_str_t* tsc_str_concat_n(size_t n, ...);
+tsc_str_t* tsc_str_raw(tsc_value_t template_value, const struct tsc_array* substitutions);
 
 /* ------------- JSON build buffer -------------
  * Single growable byte buffer with one final allocation. Used to lower

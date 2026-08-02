@@ -5,12 +5,14 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Typed numeric, bigint, string, and pointer truthiness checks now evaluate their source expressions once before testing the result, preserving side-effect order for awaited conditional selectors. Regression: `async_await_branch_block_source_try_conditional_awaited_string_raw`.
 - Top-level dynamic `JSON.stringify` now preserves JavaScript `undefined` for `undefined`, functions, and callable proxies without changing nested array/object JSON substitution or revoked-proxy errors. Regression: `json_stringify_dynamic_top_level` plus the callable-proxy JSON cases.
 - Source-`try` conditional structural return arms now receive the enclosing async return context, preserving homogeneous typed-array values instead of routing them through the pointer-only promise representation. Regression: `async_await_branch_block_source_try_structural_conditional_return_four_await`.
 - Typed lazy generators passed through a different `Generator<...>` element type now stay lazy during conversion, preserving per-yield element boxing/conversion and `.next(value)` delivery instead of materializing at the call site. Regression: `generator_lazy_yield_logical`.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Callable `String.raw(template, ...substitutions)` now lowers through the dynamic String.raw runtime path for awaited source-try conditional selectors, preserving raw-template truthiness, substitution ordering, source rejection recovery, and `finally` cleanup. Test: `async_await_branch_block_source_try_conditional_awaited_string_raw`.
 - Bounded async source-try conditional returns now lower unshadowed `Map.groupBy(await items, keyFn)` selectors, preserving callback evaluation after the awaited source, source rejection recovery, and `finally` cleanup. Test: `async_await_branch_block_source_try_conditional_awaited_map_group_by`.
 - Bounded async source-try conditional returns now lower supported unshadowed `Promise` statics with a direct awaited first operand and await-free trailing arguments, covering `resolve` and the array combinators while preserving fulfillment, awaited source rejection, and `finally` cleanup. Test: `async_await_branch_block_source_try_conditional_awaited_promise_statics`.
 - Bounded async source-try conditional returns now lower `new Proxy(await target, handler)` and `Proxy.revocable(await target, handler)` selectors, preserving proxy creation, target validation, awaited rejection recovery, and `finally` cleanup. Test: `async_await_branch_block_source_try_conditional_awaited_proxy_target`.

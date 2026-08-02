@@ -33230,7 +33230,7 @@ class Emitter {
         } else if (receiver === "Date") {
             methods = ["parse", "UTC"];
         } else if (receiver === "String") {
-            methods = ["fromCharCode", "fromCodePoint"];
+            methods = ["fromCharCode", "fromCodePoint", "raw"];
         } else if (receiver === "Array") {
             methods = ["isArray", "of", "from", "fromAsync"];
         } else if (receiver === "RegExp") {
@@ -33310,6 +33310,7 @@ class Emitter {
         if (receiver === "Promise") {
             return ["all", "allSettled", "any", "race", "reject", "resolve", "try", "withResolvers"].includes(name);
         }
+        if (receiver === "String") return name === "raw";
         if (receiver === "Map") return name === "groupBy";
         if (receiver === "Proxy") return name === "revocable";
         return false;
@@ -55441,11 +55442,23 @@ class Emitter {
 
     private truthyC(r: EmitResult, expr: ts.Expression): string {
         if (r.ty.kind === "boolean") return r.c;
-        if (r.ty.kind === "number") return `((${r.c}) != 0 && !isnan(${r.c}))`;
-        if (r.ty.kind === "bigint") return `((${r.c}) != NULL && mpz_sgn((${r.c})->value) != 0)`;
-        if (r.ty.kind === "string") return `((${r.c}) != NULL && (${r.c})->len != 0)`;
+        if (r.ty.kind === "number") {
+            const value = this.freshTemp("_truthy_number");
+            return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != 0 && !isnan(${value})); })`;
+        }
+        if (r.ty.kind === "bigint") {
+            const value = this.freshTemp("_truthy_bigint");
+            return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != NULL && mpz_sgn((${value})->value) != 0); })`;
+        }
+        if (r.ty.kind === "string") {
+            const value = this.freshTemp("_truthy_string");
+            return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != NULL && (${value})->len != 0); })`;
+        }
         if (r.ty.kind === "value") return `tsc_value_is_truthy(${r.c})`;
-        if (isPointerKind(r.ty)) return `((${r.c}) != NULL)`;
+        if (isPointerKind(r.ty)) {
+            const value = this.freshTemp("_truthy_pointer");
+            return `({ ${r.ty.c} ${value} = ${r.c}; ((${value}) != NULL); })`;
+        }
         unsupported(expr, `cannot coerce ${r.ty.c} to boolean`);
     }
 
@@ -70844,6 +70857,25 @@ class Emitter {
 
     private emitStringStatic(call: ts.CallExpression, name: string): EmitResult {
         switch (name) {
+            case "raw": {
+                if (call.arguments.length < 1) unsupported(call, "String.raw expects a template object");
+                const specs = call.arguments.map((arg) => ({
+                    value: this.emitExpr(arg),
+                    target: T_VALUE,
+                    node: arg,
+                }));
+                return this.emitSequencedExpr(T_STRING, specs, (values) => {
+                    const substitutions = this.freshTemp("_string_raw_substitutions");
+                    const pieces = [
+                        `tsc_array_t* ${substitutions} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length - 1)})`,
+                    ];
+                    for (const value of values.slice(1)) {
+                        pieces.push(`tsc_array_push_raw(${substitutions}, &${value})`);
+                    }
+                    pieces.push(`tsc_str_raw(${values[0]}, ${substitutions})`);
+                    return `({ ${pieces.join("; ")}; })`;
+                });
+            }
             case "fromCharCode": {
                 const specs = call.arguments.map((arg) => {
                     const r = this.emitExpr(arg);
