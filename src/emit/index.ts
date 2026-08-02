@@ -45837,6 +45837,10 @@ class Emitter {
         callback.open("if (!state->body_await && !tsc_promise_is_fulfilled(_p))");
         callback.line("return;");
         callback.close();
+        callback.open("if (!state->body_await && !state->iterator_close && !tsc_value_is_object(tsc_promise_value(_p)))");
+        callback.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_str_from_cstr(\"async iterator next result is not an object\")));");
+        callback.line("return;");
+        callback.close();
         callback.line(`tsc_try_frame_t ${eh};`);
         callback.line(`tsc_promise_t* ${resolvedVar};`);
         callback.line(`tsc_try_push(&${eh});`);
