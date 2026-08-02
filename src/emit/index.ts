@@ -27105,6 +27105,7 @@ class Emitter {
         buf.line(`bool ${conditionTruth} = false;`);
         const conditionTruthExpr = this.emitAsyncAwaitTryConditionalAwaitTruth(
             branch.condition,
+            branch.conditionMode,
             scope,
             awaitScope,
             continuation.thisValue,
@@ -28405,6 +28406,7 @@ class Emitter {
         buf.line(`bool ${conditionTruth} = false;`);
         const conditionTruthExpr = this.emitAsyncAwaitTryConditionalAwaitTruth(
             branch.condition,
+            branch.conditionMode,
             scope,
             awaitScope,
             continuation.thisValue,
@@ -29458,6 +29460,7 @@ class Emitter {
         buf.line(`bool ${conditionTruth} = false;`);
         const conditionTruthExpr = this.emitAsyncAwaitTryConditionalAwaitTruth(
             branch.condition,
+            branch.conditionMode,
             scope,
             awaitScope,
             continuation.thisValue,
@@ -32694,6 +32697,90 @@ class Emitter {
         return ts.isIdentifier(expression) && this.isValueReferenceIdentifier(expression);
     }
 
+    private asyncAwaitTryConditionalNullishChainOperands(condition: ts.Expression): ts.Expression[] | null {
+        const operands: ts.Expression[] = [];
+        const visit = (node: ts.Expression): void => {
+            const expression = this.unwrapTransparentExpression(node);
+            if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken) {
+                visit(expression.left);
+                visit(expression.right);
+                return;
+            }
+            operands.push(expression);
+        };
+        visit(condition);
+        if (operands.length < 2 || !operands.some((operand) => ts.isAwaitExpression(operand))) return null;
+        for (const operand of operands) {
+            if (!ts.isAwaitExpression(operand) && !this.asyncAwaitTryConditionalNullishLeftSupported(operand)) {
+                return null;
+            }
+        }
+        return operands;
+    }
+
+    private asyncAwaitTryConditionalResolvedValueBranch(
+        condition: ts.Expression,
+        thenBranch: AsyncAwaitTryConditionalReturnNode,
+        elseBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch {
+        return {
+            kind: "if",
+            condition,
+            thenBranch,
+            elseBranch,
+            fallthroughBranch: null,
+        };
+    }
+
+    private asyncAwaitTryConditionalNullishOperandBranch(
+        operand: ts.Expression,
+        nullishBranch: AsyncAwaitTryConditionalReturnNode,
+        nonNullishBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const expression = this.unwrapTransparentExpression(operand);
+        const conditionAwaitExpr = ts.isAwaitExpression(expression) ? expression : undefined;
+        if (!conditionAwaitExpr && !this.asyncAwaitTryConditionalNullishLeftSupported(expression)) return null;
+        return {
+            kind: "if",
+            condition: expression,
+            conditionMode: "nullish",
+            conditionAwaitExpr,
+            thenBranch: nullishBranch,
+            elseBranch: nonNullishBranch,
+            fallthroughBranch: null,
+        };
+    }
+
+    private asyncAwaitTryConditionalNullishChainBranchForOperands(
+        operands: readonly ts.Expression[],
+        thenBranch: AsyncAwaitTryConditionalReturnNode,
+        elseBranch: AsyncAwaitTryConditionalReturnNode,
+    ): AsyncAwaitTryConditionalReturnBranch | null {
+        const lastOperand = operands[operands.length - 1];
+        if (!lastOperand) return null;
+        let branch = this.asyncAwaitTryConditionalReturnBranchForCondition(
+            lastOperand,
+            thenBranch,
+            elseBranch,
+        );
+        if (!branch) return null;
+        for (let index = operands.length - 2; index >= 0; index--) {
+            const operand = operands[index]!;
+            const expression = this.unwrapTransparentExpression(operand);
+            const nonNullishBranch = ts.isAwaitExpression(expression)
+                ? this.asyncAwaitTryConditionalResolvedValueBranch(expression, thenBranch, elseBranch)
+                : this.asyncAwaitTryConditionalReturnBranchForCondition(expression, thenBranch, elseBranch);
+            if (!nonNullishBranch) return null;
+            branch = this.asyncAwaitTryConditionalNullishOperandBranch(
+                expression,
+                branch,
+                nonNullishBranch,
+            );
+            if (!branch) return null;
+        }
+        return branch;
+    }
+
     private asyncAwaitConditionExpressionSupported(condition: ts.Expression): boolean {
         let ok = true;
         const visitCondition = (node: ts.Node): void => {
@@ -34029,6 +34116,15 @@ class Emitter {
             };
         }
         if (!ts.isBinaryExpression(expression)) return null;
+        const nullishChainOperands = this.asyncAwaitTryConditionalNullishChainOperands(expression);
+        if (nullishChainOperands) {
+            const nullishChainBranch = this.asyncAwaitTryConditionalNullishChainBranchForOperands(
+                nullishChainOperands,
+                thenBranch,
+                elseBranch,
+            );
+            if (nullishChainBranch) return nullishChainBranch;
+        }
         const operator = expression.operatorToken.kind;
         const left = this.unwrapTransparentExpression(expression.left);
         const right = this.unwrapTransparentExpression(expression.right);
@@ -34198,7 +34294,32 @@ class Emitter {
         return null;
     }
 
-    private asyncAwaitTryConditionalReturnNodeSupported(node: AsyncAwaitTryConditionalReturnNode): boolean {
+    private asyncAwaitTryConditionalResolvedConditionSupported(
+        condition: ts.Expression,
+        resolvedAwaitExpressions: ReadonlySet<ts.AwaitExpression>,
+    ): boolean {
+        let supported = true;
+        const visit = (node: ts.Node): void => {
+            if (!supported) return;
+            if (ts.isAwaitExpression(node)) {
+                if (!resolvedAwaitExpressions.has(node)) supported = false;
+                ts.forEachChild(node, visit);
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                supported = false;
+                return;
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(condition);
+        return supported;
+    }
+
+    private asyncAwaitTryConditionalReturnNodeSupported(
+        node: AsyncAwaitTryConditionalReturnNode,
+        resolvedAwaitExpressions: ReadonlySet<ts.AwaitExpression> = new Set(),
+    ): boolean {
         if (node.kind === "return") {
             return this.asyncAwaitExpressionReturnContinuationSupported(node.continuation);
         }
@@ -34212,6 +34333,7 @@ class Emitter {
             return this.asyncAwaitTryConditionalSyncReturnExpressionSupported(node.returnExpr);
         }
         if (node.kind !== "if" || !node.elseBranch || node.fallthroughBranch) return false;
+        const childResolvedAwaitExpressions = new Set(resolvedAwaitExpressions);
         if (node.conditionAwaitExpr) {
             const promiseType = this.prepareType(mapTsType(
                 node.conditionAwaitExpr.expression,
@@ -34226,11 +34348,13 @@ class Emitter {
             const truthySupported = ["number", "bigint", "boolean", "string", "value"].includes(awaitedType.kind) ||
                 isPointerKind(awaitedType);
             if (promiseType.kind !== "promise" || !truthySupported) return false;
-        } else if (!this.asyncAwaitConditionExpressionSupported(node.condition)) {
+            childResolvedAwaitExpressions.add(node.conditionAwaitExpr);
+        }
+        if (!this.asyncAwaitTryConditionalResolvedConditionSupported(node.condition, childResolvedAwaitExpressions)) {
             return false;
         }
-        return this.asyncAwaitTryConditionalReturnNodeSupported(node.thenBranch) &&
-            this.asyncAwaitTryConditionalReturnNodeSupported(node.elseBranch);
+        return this.asyncAwaitTryConditionalReturnNodeSupported(node.thenBranch, childResolvedAwaitExpressions) &&
+            this.asyncAwaitTryConditionalReturnNodeSupported(node.elseBranch, childResolvedAwaitExpressions);
     }
 
     private asyncAwaitTryConditionalSyncReturnExpressionSupported(returnExpr: ts.Expression): boolean {
@@ -34294,6 +34418,7 @@ class Emitter {
 
     private emitAsyncAwaitTryConditionalAwaitTruth(
         condition: ts.Expression,
+        conditionMode: "truthy" | "nullish" | undefined,
         scope: Map<ts.Symbol, string>,
         awaitScope: Map<ts.AwaitExpression, EmitResult>,
         thisValue: EmitResult | null,
@@ -34303,6 +34428,9 @@ class Emitter {
         if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
         this.asyncAwaitContinuationAdapterDepth++;
         try {
+            if (conditionMode === "nullish") {
+                return this.nullishExprFromEmitResult(this.emitExpr(condition), condition);
+            }
             return this.emitBoolExpr(condition);
         } finally {
             this.asyncAwaitContinuationAdapterDepth--;
