@@ -650,6 +650,8 @@ tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* en
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_abort_controller_new(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);
+typedef void (*tsc_abort_callback_fn_t)(void* env);
+void tsc_abort_signal_add_callback(tsc_value_t signal, tsc_abort_callback_fn_t fn, void* env);
 void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise);
 void tsc_abort_signal_add_timeout(tsc_value_t signal, double timeout_id);
 void tsc_abort_signal_add_immediate(tsc_value_t signal, double immediate_id);
@@ -1187,8 +1189,8 @@ void tsc_dispatch_task_scheduled(void);
 /* ------------- fs (sync and bounded async subset) ------------- */
 tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
 tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path);
-tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer);
-tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding);
+tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_write_file_string_async(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double file_mode);
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double file_mode);
 tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer);

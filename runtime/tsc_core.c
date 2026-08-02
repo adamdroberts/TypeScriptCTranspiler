@@ -300,8 +300,16 @@ static size_t g_timeout_cap = 0;
 static double g_next_timer_id = 1.0;
 
 typedef struct {
+    tsc_abort_callback_fn_t fn;
+    void* env;
+} tsc_abort_callback_t;
+
+typedef struct {
     tsc_object_t* signal;
     bool aborted;
+    tsc_abort_callback_t* callbacks;
+    size_t callback_len;
+    size_t callback_cap;
     tsc_promise_t** promises;
     size_t promise_len;
     size_t promise_cap;
@@ -359,6 +367,12 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
         );
     }
     state->listener_len = 0;
+    for (size_t i = 0; i < state->callback_len; i++) {
+        if (state->callbacks[i].fn) {
+            state->callbacks[i].fn(state->callbacks[i].env);
+        }
+    }
+    state->callback_len = 0;
     for (size_t i = 0; i < state->promise_len; i++) {
         tsc_promise_reject_in_place(state->promises[i], reason);
     }
@@ -440,6 +454,9 @@ tsc_value_t tsc_abort_controller_new(void) {
     tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)TSC_GC_MALLOC(sizeof(tsc_abort_controller_state_t));
     state->signal = tsc_object_new_class(state);
     state->aborted = false;
+    state->callbacks = NULL;
+    state->callback_len = 0;
+    state->callback_cap = 0;
     state->promises = NULL;
     state->promise_len = 0;
     state->promise_cap = 0;
@@ -504,6 +521,24 @@ tsc_value_t tsc_abort_controller_new(void) {
 bool tsc_abort_signal_is_aborted(tsc_value_t signal) {
     tsc_abort_controller_state_t* state = abort_signal_state(signal);
     return state ? state->aborted : false;
+}
+
+void tsc_abort_signal_add_callback(tsc_value_t signal, tsc_abort_callback_fn_t fn, void* env) {
+    if (!fn) return;
+    tsc_abort_controller_state_t* state = abort_signal_state(signal);
+    if (!state) return;
+    if (state->aborted) {
+        fn(env);
+        return;
+    }
+    if (state->callback_len == state->callback_cap) {
+        size_t next = state->callback_cap ? state->callback_cap * 2 : 4;
+        state->callbacks = (tsc_abort_callback_t*)TSC_GC_REALLOC(state->callbacks, next * sizeof(tsc_abort_callback_t));
+        state->callback_cap = next;
+    }
+    state->callbacks[state->callback_len].fn = fn;
+    state->callbacks[state->callback_len].env = env;
+    state->callback_len++;
 }
 
 void tsc_abort_signal_add_promise(tsc_value_t signal, tsc_promise_t* promise) {
