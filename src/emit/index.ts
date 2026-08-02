@@ -33141,6 +33141,8 @@ class Emitter {
     private asyncAwaitTryConditionalConditionAwaitExpression(
         condition: ts.Expression,
     ): ts.AwaitExpression | null {
+        const proxyConstructorAwaitExpr = this.asyncAwaitTryConditionalProxyConstructorAwaitedFirstOperand(condition);
+        if (proxyConstructorAwaitExpr) return proxyConstructorAwaitExpr;
         const staticAwaitExpr = this.asyncAwaitTryConditionalStaticAwaitedFirstOperand(condition);
         if (staticAwaitExpr) return staticAwaitExpr;
         const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition);
@@ -33236,7 +33238,7 @@ class Emitter {
                                     ? ["canParse"]
                                         : receiver === "JSON"
                                             ? ["parse", "stringify"]
-                                            : receiver === "Object" || receiver === "Reflect"
+                                            : receiver === "Object" || receiver === "Reflect" || receiver === "Proxy"
                                                 ? this.asyncAwaitTryConditionalStaticMethodSupported(receiver, callee.name.text)
                                                     ? [callee.name.text]
                                                     : []
@@ -33267,6 +33269,24 @@ class Emitter {
         return first;
     }
 
+    private asyncAwaitTryConditionalProxyConstructorAwaitedFirstOperand(
+        condition: ts.Expression,
+    ): ts.AwaitExpression | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (!ts.isNewExpression(expression) ||
+            !ts.isIdentifier(expression.expression) ||
+            expression.expression.text !== "Proxy" ||
+            !this.isUnshadowedGlobalIdentifier(expression.expression, "Proxy") ||
+            (expression.arguments?.length ?? 0) < 2 ||
+            !Array.from(expression.arguments ?? []).slice(1).every((argument) =>
+                this.asyncAwaitConditionExpressionSupported(argument)
+            )) {
+            return null;
+        }
+        const first = this.unwrapTransparentExpression(expression.arguments![0]!);
+        return ts.isAwaitExpression(first) ? first : null;
+    }
+
     private asyncAwaitTryConditionalStaticMethodSupported(receiver: string, name: string): boolean {
         if (receiver === "Object") {
             return [
@@ -33284,6 +33304,7 @@ class Emitter {
                 "setPrototypeOf",
             ].includes(name);
         }
+        if (receiver === "Proxy") return name === "revocable";
         return false;
     }
 
@@ -34700,6 +34721,7 @@ class Emitter {
             );
         if (nullishRightAwaitBranch) return nullishRightAwaitBranch;
         const conditionAwaitExpr =
+            this.asyncAwaitTryConditionalProxyConstructorAwaitedFirstOperand(expression) ??
             this.asyncAwaitTryConditionalStaticAwaitedFirstOperand(expression) ??
             this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression);
         if (conditionAwaitExpr) {
