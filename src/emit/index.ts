@@ -74914,6 +74914,13 @@ class Emitter {
         if (name === "stringify") {
             if (args.length < 1) unsupported(call, "JSON.stringify needs a value");
             const r = this.emitExpr(args[0]!);
+            if (r.ty.kind === "value" || r.ty.kind === "void") {
+                return this.emitSequencedExpr(
+                    T_VALUE,
+                    [{ value: r, target: T_VALUE, node: args[0]! }],
+                    ([value]) => `tsc_value_json_stringify_top(${value})`,
+                );
+            }
             const tsType = this.checker.getTypeAtLocation(args[0]!);
             // Single growable buffer + straight-line append walk; one final
             // allocation. Falls back to the legacy concat path for `value` /

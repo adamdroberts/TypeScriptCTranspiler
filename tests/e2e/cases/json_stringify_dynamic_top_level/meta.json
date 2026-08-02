@@ -1,0 +1,3 @@
+{
+  "description": "JSON.stringify preserves top-level undefined for dynamic values while retaining nested null serialization"
+}

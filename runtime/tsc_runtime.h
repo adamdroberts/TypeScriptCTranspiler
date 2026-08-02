@@ -670,6 +670,7 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v);
 tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v);
 tsc_str_t* tsc_value_typeof(tsc_value_t v);
 tsc_str_t* tsc_value_json_stringify(tsc_value_t v);
+tsc_value_t tsc_value_json_stringify_top(tsc_value_t v);
 tsc_value_t tsc_structured_clone(tsc_value_t value);
 tsc_value_t tsc_value_date(struct tsc_date* d);
 tsc_value_t tsc_value_regexp(struct tsc_regexp* r);

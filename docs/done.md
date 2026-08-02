@@ -1274,6 +1274,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
   - Arrays → `[...]`
   - Class/interface values → `{"field":value,...}` using the declared property list from the TypeScript checker
 - Runtime: `tsc_json_escape_string`, `tsc_json_num`. Test: `json`
+- Top-level dynamic `JSON.stringify` now returns boxed `undefined` for `undefined`, functions, and callable proxies while retaining JSON `null` substitution for those values inside arrays and object-property omission for objects. Tests: `json_stringify_dynamic_top_level`, `proxy_callable_json`, `proxy_nested_callable_identity`, `proxy_revocable_identity`
 - `JSON.parse(text)` returns a NaN-boxed dynamic `tsc_value_t`, with recursive parsing for objects, arrays, strings, numbers, booleans, and null, including `\uXXXX` string escapes, surrogate-pair decoding to UTF-8, and catchable syntax failures. Tests: `dynamic_values`, `json_parse_errors`
 
 ## 9.5 Dynamic values

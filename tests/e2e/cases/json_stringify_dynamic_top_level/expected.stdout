@@ -1,0 +1,7 @@
+static undefined: true
+dynamic undefined: true
+dynamic null: null
+dynamic number: 0
+dynamic function: true
+array: [null,null]
+object: {"present":null}

@@ -2108,6 +2108,18 @@ tsc_str_t* tsc_value_json_stringify(tsc_value_t v) {
     return tsc_str_from_lit("null", 4);
 }
 
+tsc_value_t tsc_value_json_stringify_top(tsc_value_t v) {
+    if (value_is_box(v)) {
+        tsc_value_tag_t tag = value_tag(v);
+        if (tag == TSC_VALUE_TAG_FUNCTION ||
+            tag == TSC_VALUE_TAG_UNDEFINED ||
+            (tag == TSC_VALUE_TAG_OBJECT && value_is_callable_proxy(v))) {
+            return tsc_value_undefined();
+        }
+    }
+    return tsc_value_string(tsc_value_json_stringify(v));
+}
+
 
 
 void jp_ws(json_parser_t* p) {
