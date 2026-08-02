@@ -26408,9 +26408,15 @@ class Emitter {
         const visit = (
             node: ts.Node,
             options: { allowAwaited: boolean; allowCatch: boolean },
+            allowedConditionAwait?: ts.AwaitExpression,
         ): void => {
             if (!ok) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+            if (ts.isAwaitExpression(node)) {
+                if (node === allowedConditionAwait) return;
+                ok = false;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 ok = false;
                 return;
             }
@@ -26445,7 +26451,7 @@ class Emitter {
                     if (param) referenced.set(param.symbol, param);
                 }
             }
-            ts.forEachChild(node, (child) => visit(child, options));
+            ts.forEachChild(node, (child) => visit(child, options, allowedConditionAwait));
         };
 
         const visitCatchPreludeStatement = (stmt: ts.Statement): void => {
@@ -26506,7 +26512,13 @@ class Emitter {
 
         if (successConditionalContinuation) {
             const parts = this.asyncAwaitTryConditionalReturnBranchParts(successConditionalContinuation);
-            for (const condition of parts.conditions) visit(condition, { allowAwaited: false, allowCatch: false });
+            for (const condition of parts.conditions) {
+                visit(
+                    condition,
+                    { allowAwaited: false, allowCatch: false },
+                    this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition) ?? undefined,
+                );
+            }
             for (const awaitExpr of parts.awaitExprs) {
                 visit(awaitExpr.expression, { allowAwaited: false, allowCatch: false });
             }
@@ -27088,10 +27100,16 @@ class Emitter {
         buf.close();
         buf.line(`${awaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), awaitedType, branch.conditionAwaitExpr!)};`);
         buf.line(`bool ${conditionTruth} = false;`);
+        const conditionTruthExpr = this.emitAsyncAwaitTryConditionalAwaitTruth(
+            branch.condition,
+            scope,
+            awaitScope,
+            continuation.thisValue,
+        );
         buf.line(`tsc_try_frame_t ${conditionEh};`);
         buf.line(`tsc_try_push(&${conditionEh});`);
         buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-        buf.line(`${conditionTruth} = ${this.truthyC({ c: conditionValue, ty: awaitedType }, branch.conditionAwaitExpr!)};`);
+        buf.line(`${conditionTruth} = ${conditionTruthExpr};`);
         buf.line("tsc_try_pop();");
         buf.close();
         buf.open("else");
@@ -27944,9 +27962,18 @@ class Emitter {
         const finallyInitializedLocals = new Set<ts.Symbol>();
         let ok = true;
 
-        const visitExpr = (node: ts.Node, allowAwaited: boolean): void => {
+        const visitExpr = (
+            node: ts.Node,
+            allowAwaited: boolean,
+            allowedConditionAwait?: ts.AwaitExpression,
+        ): void => {
             if (!ok) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+            if (ts.isAwaitExpression(node)) {
+                if (node === allowedConditionAwait) return;
+                ok = false;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 ok = false;
                 return;
             }
@@ -27976,7 +28003,7 @@ class Emitter {
                     if (param) referenced.set(param.symbol, param);
                 }
             }
-            ts.forEachChild(node, (child) => visitExpr(child, allowAwaited));
+            ts.forEachChild(node, (child) => visitExpr(child, allowAwaited, allowedConditionAwait));
         };
 
         const visitFinallyStatement = (stmt: ts.Statement): void => {
@@ -28028,7 +28055,13 @@ class Emitter {
 
         if (successConditionalContinuation) {
             const parts = this.asyncAwaitTryConditionalReturnBranchParts(successConditionalContinuation);
-            for (const condition of parts.conditions) visitExpr(condition, false);
+            for (const condition of parts.conditions) {
+                visitExpr(
+                    condition,
+                    false,
+                    this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition) ?? undefined,
+                );
+            }
             for (const awaitExpr of parts.awaitExprs) visitExpr(awaitExpr.expression, false);
         } else {
             visitExpr(awaited.awaitExpr.expression, false);
@@ -28364,10 +28397,16 @@ class Emitter {
         buf.close();
         buf.line(`${awaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), awaitedType, branch.conditionAwaitExpr!)};`);
         buf.line(`bool ${conditionTruth} = false;`);
+        const conditionTruthExpr = this.emitAsyncAwaitTryConditionalAwaitTruth(
+            branch.condition,
+            scope,
+            awaitScope,
+            continuation.thisValue,
+        );
         buf.line(`tsc_try_frame_t ${conditionEh};`);
         buf.line(`tsc_try_push(&${conditionEh});`);
         buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-        buf.line(`${conditionTruth} = ${this.truthyC({ c: conditionValue, ty: awaitedType }, branch.conditionAwaitExpr!)};`);
+        buf.line(`${conditionTruth} = ${conditionTruthExpr};`);
         buf.line("tsc_try_pop();");
         buf.close();
         buf.open("else");
@@ -28874,9 +28913,15 @@ class Emitter {
         const visitCatchExpr = (
             node: ts.Node,
             options: { allowAwaited: boolean; allowCatch: boolean },
+            allowedConditionAwait?: ts.AwaitExpression,
         ): void => {
             if (!ok) return;
-            if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+            if (ts.isAwaitExpression(node)) {
+                if (node === allowedConditionAwait) return;
+                ok = false;
+                return;
+            }
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 ok = false;
                 return;
             }
@@ -28910,7 +28955,7 @@ class Emitter {
                     referenceParamOrClosureCapture(sym);
                 }
             }
-            ts.forEachChild(node, (child) => visitCatchExpr(child, options));
+            ts.forEachChild(node, (child) => visitCatchExpr(child, options, allowedConditionAwait));
         };
 
         const visitCatchPreludeStatement = (stmt: ts.Statement): void => {
@@ -29053,7 +29098,11 @@ class Emitter {
         if (successConditionalContinuation) {
             const parts = this.asyncAwaitTryConditionalReturnBranchParts(successConditionalContinuation);
             for (const condition of parts.conditions) {
-                visitCatchExpr(condition, { allowAwaited: false, allowCatch: false });
+                visitCatchExpr(
+                    condition,
+                    { allowAwaited: false, allowCatch: false },
+                    this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition) ?? undefined,
+                );
             }
             for (const awaitExpr of parts.awaitExprs) {
                 visitCatchExpr(awaitExpr.expression, { allowAwaited: false, allowCatch: false });
@@ -29398,10 +29447,16 @@ class Emitter {
         buf.close();
         buf.line(`${awaitedType.c} ${conditionValue} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), awaitedType, branch.conditionAwaitExpr!)};`);
         buf.line(`bool ${conditionTruth} = false;`);
+        const conditionTruthExpr = this.emitAsyncAwaitTryConditionalAwaitTruth(
+            branch.condition,
+            scope,
+            awaitScope,
+            continuation.thisValue,
+        );
         buf.line(`tsc_try_frame_t ${conditionEh};`);
         buf.line(`tsc_try_push(&${conditionEh});`);
         buf.open(`if (setjmp(${conditionEh}.jb) == 0)`);
-        buf.line(`${conditionTruth} = ${this.truthyC({ c: conditionValue, ty: awaitedType }, branch.conditionAwaitExpr!)};`);
+        buf.line(`${conditionTruth} = ${conditionTruthExpr};`);
         buf.line("tsc_try_pop();");
         buf.close();
         buf.open("else");
@@ -32607,6 +32662,24 @@ class Emitter {
                 node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken);
     }
 
+    private asyncAwaitTryConditionalLeadingAwaitInCondition(
+        condition: ts.Expression,
+    ): ts.AwaitExpression | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (ts.isAwaitExpression(expression)) return expression;
+        if (ts.isPrefixUnaryExpression(expression) ||
+            ts.isTypeOfExpression(expression) ||
+            ts.isVoidExpression(expression) ||
+            ts.isDeleteExpression(expression)) {
+            const operand = ts.isPrefixUnaryExpression(expression) ? expression.operand : expression.expression;
+            return this.asyncAwaitTryConditionalLeadingAwaitInCondition(operand);
+        }
+        if (!ts.isBinaryExpression(expression)) return null;
+        const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(expression.left);
+        if (!leadingAwait || !this.asyncAwaitConditionExpressionSupported(expression.right)) return null;
+        return leadingAwait;
+    }
+
     private asyncAwaitConditionExpressionSupported(condition: ts.Expression): boolean {
         let ok = true;
         const visitCondition = (node: ts.Node): void => {
@@ -33933,7 +34006,7 @@ class Emitter {
             );
         }
         const condition = this.unwrapTransparentExpression(unwrapped.condition);
-        const conditionAwaitExpr = ts.isAwaitExpression(condition) ? condition : undefined;
+        const conditionAwaitExpr = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition) ?? undefined;
         if (!conditionAwaitExpr && !this.asyncAwaitConditionExpressionSupported(unwrapped.condition)) {
             return null;
         }
@@ -34134,16 +34207,36 @@ class Emitter {
                 return;
             }
             if (node.kind === "syncReturn") return;
+            conditions.push(node.condition);
             if (node.conditionAwaitExpr) awaitExprs.push(node.conditionAwaitExpr);
-            else conditions.push(node.condition);
             visit(node.thenBranch);
             visit(node.elseBranch);
         };
+        conditions.push(branch.condition);
         if (branch.conditionAwaitExpr) awaitExprs.push(branch.conditionAwaitExpr);
-        else conditions.push(branch.condition);
         visit(branch.thenBranch);
         visit(branch.elseBranch);
         return { conditions, awaitExprs };
+    }
+
+    private emitAsyncAwaitTryConditionalAwaitTruth(
+        condition: ts.Expression,
+        scope: Map<ts.Symbol, string>,
+        awaitScope: Map<ts.AwaitExpression, EmitResult>,
+        thisValue: EmitResult | null,
+    ): string {
+        this.argumentValueScopes.push(scope);
+        this.awaitExpressionValueScopes.push(awaitScope);
+        if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+        this.asyncAwaitContinuationAdapterDepth++;
+        try {
+            return this.emitBoolExpr(condition);
+        } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
+            if (thisValue) this.functionThisStack.pop();
+            this.awaitExpressionValueScopes.pop();
+            this.argumentValueScopes.pop();
+        }
     }
 
     private asyncAwaitInterstitialCaptures(

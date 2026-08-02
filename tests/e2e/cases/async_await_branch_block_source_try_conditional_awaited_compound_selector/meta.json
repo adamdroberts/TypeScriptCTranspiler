@@ -1,0 +1,3 @@
+{
+  "description": "Async source try/catch/finally conditional selectors can use one leading await inside bounded compound conditions before choosing awaited return arms"
+}
