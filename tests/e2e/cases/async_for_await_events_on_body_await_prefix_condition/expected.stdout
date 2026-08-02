@@ -1,0 +1,2 @@
+body-await-prefix-condition-reject: prefix-condition-failure
+body-await-prefix-condition: keep,stop

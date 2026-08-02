@@ -1,0 +1,3 @@
+{
+    "description": "bounded for-await awaited body prefix followed by an awaited final-if condition with continue/break routing"
+}

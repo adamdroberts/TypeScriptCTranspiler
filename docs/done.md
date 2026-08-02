@@ -1613,6 +1613,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 - Bounded `for await...of` lowering now supports a terminal loop-body `return await`, closing the iterator before adopting the awaited return value into the enclosing async result. Test: `async_for_await_events_on_body_await`
 - Bounded `for await...of` consumers can route an awaited loop-body prefix into a final await-free `if` / `else` with direct `continue` or `break` control, including iterator close on the break path. Test: `async_for_await_events_on_body_await`
 - Bounded `for await...of` consumers can suspend on a directly awaited final `if` condition, then route its fulfilled truthiness through await-free `continue` or `break` branches with iterator close on the break path; condition rejection closes the iterator before rejecting. Test: `async_for_await_events_on_body_await_condition`
+- Bounded `for await...of` consumers can sequence an awaited body prefix and await-free prefix statements before a directly awaited final `if` condition, then route its fulfilled truthiness through `continue` or `break` branches with iterator close; rejection at either await closes the iterator before rejecting. Test: `async_for_await_events_on_body_await_prefix_condition`
 - Aliased named imports for `EventEmitter` support `defaultMaxListeners` reads and assignments. Test: `event_emitter_default_max_listeners`
 
 ### `Event` / `EventTarget`
@@ -2445,6 +2446,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `async_for_await_events_on_array_rest` | bounded for-await builds one terminal array rest binding from trailing dynamic iterator-item values |
 | `async_for_await_events_on_body_await` | bounded for-await sequences up to two direct body awaits with await-free interstitial/postlude statements, an awaited prefix before final await-free if/else continue/break routing, terminal return/throw routing, and iterator close |
 | `async_for_await_events_on_body_await_condition` | bounded for-await suspends on a directly awaited final-if condition before continue/break routing and iterator close |
+| `async_for_await_events_on_body_await_prefix_condition` | bounded for-await sequences an awaited body prefix and awaited final-if condition before continue/break routing and iterator close |
 | `async_for_await_events_on_object_binding` | bounded for-await unpacks simple static-property object binding identifiers from dynamic iterator items |
 | `async_for_await_events_on_object_rest` | bounded for-await builds a dynamic object rest binding from unexcluded iterator-item properties |
 | `async_for_await_events_on_binding_defaults` | bounded for-await array/object binding defaults apply only to undefined extracted values |
