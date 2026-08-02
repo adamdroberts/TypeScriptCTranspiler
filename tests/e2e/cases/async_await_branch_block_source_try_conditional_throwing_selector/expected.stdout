@@ -1,0 +1,6 @@
+fn-throw caught-selector-bad 
+fn-false fn-false 
+method-throw rejected-selector-bad M
+method-false method-false MM
+arrow-throw caught-selector-bad MMV
+arrow-false arrow-false MMVV
