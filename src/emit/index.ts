@@ -33327,6 +33327,7 @@ class Emitter {
         if (ts.isIdentifier(expression) && this.isValueReferenceIdentifier(expression)) return true;
         if (
             ts.isNumericLiteral(expression) ||
+            ts.isBigIntLiteral(expression) ||
             ts.isStringLiteral(expression) ||
             ts.isNoSubstitutionTemplateLiteral(expression) ||
             expression.kind === ts.SyntaxKind.TrueKeyword ||
@@ -33338,10 +33339,15 @@ class Emitter {
             return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.operand);
         }
         if (ts.isPropertyAccessExpression(expression)) {
+            const enumValue = this.enumConstantValue(expression);
+            if (enumValue !== undefined) return true;
             return expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
                 !!this.currentClass &&
                 !this.classAccessorForPropertyAccess(expression, "get") &&
                 this.propertyDeclaredType(expression) !== null;
+        }
+        if (ts.isTypeOfExpression(expression)) {
+            return this.asyncAwaitTryConditionalConditionExpressionSupported(expression.expression);
         }
         if (!ts.isBinaryExpression(expression)) return false;
         if (
