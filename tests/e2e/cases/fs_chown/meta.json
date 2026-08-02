@@ -1,1 +1,1 @@
-{"description":"fs.chownSync and immediate fs.promises.chown numeric uid/gid"}
+{"description":"fs.chownSync and libuv-backed fs.promises.chown with asynchronous completion and rejection"}

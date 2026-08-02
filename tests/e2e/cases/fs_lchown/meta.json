@@ -1,1 +1,1 @@
-{"description":"fs.lchownSync and immediate fs.promises.lchown numeric uid/gid for symlinks"}
+{"description":"fs.lchownSync and libuv-backed fs.promises.lchown with asynchronous completion and rejection for symlinks"}

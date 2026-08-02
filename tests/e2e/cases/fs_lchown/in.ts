@@ -6,6 +6,7 @@ const syncTarget = root + "/sync-target.txt";
 const syncLink = root + "/sync-link.txt";
 const promiseTarget = root + "/promise-target.txt";
 const promiseLink = root + "/promise-link.txt";
+const missingLink = root + "/missing-link.txt";
 const uid = process.getuid();
 const gid = process.getgid();
 
@@ -20,10 +21,13 @@ chownSync(syncTarget, uid, gid);
 lchownSync(syncLink, uid, gid);
 console.log("sync:", fs.lstatSync(syncLink).isSymbolicLink(), nodefs.readlinkSync(syncLink) === syncTarget);
 
-nodefs.promises.lchown(promiseLink, uid, gid).then((value: any): string => {
-    value;
+nodefs.promises.lchown(promiseLink, uid, gid).then((_value: any): Promise<string> => {
     console.log("promise:", fs.lstatSync(promiseLink).isSymbolicLink(), fs.readlinkSync(promiseLink) === promiseTarget);
-    return "done";
+    return nodefs.promises.lchown(missingLink, uid, gid).then(
+        (_unexpected: any): string => "unexpected success",
+        (reason: string): string => reason,
+    );
+}).then((reason: string): void => {
+    console.log("missing:", reason);
+    fs.rmSync(root, { recursive: true, force: true });
 });
-
-fs.rmSync(root, { recursive: true, force: true });

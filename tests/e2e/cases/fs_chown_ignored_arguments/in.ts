@@ -24,11 +24,12 @@ fs.symlinkSync(promiseTarget, promiseLink, "file");
 fs.chownSync(syncTarget, uid, gid, mark("chown"));
 lchownSync(syncLink, uid, gid, mark("lchown"));
 
-fs.promises.chown(promiseTarget, uid, gid, mark("pchown"));
-fs.promises.lchown(promiseLink, uid, gid, mark("plchown"));
+fs.promises.chown(promiseTarget, uid, gid, mark("pchown")).then((_value: any): Promise<void> => {
+    return fs.promises.lchown(promiseLink, uid, gid, mark("plchown"));
+}).then((_value: any): void => {
+    console.log("sync:", fs.statSync(syncTarget).uid === uid, fs.lstatSync(syncLink).isSymbolicLink());
+    console.log("promise:", fs.statSync(promiseTarget).uid === uid, fs.lstatSync(promiseLink).isSymbolicLink());
+    console.log("events:", events.join("|"));
 
-console.log("sync:", fs.statSync(syncTarget).uid === uid, fs.lstatSync(syncLink).isSymbolicLink());
-console.log("promise:", fs.statSync(promiseTarget).uid === uid, fs.lstatSync(promiseLink).isSymbolicLink());
-console.log("events:", events.join("|"));
-
-fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+});

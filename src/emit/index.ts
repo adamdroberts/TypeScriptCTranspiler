@@ -74400,9 +74400,10 @@ class Emitter {
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
                     ...this.ignoredArgumentSpecs(args, 3),
-                ], ([path, uidValue, gidValue]) =>
-                    settle(`({ tsc_fs_chown_sync(${path!}, ${uidValue!}, ${gidValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([path, uidValue, gidValue]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_chown_async(${path!}, ${uidValue!}, ${gidValue!})`);
+                });
             }
             case "lchown": {
                 if (args.length < 3) unsupported(call, "fs.promises.lchown needs path, uid, and gid");
@@ -74414,9 +74415,10 @@ class Emitter {
                     { value: uid, target: T_NUMBER, node: args[1]! },
                     { value: gid, target: T_NUMBER, node: args[2]! },
                     ...this.ignoredArgumentSpecs(args, 3),
-                ], ([path, uidValue, gidValue]) =>
-                    settle(`({ tsc_fs_lchown_sync(${path!}, ${uidValue!}, ${gidValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([path, uidValue, gidValue]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_lchown_async(${path!}, ${uidValue!}, ${gidValue!})`);
+                });
             }
             case "chmod": {
                 if (args.length < 2) unsupported(call, "fs.promises.chmod needs path and numeric mode");

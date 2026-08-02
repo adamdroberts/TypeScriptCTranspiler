@@ -1,2 +1,3 @@
 sync: true true
 promise: true true
+missing: fs.lchownSync: could not change ownership
