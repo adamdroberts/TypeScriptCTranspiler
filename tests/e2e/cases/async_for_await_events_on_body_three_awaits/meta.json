@@ -1,0 +1,3 @@
+{
+    "description": "bounded for-await body sequences three direct awaits with initialized and assigned interstitial locals"
+}
