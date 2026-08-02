@@ -1,3 +1,3 @@
 {
-  "description": "fs.chmodSync and immediate-settled fs.promises.chmod with Stats.mode"
+  "description": "fs.chmodSync and libuv-backed fs.promises.chmod with asynchronous completion and rejection"
 }

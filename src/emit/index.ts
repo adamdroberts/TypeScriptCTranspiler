@@ -74426,9 +74426,10 @@ class Emitter {
                     this.fsPathSpec(p, args[0]!, "fs.promises.chmod path"),
                     { value: mode, target: T_NUMBER, node: args[1]! },
                     ...this.ignoredArgumentSpecs(args, 2),
-                ], ([path, modeValue]) =>
-                    settle(`({ tsc_fs_chmod_sync(${path!}, ${modeValue!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([path, modeValue]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_chmod_async(${path!}, ${modeValue!})`);
+                });
             }
             case "access": {
                 if (args.length < 1) unsupported(call, "fs.promises.access needs path and optional mode");

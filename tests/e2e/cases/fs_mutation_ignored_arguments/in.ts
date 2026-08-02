@@ -47,22 +47,25 @@ fs.rmSync(copyRoot, { recursive: true, force: true }, mark("rm"));
 fs.promises.mkdir(promiseDir, { recursive: true }, mark("pmkdir"));
 fs.promises.mkdir(promiseEmpty);
 fs.writeFileSync(promiseFile, "abcdef");
-fs.promises.copyFile(promiseFile, promiseCopy, void 0, mark("pcopy"));
-fs.promises.rename(promiseCopy, promiseRenamed, mark("prename"));
-fs.promises.link(promiseRenamed, promiseHard, mark("plink"));
-fs.promises.symlink(promiseRenamed, promiseLink, void 0, mark("psymlink"));
-fs.promises.truncate(promiseRenamed, defaultLength, mark("ptruncate"));
-fs.promises.utimes(promiseRenamed, 500, new Date(600000), mark("putimes"));
-fs.promises.lutimes(promiseLink, 700, new Date(800000), mark("plutimes"));
-fs.promises.chmod(promiseRenamed, 0o600, mark("pchmod"));
-fs.promises.cp(promiseDir, promiseCopyRoot, { recursive: true }, mark("pcp"));
-fs.promises.unlink(promiseHard, mark("punlink"));
-fs.promises.rmdir(promiseEmpty, void 0, mark("prmdir"));
-fs.promises.rm(promiseCopyRoot, { recursive: true, force: true }, mark("prm"));
+let completion: Promise<any> = fs.promises.copyFile(promiseFile, promiseCopy, void 0, mark("pcopy"));
+completion = completion.then((_value: any) => fs.promises.rename(promiseCopy, promiseRenamed, mark("prename")));
+completion = completion.then((_value: any) => fs.promises.link(promiseRenamed, promiseHard, mark("plink")));
+completion = completion.then((_value: any) => fs.promises.symlink(promiseRenamed, promiseLink, void 0, mark("psymlink")));
+completion = completion.then((_value: any) => {
+    fs.promises.truncate(promiseRenamed, defaultLength, mark("ptruncate"));
+    return fs.promises.utimes(promiseRenamed, 500, new Date(600000), mark("putimes"));
+});
+completion = completion.then((_value: any) => fs.promises.lutimes(promiseLink, 700, new Date(800000), mark("plutimes")));
+completion = completion.then((_value: any) => fs.promises.chmod(promiseRenamed, 0o600, mark("pchmod")));
+completion.then((_value: any) => {
+    fs.promises.cp(promiseDir, promiseCopyRoot, { recursive: true }, mark("pcp"));
+    fs.promises.unlink(promiseHard, mark("punlink"));
+    fs.promises.rmdir(promiseEmpty, void 0, mark("prmdir"));
+    fs.promises.rm(promiseCopyRoot, { recursive: true, force: true }, mark("prm"));
+    console.log("sync:", fs.readFileSync(syncRenamed).length, fs.lstatSync(syncLink).isSymbolicLink(), fs.existsSync(syncHard), fs.existsSync(syncEmpty), fs.existsSync(copyRoot));
+    console.log("promise:", fs.readFileSync(promiseRenamed).length, fs.lstatSync(promiseLink).isSymbolicLink(), fs.existsSync(promiseHard), fs.existsSync(promiseEmpty), fs.existsSync(promiseCopyRoot));
+    console.log("events:", events.join("|"));
 
-console.log("sync:", fs.readFileSync(syncRenamed).length, fs.lstatSync(syncLink).isSymbolicLink(), fs.existsSync(syncHard), fs.existsSync(syncEmpty), fs.existsSync(copyRoot));
-console.log("promise:", fs.readFileSync(promiseRenamed).length, fs.lstatSync(promiseLink).isSymbolicLink(), fs.existsSync(promiseHard), fs.existsSync(promiseEmpty), fs.existsSync(promiseCopyRoot));
-console.log("events:", events.join("|"));
-
-fs.rmSync(root, { recursive: true, force: true });
-fs.rmSync(copyRoot, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(copyRoot, { recursive: true, force: true });
+});
