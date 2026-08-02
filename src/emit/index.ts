@@ -74471,7 +74471,12 @@ class Emitter {
                 ], (values) => {
                     const path = values[0]!;
                     const mode = values[1 + optionSpecs.length]!;
-                    const mkdir = `({ tsc_fs_mkdir_sync_opts(${path}, ${options.recursive ? "true" : "false"}, ${mode}); tsc_promise_resolve(tsc_value_undefined()); })`;
+                    const mkdir = options.recursive
+                        ? `({ tsc_fs_mkdir_sync_opts(${path}, true, ${mode}); tsc_promise_resolve(tsc_value_undefined()); })`
+                        : (() => {
+                            this.usesLibuv = true;
+                            return `tsc_fs_promises_mkdir_async(${path}, ${mode})`;
+                        })();
                     const signal = signalValue ? values[signalSpecIndex]! : null;
                     return settle(signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${mkdir})`
@@ -74524,7 +74529,12 @@ class Emitter {
                         ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                     ], (values) => {
                         const path = values[0]!;
-                        const rmdir = `({ tsc_fs_rmdir_sync_opts(${path!}, ${options.recursive ? "true" : "false"}); tsc_promise_resolve(tsc_value_undefined()); })`;
+                        const rmdir = options.recursive
+                            ? `({ tsc_fs_rmdir_sync_opts(${path!}, true); tsc_promise_resolve(tsc_value_undefined()); })`
+                            : (() => {
+                                this.usesLibuv = true;
+                                return `tsc_fs_promises_rmdir_async(${path!})`;
+                            })();
                         const signal = signalValue ? values[signalSpecIndex]! : null;
                         return settle(signal
                             ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${rmdir})`
@@ -74532,13 +74542,13 @@ class Emitter {
                     },
                     );
                 }
-                const fn = "tsc_fs_unlink_sync";
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(p, args[0]!, `fs.promises.${name} path`),
                     ...this.ignoredArgumentSpecs(args, 1),
-                ], ([path]) =>
-                    settle(`({ ${fn}(${path!}); tsc_promise_resolve(tsc_value_undefined()); })`),
-                );
+                ], ([path]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_unlink_async(${path!})`);
+                });
             }
             case "cp": {
                 if (args.length < 2) unsupported(call, "fs.promises.cp needs source, destination, and optional options");

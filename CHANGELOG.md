@@ -12,6 +12,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async source `try` / `catch` / `finally` recognizers now decline empty try blocks after await-free prelude scanning instead of passing an undefined statement into the awaited-step matcher. Regression: `async_await_branch_return_await_try_prelude`.
 
 ### Added
+- Added libuv-backed nonrecursive `fs.promises.mkdir`, `unlink`, and `rmdir` requests with asynchronous completion and sync-compatible rejection handling; recursive forms remain on the existing sync-backed Promise paths. Tests: `fs_mkdir_mode_options`, `fs_promises_mutation`.
 - Added libuv-backed `fs.promises.chown` and `fs.promises.lchown` requests with asynchronous ownership updates and rejection handling. Tests: `fs_chown`, `fs_lchown`.
 - Added a libuv-backed `fs.promises.chmod` request with asynchronous mode updates and rejection handling. Test: `fs_chmod`.
 - Added libuv-backed `fs.promises.utimes` and `fs.promises.lutimes` requests with Date/number timestamp conversion and asynchronous rejection handling. Tests: `fs_utimes`, `fs_lutimes`.

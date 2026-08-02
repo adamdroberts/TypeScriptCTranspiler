@@ -59,13 +59,15 @@ completion = completion.then((_value: any) => fs.promises.lutimes(promiseLink, 7
 completion = completion.then((_value: any) => fs.promises.chmod(promiseRenamed, 0o600, mark("pchmod")));
 completion.then((_value: any) => {
     fs.promises.cp(promiseDir, promiseCopyRoot, { recursive: true }, mark("pcp"));
-    fs.promises.unlink(promiseHard, mark("punlink"));
-    fs.promises.rmdir(promiseEmpty, void 0, mark("prmdir"));
-    fs.promises.rm(promiseCopyRoot, { recursive: true, force: true }, mark("prm"));
-    console.log("sync:", fs.readFileSync(syncRenamed).length, fs.lstatSync(syncLink).isSymbolicLink(), fs.existsSync(syncHard), fs.existsSync(syncEmpty), fs.existsSync(copyRoot));
-    console.log("promise:", fs.readFileSync(promiseRenamed).length, fs.lstatSync(promiseLink).isSymbolicLink(), fs.existsSync(promiseHard), fs.existsSync(promiseEmpty), fs.existsSync(promiseCopyRoot));
-    console.log("events:", events.join("|"));
+    let cleanup: Promise<any> = fs.promises.unlink(promiseHard, mark("punlink"));
+    cleanup = cleanup.then((_cleanupValue: any) => fs.promises.rmdir(promiseEmpty, void 0, mark("prmdir")));
+    cleanup.then((_cleanupValue: any): void => {
+        fs.promises.rm(promiseCopyRoot, { recursive: true, force: true }, mark("prm"));
+        console.log("sync:", fs.readFileSync(syncRenamed).length, fs.lstatSync(syncLink).isSymbolicLink(), fs.existsSync(syncHard), fs.existsSync(syncEmpty), fs.existsSync(copyRoot));
+        console.log("promise:", fs.readFileSync(promiseRenamed).length, fs.lstatSync(promiseLink).isSymbolicLink(), fs.existsSync(promiseHard), fs.existsSync(promiseEmpty), fs.existsSync(promiseCopyRoot));
+        console.log("events:", events.join("|"));
 
-    fs.rmSync(root, { recursive: true, force: true });
-    fs.rmSync(copyRoot, { recursive: true, force: true });
+        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(copyRoot, { recursive: true, force: true });
+    });
 });

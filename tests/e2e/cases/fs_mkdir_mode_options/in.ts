@@ -10,6 +10,7 @@ const MODE_700 = 0o700;
 const MODE_750 = 0o750;
 const SYNC_OPTIONS = { mode: MODE_700 };
 const PROMISE_OPTIONS = { recursive: RECURSIVE_TRUE, mode: MODE_750 };
+const PROMISE_SIMPLE_OPTIONS = { mode: MODE_700 };
 const events: string[] = [];
 
 function note(label: string): void {
@@ -34,11 +35,16 @@ fs.promises.mkdir(promiseDir, PROMISE_OPTIONS).then((value: any): string => {
     return "done";
 });
 
-fs.promises.mkdir(sidePromiseDir, void note("promise-options")).then((value: any): void => {
-    console.log("side:", fs.statSync(sideSyncDir).isDirectory(), fs.statSync(sidePromiseDir).isDirectory());
+fs.promises.mkdir(sidePromiseDir, PROMISE_SIMPLE_OPTIONS, void note("promise-options")).then((_value: any): Promise<string> => {
+    console.log("side:", fs.statSync(sideSyncDir).isDirectory(), fs.statSync(sidePromiseDir).mode % 512);
+    return fs.promises.mkdir(path.join(root, "missing", "leaf"), 0o755).then(
+        (_unexpected: any): string => "unexpected success",
+        (reason: string): string => reason,
+    );
+}).then((reason: string): void => {
+    console.log("missing:", reason);
+    process.umask(oldUmask);
+    fs.rmSync(root, { recursive: true, force: true });
 });
 
 console.log("events:", events.join("|"));
-
-process.umask(oldUmask);
-fs.rmSync(root, { recursive: true, force: true });
