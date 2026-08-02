@@ -1,0 +1,15 @@
+declaration-string-true declaration-true L
+declaration-string-false declaration-true L
+declaration-left-reject caught-left-bad L
+number-true number-true LN
+number-false fallback LFN
+number-left-reject rejected-left-bad LN
+number-fallback-reject rejected-fallback-bad LFN
+bigint-true bigint-true LB
+bigint-false fallback LFB
+bigint-left-reject rejected-left-bad LB
+bigint-fallback-reject rejected-fallback-bad LFB
+boolean-true boolean-true LV
+boolean-false fallback LFV
+boolean-left-reject caught-left-bad LV
+boolean-fallback-reject caught-fallback-bad LFV

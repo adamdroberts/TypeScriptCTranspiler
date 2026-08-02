@@ -33078,6 +33078,17 @@ class Emitter {
         falsyBranch: AsyncAwaitTryConditionalReturnNode,
     ): AsyncAwaitTryConditionalReturnBranch | null {
         const expression = this.unwrapTransparentExpression(condition);
+        const awaitExpr = this.asyncAwaitTryConditionalGlobalCoercionAwaitExpression(expression);
+        if (awaitExpr) {
+            return {
+                kind: "if",
+                condition: expression,
+                conditionAwaitExpr: awaitExpr,
+                thenBranch: truthyBranch,
+                elseBranch: falsyBranch,
+                fallthroughBranch: null,
+            };
+        }
         const parts = this.asyncAwaitTryConditionalGlobalCoercionRightAwaitParts(expression);
         if (!parts) return null;
         const awaitedBranch: AsyncAwaitTryConditionalReturnBranch = {
@@ -33113,6 +33124,8 @@ class Emitter {
     ): ts.AwaitExpression | null {
         const leadingAwait = this.asyncAwaitTryConditionalLeadingAwaitInCondition(condition);
         if (leadingAwait) return leadingAwait;
+        const globalCoercionAwait = this.asyncAwaitTryConditionalGlobalCoercionAwaitExpression(condition);
+        if (globalCoercionAwait) return globalCoercionAwait;
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(condition)?.awaitExpr ??
             this.asyncAwaitTryConditionalNullishRightAwaitParts(condition)?.awaitExpr ??
             this.asyncAwaitTryConditionalBooleanVoidRightAwaitParts(condition)?.awaitExpr ??
@@ -33168,6 +33181,24 @@ class Emitter {
             return null;
         }
         return this.asyncAwaitTryConditionalNonNullishRightAwaitParts(expression.arguments[0]!);
+    }
+
+    private asyncAwaitTryConditionalGlobalCoercionAwaitExpression(
+        condition: ts.Expression,
+    ): ts.AwaitExpression | null {
+        const expression = this.unwrapTransparentExpression(condition);
+        if (!ts.isCallExpression(expression) ||
+            expression.arguments.length !== 1 ||
+            !ts.isIdentifier(expression.expression)) {
+            return null;
+        }
+        const name = expression.expression.text;
+        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "String") ||
+            !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
+            return null;
+        }
+        const operand = this.unwrapTransparentExpression(expression.arguments[0]!);
+        return ts.isAwaitExpression(operand) ? operand : null;
     }
 
     private asyncAwaitTryConditionalValueForExpression(
