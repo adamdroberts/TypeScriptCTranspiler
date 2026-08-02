@@ -33208,7 +33208,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "Object" && name !== "String" && name !== "Symbol") ||
+        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }
@@ -33225,7 +33225,7 @@ class Emitter {
             return null;
         }
         const name = expression.expression.text;
-        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "Object" && name !== "String" && name !== "Symbol") ||
+        if ((name !== "BigInt" && name !== "Boolean" && name !== "Number" && name !== "Object" && name !== "RegExp" && name !== "String" && name !== "Symbol") ||
             !this.isUnshadowedGlobalIdentifier(expression.expression, name)) {
             return null;
         }

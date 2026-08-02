@@ -1,0 +1,9 @@
+declaration-true declaration-true LT
+declaration-empty-pattern declaration-true LT
+declaration-reject caught-pattern-bad L
+method-true method-true LTM
+method-empty-pattern method-true LTM
+method-reject rejected-pattern-bad LM
+arrow-true arrow-true LTV
+arrow-empty-pattern arrow-true LTV
+arrow-reject caught-pattern-bad LV
