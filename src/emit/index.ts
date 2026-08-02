@@ -33217,32 +33217,35 @@ class Emitter {
             return false;
         }
         const receiver = callee.expression.text;
-        const methods = receiver === "Number"
-            ? ["isFinite", "isInteger", "isNaN", "isSafeInteger", "parseFloat", "parseInt"]
-            : receiver === "Math"
-                ? [
-                    "abs", "acosh", "acos", "asinh", "asin", "atan", "atanh", "cbrt", "ceil", "clz32",
-                    "cos", "cosh", "exp", "expm1", "f16round", "floor", "fround", "hypot", "log",
-                    "log1p", "log10", "log2", "max", "min", "round", "sign", "sin", "sinh", "sqrt",
-                    "tan", "tanh", "trunc",
-                ]
-                : receiver === "Date"
-                    ? ["parse", "UTC"]
-                    : receiver === "String"
-                        ? ["fromCharCode", "fromCodePoint"]
-                        : receiver === "Array"
-                            ? ["isArray", "of", "from", "fromAsync"]
-                            : receiver === "RegExp"
-                                ? ["escape"]
-                                : receiver === "URL"
-                                    ? ["canParse"]
-                                        : receiver === "JSON"
-                                            ? ["parse", "stringify"]
-                                            : receiver === "Object" || receiver === "Reflect" || receiver === "Proxy"
-                                                ? this.asyncAwaitTryConditionalStaticMethodSupported(receiver, callee.name.text)
-                                                    ? [callee.name.text]
-                                                    : []
-                                            : [];
+        let methods: readonly string[];
+        if (receiver === "Number") {
+            methods = ["isFinite", "isInteger", "isNaN", "isSafeInteger", "parseFloat", "parseInt"];
+        } else if (receiver === "Math") {
+            methods = [
+                "abs", "acosh", "acos", "asinh", "asin", "atan", "atanh", "cbrt", "ceil", "clz32",
+                "cos", "cosh", "exp", "expm1", "f16round", "floor", "fround", "hypot", "log",
+                "log1p", "log10", "log2", "max", "min", "round", "sign", "sin", "sinh", "sqrt",
+                "tan", "tanh", "trunc",
+            ];
+        } else if (receiver === "Date") {
+            methods = ["parse", "UTC"];
+        } else if (receiver === "String") {
+            methods = ["fromCharCode", "fromCodePoint"];
+        } else if (receiver === "Array") {
+            methods = ["isArray", "of", "from", "fromAsync"];
+        } else if (receiver === "RegExp") {
+            methods = ["escape"];
+        } else if (receiver === "URL") {
+            methods = ["canParse"];
+        } else if (receiver === "JSON") {
+            methods = ["parse", "stringify"];
+        } else if (receiver === "Object" || receiver === "Reflect" || receiver === "Proxy" || receiver === "Promise") {
+            methods = this.asyncAwaitTryConditionalStaticMethodSupported(receiver, callee.name.text)
+                ? [callee.name.text]
+                : [];
+        } else {
+            methods = [];
+        }
         return methods.includes(callee.name.text) && this.isUnshadowedGlobalIdentifier(callee.expression, receiver);
     }
 
@@ -33303,6 +33306,9 @@ class Emitter {
                 "getPrototypeOf", "has", "isExtensible", "ownKeys", "preventExtensions", "set",
                 "setPrototypeOf",
             ].includes(name);
+        }
+        if (receiver === "Promise") {
+            return ["all", "allSettled", "any", "race", "reject", "resolve", "try", "withResolvers"].includes(name);
         }
         if (receiver === "Proxy") return name === "revocable";
         return false;

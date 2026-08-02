@@ -1,0 +1,7 @@
+resolve-true resolve-true LT
+resolve-reject caught-resolve L
+all-true all-true LTM
+all-throw rejected-all LM
+race-true race-true LTR
+all-settled-throw caught-all-settled LV
+any-true any-true LT
