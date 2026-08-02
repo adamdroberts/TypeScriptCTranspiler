@@ -161,6 +161,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - **Phase 9 — `Proxy` + `Reflect`**
   - Verified top-level dynamic `JSON.stringify` semantics: `undefined`, functions, and callable proxies now produce JavaScript `undefined`, while nested arrays retain `null` substitution, objects omit unsupported properties, and revoked callable proxies still throw. Tests: `json_stringify_dynamic_top_level`, `proxy_callable_json`, `proxy_nested_callable_identity`, `proxy_revocable_identity`.
+  - Verified bounded async source-try selectors: unshadowed `Reflect` calls now accept a direct awaited target with await-free trailing arguments, covering `has`, `get`, `set`, `getOwnPropertyDescriptor`, and `isExtensible` truthiness, target mutation, synchronous target errors, awaited rejection, and `finally` cleanup. Test: `async_await_branch_block_source_try_conditional_awaited_reflect_target`.
   - Remaining work: broader ECMAScript Proxy edge-case validation beyond the currently covered callable/newable/object/array/function identity and forwarding paths, revocation paths, handler and inherited-trap lookup, nullish/accessor trap forwarding and validation, receiver identity, Object helper / JSON / Object.assign integration, own-key and descriptor result validation, non-configurable/non-extensible target invariants, array/function/prototype/integrity invariant subsets, and construct `newTarget` identity/default/prototype paths.
 
 ---

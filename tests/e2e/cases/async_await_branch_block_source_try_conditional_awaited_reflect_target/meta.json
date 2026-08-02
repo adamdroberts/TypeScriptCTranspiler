@@ -1,0 +1,3 @@
+{
+  "description": "async source try/catch/finally Reflect selectors with a leading awaited target preserve truthiness, mutation, synchronous throws, and rejection cleanup"
+}

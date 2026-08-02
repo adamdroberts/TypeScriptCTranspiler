@@ -1,0 +1,13 @@
+has-true has-true LT
+has-false has-false LF
+has-reject caught-has L
+get-true get-true LTM
+get-false get-false LFM
+get-reject rejected-reflect-bad LM
+set-true set-true LTS
+set-throw rejected-Reflect.set target must be an object LS
+descriptor-true descriptor-true LTV
+descriptor-false descriptor-false LFV
+descriptor-reject caught-descriptor LV
+integrity-throw caught-integrity L
+integrity-reject caught-integrity L
