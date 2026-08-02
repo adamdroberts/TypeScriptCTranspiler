@@ -45286,12 +45286,16 @@ class Emitter {
 
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         const terminalBodyStatement = loopBody[loopBody.length - 1];
-        const bodyControl = terminalBodyStatement && ts.isContinueStatement(terminalBodyStatement)
+        const bodyControl: "continue" | "break" | "return" | null = terminalBodyStatement && ts.isContinueStatement(terminalBodyStatement)
             ? "continue"
             : terminalBodyStatement && ts.isBreakStatement(terminalBodyStatement)
                 ? "break"
+                : terminalBodyStatement && ts.isReturnStatement(terminalBodyStatement)
+                    ? "return"
                 : null;
-        if (bodyControl && (terminalBodyStatement as ts.BreakOrContinueStatement).label) return false;
+        if ((bodyControl === "continue" || bodyControl === "break") &&
+            (terminalBodyStatement as ts.BreakOrContinueStatement).label) return false;
+        const bodyReturn = bodyControl === "return" ? terminalBodyStatement as ts.ReturnStatement : null;
         const bodyStatements = bodyControl ? loopBody.slice(0, -1) : loopBody;
         let bodySupported = true;
         const visitBody = (node: ts.Node): void => {
@@ -45322,6 +45326,7 @@ class Emitter {
             ts.forEachChild(node, visitReturn);
         };
         visitReturn(result.expression);
+        if (bodyReturn?.expression) visitReturn(bodyReturn.expression);
         if (!bodySupported) return false;
 
         let usesThis = false;
@@ -45334,6 +45339,7 @@ class Emitter {
             ts.forEachChild(node, visitThis);
         };
         for (const statement of bodyStatements) visitThis(statement);
+        if (bodyReturn?.expression) visitThis(bodyReturn.expression);
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
 
@@ -45406,6 +45412,32 @@ class Emitter {
         if (bodyControl === "break") {
             callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
             callback.line(`${finishVar} = true;`);
+        } else if (bodyControl === "return") {
+            callback.line(`(void)tsc_async_iterator_return(state->iterator);`);
+            if (bodyReturn?.expression) {
+                let bodyReturned: EmitResult;
+                this.asyncAwaitContinuationAdapterDepth++;
+                try {
+                    bodyReturned = this.emitExpr(bodyReturn.expression);
+                } finally {
+                    this.asyncAwaitContinuationAdapterDepth--;
+                }
+                const bodyReturnedType = this.prepareType(bodyReturned.ty);
+                if (bodyReturnedType.kind === "void" || bodyReturnedType.kind === "never") {
+                    callback.line(`${bodyReturned.c};`);
+                    callback.line("tsc_try_pop();");
+                    callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+                } else {
+                    callback.line(`${bodyReturnedType.c} ${returnedVar} = ${bodyReturned.c};`);
+                    callback.line("tsc_try_pop();");
+                    callback.line(`${resolvedVar} = ${this.promiseResolveResult({ c: returnedVar, ty: bodyReturnedType }, bodyReturn.expression)};`);
+                    callback.line(`tsc_promise_adopt_into(_ret, ${resolvedVar});`);
+                }
+            } else {
+                callback.line("tsc_try_pop();");
+                callback.line(`tsc_promise_fulfill_in_place(_ret, tsc_value_undefined());`);
+            }
+            callback.line("return;");
         }
         callback.close();
         callback.open(`if (${finishVar})`);
