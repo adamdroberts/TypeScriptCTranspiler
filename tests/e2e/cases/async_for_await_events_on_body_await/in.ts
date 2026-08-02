@@ -48,6 +48,26 @@ async function throwAfterAwait(iterator: any): Promise<string> {
     return "empty";
 }
 
+async function twoAwaits(iterator: any, output: string[]): Promise<string> {
+    for await (const item of iterator) {
+        await Promise.resolve(item);
+        output.push(item);
+        await Promise.resolve(item + "-second");
+        output.push("done");
+        return output.join(",");
+    }
+    return "empty";
+}
+
+async function twoAwaitsReject(iterator: any): Promise<string> {
+    for await (const item of iterator) {
+        await Promise.resolve(item);
+        await Promise.reject("second-body-failure");
+        return item;
+    }
+    return "empty";
+}
+
 const emitter = new EventEmitter();
 const iterator: any = on(emitter, "data");
 collect(iterator, []).then((value: string): void => {
@@ -81,6 +101,22 @@ collect(iterator, []).then((value: string): void => {
                         console.log("body-throw-after-await-unexpected:", unexpectedValue);
                     }, (reason: any): void => {
                         console.log("body-throw-after-await:", reason);
+
+                        const twoAwaitEmitter = new EventEmitter();
+                        const twoAwaitIterator: any = on(twoAwaitEmitter, "data");
+                        twoAwaits(twoAwaitIterator, []).then((twoAwaitValue: string): void => {
+                            console.log("body-two-awaits:", twoAwaitValue);
+
+                            const twoAwaitRejectEmitter = new EventEmitter();
+                            const twoAwaitRejectIterator: any = on(twoAwaitRejectEmitter, "data");
+                            twoAwaitsReject(twoAwaitRejectIterator).then((unexpectedValue: string): void => {
+                                console.log("body-two-awaits-reject-unexpected:", unexpectedValue);
+                            }, (reason: any): void => {
+                                console.log("body-two-awaits-reject:", reason);
+                            });
+                            twoAwaitRejectEmitter.emit("data", "ignored");
+                        });
+                        twoAwaitEmitter.emit("data", "two");
                     });
                     postThrowEmitter.emit("data", "post-throw");
                 });

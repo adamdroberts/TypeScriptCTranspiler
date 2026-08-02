@@ -45406,25 +45406,48 @@ class Emitter {
         const bodyAwaitExpression = bodyAwaitCandidate && ts.isAwaitExpression(bodyAwaitCandidate)
             ? bodyAwaitCandidate
             : null;
+        const bodyAwaitSecondIndex = bodyAwaitExpression && directRoute
+            ? directRoute.statements.findIndex((statement, index) => index > 0 &&
+                ts.isExpressionStatement(statement) &&
+                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
+            : -1;
+        const bodyAwaitSecondStatement = bodyAwaitSecondIndex >= 0 &&
+            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSecondIndex]!)
+            ? directRoute!.statements[bodyAwaitSecondIndex]
+            : null;
+        const bodyAwaitSecondCandidate = bodyAwaitSecondStatement && ts.isExpressionStatement(bodyAwaitSecondStatement)
+            ? this.unwrapTransparentExpression(bodyAwaitSecondStatement.expression)
+            : null;
+        const bodyAwaitSecondExpression = bodyAwaitSecondCandidate && ts.isAwaitExpression(bodyAwaitSecondCandidate)
+            ? bodyAwaitSecondCandidate
+            : null;
         const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length === 0 && directRoute.control === "return" && directRoute.expression
             ? this.unwrapTransparentExpression(directRoute.expression)
             : null;
         const bodyReturnAwaitExpression = bodyReturnAwaitCandidate && ts.isAwaitExpression(bodyReturnAwaitCandidate)
             ? bodyReturnAwaitCandidate
             : null;
-        const bodyAwaitPostludeStatements = bodyAwaitExpression
-            ? directRoute!.statements.slice(1)
+        const bodyAwaitBetweenStatements = bodyAwaitSecondExpression
+            ? directRoute!.statements.slice(1, bodyAwaitSecondIndex)
             : [];
-        if (bodyAwaitExpression && !bodyAwaitPostludeStatements.every((statement) =>
-            ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement))) return false;
+        const bodyAwaitPostludeStatements = bodyAwaitExpression
+            ? bodyAwaitSecondExpression
+                ? directRoute!.statements.slice(bodyAwaitSecondIndex + 1)
+                : directRoute!.statements.slice(1)
+            : [];
+        const awaitFreeBodyAwaitStatements = (statements: readonly ts.Statement[]): boolean => statements.every((statement) =>
+            ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement));
+        if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenStatements)) return false;
+        if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitPostludeStatements)) return false;
         if (bodyAwaitExpression && directRoute!.control !== null &&
             directRoute!.control !== "continue" && directRoute!.control !== "break" && directRoute!.control !== "return" && directRoute!.control !== "throw") return false;
         let bodySupported = true;
-        const allowedBodyAwaitExpression = bodyAwaitExpression ?? bodyReturnAwaitExpression;
+        const allowedBodyAwaitExpressions = [bodyAwaitExpression, bodyAwaitSecondExpression, bodyReturnAwaitExpression]
+            .filter((expression): expression is ts.AwaitExpression => expression !== null);
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
             if (
-                (ts.isAwaitExpression(node) && node !== allowedBodyAwaitExpression) ||
+                (ts.isAwaitExpression(node) && !allowedBodyAwaitExpressions.includes(node)) ||
                 ts.isFunctionLike(node) ||
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
@@ -45446,7 +45469,7 @@ class Emitter {
 
         const visitReturn = (node: ts.Node): void => {
             if (!bodySupported) return;
-            if ((ts.isAwaitExpression(node) && node !== allowedBodyAwaitExpression) ||
+            if ((ts.isAwaitExpression(node) && !allowedBodyAwaitExpressions.includes(node)) ||
                 ts.isFunctionLike(node) || ts.isClassLike(node)) {
                 bodySupported = false;
                 return;
@@ -45479,6 +45502,14 @@ class Emitter {
             ))
             : null;
         if (bodyAwaitSourceExpression && bodyAwaitPromiseType?.kind !== "promise") return false;
+        const bodyAwaitSecondPromiseType = bodyAwaitSecondExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitSecondExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitSecondExpression.expression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitSecondExpression && bodyAwaitSecondPromiseType?.kind !== "promise") return false;
         if (bodyReturnAwaitExpression && bodyReturnAwaitedType?.kind === "never") return false;
 
         let usesThis = false;
@@ -45520,6 +45551,7 @@ class Emitter {
         this.structDecls.line("tsc_promise_t* result_promise;");
         this.structDecls.line("tsc_value_t iterator;");
         this.structDecls.line("bool body_await;");
+        this.structDecls.line("int body_await_stage;");
         this.structDecls.line("bool body_return;");
         this.structDecls.line("bool body_sync_return;");
         this.structDecls.line("bool body_sync_throw;");
@@ -45617,20 +45649,39 @@ class Emitter {
             bodyAwaitPostludeScope.set(entry.symbol, `state->${field}`);
             bodyAwaitPostludeScopeTypes.set(entry.symbol, entry.type);
         }
-        const emitBodyAwaitPostlude = (): void => {
-            if (bodyAwaitPostludeStatements.length === 0) return;
+        const emitBodyAwaitStatements = (statements: readonly ts.Statement[]): void => {
+            if (statements.length === 0) return;
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
             this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
             if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
             this.asyncAwaitContinuationAdapterDepth++;
             try {
-                for (const statement of bodyAwaitPostludeStatements) this.emitStmt(callback, statement);
+                for (const statement of statements) this.emitStmt(callback, statement);
             } finally {
                 this.asyncAwaitContinuationAdapterDepth--;
                 if (usesThis && thisValue) this.functionThisStack.pop();
                 this.argumentValueTypeScopes.pop();
                 this.argumentValueScopes.pop();
             }
+        };
+        const emitBodyAwaitPostlude = (): void => emitBodyAwaitStatements(bodyAwaitPostludeStatements);
+        const emitBodyAwaitSecondSource = (target: CBuf): string => {
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                source = this.emitExpr(bodyAwaitSecondExpression!.expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_for_await_body_source");
+            target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitSecondPromiseType!, bodyAwaitSecondExpression!.expression)};`);
+            return sourceVar;
         };
         const emitBodySynchronousReturn = (target: CBuf, expression: ts.Expression | null): void => {
             if (!expression) {
@@ -45707,6 +45758,23 @@ class Emitter {
         callback.line("tsc_try_pop();");
         callback.line("return;");
         callback.close();
+        if (bodyAwaitSecondExpression) {
+            callback.open("if (state->body_await_stage == 1)");
+            emitBodyAwaitStatements(bodyAwaitBetweenStatements);
+            const secondSourceVar = emitBodyAwaitSecondSource(callback);
+            callback.line("state->body_await_stage = 2;");
+            callback.line(`state->receiver = ${secondSourceVar};`);
+            callback.open(`if (tsc_promise_is_pending(${secondSourceVar}))`);
+            callback.line(`tsc_promise_add_callback(${secondSourceVar}, ${name}, state);`);
+            callback.close();
+            callback.open("else");
+            callback.line(`tsc_queue_microtask(${name}, state);`);
+            callback.close();
+            callback.line("tsc_try_pop();");
+            callback.line("return;");
+            callback.close();
+        }
+        callback.line("state->body_await_stage = 0;");
         if (bodyReturnAwaitExpression) {
             callback.open("if (state->body_return)");
             callback.line("state->body_await = false;");
@@ -45887,6 +45955,7 @@ class Emitter {
                 const bodySourceVar = this.freshTemp("_for_await_body_source");
                 callback.line(`tsc_promise_t* const ${bodySourceVar} = ${this.coerce(bodySource, bodyAwaitPromiseType!, bodyAwaitSourceExpression.expression)};`);
                 callback.line("state->body_await = true;");
+                callback.line("state->body_await_stage = 1;");
                 callback.line(`state->body_return = ${bodyReturnAwaitExpression ? "true" : "false"};`);
                 callback.line(`state->body_sync_return = ${bodyAwaitExpression && directRoute!.control === "return" ? "true" : "false"};`);
                 callback.line(`state->body_sync_throw = ${bodyAwaitExpression && directRoute!.control === "throw" ? "true" : "false"};`);
@@ -45952,6 +46021,7 @@ class Emitter {
         buf.line(`${env}->result_promise = ${resultPromise};`);
         buf.line(`${env}->iterator = tsc_async_iterator_get(${this.coerce(source, T_VALUE, loop.expression)});`);
         buf.line(`${env}->body_await = false;`);
+        buf.line(`${env}->body_await_stage = 0;`);
         buf.line(`${env}->body_return = false;`);
         buf.line(`${env}->body_sync_return = false;`);
         buf.line(`${env}->body_sync_throw = false;`);
