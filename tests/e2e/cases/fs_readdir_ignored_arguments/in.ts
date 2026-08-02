@@ -22,9 +22,8 @@ const buffers = readdirSync(root, "buffer", mark("named")).map((entry: Buffer): 
 
 fs.promises.readdir(root, void note("promise-options"), mark("promise")).then((promiseNames: string[]): void => {
     console.log("promise:", promiseNames.sort().join("|"));
+    fs.rmSync(root, { recursive: true, force: true });
 });
 
 console.log("sync:", names.join("|"), buffers.join("|"));
 console.log("events:", events.join("|"));
-
-fs.rmSync(root, { recursive: true, force: true });

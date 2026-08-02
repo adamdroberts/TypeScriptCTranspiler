@@ -1,0 +1,4 @@
+completed: true
+names: a.txt|sub
+bytes: 2:8
+error: fs.readdirSync: could not open dir

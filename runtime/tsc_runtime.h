@@ -1190,6 +1190,7 @@ tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer);
 tsc_promise_t* tsc_fs_promises_write_file_string_async(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double file_mode);
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double file_mode);
+tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer);
 void tsc_fs_write_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_write_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 void tsc_fs_write_file_sync_opts(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive);

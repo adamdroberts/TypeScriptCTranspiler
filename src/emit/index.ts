@@ -74147,6 +74147,7 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], (values) => {
                     const path = values[0]!;
+                    const useLibuv = !options.recursive && !options.withFileTypes && (options.encoding === "utf8" || options.encoding === "buffer");
                     const fn = options.withFileTypes
                         ? options.recursive
                             ? "tsc_fs_readdir_recursive_dirents_sync"
@@ -74163,7 +74164,10 @@ class Emitter {
                         : options.encoding === "hex" || options.encoding === "base64"
                             ? this.emitFsStringArrayEncodingResult(`${fn}(${path!})`, options.encoding)
                             : `${fn}(${path!})`;
-                    const resolved = mapped.elem?.kind === "array"
+                    if (useLibuv) this.usesLibuv = true;
+                    const resolved = useLibuv
+                        ? `tsc_fs_promises_readdir_async(${path!}, ${options.encoding === "buffer" ? "true" : "false"})`
+                        : mapped.elem?.kind === "array"
                         ? `tsc_promise_resolve_array(${value})`
                         : `tsc_promise_resolve(tsc_value_array(${value}))`;
                     const signal = signalValue ? values[signalSpecIndex]! : null;

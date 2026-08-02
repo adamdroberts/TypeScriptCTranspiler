@@ -19,12 +19,11 @@ const namedNames = readdirSync(dirPath, { encoding: "utf8" });
 let promiseNames = "";
 promises.readdir(dirPath, { encoding: "utf8", recursive: RECURSIVE_FALSE, withFileTypes: WITH_FILE_TYPES_FALSE }).then((names: string[]): void => {
     promiseNames = names.join("|");
+    console.log("promise:", promiseNames);
+    fs.unlinkSync(filePath);
+    fs.rmdirSync(dirPath);
 });
 
 console.log("global:", globalNames.join("|"));
 console.log("namespace:", namespaceNames.join("|"));
 console.log("named:", namedNames.join("|"));
-console.log("promise:", promiseNames);
-
-fs.unlinkSync(filePath);
-fs.rmdirSync(dirPath);

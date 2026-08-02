@@ -2862,6 +2862,10 @@ typedef struct {
     char* base;
     size_t len;
 } tsc_uv_buf_t;
+typedef struct {
+    const char* name;
+    int type;
+} tsc_uv_dirent_t;
 typedef void (*tsc_uv_fs_cb)(tsc_uv_fs_t* req);
 
 extern uv_loop_t* uv_default_loop(void);
@@ -2869,6 +2873,8 @@ extern int uv_run(uv_loop_t* loop, int mode);
 extern int uv_fs_open(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, int mode, tsc_uv_fs_cb cb);
 extern int uv_fs_read(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
 extern int uv_fs_write(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
+extern int uv_fs_scandir(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, tsc_uv_fs_cb cb);
+extern int uv_fs_scandir_next(const tsc_uv_fs_t* req, tsc_uv_dirent_t* ent);
 extern int uv_fs_close(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
 extern void uv_fs_req_cleanup(tsc_uv_fs_t* req);
 extern ssize_t uv_fs_get_result(const tsc_uv_fs_t* req);
@@ -3226,8 +3232,90 @@ tsc_promise_t* tsc_fs_promises_write_file_buffer_async(
     return tsc_fs_promises_write_file_async(path, data->data, data->len, NULL, data, append, exclusive, update, file_mode);
 }
 
+typedef struct tsc_fs_readdir_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    tsc_array_t* entries;
+    bool want_buffer;
+    tsc_str_t* error;
+    struct tsc_fs_readdir_async* next;
+} tsc_fs_readdir_async_t;
+
+static tsc_fs_readdir_async_t* g_tsc_fs_readdir_async = NULL;
+
+static void tsc_fs_readdir_async_remove(tsc_fs_readdir_async_t* task) {
+    tsc_fs_readdir_async_t** cursor = &g_tsc_fs_readdir_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_readdir_async_finish(tsc_fs_readdir_async_t* task, bool success) {
+    if (success) {
+        tsc_promise_fulfill_in_place_ptr(task->promise, task->entries);
+    } else {
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.readdirSync: could not open dir"))
+        );
+    }
+    free(task->path);
+    tsc_fs_readdir_async_remove(task);
+}
+
+static void tsc_fs_readdir_async_scandir_cb(tsc_uv_fs_t* req) {
+    tsc_fs_readdir_async_t* task = (tsc_fs_readdir_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        task->error = tsc_str_from_cstr("fs.readdirSync: could not open dir");
+        tsc_fs_readdir_async_finish(task, false);
+        return;
+    }
+
+    tsc_uv_dirent_t ent;
+    while (uv_fs_scandir_next(req, &ent) == 0) {
+        if (!ent.name) continue;
+        tsc_str_t* name = tsc_str_from_cstr(ent.name);
+        if (task->want_buffer) {
+            tsc_buffer_t* value = tsc_buffer_from_str(name, NULL);
+            tsc_array_push_raw(task->entries, &value);
+        } else {
+            tsc_array_push_raw(task->entries, &name);
+        }
+    }
+    uv_fs_req_cleanup(req);
+    tsc_fs_readdir_async_finish(task, true);
+}
+
+tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_readdir_async_t* task = (tsc_fs_readdir_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_readdir_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->want_buffer = want_buffer;
+    task->entries = tsc_array_new(want_buffer ? sizeof(tsc_buffer_t*) : sizeof(tsc_str_t*), 16);
+    task->next = g_tsc_fs_readdir_async;
+    g_tsc_fs_readdir_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_scandir(g_tsc_fs_uv_loop, &task->req, task->path, 0, tsc_fs_readdir_async_scandir_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.readdirSync: could not open dir");
+        tsc_fs_readdir_async_finish(task, false);
+    }
+    return promise;
+}
+
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL;
+    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {
