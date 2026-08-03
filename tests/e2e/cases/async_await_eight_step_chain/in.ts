@@ -261,7 +261,8 @@ async function declaration(): Promise<string> {
     const twoHundredTwo = await delay(202, twoHundredOne + "2");
     const twoHundredThree = await delay(203, twoHundredTwo + "3");
     const twoHundredFour = await delay(204, twoHundredThree + "4");
-    return twoHundredFour;
+    const twoHundredFive = await delay(205, twoHundredFour + "5");
+    return twoHundredFive;
 }
 
 class Chain {
@@ -526,7 +527,8 @@ class Chain {
         const twoHundredTwo = await delay(202, twoHundredOne + "5");
         const twoHundredThree = await delay(203, twoHundredTwo + "6");
         const twoHundredFour = await delay(204, twoHundredThree + "7");
-        return twoHundredFour;
+        const twoHundredFive = await delay(205, twoHundredFour + "8");
+        return twoHundredFive;
     }
 }
 
@@ -791,7 +793,8 @@ const value = async (): Promise<string> => {
     const twoHundredTwo = await delay(202, twoHundredOne + "5");
     const twoHundredThree = await delay(203, twoHundredTwo + "6");
     const twoHundredFour = await delay(204, twoHundredThree + "7");
-    return twoHundredFour;
+    const twoHundredFive = await delay(205, twoHundredFour + "8");
+    return twoHundredFive;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -1056,7 +1059,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const twoHundredTwo = await delay(222, twoHundredOne + "1");
         const twoHundredThree = await delay(223, twoHundredTwo + "2");
         const twoHundredFour = await delay(224, twoHundredThree + "3");
-        return twoHundredFour;
+        const twoHundredFive = await delay(225, twoHundredFour + "4");
+        return twoHundredFive;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -1318,7 +1322,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const twoHundredTwo = await delay(230, twoHundredOne + "1");
         const twoHundredThree = await delay(231, twoHundredTwo + "2");
         const twoHundredFour = await delay(232, twoHundredThree + "3");
-        return twoHundredFour;
+        const twoHundredFive = await delay(233, twoHundredFour + "4");
+        return twoHundredFive;
 }
 
 class BranchChain {
@@ -1584,7 +1589,8 @@ class BranchChain {
             const twoHundredTwo = await delay(238, twoHundredOne + "1");
             const twoHundredThree = await delay(239, twoHundredTwo + "2");
             const twoHundredFour = await delay(240, twoHundredThree + "3");
-            return twoHundredFour;
+            const twoHundredFive = await delay(241, twoHundredFour + "4");
+            return twoHundredFive;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -1846,7 +1852,8 @@ class BranchChain {
     const twoHundredTwo = await delay(246, twoHundredOne + "1");
     const twoHundredThree = await delay(247, twoHundredTwo + "2");
     const twoHundredFour = await delay(248, twoHundredThree + "3");
-    return twoHundredFour;
+    const twoHundredFive = await delay(249, twoHundredFour + "4");
+    return twoHundredFive;
     }
 }
 
@@ -2112,7 +2119,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const twoHundredTwo = await delay(254, twoHundredOne + "1");
     const twoHundredThree = await delay(255, twoHundredTwo + "2");
     const twoHundredFour = await delay(256, twoHundredThree + "3");
-    return twoHundredFour;
+    const twoHundredFive = await delay(257, twoHundredFour + "4");
+    return twoHundredFive;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -2374,7 +2382,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const twoHundredTwo = await delay(262, twoHundredOne + "1");
     const twoHundredThree = await delay(263, twoHundredTwo + "2");
     const twoHundredFour = await delay(264, twoHundredThree + "3");
-    return twoHundredFour;
+    const twoHundredFive = await delay(265, twoHundredFour + "4");
+    return twoHundredFive;
 };
 
 declaration().then((result) => console.log("declaration:", result));
