@@ -40085,6 +40085,11 @@ class Emitter {
             const directIncrementorAwait = loopIncrementor
                 ? this.unwrapTransparentExpression(loopIncrementor)
                 : null;
+            const loopInitializerStatement = ts.isForStatement(loop) &&
+                loop.initializer &&
+                ts.isVariableDeclarationList(loop.initializer)
+                ? ts.factory.createVariableStatement(undefined, loop.initializer)
+                : null;
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40105,8 +40110,9 @@ class Emitter {
             for (const statement of loopBody) visitBody(statement);
             if (
                 ts.isForStatement(loop) &&
-                loop.initializer === undefined &&
-                preLoopInitializer &&
+                (loop.initializer === undefined && preLoopInitializer !== null ||
+                    loop.initializer !== undefined && preLoopInitializer === null &&
+                    loopInitializerStatement !== null) &&
                 loop.condition &&
                 directIncrementorAwait &&
                 ts.isAwaitExpression(directIncrementorAwait) &&
@@ -40122,7 +40128,7 @@ class Emitter {
                     ], true),
                 );
                 const normalizedBody = ts.factory.updateBlock(body, [
-                    preLoopInitializer,
+                    preLoopInitializer ?? loopInitializerStatement!,
                     normalizedLoop,
                     fallthrough,
                 ]);
