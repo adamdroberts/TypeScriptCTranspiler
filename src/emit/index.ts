@@ -38240,7 +38240,7 @@ class Emitter {
                     !ts.isIdentifier(assignment.left)) return [];
                 const expression = this.unwrapTransparentExpression(assignment.right);
                 const declarationStatement = bodyContinueStatements[statementIndex - 1];
-                if (!ts.isVariableStatement(declarationStatement) ||
+                if (!declarationStatement || !ts.isVariableStatement(declarationStatement) ||
                     (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
                     declarationStatement.declarationList.declarations.length !== 1) return [];
                 const declaration = declarationStatement.declarationList.declarations[0]!;
@@ -40077,14 +40077,48 @@ class Emitter {
             visitIncrementor(loopIncrementor);
         }
         if (loopIncrementorHasAwait) {
-            // Normalize the narrow direct-await incrementor shape into an
-            // awaited body step. This preserves the required order:
-            // body -> incrementor await -> condition, while reusing the
+            // Normalize the narrow direct-await incrementor sequence into
+            // awaited body steps. This preserves the required order:
+            // body -> incrementor operands -> condition, while reusing the
             // existing body/condition continuation state machine. Other
             // incrementor-await graphs remain outside this bounded adapter.
-            const directIncrementorAwait = loopIncrementor
-                ? this.unwrapTransparentExpression(loopIncrementor)
+            const incrementorExpressions: ts.Expression[] = [];
+            const flattenIncrementor = (expression: ts.Expression): void => {
+                const unwrapped = this.unwrapTransparentExpression(expression);
+                if (ts.isBinaryExpression(unwrapped) &&
+                    unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+                    flattenIncrementor(unwrapped.left);
+                    flattenIncrementor(unwrapped.right);
+                } else {
+                    incrementorExpressions.push(unwrapped);
+                }
+            };
+            if (loopIncrementor) flattenIncrementor(loopIncrementor);
+            const incrementorContainsAwait = (node: ts.Node): boolean => {
+                let found = false;
+                const visit = (child: ts.Node): void => {
+                    if (found || ts.isFunctionLike(child) || ts.isClassLike(child)) return;
+                    if (ts.isAwaitExpression(child)) {
+                        found = true;
+                        return;
+                    }
+                    ts.forEachChild(child, visit);
+                };
+                visit(node);
+                return found;
+            };
+            const incrementorAwaitStatements = incrementorExpressions.length > 0 &&
+                incrementorExpressions.filter(ts.isAwaitExpression).length === 1 &&
+                incrementorExpressions.every((expression) => {
+                    if (ts.isAwaitExpression(expression)) return !incrementorContainsAwait(expression.expression);
+                    return !incrementorContainsAwait(expression);
+                })
+                ? incrementorExpressions.map((expression) => ts.factory.createExpressionStatement(expression))
                 : null;
+            if (incrementorAwaitStatements && incrementorAwaitStatements.some((statement) => {
+                const expression = this.unwrapTransparentExpression((statement as ts.ExpressionStatement).expression);
+                return !ts.isAwaitExpression(expression) && !this.asyncAwaitLoopPostStatementSupported(statement);
+            })) return false;
             const loopInitializerStatement = ts.isForStatement(loop) &&
                 loop.initializer &&
                 ts.isVariableDeclarationList(loop.initializer)
@@ -40114,8 +40148,7 @@ class Emitter {
                     loop.initializer !== undefined && preLoopInitializer === null &&
                     loopInitializerStatement !== null) &&
                 loop.condition &&
-                directIncrementorAwait &&
-                ts.isAwaitExpression(directIncrementorAwait) &&
+                incrementorAwaitStatements !== null &&
                 awaitExpressions.length === 1 &&
                 bodyWithoutControlFlow
             ) {
@@ -40123,7 +40156,7 @@ class Emitter {
                     loop.condition,
                     ts.factory.createBlock([
                         ...loopBody,
-                        ts.factory.createExpressionStatement(loop.incrementor!),
+                        ...incrementorAwaitStatements,
                         ts.factory.createContinueStatement(),
                     ], true),
                 );
