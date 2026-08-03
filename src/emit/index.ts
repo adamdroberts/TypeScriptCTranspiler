@@ -40125,7 +40125,8 @@ class Emitter {
                 ? ts.factory.createVariableStatement(undefined, loop.initializer)
                 : null;
             const terminalContinue = loopBodyAction && ts.isContinueStatement(loopBodyAction) && !loopBodyAction.label;
-            const loopBodyWithoutTerminalContinue = terminalContinue
+            const terminalBreak = loopBodyAction && ts.isBreakStatement(loopBodyAction) && !loopBodyAction.label;
+            const loopBodyWithoutTerminalControl = terminalContinue || terminalBreak
                 ? loopBody.slice(0, -1)
                 : loopBody;
             let bodyWithoutControlFlow = true;
@@ -40145,7 +40146,7 @@ class Emitter {
                 }
                 ts.forEachChild(node, visitBody);
             };
-            for (const statement of loopBodyWithoutTerminalContinue) visitBody(statement);
+            for (const statement of loopBodyWithoutTerminalControl) visitBody(statement);
             if (
                 ts.isForStatement(loop) &&
                 (loop.initializer === undefined && preLoopInitializer !== null ||
@@ -40158,11 +40159,13 @@ class Emitter {
             ) {
                 const normalizedLoop = ts.factory.createWhileStatement(
                     loop.condition,
-                    ts.factory.createBlock([
-                        ...loopBodyWithoutTerminalContinue,
-                        ...incrementorAwaitStatements,
-                        ts.factory.createContinueStatement(),
-                    ], true),
+                    terminalBreak
+                        ? ts.factory.createBlock(loopBody, true)
+                        : ts.factory.createBlock([
+                            ...loopBodyWithoutTerminalControl,
+                            ...incrementorAwaitStatements,
+                            ts.factory.createContinueStatement(),
+                        ], true),
                 );
                 const normalizedBody = ts.factory.updateBlock(body, [
                     preLoopInitializer ?? loopInitializerStatement!,

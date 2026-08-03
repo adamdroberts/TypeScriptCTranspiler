@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Bounded async `for` loops now preserve a terminal unlabelled `break` without running the awaited incrementor, then route directly to the awaited post-loop return; nested and nonterminal loop-body control-flow remains deferred. Test: `async_await_for_incrementor_break`
 - Bounded async `for` loops now preserve a terminal unlabelled `continue` by running the awaited incrementor sequence before re-entering the awaited condition; nested and nonterminal loop-body control-flow remains deferred. Test: `async_await_for_incrementor_continue`
 - Bounded async `for` loops now preserve multiple direct awaits in a top-level comma-sequenced incrementor, with supported await-free neighboring operands ordered before, between, and after the suspensions. Test: `async_await_for_incrementor_multi_sequence`
 - Bounded async `for` loops now lower top-level comma-sequenced incrementors with exactly one direct await and supported await-free neighboring operands as ordered body steps before condition re-entry. Test: `async_await_for_incrementor_sequence`

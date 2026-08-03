@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now preserve a terminal unlabelled `break` without running the awaited incrementor, then route directly to the awaited post-loop return; nested and nonterminal loop-body control-flow remains deferred. Test: `async_await_for_incrementor_break`
+
 - Bounded async `for` loops now preserve a terminal unlabelled `continue` by running the awaited incrementor sequence before re-entering the awaited condition; nested and nonterminal loop-body control-flow remains deferred. Test: `async_await_for_incrementor_continue`
 
 - Bounded async `for` loops now preserve multiple direct awaits in a top-level comma-sequenced incrementor, with supported await-free neighboring operands ordered before, between, and after the suspensions. Test: `async_await_for_incrementor_multi_sequence`
