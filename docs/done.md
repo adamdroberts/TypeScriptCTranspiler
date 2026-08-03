@@ -1,6 +1,6 @@
 # Implemented features
 
-- Arbitrary-length leading awaited-local continuation lowering is covered beyond the one-hundred-forty-await boundary with one hundred forty-one awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
+- Arbitrary-length leading awaited-local continuation lowering is covered beyond the one-hundred-forty-one-await boundary with one hundred forty-two awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the one-hundred-thirty-seven-await boundary with one hundred thirty-eight awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the one-hundred-thirty-six-await boundary with one hundred thirty-seven awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the one-hundred-thirty-five-await boundary with one hundred thirty-six awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
