@@ -40169,6 +40169,40 @@ class Emitter {
                     ? { statement: candidate, thenStatements, elseStatements, continueStatement: thenTerminal, breakStatement: elseTerminal }
                     : null;
             })();
+            const terminalIfContinueElseFallthrough = (() => {
+                const candidate = loopBody[loopBody.length - 1];
+                if (!candidate || !ts.isIfStatement(candidate) || !candidate.elseStatement) return null;
+                const thenStatements = ts.isBlock(candidate.thenStatement)
+                    ? Array.from(candidate.thenStatement.statements)
+                    : [candidate.thenStatement];
+                const elseStatements = ts.isBlock(candidate.elseStatement)
+                    ? Array.from(candidate.elseStatement.statements)
+                    : [candidate.elseStatement];
+                const thenTerminal = thenStatements[thenStatements.length - 1];
+                return thenTerminal && ts.isContinueStatement(thenTerminal) && !thenTerminal.label &&
+                    elseStatements.every((statement) =>
+                        ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)
+                    )
+                    ? { statement: candidate, thenStatements, elseStatements, continueStatement: thenTerminal }
+                    : null;
+            })();
+            const terminalIfBreakElseFallthrough = (() => {
+                const candidate = loopBody[loopBody.length - 1];
+                if (!candidate || !ts.isIfStatement(candidate) || !candidate.elseStatement) return null;
+                const thenStatements = ts.isBlock(candidate.thenStatement)
+                    ? Array.from(candidate.thenStatement.statements)
+                    : [candidate.thenStatement];
+                const elseStatements = ts.isBlock(candidate.elseStatement)
+                    ? Array.from(candidate.elseStatement.statements)
+                    : [candidate.elseStatement];
+                const thenTerminal = thenStatements[thenStatements.length - 1];
+                return thenTerminal && ts.isBreakStatement(thenTerminal) && !thenTerminal.label &&
+                    elseStatements.every((statement) =>
+                        ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)
+                    )
+                    ? { statement: candidate, thenStatements, elseStatements, breakStatement: thenTerminal }
+                    : null;
+            })();
             const terminalIfBreak = (() => {
                 const candidate = loopBody[loopBody.length - 1];
                 if (!candidate || !ts.isIfStatement(candidate) || candidate.elseStatement) return null;
@@ -40183,19 +40217,19 @@ class Emitter {
             const loopBodyWithoutTerminalControl = terminalContinue || terminalBreak
                 ? loopBody.slice(0, -1)
                 : loopBody;
-            const terminalIfControlPrefix = terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue || terminalIfContinueElseBreak
+            const terminalIfControlPrefix = terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue || terminalIfContinueElseBreak || terminalIfContinueElseFallthrough || terminalIfBreakElseFallthrough
                 ? loopBody.slice(0, -1)
                 : [];
-            const terminalIfControlPrefixSupported = !(terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue || terminalIfContinueElseBreak) ||
+            const terminalIfControlPrefixSupported = !(terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue || terminalIfContinueElseBreak || terminalIfContinueElseFallthrough || terminalIfBreakElseFallthrough) ||
                 terminalIfControlPrefix.every((statement) =>
                     ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)
                 );
             const allowedContinue = terminalContinue
                 ? loopBodyAction
-                : terminalIfContinue?.continueStatement ?? terminalIfBreakElseContinue?.continueStatement ?? terminalIfContinueElseBreak?.continueStatement;
+                : terminalIfContinue?.continueStatement ?? terminalIfBreakElseContinue?.continueStatement ?? terminalIfContinueElseBreak?.continueStatement ?? terminalIfContinueElseFallthrough?.continueStatement;
             const allowedBreak = terminalBreak
                 ? loopBodyAction
-                : terminalIfBreak?.breakStatement ?? terminalIfBreakElseContinue?.breakStatement ?? terminalIfContinueElseBreak?.breakStatement;
+                : terminalIfBreak?.breakStatement ?? terminalIfBreakElseContinue?.breakStatement ?? terminalIfContinueElseBreak?.breakStatement ?? terminalIfBreakElseFallthrough?.breakStatement;
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40285,6 +40319,47 @@ class Emitter {
                                             ts.factory.createBlock([
                                                 ...terminalIfControlPrefix,
                                                 ...terminalIfContinueElseBreak.elseStatements,
+                                            ], true),
+                                        ),
+                                    ]
+                                : terminalIfContinueElseFallthrough
+                                    ? [
+                                        ...loopBody.slice(0, -1),
+                                        ts.factory.updateIfStatement(
+                                            terminalIfContinueElseFallthrough.statement,
+                                            terminalIfContinueElseFallthrough.statement.expression,
+                                            ts.factory.createBlock([
+                                                ...terminalIfControlPrefix,
+                                                ...terminalIfContinueElseFallthrough.thenStatements.slice(0, -1),
+                                                ...incrementorAwaitStatements,
+                                                ts.factory.createContinueStatement(),
+                                            ], true),
+                                            ts.factory.createBlock([
+                                                ...terminalIfControlPrefix,
+                                                ...terminalIfContinueElseFallthrough.elseStatements,
+                                                ...incrementorAwaitStatements,
+                                                ts.factory.createContinueStatement(),
+                                            ], true),
+                                        ),
+                                    ]
+                                : terminalIfBreakElseFallthrough
+                                    ? [
+                                        ...loopBody.slice(0, -1),
+                                        ts.factory.updateIfStatement(
+                                            terminalIfBreakElseFallthrough.statement,
+                                            ts.factory.createPrefixUnaryExpression(
+                                                ts.SyntaxKind.ExclamationToken,
+                                                terminalIfBreakElseFallthrough.statement.expression,
+                                            ),
+                                            ts.factory.createBlock([
+                                                ...terminalIfControlPrefix,
+                                                ...terminalIfBreakElseFallthrough.elseStatements,
+                                                ...incrementorAwaitStatements,
+                                                ts.factory.createContinueStatement(),
+                                            ], true),
+                                            ts.factory.createBlock([
+                                                ...terminalIfControlPrefix,
+                                                ...terminalIfBreakElseFallthrough.thenStatements,
                                             ], true),
                                         ),
                                     ]
