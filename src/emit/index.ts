@@ -40153,6 +40153,22 @@ class Emitter {
                     ? { statement: candidate, thenStatements, elseStatements, breakStatement: thenTerminal, continueStatement: elseTerminal }
                     : null;
             })();
+            const terminalIfContinueElseBreak = (() => {
+                const candidate = loopBody[loopBody.length - 1];
+                if (!candidate || !ts.isIfStatement(candidate) || !candidate.elseStatement) return null;
+                const thenStatements = ts.isBlock(candidate.thenStatement)
+                    ? Array.from(candidate.thenStatement.statements)
+                    : [candidate.thenStatement];
+                const elseStatements = ts.isBlock(candidate.elseStatement)
+                    ? Array.from(candidate.elseStatement.statements)
+                    : [candidate.elseStatement];
+                const thenTerminal = thenStatements[thenStatements.length - 1];
+                const elseTerminal = elseStatements[elseStatements.length - 1];
+                return thenTerminal && ts.isContinueStatement(thenTerminal) && !thenTerminal.label &&
+                    elseTerminal && ts.isBreakStatement(elseTerminal) && !elseTerminal.label
+                    ? { statement: candidate, thenStatements, elseStatements, continueStatement: thenTerminal, breakStatement: elseTerminal }
+                    : null;
+            })();
             const terminalIfBreak = (() => {
                 const candidate = loopBody[loopBody.length - 1];
                 if (!candidate || !ts.isIfStatement(candidate) || candidate.elseStatement) return null;
@@ -40167,19 +40183,19 @@ class Emitter {
             const loopBodyWithoutTerminalControl = terminalContinue || terminalBreak
                 ? loopBody.slice(0, -1)
                 : loopBody;
-            const terminalIfControlPrefix = terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue
+            const terminalIfControlPrefix = terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue || terminalIfContinueElseBreak
                 ? loopBody.slice(0, -1)
                 : [];
-            const terminalIfControlPrefixSupported = !(terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue) ||
+            const terminalIfControlPrefixSupported = !(terminalIfContinue || terminalIfBreak || terminalIfBreakElseContinue || terminalIfContinueElseBreak) ||
                 terminalIfControlPrefix.every((statement) =>
                     ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)
                 );
             const allowedContinue = terminalContinue
                 ? loopBodyAction
-                : terminalIfContinue?.continueStatement ?? terminalIfBreakElseContinue?.continueStatement;
+                : terminalIfContinue?.continueStatement ?? terminalIfBreakElseContinue?.continueStatement ?? terminalIfContinueElseBreak?.continueStatement;
             const allowedBreak = terminalBreak
                 ? loopBodyAction
-                : terminalIfBreak?.breakStatement ?? terminalIfBreakElseContinue?.breakStatement;
+                : terminalIfBreak?.breakStatement ?? terminalIfBreakElseContinue?.breakStatement ?? terminalIfContinueElseBreak?.breakStatement;
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40251,6 +40267,24 @@ class Emitter {
                                                 ...terminalIfBreakElseContinue.elseStatements.slice(0, -1),
                                                 ...incrementorAwaitStatements,
                                                 ts.factory.createContinueStatement(),
+                                            ], true),
+                                        ),
+                                    ]
+                                : terminalIfContinueElseBreak
+                                    ? [
+                                        ...loopBody.slice(0, -1),
+                                        ts.factory.updateIfStatement(
+                                            terminalIfContinueElseBreak.statement,
+                                            terminalIfContinueElseBreak.statement.expression,
+                                            ts.factory.createBlock([
+                                                ...terminalIfControlPrefix,
+                                                ...terminalIfContinueElseBreak.thenStatements.slice(0, -1),
+                                                ...incrementorAwaitStatements,
+                                                ts.factory.createContinueStatement(),
+                                            ], true),
+                                            ts.factory.createBlock([
+                                                ...terminalIfControlPrefix,
+                                                ...terminalIfContinueElseBreak.elseStatements,
                                             ], true),
                                         ),
                                     ]
