@@ -40013,7 +40013,8 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         if (body.statements.length < 2) return false;
-        const preLoopInitializer = body.statements.length === 3 && ts.isVariableStatement(body.statements[0]!)
+        const preLoopInitializer = body.statements.length === 3 &&
+            (ts.isVariableStatement(body.statements[0]!) || ts.isExpressionStatement(body.statements[0]!))
             ? body.statements[0]!
             : null;
         if (body.statements.length !== 2 && !preLoopInitializer) return false;
@@ -40058,7 +40059,9 @@ class Emitter {
             ? ts.isExpression(loop.initializer)
                 ? loop.initializer
                 : ts.factory.createVariableStatement(undefined, loop.initializer)
-            : preLoopInitializer;
+            : preLoopInitializer && ts.isExpressionStatement(preLoopInitializer)
+                ? preLoopInitializer.expression
+                : preLoopInitializer;
         const doWhile = ts.isDoStatement(loop);
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
@@ -40120,9 +40123,10 @@ class Emitter {
                 return !ts.isAwaitExpression(expression) && !this.asyncAwaitLoopPostStatementSupported(statement);
             })) return false;
             const loopInitializerStatement = ts.isForStatement(loop) &&
-                loop.initializer &&
-                ts.isVariableDeclarationList(loop.initializer)
-                ? ts.factory.createVariableStatement(undefined, loop.initializer)
+                loop.initializer
+                ? ts.isVariableDeclarationList(loop.initializer)
+                    ? ts.factory.createVariableStatement(undefined, loop.initializer)
+                    : ts.factory.createExpressionStatement(loop.initializer)
                 : null;
             const terminalContinue = loopBodyAction && ts.isContinueStatement(loopBodyAction) && !loopBodyAction.label;
             const terminalBreak = loopBodyAction && ts.isBreakStatement(loopBodyAction) && !loopBodyAction.label;
