@@ -366,7 +366,8 @@ async function declaration(): Promise<string> {
     const threeHundredSeven = await delay(307, threeHundredSix + "7");
     const threeHundredEight = await delay(308, threeHundredSeven + "8");
     const threeHundredNine = await delay(309, threeHundredEight + "9");
-    return threeHundredNine;
+    const threeHundredTen = await delay(310, threeHundredNine + "0");
+    return threeHundredTen;
 }
 
 class Chain {
@@ -736,7 +737,8 @@ class Chain {
         const threeHundredSeven = await delay(307, threeHundredSix + "0");
         const threeHundredEight = await delay(308, threeHundredSeven + "1");
         const threeHundredNine = await delay(309, threeHundredEight + "2");
-        return threeHundredNine;
+        const threeHundredTen = await delay(310, threeHundredNine + "3");
+        return threeHundredTen;
     }
 }
 
@@ -1106,7 +1108,8 @@ const value = async (): Promise<string> => {
     const threeHundredSeven = await delay(307, threeHundredSix + "0");
     const threeHundredEight = await delay(308, threeHundredSeven + "1");
     const threeHundredNine = await delay(309, threeHundredEight + "2");
-    return threeHundredNine;
+    const threeHundredTen = await delay(310, threeHundredNine + "3");
+    return threeHundredTen;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -1476,7 +1479,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const threeHundredSeven = await delay(327, threeHundredSix + "6");
         const threeHundredEight = await delay(328, threeHundredSeven + "7");
         const threeHundredNine = await delay(329, threeHundredEight + "8");
-        return threeHundredNine;
+        const threeHundredTen = await delay(330, threeHundredNine + "9");
+        return threeHundredTen;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -1843,7 +1847,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const threeHundredSeven = await delay(335, threeHundredSix + "6");
         const threeHundredEight = await delay(336, threeHundredSeven + "7");
         const threeHundredNine = await delay(337, threeHundredEight + "8");
-        return threeHundredNine;
+        const threeHundredTen = await delay(338, threeHundredNine + "9");
+        return threeHundredTen;
 }
 
 class BranchChain {
@@ -2214,7 +2219,8 @@ class BranchChain {
             const threeHundredSeven = await delay(343, threeHundredSix + "6");
             const threeHundredEight = await delay(344, threeHundredSeven + "7");
             const threeHundredNine = await delay(345, threeHundredEight + "8");
-            return threeHundredNine;
+            const threeHundredTen = await delay(346, threeHundredNine + "9");
+            return threeHundredTen;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -2581,7 +2587,8 @@ class BranchChain {
     const threeHundredSeven = await delay(351, threeHundredSix + "6");
     const threeHundredEight = await delay(352, threeHundredSeven + "7");
     const threeHundredNine = await delay(353, threeHundredEight + "8");
-    return threeHundredNine;
+    const threeHundredTen = await delay(354, threeHundredNine + "9");
+    return threeHundredTen;
     }
 }
 
@@ -2952,7 +2959,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const threeHundredSeven = await delay(359, threeHundredSix + "6");
     const threeHundredEight = await delay(360, threeHundredSeven + "7");
     const threeHundredNine = await delay(361, threeHundredEight + "8");
-    return threeHundredNine;
+    const threeHundredTen = await delay(362, threeHundredNine + "9");
+    return threeHundredTen;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -3319,7 +3327,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const threeHundredSeven = await delay(367, threeHundredSix + "6");
     const threeHundredEight = await delay(368, threeHundredSeven + "7");
     const threeHundredNine = await delay(369, threeHundredEight + "8");
-    return threeHundredNine;
+    const threeHundredTen = await delay(370, threeHundredNine + "9");
+    return threeHundredTen;
 };
 
 declaration().then((result) => console.log("declaration:", result));
