@@ -40076,6 +40076,65 @@ class Emitter {
             };
             visitIncrementor(loopIncrementor);
         }
+        if (loopIncrementorHasAwait) {
+            // Normalize the narrow direct-await incrementor shape into an
+            // awaited body step. This preserves the required order:
+            // body -> incrementor await -> condition, while reusing the
+            // existing body/condition continuation state machine. Other
+            // incrementor-await graphs remain outside this bounded adapter.
+            const directIncrementorAwait = loopIncrementor
+                ? this.unwrapTransparentExpression(loopIncrementor)
+                : null;
+            let bodyWithoutControlFlow = true;
+            const visitBody = (node: ts.Node): void => {
+                if (!bodyWithoutControlFlow) return;
+                if (
+                    ts.isAwaitExpression(node) ||
+                    ts.isFunctionLike(node) ||
+                    ts.isClassLike(node) ||
+                    ts.isReturnStatement(node) ||
+                    ts.isThrowStatement(node) ||
+                    ts.isBreakStatement(node) ||
+                    ts.isContinueStatement(node)
+                ) {
+                    bodyWithoutControlFlow = false;
+                    return;
+                }
+                ts.forEachChild(node, visitBody);
+            };
+            for (const statement of loopBody) visitBody(statement);
+            if (
+                ts.isForStatement(loop) &&
+                loop.initializer === undefined &&
+                preLoopInitializer &&
+                loop.condition &&
+                directIncrementorAwait &&
+                ts.isAwaitExpression(directIncrementorAwait) &&
+                awaitExpressions.length === 1 &&
+                bodyWithoutControlFlow
+            ) {
+                const normalizedLoop = ts.factory.createWhileStatement(
+                    loop.condition,
+                    ts.factory.createBlock([
+                        ...loopBody,
+                        ts.factory.createExpressionStatement(loop.incrementor!),
+                        ts.factory.createContinueStatement(),
+                    ], true),
+                );
+                const normalizedBody = ts.factory.updateBlock(body, [
+                    preLoopInitializer,
+                    normalizedLoop,
+                    fallthrough,
+                ]);
+                return this.emitAsyncAwaitWhileConditionReturnContinuation(
+                    buf,
+                    normalizedBody,
+                    parameters,
+                    thisValue,
+                );
+            }
+            return false;
+        }
         const loopBodyContinues = loopBodyAction && ts.isContinueStatement(loopBodyAction) && !loopBodyAction.label;
         const loopContinueIncrementorSupported = !loopIncrementor || !loopIncrementorHasAwait;
         const loopInitializerExpression = loopInitializer && ts.isExpression(loopInitializer)

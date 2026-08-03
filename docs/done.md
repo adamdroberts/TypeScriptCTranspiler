@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops can now await a direct incrementor before re-entering an awaited condition, preserving body-to-incrementor-to-condition ordering for a synchronous loop body with a pre-loop local initializer. Test: `async_await_for_incrementor`
+
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the three-hundred-seventy-one-await boundary with three hundred seventy-two awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
 
 - Arbitrary-length leading awaited-local continuation lowering is covered beyond the three-hundred-seventy-await boundary with three hundred seventy-one awaited-local chains across async function declarations, class methods, async function values, and branch fallthroughs. Test: `async_await_eight_step_chain`
