@@ -40126,9 +40126,30 @@ class Emitter {
                 : null;
             const terminalContinue = loopBodyAction && ts.isContinueStatement(loopBodyAction) && !loopBodyAction.label;
             const terminalBreak = loopBodyAction && ts.isBreakStatement(loopBodyAction) && !loopBodyAction.label;
+            const terminalIfContinue = (() => {
+                const candidate = loopBody[loopBody.length - 1];
+                if (!candidate || !ts.isIfStatement(candidate) || candidate.elseStatement) return null;
+                const thenStatements = ts.isBlock(candidate.thenStatement)
+                    ? Array.from(candidate.thenStatement.statements)
+                    : [candidate.thenStatement];
+                const thenTerminal = thenStatements[thenStatements.length - 1];
+                return thenTerminal && ts.isContinueStatement(thenTerminal) && !thenTerminal.label
+                    ? { statement: candidate, thenStatements, continueStatement: thenTerminal }
+                    : null;
+            })();
             const loopBodyWithoutTerminalControl = terminalContinue || terminalBreak
                 ? loopBody.slice(0, -1)
                 : loopBody;
+            const terminalIfContinuePrefix = terminalIfContinue
+                ? loopBody.slice(0, -1)
+                : [];
+            const terminalIfContinuePrefixSupported = !terminalIfContinue ||
+                terminalIfContinuePrefix.every((statement) =>
+                    ts.isExpressionStatement(statement) && this.asyncAwaitLoopPostStatementSupported(statement)
+                );
+            const allowedContinue = terminalContinue
+                ? loopBodyAction
+                : terminalIfContinue?.continueStatement;
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40139,7 +40160,7 @@ class Emitter {
                     ts.isReturnStatement(node) ||
                     ts.isThrowStatement(node) ||
                     ts.isBreakStatement(node) ||
-                    ts.isContinueStatement(node)
+                    ts.isContinueStatement(node) && node !== allowedContinue
                 ) {
                     bodyWithoutControlFlow = false;
                     return;
@@ -40155,17 +40176,40 @@ class Emitter {
                 loop.condition &&
                 incrementorAwaitStatements !== null &&
                 awaitExpressions.length === 1 &&
-                bodyWithoutControlFlow
+                bodyWithoutControlFlow &&
+                terminalIfContinuePrefixSupported
             ) {
                 const normalizedLoop = ts.factory.createWhileStatement(
                     loop.condition,
-                    terminalBreak
-                        ? ts.factory.createBlock(loopBody, true)
-                        : ts.factory.createBlock([
+                    ts.factory.createBlock(
+                        terminalBreak
+                            ? loopBody
+                            : terminalIfContinue
+                                ? [
+                                    ...loopBody.slice(0, -1),
+                                    ts.factory.updateIfStatement(
+                                        terminalIfContinue.statement,
+                                        terminalIfContinue.statement.expression,
+                                        ts.factory.createBlock([
+                                            ...terminalIfContinuePrefix,
+                                            ...terminalIfContinue.thenStatements.slice(0, -1),
+                                            ...incrementorAwaitStatements,
+                                            ts.factory.createContinueStatement(),
+                                        ], true),
+                                        ts.factory.createBlock([
+                                            ...terminalIfContinuePrefix,
+                                            ...incrementorAwaitStatements,
+                                            ts.factory.createContinueStatement(),
+                                        ], true),
+                                    ),
+                                ]
+                                : [
                             ...loopBodyWithoutTerminalControl,
                             ...incrementorAwaitStatements,
                             ts.factory.createContinueStatement(),
-                        ], true),
+                                ],
+                        true,
+                    ),
                 );
                 const normalizedBody = ts.factory.updateBlock(body, [
                     preLoopInitializer ?? loopInitializerStatement!,

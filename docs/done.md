@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now preserve a top-level await-free `if` whose then branch ends in an unlabelled `continue`, running the awaited incrementor on both selected and fallthrough paths while retaining supported await-free expression prefixes. Test: `async_await_for_incrementor_if_continue`
+
 - Bounded async `for` loops now preserve a terminal unlabelled `break` without running the awaited incrementor, then route directly to the awaited post-loop return; nested and nonterminal loop-body control-flow remains deferred. Test: `async_await_for_incrementor_break`
 
 - Bounded async `for` loops now preserve a terminal unlabelled `continue` by running the awaited incrementor sequence before re-entering the awaited condition; nested and nonterminal loop-body control-flow remains deferred. Test: `async_await_for_incrementor_continue`
