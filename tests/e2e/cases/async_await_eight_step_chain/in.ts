@@ -187,7 +187,8 @@ async function declaration(): Promise<string> {
     const oneHundredTwentyEight = await delay(128, oneHundredTwentySeven + "8");
     const oneHundredTwentyNine = await delay(129, oneHundredTwentyEight + "9");
     const oneHundredThirty = await delay(130, oneHundredTwentyNine + "0");
-    return oneHundredThirty;
+    const oneHundredThirtyOne = await delay(131, oneHundredThirty + "1");
+    return oneHundredThirtyOne;
 }
 
 class Chain {
@@ -378,7 +379,8 @@ class Chain {
         const oneHundredTwentyEight = await delay(128, oneHundredTwentySeven + "1");
         const oneHundredTwentyNine = await delay(129, oneHundredTwentyEight + "2");
         const oneHundredThirty = await delay(130, oneHundredTwentyNine + "3");
-        return oneHundredThirty;
+        const oneHundredThirtyOne = await delay(131, oneHundredThirty + "4");
+        return oneHundredThirtyOne;
     }
 }
 
@@ -569,7 +571,8 @@ const value = async (): Promise<string> => {
     const oneHundredTwentyEight = await delay(128, oneHundredTwentySeven + "1");
     const oneHundredTwentyNine = await delay(129, oneHundredTwentyEight + "2");
     const oneHundredThirty = await delay(130, oneHundredTwentyNine + "3");
-    return oneHundredThirty;
+    const oneHundredThirtyOne = await delay(131, oneHundredThirty + "4");
+    return oneHundredThirtyOne;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -760,7 +763,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const oneHundredTwentyEight = await delay(148, oneHundredTwentySeven + "7");
         const oneHundredTwentyNine = await delay(149, oneHundredTwentyEight + "8");
         const oneHundredThirty = await delay(150, oneHundredTwentyNine + "9");
-        return oneHundredThirty;
+        const oneHundredThirtyOne = await delay(151, oneHundredThirty + "0");
+        return oneHundredThirtyOne;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -948,7 +952,8 @@ async function branchEight(flag: boolean): Promise<string> {
     const oneHundredTwentyEight = await delay(156, oneHundredTwentySeven + "7");
     const oneHundredTwentyNine = await delay(157, oneHundredTwentyEight + "8");
     const oneHundredThirty = await delay(158, oneHundredTwentyNine + "9");
-    return oneHundredThirty;
+    const oneHundredThirtyOne = await delay(159, oneHundredThirty + "0");
+    return oneHundredThirtyOne;
 }
 
 class BranchChain {
@@ -1140,7 +1145,8 @@ class BranchChain {
             const oneHundredTwentyEight = await delay(164, oneHundredTwentySeven + "7");
             const oneHundredTwentyNine = await delay(165, oneHundredTwentyEight + "8");
             const oneHundredThirty = await delay(166, oneHundredTwentyNine + "9");
-            return oneHundredThirty;
+            const oneHundredThirtyOne = await delay(167, oneHundredThirty + "0");
+            return oneHundredThirtyOne;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -1328,7 +1334,8 @@ class BranchChain {
         const oneHundredTwentyEight = await delay(172, oneHundredTwentySeven + "7");
         const oneHundredTwentyNine = await delay(173, oneHundredTwentyEight + "8");
         const oneHundredThirty = await delay(174, oneHundredTwentyNine + "9");
-        return oneHundredThirty;
+        const oneHundredThirtyOne = await delay(175, oneHundredThirty + "0");
+        return oneHundredThirtyOne;
     }
 }
 
@@ -1520,7 +1527,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const oneHundredTwentyEight = await delay(180, oneHundredTwentySeven + "7");
     const oneHundredTwentyNine = await delay(181, oneHundredTwentyEight + "8");
     const oneHundredThirty = await delay(182, oneHundredTwentyNine + "9");
-    return oneHundredThirty;
+    const oneHundredThirtyOne = await delay(183, oneHundredThirty + "0");
+    return oneHundredThirtyOne;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -1708,7 +1716,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const oneHundredTwentyEight = await delay(188, oneHundredTwentySeven + "7");
     const oneHundredTwentyNine = await delay(189, oneHundredTwentyEight + "8");
     const oneHundredThirty = await delay(190, oneHundredTwentyNine + "9");
-    return oneHundredThirty;
+    const oneHundredThirtyOne = await delay(191, oneHundredThirty + "0");
+    return oneHundredThirtyOne;
 };
 
 declaration().then((result) => console.log("declaration:", result));
