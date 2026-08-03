@@ -40124,6 +40124,10 @@ class Emitter {
                 ts.isVariableDeclarationList(loop.initializer)
                 ? ts.factory.createVariableStatement(undefined, loop.initializer)
                 : null;
+            const terminalContinue = loopBodyAction && ts.isContinueStatement(loopBodyAction) && !loopBodyAction.label;
+            const loopBodyWithoutTerminalContinue = terminalContinue
+                ? loopBody.slice(0, -1)
+                : loopBody;
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40141,7 +40145,7 @@ class Emitter {
                 }
                 ts.forEachChild(node, visitBody);
             };
-            for (const statement of loopBody) visitBody(statement);
+            for (const statement of loopBodyWithoutTerminalContinue) visitBody(statement);
             if (
                 ts.isForStatement(loop) &&
                 (loop.initializer === undefined && preLoopInitializer !== null ||
@@ -40155,7 +40159,7 @@ class Emitter {
                 const normalizedLoop = ts.factory.createWhileStatement(
                     loop.condition,
                     ts.factory.createBlock([
-                        ...loopBody,
+                        ...loopBodyWithoutTerminalContinue,
                         ...incrementorAwaitStatements,
                         ts.factory.createContinueStatement(),
                     ], true),
