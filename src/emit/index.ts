@@ -40234,6 +40234,24 @@ class Emitter {
             const allowedBreak = terminalBreak
                 ? loopBodyAction
                 : terminalIfBreak?.breakStatement ?? terminalIfBreakElseContinue?.breakStatement ?? terminalIfContinueElseBreak?.breakStatement ?? terminalIfBreakElseFallthrough?.breakStatement;
+            const terminalIfContinueAwaitConditionSupported = (() => {
+                if (!terminalIfContinue) return true;
+                const condition = this.unwrapTransparentExpression(terminalIfContinue.statement.expression);
+                if (!ts.isAwaitExpression(condition)) return true;
+                let supported = true;
+                const visitAwaitOperand = (node: ts.Node): void => {
+                    if (!supported || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                    if (ts.isAwaitExpression(node)) {
+                        supported = false;
+                        return;
+                    }
+                    ts.forEachChild(node, visitAwaitOperand);
+                };
+                visitAwaitOperand(condition.expression);
+                return supported && terminalIfContinue.thenStatements.slice(0, -1).every((statement) =>
+                    this.asyncAwaitLoopPostStatementSupported(statement)
+                );
+            })();
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40251,7 +40269,10 @@ class Emitter {
                 }
                 ts.forEachChild(node, visitBody);
             };
-            for (const statement of loopBodyWithoutTerminalControl) visitBody(statement);
+            for (const statement of loopBodyWithoutTerminalControl) {
+                if (terminalIfContinueAwaitConditionSupported && terminalIfContinue?.statement === statement) continue;
+                visitBody(statement);
+            }
             if (
                 ts.isForStatement(loop) &&
                 (loop.initializer === undefined && preLoopInitializer !== null ||
