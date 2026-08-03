@@ -264,7 +264,8 @@ async function declaration(): Promise<string> {
     const twoHundredFive = await delay(205, twoHundredFour + "5");
     const twoHundredSix = await delay(206, twoHundredFive + "6");
     const twoHundredSeven = await delay(207, twoHundredSix + "7");
-    return twoHundredSeven;
+    const twoHundredEight = await delay(208, twoHundredSeven + "8");
+    return twoHundredEight;
 }
 
 class Chain {
@@ -532,7 +533,8 @@ class Chain {
         const twoHundredFive = await delay(205, twoHundredFour + "8");
         const twoHundredSix = await delay(206, twoHundredFive + "9");
         const twoHundredSeven = await delay(207, twoHundredSix + "0");
-        return twoHundredSeven;
+        const twoHundredEight = await delay(208, twoHundredSeven + "1");
+        return twoHundredEight;
     }
 }
 
@@ -800,7 +802,8 @@ const value = async (): Promise<string> => {
     const twoHundredFive = await delay(205, twoHundredFour + "8");
     const twoHundredSix = await delay(206, twoHundredFive + "9");
     const twoHundredSeven = await delay(207, twoHundredSix + "0");
-    return twoHundredSeven;
+    const twoHundredEight = await delay(208, twoHundredSeven + "1");
+    return twoHundredEight;
 };
 
 async function branchEight(flag: boolean): Promise<string> {
@@ -1068,7 +1071,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const twoHundredFive = await delay(225, twoHundredFour + "4");
         const twoHundredSix = await delay(226, twoHundredFive + "5");
         const twoHundredSeven = await delay(227, twoHundredSix + "6");
-        return twoHundredSeven;
+        const twoHundredEight = await delay(228, twoHundredSeven + "7");
+        return twoHundredEight;
     }
     const one = await delay(29, "f");
     var switchMarker, switchLabel;
@@ -1333,7 +1337,8 @@ async function branchEight(flag: boolean): Promise<string> {
         const twoHundredFive = await delay(233, twoHundredFour + "4");
         const twoHundredSix = await delay(234, twoHundredFive + "5");
         const twoHundredSeven = await delay(235, twoHundredSix + "6");
-        return twoHundredSeven;
+        const twoHundredEight = await delay(236, twoHundredSeven + "7");
+        return twoHundredEight;
 }
 
 class BranchChain {
@@ -1602,7 +1607,8 @@ class BranchChain {
             const twoHundredFive = await delay(241, twoHundredFour + "4");
             const twoHundredSix = await delay(242, twoHundredFive + "5");
             const twoHundredSeven = await delay(243, twoHundredSix + "6");
-            return twoHundredSeven;
+            const twoHundredEight = await delay(244, twoHundredSeven + "7");
+            return twoHundredEight;
         }
         const one = await delay(45, "n");
         var switchMarker, switchLabel;
@@ -1867,7 +1873,8 @@ class BranchChain {
     const twoHundredFive = await delay(249, twoHundredFour + "4");
     const twoHundredSix = await delay(250, twoHundredFive + "5");
     const twoHundredSeven = await delay(251, twoHundredSix + "6");
-    return twoHundredSeven;
+    const twoHundredEight = await delay(252, twoHundredSeven + "7");
+    return twoHundredEight;
     }
 }
 
@@ -2136,7 +2143,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const twoHundredFive = await delay(257, twoHundredFour + "4");
     const twoHundredSix = await delay(258, twoHundredFive + "5");
     const twoHundredSeven = await delay(259, twoHundredSix + "6");
-    return twoHundredSeven;
+    const twoHundredEight = await delay(260, twoHundredSeven + "7");
+    return twoHundredEight;
     }
     const one = await delay(61, "x");
     var switchMarker, switchLabel;
@@ -2401,7 +2409,8 @@ const branchValue = async (flag: boolean): Promise<string> => {
     const twoHundredFive = await delay(265, twoHundredFour + "4");
     const twoHundredSix = await delay(266, twoHundredFive + "5");
     const twoHundredSeven = await delay(267, twoHundredSix + "6");
-    return twoHundredSeven;
+    const twoHundredEight = await delay(268, twoHundredSeven + "7");
+    return twoHundredEight;
 };
 
 declaration().then((result) => console.log("declaration:", result));
