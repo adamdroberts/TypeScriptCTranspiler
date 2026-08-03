@@ -1,0 +1,3 @@
+{
+  "description": "async for loops preserve multiple direct awaits in a comma-sequenced incrementor"
+}

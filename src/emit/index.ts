@@ -40108,7 +40108,7 @@ class Emitter {
                 return found;
             };
             const incrementorAwaitStatements = incrementorExpressions.length > 0 &&
-                incrementorExpressions.filter(ts.isAwaitExpression).length === 1 &&
+                incrementorExpressions.filter(ts.isAwaitExpression).length >= 1 &&
                 incrementorExpressions.every((expression) => {
                     if (ts.isAwaitExpression(expression)) return !incrementorContainsAwait(expression.expression);
                     return !incrementorContainsAwait(expression);

@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now preserve multiple direct awaits in a top-level comma-sequenced incrementor, with supported await-free neighboring operands ordered before, between, and after the suspensions. Test: `async_await_for_incrementor_multi_sequence`
+
 - Bounded async `for` loops now lower top-level comma-sequenced incrementors with exactly one direct await and supported await-free neighboring operands as ordered body steps before condition re-entry. Test: `async_await_for_incrementor_sequence`
 
 - Bounded async `for` loops now preserve an await-free loop-owned variable initializer before a direct awaited incrementor and awaited condition, carrying the initialized local through body-to-incrementor-to-condition suspension order. Test: `async_await_for_incrementor_initializer`
