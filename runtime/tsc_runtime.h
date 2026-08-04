@@ -189,6 +189,7 @@ tsc_symbol_t* tsc_symbol_for(const tsc_str_t* key);
 tsc_str_t* tsc_symbol_key_for(const tsc_symbol_t* sym);
 tsc_symbol_t* tsc_symbol_iterator(void);
 tsc_symbol_t* tsc_symbol_async_iterator(void);
+tsc_symbol_t* tsc_symbol_async_dispose(void);
 tsc_symbol_t* tsc_symbol_unscopables(void);
 tsc_symbol_t* tsc_symbol_is_concat_spreadable(void);
 tsc_symbol_t* tsc_symbol_to_string_tag(void);

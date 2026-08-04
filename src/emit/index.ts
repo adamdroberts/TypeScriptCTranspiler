@@ -80816,6 +80816,13 @@ class Emitter {
             expr.name.text === "asyncIterator";
     }
 
+    private isSymbolAsyncDisposeExpression(expr: ts.Expression): boolean {
+        return ts.isPropertyAccessExpression(expr) &&
+            ts.isIdentifier(expr.expression) &&
+            expr.expression.text === "Symbol" &&
+            expr.name.text === "asyncDispose";
+    }
+
     private isSymbolUnscopablesExpression(expr: ts.Expression): boolean {
         return ts.isPropertyAccessExpression(expr) &&
             ts.isIdentifier(expr.expression) &&
@@ -80847,6 +80854,7 @@ class Emitter {
     private isSupportedWellKnownSymbolExpression(expr: ts.Expression): boolean {
         return this.isSymbolIteratorExpression(expr) ||
             this.isSymbolAsyncIteratorExpression(expr) ||
+            this.isSymbolAsyncDisposeExpression(expr) ||
             this.isSymbolUnscopablesExpression(expr) ||
             this.isSymbolIsConcatSpreadableExpression(expr) ||
             this.isSymbolToStringTagExpression(expr) ||
@@ -86148,6 +86156,9 @@ class Emitter {
             if (pa.expression.text === "Symbol" && pa.name.text === "asyncIterator") {
                 return { c: `tsc_symbol_async_iterator()`, ty: T_SYMBOL };
             }
+            if (pa.expression.text === "Symbol" && pa.name.text === "asyncDispose") {
+                return { c: `tsc_symbol_async_dispose()`, ty: T_SYMBOL };
+            }
             if (pa.expression.text === "Symbol" && pa.name.text === "unscopables") {
                 return { c: `tsc_symbol_unscopables()`, ty: T_SYMBOL };
             }
@@ -86637,6 +86648,13 @@ class Emitter {
                 T_VALUE,
                 [{ value: recv, target: T_VALUE, node: ea.expression }],
                 ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_async_iterator())`,
+            );
+        }
+        if (this.isSymbolAsyncDisposeExpression(ea.argumentExpression) && recv.ty.kind === "value") {
+            return this.emitSequencedExpr(
+                T_VALUE,
+                [{ value: recv, target: T_VALUE, node: ea.expression }],
+                ([value]) => `tsc_value_get_symbol_prop(${value}, tsc_symbol_async_dispose())`,
             );
         }
         if (isArrayPrototypeReceiver && this.isSymbolUnscopablesExpression(ea.argumentExpression)) {

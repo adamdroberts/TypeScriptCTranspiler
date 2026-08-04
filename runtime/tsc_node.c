@@ -4145,6 +4145,12 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         0.0,
         tsc_str_from_lit("close", 5)
     ));
+    tsc_object_set(object, tsc_str_from_cstr("__tsc_symbol_asyncDispose"), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_close_builtin,
+        handle,
+        0.0,
+        tsc_str_from_lit("asyncDispose", 12)
+    ));
     return tsc_value_object(object);
 }
 

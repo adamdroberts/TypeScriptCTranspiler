@@ -1,0 +1,5 @@
+symbol: symbol:function
+result: true
+closedError: true
+idempotent: true
+error: pending

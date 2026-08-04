@@ -1,5 +1,7 @@
 # Implemented features
 
+- `fs.promises.open` FileHandle values now expose `Symbol.asyncDispose`, delegating to asynchronous `close()`, fulfilling after disposal, rejecting later I/O, and remaining idempotent on repeated disposal. Test: `fs_promises_file_handle_async_dispose`.
+
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `writeFile()` for current-position string/Buffer writes, UTF-8/hex/base64 encodings, optional `flush: true`, and closed-handle rejection without replacing or closing the caller-owned descriptor. Test: `fs_promises_file_handle_write_file`.
 
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `readFile()` with default/explicit Buffer results, UTF-8/hex/base64 string encodings, current-position reads, and closed-handle rejection without closing the caller-owned descriptor. Test: `fs_promises_file_handle_read_file`.
@@ -3313,6 +3315,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_promises_file_handle_append_file` | libuv-backed FileHandle appendFile string/Buffer data, encoding, flush, append ordering, and close rejection |
 | `fs_promises_file_handle_write_file` | libuv-backed FileHandle writeFile current-position string/Buffer writes, encoding, flush, and close rejection |
 | `fs_promises_file_handle_read_file` | libuv-backed FileHandle readFile Buffer/string results, current-position reads, encoding, and close rejection |
+| `fs_promises_file_handle_async_dispose` | libuv-backed FileHandle Symbol.asyncDispose delegation, disposal fulfillment, close rejection, and idempotency |
 | `fs_promises_readdir_abort_libuv` | libuv-backed fs.promises.readdir AbortSignal cancellation for shallow, recursive, encoded, and Dirent scanners |
 | `fs_promises_metadata_abort_libuv` | libuv-backed fs.promises stat/lstat/realpath/readlink/mkdtemp AbortSignal cancellation |
 | `fs_promises_mutation_abort_libuv` | libuv-backed fs.promises mkdir/rm/rmdir AbortSignal cancellation for simple and recursive requests |

@@ -16,6 +16,7 @@ interface SymbolConstructor {
     keyFor(sym: symbol, ...ignored: any[]): string | undefined;
     readonly iterator: symbol;
     readonly asyncIterator: symbol;
+    readonly asyncDispose: symbol;
     readonly unscopables: symbol;
     readonly isConcatSpreadable: symbol;
     readonly toStringTag: symbol;
@@ -1626,6 +1627,7 @@ interface FSFileHandle {
     sync(...ignored: any[]): Promise<void>;
     datasync(...ignored: any[]): Promise<void>;
     close(...ignored: any[]): Promise<void>;
+    [Symbol.asyncDispose](...ignored: any[]): Promise<void>;
 }
 interface FSPromises {
     readFile(path: FSPathLike, options: FSPromisesReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
