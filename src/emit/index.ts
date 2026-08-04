@@ -54443,7 +54443,7 @@ class Emitter {
             }
         }
         const finallyMultiYieldHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .find((handler) => this.activeLazyGeneratorCatchRecoveryDepth === 0 && !!handler.finallyMultiYieldStatement);
+            .find((handler) => this.activeLazyGeneratorFinalizerEmissionDepth === 0 && !!handler.finallyMultiYieldStatement);
         if (finallyMultiYieldHandler?.finallyMultiYieldStatement) {
             this.activeLazyGeneratorCatchRecoveryDepth++;
             this.activeLazyGeneratorFinalizerEmissionDepth++;
