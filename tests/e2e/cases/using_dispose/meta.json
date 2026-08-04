@@ -1,3 +1,3 @@
 {
-  "description": "bounded synchronous using declarations dispose dynamic Symbol.dispose resources in reverse order on normal, direct return/throw, and loop break/continue completion"
+  "description": "bounded synchronous using declarations dispose dynamic Symbol.dispose resources in reverse order on normal, direct or nested return/throw, and loop break/continue completion"
 }

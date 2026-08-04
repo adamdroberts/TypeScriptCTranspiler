@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Fixed
 - Synchronous `using` cleanup now runs after direct `return`/`throw` expressions are evaluated, preserving expression side effects before `Symbol.dispose` callbacks. Regression: `using_dispose`.
+- Synchronous `using` scopes now clean up across nested local `return`/`throw` branches while retaining the bounded diagnostic for nested loop-control exits. Regression: `using_dispose`.
 
 - Typed `Object.entries(...)` calls on Error-family values now preserve the declared `[string, any][]` result element layout while retaining the empty non-enumerable Error-object semantics. Regression: `error_object_methods`.
 

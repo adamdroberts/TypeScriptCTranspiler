@@ -1,4 +1,6 @@
 body21
 return: returned body21er
 throw: thrown body21erxt
-loop exits: body21erxtbBcCcC
+nested return: nested body21erxtNn
+nested throw: nested-throw body21erxtNnXq
+loop exits: body21erxtNnXqbBcCcC

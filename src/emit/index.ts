@@ -724,6 +724,7 @@ class Emitter {
     private generatorStack: GeneratorContext[] = [];
     private activeBreakTargets: Array<string | null> = [];
     private activeContinueTargets: Array<string | null> = [];
+    private syncUsingScopes: string[][] = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
@@ -58260,33 +58261,44 @@ class Emitter {
     ): void {
         const disposables = this.syncUsingNames(statements);
         let exited = false;
-        for (const stmt of statements) {
-            if (disposables.length > 0 && ts.isReturnStatement(stmt)) {
-                this.emitReturn(buf, stmt, disposables);
-                exited = true;
-                break;
+        if (disposables.length > 0) this.syncUsingScopes.push(disposables);
+        try {
+            for (const stmt of statements) {
+                if (disposables.length > 0 && ts.isReturnStatement(stmt)) {
+                    this.emitReturn(buf, stmt);
+                    exited = true;
+                    break;
+                }
+                if (disposables.length > 0 && ts.isThrowStatement(stmt)) {
+                    this.emitThrow(buf, stmt);
+                    exited = true;
+                    break;
+                }
+                if (disposables.length > 0 && this.isDirectUsingExit(stmt)) {
+                    this.emitSyncDisposals(buf, disposables);
+                    exited = true;
+                }
+                this.emitStmt(buf, stmt);
+                if (this.statementAlwaysExits(stmt)) {
+                    exited = true;
+                    break;
+                }
             }
-            if (disposables.length > 0 && ts.isThrowStatement(stmt)) {
-                this.emitThrow(buf, stmt, disposables);
-                exited = true;
-                break;
-            }
-            if (disposables.length > 0 && this.isDirectUsingExit(stmt)) {
-                this.emitSyncDisposals(buf, disposables);
-                exited = true;
-            }
-            this.emitStmt(buf, stmt);
-            if (this.statementAlwaysExits(stmt)) {
-                exited = true;
-                break;
-            }
+            if (!exited) this.emitSyncDisposals(buf, disposables);
+        } finally {
+            if (disposables.length > 0) this.syncUsingScopes.pop();
         }
-        if (!exited) this.emitSyncDisposals(buf, disposables);
     }
 
     private emitSyncDisposals(buf: CBuf, disposables: readonly string[]): void {
         for (let i = disposables.length - 1; i >= 0; i--) {
             buf.line(`tsc_value_dispose_sync(${disposables[i]!});`);
+        }
+    }
+
+    private emitActiveSyncDisposals(buf: CBuf): void {
+        for (let i = this.syncUsingScopes.length - 1; i >= 0; i--) {
+            this.emitSyncDisposals(buf, this.syncUsingScopes[i]!);
         }
     }
 
@@ -58333,7 +58345,7 @@ class Emitter {
             .filter((index) => index >= 0);
         const hasUnsupportedEarlyExit = statements.some((statement) =>
             !this.isDirectUsingExit(statement) &&
-            this.usingScopeHasEarlyExit(statement),
+            this.usingScopeHasUnsupportedEarlyExit(statement),
         );
         const hasEarlyExitBeforeUsing = directEarlyExitIndexes.some((index) => index < firstUsingIndex);
         const hasUsingAfterEarlyExit = directEarlyExitIndexes.some((index) =>
@@ -58350,25 +58362,20 @@ class Emitter {
             );
             unsupported(
                 usingStatement ?? statements[0]!,
-                "using scopes only support direct return/throw/break/continue cleanup after their declarations",
+                "using scopes only support local return/throw and direct loop-body break/continue cleanup after their declarations",
             );
         }
         return names;
     }
 
-    private usingScopeHasEarlyExit(node: ts.Node): boolean {
+    private usingScopeHasUnsupportedEarlyExit(node: ts.Node): boolean {
         if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
-        if (
-            ts.isReturnStatement(node) ||
-            ts.isThrowStatement(node) ||
-            node.kind === ts.SyntaxKind.BreakStatement ||
-            node.kind === ts.SyntaxKind.ContinueStatement
-        ) {
+        if (node.kind === ts.SyntaxKind.BreakStatement || node.kind === ts.SyntaxKind.ContinueStatement) {
             return true;
         }
         let found = false;
         node.forEachChild((child) => {
-            if (!found && this.usingScopeHasEarlyExit(child)) found = true;
+            if (!found && this.usingScopeHasUnsupportedEarlyExit(child)) found = true;
         });
         return found;
     }
@@ -59047,7 +59054,6 @@ class Emitter {
     private emitReturn(
         buf: CBuf,
         r: ts.ReturnStatement,
-        syncDisposables: readonly string[] = [],
     ): void {
         if (this.returnStack.length === 0) {
             unsupported(r, "return outside of function");
@@ -59057,7 +59063,7 @@ class Emitter {
             this.asyncAwaitContinuationReturnTargets[this.asyncAwaitContinuationReturnTargets.length - 1];
         if (continuationReturn) {
             if (!r.expression) {
-                this.emitSyncDisposals(buf, syncDisposables);
+                this.emitActiveSyncDisposals(buf);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
                 buf.line("return;");
@@ -59067,14 +59073,14 @@ class Emitter {
             const returnedType = this.prepareType(expr.ty);
             if (returnedType.kind === "void" || returnedType.kind === "never") {
                 buf.line(`${expr.c};`);
-                this.emitSyncDisposals(buf, syncDisposables);
+                this.emitActiveSyncDisposals(buf);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
             } else {
                 const returnVar = this.freshTemp("_await_return");
                 const resolvedVar = this.freshTemp("_await_resolved");
                 buf.line(`${returnedType.c} ${returnVar} = ${expr.c};`);
-                this.emitSyncDisposals(buf, syncDisposables);
+                this.emitActiveSyncDisposals(buf);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_t* ${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, r.expression)};`);
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, ${resolvedVar});`);
@@ -59090,14 +59096,14 @@ class Emitter {
                 buf.line(`${gen.arrayVar}->iter_has_return = true;`);
                 buf.line(`${gen.arrayVar}->iter_return_consumed = false;`);
             }
-            this.emitSyncDisposals(buf, syncDisposables);
+            this.emitActiveSyncDisposals(buf);
             buf.line(`return ${gen.arrayVar};`);
             return;
         }
         const asyncCtx = this.asyncFunctionStack[this.asyncFunctionStack.length - 1];
         if (asyncCtx) {
             if (!r.expression) {
-                this.emitSyncDisposals(buf, syncDisposables);
+                this.emitActiveSyncDisposals(buf);
                 buf.line("return tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
@@ -59105,33 +59111,33 @@ class Emitter {
             if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0) {
                 const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
                 if (this.prepareType(awaitedSource.ty).kind === "promise") {
-                    this.emitSyncDisposals(buf, syncDisposables);
+                    this.emitActiveSyncDisposals(buf);
                     buf.line(`return tsc_promise_adopt(${awaitedSource.c});`);
                     return;
                 }
             }
             const expr = this.emitExpr(r.expression);
             if (expr.ty.kind === "promise") {
-                this.emitSyncDisposals(buf, syncDisposables);
+                this.emitActiveSyncDisposals(buf);
                 buf.line(`return tsc_promise_adopt(${expr.c});`);
                 return;
             }
-            this.emitSyncDisposals(buf, syncDisposables);
+            this.emitActiveSyncDisposals(buf);
             buf.line(`return ${this.promiseResolveResult(expr, r.expression)};`);
             return;
         }
         if (!r.expression) {
-            this.emitSyncDisposals(buf, syncDisposables);
+            this.emitActiveSyncDisposals(buf);
             buf.line("return;");
             return;
         }
-        if (this.emitTailCallReturn(buf, r.expression, syncDisposables)) return;
+        if (this.emitTailCallReturn(buf, r.expression)) return;
         const expr = this.emitExpr(r.expression);
         const coerced = this.coerce(expr, ret, r.expression);
-        if (syncDisposables.length > 0) {
+        if (this.syncUsingScopes.length > 0) {
             const returnValue = this.freshTemp("_using_return");
             buf.line(`${ret.c} const ${returnValue} = ${coerced};`);
-            this.emitSyncDisposals(buf, syncDisposables);
+            this.emitActiveSyncDisposals(buf);
             buf.line(`return ${returnValue};`);
             return;
         }
@@ -59141,7 +59147,6 @@ class Emitter {
     private emitTailCallReturn(
         buf: CBuf,
         expr: ts.Expression,
-        syncDisposables: readonly string[] = [],
     ): boolean {
         const ctx = this.tailFunctionStack[this.tailFunctionStack.length - 1];
         if (!ctx || !ts.isCallExpression(expr) || !ts.isIdentifier(expr.expression)) {
@@ -59169,7 +59174,7 @@ class Emitter {
         for (let i = 0; i < temps.length; i++) {
             buf.line(`${ctx.params[i]!.name} = ${temps[i]!.name};`);
         }
-        this.emitSyncDisposals(buf, syncDisposables);
+        this.emitActiveSyncDisposals(buf);
         buf.line(`goto ${ctx.label};`);
         buf.close();
         return true;
@@ -59404,15 +59409,14 @@ class Emitter {
     private emitThrow(
         buf: CBuf,
         t: ts.ThrowStatement,
-        syncDisposables: readonly string[] = [],
     ): void {
         const e = this.emitExpr(t.expression);
         const asStr = this.coerceToString(e, t.expression);
         let thrown = asStr;
-        if (syncDisposables.length > 0) {
+        if (this.syncUsingScopes.length > 0) {
             const thrownValue = this.freshTemp("_using_throw");
             buf.line(`tsc_str_t* const ${thrownValue} = ${asStr};`);
-            this.emitSyncDisposals(buf, syncDisposables);
+            this.emitActiveSyncDisposals(buf);
             thrown = thrownValue;
         }
         if (

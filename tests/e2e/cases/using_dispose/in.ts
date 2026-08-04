@@ -32,6 +32,27 @@ function throwRun(): void {
     throw (events += "x", "thrown");
 }
 
+function nestedReturnRun(shouldReturn: boolean): string {
+    const value: any = {};
+    value[Symbol.dispose] = (): void => {
+        events += "n";
+    };
+    using resource: any = value;
+    if (shouldReturn) return (events += "N", "nested");
+    events += "f";
+    return "fallthrough";
+}
+
+function nestedThrowRun(shouldThrow: boolean): void {
+    const value: any = {};
+    value[Symbol.dispose] = (): void => {
+        events += "q";
+    };
+    using resource: any = value;
+    if (shouldThrow) throw (events += "X", "nested-throw");
+    events += "g";
+}
+
 function breakRun(): void {
     for (let i = 0; i < 1; i++) {
         const value: any = {};
@@ -66,6 +87,14 @@ try {
     caught = String(error);
 }
 console.log("throw:", caught, events);
+console.log("nested return:", nestedReturnRun(true), events);
+let nestedCaught = "";
+try {
+    nestedThrowRun(true);
+} catch (error) {
+    nestedCaught = String(error);
+}
+console.log("nested throw:", nestedCaught, events);
 breakRun();
 continueRun();
 console.log("loop exits:", events);
