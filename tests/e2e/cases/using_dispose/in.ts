@@ -98,3 +98,14 @@ console.log("nested throw:", nestedCaught, events);
 breakRun();
 continueRun();
 console.log("loop exits:", events);
+
+async function asyncReturnRun(): Promise<string> {
+    const value: any = {};
+    value[Symbol.dispose] = (): void => {
+        events += "A";
+    };
+    using resource: any = value;
+    return (events += "a", "async");
+}
+
+asyncReturnRun().then((value) => console.log("async return:", value, events));

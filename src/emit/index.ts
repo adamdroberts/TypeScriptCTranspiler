@@ -59111,6 +59111,13 @@ class Emitter {
             if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0) {
                 const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
                 if (this.prepareType(awaitedSource.ty).kind === "promise") {
+                    if (this.syncUsingScopes.length > 0) {
+                        const sourceValue = this.freshTemp("_using_async_source");
+                        buf.line(`${awaitedSource.ty.c} const ${sourceValue} = ${awaitedSource.c};`);
+                        this.emitActiveSyncDisposals(buf);
+                        buf.line(`return tsc_promise_adopt(${sourceValue});`);
+                        return;
+                    }
                     this.emitActiveSyncDisposals(buf);
                     buf.line(`return tsc_promise_adopt(${awaitedSource.c});`);
                     return;
@@ -59118,8 +59125,22 @@ class Emitter {
             }
             const expr = this.emitExpr(r.expression);
             if (expr.ty.kind === "promise") {
+                if (this.syncUsingScopes.length > 0) {
+                    const promiseValue = this.freshTemp("_using_async_promise");
+                    buf.line(`${expr.ty.c} const ${promiseValue} = ${expr.c};`);
+                    this.emitActiveSyncDisposals(buf);
+                    buf.line(`return tsc_promise_adopt(${promiseValue});`);
+                    return;
+                }
                 this.emitActiveSyncDisposals(buf);
                 buf.line(`return tsc_promise_adopt(${expr.c});`);
+                return;
+            }
+            if (this.syncUsingScopes.length > 0) {
+                const resolvedValue = this.freshTemp("_using_async_resolved");
+                buf.line(`tsc_promise_t* const ${resolvedValue} = ${this.promiseResolveResult(expr, r.expression)};`);
+                this.emitActiveSyncDisposals(buf);
+                buf.line(`return ${resolvedValue};`);
                 return;
             }
             this.emitActiveSyncDisposals(buf);
