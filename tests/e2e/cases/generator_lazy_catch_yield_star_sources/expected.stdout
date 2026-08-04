@@ -1,0 +1,9 @@
+map map-source map-one 1 map-two 2 true map-done
+set set-source set-one set-two true set-done
+string string-source a b true string-done
+custom custom-source 30 40 true custom-done
+url url-source url-one 1 url-two 2 true url-done
+buffer buffer-source 50 60 true buffer-done
+dynamic-array dynamic-array-source dynamic-one dynamic-two true dynamic-array-done
+dynamic-string dynamic-string-source a b true dynamic-string-done
+map-close map-source map-one true map-closed
