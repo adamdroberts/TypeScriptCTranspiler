@@ -52864,7 +52864,8 @@ class Emitter {
         }
 
         if (ts.isIfStatement(stmt)) {
-            if (this.nodeContainsYield(stmt.expression)) return false;
+            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
+            if (this.nodeContainsYield(stmt.expression) && !yieldedCondition) return false;
             if (!this.isValidLazyGeneratorStatement(stmt.thenStatement, loopDepth)) return false;
             return !stmt.elseStatement || this.isValidLazyGeneratorStatement(stmt.elseStatement, loopDepth);
         }
@@ -53412,6 +53413,13 @@ class Emitter {
             return stmt.expression ? this.singleYieldExpressionInExpression(stmt.expression) : null;
         }
         return null;
+    }
+
+    private directLazyYieldCondition(expr: ts.Expression): ts.YieldExpression | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isYieldExpression(unwrapped) || unwrapped.asteriskToken) return null;
+        if (unwrapped.expression && this.nodeContainsYield(unwrapped.expression)) return null;
+        return unwrapped;
     }
 
     private simpleLazyMultiYieldReturn(stmt: ts.Statement): {
@@ -54248,8 +54256,29 @@ class Emitter {
         }
 
         if (ts.isIfStatement(stmt)) {
-            const cond = this.emitExpr(stmt.expression);
-            const condC = this.truthyExprFromEmitResult(cond, stmt.expression);
+            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
+            let condC: string;
+            if (yieldedCondition) {
+                const nextState = nextStateId();
+                const value = yieldedCondition.expression
+                    ? this.emitExpr(yieldedCondition.expression)
+                    : { c: "NULL", ty: T_VOID };
+                const valueNode = yieldedCondition.expression ?? yieldedCondition;
+                const tmp = this.freshTemp("_yield");
+                buf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
+                buf.line(`tsc_array_push_raw(a, &${tmp});`);
+                buf.line(`*state = ${nextState};`);
+                buf.line("*done = false;");
+                buf.line("return;");
+                buf.line(`case ${nextState}:;`);
+                condC = this.truthyExprFromEmitResult(
+                    { c: "next_arg", ty: T_VALUE },
+                    stmt.expression,
+                );
+            } else {
+                const cond = this.emitExpr(stmt.expression);
+                condC = this.truthyExprFromEmitResult(cond, stmt.expression);
+            }
             buf.open(`if (${condC})`);
             this.emitLazyGeneratorStmt(buf, stmt.thenStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             if (stmt.elseStatement) {

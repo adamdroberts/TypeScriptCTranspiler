@@ -23,6 +23,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - `await using` now supports one or more dynamic, non-thenable resources at the start of a non-suspending async body, disposing them through `Symbol.asyncDispose` in reverse order on normal or direct-return completion and continuing later cleanup after an earlier disposal rejection across declarations, async arrows, class methods, and await-free terminal `if` return/throw branches with bounded simple prefixes, one nested await-free selector, and bounded fallback prefixes before completion; deeper nested/loop control-flow exits, thenable initializers, and broader suppression state machines remain deferred. Tests: `await_using_dispose`, `await_using_multiple_dispose`, `await_using_async_values_dispose`, `await_using_branch_dispose`.
 
+- Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing while leaving compound selectors, loop/switch suspension, and broader generator graphs deferred. Test: `generator_lazy_if_yield_condition`.
+
 - Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion, direct local `return`/`throw`, or direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested control-flow exits remain compile-time diagnostics. Test: `using_dispose`.
 
 - `Symbol.dispose` now has stable well-known-symbol identity, description, static-emitter support, and dynamic symbol-key lookup as the synchronous explicit-resource-management hook. Test: `symbols`.

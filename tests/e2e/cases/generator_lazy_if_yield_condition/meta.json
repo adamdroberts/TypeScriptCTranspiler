@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators suspend and resume direct yield expressions used as if selectors"
+}
