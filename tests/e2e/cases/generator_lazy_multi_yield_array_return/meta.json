@@ -1,0 +1,3 @@
+{
+  "description": "lazy generator multi-yield returns preserve finite typed and dynamic array literal construction"
+}

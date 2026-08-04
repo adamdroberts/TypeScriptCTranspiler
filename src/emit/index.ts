@@ -53501,10 +53501,10 @@ class Emitter {
     }
 
     private simpleLazyMultiYieldReturn(stmt: ts.Statement): {
-        expression: ts.BinaryExpression;
+        expression: ts.Expression;
         yields: ts.YieldExpression[];
     } | null {
-        if (!ts.isReturnStatement(stmt) || !stmt.expression || !ts.isBinaryExpression(stmt.expression)) return null;
+        if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
         const yields: ts.YieldExpression[] = [];
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
@@ -53539,7 +53539,14 @@ class Emitter {
             if (ts.isTaggedTemplateExpression(unwrapped)) {
                 return !this.nodeContainsYield(unwrapped);
             }
-            if (ts.isArrayLiteralExpression(unwrapped) || ts.isObjectLiteralExpression(unwrapped)) {
+            if (ts.isArrayLiteralExpression(unwrapped)) {
+                for (const element of unwrapped.elements) {
+                    if (element.kind === ts.SyntaxKind.OmittedExpression || ts.isSpreadElement(element)) return false;
+                    if (!visit(element as ts.Expression)) return false;
+                }
+                return true;
+            }
+            if (ts.isObjectLiteralExpression(unwrapped)) {
                 return !this.nodeContainsYield(unwrapped);
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
@@ -54811,9 +54818,60 @@ class Emitter {
         return stable;
     }
 
+    private emitLazyMultiYieldArrayLiteral(
+        al: ts.ArrayLiteralExpression,
+        build: (node: ts.Expression) => EmitResult,
+    ): EmitResult {
+        const litType =
+            this.checker.getContextualType(al) ??
+            this.checker.getTypeAtLocation(al);
+        const mapped = this.isUntypedJsArrayLiteral(al)
+            ? T_VALUE
+            : mapTsType(al, litType, this.checker);
+        if (mapped.kind === "value") {
+            const pieces: string[] = [];
+            const array = this.freshTemp("_lazy_dynarr");
+            pieces.push(`tsc_array_t* ${array} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`);
+            for (const element of al.elements) {
+                if (element.kind === ts.SyntaxKind.OmittedExpression || ts.isSpreadElement(element)) {
+                    unsupported(element, "lazy multi-yield array literals must be dense and cannot spread");
+                }
+                const value = build(element as ts.Expression);
+                const boxed = this.freshTemp("_lazy_dynv");
+                pieces.push(`tsc_value_t ${boxed} = ${this.coerce(value, T_VALUE, element)}`);
+                pieces.push(`tsc_array_push_raw(${array}, &${boxed})`);
+            }
+            pieces.push(`tsc_value_array(${array})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        }
+        if (mapped.kind !== "array") {
+            unsupported(al, `lazy multi-yield array literal inferred non-array type ${mapped.c}`);
+        }
+        const elemType = mapped.elem!;
+        const array = this.freshTemp("_lazy_arr");
+        const arrayCtor = elemType.kind === "number" || elemType.kind === "boolean"
+            ? "tsc_array_new_atomic"
+            : "tsc_array_new";
+        const pieces: string[] = [
+            `tsc_array_t* ${array} = ${arrayCtor}(sizeof(${elemType.c}), ${Math.max(8, al.elements.length)})`,
+        ];
+        for (const element of al.elements) {
+            if (element.kind === ts.SyntaxKind.OmittedExpression || ts.isSpreadElement(element)) {
+                unsupported(element, "lazy multi-yield array literals must be dense and cannot spread");
+            }
+            const value = build(element as ts.Expression);
+            const coerced = this.coerce(value, elemType, element);
+            const item = this.freshTemp("_lazy_el");
+            pieces.push(`${elemType.c} ${item} = ${coerced}`);
+            pieces.push(`TSC_ARR(${elemType.c}, ${array}, ${array}->len) = ${item}; ${array}->len++`);
+        }
+        pieces.push(array);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
+    }
+
     private emitLazyGeneratorMultiYieldReturn(
         buf: CBuf,
-        info: { expression: ts.BinaryExpression; yields: ts.YieldExpression[] },
+        info: { expression: ts.Expression; yields: ts.YieldExpression[] },
         elemType: CType,
         envLocalName: string,
         nextStateId: () => number,
@@ -54901,7 +54959,12 @@ class Emitter {
             if (ts.isTaggedTemplateExpression(unwrapped)) {
                 return this.emitExpr(unwrapped);
             }
-            if (ts.isArrayLiteralExpression(unwrapped) || ts.isObjectLiteralExpression(unwrapped)) {
+            if (ts.isArrayLiteralExpression(unwrapped)) {
+                return this.nodeContainsYield(unwrapped)
+                    ? this.emitLazyMultiYieldArrayLiteral(unwrapped, build)
+                    : this.emitExpr(unwrapped);
+            }
+            if (ts.isObjectLiteralExpression(unwrapped)) {
                 return this.emitExpr(unwrapped);
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
