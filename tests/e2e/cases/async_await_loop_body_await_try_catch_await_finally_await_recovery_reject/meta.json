@@ -1,0 +1,3 @@
+{
+  "description": "async loop body awaited catch recovery rejection runs awaited finally before propagating"
+}

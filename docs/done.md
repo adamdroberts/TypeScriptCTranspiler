@@ -8,6 +8,8 @@
 
 - Ordinary awaited loop bodies now retain await-free statements after the try body, catch recovery, and awaited `finally` cleanup before terminal `return await` or `throw await`, including the rejected-body catch path. Tests: `async_await_loop_body_await_try_catch_await_finally_await_postlude_return`, `async_await_loop_body_await_try_catch_await_finally_await_postlude_throw`
 
+- Ordinary awaited loop bodies now preserve awaited catch/finally rejection precedence: a rejected catch recovery remains the rejection after successful cleanup, while a cleanup rejection overrides the recovered path before terminal settlement. Tests: `async_await_loop_body_await_try_catch_await_finally_await_recovery_reject`, `async_await_loop_body_await_try_catch_await_finally_await_cleanup_reject`
+
 - Ordinary awaited loop bodies now carry initialized `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `throw await`, preserving captured values and rejection delivery. Test: `async_await_loop_body_await_local_multi_throw`
 
 - Ordinary awaited loop bodies now carry initialized `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `return await`, preserving captured values. Test: `async_await_loop_body_await_local_multi_return`
