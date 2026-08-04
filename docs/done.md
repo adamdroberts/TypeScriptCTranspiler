@@ -10,7 +10,7 @@
 
 - Lazy generators now suspend and resume a direct `yield` used as a `switch` discriminant, matching static string, numeric, and boolean case keys through the resumed value while preserving default/fallthrough routing and close/finally handling; compound discriminants and broader switch graphs remain deferred. Test: `generator_lazy_switch_yield_condition`.
 
-- Lazy generators now suspend a direct `yield` used as the first `switch` case label, preserve the discriminant across that second suspension, match later static cases when the yielded case does not match, and route close/finally cleanup; compound or later yielded case labels remain deferred. Test: `generator_lazy_switch_yield_case`.
+- Lazy generators now suspend direct `yield` expressions used as `switch` case labels at any clause position, preserve the discriminant across each suspension, evaluate multiple yielded labels in order before selecting a match or default, and route close/finally cleanup; compound yielded labels remain deferred. Tests: `generator_lazy_switch_yield_case`, `generator_lazy_switch_yield_case_order`.
 
 - Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, including async functions without suspension in the using scope, disposing resources in reverse declaration order on normal completion, after direct or nested local `return`/`throw` expressions have been evaluated, or on direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested loop-control exits remain compile-time diagnostics. Test: `using_dispose`.
 
@@ -3400,6 +3400,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_loop_yield_condition` | lazy generators suspend direct yield expressions used as while, do-while, and counted for conditions with continue, incrementor, and close/finally coverage |
 | `generator_lazy_switch_yield_condition` | lazy generators suspend a direct yield used as a switch discriminant with static case matching, fallthrough, and close/finally coverage |
 | `generator_lazy_switch_yield_case` | lazy generators suspend a direct yield used as the first switch case label and preserve later static cases plus close/finally coverage |
+| `generator_lazy_switch_yield_case_order` | lazy generators evaluate static and multiple direct-yield switch case labels in order before matching or selecting the default |
 | `generator_lazy_params` | lazy generator environments preserve parameters and this receivers |
 | `generator_lazy_locals` | lazy generator environments preserve simple locals across suspension points |
 | `generator_lazy_next_value` | lazy generators receive next(value) into simple suspended yield assignments |

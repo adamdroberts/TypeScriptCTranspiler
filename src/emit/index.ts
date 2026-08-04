@@ -52952,12 +52952,9 @@ class Emitter {
         if (ts.isSwitchStatement(stmt)) {
             const yieldedDiscriminant = this.directLazyYieldCondition(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant) return false;
-            for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
+            for (const clause of stmt.caseBlock.clauses) {
                 const yieldedCase = ts.isCaseClause(clause) ? this.directLazyYieldCondition(clause.expression) : null;
                 if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression) && !yieldedCase) {
-                    return false;
-                }
-                if (ts.isCaseClause(clause) && yieldedCase && index !== 0) {
                     return false;
                 }
                 if (ts.isCaseClause(clause) && !yieldedCase && !this.switchCaseKey(clause.expression)) {
@@ -53435,9 +53432,9 @@ class Emitter {
         return unwrapped;
     }
 
-    private directLazyYieldSwitchCase(stmt: ts.SwitchStatement): ts.YieldExpression | null {
-        const first = stmt.caseBlock.clauses[0];
-        return first && ts.isCaseClause(first) ? this.directLazyYieldCondition(first.expression) : null;
+    private lazyGeneratorSwitchHasDirectYieldCase(stmt: ts.SwitchStatement): boolean {
+        return stmt.caseBlock.clauses.some((clause) =>
+            ts.isCaseClause(clause) && !!this.directLazyYieldCondition(clause.expression));
     }
 
     private emitLazyGeneratorDirectYieldValue(
@@ -53891,8 +53888,7 @@ class Emitter {
                 envLocalName,
             );
             const disc = yieldedDiscriminant ?? this.emitExpr(stmt.expression);
-            const hasYieldedCase = stmt.caseBlock.clauses.some((clause, index) =>
-                index === 0 && ts.isCaseClause(clause) && !!this.directLazyYieldCondition(clause.expression));
+            const hasYieldedCase = this.lazyGeneratorSwitchHasDirectYieldCase(stmt);
             const isDynamic = disc.ty.kind === "value" || hasYieldedCase;
             const isStr = disc.ty.kind === "string";
             const isBool = disc.ty.kind === "boolean";
@@ -53938,40 +53934,50 @@ class Emitter {
                 }
                 return `(${discRef} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
             };
-            const caseConds = new Map<ts.CaseClause, string>();
-            const allCaseConds: string[] = [];
-            for (const clause of stmt.caseBlock.clauses) {
-                if (!ts.isCaseClause(clause)) continue;
-                const cond = buildCond(clause.expression);
-                caseConds.set(clause, cond);
-                allCaseConds.push(cond);
+            let defaultIndex = -1;
+            const caseIndices: number[] = [];
+            for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
+                if (ts.isCaseClause(clause)) caseIndices.push(index);
+                else defaultIndex = index;
             }
 
-            let first = true;
-            let defaultIndex = -1;
-            for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
-                if (ts.isCaseClause(clause)) {
-                    const cond = caseConds.get(clause)!;
-                    buf.open(first ? `if (${cond})` : `else if (${cond})`);
+            const emitCaseChain = (position: number): void => {
+                const index = caseIndices[position]!;
+                const clause = stmt.caseBlock.clauses[index]! as ts.CaseClause;
+                const cond = buildCond(clause.expression);
+                buf.open(`if (${cond})`);
+                this.emitLazyGeneratorSwitchClauseRange(
+                    buf,
+                    stmt.caseBlock.clauses,
+                    index,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                buf.close();
+                if (position + 1 < caseIndices.length) {
+                    buf.open("else");
+                    emitCaseChain(position + 1);
+                    buf.close();
+                } else if (defaultIndex >= 0) {
+                    buf.open("else");
                     this.emitLazyGeneratorSwitchClauseRange(
                         buf,
                         stmt.caseBlock.clauses,
-                        index,
+                        defaultIndex,
                         nextStateId,
                         nextYieldStarSlot,
                         elemType,
                         envLocalName,
                     );
                     buf.close();
-                    first = false;
-                    continue;
                 }
+            };
 
-                defaultIndex = index;
-            }
-
-            if (defaultIndex >= 0) {
-                buf.open(first ? "if (true)" : "else");
+            if (caseIndices.length > 0) {
+                emitCaseChain(0);
+            } else if (defaultIndex >= 0) {
                 this.emitLazyGeneratorSwitchClauseRange(
                     buf,
                     stmt.caseBlock.clauses,
@@ -53981,7 +53987,6 @@ class Emitter {
                     elemType,
                     envLocalName,
                 );
-                buf.close();
             }
             buf.close();
         } finally {
@@ -55153,7 +55158,7 @@ class Emitter {
             ts.forEachChild(fn.body, collectForInInfos);
 
             const collectSwitchResumeInfos = (node: ts.Node) => {
-                if (ts.isSwitchStatement(node) && this.directLazyYieldSwitchCase(node)) {
+                if (ts.isSwitchStatement(node) && this.lazyGeneratorSwitchHasDirectYieldCase(node)) {
                     const index = switchResumeInfos.length;
                     const info: LazySwitchResumeInfo = { field: `switch_disc_${index}` };
                     switchResumeInfos.push({ statement: node, info });

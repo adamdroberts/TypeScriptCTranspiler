@@ -1,0 +1,8 @@
+alpha true complete start:alpha|static-case|done
+beta false case-select start:beta
+beta false second-select start:beta
+beta true complete start:beta|second-yielded-case|done
+other false case-select start:other
+other false second-select start:other
+other true complete start:other|default|done
+close false close-case true closed close-finally

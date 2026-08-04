@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators evaluate static and multiple direct-yield switch case labels in order before matching or selecting the default, with close/finally handling"
+}
