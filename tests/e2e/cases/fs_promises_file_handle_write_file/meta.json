@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed FileHandle writeFile for current-position writes, encoded strings, Buffer data, flush, and close rejection"
+}

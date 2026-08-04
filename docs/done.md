@@ -1,5 +1,7 @@
 # Implemented features
 
+- `fs.promises.open` FileHandle values now support libuv-backed asynchronous `writeFile()` for current-position string/Buffer writes, UTF-8/hex/base64 encodings, optional `flush: true`, and closed-handle rejection without replacing or closing the caller-owned descriptor. Test: `fs_promises_file_handle_write_file`.
+
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `appendFile()` for string/Buffer data, UTF-8/hex/base64 encodings, optional `flush: true`, and closed-handle rejection without closing the caller-owned descriptor. Test: `fs_promises_file_handle_append_file`.
 
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `chmod()`, `chown()`, and `utimes()` descriptor mutations with numeric/Date arguments and reject after asynchronous close. Test: `fs_promises_file_handle_metadata`.
@@ -3307,6 +3309,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_promises_write_file_libuv` | libuv-backed fs.promises.writeFile/appendFile string, Buffer, encoded, append, mode, and exclusive flows |
 | `fs_promises_write_file_abort_libuv` | libuv-backed fs.promises.writeFile/appendFile AbortSignal cancellation for queued and in-flight requests |
 | `fs_promises_file_handle_append_file` | libuv-backed FileHandle appendFile string/Buffer data, encoding, flush, append ordering, and close rejection |
+| `fs_promises_file_handle_write_file` | libuv-backed FileHandle writeFile current-position string/Buffer writes, encoding, flush, and close rejection |
 | `fs_promises_readdir_abort_libuv` | libuv-backed fs.promises.readdir AbortSignal cancellation for shallow, recursive, encoded, and Dirent scanners |
 | `fs_promises_metadata_abort_libuv` | libuv-backed fs.promises stat/lstat/realpath/readlink/mkdtemp AbortSignal cancellation |
 | `fs_promises_mutation_abort_libuv` | libuv-backed fs.promises mkdir/rm/rmdir AbortSignal cancellation for simple and recursive requests |

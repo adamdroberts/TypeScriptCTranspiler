@@ -3079,6 +3079,7 @@ typedef struct tsc_fs_file_handle_append_async {
     int fd;
     size_t offset;
     bool flush;
+    bool is_append;
     bool req_pending;
     tsc_str_t* error;
     tsc_uv_buf_t write_buf;
@@ -3485,13 +3486,22 @@ static void tsc_fs_file_handle_append_async_remove(tsc_fs_file_handle_append_asy
     }
 }
 
+static const char* tsc_fs_file_handle_append_error(const tsc_fs_file_handle_append_async_t* task, bool flush) {
+    if (flush) return task->is_append
+        ? "fs.promises.FileHandle.appendFile: could not flush file"
+        : "fs.promises.FileHandle.writeFile: could not flush file";
+    return task->is_append
+        ? "fs.promises.FileHandle.appendFile: could not append file"
+        : "fs.promises.FileHandle.writeFile: could not write file";
+}
+
 static void tsc_fs_file_handle_append_async_finish(tsc_fs_file_handle_append_async_t* task, bool success) {
     if (success) {
         tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
     } else {
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not append file"))
+            tsc_value_string(task->error ? task->error : tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, false)))
         );
     }
     tsc_fs_file_handle_append_async_remove(task);
@@ -3508,7 +3518,7 @@ static void tsc_fs_file_handle_append_async_flush_or_finish(tsc_fs_file_handle_a
         if (rc < 0) {
             task->req_pending = false;
             uv_fs_req_cleanup(&task->req);
-            task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not flush file");
+            task->error = tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, true));
             tsc_fs_file_handle_append_async_finish(task, false);
         } else {
             task->req_pending = true;
@@ -3524,7 +3534,7 @@ static void tsc_fs_file_handle_append_async_fsync_cb(tsc_uv_fs_t* req) {
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
     if (result < 0) {
-        task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not flush file");
+        task->error = tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, true));
         tsc_fs_file_handle_append_async_finish(task, false);
         return;
     }
@@ -3537,7 +3547,7 @@ static void tsc_fs_file_handle_append_async_write_cb(tsc_uv_fs_t* req) {
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
     if (result < 0 || result == 0) {
-        task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not append file");
+        task->error = tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, false));
         tsc_fs_file_handle_append_async_flush_or_finish(task, false);
         return;
     }
@@ -3564,14 +3574,14 @@ static void tsc_fs_file_handle_append_async_write_next(tsc_fs_file_handle_append
     if (rc < 0) {
         task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
-        task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not append file");
+        task->error = tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, false));
         tsc_fs_file_handle_append_async_flush_or_finish(task, false);
     } else {
         task->req_pending = true;
     }
 }
 
-static tsc_str_t* tsc_fs_file_handle_append_encoding(tsc_value_t options) {
+static tsc_str_t* tsc_fs_file_handle_append_encoding(tsc_value_t options, bool is_append) {
     if (tsc_value_is_nullish(options)) return NULL;
     tsc_value_t encoding_value = options;
     if (value_is_box(options) && value_tag(options) == TSC_VALUE_TAG_OBJECT) {
@@ -3579,12 +3589,16 @@ static tsc_str_t* tsc_fs_file_handle_append_encoding(tsc_value_t options) {
     }
     if (tsc_value_is_nullish(encoding_value)) return NULL;
     if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
-        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"));
+        tsc_throw_str(tsc_str_from_cstr(is_append
+            ? "fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"
+            : "fs.promises.FileHandle.writeFile encoding must be UTF-8, hex, or base64"));
         return NULL;
     }
     tsc_str_t* encoding = tsc_value_as_string(encoding_value);
     if (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8") && !str_lit_eq(encoding, "hex") && !str_lit_eq(encoding, "base64")) {
-        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"));
+        tsc_throw_str(tsc_str_from_cstr(is_append
+            ? "fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"
+            : "fs.promises.FileHandle.writeFile encoding must be UTF-8, hex, or base64"));
         return NULL;
     }
     return encoding;
@@ -3596,23 +3610,27 @@ static bool tsc_fs_file_handle_append_flush(tsc_value_t options) {
     return !tsc_value_is_undefined(flush) && tsc_value_as_bool(flush);
 }
 
-static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* handle, tsc_array_t* args) {
+static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, bool is_append) {
     if (!args || args->len < 1) {
-        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile needs string or Buffer data"));
+        tsc_throw_str(tsc_str_from_cstr(is_append
+            ? "fs.promises.FileHandle.appendFile needs string or Buffer data"
+            : "fs.promises.FileHandle.writeFile needs string or Buffer data"));
         return NULL;
     }
     if (!handle || handle->closed || handle->fd < 0) {
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
     }
     tsc_value_t data_value = TSC_ARR(tsc_value_t, args, 0);
-    tsc_str_t* encoding = args->len > 1 ? tsc_fs_file_handle_append_encoding(TSC_ARR(tsc_value_t, args, 1)) : NULL;
+    tsc_str_t* encoding = args->len > 1 ? tsc_fs_file_handle_append_encoding(TSC_ARR(tsc_value_t, args, 1), is_append) : NULL;
     tsc_buffer_t* buffer = NULL;
     if (value_is_box(data_value) && value_tag(data_value) == TSC_VALUE_TAG_STRING) {
         buffer = tsc_buffer_from_str(tsc_value_as_string(data_value), encoding);
     } else if (tsc_util_types_is_typed_array(data_value)) {
         buffer = tsc_value_as_buffer(data_value);
     } else {
-        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile needs string or Buffer data"));
+        tsc_throw_str(tsc_str_from_cstr(is_append
+            ? "fs.promises.FileHandle.appendFile needs string or Buffer data"
+            : "fs.promises.FileHandle.writeFile needs string or Buffer data"));
         return NULL;
     }
 
@@ -3624,6 +3642,7 @@ static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* hand
     task->buffer = buffer;
     task->fd = handle->fd;
     task->flush = args->len > 1 && tsc_fs_file_handle_append_flush(TSC_ARR(tsc_value_t, args, 1));
+    task->is_append = is_append;
     task->next = g_tsc_fs_file_handle_append_async;
     g_tsc_fs_file_handle_append_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -3633,7 +3652,12 @@ static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* hand
 
 static tsc_value_t tsc_fs_file_handle_append_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    return tsc_value_promise(tsc_fs_file_handle_append_start((tsc_fs_file_handle_t*)env, args));
+    return tsc_value_promise(tsc_fs_file_handle_append_start((tsc_fs_file_handle_t*)env, args, true));
+}
+
+static tsc_value_t tsc_fs_file_handle_write_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    return tsc_value_promise(tsc_fs_file_handle_append_start((tsc_fs_file_handle_t*)env, args, false));
 }
 
 enum {
@@ -4057,6 +4081,12 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         handle,
         1.0,
         tsc_str_from_lit("appendFile", 10)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("writeFile", 9), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_write_file_builtin,
+        handle,
+        1.0,
+        tsc_str_from_lit("writeFile", 9)
     ));
     tsc_object_set(object, tsc_str_from_lit("chmod", 5), tsc_value_function_builtin_named(
         tsc_fs_file_handle_chmod_builtin,

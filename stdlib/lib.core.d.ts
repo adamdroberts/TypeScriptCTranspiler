@@ -1609,6 +1609,7 @@ interface FSFileHandle {
     readv(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileReadvResult>;
     writev(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileWritevResult>;
     appendFile(data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
+    writeFile(data: string | Buffer, options?: FSWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
     chmod(mode: number, ...ignored: any[]): Promise<void>;
     chown(uid: number, gid: number, ...ignored: any[]): Promise<void>;
     utimes(atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
