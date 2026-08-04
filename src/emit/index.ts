@@ -53537,10 +53537,14 @@ class Emitter {
                 return !this.nodeContainsYield(unwrapped);
             }
             if (ts.isTemplateExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                return this.simpleLazyMultiYieldTemplateSpans(unwrapped, visit);
             }
             if (ts.isTaggedTemplateExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                const tag = this.unwrapTransparentExpression(unwrapped.tag);
+                if (ts.isYieldExpression(tag) || this.nodeContainsYield(unwrapped.tag)) return false;
+                return ts.isTemplateExpression(unwrapped.template)
+                    ? this.simpleLazyMultiYieldTemplateSpans(unwrapped.template, visit)
+                    : !this.nodeContainsYield(unwrapped.template);
             }
             if (ts.isArrayLiteralExpression(unwrapped)) {
                 for (const element of unwrapped.elements) {
@@ -53681,6 +53685,17 @@ class Emitter {
             return ts.isYieldExpression(unwrapped) &&
                 !unwrapped.asteriskToken &&
                 (!unwrapped.expression || !this.nodeContainsYield(unwrapped.expression));
+        });
+    }
+
+    private simpleLazyMultiYieldTemplateSpans(
+        expr: ts.TemplateExpression,
+        visit: (node: ts.Expression) => boolean,
+    ): boolean {
+        return expr.templateSpans.every((span) => {
+            const expression = this.unwrapTransparentExpression(span.expression);
+            if (ts.isYieldExpression(expression)) return visit(span.expression);
+            return !this.nodeContainsYield(span.expression);
         });
     }
 

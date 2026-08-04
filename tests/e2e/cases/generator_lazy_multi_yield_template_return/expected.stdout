@@ -1,0 +1,6 @@
+template-before false first
+template-middle false second
+template-done true left A middle B right
+tagged-before 0 false third
+tagged-middle 0 false fourth
+tagged-done 1 true start C end D!
