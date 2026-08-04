@@ -733,6 +733,7 @@ class Emitter {
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
     private activeLazyGeneratorFinalizers: ts.Statement[][] = [];
+    private activeLazyGeneratorFinalizerEmissionDepth = 0;
     private activeLazyGeneratorCatchHandlers: LazyGeneratorCatchHandler[] = [];
     private activeLazyGeneratorCatchRecoveryDepth = 0;
     private activeLazyGeneratorCloseEnabled = false;
@@ -53015,13 +53016,18 @@ class Emitter {
         if (stmt.catchClause || !stmt.finallyBlock) return false;
         const terminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
         const terminalThrow = this.lazyGeneratorTryTerminalThrow(stmt);
+        const finallyStatements = stmt.finallyBlock.statements;
+        const finallyTail = finallyStatements[finallyStatements.length - 1];
+        const finallyMultiYieldTerminal = !!finallyTail &&
+            (!!this.simpleLazyMultiYieldReturn(finallyTail) || !!this.simpleLazyMultiYieldThrow(finallyTail));
+        const finallyBody = finallyMultiYieldTerminal ? finallyStatements.slice(0, -1) : finallyStatements;
         if ((!terminalReturn && !terminalThrow && this.lazyGeneratorContainsAbruptControlFlow(stmt.tryBlock)) ||
-            this.lazyGeneratorContainsAbruptControlFlow(stmt.finallyBlock)) {
+            finallyBody.some((child) => this.lazyGeneratorContainsAbruptControlFlow(child))) {
             return false;
         }
         if (!stmt.tryBlock.statements.some((child) => this.nodeContainsYield(child))) return false;
         if (!stmt.tryBlock.statements.every((child) => this.isValidLazyGeneratorStatement(child))) return false;
-        return stmt.finallyBlock.statements.every((child) =>
+        return finallyBody.every((child) =>
             !this.nodeContainsYield(child) && this.isValidLazyGeneratorStatement(child));
     }
 
@@ -54341,9 +54347,16 @@ class Emitter {
             }
             buf.close();
         }
-        for (const finalizer of [...this.activeLazyGeneratorFinalizers].reverse()) {
-            for (const child of finalizer) {
-                this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+        if (this.activeLazyGeneratorFinalizerEmissionDepth === 0) {
+            this.activeLazyGeneratorFinalizerEmissionDepth++;
+            try {
+                for (const finalizer of [...this.activeLazyGeneratorFinalizers].reverse()) {
+                    for (const child of finalizer) {
+                        this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                    }
+                }
+            } finally {
+                this.activeLazyGeneratorFinalizerEmissionDepth--;
             }
         }
         const finallyHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
