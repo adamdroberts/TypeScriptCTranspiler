@@ -1,0 +1,9 @@
+final-success-error:finally
+final-source-reject-error:finally
+final-cleanup-reject-error:cleanup
+catch-success-error:finally
+catch-source-reject-error:finally
+catch-stage-reject-error:finally
+catch-recovery-reject-error:finally
+catch-terminal-reject-error:finally
+catch-cleanup-reject-error:cleanup

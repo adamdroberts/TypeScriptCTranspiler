@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified counted awaited loop-body synchronous terminal-finally parity: a counted `for` preserves its awaited condition and incrementor while final synchronous `finally` `return`/`throw` overrides source and catch terminal completions; cleanup rejection retains precedence. Tests: `async_await_for_body_await_try_terminal_finally_synchronous_return`, `async_await_for_body_await_try_terminal_finally_synchronous_throw`.
+
 - Verified iterator nested awaited-if catch-plus-synchronous-terminal-finally coverage: both `for...of` and `for...in` carry source and awaited catch terminal completions through awaited cleanup to a final synchronous `finally` `return` or `throw`, while cleanup rejection retains precedence. Tests: `async_await_iterator_body_multi_await_nested_await_if_catch_finally_synchronous_return`, `async_await_iterator_body_multi_await_nested_await_if_catch_finally_synchronous_throw`.
 
 - Verified iterator nested awaited-if synchronous terminal-finally override coverage: both `for...of` and `for...in` bodies apply a final synchronous `finally` `return` or `throw` after awaited cleanup, overriding source terminal completion while cleanup rejection retains precedence. Tests: `async_await_iterator_body_multi_await_nested_await_if_terminal_finally_synchronous_return`, `async_await_iterator_body_multi_await_nested_await_if_terminal_finally_synchronous_throw`.

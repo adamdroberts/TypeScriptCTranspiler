@@ -13,6 +13,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Counted awaited loop bodies now have synchronous terminal-finally parity: a counted `for` preserves its awaited condition and incrementor while final synchronous `finally` `return`/`throw` overrides source and catch terminal completions, with cleanup rejection retaining precedence. Tests: `async_await_for_body_await_try_terminal_finally_synchronous_return`, `async_await_for_body_await_try_terminal_finally_synchronous_throw`
+
 - Iterator nested awaited-if bodies now compose awaited catch recovery and catch terminal completion with synchronous terminal `finally` `return` and `throw` overrides across both `for...of` and `for...in`, preserving cleanup-rejection precedence. Tests: `async_await_iterator_body_multi_await_nested_await_if_catch_finally_synchronous_return`, `async_await_iterator_body_multi_await_nested_await_if_catch_finally_synchronous_throw`
 
 - Iterator nested awaited-if bodies now support synchronous terminal `finally` `return` and `throw` overrides after awaited cleanup across both `for...of` and `for...in`, preserving source override and cleanup-rejection precedence. Tests: `async_await_iterator_body_multi_await_nested_await_if_terminal_finally_synchronous_return`, `async_await_iterator_body_multi_await_nested_await_if_terminal_finally_synchronous_throw`
