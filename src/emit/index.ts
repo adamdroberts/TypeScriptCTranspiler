@@ -738,6 +738,7 @@ class Emitter {
     private activeLazyGeneratorCloseEnabled = false;
     private activeLazyGeneratorOuterCaptureSymbols: ReadonlySet<ts.Symbol> = new Set();
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
+    private lazyGeneratorMultiYieldResumeValues: Map<ts.YieldExpression, EmitResult> | null = null;
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
     private lazyGeneratorForInInfos = new WeakMap<ts.ForInStatement, LazyForInInfo>();
@@ -53522,7 +53523,9 @@ class Emitter {
                 return visit(unwrapped.expression) && visit(unwrapped.argumentExpression);
             }
             if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                if (!this.isSimpleLazyMultiYieldCallLike(unwrapped)) return false;
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                return (unwrapped.arguments ?? []).every((argument) => visit(argument as ts.Expression));
             }
             if (ts.isPostfixUnaryExpression(unwrapped)) {
                 return !this.nodeContainsYield(unwrapped);
@@ -53666,6 +53669,19 @@ class Emitter {
         };
         visit(expr);
         return multiple ? null : found;
+    }
+
+    private isSimpleLazyMultiYieldCallLike(expr: ts.CallExpression | ts.NewExpression): boolean {
+        if (!this.nodeContainsYield(expr)) return true;
+        const args = expr.arguments ?? [];
+        if (this.nodeContainsYield(expr.expression) || args.length === 0) return false;
+        return args.every((argument) => {
+            if (ts.isSpreadElement(argument)) return false;
+            const unwrapped = this.unwrapTransparentExpression(argument);
+            return ts.isYieldExpression(unwrapped) &&
+                !unwrapped.asteriskToken &&
+                (!unwrapped.expression || !this.nodeContainsYield(unwrapped.expression));
+        });
     }
 
     private simpleLazyYieldNeedsResume(stmt: ts.Statement): boolean {
@@ -54971,6 +54987,18 @@ class Emitter {
         buf.line(`case ${states[states.length - 1]}:;`);
         this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
         const yieldByNode = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
+        const resumeValues = new Map<ts.YieldExpression, EmitResult>();
+        for (let index = 0; index < info.yields.length; index++) {
+            const yieldExpr = info.yields[index]!;
+            const type = this.prepareType(mapTsType(yieldExpr, this.checker.getTypeAtLocation(yieldExpr), this.checker));
+            const source = index === info.yields.length - 1
+                ? "next_arg"
+                : `${envLocalName}->multi_yield_values[${index}]`;
+            resumeValues.set(yieldExpr, {
+                c: this.coerce({ c: source, ty: T_VALUE }, type, yieldExpr),
+                ty: type,
+            });
+        }
         const build = (node: ts.Expression): EmitResult => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) {
@@ -55090,7 +55118,14 @@ class Emitter {
             }
             return this.emitSimpleLazyResumeBinary(unwrapped, build(unwrapped.left), build(unwrapped.right));
         };
-        const result = build(info.expression);
+        const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+        this.lazyGeneratorMultiYieldResumeValues = resumeValues;
+        let result: EmitResult;
+        try {
+            result = build(info.expression);
+        } finally {
+            this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
+        }
         buf.line(`a->iter_return = ${this.coerce(result, T_VALUE, info.expression)};`);
         buf.line("a->iter_has_return = true;");
         buf.line("a->iter_return_consumed = false;");
@@ -60156,6 +60191,10 @@ class Emitter {
     // ---------------- expressions ----------------
 
     private emitExpr(expr: ts.Expression): EmitResult {
+        const multiYieldResumeValue = ts.isYieldExpression(expr)
+            ? this.lazyGeneratorMultiYieldResumeValues?.get(expr)
+            : undefined;
+        if (multiYieldResumeValue) return multiYieldResumeValue;
         if (this.lazyGeneratorResumeOverride?.expr === expr) {
             return this.lazyGeneratorResumeOverride.result;
         }
