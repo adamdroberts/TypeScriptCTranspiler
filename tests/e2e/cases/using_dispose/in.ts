@@ -32,6 +32,30 @@ function throwRun(): void {
     throw "thrown";
 }
 
+function breakRun(): void {
+    for (let i = 0; i < 1; i++) {
+        const value: any = {};
+        value[Symbol.dispose] = (): void => {
+            events += "B";
+        };
+        using resource: any = value;
+        events += "b";
+        break;
+    }
+}
+
+function continueRun(): void {
+    for (let i = 0; i < 2; i++) {
+        const value: any = {};
+        value[Symbol.dispose] = (): void => {
+            events += "C";
+        };
+        using resource: any = value;
+        events += "c";
+        continue;
+    }
+}
+
 run();
 console.log(events);
 console.log("return:", returnRun(), events);
@@ -42,3 +66,6 @@ try {
     caught = String(error);
 }
 console.log("throw:", caught, events);
+breakRun();
+continueRun();
+console.log("loop exits:", events);

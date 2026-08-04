@@ -2,7 +2,7 @@
 
 - `SuppressedError` callable and constructable forms now create typed Error values with optional messages, ignored extras, direct `.error` / `.suppressed` field access, Error stringification, and bounded own-property Object/Reflect reflection; broader cleanup-suppression state machines remain deferred. Test: `suppressed_error`.
 
-- Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion or direct local `return`/`throw` exits through `Symbol.dispose`; `await using`, nested control-flow exits, and loop `break`/`continue` cleanup remain compile-time diagnostics. Test: `using_dispose`.
+- Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion, direct local `return`/`throw`, or direct loop-body `break`/`continue` exits through `Symbol.dispose`; `await using` and nested control-flow exits remain compile-time diagnostics. Test: `using_dispose`.
 
 - `Symbol.dispose` now has stable well-known-symbol identity, description, static-emitter support, and dynamic symbol-key lookup as the synchronous explicit-resource-management hook. Test: `symbols`.
 

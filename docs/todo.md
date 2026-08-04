@@ -10,7 +10,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - Verified bounded `SuppressedError` coverage: callable and constructable forms create typed Error values with stored `error` and `suppressed` fields, optional messages, ignored extras, direct stringification, and bounded own-property reflection. Broader cleanup-suppression state machines remain deferred. Test: `suppressed_error`.
 
-- Verified bounded synchronous `using` coverage: ordinary local block lists can bind dynamic disposable values and dispose them in reverse declaration order on normal completion or direct local `return`/`throw` exits through `Symbol.dispose`; `await using`, nested control-flow exits, and loop `break`/`continue` cleanup remain deferred. Test: `using_dispose`.
+- Verified bounded synchronous `using` coverage: ordinary local block lists can bind dynamic disposable values and dispose them in reverse declaration order on normal completion, direct local `return`/`throw`, or direct loop-body `break`/`continue` exits through `Symbol.dispose`; `await using` and nested control-flow exits remain deferred. Test: `using_dispose`.
 
 - Verified bounded `Symbol.dispose` coverage: the well-known symbol now has stable singleton identity, description, static-emitter support, and dynamic symbol-key lookup, providing the synchronous counterpart needed by explicit resource management. Test: `symbols`.
 

@@ -57202,6 +57202,13 @@ class Emitter {
 
     private emitStmtInBlock(buf: CBuf, s: ts.Statement): void {
         if (ts.isBlock(s)) {
+            if (s.statements.some(
+                (statement) => ts.isVariableStatement(statement) &&
+                    (statement.declarationList.flags & (ts.NodeFlags.Using | ts.NodeFlags.AwaitUsing)) !== 0,
+            )) {
+                this.emitStmtList(buf, s.statements);
+                return;
+            }
             for (let i = 0; i < s.statements.length; i++) {
                 const child = s.statements[i]!;
                 if (
@@ -58254,7 +58261,7 @@ class Emitter {
         const disposables = this.syncUsingNames(statements);
         let exited = false;
         for (const stmt of statements) {
-            if (disposables.length > 0 && (ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt))) {
+            if (disposables.length > 0 && this.isDirectUsingExit(stmt)) {
                 this.emitSyncDisposals(buf, disposables);
                 exited = true;
             }
@@ -58271,6 +58278,13 @@ class Emitter {
         for (let i = disposables.length - 1; i >= 0; i--) {
             buf.line(`tsc_value_dispose_sync(${disposables[i]!});`);
         }
+    }
+
+    private isDirectUsingExit(stmt: ts.Statement): boolean {
+        return ts.isReturnStatement(stmt) ||
+            ts.isThrowStatement(stmt) ||
+            ts.isBreakStatement(stmt) ||
+            ts.isContinueStatement(stmt);
     }
 
     private syncUsingNames(
@@ -58304,11 +58318,11 @@ class Emitter {
         );
         const directEarlyExitIndexes = statements
             .map((statement, index) =>
-                (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) ? index : -1,
+                this.isDirectUsingExit(statement) ? index : -1,
             )
             .filter((index) => index >= 0);
         const hasUnsupportedEarlyExit = statements.some((statement) =>
-            !(ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) &&
+            !this.isDirectUsingExit(statement) &&
             this.usingScopeHasEarlyExit(statement),
         );
         const hasEarlyExitBeforeUsing = directEarlyExitIndexes.some((index) => index < firstUsingIndex);
@@ -58326,7 +58340,7 @@ class Emitter {
             );
             unsupported(
                 usingStatement ?? statements[0]!,
-                "using scopes only support direct return/throw cleanup after their declarations",
+                "using scopes only support direct return/throw/break/continue cleanup after their declarations",
             );
         }
         return names;
