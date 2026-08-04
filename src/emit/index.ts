@@ -52988,7 +52988,7 @@ class Emitter {
                     if (!ts.isIdentifier(decl.name)) return false;
                 }
             }
-            if (this.simpleLazyMultiYieldReturn(stmt)) return true;
+            if (this.simpleLazyMultiYieldReturn(stmt) || this.simpleLazyMultiYieldThrow(stmt)) return true;
             const yieldExpr = this.simpleLazyYieldExpression(stmt);
             if (yieldExpr) {
                 if (yieldExpr.asteriskToken && (!yieldExpr.expression || !this.isSimpleLazyYieldStarSource(yieldExpr.expression))) {
@@ -53066,14 +53066,16 @@ class Emitter {
         const throwCandidate = ts.isThrowStatement(last) && last.expression ? last : null;
         const conditionalCandidate = !returnStatement && !throwCandidate &&
             ts.isIfStatement(last) && last.elseStatement ? last : null;
+        const hasFinallyOverride = finallyStatements.length > 0 || !!finallyThrow || !!finallyReturn || !!finallyConditionalStatement;
         let throwStatement: ts.ThrowStatement | null = null;
         if (throwCandidate) {
             const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
-            if (this.isSimpleLazyMultiYieldLiteral(expression)) {
+            if (!hasFinallyOverride && this.simpleLazyMultiYieldThrow(throwCandidate)) {
+                throwStatement = throwCandidate;
+            } else if (this.isSimpleLazyMultiYieldLiteral(expression)) {
                 throwStatement = throwCandidate;
             }
         }
-        const hasFinallyOverride = finallyStatements.length > 0 || !!finallyThrow || !!finallyReturn || !!finallyConditionalStatement;
         if (returnStatement && this.nodeContainsYield(returnStatement.expression!) &&
             (hasFinallyOverride || !this.simpleLazyMultiYieldReturn(returnStatement))) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
@@ -53507,7 +53509,29 @@ class Emitter {
         expression: ts.Expression;
         yields: ts.YieldExpression[];
     } | null {
-        if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+        return this.simpleLazyMultiYieldTerminal(stmt, "return");
+    }
+
+    private simpleLazyMultiYieldThrow(stmt: ts.Statement): {
+        expression: ts.Expression;
+        yields: ts.YieldExpression[];
+    } | null {
+        return this.simpleLazyMultiYieldTerminal(stmt, "throw");
+    }
+
+    private simpleLazyMultiYieldTerminal(
+        stmt: ts.Statement,
+        terminal: "return" | "throw",
+    ): {
+        expression: ts.Expression;
+        yields: ts.YieldExpression[];
+    } | null {
+        const expression = terminal === "return" && ts.isReturnStatement(stmt)
+            ? stmt.expression
+            : terminal === "throw" && ts.isThrowStatement(stmt)
+                ? stmt.expression
+                : undefined;
+        if (!expression) return null;
         const yields: ts.YieldExpression[] = [];
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
@@ -53617,8 +53641,8 @@ class Emitter {
                 ts.SyntaxKind.AsteriskAsteriskToken].includes(op)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
-        if (!visit(stmt.expression) || yields.length < 2) return null;
-        return { expression: stmt.expression, yields };
+        if (!visit(expression) || yields.length < 2) return null;
+        return { expression, yields };
     }
 
     private isSimpleLazyMultiYieldLiteral(expr: ts.Expression): boolean {
@@ -53654,11 +53678,12 @@ class Emitter {
         );
     }
 
-    private lazyGeneratorMaxMultiYieldReturn(node: ts.Node): number {
+    private lazyGeneratorMaxMultiYieldTerminal(node: ts.Node): number {
         let max = 0;
         const visit = (current: ts.Node): void => {
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
-            const info = this.simpleLazyMultiYieldReturn(current as ts.Statement);
+            const info = this.simpleLazyMultiYieldReturn(current as ts.Statement) ??
+                this.simpleLazyMultiYieldThrow(current as ts.Statement);
             if (info) max = Math.max(max, info.yields.length);
             ts.forEachChild(current, visit);
         };
@@ -54755,16 +54780,18 @@ class Emitter {
         }
 
         const multiYieldReturn = this.simpleLazyMultiYieldReturn(stmt);
-        if (multiYieldReturn) {
-            if (!envLocalName) unsupported(stmt, "lazy generator multi-yield return requires an environment");
+        const multiYieldThrow = this.simpleLazyMultiYieldThrow(stmt);
+        if (multiYieldReturn || multiYieldThrow) {
+            if (!envLocalName) unsupported(stmt, "lazy generator multi-yield terminal requires an environment");
             this.emitLazyGeneratorMultiYieldReturn(
                 buf,
-                multiYieldReturn,
+                multiYieldReturn ?? multiYieldThrow!,
                 elemType,
                 envLocalName,
                 nextStateId,
                 nextYieldStarSlot,
                 this.stableLazyGeneratorPreReturnLocals(stmt),
+                multiYieldThrow ? "throw" : "return",
             );
             return;
         }
@@ -55041,6 +55068,7 @@ class Emitter {
         nextStateId: () => number,
         nextYieldStarSlot: () => number,
         stableLocals: ReadonlySet<ts.Symbol>,
+        terminal: "return" | "throw" = "return",
     ): void {
         const states = info.yields.map(() => nextStateId());
         for (let i = 0; i < info.yields.length; i++) {
@@ -55200,6 +55228,13 @@ class Emitter {
             result = build(info.expression);
         } finally {
             this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
+        }
+        if (terminal === "throw") {
+            buf.line("*state = -1;");
+            buf.line("*done = true;");
+            buf.line(`tsc_throw_str(${this.coerceToString(result, info.expression)});`);
+            buf.line("return;");
+            return;
         }
         buf.line(`a->iter_return = ${this.coerce(result, T_VALUE, info.expression)};`);
         buf.line("a->iter_has_return = true;");
@@ -55462,8 +55497,8 @@ class Emitter {
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
         const yieldStarCount = this.countSimpleLazyYieldStars(fn.body);
         const hasYieldStar = yieldStarCount > 0;
-        const multiYieldCount = this.lazyGeneratorMaxMultiYieldReturn(fn.body);
-        const hasMultiYieldReturn = multiYieldCount > 0;
+        const multiYieldCount = this.lazyGeneratorMaxMultiYieldTerminal(fn.body);
+        const hasMultiYieldTerminal = multiYieldCount > 0;
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
         const hasLazyCatch = this.lazyGeneratorHasCatchReturn(fn.body);
         const hasLazyClose = hasYieldStar || hasLazyFinalizer || hasLazyCatch;
@@ -55498,7 +55533,7 @@ class Emitter {
             switchResumeInfos.length > 0 ||
             outerCaptureFieldInfos.length > 0 ||
             !!implicitThisParam ||
-            hasMultiYieldReturn ||
+            hasMultiYieldTerminal ||
             hasLazyClose;
         const envType = needsEnv ? `_gen_lazy_env_${baseName}_${this.freshTemp("")}` : null;
         const previousOuterCaptureSymbols = this.activeLazyGeneratorOuterCaptureSymbols;
@@ -55521,7 +55556,7 @@ class Emitter {
             for (const info of compoundResumeInfos) {
                 this.structDecls.line(`${info.type.c} ${info.field};`);
             }
-            if (hasMultiYieldReturn) {
+            if (hasMultiYieldTerminal) {
                 this.structDecls.line(`tsc_value_t multi_yield_values[${multiYieldCount}];`);
             }
             for (const { info } of forOfInfos) {
@@ -55753,7 +55788,7 @@ class Emitter {
             for (const info of compoundResumeInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
             }
-            if (hasMultiYieldReturn) {
+            if (hasMultiYieldTerminal) {
                 for (let i = 0; i < multiYieldCount; i++) {
                     buf.line(`${envVar}->multi_yield_values[${i}] = tsc_value_undefined();`);
                 }

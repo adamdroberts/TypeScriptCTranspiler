@@ -38,3 +38,24 @@ const expressionSecond: any = expressionIter.throw("terminal");
 const expressionThird: any = expressionIter.next(4);
 const expressionDone: any = expressionIter.next(5);
 console.log("terminal-expression:", expressionFirst.done, expressionFirst.value, expressionSecond.done, expressionSecond.value, expressionThird.done, expressionThird.value, expressionDone.done, expressionDone.value);
+
+function* terminalThrowExpression(): Generator<string, number, string> {
+    try {
+        yield "throw-start";
+    } catch (error) {
+        throw (yield "throw-left") + (yield "throw-right");
+    }
+    return 0;
+}
+
+const throwIter = terminalThrowExpression();
+const throwFirst: any = throwIter.next();
+const throwSecond: any = throwIter.throw("terminal-throw");
+const throwThird: any = throwIter.next("left");
+let throwValue: any;
+try {
+    throwIter.next("right");
+} catch (error: any) {
+    throwValue = error;
+}
+console.log("terminal-throw-expression:", throwFirst.done, throwFirst.value, throwSecond.done, throwSecond.value, throwThird.done, throwThird.value, throwValue);

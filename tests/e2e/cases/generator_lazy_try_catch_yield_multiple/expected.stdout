@@ -1,2 +1,3 @@
 multi: false pause false recovery-one false recovery-two:boom true done catch:boom|between|after|finally
 terminal-expression: false 1 false 2 false 3 true 9
+terminal-throw-expression: false throw-start false throw-left false throw-right leftright
