@@ -54888,31 +54888,58 @@ class Emitter {
         const mapped = this.isUntypedJsObjectLiteral(ol)
             ? T_VALUE
             : this.prepareType(mapTsType(ol, targetType, this.checker));
-        if (mapped.kind !== "value") {
-            unsupported(ol, "lazy multi-yield object literals currently require a dynamic object result");
-        }
-        const object = this.freshTemp("_lazy_dynobj");
-        const pieces: string[] = [`tsc_object_t* ${object} = tsc_object_new()`];
-        for (const property of ol.properties) {
-            let name: string;
-            let expression: ts.Expression;
-            if (ts.isPropertyAssignment(property)) {
-                name = this.staticPropertyName(property.name) ??
-                    unsupported(property.name, "lazy multi-yield object keys must be static");
-                expression = property.initializer;
-            } else if (ts.isShorthandPropertyAssignment(property)) {
-                name = property.name.text;
-                expression = property.name;
-            } else {
-                unsupported(property, "lazy multi-yield object literals support property assignments and shorthand properties only");
+        if (mapped.kind === "value") {
+            const object = this.freshTemp("_lazy_dynobj");
+            const pieces: string[] = [`tsc_object_t* ${object} = tsc_object_new()`];
+            for (const property of ol.properties) {
+                let name: string;
+                let expression: ts.Expression;
+                if (ts.isPropertyAssignment(property)) {
+                    name = this.staticPropertyName(property.name) ??
+                        unsupported(property.name, "lazy multi-yield object keys must be static");
+                    expression = property.initializer;
+                } else if (ts.isShorthandPropertyAssignment(property)) {
+                    name = property.name.text;
+                    expression = property.name;
+                } else {
+                    unsupported(property, "lazy multi-yield object literals support property assignments and shorthand properties only");
+                }
+                const value = build(expression);
+                pieces.push(
+                    `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, expression)})`,
+                );
             }
-            const value = build(expression);
-            pieces.push(
-                `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, expression)})`,
-            );
+            pieces.push(`tsc_value_object(${object})`);
+            return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
         }
-        pieces.push(`tsc_value_object(${object})`);
-        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+        if (mapped.kind !== "class") {
+            unsupported(ol, "lazy multi-yield object literals currently require a dynamic object or named interface/class result");
+        }
+        const cls = mapped.className!;
+        const object = this.freshTemp("_lazy_obj");
+        const alloc = this.objectLiteralInitializesAllFields(ol, targetType)
+            ? "TSC_GC_MALLOC_UNINIT"
+            : "TSC_GC_MALLOC";
+        const pieces: string[] = [
+            `${cls}_t* ${object} = (${cls}_t*)${alloc}(sizeof(${cls}_t))`,
+        ];
+        for (const property of ol.properties) {
+            if (ts.isPropertyAssignment(property)) {
+                const name = this.staticPropertyName(property.name) ??
+                    unsupported(property.name, "lazy multi-yield object keys must be static");
+                const value = build(property.initializer);
+                const fieldType = this.objectFieldType(ol, targetType, name, property.name);
+                pieces.push(`${object}->${mangleIdent(name)} = ${this.coerce(value, fieldType, property.initializer)}`);
+            } else if (ts.isShorthandPropertyAssignment(property)) {
+                const value = build(property.name);
+                const fieldType = this.objectFieldType(ol, targetType, property.name.text, property.name);
+                pieces.push(`${object}->${mangleIdent(property.name.text)} = ${this.coerce(value, fieldType, property.name)}`);
+            } else {
+                unsupported(property, "lazy multi-yield typed object literals support property assignments and shorthand properties only");
+            }
+        }
+        pieces.push(object);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
     }
 
     private emitLazyGeneratorMultiYieldReturn(
