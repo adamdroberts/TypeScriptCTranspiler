@@ -38915,6 +38915,11 @@ class Emitter {
             visit(statement);
             return found;
         };
+        const terminalTryStatement = !bodyContinue && loopBody.length >= 2 &&
+            ts.isTryStatement(loopBody[loopBody.length - 2]!)
+            ? loopBody[loopBody.length - 2] as ts.TryStatement
+            : null;
+        const terminalTryPreludeStatements = terminalTryStatement ? loopBody.slice(0, -2) : [];
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -39123,74 +39128,74 @@ class Emitter {
             bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = bodyLeadingChain.preludeStatements;
             bodyRejectResult = !!bodyLeadingChain.terminalThrowStatement;
-        } else if (!bodyContinue && loopBody.length === 2 && ts.isTryStatement(loopBody[0]!) &&
-            !!loopBody[0]!.finallyBlock &&
-            loopBody[0]!.tryBlock.statements.length >= 1 &&
-            ts.isExpressionStatement(loopBody[0]!.tryBlock.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression)) &&
+        } else if (terminalTryStatement && terminalTryPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !!terminalTryStatement.finallyBlock &&
+            terminalTryStatement.tryBlock.statements.length >= 1 &&
+            ts.isExpressionStatement(terminalTryStatement.tryBlock.statements[0]!) &&
+            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.tryBlock.statements[0]!.expression)) &&
             ts.isAwaitExpression(directBodyAwait) &&
-            loopBody[0]!.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            (!loopBody[0]!.catchClause ||
-                ((!loopBody[0]!.catchClause.variableDeclaration || ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)) &&
-                    loopBody[0]!.catchClause.block.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-                    !loopBody[0]!.catchClause.block.statements.some(statementContainsAwait))) &&
-            loopBody[0]!.finallyBlock.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            !loopBody[0]!.finallyBlock.statements.some(statementContainsAwait)) {
-            const tryAwait = this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
+            terminalTryStatement.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            (!terminalTryStatement.catchClause ||
+                ((!terminalTryStatement.catchClause.variableDeclaration || ts.isIdentifier(terminalTryStatement.catchClause.variableDeclaration.name)) &&
+                    terminalTryStatement.catchClause.block.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+                    !terminalTryStatement.catchClause.block.statements.some(statementContainsAwait))) &&
+            terminalTryStatement.finallyBlock.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !terminalTryStatement.finallyBlock.statements.some(statementContainsAwait)) {
+            const tryAwait = this.unwrapTransparentExpression(terminalTryStatement.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
             bodyAwaitExpr = tryAwait;
             bodyAwaitExprs = [tryAwait, directBodyAwait];
             bodyReturnExpr = bodyExpression;
-            bodyBetweenAwaitStatements = [loopBody[0]!.tryBlock.statements.slice(1)];
-            bodyAwaitFinallyStatements = loopBody[0]!.finallyBlock.statements;
+            bodyBetweenAwaitStatements = [terminalTryStatement.tryBlock.statements.slice(1)];
+            bodyAwaitFinallyStatements = terminalTryStatement.finallyBlock.statements;
             bodyAwaitFinallyAfterBetween = true;
-            bodyPreludeStatements = [];
+            bodyPreludeStatements = terminalTryPreludeStatements;
             bodyAwaitTerminal = true;
-            bodyAwaitCatchPresent = !!loopBody[0]!.catchClause;
-            bodyAwaitCatchStatements = loopBody[0]!.catchClause?.block.statements ?? [];
-            bodyAwaitCatchSymbol = loopBody[0]!.catchClause?.variableDeclaration &&
-                ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)
-                ? this.symbolForIdentifier(loopBody[0]!.catchClause.variableDeclaration.name) ?? undefined
+            bodyAwaitCatchPresent = !!terminalTryStatement.catchClause;
+            bodyAwaitCatchStatements = terminalTryStatement.catchClause?.block.statements ?? [];
+            bodyAwaitCatchSymbol = terminalTryStatement.catchClause?.variableDeclaration &&
+                ts.isIdentifier(terminalTryStatement.catchClause.variableDeclaration.name)
+                ? this.symbolForIdentifier(terminalTryStatement.catchClause.variableDeclaration.name) ?? undefined
                 : undefined;
-        } else if (!bodyContinue && loopBody.length === 2 && ts.isTryStatement(loopBody[0]!) &&
-            !!loopBody[0]!.catchClause && !!loopBody[0]!.finallyBlock &&
-            loopBody[0]!.tryBlock.statements.length >= 1 &&
-            ts.isExpressionStatement(loopBody[0]!.tryBlock.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression)) &&
+        } else if (terminalTryStatement && terminalTryPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !!terminalTryStatement.catchClause && !!terminalTryStatement.finallyBlock &&
+            terminalTryStatement.tryBlock.statements.length >= 1 &&
+            ts.isExpressionStatement(terminalTryStatement.tryBlock.statements[0]!) &&
+            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.tryBlock.statements[0]!.expression)) &&
             ts.isAwaitExpression(directBodyAwait) &&
-            loopBody[0]!.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            (!loopBody[0]!.catchClause.variableDeclaration || ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)) &&
-            loopBody[0]!.catchClause.block.statements.length >= 1 &&
-            ts.isExpressionStatement(loopBody[0]!.catchClause.block.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.catchClause.block.statements[0]!.expression)) &&
-            loopBody[0]!.catchClause.block.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            !loopBody[0]!.catchClause.block.statements.slice(1).some(statementContainsAwait) &&
-            loopBody[0]!.finallyBlock.statements.length >= 1 &&
-            ts.isExpressionStatement(loopBody[0]!.finallyBlock.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.finallyBlock.statements[0]!.expression)) &&
-            loopBody[0]!.finallyBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            !loopBody[0]!.finallyBlock.statements.slice(1).some(statementContainsAwait)) {
-            const tryAwait = this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
-            const catchAwait = this.unwrapTransparentExpression(loopBody[0]!.catchClause.block.statements[0]!.expression) as ts.AwaitExpression;
-            const finallyAwait = this.unwrapTransparentExpression(loopBody[0]!.finallyBlock.statements[0]!.expression) as ts.AwaitExpression;
+            terminalTryStatement.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            (!terminalTryStatement.catchClause.variableDeclaration || ts.isIdentifier(terminalTryStatement.catchClause.variableDeclaration.name)) &&
+            terminalTryStatement.catchClause.block.statements.length >= 1 &&
+            ts.isExpressionStatement(terminalTryStatement.catchClause.block.statements[0]!) &&
+            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.catchClause.block.statements[0]!.expression)) &&
+            terminalTryStatement.catchClause.block.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !terminalTryStatement.catchClause.block.statements.slice(1).some(statementContainsAwait) &&
+            terminalTryStatement.finallyBlock.statements.length >= 1 &&
+            ts.isExpressionStatement(terminalTryStatement.finallyBlock.statements[0]!) &&
+            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.finallyBlock.statements[0]!.expression)) &&
+            terminalTryStatement.finallyBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !terminalTryStatement.finallyBlock.statements.slice(1).some(statementContainsAwait)) {
+            const tryAwait = this.unwrapTransparentExpression(terminalTryStatement.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
+            const catchAwait = this.unwrapTransparentExpression(terminalTryStatement.catchClause.block.statements[0]!.expression) as ts.AwaitExpression;
+            const finallyAwait = this.unwrapTransparentExpression(terminalTryStatement.finallyBlock.statements[0]!.expression) as ts.AwaitExpression;
             bodyAwaitExpr = tryAwait;
             bodyAwaitExprs = [tryAwait, finallyAwait, directBodyAwait];
             bodyReturnExpr = bodyExpression;
             bodyBetweenAwaitStatements = [
-                loopBody[0]!.tryBlock.statements.slice(1),
-                loopBody[0]!.finallyBlock.statements.slice(1),
+                terminalTryStatement.tryBlock.statements.slice(1),
+                terminalTryStatement.finallyBlock.statements.slice(1),
             ];
             bodyAwaitCatchAwaitExpr = catchAwait;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwait;
-            bodyPreludeStatements = [];
+            bodyPreludeStatements = terminalTryPreludeStatements;
             bodyAwaitTerminal = true;
             bodyAwaitCatchPresent = true;
             bodyAwaitCatchBetweenAwaitStatements = [
-                loopBody[0]!.catchClause.block.statements.slice(1),
-                loopBody[0]!.finallyBlock.statements.slice(1),
+                terminalTryStatement.catchClause.block.statements.slice(1),
+                terminalTryStatement.finallyBlock.statements.slice(1),
             ];
-            bodyAwaitCatchSymbol = loopBody[0]!.catchClause.variableDeclaration &&
-                ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)
-                ? this.symbolForIdentifier(loopBody[0]!.catchClause.variableDeclaration.name) ?? undefined
+            bodyAwaitCatchSymbol = terminalTryStatement.catchClause.variableDeclaration &&
+                ts.isIdentifier(terminalTryStatement.catchClause.variableDeclaration.name)
+                ? this.symbolForIdentifier(terminalTryStatement.catchClause.variableDeclaration.name) ?? undefined
                 : undefined;
         } else if (ts.isAwaitExpression(directBodyAwait)) {
             const nestedBodyAwait = this.unwrapTransparentExpression(directBodyAwait.expression);
