@@ -1,0 +1,3 @@
+{
+  "description": "terminal awaited loop try/catch/finally preserves await-free preludes when fulfilled throw-await enters catch and cleanup rejects"
+}
