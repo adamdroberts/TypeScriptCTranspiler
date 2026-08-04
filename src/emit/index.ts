@@ -53632,7 +53632,10 @@ class Emitter {
                         if (ts.isYieldExpression(spreadExpression)) {
                             if (!visit(spreadExpression)) return false;
                         } else if (this.nodeContainsYield(element.expression)) {
-                            if (!ts.isArrayLiteralExpression(spreadExpression) && !ts.isObjectLiteralExpression(spreadExpression)) return false;
+                            const nestedLiteral = ts.isArrayLiteralExpression(spreadExpression) || ts.isObjectLiteralExpression(spreadExpression);
+                            const nestedCall = (ts.isCallExpression(spreadExpression) || ts.isNewExpression(spreadExpression)) &&
+                                this.isSimpleLazyMultiYieldCallLike(spreadExpression);
+                            if (!nestedLiteral && !nestedCall) return false;
                             if (!visit(spreadExpression)) return false;
                         }
                         continue;
@@ -53658,7 +53661,10 @@ class Emitter {
                         if (ts.isYieldExpression(spreadExpression)) {
                             if (!visit(spreadExpression)) return false;
                         } else if (this.nodeContainsYield(property.expression)) {
-                            if (!ts.isArrayLiteralExpression(spreadExpression) && !ts.isObjectLiteralExpression(spreadExpression)) return false;
+                            const nestedLiteral = ts.isArrayLiteralExpression(spreadExpression) || ts.isObjectLiteralExpression(spreadExpression);
+                            const nestedCall = (ts.isCallExpression(spreadExpression) || ts.isNewExpression(spreadExpression)) &&
+                                this.isSimpleLazyMultiYieldCallLike(spreadExpression);
+                            if (!nestedLiteral && !nestedCall) return false;
                             if (!visit(spreadExpression)) return false;
                         }
                     } else {

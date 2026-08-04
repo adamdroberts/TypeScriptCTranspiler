@@ -1,0 +1,4 @@
+typed-array false 1 false 2 true 10,20,9
+dynamic-array false first false second true left|right|tail
+typed-object false 1 false 3 false 2 true 10 20 30
+dynamic-object false first false last false middle true left middle right
