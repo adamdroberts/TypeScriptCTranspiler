@@ -7,7 +7,7 @@ function* multi(): Generator<string, string, string> {
         events.push("catch:" + error);
         yield "recovery-one";
         events.push("between");
-        yield "recovery-two";
+        yield "recovery-two:" + error;
         events.push("after");
         return "done";
     } finally {

@@ -33,7 +33,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now support one direct catch-recovery `yield` after a suspended try-block yield entered through `.throw(error)`, returning that recovery value before terminal catch completion and non-suspending `finally` cleanup. Test: `generator_lazy_try_catch_yield`.
 
-- Lazy generators now sequence multiple direct catch-recovery yields after `.throw(error)` enters a suspended `try`, preserving await-free interstitial statements before terminal catch completion and non-suspending `finally` cleanup. Test: `generator_lazy_try_catch_yield_multiple`.
+- Lazy generators now sequence multiple direct catch-recovery yields after `.throw(error)` enters a suspended `try`, preserving the named catch binding and await-free interstitial statements before terminal catch completion and non-suspending `finally` cleanup. Test: `generator_lazy_try_catch_yield_multiple`.
 
 - Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion, direct local `return`/`throw`, or direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested control-flow exits remain compile-time diagnostics. Test: `using_dispose`.
 

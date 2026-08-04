@@ -742,6 +742,7 @@ class Emitter {
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
     private lazyGeneratorForInInfos = new WeakMap<ts.ForInStatement, LazyForInInfo>();
     private lazyGeneratorSwitchResumeInfos = new WeakMap<ts.SwitchStatement, LazySwitchResumeInfo>();
+    private lazyGeneratorCatchBindingFields = new WeakMap<ts.CatchClause, string>();
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -54149,7 +54150,9 @@ class Emitter {
                     if (!ts.isIdentifier(catchDecl.name)) unsupported(catchDecl, "catch binding must be simple identifier");
                     catchSymbol = this.symbolForIdentifier(catchDecl.name) ?? null;
                     if (catchSymbol) this.catchStringSymbols.add(catchSymbol);
-                    buf.line(`tsc_str_t* ${mangleIdent(catchDecl.name.text)} = tsc_value_to_string(${envLocalName}->lazy_close_arg);`);
+                    const catchBindingField = this.lazyGeneratorCatchBindingFields.get(handler.catchClause);
+                    if (!catchBindingField) unsupported(catchDecl, "lazy generator catch binding requires a resumable environment");
+                    buf.line(`${envLocalName}->${catchBindingField} = tsc_value_to_string(${envLocalName}->lazy_close_arg);`);
                 }
                 try {
                     this.activeLazyGeneratorCatchRecoveryDepth++;
@@ -55060,6 +55063,11 @@ class Emitter {
             statement: ts.SwitchStatement;
             info: LazySwitchResumeInfo;
         }> = [];
+        const catchBindingInfos: Array<{
+            clause: ts.CatchClause;
+            symbol: ts.Symbol;
+            field: string;
+        }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
@@ -55182,6 +55190,25 @@ class Emitter {
                 ts.forEachChild(node, collectSwitchResumeInfos);
             };
             ts.forEachChild(fn.body, collectSwitchResumeInfos);
+
+            const collectCatchBindingInfos = (node: ts.Node) => {
+                if (ts.isTryStatement(node)) {
+                    const handler = this.lazyGeneratorTryCatchReturn(node);
+                    const catchDecl = handler?.catchClause.variableDeclaration;
+                    if (catchDecl) {
+                        if (!ts.isIdentifier(catchDecl.name)) unsupported(catchDecl, "lazy generator catch bindings must be identifiers");
+                        const symbol = this.symbolForIdentifier(catchDecl.name);
+                        if (!symbol) unsupported(catchDecl.name, "could not resolve lazy generator catch binding symbol");
+                        const index = catchBindingInfos.length;
+                        const field = `catch_${index}_${mangleIdent(catchDecl.name.text)}`;
+                        catchBindingInfos.push({ clause: handler!.catchClause, symbol, field });
+                        this.lazyGeneratorCatchBindingFields.set(handler!.catchClause, field);
+                    }
+                }
+                if (node !== fn.body && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collectCatchBindingInfos);
+            };
+            ts.forEachChild(fn.body, collectCatchBindingInfos);
         }
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
@@ -55260,6 +55287,9 @@ class Emitter {
             for (const { info } of switchResumeInfos) {
                 this.structDecls.line(`tsc_value_t ${info.field};`);
             }
+            for (const info of catchBindingInfos) {
+                this.structDecls.line(`tsc_str_t* ${info.field};`);
+            }
             if (hasLazyClose) {
                 this.structDecls.line("bool lazy_close_requested;");
                 this.structDecls.line("bool lazy_close_throw;");
@@ -55307,6 +55337,12 @@ class Emitter {
             for (const info of localVarInfos) {
                 envBindings.set(info.symbol, {
                     type: info.type,
+                    ptr: `&${envLocal}->${info.field}`,
+                });
+            }
+            for (const info of catchBindingInfos) {
+                envBindings.set(info.symbol, {
+                    type: T_STRING,
                     ptr: `&${envLocal}->${info.field}`,
                 });
             }
@@ -55459,6 +55495,9 @@ class Emitter {
             }
             for (const { info } of switchResumeInfos) {
                 buf.line(`${envVar}->${info.field} = tsc_value_undefined();`);
+            }
+            for (const info of catchBindingInfos) {
+                buf.line(`${envVar}->${info.field} = NULL;`);
             }
             for (const info of outerCaptureFieldInfos) {
                 buf.line(`${envVar}->${info.field} = ${info.binding.ptr};`);

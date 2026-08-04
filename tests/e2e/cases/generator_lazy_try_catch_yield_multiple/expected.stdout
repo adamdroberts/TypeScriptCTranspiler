@@ -1,1 +1,1 @@
-multi: false pause false recovery-one false recovery-two true done catch:boom|between|after|finally
+multi: false pause false recovery-one false recovery-two:boom true done catch:boom|between|after|finally
