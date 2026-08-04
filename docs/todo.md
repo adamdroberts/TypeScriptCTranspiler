@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified ordinary awaited loop-body initialized-var return coverage: a `while` body can carry an initialized `var` alias through multiple direct body suspensions into a terminal `return await`, with the leading continuation owning the terminal await without duplicate outer-loop reference scanning. Test: `async_await_loop_body_await_var_local_return`.
+
 - Verified nested awaited loop-body initialized-var throw coverage: awaited loop-body `if` branches now carry direct initialized `var` aliases (`value = await ...`) through later branch suspensions into terminal `throw await` arms. Test: `async_await_loop_body_if_await_var_local_throw`.
 
 - Verified nested awaited loop-body initialized-var coverage: awaited loop-body `if` branches now carry direct initialized `var` aliases (`value = await ...`) through later branch suspensions before `continue`, `break`, and terminal `return await` arms. Tests: `async_await_loop_body_if_await_var_local_continue`, `async_await_loop_body_if_await_var_local_break`, `async_await_loop_body_if_await_var_local_return`.

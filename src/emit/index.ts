@@ -39461,7 +39461,7 @@ class Emitter {
         if (bodyContinueElseReturnAwaitExpr) visitReferences(bodyContinueElseReturnAwaitExpr);
         if (bodyContinueElseReturnSynchronousExpr) visitReferences(bodyContinueElseReturnSynchronousExpr);
         if (bodyAwaitExpr && bodyAwaitExprs.length === 0) visitReferences(bodyAwaitExpr);
-        visitReferences(bodyReturnExpr);
+        if (!bodyLeadingChain) visitReferences(bodyReturnExpr);
         if (bodyLeadingChain) {
             for (const parameter of bodyLeadingChain.params) referenced.set(parameter.symbol, parameter);
             if (bodyLeadingChain.thisValue) usesThis = true;
