@@ -53889,7 +53889,8 @@ class Emitter {
             if (cur !== node && (ts.isFunctionLike(cur) || ts.isClassLike(cur))) return;
             if (ts.isTryStatement(cur)) {
                 const handler = this.lazyGeneratorTryCatchReturn(cur);
-                if (handler && handler.finallyStatements.some((statement) => this.nodeContainsYield(statement))) {
+                const hasTerminalSourceThrow = !!this.lazyGeneratorTryTerminalThrow(cur);
+                if (handler && (hasTerminalSourceThrow || handler.finallyStatements.some((statement) => this.nodeContainsYield(statement)))) {
                     let finalizerYieldCount = 0;
                     let finalizerYieldStarCount = 0;
                     for (const statement of handler.finallyStatements) {
@@ -53910,6 +53911,7 @@ class Emitter {
                     }, 0);
                     count += finalizerYieldCount * catchRecoveryYieldStars;
                     if (catchRecoveryYieldStars > 0) count += finalizerYieldStarCount;
+                    if (hasTerminalSourceThrow) count += catchRecoveryYieldStars;
                 }
             }
             ts.forEachChild(cur, visit);
