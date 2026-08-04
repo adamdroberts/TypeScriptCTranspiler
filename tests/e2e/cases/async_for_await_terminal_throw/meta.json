@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await lowering propagates a synchronous terminal throw after iterator exhaustion"
+}

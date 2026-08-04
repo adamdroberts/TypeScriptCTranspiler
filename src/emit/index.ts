@@ -47362,8 +47362,9 @@ class Emitter {
         if (body.statements.length !== 2) return false;
         const loop = body.statements[0];
         const result = body.statements[1];
+        const resultIsThrow = !!result && ts.isThrowStatement(result);
         if (!loop || !result || !ts.isForOfStatement(loop) || !loop.awaitModifier ||
-            !ts.isReturnStatement(result) || !result.expression) return false;
+            (!ts.isReturnStatement(result) && !resultIsThrow) || !result.expression) return false;
         const initializer = loop.initializer;
         type BindingDescriptor = {
             identifier: ts.Identifier;
@@ -48404,6 +48405,11 @@ class Emitter {
                 this.argumentValueScopes.pop();
             }
             const returnedType = this.prepareType(returned.ty);
+            if (resultIsThrow) {
+                target.line("tsc_try_pop();");
+                target.line(`tsc_promise_reject_in_place(_ret, ${this.coerce(returned, T_VALUE, result.expression!)});`);
+                return;
+            }
             if (returnedType.kind === "void" || returnedType.kind === "never") {
                 target.line(`${returned.c};`);
                 target.line("tsc_try_pop();");

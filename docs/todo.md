@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded async `for await...of` terminal-throw coverage: a supported iterator continuation now propagates a synchronous `throw` after iterator exhaustion, including sync-source adaptation, while existing iterator return/throw and close behavior remains green. Test: `async_for_await_terminal_throw`.
+
 - Verified bounded async-from-sync `for await...of` coverage: the specialized async iterator continuation now adapts synchronous arrays, strings, and symbol-backed iterables, awaits promise-valued sync iterator results, forwards early-return `IteratorClose`, and preserves the existing bare `next()` async-iterator compatibility path. Tests: `async_for_await_sync_iterables`, `async_for_await_sync_iterator_close`; existing `async_for_await_events_on_` family remains green.
 
 - Verified empty synchronous terminal-finally return coverage: ordinary awaited loops (with and without catch) and nested iterator bodies now settle `finally { return; }` as `undefined` after awaited cleanup, while cleanup rejection retains precedence. Tests: `async_await_loop_body_await_try_terminal_finally_empty_return`, `async_await_iterator_body_multi_await_nested_await_if_terminal_finally_empty_return`.
