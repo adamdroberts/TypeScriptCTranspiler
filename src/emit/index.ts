@@ -38677,7 +38677,7 @@ class Emitter {
                     ts.isIdentifier(expression.left) && ts.isAwaitExpression(this.unwrapTransparentExpression(expression.right))) {
                     const declarationStatement = returnPreludeStatements[statementIndex - 1];
                     if (ts.isVariableStatement(declarationStatement) &&
-                        (declarationStatement.declarationList.flags & ts.NodeFlags.Let) !== 0 &&
+                        (declarationStatement.declarationList.flags & ts.NodeFlags.Const) === 0 &&
                         declarationStatement.declarationList.declarations.length === 1) {
                         const declaration = declarationStatement.declarationList.declarations[0]!;
                         if (ts.isIdentifier(declaration.name) && !declaration.initializer && declaration.name.text === expression.left.text) {
