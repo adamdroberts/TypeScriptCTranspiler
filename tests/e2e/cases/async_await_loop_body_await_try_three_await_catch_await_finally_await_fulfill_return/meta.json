@@ -1,0 +1,3 @@
+{
+  "description": "async while body fulfills three source awaits before awaited finally return bypasses catch"
+}
