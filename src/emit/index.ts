@@ -25925,16 +25925,41 @@ class Emitter {
                 : [statement];
             if (path.length === 0) return null;
             const prefix = path.slice(0, -1);
-            if (!prefix.every(simpleBodyStatement)) return null;
-            if (prefix.some((entry) => this.statementAlwaysExits(entry))) return null;
             const completion = path[path.length - 1]!;
             if (ts.isReturnStatement(completion) || ts.isThrowStatement(completion)) {
-                return {
-                    prefix,
-                    completion,
-                };
+                if (prefix.every(simpleBodyStatement) &&
+                    !prefix.some((entry) => this.statementAlwaysExits(entry))) {
+                    return {
+                        prefix,
+                        completion,
+                    };
+                }
+                if (allowNested && prefix.length > 0) {
+                    const candidate = prefix[prefix.length - 1]!;
+                    const candidatePrefix = prefix.slice(0, -1);
+                    if (ts.isIfStatement(candidate) && !candidate.elseStatement &&
+                        candidatePrefix.every(simpleBodyStatement) &&
+                        !candidatePrefix.some((entry) => this.statementAlwaysExits(entry))) {
+                        const thenPath = completionPath(candidate.thenStatement, false);
+                        if (!thenPath) return null;
+                        return {
+                            prefix: candidatePrefix,
+                            conditional: {
+                                expression: candidate.expression,
+                                then: thenPath,
+                                else: {
+                                    prefix: [],
+                                    completion,
+                                },
+                            },
+                        };
+                    }
+                }
+                return null;
             }
             if (!allowNested || !ts.isIfStatement(completion)) return null;
+            if (!prefix.every(simpleBodyStatement)) return null;
+            if (prefix.some((entry) => this.statementAlwaysExits(entry))) return null;
             const thenPath = completionPath(completion.thenStatement, false);
             const elsePath = completion.elseStatement
                 ? completionPath(completion.elseStatement, false)

@@ -29,12 +29,8 @@ async function throwBranch(): Promise<string> {
     await using resource: any = value;
     if (true) {
         events += "x";
-        if (false) {
-            return "never";
-        } else {
-            const reason = "boom";
-            throw reason;
-        }
+        if (false) return "never";
+        throw "boom";
     }
     return "never";
 }
