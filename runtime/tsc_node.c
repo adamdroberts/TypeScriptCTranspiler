@@ -2920,6 +2920,9 @@ extern int uv_fs_access(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int
 extern int uv_fs_stat(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_lstat(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern int uv_fs_fstat(uv_loop_t* loop, tsc_uv_fs_t* req, int file, tsc_uv_fs_cb cb);
+extern int uv_fs_fchmod(uv_loop_t* loop, tsc_uv_fs_t* req, int file, int mode, tsc_uv_fs_cb cb);
+extern int uv_fs_fchown(uv_loop_t* loop, tsc_uv_fs_t* req, int file, int uid, int gid, tsc_uv_fs_cb cb);
+extern int uv_fs_futime(uv_loop_t* loop, tsc_uv_fs_t* req, int file, double atime, double mtime, tsc_uv_fs_cb cb);
 extern tsc_uv_stat_t* uv_fs_get_statbuf(tsc_uv_fs_t* req);
 extern int uv_fs_statfs(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
 extern void* uv_fs_get_ptr(const tsc_uv_fs_t* req);
@@ -3055,6 +3058,19 @@ typedef struct tsc_fs_file_handle_sync_async {
     struct tsc_fs_file_handle_sync_async* next;
 } tsc_fs_file_handle_sync_async_t;
 
+typedef struct tsc_fs_file_handle_metadata_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    int fd;
+    int operation;
+    int mode;
+    int uid;
+    int gid;
+    double atime;
+    double mtime;
+    struct tsc_fs_file_handle_metadata_async* next;
+} tsc_fs_file_handle_metadata_async_t;
+
 static tsc_fs_open_async_t* g_tsc_fs_open_async = NULL;
 static tsc_fs_file_handle_close_async_t* g_tsc_fs_file_handle_close_async = NULL;
 static tsc_fs_file_handle_io_async_t* g_tsc_fs_file_handle_io_async = NULL;
@@ -3062,6 +3078,7 @@ static tsc_fs_file_handle_vector_io_async_t* g_tsc_fs_file_handle_vector_io_asyn
 static tsc_fs_file_handle_stat_async_t* g_tsc_fs_file_handle_stat_async = NULL;
 static tsc_fs_file_handle_truncate_async_t* g_tsc_fs_file_handle_truncate_async = NULL;
 static tsc_fs_file_handle_sync_async_t* g_tsc_fs_file_handle_sync_async = NULL;
+static tsc_fs_file_handle_metadata_async_t* g_tsc_fs_file_handle_metadata_async = NULL;
 
 static bool tsc_fs_open_flags_from_string(const tsc_str_t* flags_str, int* out_flags) {
     char* flags_c = flags_str ? cstr_dup(flags_str) : NULL;
@@ -3441,6 +3458,159 @@ static tsc_value_t tsc_fs_file_handle_datasync_builtin(void* env, tsc_value_t th
     return tsc_value_promise(tsc_fs_file_handle_sync_start((tsc_fs_file_handle_t*)env, true));
 }
 
+enum {
+    TSC_FS_FILE_HANDLE_CHMOD = 1,
+    TSC_FS_FILE_HANDLE_CHOWN = 2,
+    TSC_FS_FILE_HANDLE_UTIMES = 3,
+};
+
+static void tsc_fs_file_handle_metadata_async_remove(tsc_fs_file_handle_metadata_async_t* task) {
+    tsc_fs_file_handle_metadata_async_t** cursor = &g_tsc_fs_file_handle_metadata_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static const char* tsc_fs_file_handle_metadata_error(int operation) {
+    switch (operation) {
+        case TSC_FS_FILE_HANDLE_CHMOD: return "fs.promises.FileHandle.chmod: could not change mode";
+        case TSC_FS_FILE_HANDLE_CHOWN: return "fs.promises.FileHandle.chown: could not change ownership";
+        default: return "fs.promises.FileHandle.utimes: could not update timestamps";
+    }
+}
+
+static void tsc_fs_file_handle_metadata_async_cb(tsc_uv_fs_t* req) {
+    tsc_fs_file_handle_metadata_async_t* task = (tsc_fs_file_handle_metadata_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(tsc_str_from_cstr(tsc_fs_file_handle_metadata_error(task->operation)))
+        );
+    } else {
+        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    }
+    tsc_fs_file_handle_metadata_async_remove(task);
+}
+
+static double tsc_fs_file_handle_metadata_integer(tsc_value_t value, const char* message) {
+    if (!tsc_value_number_is_safe_integer(value)) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+        return 0.0;
+    }
+    double number = tsc_value_as_num(value);
+    if (number < 0.0) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+        return 0.0;
+    }
+    if (number > (double)INT_MAX) {
+        tsc_throw_str(tsc_str_from_cstr(message));
+        return 0.0;
+    }
+    return number;
+}
+
+static double tsc_fs_file_handle_metadata_time(tsc_value_t value) {
+    if (tsc_util_types_is_date(value)) {
+        double number = tsc_date_get_time(tsc_value_as_date(value)) / 1000.0;
+        if (isnan(number) || isinf(number)) {
+            tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.utimes times must be finite numbers or Date values"));
+            return 0.0;
+        }
+        return number;
+    }
+    double number = tsc_value_as_num(value);
+    if (isnan(number) || isinf(number)) {
+        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.utimes times must be finite numbers or Date values"));
+        return 0.0;
+    }
+    return number;
+}
+
+static tsc_promise_t* tsc_fs_file_handle_metadata_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, int operation) {
+    if (!handle || handle->closed || handle->fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+    }
+    size_t required = operation == TSC_FS_FILE_HANDLE_CHMOD ? 1 : 2;
+    if (!args || args->len < required) {
+        tsc_throw_str(tsc_str_from_cstr(operation == TSC_FS_FILE_HANDLE_CHMOD
+            ? "fs.promises.FileHandle.chmod needs a mode"
+            : operation == TSC_FS_FILE_HANDLE_CHOWN
+                ? "fs.promises.FileHandle.chown needs uid and gid"
+                : "fs.promises.FileHandle.utimes needs atime and mtime"));
+        return NULL;
+    }
+
+    tsc_fs_file_handle_metadata_async_t* task = (tsc_fs_file_handle_metadata_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_metadata_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = tsc_promise_pending();
+    task->fd = handle->fd;
+    task->operation = operation;
+    if (operation == TSC_FS_FILE_HANDLE_CHMOD) {
+        task->mode = (int)tsc_fs_file_handle_metadata_integer(
+            TSC_ARR(tsc_value_t, args, 0),
+            "fs.promises.FileHandle.chmod mode must be a non-negative safe integer"
+        );
+    } else if (operation == TSC_FS_FILE_HANDLE_CHOWN) {
+        task->uid = (int)tsc_fs_file_handle_metadata_integer(
+            TSC_ARR(tsc_value_t, args, 0),
+            "fs.promises.FileHandle.chown uid must be a non-negative safe integer"
+        );
+        task->gid = (int)tsc_fs_file_handle_metadata_integer(
+            TSC_ARR(tsc_value_t, args, 1),
+            "fs.promises.FileHandle.chown gid must be a non-negative safe integer"
+        );
+    } else {
+        task->atime = tsc_fs_file_handle_metadata_time(TSC_ARR(tsc_value_t, args, 0));
+        task->mtime = tsc_fs_file_handle_metadata_time(TSC_ARR(tsc_value_t, args, 1));
+    }
+    task->next = g_tsc_fs_file_handle_metadata_async;
+    g_tsc_fs_file_handle_metadata_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc;
+    switch (operation) {
+        case TSC_FS_FILE_HANDLE_CHMOD:
+            rc = uv_fs_fchmod(g_tsc_fs_uv_loop, &task->req, task->fd, task->mode, tsc_fs_file_handle_metadata_async_cb);
+            break;
+        case TSC_FS_FILE_HANDLE_CHOWN:
+            rc = uv_fs_fchown(g_tsc_fs_uv_loop, &task->req, task->fd, task->uid, task->gid, tsc_fs_file_handle_metadata_async_cb);
+            break;
+        default:
+            rc = uv_fs_futime(g_tsc_fs_uv_loop, &task->req, task->fd, task->atime, task->mtime, tsc_fs_file_handle_metadata_async_cb);
+            break;
+    }
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(tsc_str_from_cstr(tsc_fs_file_handle_metadata_error(operation)))
+        );
+        tsc_fs_file_handle_metadata_async_remove(task);
+    }
+    return task->promise;
+}
+
+static tsc_value_t tsc_fs_file_handle_chmod_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    return tsc_value_promise(tsc_fs_file_handle_metadata_start((tsc_fs_file_handle_t*)env, args, TSC_FS_FILE_HANDLE_CHMOD));
+}
+
+static tsc_value_t tsc_fs_file_handle_chown_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    return tsc_value_promise(tsc_fs_file_handle_metadata_start((tsc_fs_file_handle_t*)env, args, TSC_FS_FILE_HANDLE_CHOWN));
+}
+
+static tsc_value_t tsc_fs_file_handle_utimes_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    return tsc_value_promise(tsc_fs_file_handle_metadata_start((tsc_fs_file_handle_t*)env, args, TSC_FS_FILE_HANDLE_UTIMES));
+}
+
 static size_t tsc_fs_file_handle_io_index(tsc_value_t value) {
     if (!tsc_value_number_is_safe_integer(value)) {
         tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle I/O offsets and lengths must be safe integers"));
@@ -3703,6 +3873,24 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         handle,
         1.0,
         tsc_str_from_lit("writev", 6)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("chmod", 5), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_chmod_builtin,
+        handle,
+        1.0,
+        tsc_str_from_lit("chmod", 5)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("chown", 5), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_chown_builtin,
+        handle,
+        2.0,
+        tsc_str_from_lit("chown", 5)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("utimes", 6), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_utimes_builtin,
+        handle,
+        2.0,
+        tsc_str_from_lit("utimes", 6)
     ));
     tsc_object_set(object, tsc_str_from_lit("stat", 4), tsc_value_function_builtin_named(
         tsc_fs_file_handle_stat_builtin,
@@ -7090,7 +7278,7 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
 }
 
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_file_handle_io_async != NULL || g_tsc_fs_file_handle_vector_io_async != NULL || g_tsc_fs_file_handle_stat_async != NULL || g_tsc_fs_file_handle_truncate_async != NULL || g_tsc_fs_file_handle_sync_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_file_handle_io_async != NULL || g_tsc_fs_file_handle_vector_io_async != NULL || g_tsc_fs_file_handle_stat_async != NULL || g_tsc_fs_file_handle_truncate_async != NULL || g_tsc_fs_file_handle_sync_async != NULL || g_tsc_fs_file_handle_metadata_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {

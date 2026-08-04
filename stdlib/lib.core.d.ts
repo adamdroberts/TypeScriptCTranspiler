@@ -1608,6 +1608,9 @@ interface FSFileHandle {
     write(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileWriteResult>;
     readv(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileReadvResult>;
     writev(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileWritevResult>;
+    chmod(mode: number, ...ignored: any[]): Promise<void>;
+    chown(uid: number, gid: number, ...ignored: any[]): Promise<void>;
+    utimes(atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
     stat(...ignored: any[]): Promise<FSStats>;
     truncate(len?: number, ...ignored: any[]): Promise<void>;
     sync(...ignored: any[]): Promise<void>;

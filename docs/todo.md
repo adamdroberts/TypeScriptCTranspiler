@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded async FileHandle metadata-mutation coverage: libuv-backed `fs.promises.open` handles now support `chmod()`, `chown()`, and `utimes()` with numeric/Date arguments and reject after asynchronous `close()`. Test: `fs_promises_file_handle_metadata`.
+
 - Verified bounded async FileHandle vector I/O coverage: libuv-backed `fs.promises.open` handles now support `readv()` and `writev()` over `Buffer[]` arrays with numeric/null positions, Node-shaped byte-count/buffer-array results, and closed-handle rejection. Test: `fs_promises_file_handle_readv_writev`.
 
 - Verified bounded async FileHandle durability coverage: libuv-backed `fs.promises.open` handles now support ordered `sync()` and `datasync()` requests and reject after asynchronous `close()`. Test: `fs_promises_file_handle_sync`.
@@ -339,6 +341,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
   - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now expose asynchronous `stat()` with typed `FSStats` results, and closed handles reject later `stat()` calls. Test: `fs_promises_file_handle_stat`.
   - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now support Buffer `read()` and `write()` requests with bounded offset/length/position arguments and `{ bytesRead, buffer }` / `{ bytesWritten, buffer }` results, followed by asynchronous `close()`. Test: `fs_promises_file_handle_io`.
   - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now support `readv()` and `writev()` over `Buffer[]` arrays with numeric/null positions and `{ bytesRead, buffers }` / `{ bytesWritten, buffers }` results, while closed handles reject later vector I/O requests. Test: `fs_promises_file_handle_readv_writev`.
+  - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now support asynchronous `chmod()`, `chown()`, and `utimes()` descriptor mutations, including Date timestamp values, while closed handles reject later metadata requests. Test: `fs_promises_file_handle_metadata`.
   - Phase 12 remaining work: `http` / `https` on OpenSSL plus best-effort `http2`.
   - Phase 13 remaining work: real async child-process lifecycle handles/events/streams beyond the currently documented `exec` / `execFile` callback and sync-backed `execSync` / `execFileSync` / `spawnSync` subsets; `fork`; broader `spawn` / `spawnSync` options beyond the covered cwd/env/shell/input/encoding/buffer/maxBuffer/timeout/killSignal/stdio/detached/uid/gid/windows/argv0/error-metadata subsets; `cluster`; and `worker_threads` with structured-clone messages.
 
