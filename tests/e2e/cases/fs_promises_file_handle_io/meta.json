@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed FileHandle buffer read and write with offsets, lengths, positions, and close"
+}

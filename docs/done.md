@@ -1,5 +1,7 @@
 # Implemented features
 
+- `fs.promises.open` FileHandle values now support libuv-backed Buffer `read()` and `write()` requests with offset, length, and position arguments, returning Node-shaped byte-count/buffer result objects before asynchronous `close()`. Test: `fs_promises_file_handle_io`.
+
 - `fs.promises.open` now uses libuv to return a `FileHandle` value with a read-only `fd` and asynchronous `close()` method, preserving the existing string/numeric open-flag and mode contract. Test: `fs_promises_open`.
 
 - Async `for await...of` continuations now propagate a synchronous terminal `throw` after iterator exhaustion, including adapted synchronous sources, while preserving existing iterator close and return/throw paths. Test: `async_for_await_terminal_throw`.

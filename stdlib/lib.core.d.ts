@@ -1586,8 +1586,18 @@ interface FS {
     renameSync(oldPath: FSPathLike, newPath: FSPathLike, ...ignored: any[]): void;
     promises: FSPromises;
 }
+interface FSFileReadResult {
+    readonly bytesRead: number;
+    readonly buffer: Buffer;
+}
+interface FSFileWriteResult {
+    readonly bytesWritten: number;
+    readonly buffer: Buffer;
+}
 interface FSFileHandle {
     readonly fd: number;
+    read(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileReadResult>;
+    write(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileWriteResult>;
     close(...ignored: any[]): Promise<void>;
 }
 interface FSPromises {
