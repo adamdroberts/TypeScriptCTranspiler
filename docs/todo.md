@@ -8,6 +8,10 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified ordinary awaited loop-body initialized-local multi-await throw coverage: a `while` body can carry `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `throw await`, preserving the captured values and rejection delivery. Test: `async_await_loop_body_await_local_multi_throw`.
+
+- Verified ordinary awaited loop-body initialized-local multi-await return coverage: a `while` body can carry `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `return await`, preserving the captured values. Test: `async_await_loop_body_await_local_multi_return`.
+
 - Verified ordinary awaited loop-body assigned-var multi-alias throw coverage: a `while` body can carry multiple assigned-before-use `var` aliases through ordered direct awaits and a later awaited body step into a terminal `throw await`, preserving rejection delivery. Test: `async_await_loop_body_await_assigned_var_multi_throw`.
 
 - Verified ordinary awaited loop-body assigned-var multi-alias return coverage: a `while` body can carry multiple assigned-before-use `var` aliases through ordered direct awaits and a later awaited body step into a terminal `return await`. Test: `async_await_loop_body_await_assigned_var_multi_return`.

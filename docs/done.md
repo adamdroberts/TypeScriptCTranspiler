@@ -1,5 +1,9 @@
 # Implemented features
 
+- Ordinary awaited loop bodies now carry initialized `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `throw await`, preserving captured values and rejection delivery. Test: `async_await_loop_body_await_local_multi_throw`
+
+- Ordinary awaited loop bodies now carry initialized `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `return await`, preserving captured values. Test: `async_await_loop_body_await_local_multi_return`
+
 - Ordinary awaited loop bodies now carry multiple assigned-before-use `var` aliases through ordered direct awaits and a later awaited body step into a terminal `throw await`, preserving rejection delivery. Test: `async_await_loop_body_await_assigned_var_multi_throw`
 
 - Ordinary awaited loop bodies now carry multiple assigned-before-use `var` aliases through ordered direct awaits and a later awaited body step into a terminal `return await`. Test: `async_await_loop_body_await_assigned_var_multi_return`
