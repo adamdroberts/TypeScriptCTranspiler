@@ -53073,7 +53073,9 @@ class Emitter {
                 throwStatement = throwCandidate;
             }
         }
-        if (returnStatement && this.nodeContainsYield(returnStatement.expression!)) return null;
+        const hasFinallyOverride = finallyStatements.length > 0 || !!finallyThrow || !!finallyReturn || !!finallyConditionalStatement;
+        if (returnStatement && this.nodeContainsYield(returnStatement.expression!) &&
+            (hasFinallyOverride || !this.simpleLazyMultiYieldReturn(returnStatement))) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
         const catchPreludeSymbols = new Set<ts.Symbol>();
         for (const child of catchPreludeStatements) {
@@ -53128,7 +53130,7 @@ class Emitter {
             }
         } else if (returnStatement) {
             const expression = this.unwrapTransparentExpression(returnStatement.expression!);
-            if (!this.isSimpleLazyMultiYieldLiteral(expression)) {
+            if (!this.isSimpleLazyMultiYieldLiteral(expression) && !this.simpleLazyMultiYieldReturn(returnStatement)) {
                 if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
                 if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             }
@@ -54283,24 +54285,29 @@ class Emitter {
                             buf.line(`${deferredCatchThrow} = ${this.coerceToString(thrown, handler.throwStatement.expression!)};`);
                         }
                     } else {
-                        if (handler.returnStatement) {
-                            this.emitLazyGeneratorStmt(
-                                buf,
-                                handler.returnStatement,
-                                nextStateId,
-                                nextYieldStarSlot,
-                                elemType,
-                                envLocalName,
-                            );
-                        } else {
-                            this.emitLazyGeneratorStmt(
-                                buf,
-                                handler.throwStatement!,
-                                nextStateId,
-                                nextYieldStarSlot,
-                                elemType,
-                                envLocalName,
-                            );
+                        this.activeLazyGeneratorCatchRecoveryDepth++;
+                        try {
+                            if (handler.returnStatement) {
+                                this.emitLazyGeneratorStmt(
+                                    buf,
+                                    handler.returnStatement,
+                                    nextStateId,
+                                    nextYieldStarSlot,
+                                    elemType,
+                                    envLocalName,
+                                );
+                            } else {
+                                this.emitLazyGeneratorStmt(
+                                    buf,
+                                    handler.throwStatement!,
+                                    nextStateId,
+                                    nextYieldStarSlot,
+                                    elemType,
+                                    envLocalName,
+                                );
+                            }
+                        } finally {
+                            this.activeLazyGeneratorCatchRecoveryDepth--;
                         }
                     }
                 } finally {
