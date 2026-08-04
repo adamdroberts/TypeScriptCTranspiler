@@ -1,0 +1,3 @@
+{
+  "description": "ordinary awaited loop bodies carry catch return-await completion through awaited finally cleanup and preserve rejection precedence"
+}

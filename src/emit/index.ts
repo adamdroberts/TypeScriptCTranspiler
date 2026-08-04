@@ -304,6 +304,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyPostAwaitStatements: readonly ts.Statement[];
     bodyAwaitFinallyStatements?: readonly ts.Statement[];
     bodyAwaitFinallyAwaitExpr?: ts.AwaitExpression;
+    bodyAwaitFinallyPreludeStatements?: readonly ts.Statement[];
     bodyAwaitFinallyStartIndex?: number;
     bodyAwaitFinallyEndIndex?: number;
     bodyAwaitFinallyAfterBetween?: boolean;
@@ -319,6 +320,8 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitCatchStartIndex?: number;
     bodyAwaitCatchBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyAwaitCatchSymbol?: ts.Symbol;
+    bodyAwaitCatchTerminalAwaitExpr?: ts.AwaitExpression;
+    bodyAwaitCatchTerminalRejectResult?: boolean;
     bodyAwaitCatchAdapter?: string;
     bodyAwaitCatchReasonCaptured?: boolean;
     bodyPreludeCaptureParams?: readonly AsyncAwaitContinuationParam[];
@@ -38919,6 +38922,7 @@ class Emitter {
         const directBodyAwait = this.unwrapTransparentExpression(bodyExpression);
         let bodyAwaitFinallyStatements: readonly ts.Statement[] = [];
         let continuationBodyAwaitFinallyAwaitExpr: ts.AwaitExpression | undefined;
+        let bodyAwaitFinallyPreludeStatements: readonly ts.Statement[] = [];
         let bodyAwaitFinallyStartIndex = 0;
         let bodyAwaitFinallyEndIndex: number | undefined;
         let bodyAwaitFinallyAfterBetween = false;
@@ -38934,6 +38938,8 @@ class Emitter {
         let bodyAwaitCatchStartIndex = 0;
         let bodyAwaitCatchBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
+        let bodyAwaitCatchTerminalAwaitExpr: ts.AwaitExpression | undefined;
+        let bodyAwaitCatchTerminalRejectResult = false;
         let bodyPreludeCaptureParams: AsyncAwaitContinuationParam[] = [];
         const statementContainsAwait = (statement: ts.Statement): boolean => {
             let found = false;
@@ -39030,11 +39036,36 @@ class Emitter {
             between.push(pending);
             return { expressions, between, aliases, prelude };
         };
+        const parseTerminalCatchAwaitSequence = (statements: readonly ts.Statement[]) => {
+            const terminalStatement = statements[statements.length - 1];
+            const terminalExpression = terminalStatement &&
+                (ts.isReturnStatement(terminalStatement) || ts.isThrowStatement(terminalStatement)) &&
+                terminalStatement.expression
+                ? this.unwrapTransparentExpression(terminalStatement.expression)
+                : null;
+            if (terminalExpression && ts.isAwaitExpression(terminalExpression)) {
+                const sequence = parseTerminalAwaitSequence(statements.slice(0, -1), true);
+                return sequence
+                    ? {
+                        ...sequence,
+                        terminalAwait: terminalExpression,
+                        terminalRejectResult: ts.isThrowStatement(terminalStatement),
+                    }
+                    : null;
+            }
+            const sequence = parseTerminalAwaitSequence(statements, true);
+            return sequence
+                ? { ...sequence, terminalAwait: null, terminalRejectResult: false }
+                : null;
+        };
         const terminalTryAwaitSequence = terminalTryStatement
             ? parseTerminalAwaitSequence(terminalTryStatement.tryBlock.statements, true)
             : null;
         const terminalCatchAwaitSequence = terminalTryStatement?.catchClause
             ? parseTerminalAwaitSequence(terminalTryStatement.catchClause.block.statements, true)
+            : null;
+        const terminalBodyCatchAwaitSequence = terminalBodyTryStatement?.catchClause
+            ? parseTerminalCatchAwaitSequence(terminalBodyTryStatement.catchClause.block.statements)
             : null;
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
@@ -39280,6 +39311,7 @@ class Emitter {
             bodyAwaitedAliasIndices = tryAwaitSequence.aliases.map(({ index }) => index);
             bodyAwaitFinallyStartIndex = terminalIndex + 1;
             bodyAwaitFinallyEndIndex = bodyAwaitFinallyStartIndex + finallyAwaitSequence.expressions.length;
+            bodyAwaitFinallyPreludeStatements = finallyAwaitSequence.prelude;
             bodyAwaitTerminalIndex = terminalIndex;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwaitSequence.expressions[0]!;
             bodyPreludeStatements = [...loopBody.slice(0, -1), ...tryAwaitSequence.prelude];
@@ -39295,25 +39327,31 @@ class Emitter {
             (!terminalBodyTryStatement.catchClause.variableDeclaration ||
                 ts.isIdentifier(terminalBodyTryStatement.catchClause.variableDeclaration.name)) &&
             (() => {
-                const catchAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.catchClause.block.statements, true);
+                const catchAwaitSequence = terminalBodyCatchAwaitSequence;
                 const finallyAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.finallyBlock.statements);
-                return catchAwaitSequence !== null && catchAwaitSequence.expressions.length > 0 &&
+                return catchAwaitSequence !== null &&
+                    (catchAwaitSequence.expressions.length > 0 || !!catchAwaitSequence.terminalAwait) &&
                     finallyAwaitSequence !== null && finallyAwaitSequence.expressions.length > 0;
             })()) {
             const tryPrefix = terminalBodyTryStatement.tryBlock.statements.slice(0, -1);
             const tryAwaitSequence = tryPrefix.length === 0
                 ? { expressions: [], between: [], aliases: [], prelude: [] }
                 : parseTerminalAwaitSequence(tryPrefix, true)!;
-            const catchAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.catchClause.block.statements, true)!;
+            const catchAwaitSequence = terminalBodyCatchAwaitSequence!;
             const finallyAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.finallyBlock.statements)!;
             const finallyBetweenAwaitStatements = finallyAwaitSequence.between.map((statements, index) =>
                 index === 0 ? [...finallyAwaitSequence.prelude, ...statements] : statements,
             );
-            const catchFinallyBetweenAwaitStatements = catchAwaitSequence.between.map((statements, index) =>
-                index === catchAwaitSequence.between.length - 1
-                    ? [...statements, ...finallyAwaitSequence.prelude]
-                    : statements,
-            );
+            const catchFinallyBetweenAwaitStatements = catchAwaitSequence.terminalAwait
+                ? [
+                    ...catchAwaitSequence.between,
+                    [...finallyAwaitSequence.prelude],
+                ]
+                : catchAwaitSequence.between.map((statements, index) =>
+                    index === catchAwaitSequence.between.length - 1
+                        ? [...statements, ...finallyAwaitSequence.prelude]
+                        : statements,
+                );
             const terminalIndex = tryAwaitSequence.expressions.length;
             bodyAwaitExpr = tryAwaitSequence.expressions[0] ?? directBodyAwait;
             bodyAwaitExprs = [
@@ -39328,14 +39366,17 @@ class Emitter {
             ];
             bodyAwaitedAliasSymbols = tryAwaitSequence.aliases.map(({ symbol }) => symbol);
             bodyAwaitedAliasIndices = tryAwaitSequence.aliases.map(({ index }) => index);
-            bodyAwaitCatchAwaitExpr = catchAwaitSequence.expressions[0]!;
+            bodyAwaitCatchAwaitExpr = catchAwaitSequence.expressions[0] ?? catchAwaitSequence.terminalAwait!;
             bodyAwaitCatchExprs = catchAwaitSequence.expressions;
             bodyAwaitCatchAwaitedAliasSymbols = catchAwaitSequence.aliases.map(({ symbol }) => symbol);
             bodyAwaitCatchAwaitedAliasIndices = catchAwaitSequence.aliases.map(({ index }) => index);
             bodyAwaitCatchPreludeStatements = catchAwaitSequence.prelude;
+            bodyAwaitCatchTerminalAwaitExpr = catchAwaitSequence.terminalAwait ?? undefined;
+            bodyAwaitCatchTerminalRejectResult = catchAwaitSequence.terminalRejectResult;
             bodyAwaitCatchStartIndex = terminalIndex;
             bodyAwaitFinallyStartIndex = terminalIndex + 1;
             bodyAwaitFinallyEndIndex = bodyAwaitFinallyStartIndex + finallyAwaitSequence.expressions.length;
+            bodyAwaitFinallyPreludeStatements = finallyAwaitSequence.prelude;
             bodyAwaitTerminalIndex = terminalIndex;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwaitSequence.expressions[0]!;
             bodyPreludeStatements = [...loopBody.slice(0, -1), ...tryAwaitSequence.prelude];
@@ -39416,6 +39457,7 @@ class Emitter {
             bodyAwaitCatchStartIndex = terminalTryAwaitSequence.expressions.length;
             bodyAwaitFinallyStartIndex = terminalTryAwaitSequence.expressions.length;
             bodyAwaitFinallyEndIndex = bodyAwaitFinallyStartIndex + finallyAwaitExprs.length;
+            bodyAwaitFinallyPreludeStatements = finallyAwaitSequence.prelude;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwait;
             bodyPreludeStatements = [...terminalTryPreludeStatements, ...terminalTryAwaitSequence.prelude];
             bodyAwaitTerminal = true;
@@ -39767,7 +39809,7 @@ class Emitter {
         let ok = true;
         const visitReferences = (node: ts.Node): void => {
             if (!ok) return;
-            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || node === bodyAwaitCatchAwaitExpr || bodyAwaitCatchExprs.includes(node as ts.AwaitExpression) || bodyAwaitExprs.includes(node as ts.AwaitExpression) || (bodyAwaitTerminal && node === bodyReturnExpr) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseReturnAwaitPreludeExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === bodyContinueElseReturnSynchronousExpr || node === fallthroughAwaitExpr) {
+            if (node === conditionAwaitExpr || node === bodyAwaitExpr || node === bodyContinueConditionAwaitExpr || node === bodyAwaitCatchAwaitExpr || node === bodyAwaitCatchTerminalAwaitExpr || bodyAwaitCatchExprs.includes(node as ts.AwaitExpression) || bodyAwaitExprs.includes(node as ts.AwaitExpression) || (bodyAwaitTerminal && node === bodyReturnExpr) || bodyContinueElseAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseBreakAwaitExprs.includes(node as ts.AwaitExpression) || bodyContinueElseReturnAwaitPreludeExprs.includes(node as ts.AwaitExpression) || node === bodyContinueElseReturnAwaitExpr || node === bodyContinueElseReturnSynchronousExpr || node === fallthroughAwaitExpr) {
                 ts.forEachChild(node, visitReferences);
                 return;
             }
@@ -39803,6 +39845,7 @@ class Emitter {
         for (const statement of bodyAwaitCatchStatements) visitReferences(statement);
         if (bodyAwaitCatchAwaitExpr) visitReferences(bodyAwaitCatchAwaitExpr);
         for (const awaitExpr of bodyAwaitCatchExprs) visitReferences(awaitExpr);
+        if (bodyAwaitCatchTerminalAwaitExpr) visitReferences(bodyAwaitCatchTerminalAwaitExpr);
         for (const statement of bodyAwaitCatchPreludeStatements) visitReferences(statement);
         for (const statements of bodyAwaitCatchBetweenAwaitStatements) {
             for (const statement of statements) visitReferences(statement);
@@ -39843,6 +39886,7 @@ class Emitter {
             bodyPostAwaitStatements,
             bodyAwaitFinallyStatements,
             bodyAwaitFinallyAwaitExpr: continuationBodyAwaitFinallyAwaitExpr,
+            bodyAwaitFinallyPreludeStatements,
             bodyAwaitFinallyAfterBetween,
             bodyAwaitTerminal,
             bodyAwaitTerminalIndex,
@@ -39855,6 +39899,8 @@ class Emitter {
             bodyAwaitCatchPreludeStatements,
             bodyAwaitCatchBetweenAwaitStatements,
             bodyAwaitCatchSymbol,
+            bodyAwaitCatchTerminalAwaitExpr,
+            bodyAwaitCatchTerminalRejectResult,
             bodyAwaitCatchStartIndex,
             bodyAwaitFinallyStartIndex,
             bodyAwaitFinallyEndIndex,
@@ -39906,6 +39952,7 @@ class Emitter {
                     ? this.unwrapTransparentExpression(continuation.bodyReturnExpr)
                     : null;
                 const catchRecoveryAwaitExprs = continuation.bodyAwaitCatchExprs ?? [continuation.bodyAwaitCatchAwaitExpr];
+                const catchTerminalAwait = continuation.bodyAwaitCatchTerminalAwaitExpr;
                 const finallyAwaitExprs = continuation.bodyAwaitFinallyEndIndex !== undefined
                     ? continuation.bodyAwaitExprs.slice(
                         continuation.bodyAwaitFinallyStartIndex ?? 0,
@@ -39914,6 +39961,7 @@ class Emitter {
                     : (continuation.bodyAwaitFinallyAwaitExpr ? [continuation.bodyAwaitFinallyAwaitExpr] : []);
                 const catchAwaitExprs = [
                     ...catchRecoveryAwaitExprs,
+                    ...(catchTerminalAwait ? [catchTerminalAwait] : []),
                     ...finallyAwaitExprs,
                     ...(terminalAwait && ts.isAwaitExpression(terminalAwait) ? [terminalAwait] : []),
                 ];
@@ -39933,12 +39981,22 @@ class Emitter {
                         bodyAwaitCatchAwaitedAliasSymbols: undefined,
                         bodyAwaitCatchAwaitedAliasIndices: undefined,
                         bodyAwaitCatchPreludeStatements: undefined,
+                        bodyAwaitCatchTerminalAwaitExpr: undefined,
+                        bodyAwaitCatchTerminalRejectResult: undefined,
                         bodyAwaitCatchAdapter: undefined,
                         bodyAwaitCatchReasonCaptured: true,
-                        bodyAwaitTerminal: terminalTryCatchFallthrough ? false : continuation.bodyAwaitTerminal,
-                        bodyAwaitTerminalIndex: terminalTryCatchFallthrough ? undefined : continuation.bodyAwaitTerminalIndex,
-                        bodyAwaitFinallyStartIndex: catchRecoveryAwaitExprs.length,
-                        bodyAwaitFinallyEndIndex: catchRecoveryAwaitExprs.length + finallyAwaitExprs.length,
+                        bodyAwaitTerminal: catchTerminalAwait
+                            ? true
+                            : terminalTryCatchFallthrough ? false : continuation.bodyAwaitTerminal,
+                        bodyAwaitTerminalIndex: catchTerminalAwait
+                            ? catchRecoveryAwaitExprs.length
+                            : terminalTryCatchFallthrough ? undefined : continuation.bodyAwaitTerminalIndex,
+                        bodyReturnExpr: catchTerminalAwait ?? continuation.bodyReturnExpr,
+                        bodyRejectResult: catchTerminalAwait
+                            ? !!continuation.bodyAwaitCatchTerminalRejectResult
+                            : continuation.bodyRejectResult,
+                        bodyAwaitFinallyStartIndex: catchRecoveryAwaitExprs.length + (catchTerminalAwait ? 1 : 0),
+                        bodyAwaitFinallyEndIndex: catchRecoveryAwaitExprs.length + (catchTerminalAwait ? 1 : 0) + finallyAwaitExprs.length,
                     },
                     catchAwaitExprs,
                 );
@@ -40458,6 +40516,7 @@ class Emitter {
                 buf.line(`${catchEnvType}* const ${catchEnvVar} = (${catchEnvType}*)TSC_GC_MALLOC(sizeof(${catchEnvType}));`);
                 buf.line(`${catchEnvVar}->receiver = ${catchSourceVar};`);
                 buf.line(`${catchEnvVar}->result_promise = _ret;`);
+                if (continuation.bodyAwaitCatchTerminalAwaitExpr) buf.line(`${catchEnvVar}->terminal_promise = NULL;`);
                 if (continuation.bodyAwaitFinallyAwaitExpr) {
                     buf.line(`${catchEnvVar}->reject_after_success = false;`);
                     buf.line(`${catchEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
@@ -40522,6 +40581,7 @@ class Emitter {
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 let rejectedFinallySource: EmitResult;
                 try {
+                    for (const statement of continuation.bodyAwaitFinallyPreludeStatements ?? []) this.emitStmt(buf, statement);
                     rejectedFinallySource = this.emitExpr(continuation.bodyAwaitFinallyAwaitExpr.expression);
                 } finally {
                     if (continuation.thisValue) this.functionThisStack.pop();
@@ -40614,6 +40674,7 @@ class Emitter {
                     buf.line(`${terminalThrowEnvType}* const ${terminalThrowEnvVar} = (${terminalThrowEnvType}*)TSC_GC_MALLOC(sizeof(${terminalThrowEnvType}));`);
                     buf.line(`${terminalThrowEnvVar}->receiver = ${terminalThrowSourceVar};`);
                     buf.line(`${terminalThrowEnvVar}->result_promise = _ret;`);
+                    if (continuation.bodyAwaitCatchTerminalAwaitExpr) buf.line(`${terminalThrowEnvVar}->terminal_promise = NULL;`);
                     if (continuation.bodyAwaitFinallyAwaitExpr) {
                         buf.line(`${terminalThrowEnvVar}->reject_after_success = false;`);
                         buf.line(`${terminalThrowEnvVar}->rejection_reason = ${terminalThrowReasonVar};`);

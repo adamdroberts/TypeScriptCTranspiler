@@ -1,5 +1,7 @@
 # Implemented features
 
+- Ordinary awaited loop bodies now allow a terminal source `try/catch/finally` catch arm to sequence awaited recovery and finish with `return await` or `throw await`, carrying the catch completion through multiple awaited `finally` cleanups; catch-recovery rejection, catch-terminal rejection, and cleanup rejection preserve JavaScript precedence. Tests: `async_await_loop_body_await_try_terminal_catch_terminal_await_return`, `async_await_loop_body_await_try_terminal_catch_terminal_await_throw`
+
 - Counted awaited loop bodies now preserve await-free statements before the first awaited try, catch-recovery, and finally-cleanup stages in a terminal `try/catch/finally`, while retaining `for` initializer/incrementor ordering across return fulfillment, terminal rejection, fulfilled terminal throw, source rejection, and cleanup rejection. Tests: `async_await_for_body_await_try_terminal_catch_finally_await_prelude_return`, `async_await_for_body_await_try_terminal_catch_finally_await_prelude_throw`
 
 - Ordinary awaited loop bodies now suspend through a no-catch `try` with synchronous `finally` cleanup before terminal `return await` or `throw await`, preserving cleanup ordering and propagating rejection when the body await rejects. Tests: `async_await_loop_body_await_try_finally_return`, `async_await_loop_body_await_try_finally_throw`, `async_await_loop_body_await_try_finally_body_reject`
