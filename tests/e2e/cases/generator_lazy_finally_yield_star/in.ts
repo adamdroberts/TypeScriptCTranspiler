@@ -31,3 +31,9 @@ try {
     thrownValue = error;
 }
 console.log("finally-yield-star-throw:", thrownFirst.done, thrownFirst.value, thrownSecond.done, thrownSecond.value, thrownValue);
+
+const returned = cleanup();
+const returnedFirst: any = returned.next();
+const returnedSecond: any = returned.next("source-resume");
+const returnedDone: any = returned.return("delegated-return");
+console.log("finally-yield-star-active-return:", returnedFirst.done, returnedFirst.value, returnedSecond.done, returnedSecond.value, returnedDone.done, returnedDone.value);
