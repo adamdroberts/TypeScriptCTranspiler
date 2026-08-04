@@ -8,6 +8,10 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified ordinary awaited loop-body assigned-var multi-alias throw coverage: a `while` body can carry multiple assigned-before-use `var` aliases through ordered direct awaits and a later awaited body step into a terminal `throw await`, preserving rejection delivery. Test: `async_await_loop_body_await_assigned_var_multi_throw`.
+
+- Verified ordinary awaited loop-body assigned-var multi-alias return coverage: a `while` body can carry multiple assigned-before-use `var` aliases through ordered direct awaits and a later awaited body step into a terminal `return await`. Test: `async_await_loop_body_await_assigned_var_multi_return`.
+
 - Verified ordinary awaited loop-body initialized-var throw coverage: a `while` body can carry an initialized `var` alias through multiple direct body suspensions into a terminal `throw await`, with the leading continuation owning the terminal await and preserving rejection delivery. Test: `async_await_loop_body_await_var_local_throw`.
 
 - Verified ordinary awaited loop-body initialized-var return coverage: a `while` body can carry an initialized `var` alias through multiple direct body suspensions into a terminal `return await`, with the leading continuation owning the terminal await without duplicate outer-loop reference scanning. Test: `async_await_loop_body_await_var_local_return`.
