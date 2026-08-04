@@ -53637,7 +53637,9 @@ class Emitter {
                                 this.isSimpleLazyMultiYieldCallLike(spreadExpression);
                             const nestedBinary = ts.isBinaryExpression(spreadExpression) &&
                                 !this.isAssignmentOperatorKind(spreadExpression.operatorToken.kind);
-                            if (!nestedLiteral && !nestedCall && !nestedBinary) return false;
+                            const nestedConditional = ts.isConditionalExpression(spreadExpression) &&
+                                !!this.directLazyYieldCondition(spreadExpression.condition);
+                            if (!nestedLiteral && !nestedCall && !nestedBinary && !nestedConditional) return false;
                             if (!visit(spreadExpression)) return false;
                         }
                         continue;
@@ -53668,7 +53670,9 @@ class Emitter {
                                 this.isSimpleLazyMultiYieldCallLike(spreadExpression);
                             const nestedBinary = ts.isBinaryExpression(spreadExpression) &&
                                 !this.isAssignmentOperatorKind(spreadExpression.operatorToken.kind);
-                            if (!nestedLiteral && !nestedCall && !nestedBinary) return false;
+                            const nestedConditional = ts.isConditionalExpression(spreadExpression) &&
+                                !!this.directLazyYieldCondition(spreadExpression.condition);
+                            if (!nestedLiteral && !nestedCall && !nestedBinary && !nestedConditional) return false;
                             if (!visit(spreadExpression)) return false;
                         }
                     } else {
