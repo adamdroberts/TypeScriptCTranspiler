@@ -1,5 +1,7 @@
 # Implemented features
 
+- Ordinary awaited loop bodies now carry an initialized `var` alias through multiple direct body suspensions into a terminal `throw await`, with the leading continuation owning the terminal await and preserving rejection delivery. Test: `async_await_loop_body_await_var_local_throw`
+
 - Ordinary awaited loop bodies now carry an initialized `var` alias through multiple direct body suspensions into a terminal `return await`, allowing the leading continuation to own the terminal await without duplicate outer-loop reference scanning. Test: `async_await_loop_body_await_var_local_return`
 
 - Awaited loop-body `if` branches now carry direct initialized `var` aliases (`value = await ...`) through later branch suspensions into terminal `throw await` arms. Test: `async_await_loop_body_if_await_var_local_throw`
