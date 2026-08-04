@@ -1,0 +1,10 @@
+of-success:of-return-finally
+of-source-reject:of-return-finally
+of-finally-reject:of-return-finally
+of-cleanup-reject-error:of-return-cleanup
+of-source-and-finally-reject:of-return-finally
+in-success:in-return-finally
+in-source-reject:in-return-finally
+in-finally-reject:in-return-finally
+in-cleanup-reject-error:in-return-cleanup
+in-source-and-finally-reject:in-return-finally

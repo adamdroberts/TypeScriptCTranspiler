@@ -43781,6 +43781,7 @@ class Emitter {
             isCatchAwait: boolean;
             isLastCatchAwait: boolean;
             terminalAction: "return" | "throw" | null;
+            terminalSynchronousExpression: ts.Expression | null;
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
@@ -43911,6 +43912,7 @@ class Emitter {
                 isLastTryBodyAwait = false,
                 additionalCaptures: readonly NestedBranchCapture[] = [],
                 terminalAction: "return" | "throw" | null = null,
+                terminalSynchronousExpression: ts.Expression | null = null,
             ): boolean => {
                 expressions.push({
                     expression,
@@ -43931,6 +43933,7 @@ class Emitter {
                     isCatchAwait,
                     isLastCatchAwait,
                     terminalAction,
+                    terminalSynchronousExpression,
                 });
                 pendingStatements = [];
                 return true;
@@ -44406,6 +44409,7 @@ class Emitter {
                     const finallyTerminalStatement = finallyStatements[finallyStatements.length - 1];
                     let finallyTerminalAction: "return" | "throw" | null = null;
                     let finallyTerminalExpression: ts.AwaitExpression | null = null;
+                    let finallyTerminalSynchronousExpression: ts.Expression | null = null;
                     if (finallyTerminalStatement &&
                         (ts.isReturnStatement(finallyTerminalStatement) || ts.isThrowStatement(finallyTerminalStatement))) {
                         const candidate = finallyTerminalStatement.expression
@@ -44414,9 +44418,12 @@ class Emitter {
                         if (candidate && ts.isAwaitExpression(candidate)) {
                             finallyTerminalAction = ts.isReturnStatement(finallyTerminalStatement) ? "return" : "throw";
                             finallyTerminalExpression = candidate;
+                        } else if (candidate && this.asyncAwaitSyncReturnExpressionSupported(candidate)) {
+                            finallyTerminalAction = ts.isReturnStatement(finallyTerminalStatement) ? "return" : "throw";
+                            finallyTerminalSynchronousExpression = candidate;
                         }
                     }
-                    const finallyAwaitSourceStatements = finallyTerminalExpression
+                    const finallyAwaitSourceStatements = finallyTerminalExpression || finallyTerminalSynchronousExpression
                         ? finallyStatements.slice(0, -1)
                         : finallyStatements;
                     const finallyAwaitSteps: {
@@ -44524,6 +44531,13 @@ class Emitter {
                                 finallyIndex === finallyAwaitSteps.length - 1 && !finallyTerminalExpression,
                                 false,
                                 false,
+                                [],
+                                finallyIndex === finallyAwaitSteps.length - 1 && !finallyTerminalExpression
+                                    ? finallyTerminalAction
+                                    : null,
+                                finallyIndex === finallyAwaitSteps.length - 1 && !finallyTerminalExpression
+                                    ? finallyTerminalSynchronousExpression
+                                    : null,
                             )) return null;
                         }
                         if (finallyTerminalExpression && finallyTerminalAction) {
@@ -44543,6 +44557,7 @@ class Emitter {
                                 false,
                                 [],
                                 finallyTerminalAction,
+                                finallyTerminalSynchronousExpression,
                             )) return null;
                         }
                         continue;
@@ -45582,7 +45597,21 @@ class Emitter {
                 controlBuf.close();
             }
             if (currentAwait.terminalAction) {
-                if (currentAwait.terminalAction === "return" &&
+                if (currentAwait.terminalSynchronousExpression) {
+                    const synchronousTerminal: NestedBranchTerminal = {
+                        action: currentAwait.terminalAction,
+                        conditions: [],
+                        awaitedExpression: null,
+                        synchronousExpression: currentAwait.terminalSynchronousExpression,
+                        postlude: [],
+                        captures: [],
+                    };
+                    if (currentAwait.terminalAction === "return") {
+                        emitBranchSynchronousReturn(controlBuf, "state", synchronousTerminal, []);
+                    } else {
+                        emitBranchSynchronousThrow(controlBuf, "state", synchronousTerminal, []);
+                    }
+                } else if (currentAwait.terminalAction === "return" &&
                     !currentAwait.catchStatements && finallyAwaitIndex >= 0) {
                     controlBuf.line("state->terminal_pending = true;");
                     controlBuf.line("state->terminal_throw = false;");

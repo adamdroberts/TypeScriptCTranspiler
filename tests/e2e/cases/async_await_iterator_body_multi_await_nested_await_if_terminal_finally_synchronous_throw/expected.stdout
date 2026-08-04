@@ -1,0 +1,10 @@
+of-success-error:of-throw-finally
+of-source-reject-error:of-throw-finally
+of-finally-reject-error:of-throw-finally
+of-cleanup-reject-error:of-throw-cleanup
+of-source-and-finally-reject-error:of-throw-finally
+in-success-error:in-throw-finally
+in-source-reject-error:in-throw-finally
+in-finally-reject-error:in-throw-finally
+in-cleanup-reject-error:in-throw-cleanup
+in-source-and-finally-reject-error:in-throw-finally
