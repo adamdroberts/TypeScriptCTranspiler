@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified ordinary awaited loop-body assigned-var multi-alias coverage: `while` and counted-`for` bodies now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later body suspensions before `continue` or `break`, preserving the awaited post-loop result path. Tests: `async_await_loop_body_await_assigned_var_multi_continue`, `async_await_loop_body_await_assigned_var_multi_break`.
+
 - Verified ordinary awaited loop-body assigned-var coverage: `while` and counted-`for` bodies now carry an assigned-before-use `var` alias initialized by direct `value = await ...` through later body suspensions before `continue` or `break`, preserving the awaited post-loop result path. Tests: `async_await_loop_body_await_assigned_var_continue`, `async_await_loop_body_await_assigned_var_break`.
 
 - Verified awaited assigned-var multi-alias/incrementor composition: bounded async `for` loops now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later body suspension before an awaited counted-`for` incrementor on `continue`, while terminal `break` skips the incrementor. Tests: `async_await_for_incrementor_body_await_assigned_var_multi_continue`, `async_await_for_incrementor_body_await_assigned_var_multi_break`.
