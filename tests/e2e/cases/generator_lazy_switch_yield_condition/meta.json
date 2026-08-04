@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators suspend a direct yield used as a switch discriminant and preserve static case selection, fallthrough completion, and close/finally handling"
+}

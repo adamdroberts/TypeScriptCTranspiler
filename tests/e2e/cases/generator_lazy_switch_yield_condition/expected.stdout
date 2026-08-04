@@ -1,0 +1,10 @@
+route alpha false select start
+route alpha false alpha-yield start|alpha
+route alpha true complete start|alpha|done
+route fall false select start
+route fall true complete start|fall-first|beta|done
+route beta false select start
+route beta true complete start|beta|done
+route other false select start
+route other true complete start|default|done
+close false close-select true closed close-finally

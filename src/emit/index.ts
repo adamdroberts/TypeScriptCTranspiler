@@ -52945,7 +52945,8 @@ class Emitter {
         }
 
         if (ts.isSwitchStatement(stmt)) {
-            if (this.nodeContainsYield(stmt.expression)) return false;
+            const yieldedDiscriminant = this.directLazyYieldCondition(stmt.expression);
+            if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant) return false;
             for (const clause of stmt.caseBlock.clauses) {
                 if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression)) {
                     return false;
@@ -53425,21 +53426,21 @@ class Emitter {
         return unwrapped;
     }
 
-    private emitLazyGeneratorDirectYieldCondition(
+    private emitLazyGeneratorDirectYieldValue(
         buf: CBuf,
         expression: ts.Expression,
         nextStateId: () => number,
         nextYieldStarSlot: () => number,
         elemType: CType,
         envLocalName: string,
-    ): string | null {
-        const yieldedCondition = this.directLazyYieldCondition(expression);
-        if (!yieldedCondition) return null;
+    ): EmitResult | null {
+        const yieldedExpression = this.directLazyYieldCondition(expression);
+        if (!yieldedExpression) return null;
         const nextState = nextStateId();
-        const value = yieldedCondition.expression
-            ? this.emitExpr(yieldedCondition.expression)
+        const value = yieldedExpression.expression
+            ? this.emitExpr(yieldedExpression.expression)
             : { c: "NULL", ty: T_VOID };
-        const valueNode = yieldedCondition.expression ?? yieldedCondition;
+        const valueNode = yieldedExpression.expression ?? yieldedExpression;
         const tmp = this.freshTemp("_yield");
         buf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
         buf.line(`tsc_array_push_raw(a, &${tmp});`);
@@ -53454,10 +53455,26 @@ class Emitter {
             nextStateId,
             nextYieldStarSlot,
         );
-        return this.truthyExprFromEmitResult(
-            { c: "next_arg", ty: T_VALUE },
+        return { c: "next_arg", ty: T_VALUE };
+    }
+
+    private emitLazyGeneratorDirectYieldCondition(
+        buf: CBuf,
+        expression: ts.Expression,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): string | null {
+        const resumed = this.emitLazyGeneratorDirectYieldValue(
+            buf,
             expression,
+            nextStateId,
+            nextYieldStarSlot,
+            elemType,
+            envLocalName,
         );
+        return resumed ? this.truthyExprFromEmitResult(resumed, expression) : null;
     }
 
     private simpleLazyMultiYieldReturn(stmt: ts.Statement): {
@@ -53851,16 +53868,28 @@ class Emitter {
         this.activeLazyGeneratorBreakTargets.push("switch");
         this.activeLazyGeneratorSwitchEndLabels.push(endLabel);
         try {
-            const disc = this.emitExpr(stmt.expression);
+            const yieldedDiscriminant = this.emitLazyGeneratorDirectYieldValue(
+                buf,
+                stmt.expression,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            const disc = yieldedDiscriminant ?? this.emitExpr(stmt.expression);
+            const isDynamic = disc.ty.kind === "value";
             const isStr = disc.ty.kind === "string";
             const isBool = disc.ty.kind === "boolean";
-            if (!isStr && !isBool) requireNumber(stmt.expression, disc.ty);
+            if (!isDynamic && !isStr && !isBool) requireNumber(stmt.expression, disc.ty);
             const discVar = this.freshTemp("_sw");
             buf.open("");
             buf.line(`${disc.ty.c} ${discVar} = ${disc.c};`);
 
             const buildCond = (caseExpr: ts.Expression): string => {
                 const caseVal = this.emitExpr(caseExpr);
+                if (isDynamic) {
+                    return `tsc_value_eq(${discVar}, ${this.coerce(caseVal, T_VALUE, caseExpr)})`;
+                }
                 if (isStr) {
                     return `tsc_str_eq(${discVar}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
                 }

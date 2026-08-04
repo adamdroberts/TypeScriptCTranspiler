@@ -27,6 +27,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; compound or nested condition selectors and broader loop/switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.
 
+- Lazy generators now suspend and resume a direct `yield` used as a `switch` discriminant, matching static string, numeric, and boolean case keys through the resumed value while preserving default/fallthrough routing and close/finally handling; compound discriminants, yielded case labels, and broader switch graphs remain deferred. Test: `generator_lazy_switch_yield_condition`.
+
 - Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion, direct local `return`/`throw`, or direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested control-flow exits remain compile-time diagnostics. Test: `using_dispose`.
 
 - `Symbol.dispose` now has stable well-known-symbol identity, description, static-emitter support, and dynamic symbol-key lookup as the synchronous explicit-resource-management hook. Test: `symbols`.
