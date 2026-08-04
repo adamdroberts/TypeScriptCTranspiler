@@ -38934,11 +38934,32 @@ class Emitter {
             const between: ts.Statement[][] = [];
             const aliases: { symbol: ts.Symbol; index: number }[] = [];
             let pending: ts.Statement[] = [];
+            const awaitedAssignmentAlias = (statementIndex: number) => {
+                if (!allowAwaitedLocalAliases || statementIndex <= 0) return null;
+                const statement = statements[statementIndex];
+                const declarationStatement = statements[statementIndex - 1];
+                if (!statement || !declarationStatement || !ts.isExpressionStatement(statement) ||
+                    !ts.isVariableStatement(declarationStatement) ||
+                    (declarationStatement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
+                    declarationStatement.declarationList.declarations.length !== 1) return null;
+                const assignment = this.unwrapTransparentExpression(statement.expression);
+                if (!ts.isBinaryExpression(assignment) || assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                    !ts.isIdentifier(assignment.left)) return null;
+                const awaitExpression = this.unwrapTransparentExpression(assignment.right);
+                if (!ts.isAwaitExpression(awaitExpression)) return null;
+                const declaration = declarationStatement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name) || declaration.initializer) return null;
+                const assignmentSymbol = this.symbolForIdentifier(assignment.left);
+                const declarationSymbol = this.symbolForIdentifier(declaration.name);
+                if (!assignmentSymbol || assignmentSymbol !== declarationSymbol) return null;
+                return { expression: awaitExpression, symbol: assignmentSymbol, declarationStatement };
+            };
             for (const [statementIndex, statement] of statements.entries()) {
                 let expression = ts.isExpressionStatement(statement)
                     ? this.unwrapTransparentExpression(statement.expression)
                     : null;
                 let aliasSymbol: ts.Symbol | undefined;
+                let assignmentDeclaration: ts.Statement | undefined;
                 if (allowAwaitedLocalAliases && ts.isVariableStatement(statement) &&
                     statement.declarationList.declarations.length === 1) {
                     const declaration = statement.declarationList.declarations[0]!;
@@ -38951,8 +38972,22 @@ class Emitter {
                         if (!aliasSymbol) return null;
                     }
                 }
+                const assignmentAlias = awaitedAssignmentAlias(statementIndex);
+                if (assignmentAlias) {
+                    expression = assignmentAlias.expression;
+                    aliasSymbol = assignmentAlias.symbol;
+                    assignmentDeclaration = assignmentAlias.declarationStatement;
+                }
+                if (!expression && awaitedAssignmentAlias(statementIndex + 1)?.declarationStatement === statement) {
+                    pending.push(statement);
+                    continue;
+                }
                 if (expression && ts.isAwaitExpression(expression)) {
-                    if (expressions.length === 0 && statementIndex !== 0) return null;
+                    if (assignmentDeclaration) {
+                        if (pending[pending.length - 1] !== assignmentDeclaration) return null;
+                        pending = pending.slice(0, -1);
+                        if (expressions.length === 0 && statementIndex - 1 !== 0) return null;
+                    } else if (expressions.length === 0 && statementIndex !== 0) return null;
                     if (expressions.length > 0) between.push(pending);
                     if (aliasSymbol) aliases.push({ symbol: aliasSymbol, index: expressions.length });
                     expressions.push(expression);
