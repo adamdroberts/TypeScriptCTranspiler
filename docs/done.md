@@ -2,7 +2,9 @@
 
 - `SuppressedError` callable and constructable forms now create typed Error values with optional messages, ignored extras, direct `.error` / `.suppressed` field access, Error stringification, and bounded own-property Object/Reflect reflection; broader cleanup-suppression state machines remain deferred. Test: `suppressed_error`.
 
-- Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, including async functions without suspension in the using scope, disposing resources in reverse declaration order on normal completion, after direct or nested local `return`/`throw` expressions have been evaluated, or on direct loop-body `break`/`continue` exits through `Symbol.dispose`; `await using` and nested loop-control exits remain compile-time diagnostics. Test: `using_dispose`.
+- `await using` now supports one dynamic, non-thenable resource at the start of a non-suspending async body, disposing it through `Symbol.asyncDispose` on normal or direct-return completion with Promise sequencing and disposal rejection precedence; nested resources/control-flow exits, thenable initializers, and broader suppression state machines remain deferred. Test: `await_using_dispose`.
+
+- Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, including async functions without suspension in the using scope, disposing resources in reverse declaration order on normal completion, after direct or nested local `return`/`throw` expressions have been evaluated, or on direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested loop-control exits remain compile-time diagnostics. Test: `using_dispose`.
 
 - `Symbol.dispose` now has stable well-known-symbol identity, description, static-emitter support, and dynamic symbol-key lookup as the synchronous explicit-resource-management hook. Test: `symbols`.
 

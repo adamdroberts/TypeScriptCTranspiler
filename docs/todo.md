@@ -10,7 +10,9 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - Verified bounded `SuppressedError` coverage: callable and constructable forms create typed Error values with stored `error` and `suppressed` fields, optional messages, ignored extras, direct stringification, and bounded own-property reflection. Broader cleanup-suppression state machines remain deferred. Test: `suppressed_error`.
 
-- Verified bounded synchronous `using` coverage: ordinary local block lists can bind dynamic disposable values, including async functions without suspension in the using scope, and dispose them in reverse declaration order on normal completion, after direct or nested local `return`/`throw` expressions have been evaluated, or on direct loop-body `break`/`continue` exits through `Symbol.dispose`; `await using` and nested loop-control exits remain deferred. Test: `using_dispose`.
+- Verified bounded `await using` coverage: one dynamic, non-thenable resource can be bound at the start of a non-suspending async body and disposed through `Symbol.asyncDispose` on normal or direct-return completion, with disposal Promise sequencing and disposal rejection precedence; nested resources/control-flow exits, thenable initializers, and broader suppression state machines remain deferred. Test: `await_using_dispose`.
+
+- Verified bounded synchronous `using` coverage: ordinary local block lists can bind dynamic disposable values, including async functions without suspension in the using scope, and dispose them in reverse declaration order on normal completion, after direct or nested local `return`/`throw` expressions have been evaluated, or on direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested loop-control exits remain deferred. Test: `using_dispose`.
 
 - Verified bounded `Symbol.dispose` coverage: the well-known symbol now has stable singleton identity, description, static-emitter support, and dynamic symbol-key lookup, providing the synchronous counterpart needed by explicit resource management. Test: `symbols`.
 

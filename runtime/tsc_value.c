@@ -1020,6 +1020,27 @@ void tsc_value_dispose_sync(tsc_value_t value) {
     (void)tsc_value_apply_function(method, value, tsc_value_array(args));
 }
 
+tsc_promise_t* tsc_value_dispose_async(tsc_value_t value) {
+    if (tsc_value_is_nullish(value)) return tsc_promise_resolve(tsc_value_undefined());
+    tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_async_dispose());
+    if (tsc_value_is_undefined(method) || tsc_value_is_nullish(method)) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("Object is not asynchronously disposable")));
+    }
+    if (!tsc_value_is_callable(method)) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("Symbol.asyncDispose is not callable")));
+    }
+    tsc_try_frame_t eh;
+    tsc_try_push(&eh);
+    if (setjmp(eh.jb) == 0) {
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+        tsc_value_t result = tsc_value_apply_function(method, value, tsc_value_array(args));
+        tsc_try_pop();
+        return tsc_promise_resolve_thenable(result);
+    }
+    tsc_try_pop();
+    return tsc_promise_reject(tsc_value_string(tsc_current_error()));
+}
+
 static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {
     const tsc_str_t* key = tsc_str_from_lit(name, len);
     if (!tsc_value_has_prop(desc, key)) return false;

@@ -1,0 +1,3 @@
+{
+  "description": "bounded await using disposal for one dynamic non-thenable resource in non-suspending async bodies, covering return and normal completion through Symbol.asyncDispose"
+}

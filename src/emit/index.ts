@@ -24248,7 +24248,8 @@ class Emitter {
                     try {
                         const handledAsyncAwait =
                             isAsync &&
-                            (this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
+                            (this.emitAsyncUsingSimpleBody(this.defs, m.body) ||
+                                this.emitDirectAsyncAwaitReturnAlias(this.defs, m.body) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, m.body) ||
                                 this.emitDirectAsyncAwaitThrowAlias(this.defs, m.body) ||
                                 this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
@@ -25828,7 +25829,8 @@ class Emitter {
         this.emitCapturedParameterCells(this.defs, fd.parameters, capturedCells);
         try {
             if (!fd.body) unsupported(fd, "function without body");
-            if (!this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
+            if (!this.emitAsyncUsingSimpleBody(this.defs, fd.body) &&
+                !this.emitDirectAsyncAwaitReturnAlias(this.defs, fd.body) &&
                 !this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, fd.body) &&
                 !this.emitDirectAsyncAwaitThrowAlias(this.defs, fd.body) &&
                 !this.emitAsyncAwaitForAwaitReturnContinuation(this.defs, fd.body, fd.parameters, thisType ? { c: "__tsc_this", ty: thisType } : null) &&
@@ -25870,6 +25872,75 @@ class Emitter {
         }
         this.defs.close();
         this.defs.line();
+    }
+
+    private emitAsyncUsingSimpleBody(buf: CBuf, body: ts.Block): boolean {
+        const statements = Array.from(body.statements);
+        const awaitUsingStatements = statements.filter(
+            (statement): statement is ts.VariableStatement =>
+                ts.isVariableStatement(statement) &&
+                (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) !== 0,
+        );
+        if (awaitUsingStatements.length !== 1) return false;
+        const usingStatement = awaitUsingStatements[0]!;
+        if (statements[0] !== usingStatement || usingStatement.declarationList.declarations.length !== 1) {
+            return false;
+        }
+        const declaration = usingStatement.declarationList.declarations[0]!;
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+        const storageType = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+        if (storageType.kind !== "value") return false;
+
+        const containsAwait = (node: ts.Node): boolean => {
+            if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
+            if (ts.isAwaitExpression(node)) return true;
+            let found = false;
+            node.forEachChild((child) => {
+                if (!found && containsAwait(child)) found = true;
+            });
+            return found;
+        };
+        if (containsAwait(declaration.initializer)) return false;
+        const tail = statements.slice(1);
+        if (tail.some(containsAwait)) return false;
+
+        const terminal = tail.length > 0 ? tail[tail.length - 1]! : null;
+        const terminalIsReturn = !!terminal && ts.isReturnStatement(terminal);
+        const terminalIsThrow = !!terminal && ts.isThrowStatement(terminal);
+        const bodyStatements = terminalIsReturn || terminalIsThrow
+            ? tail.slice(0, -1)
+            : tail;
+        const simpleBodyStatement = (statement: ts.Statement): boolean =>
+            ts.isExpressionStatement(statement) ||
+            ts.isVariableStatement(statement) ||
+            ts.isEmptyStatement(statement);
+        if (!bodyStatements.every(simpleBodyStatement)) return false;
+        if (bodyStatements.some((statement) => this.statementAlwaysExits(statement))) return false;
+        if (terminal && !terminalIsReturn && !terminalIsThrow && !simpleBodyStatement(terminal)) return false;
+
+        const resourceName = mangleIdent(declaration.name.text);
+        const resource = this.emitExpr(declaration.initializer);
+        buf.line(`tsc_value_t ${resourceName} = ${this.coerce(resource, T_VALUE, declaration.initializer)};`);
+        for (const statement of bodyStatements) this.emitStmt(buf, statement);
+
+        const resultPromise = this.freshTemp("_await_using_result");
+        if (terminalIsReturn) {
+            const returnStatement = terminal as ts.ReturnStatement;
+            if (!returnStatement.expression) {
+                buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            } else {
+                const returned = this.emitExpr(returnStatement.expression);
+                buf.line(`tsc_promise_t* const ${resultPromise} = ${this.promiseResolveResult(returned, returnStatement.expression)};`);
+            }
+        } else if (terminalIsThrow) {
+            const throwStatement = terminal as ts.ThrowStatement;
+            const thrown = this.emitExpr(throwStatement.expression);
+            buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_reject(tsc_value_string(${this.coerceToString(thrown, throwStatement.expression)}));`);
+        } else {
+            buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+        }
+        buf.line(`return tsc_promise_after_async_dispose(tsc_value_dispose_async(${resourceName}), ${resultPromise});`);
+        return true;
     }
 
     private directAsyncAwaitReturnAlias(body: ts.Block): DirectAsyncAwaitReturnAlias | null {

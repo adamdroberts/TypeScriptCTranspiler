@@ -92,6 +92,40 @@ void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
 }
 
 typedef struct {
+    tsc_promise_t* dispose;
+    tsc_promise_t* result;
+    tsc_promise_t* output;
+} tsc_promise_after_async_dispose_env_t;
+
+static void tsc_promise_after_async_dispose_callback(void* env) {
+    tsc_promise_after_async_dispose_env_t* state = (tsc_promise_after_async_dispose_env_t*)env;
+    if (!state || !state->dispose || !state->result || !state->output) return;
+    if (tsc_promise_is_pending(state->dispose)) return;
+    if (tsc_promise_is_rejected(state->dispose)) {
+        tsc_promise_reject_in_place(state->output, tsc_promise_reason(state->dispose));
+        return;
+    }
+    tsc_promise_adopt_into(state->output, state->result);
+}
+
+tsc_promise_t* tsc_promise_after_async_dispose(tsc_promise_t* dispose, tsc_promise_t* result) {
+    if (!dispose) return result ? result : tsc_promise_resolve(tsc_value_undefined());
+    if (!result) result = tsc_promise_resolve(tsc_value_undefined());
+    tsc_promise_t* output = tsc_promise_pending();
+    tsc_promise_after_async_dispose_env_t* state =
+        (tsc_promise_after_async_dispose_env_t*)TSC_GC_MALLOC(sizeof(tsc_promise_after_async_dispose_env_t));
+    state->dispose = dispose;
+    state->result = result;
+    state->output = output;
+    if (tsc_promise_is_pending(dispose)) {
+        tsc_promise_add_callback(dispose, tsc_promise_after_async_dispose_callback, state);
+    } else {
+        tsc_queue_microtask(tsc_promise_after_async_dispose_callback, state);
+    }
+    return output;
+}
+
+typedef struct {
     tsc_promise_t* dest;
     tsc_promise_t* source;
 } tsc_promise_adopt_env_t;
