@@ -2973,6 +2973,188 @@ static uv_loop_t* g_tsc_fs_uv_loop = NULL;
 static void tsc_fs_stats_fill_uv(tsc_fs_stats_t* out, const tsc_uv_stat_t* st);
 static tsc_fs_stats_t* tsc_fs_stats_new(void);
 
+typedef struct tsc_fs_file_handle {
+    int fd;
+    bool closed;
+} tsc_fs_file_handle_t;
+
+typedef struct tsc_fs_open_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    int fd;
+    bool req_pending;
+    tsc_str_t* error;
+    struct tsc_fs_open_async* next;
+} tsc_fs_open_async_t;
+
+typedef struct tsc_fs_file_handle_close_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    int fd;
+    bool req_pending;
+    struct tsc_fs_file_handle_close_async* next;
+} tsc_fs_file_handle_close_async_t;
+
+static tsc_fs_open_async_t* g_tsc_fs_open_async = NULL;
+static tsc_fs_file_handle_close_async_t* g_tsc_fs_file_handle_close_async = NULL;
+
+static bool tsc_fs_open_flags_from_string(const tsc_str_t* flags_str, int* out_flags) {
+    char* flags_c = flags_str ? cstr_dup(flags_str) : NULL;
+    const char* f = flags_c ? flags_c : "r";
+    bool valid = true;
+    int flags = 0;
+    if (strcmp(f, "r") == 0) flags = O_RDONLY;
+    else if (strcmp(f, "r+") == 0) flags = O_RDWR;
+    else if (strcmp(f, "rs") == 0) flags = O_RDONLY | O_SYNC;
+    else if (strcmp(f, "rs+") == 0) flags = O_RDWR | O_SYNC;
+    else if (strcmp(f, "w") == 0) flags = O_WRONLY | O_CREAT | O_TRUNC;
+    else if (strcmp(f, "wx") == 0 || strcmp(f, "xw") == 0) flags = O_WRONLY | O_CREAT | O_TRUNC | O_EXCL;
+    else if (strcmp(f, "w+") == 0) flags = O_RDWR | O_CREAT | O_TRUNC;
+    else if (strcmp(f, "wx+") == 0 || strcmp(f, "xw+") == 0) flags = O_RDWR | O_CREAT | O_TRUNC | O_EXCL;
+    else if (strcmp(f, "a") == 0) flags = O_WRONLY | O_CREAT | O_APPEND;
+    else if (strcmp(f, "ax") == 0 || strcmp(f, "xa") == 0) flags = O_WRONLY | O_CREAT | O_APPEND | O_EXCL;
+    else if (strcmp(f, "a+") == 0) flags = O_RDWR | O_CREAT | O_APPEND;
+    else if (strcmp(f, "ax+") == 0 || strcmp(f, "xa+") == 0) flags = O_RDWR | O_CREAT | O_APPEND | O_EXCL;
+    else if (strcmp(f, "as") == 0) flags = O_WRONLY | O_CREAT | O_APPEND | O_SYNC;
+    else if (strcmp(f, "as+") == 0) flags = O_RDWR | O_CREAT | O_APPEND | O_SYNC;
+    else valid = false;
+    free(flags_c);
+    if (valid && out_flags) *out_flags = flags;
+    return valid;
+}
+
+static void tsc_fs_open_async_remove(tsc_fs_open_async_t* task) {
+    tsc_fs_open_async_t** cursor = &g_tsc_fs_open_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_file_handle_close_async_remove(tsc_fs_file_handle_close_async_t* task) {
+    tsc_fs_file_handle_close_async_t** cursor = &g_tsc_fs_file_handle_close_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_file_handle_close_async_cb(tsc_uv_fs_t* req) {
+    tsc_fs_file_handle_close_async_t* task = (tsc_fs_file_handle_close_async_t*)req;
+    task->req_pending = false;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(tsc_str_from_cstr("fs.promises.open: could not close file handle")));
+    } else {
+        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    }
+    tsc_fs_file_handle_close_async_remove(task);
+}
+
+static tsc_value_t tsc_fs_file_handle_close_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_file_handle_t* handle = (tsc_fs_file_handle_t*)env;
+    if (!handle || handle->closed) return tsc_value_promise(tsc_promise_resolve(tsc_value_undefined()));
+    handle->closed = true;
+    int fd = handle->fd;
+    handle->fd = -1;
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_file_handle_close_async_t* task = (tsc_fs_file_handle_close_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_close_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->fd = fd;
+    task->next = g_tsc_fs_file_handle_close_async;
+    g_tsc_fs_file_handle_close_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_close(g_tsc_fs_uv_loop, &task->req, fd, tsc_fs_file_handle_close_async_cb);
+    if (rc < 0) {
+        task->req_pending = false;
+        uv_fs_req_cleanup(&task->req);
+        tsc_promise_reject_in_place(promise, tsc_value_string(tsc_str_from_cstr("fs.promises.open: could not close file handle")));
+        tsc_fs_file_handle_close_async_remove(task);
+    } else {
+        task->req_pending = true;
+    }
+    return tsc_value_promise(promise);
+}
+
+static tsc_value_t tsc_fs_file_handle_value(int fd) {
+    tsc_fs_file_handle_t* handle = (tsc_fs_file_handle_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_t));
+    handle->fd = fd;
+    handle->closed = false;
+    tsc_object_t* object = tsc_object_new();
+    tsc_object_define(object, tsc_str_from_lit("fd", 2), tsc_value_num((double)fd), false, true, false);
+    tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_close_builtin,
+        handle,
+        0.0,
+        tsc_str_from_lit("close", 5)
+    ));
+    return tsc_value_object(object);
+}
+
+static void tsc_fs_open_async_finish(tsc_fs_open_async_t* task, bool success) {
+    if (success) {
+        tsc_promise_fulfill_in_place(task->promise, tsc_fs_file_handle_value(task->fd));
+    } else {
+        tsc_promise_reject_in_place(task->promise, tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.promises.open: could not open file")));
+    }
+    tsc_fs_open_async_remove(task);
+    free(task->path);
+}
+
+static void tsc_fs_open_async_cb(tsc_uv_fs_t* req) {
+    tsc_fs_open_async_t* task = (tsc_fs_open_async_t*)req;
+    task->req_pending = false;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.promises.open: could not open file");
+        tsc_fs_open_async_finish(task, false);
+        return;
+    }
+    task->fd = (int)result;
+    tsc_fs_open_async_finish(task, true);
+}
+
+tsc_promise_t* tsc_fs_promises_open_async(const tsc_str_t* path, const tsc_str_t* flags_str, double flags_num, bool flags_is_num, double mode) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    int open_flags = 0;
+    if (flags_is_num) {
+        open_flags = (int)flags_num;
+    } else if (!tsc_fs_open_flags_from_string(flags_str, &open_flags)) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.open: unsupported flags")));
+    }
+    tsc_fs_open_async_t* task = (tsc_fs_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_open_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->next = g_tsc_fs_open_async;
+    g_tsc_fs_open_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_open(g_tsc_fs_uv_loop, &task->req, task->path, open_flags, mode >= 0.0 ? (int)mode : 0666, tsc_fs_open_async_cb);
+    if (rc < 0) {
+        task->req_pending = false;
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.promises.open: could not open file");
+        tsc_fs_open_async_finish(task, false);
+    } else {
+        task->req_pending = true;
+    }
+    return promise;
+}
+
 static void tsc_fs_read_file_async_remove(tsc_fs_read_file_async_t* task) {
     tsc_fs_read_file_async_t** cursor = &g_tsc_fs_read_file_async;
     while (*cursor) {
@@ -6275,7 +6457,7 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
 }
 
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {

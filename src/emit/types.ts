@@ -467,6 +467,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         if (sym?.getName() === "TextDecoder") return T_TEXT_DECODER;
         if (sym?.getName() === "FSStats") return T_FS_STATS;
         if (sym?.getName() === "FSDirent") return T_FS_DIRENT;
+        if (sym?.getName() === "FSFileHandle") return T_VALUE;
         if (sym?.getName() === "DispatchQueue") return T_DISPATCH_QUEUE;
         if (sym?.getName() === "TemplateStringsArray") return arrayType(T_STRING);
         if (sym?.getName() === "ProxyHandler") return T_VALUE;

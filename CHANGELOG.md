@@ -13,6 +13,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- `fs.promises.open` now uses libuv to return a `FileHandle` value with a read-only `fd` and asynchronous `close()` method, preserving the existing string/numeric open-flag and mode contract. Test: `fs_promises_open`.
+
 - Bounded async `for await...of` continuations now propagate a synchronous terminal `throw` after iterator exhaustion while retaining iterator close and existing return/throw behavior. Test: `async_for_await_terminal_throw`.
 
 - Bounded async `for await...of` lowering now adapts synchronous arrays, strings, and symbol-backed iterables, awaits promise-valued sync iterator results, forwards early-return `IteratorClose`, validates iterator method/result objects, and retains bare `next()` async-iterator compatibility. Tests: `async_for_await_sync_iterables`, `async_for_await_sync_iterator_close`, plus the `async_for_await_events_on_` regression family.

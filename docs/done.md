@@ -1,5 +1,7 @@
 # Implemented features
 
+- `fs.promises.open` now uses libuv to return a `FileHandle` value with a read-only `fd` and asynchronous `close()` method, preserving the existing string/numeric open-flag and mode contract. Test: `fs_promises_open`.
+
 - Async `for await...of` continuations now propagate a synchronous terminal `throw` after iterator exhaustion, including adapted synchronous sources, while preserving existing iterator close and return/throw paths. Test: `async_for_await_terminal_throw`.
 
 - Async `for await...of` now adapts synchronous arrays, strings, and symbol-backed iterables through an async-from-sync runtime wrapper, awaits promise-valued sync iterator results, forwards early-return `IteratorClose`, validates iterator method/result objects, and preserves the existing bare `next()` async-iterator compatibility path. Tests: `async_for_await_sync_iterables`, `async_for_await_sync_iterator_close`; existing `async_for_await_events_on_` family remains green.

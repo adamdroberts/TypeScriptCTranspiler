@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded `fs.promises.open` coverage: libuv-backed open now returns a `FileHandle` value with a read-only `fd` and asynchronous `close()` method, preserving the existing string/numeric open-flag and mode contract. Test: `fs_promises_open`.
+
 - Verified bounded async `for await...of` terminal-throw coverage: a supported iterator continuation now propagates a synchronous `throw` after iterator exhaustion, including sync-source adaptation, while existing iterator return/throw and close behavior remains green. Test: `async_for_await_terminal_throw`.
 
 - Verified bounded async-from-sync `for await...of` coverage: the specialized async iterator continuation now adapts synchronous arrays, strings, and symbol-backed iterables, awaits promise-valued sync iterator results, forwards early-return `IteratorClose`, and preserves the existing bare `next()` async-iterator compatibility path. Tests: `async_for_await_sync_iterables`, `async_for_await_sync_iterator_close`; existing `async_for_await_events_on_` family remains green.

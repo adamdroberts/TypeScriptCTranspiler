@@ -1191,6 +1191,7 @@ tsc_str_t* tsc_fs_read_file_sync(const tsc_str_t* path);
 tsc_buffer_t* tsc_fs_read_file_buffer_sync(const tsc_str_t* path);
 tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal);
+tsc_promise_t* tsc_fs_promises_open_async(const tsc_str_t* path, const tsc_str_t* flags_str, double flags_num, bool flags_is_num, double mode);
 tsc_promise_t* tsc_fs_promises_write_file_string_async(const tsc_str_t* path, const tsc_str_t* data, bool append, bool exclusive, bool update, double file_mode, bool flush, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_write_file_buffer_async(const tsc_str_t* path, const tsc_buffer_t* data, bool append, bool exclusive, bool update, double file_mode, bool flush, tsc_value_t signal);
 tsc_promise_t* tsc_fs_promises_readdir_async(const tsc_str_t* path, bool want_buffer, tsc_value_t signal);

@@ -77514,6 +77514,45 @@ class Emitter {
         if (mapped.kind !== "promise") unsupported(call, `fs.promises.${name} result must be Promise<T>`);
         const settle = (successExpr: string) => this.emitImmediatePromiseTry(successExpr);
         switch (name) {
+            case "open": {
+                if (args.length < 1) unsupported(call, "fs.promises.open needs a path, optional flags, and optional mode");
+                const pathExpr = this.emitExpr(args[0]!);
+
+                let flagsIsNum = false;
+                let flagsSpec: SequencedCallArg;
+                if (args[1] && !this.isUndefinedExpression(args[1])) {
+                    const flagsExpr = this.emitExpr(args[1]!);
+                    if (flagsExpr.ty.kind === "string") {
+                        flagsSpec = { value: flagsExpr, target: T_STRING, node: args[1] };
+                    } else if (flagsExpr.ty.kind === "number") {
+                        flagsSpec = { value: flagsExpr, target: T_NUMBER, node: args[1] };
+                        flagsIsNum = true;
+                    } else {
+                        unsupported(args[1]!, "fs.promises.open flags must be string or number");
+                    }
+                } else {
+                    flagsSpec = { value: { c: `tsc_str_from_cstr("r")`, ty: T_STRING }, target: T_STRING, node: call };
+                }
+
+                let modeSpec: SequencedCallArg;
+                if (args[2] && !this.isUndefinedExpression(args[2])) {
+                    const modeExpr = this.emitExpr(args[2]!);
+                    if (modeExpr.ty.kind !== "number") unsupported(args[2]!, "fs.promises.open mode must be a number");
+                    modeSpec = { value: modeExpr, target: T_NUMBER, node: args[2] };
+                } else {
+                    modeSpec = { value: { c: "438.0", ty: T_NUMBER }, target: T_NUMBER, node: call };
+                }
+
+                this.usesLibuv = true;
+                return this.emitSequencedExpr(mapped, [
+                    this.fsPathSpec(pathExpr, args[0]!, "fs.promises.open path"),
+                    flagsSpec,
+                    modeSpec,
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([path, flags, mode]) => settle(
+                    `tsc_fs_promises_open_async(${path!}, ${flagsIsNum ? "NULL" : flags!}, ${flagsIsNum ? flags! : "0.0"}, ${flagsIsNum ? "true" : "false"}, ${mode!})`,
+                ));
+            }
             case "readFile": {
                 if (args.length < 1) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/hex/base64/buffer/null encoding/flag options");
                 const result = this.validateFsReadFileOptions(args[1], "fs.promises.readFile", true);
