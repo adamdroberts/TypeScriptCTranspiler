@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now compose a conditional three-await condition (`await flag ? await yes : await no`) with an awaited incrementor, preserving branch selection and body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_conditional_condition`
+
 - Bounded async `for` loops now compose a direct awaited loop initializer with two direct awaited short-circuit condition operands and an awaited incrementor, carrying the loop-owned variable through initializer-to-condition-to-body-to-incrementor ordering. Test: `async_await_for_incrementor_await_initializer_multi_condition`
 
 - Bounded async `for` loops now compose a direct awaited loop initializer with three or more direct awaited short-circuit condition operands and an awaited incrementor, carrying the loop-owned variable through initializer-to-condition-to-body-to-incrementor ordering. Test: `async_await_for_incrementor_await_initializer_three_condition`
