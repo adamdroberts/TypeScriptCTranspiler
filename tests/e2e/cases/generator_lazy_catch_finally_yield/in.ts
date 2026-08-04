@@ -86,3 +86,38 @@ try {
     throwThrowValue = error;
 }
 console.log("catch-finally-yield-throw-throw:", throwThrowFirst.done, throwThrowFirst.value, throwThrowSecond.done, throwThrowSecond.value, throwThrowThird.done, throwThrowThird.value, throwThrowValue);
+
+function* caughtBodyThenReturn(): Generator<string, string, string> {
+    try {
+        yield "tail-source";
+    } catch {
+        return "tail-caught";
+    } finally {
+        yield "tail-cleanup";
+        return (yield "tail-left") + (yield "tail-right");
+    }
+}
+
+const tailNormal = caughtBodyThenReturn();
+const tailNormalFirst: any = tailNormal.next();
+const tailNormalSecond: any = tailNormal.next("source-resume");
+const tailNormalThird: any = tailNormal.next("left-resume");
+const tailNormalFourth: any = tailNormal.next("right-resume");
+const tailNormalDone: any = tailNormal.next("tail-return-resume");
+console.log("catch-finally-yield-tail-normal:", tailNormalFirst.done, tailNormalFirst.value, tailNormalSecond.done, tailNormalSecond.value, tailNormalThird.done, tailNormalThird.value, tailNormalFourth.done, tailNormalFourth.value, tailNormalDone.done, tailNormalDone.value);
+
+const tailThrow = caughtBodyThenReturn();
+const tailThrowFirst: any = tailThrow.next();
+const tailThrowSecond: any = tailThrow.throw("source-throw");
+const tailThrowThird: any = tailThrow.next("left-throw");
+const tailThrowFourth: any = tailThrow.next("right-throw");
+const tailThrowDone: any = tailThrow.next("tail-return-throw");
+console.log("catch-finally-yield-tail-throw:", tailThrowFirst.done, tailThrowFirst.value, tailThrowSecond.done, tailThrowSecond.value, tailThrowThird.done, tailThrowThird.value, tailThrowFourth.done, tailThrowFourth.value, tailThrowDone.done, tailThrowDone.value);
+
+const tailClosed = caughtBodyThenReturn();
+const tailClosedFirst: any = tailClosed.next();
+const tailClosedSecond: any = tailClosed.return("closed");
+const tailClosedThird: any = tailClosed.next("left-close");
+const tailClosedFourth: any = tailClosed.next("right-close");
+const tailClosedDone: any = tailClosed.next("tail-return-close");
+console.log("catch-finally-yield-tail-close:", tailClosedFirst.done, tailClosedFirst.value, tailClosedSecond.done, tailClosedSecond.value, tailClosedThird.done, tailClosedThird.value, tailClosedFourth.done, tailClosedFourth.value, tailClosedDone.done, tailClosedDone.value);

@@ -5,3 +5,6 @@ catch-finally-yield-star-normal: false star-source false star-one false star-two
 catch-finally-yield-star-throw: false star-source false star-one false star-two true star-caught
 catch-finally-yield-throw-normal: false throw-source false throw-cleanup-one false throw-cleanup-two true throw-normal
 catch-finally-yield-throw-throw: false throw-source false throw-cleanup-one false throw-cleanup-two caught-throw
+catch-finally-yield-tail-normal: false tail-source false tail-cleanup false tail-left false tail-right true right-resumetail-return-resume
+catch-finally-yield-tail-throw: false tail-source false tail-cleanup false tail-left false tail-right true right-throwtail-return-throw
+catch-finally-yield-tail-close: false tail-source false tail-cleanup false tail-left false tail-right true right-closetail-return-close
