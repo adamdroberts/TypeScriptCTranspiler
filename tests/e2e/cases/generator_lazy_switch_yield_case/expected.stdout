@@ -1,0 +1,7 @@
+route alpha false case-select start:alpha
+route alpha true complete start:alpha|yielded-case|done
+route beta false case-select start:beta
+route beta true complete start:beta|static-case|done
+route other false case-select start:other
+route other true complete start:other|default|done
+close false close-case true closed close-finally

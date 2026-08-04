@@ -145,6 +145,10 @@ interface LazyForInInfo {
     sourceType: CType;
 }
 
+interface LazySwitchResumeInfo {
+    field: string;
+}
+
 interface AsyncFunctionContext {
     promiseType: CType;
 }
@@ -736,6 +740,7 @@ class Emitter {
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
     private lazyGeneratorForInInfos = new WeakMap<ts.ForInStatement, LazyForInInfo>();
+    private lazyGeneratorSwitchResumeInfos = new WeakMap<ts.SwitchStatement, LazySwitchResumeInfo>();
     private asyncFunctionStack: AsyncFunctionContext[] = [];
     private tryDepth = 0;
     private currentClass: string | null = null;
@@ -52947,11 +52952,15 @@ class Emitter {
         if (ts.isSwitchStatement(stmt)) {
             const yieldedDiscriminant = this.directLazyYieldCondition(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant) return false;
-            for (const clause of stmt.caseBlock.clauses) {
-                if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression)) {
+            for (const [index, clause] of stmt.caseBlock.clauses.entries()) {
+                const yieldedCase = ts.isCaseClause(clause) ? this.directLazyYieldCondition(clause.expression) : null;
+                if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression) && !yieldedCase) {
                     return false;
                 }
-                if (ts.isCaseClause(clause) && !this.switchCaseKey(clause.expression)) {
+                if (ts.isCaseClause(clause) && yieldedCase && index !== 0) {
+                    return false;
+                }
+                if (ts.isCaseClause(clause) && !yieldedCase && !this.switchCaseKey(clause.expression)) {
                     return false;
                 }
                 let sawBreak = false;
@@ -53426,6 +53435,11 @@ class Emitter {
         return unwrapped;
     }
 
+    private directLazyYieldSwitchCase(stmt: ts.SwitchStatement): ts.YieldExpression | null {
+        const first = stmt.caseBlock.clauses[0];
+        return first && ts.isCaseClause(first) ? this.directLazyYieldCondition(first.expression) : null;
+    }
+
     private emitLazyGeneratorDirectYieldValue(
         buf: CBuf,
         expression: ts.Expression,
@@ -53877,26 +53891,52 @@ class Emitter {
                 envLocalName,
             );
             const disc = yieldedDiscriminant ?? this.emitExpr(stmt.expression);
-            const isDynamic = disc.ty.kind === "value";
+            const hasYieldedCase = stmt.caseBlock.clauses.some((clause, index) =>
+                index === 0 && ts.isCaseClause(clause) && !!this.directLazyYieldCondition(clause.expression));
+            const isDynamic = disc.ty.kind === "value" || hasYieldedCase;
             const isStr = disc.ty.kind === "string";
             const isBool = disc.ty.kind === "boolean";
             if (!isDynamic && !isStr && !isBool) requireNumber(stmt.expression, disc.ty);
-            const discVar = this.freshTemp("_sw");
+            const switchResumeInfo = this.lazyGeneratorSwitchResumeInfos.get(stmt);
+            if (hasYieldedCase && !switchResumeInfo) {
+                unsupported(stmt, "lazy generator yielded switch cases require a resumable switch environment");
+            }
             buf.open("");
-            buf.line(`${disc.ty.c} ${discVar} = ${disc.c};`);
+            const discType = isDynamic ? T_VALUE : disc.ty;
+            const discC = isDynamic ? this.coerce(disc, T_VALUE, stmt.expression) : disc.c;
+            const discVar = this.freshTemp("_sw");
+            const discRef = switchResumeInfo
+                ? `${envLocalName}->${switchResumeInfo.field}`
+                : discVar;
+            if (switchResumeInfo) {
+                if (!envLocalName) unsupported(stmt, "lazy generator yielded switch cases require an environment");
+                buf.line(`${discRef} = ${discC};`);
+            } else {
+                buf.line(`${discType.c} ${discVar} = ${discC};`);
+            }
 
             const buildCond = (caseExpr: ts.Expression): string => {
-                const caseVal = this.emitExpr(caseExpr);
+                const yieldedCase = this.directLazyYieldCondition(caseExpr);
+                const caseVal = yieldedCase
+                    ? this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        caseExpr,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    )!
+                    : this.emitExpr(caseExpr);
                 if (isDynamic) {
-                    return `tsc_value_eq(${discVar}, ${this.coerce(caseVal, T_VALUE, caseExpr)})`;
+                    return `tsc_value_eq(${discRef}, ${this.coerce(caseVal, T_VALUE, caseExpr)})`;
                 }
                 if (isStr) {
-                    return `tsc_str_eq(${discVar}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+                    return `tsc_str_eq(${discRef}, ${this.coerce(caseVal, disc.ty, caseExpr)})`;
                 }
                 if (isBool) {
-                    return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+                    return `(${discRef} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
                 }
-                return `(${discVar} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
+                return `(${discRef} == ${this.coerce(caseVal, disc.ty, caseExpr)})`;
             };
             const caseConds = new Map<ts.CaseClause, string>();
             const allCaseConds: string[] = [];
@@ -54997,6 +55037,10 @@ class Emitter {
             statement: ts.ForInStatement;
             info: LazyForInInfo;
         }> = [];
+        const switchResumeInfos: Array<{
+            statement: ts.SwitchStatement;
+            info: LazySwitchResumeInfo;
+        }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
@@ -55107,6 +55151,18 @@ class Emitter {
                 ts.forEachChild(node, collectForInInfos);
             };
             ts.forEachChild(fn.body, collectForInInfos);
+
+            const collectSwitchResumeInfos = (node: ts.Node) => {
+                if (ts.isSwitchStatement(node) && this.directLazyYieldSwitchCase(node)) {
+                    const index = switchResumeInfos.length;
+                    const info: LazySwitchResumeInfo = { field: `switch_disc_${index}` };
+                    switchResumeInfos.push({ statement: node, info });
+                    this.lazyGeneratorSwitchResumeInfos.set(node, info);
+                }
+                if (node !== fn.body && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collectSwitchResumeInfos);
+            };
+            ts.forEachChild(fn.body, collectSwitchResumeInfos);
         }
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
@@ -55145,6 +55201,7 @@ class Emitter {
             compoundResumeInfos.length > 0 ||
             forOfInfos.length > 0 ||
             forInInfos.length > 0 ||
+            switchResumeInfos.length > 0 ||
             outerCaptureFieldInfos.length > 0 ||
             !!implicitThisParam ||
             hasMultiYieldReturn ||
@@ -55180,6 +55237,9 @@ class Emitter {
             for (const { info } of forInInfos) {
                 this.structDecls.line(`tsc_array_t* ${info.keysField};`);
                 this.structDecls.line(`size_t ${info.indexField};`);
+            }
+            for (const { info } of switchResumeInfos) {
+                this.structDecls.line(`tsc_value_t ${info.field};`);
             }
             if (hasLazyClose) {
                 this.structDecls.line("bool lazy_close_requested;");
@@ -55367,6 +55427,9 @@ class Emitter {
             }
             for (const info of localVarInfos) {
                 buf.line(`${envVar}->${info.field} = ${this.zeroValue(info.type)};`);
+            }
+            for (const { info } of switchResumeInfos) {
+                buf.line(`${envVar}->${info.field} = tsc_value_undefined();`);
             }
             for (const info of outerCaptureFieldInfos) {
                 buf.line(`${envVar}->${info.field} = ${info.binding.ptr};`);
