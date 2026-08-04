@@ -312,6 +312,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitCatchBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyAwaitCatchSymbol?: ts.Symbol;
     bodyAwaitCatchAdapter?: string;
+    bodyPreludeCaptureParams?: readonly AsyncAwaitContinuationParam[];
     bodyPreludeStatements: readonly ts.Statement[];
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
     bodyContinue: boolean;
@@ -38902,6 +38903,7 @@ class Emitter {
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
         let bodyAwaitCatchBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
+        let bodyPreludeCaptureParams: AsyncAwaitContinuationParam[] = [];
         const statementContainsAwait = (statement: ts.Statement): boolean => {
             let found = false;
             const visit = (node: ts.Node): void => {
@@ -39356,6 +39358,24 @@ class Emitter {
         } else {
             return false;
         }
+        if (bodyAwaitTerminal) {
+            for (const statement of bodyPreludeStatements) {
+                if (!ts.isVariableStatement(statement)) continue;
+                for (const declaration of statement.declarationList.declarations) {
+                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    if (!symbol || this.currentFunctionCellForSymbol(symbol)) return false;
+                    const type = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+                    if (!this.isAsyncAwaitPreludeCaptureType(type)) return false;
+                    bodyPreludeCaptureParams.push({
+                        symbol,
+                        name: mangleIdent(declaration.name.text),
+                        type,
+                        field: `body_prelude_capture_${bodyPreludeCaptureParams.length}`,
+                    });
+                }
+            }
+        }
         if (!bodyPostAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement))) return false;
         const bodyPreludeSupported = bodyPreludeStatements.every((statement) => {
             if (ts.isExpressionStatement(statement)) return true;
@@ -39586,6 +39606,7 @@ class Emitter {
             bodyAwaitCatchAwaitExpr,
             bodyAwaitCatchBetweenAwaitStatements,
             bodyAwaitCatchSymbol,
+            bodyPreludeCaptureParams,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
             bodyContinue,
@@ -40073,6 +40094,7 @@ class Emitter {
                 ? [{ symbol, index, type, field: `awaited_alias_value_${aliasIndex}` }]
                 : [];
         });
+        const bodyPreludeCaptureParams = continuation.bodyPreludeCaptureParams ?? [];
         for (let index = 0; index < names.length; index++) {
             const name = names[index]!;
             const envType = `${name}_env_t`;
@@ -40084,6 +40106,7 @@ class Emitter {
                 this.structDecls.line("tsc_value_t rejection_reason;");
             }
             for (const alias of awaitedAliasEntries) this.structDecls.line(`${alias.type.c} ${alias.field};`);
+            for (const param of bodyPreludeCaptureParams) this.structDecls.line(`${param.type.c} ${param.field};`);
             for (const param of continuation.params) this.structDecls.line(`${param.type.c} ${param.field};`);
             if (continuation.thisValue) this.structDecls.line(`${continuation.thisValue.ty.c} this_arg;`);
             this.structDecls.close(` ${envType};`);
@@ -40109,6 +40132,7 @@ class Emitter {
                 );
             const scope = new Map<ts.Symbol, string>();
             for (const param of continuation.params) scope.set(param.symbol, `state->${param.field}`);
+            for (const param of bodyPreludeCaptureParams) scope.set(param.symbol, `state->${param.field}`);
             for (const alias of awaitedAliasEntries) {
                 if (alias.index < index) scope.set(alias.symbol, `state->${alias.field}`);
             }
@@ -40148,6 +40172,7 @@ class Emitter {
                 buf.line(`${catchEnvType}* const ${catchEnvVar} = (${catchEnvType}*)TSC_GC_MALLOC(sizeof(${catchEnvType}));`);
                 buf.line(`${catchEnvVar}->receiver = ${catchSourceVar};`);
                 buf.line(`${catchEnvVar}->result_promise = _ret;`);
+                for (const param of bodyPreludeCaptureParams) buf.line(`${catchEnvVar}->${param.field} = state->${param.field};`);
                 for (const param of continuation.params) buf.line(`${catchEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${catchEnvVar}->this_arg = state->this_arg;`);
                 buf.open(`if (tsc_promise_is_pending(${catchSourceVar}))`);
@@ -40185,6 +40210,7 @@ class Emitter {
                         buf.line(`${nextEnvVar}->reject_after_success = true;`);
                         buf.line(`${nextEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
                     }
+                    for (const param of bodyPreludeCaptureParams) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
                     buf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
@@ -40217,6 +40243,7 @@ class Emitter {
                 buf.line(`${rejectedFinallyEnvVar}->result_promise = _ret;`);
                 buf.line(`${rejectedFinallyEnvVar}->reject_after_success = true;`);
                 buf.line(`${rejectedFinallyEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
+                for (const param of bodyPreludeCaptureParams) buf.line(`${rejectedFinallyEnvVar}->${param.field} = state->${param.field};`);
                 for (const param of continuation.params) buf.line(`${rejectedFinallyEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${rejectedFinallyEnvVar}->this_arg = state->this_arg;`);
                 buf.open(`if (tsc_promise_is_pending(${rejectedFinallySourceVar}))`);
@@ -40286,6 +40313,7 @@ class Emitter {
                             buf.line(`${nextEnvVar}->rejection_reason = state->rejection_reason;`);
                         }
                     }
+                    for (const param of bodyPreludeCaptureParams) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     for (const alias of awaitedAliasEntries) {
                         const value = alias.index === index ? bodyValueVar : `state->${alias.field}`;
                         buf.line(`${nextEnvVar}->${alias.field} = ${value};`);
@@ -40528,6 +40556,7 @@ class Emitter {
                 buf.line(`${bodyEnvType}* const ${bodyEnvVar} = (${bodyEnvType}*)TSC_GC_MALLOC(sizeof(${bodyEnvType}));`);
                 buf.line(`${bodyEnvVar}->receiver = ${bodySourceVar};`);
                 buf.line(`${bodyEnvVar}->result_promise = _ret;`);
+                for (const param of continuation.bodyPreludeCaptureParams ?? []) buf.line(`${bodyEnvVar}->${param.field} = ${param.name};`);
                 for (const param of continuation.params) buf.line(`${bodyEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${bodyEnvVar}->this_arg = state->this_arg;`);
                 buf.open(`if (tsc_promise_is_pending(${bodySourceVar}))`);
