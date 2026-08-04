@@ -1,0 +1,3 @@
+{
+  "description": "bounded await using disposal for multiple dynamic resources in reverse order, including continued cleanup after an earlier async disposal rejection"
+}

@@ -832,7 +832,7 @@ void tsc_promise_fulfill_in_place_ptr(tsc_promise_t* p, void* ptr_result);
 void tsc_promise_reject_in_place(tsc_promise_t* p, tsc_value_t reason);
 void tsc_promise_adopt_into(tsc_promise_t* dest, tsc_promise_t* source);
 void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env);
-tsc_promise_t* tsc_promise_after_async_dispose(tsc_promise_t* dispose, tsc_promise_t* result);
+tsc_promise_t* tsc_promise_after_async_dispose_many(const tsc_value_t* resources, size_t count, tsc_promise_t* result);
 bool tsc_promise_is_fulfilled(const tsc_promise_t* p);
 bool tsc_promise_is_rejected(const tsc_promise_t* p);
 bool tsc_promise_is_pending(const tsc_promise_t* p);

@@ -25876,20 +25876,22 @@ class Emitter {
 
     private emitAsyncUsingSimpleBody(buf: CBuf, body: ts.Block): boolean {
         const statements = Array.from(body.statements);
-        const awaitUsingStatements = statements.filter(
-            (statement): statement is ts.VariableStatement =>
-                ts.isVariableStatement(statement) &&
-                (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) !== 0,
-        );
-        if (awaitUsingStatements.length !== 1) return false;
-        const usingStatement = awaitUsingStatements[0]!;
-        if (statements[0] !== usingStatement || usingStatement.declarationList.declarations.length !== 1) {
-            return false;
+        const declarations: ts.VariableDeclaration[] = [];
+        let usingStatementCount = 0;
+        for (const statement of statements) {
+            if (!ts.isVariableStatement(statement) ||
+                (statement.declarationList.flags & ts.NodeFlags.AwaitUsing) !== ts.NodeFlags.AwaitUsing) {
+                break;
+            }
+            usingStatementCount++;
+            for (const declaration of statement.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+                const storageType = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+                if (storageType.kind !== "value") return false;
+                declarations.push(declaration);
+            }
         }
-        const declaration = usingStatement.declarationList.declarations[0]!;
-        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
-        const storageType = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
-        if (storageType.kind !== "value") return false;
+        if (usingStatementCount === 0 || declarations.length === 0) return false;
 
         const containsAwait = (node: ts.Node): boolean => {
             if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
@@ -25900,8 +25902,8 @@ class Emitter {
             });
             return found;
         };
-        if (containsAwait(declaration.initializer)) return false;
-        const tail = statements.slice(1);
+        if (declarations.some((declaration) => containsAwait(declaration.initializer!))) return false;
+        const tail = statements.slice(usingStatementCount);
         if (tail.some(containsAwait)) return false;
 
         const terminal = tail.length > 0 ? tail[tail.length - 1]! : null;
@@ -25918,9 +25920,14 @@ class Emitter {
         if (bodyStatements.some((statement) => this.statementAlwaysExits(statement))) return false;
         if (terminal && !terminalIsReturn && !terminalIsThrow && !simpleBodyStatement(terminal)) return false;
 
-        const resourceName = mangleIdent(declaration.name.text);
-        const resource = this.emitExpr(declaration.initializer);
-        buf.line(`tsc_value_t ${resourceName} = ${this.coerce(resource, T_VALUE, declaration.initializer)};`);
+        const resourceNames: string[] = [];
+        for (const declaration of declarations) {
+            if (!ts.isIdentifier(declaration.name)) return false;
+            const resourceName = mangleIdent(declaration.name.text);
+            const resource = this.emitExpr(declaration.initializer!);
+            buf.line(`tsc_value_t ${resourceName} = ${this.coerce(resource, T_VALUE, declaration.initializer!)};`);
+            resourceNames.push(resourceName);
+        }
         for (const statement of bodyStatements) this.emitStmt(buf, statement);
 
         const resultPromise = this.freshTemp("_await_using_result");
@@ -25939,7 +25946,9 @@ class Emitter {
         } else {
             buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
         }
-        buf.line(`return tsc_promise_after_async_dispose(tsc_value_dispose_async(${resourceName}), ${resultPromise});`);
+        const resources = this.freshTemp("_await_using_resources");
+        buf.line(`tsc_value_t ${resources}[${resourceNames.length}] = { ${resourceNames.join(", ")} };`);
+        buf.line(`return tsc_promise_after_async_dispose_many(${resources}, ${resourceNames.length}, ${resultPromise});`);
         return true;
     }
 

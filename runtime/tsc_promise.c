@@ -92,36 +92,76 @@ void tsc_promise_add_callback(tsc_promise_t* p, void (*fn)(void*), void* env) {
 }
 
 typedef struct {
-    tsc_promise_t* dispose;
+    tsc_value_t* resources;
+    size_t count;
+    size_t next_index;
     tsc_promise_t* result;
     tsc_promise_t* output;
-} tsc_promise_after_async_dispose_env_t;
+    tsc_promise_t* current_dispose;
+    bool has_rejection;
+    tsc_value_t first_rejection;
+} tsc_promise_after_async_dispose_many_env_t;
 
-static void tsc_promise_after_async_dispose_callback(void* env) {
-    tsc_promise_after_async_dispose_env_t* state = (tsc_promise_after_async_dispose_env_t*)env;
-    if (!state || !state->dispose || !state->result || !state->output) return;
-    if (tsc_promise_is_pending(state->dispose)) return;
-    if (tsc_promise_is_rejected(state->dispose)) {
-        tsc_promise_reject_in_place(state->output, tsc_promise_reason(state->dispose));
+static void tsc_promise_after_async_dispose_many_step(void* env);
+
+static void tsc_promise_after_async_dispose_many_start(
+    tsc_promise_after_async_dispose_many_env_t* state
+) {
+    if (!state || !state->result || !state->output) return;
+    if (state->next_index == 0) {
+        if (state->has_rejection) {
+            tsc_promise_reject_in_place(state->output, state->first_rejection);
+        } else {
+            tsc_promise_adopt_into(state->output, state->result);
+        }
         return;
     }
-    tsc_promise_adopt_into(state->output, state->result);
+    state->current_dispose = tsc_value_dispose_async(state->resources[--state->next_index]);
+    if (!state->current_dispose) {
+        state->has_rejection = true;
+        state->first_rejection = tsc_value_string(tsc_str_from_cstr("async disposal failed"));
+        tsc_promise_after_async_dispose_many_start(state);
+    } else if (tsc_promise_is_pending(state->current_dispose)) {
+        tsc_promise_add_callback(state->current_dispose, tsc_promise_after_async_dispose_many_step, state);
+    } else {
+        tsc_queue_microtask(tsc_promise_after_async_dispose_many_step, state);
+    }
 }
 
-tsc_promise_t* tsc_promise_after_async_dispose(tsc_promise_t* dispose, tsc_promise_t* result) {
-    if (!dispose) return result ? result : tsc_promise_resolve(tsc_value_undefined());
+static void tsc_promise_after_async_dispose_many_step(void* env) {
+    tsc_promise_after_async_dispose_many_env_t* state =
+        (tsc_promise_after_async_dispose_many_env_t*)env;
+    if (!state || !state->current_dispose) return;
+    if (tsc_promise_is_pending(state->current_dispose)) return;
+    if (tsc_promise_is_rejected(state->current_dispose) && !state->has_rejection) {
+        state->has_rejection = true;
+        state->first_rejection = tsc_promise_reason(state->current_dispose);
+    }
+    state->current_dispose = NULL;
+    tsc_promise_after_async_dispose_many_start(state);
+}
+
+tsc_promise_t* tsc_promise_after_async_dispose_many(
+    const tsc_value_t* resources,
+    size_t count,
+    tsc_promise_t* result
+) {
     if (!result) result = tsc_promise_resolve(tsc_value_undefined());
     tsc_promise_t* output = tsc_promise_pending();
-    tsc_promise_after_async_dispose_env_t* state =
-        (tsc_promise_after_async_dispose_env_t*)TSC_GC_MALLOC(sizeof(tsc_promise_after_async_dispose_env_t));
-    state->dispose = dispose;
+    tsc_promise_after_async_dispose_many_env_t* state =
+        (tsc_promise_after_async_dispose_many_env_t*)TSC_GC_MALLOC(sizeof(tsc_promise_after_async_dispose_many_env_t));
+    state->resources = count > 0
+        ? (tsc_value_t*)TSC_GC_MALLOC(count * sizeof(tsc_value_t))
+        : NULL;
+    for (size_t i = 0; i < count; i++) state->resources[i] = resources[i];
+    state->count = count;
+    state->next_index = count;
     state->result = result;
     state->output = output;
-    if (tsc_promise_is_pending(dispose)) {
-        tsc_promise_add_callback(dispose, tsc_promise_after_async_dispose_callback, state);
-    } else {
-        tsc_queue_microtask(tsc_promise_after_async_dispose_callback, state);
-    }
+    state->current_dispose = NULL;
+    state->has_rejection = false;
+    state->first_rejection = tsc_value_undefined();
+    tsc_promise_after_async_dispose_many_start(state);
     return output;
 }
 

@@ -168,7 +168,9 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify; object properties whose values are `undefined` or boxed function identities are omitted, while array slots stringify as `null` |
 | `tsc_value_apply_function(fn, this_arg, args)` | `tsc_value_t` | Dynamic `Reflect.apply` dispatch for boxed accessor function identities returned from descriptor `get`/`set` fields |
 | `tsc_value_dispose_sync(value)` | `void` | Calls a dynamic value's `[Symbol.dispose]()` method, skipping nullish values and throwing when the value is not synchronously disposable |
+| `tsc_value_dispose_async(value)` | `tsc_promise_t*` | Calls a dynamic value's `[Symbol.asyncDispose]()` method with the value as receiver and assimilates its result into a Promise |
 | `tsc_promise_resolve/reject(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled/rejected Promise record used by the settled Promise subset |
+| `tsc_promise_after_async_dispose_many(resources, count, result)` | `tsc_promise_t*` | Disposes dynamic resources sequentially in reverse order, continues after cleanup rejection, and settles with the first cleanup rejection or the body result |
 | `tsc_promise_resolve_fs_stats(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<FSStats>` side-channel record |
 | `tsc_promise_resolve_buffer(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<Buffer>` side-channel record |
 | `tsc_async_iterator_get(value)` | `tsc_value_t` | Resolves a dynamic async iterator through `[Symbol.asyncIterator]()` when present |
