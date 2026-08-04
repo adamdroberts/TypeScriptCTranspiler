@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified mixed-condition incrementor coverage: a bounded async `for` loop now preserves a right-associated `await a || await b && await c` condition before its awaited incrementor, including the expected short-circuit skips and loop re-entry ordering. Test: `async_await_for_incrementor_mixed_condition`.
+
 - Verified awaited-initializer conditional-condition extension: a bounded async `for` loop can now suspend through its direct awaited loop initializer before selecting between direct awaited true/false condition operands and then awaiting its incrementor, preserving the loop-owned capture, branch laziness, and evaluation order. Test: `async_await_for_incrementor_await_initializer_conditional_condition`.
 
 - Verified conditional-condition/incrementor extension: a bounded async `for` loop can now select between direct awaited true/false condition operands after a direct awaited selector and then await its incrementor before condition re-entry, preserving branch laziness and evaluation order. Test: `async_await_for_incrementor_conditional_condition`.
