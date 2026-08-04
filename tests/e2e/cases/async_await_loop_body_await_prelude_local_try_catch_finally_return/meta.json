@@ -1,0 +1,3 @@
+{
+  "description": "async while body prelude local survives awaited try/catch/finally before return"
+}
