@@ -38929,17 +38929,32 @@ class Emitter {
             ? loopBody[loopBody.length - 2] as ts.TryStatement
             : null;
         const terminalTryPreludeStatements = terminalTryStatement ? loopBody.slice(0, -2) : [];
-        const parseTerminalAwaitSequence = (statements: readonly ts.Statement[]) => {
+        const parseTerminalAwaitSequence = (statements: readonly ts.Statement[], allowAwaitedLocalAliases = false) => {
             const expressions: ts.AwaitExpression[] = [];
             const between: ts.Statement[][] = [];
+            const aliases: { symbol: ts.Symbol; index: number }[] = [];
             let pending: ts.Statement[] = [];
             for (const [statementIndex, statement] of statements.entries()) {
-                const expression = ts.isExpressionStatement(statement)
+                let expression = ts.isExpressionStatement(statement)
                     ? this.unwrapTransparentExpression(statement.expression)
                     : null;
+                let aliasSymbol: ts.Symbol | undefined;
+                if (allowAwaitedLocalAliases && ts.isVariableStatement(statement) &&
+                    statement.declarationList.declarations.length === 1) {
+                    const declaration = statement.declarationList.declarations[0]!;
+                    const initializer = declaration.initializer
+                        ? this.unwrapTransparentExpression(declaration.initializer)
+                        : null;
+                    if (ts.isIdentifier(declaration.name) && initializer && ts.isAwaitExpression(initializer)) {
+                        expression = initializer;
+                        aliasSymbol = this.symbolForIdentifier(declaration.name) ?? undefined;
+                        if (!aliasSymbol) return null;
+                    }
+                }
                 if (expression && ts.isAwaitExpression(expression)) {
                     if (expressions.length === 0 && statementIndex !== 0) return null;
                     if (expressions.length > 0) between.push(pending);
+                    if (aliasSymbol) aliases.push({ symbol: aliasSymbol, index: expressions.length });
                     expressions.push(expression);
                     pending = [];
                     continue;
@@ -38950,10 +38965,10 @@ class Emitter {
             }
             if (expressions.length === 0) return null;
             between.push(pending);
-            return { expressions, between };
+            return { expressions, between, aliases };
         };
         const terminalTryAwaitSequence = terminalTryStatement
-            ? parseTerminalAwaitSequence(terminalTryStatement.tryBlock.statements)
+            ? parseTerminalAwaitSequence(terminalTryStatement.tryBlock.statements, true)
             : null;
         const terminalCatchAwaitSequence = terminalTryStatement?.catchClause
             ? parseTerminalAwaitSequence(terminalTryStatement.catchClause.block.statements)
@@ -39214,6 +39229,8 @@ class Emitter {
                 ...terminalTryAwaitSequence.between,
                 terminalTryStatement.finallyBlock.statements.slice(1),
             ];
+            bodyAwaitedAliasSymbols = terminalTryAwaitSequence.aliases.map(({ symbol }) => symbol);
+            bodyAwaitedAliasIndices = terminalTryAwaitSequence.aliases.map(({ index }) => index);
             bodyAwaitCatchAwaitExpr = terminalCatchAwaitSequence.expressions[0]!;
             bodyAwaitCatchExprs = terminalCatchAwaitSequence.expressions;
             bodyAwaitCatchStartIndex = terminalTryAwaitSequence.expressions.length;
@@ -39709,6 +39726,8 @@ class Emitter {
                         ...continuation,
                         bodyAwaitExpr: continuation.bodyAwaitCatchAwaitExpr,
                         bodyAwaitExprs: catchAwaitExprs,
+                        bodyAwaitedAliasSymbols: [],
+                        bodyAwaitedAliasIndices: [],
                         bodyBetweenAwaitStatements: continuation.bodyAwaitCatchBetweenAwaitStatements,
                         bodyAwaitCatchStatements: undefined,
                         bodyAwaitCatchAwaitExpr: undefined,
