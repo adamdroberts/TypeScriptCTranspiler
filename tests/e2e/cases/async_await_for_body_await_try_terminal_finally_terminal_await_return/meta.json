@@ -1,0 +1,3 @@
+{
+  "description": "counted async for finally return-await overrides source terminal completion while cleanup rejection retains precedence"
+}
