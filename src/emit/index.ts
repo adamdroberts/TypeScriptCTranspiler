@@ -39359,12 +39359,22 @@ class Emitter {
             return false;
         }
         if (bodyAwaitTerminal) {
-            for (const statement of bodyPreludeStatements) {
+            for (const [statementIndex, statement] of bodyPreludeStatements.entries()) {
                 if (!ts.isVariableStatement(statement)) continue;
                 for (const declaration of statement.declarationList.declarations) {
-                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return false;
+                    if (!ts.isIdentifier(declaration.name)) return false;
                     const symbol = this.symbolForIdentifier(declaration.name);
                     if (!symbol || this.currentFunctionCellForSymbol(symbol)) return false;
+                    if (!declaration.initializer) {
+                        const nextStatement = bodyPreludeStatements[statementIndex + 1];
+                        if ((statement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
+                            statement.declarationList.declarations.length !== 1 ||
+                            !nextStatement || !ts.isExpressionStatement(nextStatement) ||
+                            !ts.isBinaryExpression(nextStatement.expression) ||
+                            nextStatement.expression.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                            !ts.isIdentifier(nextStatement.expression.left) ||
+                            this.symbolForIdentifier(nextStatement.expression.left) !== symbol) return false;
+                    }
                     const type = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
                     if (!this.isAsyncAwaitPreludeCaptureType(type)) return false;
                     bodyPreludeCaptureParams.push({
