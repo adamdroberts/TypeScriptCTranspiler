@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Awaited loop-body `if` branches now carry direct initialized `var` aliases (`value = await ...`) through later branch suspensions into terminal `throw await` arms. Test: `async_await_loop_body_if_await_var_local_throw`
 - Awaited loop-body `if` branches now carry direct initialized `var` aliases (`value = await ...`) through later branch suspensions before `continue`, `break`, and terminal `return await` arms. Tests: `async_await_loop_body_if_await_var_local_continue`, `async_await_loop_body_if_await_var_local_break`, `async_await_loop_body_if_await_var_local_return`
 - Awaited loop-body `if` branches now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions into a terminal `throw await` expression. Test: `async_await_loop_body_if_await_assigned_var_multi_throw`
 - Awaited loop-body `if` branches now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions into a terminal `return await` expression. Test: `async_await_loop_body_if_await_assigned_var_multi_return`

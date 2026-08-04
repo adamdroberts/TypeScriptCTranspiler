@@ -1,0 +1,3 @@
+{
+  "description": "async loop branch initialized var alias throws after multiple awaits"
+}
