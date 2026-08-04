@@ -1,0 +1,6 @@
+success:finally
+source-reject:finally
+stage-reject:finally
+recovery-reject:finally
+catch-terminal-reject:finally
+cleanup-reject-error:cleanup
