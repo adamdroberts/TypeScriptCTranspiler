@@ -3,3 +3,5 @@ catch-finally-yield-throw: false source false cleanup-one false cleanup-two true
 catch-finally-yield-close: false source false cleanup-one false cleanup-two true closed
 catch-finally-yield-star-normal: false star-source false star-one false star-two true star-normal
 catch-finally-yield-star-throw: false star-source false star-one false star-two true star-caught
+catch-finally-yield-throw-normal: false throw-source false throw-cleanup-one false throw-cleanup-two true throw-normal
+catch-finally-yield-throw-throw: false throw-source false throw-cleanup-one false throw-cleanup-two caught-throw

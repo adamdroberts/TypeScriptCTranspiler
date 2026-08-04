@@ -54309,13 +54309,14 @@ class Emitter {
                 (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn ||
                     !!handler.finallyMultiYieldStatement || !!handler.finallyConditionalStatement) &&
                 (!!handler.throwStatement || handler.catchConditionalKind === "throw" || handler.catchConditionalKind === "mixed"));
-        const deferredCatchThrow = deferredCatchThrowHandler ? this.freshTemp("_lazy_catch_throw") : null;
+        const deferredCatchThrow = deferredCatchThrowHandler
+            ? `${envLocalName}->lazy_deferred_catch_throw`
+            : null;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
         buf.line(`${envLocalName}->lazy_close_requested = false;`);
         buf.open(`if (!${envLocalName}->lazy_close_throw)`);
         buf.line(`${envLocalName}->lazy_close_handled = true;`);
         buf.close();
-        if (deferredCatchThrow) buf.line(`tsc_str_t* ${deferredCatchThrow} = NULL;`);
         if (this.activeLazyGeneratorCatchHandlers.length > 0 && this.activeLazyGeneratorCatchRecoveryDepth === 0) {
             buf.open(`if (${envLocalName}->lazy_close_throw)`);
             buf.line(`${envLocalName}->lazy_close_handled = true;`);
@@ -55687,6 +55688,7 @@ class Emitter {
                 this.structDecls.line("bool lazy_close_throw;");
                 this.structDecls.line("bool lazy_close_handled;");
                 this.structDecls.line("tsc_value_t lazy_close_arg;");
+                this.structDecls.line("tsc_str_t* lazy_deferred_catch_throw;");
             }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {
@@ -55922,6 +55924,7 @@ class Emitter {
                 buf.line(`${envVar}->lazy_close_throw = false;`);
                 buf.line(`${envVar}->lazy_close_handled = false;`);
                 buf.line(`${envVar}->lazy_close_arg = tsc_value_undefined();`);
+                buf.line(`${envVar}->lazy_deferred_catch_throw = NULL;`);
             }
             if (hasYieldStar) {
                 for (let i = 0; i < yieldStarCount; i++) {

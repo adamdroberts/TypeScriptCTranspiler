@@ -55,3 +55,34 @@ const starThrowSecond: any = starThrow.throw("source-throw");
 const starThrowThird: any = starThrow.next("one-throw");
 const starThrowDone: any = starThrow.next("two-throw");
 console.log("catch-finally-yield-star-throw:", starThrowFirst.done, starThrowFirst.value, starThrowSecond.done, starThrowSecond.value, starThrowThird.done, starThrowThird.value, starThrowDone.done, starThrowDone.value);
+
+function* caughtThrow(): Generator<string, string, string> {
+    try {
+        yield "throw-source";
+    } catch {
+        throw "caught-throw";
+    } finally {
+        yield "throw-cleanup-one";
+        yield "throw-cleanup-two";
+    }
+    return "throw-normal";
+}
+
+const throwNormal = caughtThrow();
+const throwNormalFirst: any = throwNormal.next();
+const throwNormalSecond: any = throwNormal.next("source-resume");
+const throwNormalThird: any = throwNormal.next("one-resume");
+const throwNormalDone: any = throwNormal.next("two-resume");
+console.log("catch-finally-yield-throw-normal:", throwNormalFirst.done, throwNormalFirst.value, throwNormalSecond.done, throwNormalSecond.value, throwNormalThird.done, throwNormalThird.value, throwNormalDone.done, throwNormalDone.value);
+
+const throwThrow = caughtThrow();
+const throwThrowFirst: any = throwThrow.next();
+const throwThrowSecond: any = throwThrow.throw("source-throw");
+const throwThrowThird: any = throwThrow.next("one-throw");
+let throwThrowValue: any;
+try {
+    throwThrow.next("two-throw");
+} catch (error: any) {
+    throwThrowValue = error;
+}
+console.log("catch-finally-yield-throw-throw:", throwThrowFirst.done, throwThrowFirst.value, throwThrowSecond.done, throwThrowSecond.value, throwThrowThird.done, throwThrowThird.value, throwThrowValue);
