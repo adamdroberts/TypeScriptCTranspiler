@@ -49,6 +49,40 @@ function* caughtSourceThrow(): Generator<any, string, any> {
     return "source-throw-outer-normal";
 }
 
+function* sourceThrowCatchThrowDelegate(): Generator<string, string, string> {
+    try {
+        events.push("source-catch-throw-start");
+        yield "source-catch-throw-one";
+        throw "source-terminal-for-catch-throw";
+    } catch (error: any) {
+        events.push("source-catch-throw-catch:" + error);
+        yield "source-catch-throw-recovery";
+        throw "catch-terminal-throw";
+    } finally {
+        events.push("source-catch-throw-finally");
+    }
+}
+
+function* caughtSourceThrowCatchThrow(): Generator<any, string, any> {
+    try {
+        yield "source-catch-throw-outer";
+    } catch {
+        yield* sourceThrowCatchThrowDelegate();
+        return "source-catch-throw-outer-done";
+    }
+    return "source-catch-throw-outer-normal";
+}
+
+const sourceThrowCatchThrow = caughtSourceThrowCatchThrow();
+const sourceThrowCatchThrowFirst: any = sourceThrowCatchThrow.next();
+const sourceThrowCatchThrowRecovery: any = sourceThrowCatchThrow.throw("outer-source-throw");
+const sourceThrowCatchThrowCatch: any = sourceThrowCatchThrow.next("source-catch-throw-resume");
+try {
+    sourceThrowCatchThrow.next("source-catch-throw-recovery-resume");
+} catch (error: any) {
+    console.log("source-throw-catch-throw", sourceThrowCatchThrowFirst.done, sourceThrowCatchThrowFirst.value, sourceThrowCatchThrowRecovery.done, sourceThrowCatchThrowRecovery.value, sourceThrowCatchThrowCatch.done, sourceThrowCatchThrowCatch.value, error, events.join("|"));
+}
+
 const sourceThrow = caughtSourceThrow();
 const sourceThrowFirst: any = sourceThrow.next();
 const sourceThrowRecovery: any = sourceThrow.throw("outer-source-throw");

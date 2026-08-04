@@ -53168,7 +53168,8 @@ class Emitter {
                 if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             }
         }
-        if (tryTerminalThrow && (!returnStatement || this.nodeContainsYield(returnStatement.expression!) ||
+        if (tryTerminalThrow && ((!returnStatement && !throwStatement) ||
+            (returnStatement && this.nodeContainsYield(returnStatement.expression!)) ||
             catchPreludeStatements.some((child) => ts.isVariableStatement(child) ||
                 (this.nodeContainsYield(child) && !this.simpleLazyYieldExpression(child))))) return null;
         if (throwCandidate && !throwStatement) {
@@ -54875,13 +54876,14 @@ class Emitter {
                         }
                         this.activeLazyGeneratorCatchHandlers.pop();
                     }
-                    const returned = catchReturn.returnStatement
-                        ? this.emitExpr(catchReturn.returnStatement.expression!)
-                        : null;
-                    if (!returned) unsupported(stmt, "lazy generator source throw catch recovery requires a terminal return");
-                    buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, catchReturn.returnStatement!.expression!)};`);
-                    buf.line("a->iter_has_return = true;");
-                    buf.line("a->iter_return_consumed = false;");
+                    if (catchReturn.returnStatement) {
+                        const returned = this.emitExpr(catchReturn.returnStatement.expression!);
+                        buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, catchReturn.returnStatement.expression!)};`);
+                        buf.line("a->iter_has_return = true;");
+                        buf.line("a->iter_return_consumed = false;");
+                    } else if (!catchReturn.throwStatement) {
+                        unsupported(stmt, "lazy generator source throw catch recovery requires a terminal return or throw");
+                    }
                 } finally {
                     if (catchSymbol) this.catchStringSymbols.delete(catchSymbol);
                 }
@@ -54913,6 +54915,19 @@ class Emitter {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");
                 buf.line("return;");
+            } else if (tryTerminalThrow && catchReturn.throwStatement) {
+                const catchDecl = catchReturn.catchClause.variableDeclaration;
+                const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
+                    ? this.symbolForIdentifier(catchDecl.name)
+                    : null;
+                if (catchSymbol) this.catchStringSymbols.add(catchSymbol);
+                try {
+                    buf.line("*state = -1;");
+                    buf.line("*done = true;");
+                    this.emitThrow(buf, catchReturn.throwStatement);
+                } finally {
+                    if (catchSymbol) this.catchStringSymbols.delete(catchSymbol);
+                }
             } else if (tryTerminalReturn || tryTerminalThrow) {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");

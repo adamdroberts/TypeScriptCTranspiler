@@ -2,3 +2,5 @@ static void _gen_lazy_next_recoveryDelegate_
 static bool _gen_lazy_close_recoveryDelegate_
 static void _gen_lazy_next_sourceThrowDelegate_
 static bool _gen_lazy_close_sourceThrowDelegate_
+static void _gen_lazy_next_sourceThrowCatchThrowDelegate_
+static bool _gen_lazy_close_sourceThrowCatchThrowDelegate_
