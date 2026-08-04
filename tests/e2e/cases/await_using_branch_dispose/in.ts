@@ -6,12 +6,18 @@ value[Symbol.asyncDispose] = (): Promise<void> => {
     return Promise.resolve();
 };
 
-async function run(flag: boolean): Promise<string> {
+async function run(flag: boolean, nested: boolean): Promise<string> {
     await using resource: any = value;
     if (flag) {
         events += "t";
         const answer = "yes";
-        return answer;
+        if (nested) {
+            events += "n";
+            return answer;
+        } else {
+            events += "a";
+            return "alternate";
+        }
     } else {
         events += "f";
         const answer = "no";
@@ -23,16 +29,20 @@ async function throwBranch(): Promise<string> {
     await using resource: any = value;
     if (true) {
         events += "x";
-        const reason = "boom";
-        throw reason;
+        if (false) {
+            return "never";
+        } else {
+            const reason = "boom";
+            throw reason;
+        }
     }
     return "never";
 }
 
-run(true)
+run(true, true)
     .then((result: string): Promise<string> => {
         console.log("true:", result, events);
-        return run(false);
+        return run(false, false);
     })
     .then((result: string): Promise<string> => {
         console.log("false:", result, events);

@@ -25912,21 +25912,41 @@ class Emitter {
             ts.isEmptyStatement(statement);
         type CompletionPath = {
             prefix: ts.Statement[];
-            completion: ts.ReturnStatement | ts.ThrowStatement;
+            completion?: ts.ReturnStatement | ts.ThrowStatement;
+            conditional?: {
+                expression: ts.Expression;
+                then: CompletionPath;
+                else: CompletionPath | null;
+            };
         };
-        const completionPath = (statement: ts.Statement): CompletionPath | null => {
+        const completionPath = (statement: ts.Statement, allowNested: boolean): CompletionPath | null => {
             const path = ts.isBlock(statement)
                 ? Array.from(statement.statements)
                 : [statement];
             if (path.length === 0) return null;
-            const completion = path[path.length - 1]!;
-            if (!ts.isReturnStatement(completion) && !ts.isThrowStatement(completion)) return null;
             const prefix = path.slice(0, -1);
             if (!prefix.every(simpleBodyStatement)) return null;
             if (prefix.some((entry) => this.statementAlwaysExits(entry))) return null;
+            const completion = path[path.length - 1]!;
+            if (ts.isReturnStatement(completion) || ts.isThrowStatement(completion)) {
+                return {
+                    prefix,
+                    completion,
+                };
+            }
+            if (!allowNested || !ts.isIfStatement(completion)) return null;
+            const thenPath = completionPath(completion.thenStatement, false);
+            const elsePath = completion.elseStatement
+                ? completionPath(completion.elseStatement, false)
+                : null;
+            if (!thenPath || (completion.elseStatement && !elsePath)) return null;
             return {
                 prefix,
-                completion,
+                conditional: {
+                    expression: completion.expression,
+                    then: thenPath,
+                    else: elsePath,
+                },
             };
         };
         const terminal = tail.length > 0 ? tail[tail.length - 1]! : null;
@@ -25938,9 +25958,9 @@ class Emitter {
         let conditionalFallback: CompletionPath | null = null;
         let bodyStatements: ts.Statement[];
         if (terminal && ts.isIfStatement(terminal)) {
-            const thenPath = completionPath(terminal.thenStatement);
+            const thenPath = completionPath(terminal.thenStatement, true);
             const elsePath = terminal.elseStatement
-                ? completionPath(terminal.elseStatement)
+                ? completionPath(terminal.elseStatement, true)
                 : null;
             if (!thenPath || (terminal.elseStatement && !elsePath)) return false;
             conditional = terminal;
@@ -25952,7 +25972,7 @@ class Emitter {
         ) {
             const candidate = tail.length > 1 ? tail[tail.length - 2]! : null;
             const thenPath = candidate && ts.isIfStatement(candidate) && !candidate.elseStatement
-                ? completionPath(candidate.thenStatement)
+                ? completionPath(candidate.thenStatement, true)
                 : null;
             if (candidate && ts.isIfStatement(candidate) && thenPath) {
                 conditional = candidate;
@@ -25996,20 +26016,35 @@ class Emitter {
                 buf.line(`${resultPromise} = tsc_promise_reject(tsc_value_string(${this.coerceToString(thrown, completion.expression)}));`);
             }
         };
+        const emitCompletionPath = (path: CompletionPath): void => {
+            for (const statement of path.prefix) this.emitStmt(buf, statement);
+            if (!path.conditional) {
+                emitCompletion(path.completion!);
+                return;
+            }
+            const condition = this.emitExpr(path.conditional.expression);
+            buf.open(`if (${this.coerce(condition, T_BOOLEAN, path.conditional.expression)})`);
+            emitCompletionPath(path.conditional.then);
+            buf.close();
+            buf.open("else");
+            if (path.conditional.else) {
+                emitCompletionPath(path.conditional.else);
+            } else {
+                buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            }
+            buf.close();
+        };
         if (conditional) {
             buf.line(`tsc_promise_t* ${resultPromise};`);
             const condition = this.emitExpr(conditional.expression);
             buf.open(`if (${this.coerce(condition, T_BOOLEAN, conditional.expression)})`);
-            for (const statement of conditionalThen!.prefix) this.emitStmt(buf, statement);
-            emitCompletion(conditionalThen!.completion);
+            emitCompletionPath(conditionalThen!);
             buf.close();
             buf.open("else");
             if (conditionalElse) {
-                for (const statement of conditionalElse.prefix) this.emitStmt(buf, statement);
-                emitCompletion(conditionalElse.completion);
+                emitCompletionPath(conditionalElse);
             } else if (conditionalFallback) {
-                for (const statement of conditionalFallback.prefix) this.emitStmt(buf, statement);
-                emitCompletion(conditionalFallback.completion);
+                emitCompletionPath(conditionalFallback);
             } else {
                 buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
             }
