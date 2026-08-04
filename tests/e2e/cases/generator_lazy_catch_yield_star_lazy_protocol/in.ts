@@ -5,13 +5,13 @@ function* recoveryDelegate(): Generator<string, string, string> {
         events.push("delegate-start");
         yield "delegate-one";
         yield "delegate-two";
+        return "delegate-normal";
     } catch (error: any) {
         events.push("delegate-catch:" + error);
         return "delegate-recovered";
     } finally {
         events.push("delegate-finally");
     }
-    return "delegate-normal";
 }
 
 function* caught(): Generator<any, string, any> {
@@ -23,6 +23,13 @@ function* caught(): Generator<any, string, any> {
     }
     return "outer-normal";
 }
+
+const delegatedNormal = caught();
+const delegatedNormalFirst: any = delegatedNormal.next();
+const delegatedNormalRecovery: any = delegatedNormal.throw("source-throw");
+const delegatedNormalSecond: any = delegatedNormal.next("delegate-one-resume");
+const delegatedNormalDone: any = delegatedNormal.next("delegate-two-resume");
+console.log("normal", delegatedNormalFirst.done, delegatedNormalFirst.value, delegatedNormalRecovery.done, delegatedNormalRecovery.value, delegatedNormalSecond.done, delegatedNormalSecond.value, delegatedNormalDone.done, delegatedNormalDone.value, events.join("|"));
 
 const delegatedThrow = caught();
 const delegatedThrowFirst: any = delegatedThrow.next();
