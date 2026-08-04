@@ -1,0 +1,37 @@
+const events: string[] = [];
+
+function* recoveryDelegate(): Generator<string, string, string> {
+    try {
+        events.push("delegate-start");
+        yield "delegate-one";
+        yield "delegate-two";
+    } catch (error: any) {
+        events.push("delegate-catch:" + error);
+        return "delegate-recovered";
+    } finally {
+        events.push("delegate-finally");
+    }
+    return "delegate-normal";
+}
+
+function* caught(): Generator<any, string, any> {
+    try {
+        yield "source";
+    } catch {
+        yield* recoveryDelegate();
+        return "outer-done";
+    }
+    return "outer-normal";
+}
+
+const delegatedThrow = caught();
+const delegatedThrowFirst: any = delegatedThrow.next();
+const delegatedThrowRecovery: any = delegatedThrow.throw("source-throw");
+const delegatedThrowDone: any = delegatedThrow.throw("delegated-throw");
+console.log("throw", delegatedThrowFirst.done, delegatedThrowFirst.value, delegatedThrowRecovery.done, delegatedThrowRecovery.value, delegatedThrowDone.done, delegatedThrowDone.value, events.join("|"));
+
+const delegatedClose = caught();
+const delegatedCloseFirst: any = delegatedClose.next();
+const delegatedCloseRecovery: any = delegatedClose.throw("source-throw");
+const delegatedCloseDone: any = delegatedClose.return("closed");
+console.log("close", delegatedCloseFirst.done, delegatedCloseFirst.value, delegatedCloseRecovery.done, delegatedCloseRecovery.value, delegatedCloseDone.done, delegatedCloseDone.value, events.join("|"));

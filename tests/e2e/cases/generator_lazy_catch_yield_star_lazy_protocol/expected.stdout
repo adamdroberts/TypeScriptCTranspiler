@@ -1,0 +1,2 @@
+throw false source false delegate-one true outer-done delegate-start|delegate-catch:delegated-throw|delegate-finally
+close false source false delegate-one true closed delegate-start|delegate-catch:delegated-throw|delegate-finally|delegate-start|delegate-finally
