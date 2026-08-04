@@ -996,6 +996,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Lazy generators route a terminal literal source `throw` after suspended `try`-block yields through a non-suspending `finally` before propagating. Test: `generator_lazy_try_finally_yield`
 - Lazy generators catch a bounded `.throw(error)` at a suspended `try` block with an unbound, simple unused identifier, directly returned simple identifier, or two-leaf string-concatenated catch and produce a completed iterator result. Test: `generator_lazy_try_finally_yield`
 - Lazy generators compose bounded suspended catch recovery with a non-suspending `finally`, running finalization on handled `.throw(error)` and normal completion and honoring terminal literal `throw` or `return` overrides. Test: `generator_lazy_try_finally_yield`
+- Lazy generators now support one direct catch-recovery `yield` after a suspended try-block yield when entered through `.throw(error)`, returning that recovery value before terminal catch completion and non-suspending `finally` cleanup. Test: `generator_lazy_try_catch_yield`.
 - Lazy generators execute bounded yield-free, non-abrupt catch expression-statement preludes and simple string-literal `const` / `let` aliases before terminal recovery. Test: `generator_lazy_try_finally_yield`
 - Lazy generators preserve simple catch-binding `const` / `let` aliases in bounded catch preludes before terminal returns and rethrows. Test: `generator_lazy_try_finally_yield`
 - Lazy generators preserve bounded chains of simple catch-binding aliases before terminal catch returns and rethrows. Test: `generator_lazy_try_finally_yield`
@@ -3410,6 +3411,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_switch_nested` | lazy generators resume across switch cases with nested block-local breaks |
 | `generator_lazy_switch_nested_switch` | lazy generators resume across nested switch statement suspension points |
 | `generator_lazy_try` | lazy generators support non-suspending try/catch/finally statements |
+| `generator_lazy_try_catch_yield` | lazy generators suspend one direct catch-recovery yield after `.throw(...)` and resume through terminal completion and finally cleanup |
 | `generator_lazy_throw` | lazy generators support throw statements without suspension points and close the lazy state before propagating |
 | `generator_lazy_throw_yield` | lazy generators resume suspended throw-yield expressions and close before throwing |
 | `generator_lazy_while` | lazy generators resume across simple while-loop suspension points |

@@ -1,0 +1,2 @@
+handled: false handled-pause false handled-recovery:boom true handled-done handled-try|handled-catch|handled-after-yield|handled-finally
+normal: false normal-pause true normal-done handled-try|handled-catch|handled-after-yield|handled-finally|normal-try|normal-finally

@@ -734,6 +734,7 @@ class Emitter {
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
     private activeLazyGeneratorFinalizers: ts.Statement[][] = [];
     private activeLazyGeneratorCatchHandlers: LazyGeneratorCatchHandler[] = [];
+    private activeLazyGeneratorCatchRecoveryDepth = 0;
     private activeLazyGeneratorCloseEnabled = false;
     private activeLazyGeneratorOuterCaptureSymbols: ReadonlySet<ts.Symbol> = new Set();
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
@@ -53073,29 +53074,40 @@ class Emitter {
         if (returnStatement && this.nodeContainsYield(returnStatement.expression!)) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
         const catchPreludeSymbols = new Set<ts.Symbol>();
-        if (
-            catchPreludeStatements.some((child) =>
-                this.nodeContainsYield(child) ||
-                this.lazyGeneratorContainsAbruptControlFlow(child) ||
-                !this.isValidLazyGeneratorStatement(child) ||
-                (ts.isVariableStatement(child) && (
-                    !(child.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) ||
-                    child.declarationList.declarations.some((declaration) => {
-                        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return true;
-                        const initializer = this.unwrapTransparentExpression(declaration.initializer);
-                        const isLiteral = ts.isStringLiteral(initializer) || ts.isNoSubstitutionTemplateLiteral(initializer);
-                        const initializerSymbol = ts.isIdentifier(initializer)
-                            ? this.symbolForIdentifier(initializer)
-                            : null;
-                        const isCatchAlias = !!initializerSymbol &&
-                            (initializerSymbol === catchSymbol || catchPreludeSymbols.has(initializerSymbol));
-                        const symbol = this.symbolForIdentifier(declaration.name);
-                        if ((!isLiteral && !isCatchAlias) || !symbol) return true;
-                        catchPreludeSymbols.add(symbol);
-                        return false;
-                    })
-                )))
-        ) return null;
+        let catchYieldCount = 0;
+        for (const child of catchPreludeStatements) {
+            if (this.nodeContainsYield(child)) {
+                const unwrappedChildExpression = ts.isExpressionStatement(child)
+                    ? this.unwrapTransparentExpression(child.expression)
+                    : null;
+                const directYield = !!unwrappedChildExpression &&
+                    ts.isYieldExpression(unwrappedChildExpression) &&
+                    !unwrappedChildExpression.asteriskToken &&
+                    !this.nodeContainsYield(unwrappedChildExpression.expression ?? unwrappedChildExpression);
+                if (!directYield || catchYieldCount++ > 0) return null;
+                continue;
+            }
+            if (this.lazyGeneratorContainsAbruptControlFlow(child) || !this.isValidLazyGeneratorStatement(child)) {
+                return null;
+            }
+            if (ts.isVariableStatement(child) && (
+                !(child.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) ||
+                child.declarationList.declarations.some((declaration) => {
+                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer) return true;
+                    const initializer = this.unwrapTransparentExpression(declaration.initializer);
+                    const isLiteral = ts.isStringLiteral(initializer) || ts.isNoSubstitutionTemplateLiteral(initializer);
+                    const initializerSymbol = ts.isIdentifier(initializer)
+                        ? this.symbolForIdentifier(initializer)
+                        : null;
+                    const isCatchAlias = !!initializerSymbol &&
+                        (initializerSymbol === catchSymbol || catchPreludeSymbols.has(initializerSymbol));
+                    const symbol = this.symbolForIdentifier(declaration.name);
+                    if ((!isLiteral && !isCatchAlias) || !symbol) return true;
+                    catchPreludeSymbols.add(symbol);
+                    return false;
+                })
+            )) return null;
+        }
         let catchStatement: ts.Statement | null = null;
         let catchConditionalKind: "return" | "throw" | "mixed" | null = null;
         if (conditionalCandidate) {
@@ -54121,13 +54133,14 @@ class Emitter {
     ): void {
         if (!envLocalName || !this.activeLazyGeneratorCloseEnabled) return;
         const deferredCatchThrowHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .find((handler) => (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) &&
+            .find((handler) => this.activeLazyGeneratorCatchRecoveryDepth === 0 &&
+                (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) &&
                 (!!handler.throwStatement || handler.catchConditionalKind === "throw" || handler.catchConditionalKind === "mixed"));
         const deferredCatchThrow = deferredCatchThrowHandler ? this.freshTemp("_lazy_catch_throw") : null;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
         buf.line(`${envLocalName}->lazy_close_requested = false;`);
         if (deferredCatchThrow) buf.line(`tsc_str_t* ${deferredCatchThrow} = NULL;`);
-        if (this.activeLazyGeneratorCatchHandlers.length > 0) {
+        if (this.activeLazyGeneratorCatchHandlers.length > 0 && this.activeLazyGeneratorCatchRecoveryDepth === 0) {
             buf.open(`if (${envLocalName}->lazy_close_throw)`);
             buf.line(`${envLocalName}->lazy_close_handled = true;`);
             for (const handler of [...this.activeLazyGeneratorCatchHandlers].reverse()) {
@@ -54140,9 +54153,11 @@ class Emitter {
                     buf.line(`tsc_str_t* ${mangleIdent(catchDecl.name.text)} = tsc_value_to_string(${envLocalName}->lazy_close_arg);`);
                 }
                 try {
+                    this.activeLazyGeneratorCatchRecoveryDepth++;
                     for (const child of handler.catchPreludeStatements) {
                         this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                     }
+                    this.activeLazyGeneratorCatchRecoveryDepth--;
                     if (handler.catchStatement) {
                         if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) {
                             if (handler.catchConditionalKind === "throw") {
@@ -55409,9 +55424,19 @@ class Emitter {
             closeBuf.line(`${closeEnv}->lazy_close_requested = true;`);
             closeBuf.line(`${closeEnv}->lazy_close_throw = is_throw;`);
             closeBuf.line(`${closeEnv}->lazy_close_arg = arg;`);
+            const closeYieldStart = this.freshTemp("_lazy_close_len");
+            closeBuf.line(`size_t ${closeYieldStart} = a->len;`);
             closeBuf.open(`if (a->state >= 0 && a->lazy_next)`);
             closeBuf.line("bool _lazy_close_done = false;");
             closeBuf.line(`a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_lazy_close_done);`);
+            closeBuf.close();
+            const closeYieldRaw = `TSC_ARR(${elemType.c}, a, a->len - 1)`;
+            const closeYieldValue = this.coerce({ c: closeYieldRaw, ty: elemType }, T_VALUE, fn);
+            closeBuf.open(`if (a->len > ${closeYieldStart})`);
+            closeBuf.line(`a->lazy_close_value = ${closeYieldValue};`);
+            closeBuf.line("a->lazy_close_yielded = true;");
+            closeBuf.line("a->iter_pos = a->len;");
+            closeBuf.line("return !is_throw;");
             closeBuf.close();
             closeBuf.line(`return is_throw && !${closeEnv}->lazy_close_handled;`);
             closeBuf.close();
