@@ -236,11 +236,172 @@ tsc_promise_t* tsc_promise_resolve_thenable(tsc_value_t value) {
     return tsc_promise_resolve_thenable_seen(value, NULL);
 }
 
+typedef struct {
+    tsc_value_t iterator;
+} tsc_async_from_sync_iterator_t;
+
+typedef struct {
+    tsc_promise_t* source;
+    tsc_promise_t* result;
+    bool done;
+} tsc_async_from_sync_result_env_t;
+
+static tsc_value_t async_from_sync_result_object(tsc_value_t value, bool done) {
+    tsc_object_t* result = tsc_object_new();
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    return tsc_value_object(result);
+}
+
+static void async_from_sync_result_callback(void* env) {
+    tsc_async_from_sync_result_env_t* state = (tsc_async_from_sync_result_env_t*)env;
+    if (!state || !state->source || !state->result) return;
+    if (tsc_promise_is_rejected(state->source)) {
+        tsc_promise_reject_in_place(state->result, tsc_promise_reason(state->source));
+        return;
+    }
+    if (!tsc_promise_is_fulfilled(state->source)) return;
+    tsc_promise_fulfill_in_place(
+        state->result,
+        async_from_sync_result_object(tsc_promise_value(state->source), state->done)
+    );
+}
+
+static tsc_value_t async_from_sync_result_promise(tsc_value_t result) {
+    tsc_promise_t* output = tsc_promise_pending();
+    if (!tsc_value_is_object(result)) {
+        tsc_promise_reject_in_place(
+            output,
+            tsc_value_string(tsc_str_from_lit("sync iterator result is not an object", 37))
+        );
+        return tsc_value_promise(output);
+    }
+    tsc_value_t done = tsc_value_get_prop(result, tsc_str_from_lit("done", 4));
+    tsc_value_t value = tsc_value_get_prop(result, tsc_str_from_lit("value", 5));
+    tsc_promise_t* value_promise = tsc_promise_resolve_thenable(value);
+    tsc_async_from_sync_result_env_t* env =
+        (tsc_async_from_sync_result_env_t*)TSC_GC_MALLOC(sizeof(tsc_async_from_sync_result_env_t));
+    env->source = value_promise;
+    env->result = output;
+    env->done = tsc_value_is_truthy(done);
+    if (tsc_promise_is_pending(value_promise)) {
+        tsc_promise_add_callback(value_promise, async_from_sync_result_callback, env);
+    } else {
+        async_from_sync_result_callback(env);
+    }
+    return tsc_value_promise(output);
+}
+
+static tsc_value_t async_from_sync_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_async_from_sync_iterator_t* state = (tsc_async_from_sync_iterator_t*)env;
+    tsc_value_t next = tsc_value_get_prop(state->iterator, tsc_str_from_lit("next", 4));
+    if (!tsc_value_is_callable(next)) {
+        tsc_throw_str(tsc_str_from_lit("sync iterator next is not callable", 34));
+    }
+    return async_from_sync_result_promise(
+        tsc_value_apply_function(next, state->iterator, tsc_value_array(args))
+    );
+}
+
+static tsc_value_t async_from_sync_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_async_from_sync_iterator_t* state = (tsc_async_from_sync_iterator_t*)env;
+    tsc_value_t close = tsc_value_get_prop(state->iterator, tsc_str_from_lit("return", 6));
+    if (!tsc_value_is_callable(close)) {
+        tsc_value_t value = args && args->len > 0
+            ? TSC_ARR(tsc_value_t, args, 0)
+            : tsc_value_undefined();
+        return tsc_value_promise(tsc_promise_resolve(async_from_sync_result_object(value, true)));
+    }
+    return async_from_sync_result_promise(
+        tsc_value_apply_function(close, state->iterator, tsc_value_array(args))
+    );
+}
+
+static tsc_value_t async_from_sync_throw(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_async_from_sync_iterator_t* state = (tsc_async_from_sync_iterator_t*)env;
+    tsc_value_t throw_method = tsc_value_get_prop(state->iterator, tsc_str_from_lit("throw", 5));
+    if (!tsc_value_is_callable(throw_method)) {
+        tsc_throw_str(tsc_str_from_lit("sync iterator throw is not callable", 35));
+    }
+    return async_from_sync_result_promise(
+        tsc_value_apply_function(throw_method, state->iterator, tsc_value_array(args))
+    );
+}
+
+static tsc_value_t async_from_sync_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return this_arg;
+}
+
+static tsc_value_t async_from_sync_iterator_wrap(tsc_value_t iterator) {
+    tsc_async_from_sync_iterator_t* state =
+        (tsc_async_from_sync_iterator_t*)TSC_GC_MALLOC(sizeof(tsc_async_from_sync_iterator_t));
+    state->iterator = iterator;
+    tsc_object_t* wrapper = tsc_object_new();
+    tsc_object_set(
+        wrapper,
+        tsc_str_from_lit("next", 4),
+        tsc_value_function_builtin_named(async_from_sync_next, state, 1.0, tsc_str_from_lit("next", 4))
+    );
+    tsc_object_set(
+        wrapper,
+        tsc_str_from_lit("return", 6),
+        tsc_value_function_builtin_named(async_from_sync_return, state, 1.0, tsc_str_from_lit("return", 6))
+    );
+    tsc_object_set(
+        wrapper,
+        tsc_str_from_lit("throw", 5),
+        tsc_value_function_builtin_named(async_from_sync_throw, state, 1.0, tsc_str_from_lit("throw", 5))
+    );
+    tsc_object_set(
+        wrapper,
+        tsc_str_from_lit("__tsc_symbol_asyncIterator", 27),
+        tsc_value_function_builtin_named(
+            async_from_sync_async_iterator,
+            state,
+            0.0,
+            tsc_str_from_lit("[Symbol.asyncIterator]", 22)
+        )
+    );
+    return tsc_value_object(wrapper);
+}
+
 tsc_value_t tsc_async_iterator_get(tsc_value_t value) {
     tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_async_iterator());
-    if (!tsc_value_is_callable(method)) return value;
-    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
-    return tsc_value_apply_function(method, value, tsc_value_array(args));
+    if (!tsc_value_is_undefined(method) && !tsc_value_is_nullish(method)) {
+        if (!tsc_value_is_callable(method)) {
+            tsc_throw_str(tsc_str_from_lit("async iterator method is not callable", 37));
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+        tsc_value_t iterator = tsc_value_apply_function(method, value, tsc_value_array(args));
+        if (!tsc_value_is_object(iterator)) {
+            tsc_throw_str(tsc_str_from_lit("async iterator method must return an object", 43));
+        }
+        return iterator;
+    }
+
+    tsc_value_t sync_method = tsc_value_get_symbol_prop(value, tsc_symbol_iterator());
+    tsc_value_t sync_iterator;
+    if (tsc_value_is_undefined(sync_method) && value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_STRING) {
+        sync_iterator = tsc_value_symbol_iterator(value);
+    } else {
+        if (!tsc_value_is_callable(sync_method)) {
+            if (tsc_value_is_callable(tsc_value_get_prop(value, tsc_str_from_lit("next", 4)))) {
+                return value;
+            }
+            tsc_throw_str(tsc_str_from_lit("value is not async iterable", 27));
+        }
+        tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+        sync_iterator = tsc_value_apply_function(sync_method, value, tsc_value_array(args));
+    }
+    if (!tsc_value_is_object(sync_iterator)) {
+        tsc_throw_str(tsc_str_from_lit("sync iterator method must return an object", 42));
+    }
+    return async_from_sync_iterator_wrap(sync_iterator);
 }
 
 tsc_promise_t* tsc_async_iterator_next(tsc_value_t iterator) {

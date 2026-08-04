@@ -13,6 +13,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Bounded async `for await...of` lowering now adapts synchronous arrays, strings, and symbol-backed iterables, awaits promise-valued sync iterator results, forwards early-return `IteratorClose`, validates iterator method/result objects, and retains bare `next()` async-iterator compatibility. Tests: `async_for_await_sync_iterables`, `async_for_await_sync_iterator_close`, plus the `async_for_await_events_on_` regression family.
+
 - Ordinary awaited loops and iterator nested awaited-if bodies now support empty synchronous terminal `finally { return; }` overrides after awaited cleanup, including ordinary catch paths and both `for...of`/`for...in`, settling `undefined` while preserving cleanup-rejection precedence. Tests: `async_await_loop_body_await_try_terminal_finally_empty_return`, `async_await_iterator_body_multi_await_nested_await_if_terminal_finally_empty_return`
 
 - Counted awaited loop bodies now have synchronous terminal-finally parity: a counted `for` preserves its awaited condition and incrementor while final synchronous `finally` `return`/`throw` overrides source and catch terminal completions, with cleanup rejection retaining precedence. Tests: `async_await_for_body_await_try_terminal_finally_synchronous_return`, `async_await_for_body_await_try_terminal_finally_synchronous_throw`

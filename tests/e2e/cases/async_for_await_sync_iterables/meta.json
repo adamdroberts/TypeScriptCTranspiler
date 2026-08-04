@@ -1,0 +1,3 @@
+{
+  "description": "for-await adapts synchronous arrays and strings, including promise-valued sync iterator results"
+}

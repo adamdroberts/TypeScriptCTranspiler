@@ -47448,7 +47448,7 @@ class Emitter {
             this.checker.getTypeAtLocation(loop.expression),
             this.checker,
         ));
-        if (sourceType.kind !== "value") return false;
+        if (sourceType.kind === "void" || sourceType.kind === "never") return false;
 
         const loopBody = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
         type BodyControl = "continue" | "break" | "return" | "throw";
@@ -49596,6 +49596,9 @@ class Emitter {
         buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_pending();`);
         buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
         buf.line(`${env}->result_promise = ${resultPromise};`);
+        buf.line(`tsc_try_frame_t ${initialEh};`);
+        buf.line(`tsc_try_push(&${initialEh});`);
+        buf.open(`if (setjmp(${initialEh}.jb) == 0)`);
         buf.line(`${env}->iterator = tsc_async_iterator_get(${this.coerce(source, T_VALUE, loop.expression)});`);
         buf.line(`${env}->body_await = false;`);
         buf.line(`${env}->body_await_stage = 0;`);
@@ -49609,9 +49612,6 @@ class Emitter {
         buf.line(`${env}->iterator_close_reason = tsc_value_undefined();`);
         for (const param of params) buf.line(`${env}->${param.field} = ${this.asyncAwaitContinuationParamValue(param)};`);
         if (usesThis && thisValue) buf.line(`${env}->this_arg = ${this.asyncAwaitContinuationThisValue(thisValue)};`);
-        buf.line(`tsc_try_frame_t ${initialEh};`);
-        buf.line(`tsc_try_push(&${initialEh});`);
-        buf.open(`if (setjmp(${initialEh}.jb) == 0)`);
         buf.line(`tsc_promise_t* ${initialNext} = tsc_async_iterator_next(${env}->iterator);`);
         buf.line(`${env}->receiver = ${initialNext};`);
         buf.line("tsc_try_pop();");
