@@ -30934,7 +30934,13 @@ class Emitter {
                 ts.isIdentifier(statement.expression.left) &&
                 this.symbolForIdentifier(statement.expression.left) === symbol,
             );
-            if (!assignedBeforeAwait) return null;
+            const firstAwaitAssignsSymbol = firstAwaitIndex < body.statements.length - 1 &&
+                (() => {
+                    const firstAwaitStep = this.awaitedContinuationStep(body.statements[firstAwaitIndex]!);
+                    return !!firstAwaitStep?.variable &&
+                        this.symbolForIdentifier(firstAwaitStep.variable) === symbol;
+                })();
+            if (!assignedBeforeAwait && !firstAwaitAssignsSymbol) return null;
         }
         const finalReturnExpression = ts.isReturnStatement(result) && result.expression
             ? this.unwrapTransparentExpression(result.expression)
@@ -38886,7 +38892,7 @@ class Emitter {
                 const expression = this.unwrapTransparentExpression(assignment.right);
                 const declarationStatement = bodyContinueStatements[statementIndex - 1];
                 if (!declarationStatement || !ts.isVariableStatement(declarationStatement) ||
-                    (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                    (declarationStatement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
                     declarationStatement.declarationList.declarations.length !== 1) return [];
                 const declaration = declarationStatement.declarationList.declarations[0]!;
                 if (!ts.isIdentifier(declaration.name) || declaration.initializer || declaration.name.text !== assignment.left.text) return [];
@@ -39170,7 +39176,7 @@ class Emitter {
             const declarationStatement = loopBody[assignmentStatementIndex - 1];
             if (!assignmentStatement || !declarationStatement || !ts.isExpressionStatement(assignmentStatement) ||
                 !ts.isVariableStatement(declarationStatement) ||
-                (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                (declarationStatement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
                 declarationStatement.declarationList.declarations.length === 0) return false;
             const assignment = assignmentStatement.expression;
             if (!ts.isBinaryExpression(assignment) ||
@@ -41023,7 +41029,7 @@ class Emitter {
                     if (!ts.isAwaitExpression(awaitExpression)) return false;
                     const declarationStatement = statements[statementIndex - 1];
                     if (!ts.isVariableStatement(declarationStatement) ||
-                        (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                        (declarationStatement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
                         declarationStatement.declarationList.declarations.length !== 1) return false;
                     const declaration = declarationStatement.declarationList.declarations[0]!;
                     if (!ts.isIdentifier(declaration.name) || declaration.initializer ||
