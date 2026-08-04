@@ -53,9 +53,11 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Lazy generators now resume through bounded direct catch/finally finalizer-body yields, including a supported array `yield*` delegation and terminal multi-yield `return`/`throw` overrides after the body yields, after suspended `try` completion, `.throw(error)` catch entry, and active `.return(value)` close; deferred catch-terminal throws survive finalizer suspension, while broader catch/finally suppression graphs remain deferred. Test: `generator_lazy_catch_finally_yield`.
 - Lazy generators now resume nested no-catch `try`/`finally` frames in inner-to-outer finalizer order across normal completion and active `.return(value)` close, and rethrow the original `.throw(error)` argument after all finalizers finish; broader nested abrupt-control and suppression graphs remain deferred. Test: `generator_lazy_nested_finally_yield`.
 
-- Lazy generator returns now construct bounded dense typed and dynamic array literals from finite ordered suspended yield operands after the final `.next(value)`; sparse literals and spreads remain deferred. Test: `generator_lazy_multi_yield_array_return`.
+- Lazy generator multi-yield typed and dynamic array/object terminal returns now preserve finite yield order while expanding yield-free array, string, dynamic, and object spreads; yielded spread operands and sparse arrays remain deferred. Test: `generator_lazy_multi_yield_spread_return`.
 
-- Lazy generator returns now construct simple dynamic and named typed object literals from finite ordered suspended yield operands after the final `.next(value)`; spreads, methods, and computed keys remain deferred. Tests: `generator_lazy_multi_yield_object_return`, `generator_lazy_multi_yield_typed_object_return`.
+- Lazy generator returns now construct bounded dense typed and dynamic array literals from finite ordered suspended yield operands after the final `.next(value)`; sparse literals and yielded spread operands remain deferred. Test: `generator_lazy_multi_yield_array_return`.
+
+- Lazy generator returns now construct simple dynamic and named typed object literals from finite ordered suspended yield operands after the final `.next(value)`; yielded spreads, methods, and computed keys remain deferred. Tests: `generator_lazy_multi_yield_object_return`, `generator_lazy_multi_yield_typed_object_return`.
 
 - Lazy generator returns now stage finite ordered direct `yield` arguments alongside yield-free arguments for calls and constructors, deferring the side-effecting call or `new` expression until the final resume; spread arguments, yielded callee expressions, and nested yielded operands remain deferred. Test: `generator_lazy_multi_yield_call_return`.
 

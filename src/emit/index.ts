@@ -53621,7 +53621,11 @@ class Emitter {
             }
             if (ts.isArrayLiteralExpression(unwrapped)) {
                 for (const element of unwrapped.elements) {
-                    if (element.kind === ts.SyntaxKind.OmittedExpression || ts.isSpreadElement(element)) return false;
+                    if (element.kind === ts.SyntaxKind.OmittedExpression) return false;
+                    if (ts.isSpreadElement(element)) {
+                        if (this.nodeContainsYield(element.expression)) return false;
+                        continue;
+                    }
                     if (!visit(element as ts.Expression)) return false;
                 }
                 return true;
@@ -53632,6 +53636,8 @@ class Emitter {
                         if (!this.staticPropertyName(property.name) || !visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         if (!visit(property.name)) return false;
+                    } else if (ts.isSpreadAssignment(property)) {
+                        if (this.nodeContainsYield(property.expression)) return false;
                     } else {
                         return false;
                     }
@@ -55195,8 +55201,26 @@ class Emitter {
             const array = this.freshTemp("_lazy_dynarr");
             pieces.push(`tsc_array_t* ${array} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`);
             for (const element of al.elements) {
-                if (element.kind === ts.SyntaxKind.OmittedExpression || ts.isSpreadElement(element)) {
-                    unsupported(element, "lazy multi-yield array literals must be dense and cannot spread");
+                if (element.kind === ts.SyntaxKind.OmittedExpression) {
+                    unsupported(element, "lazy multi-yield array literals must be dense");
+                }
+                if (ts.isSpreadElement(element)) {
+                    const source = this.emitExpr(element.expression);
+                    if (source.ty.kind === "array") {
+                        const src = this.freshTemp("_lazy_dynspread_src");
+                        const index = this.freshTemp("_lazy_dynspread_i");
+                        const value = this.freshTemp("_lazy_dynspread_v");
+                        const elem = source.ty.elem!;
+                        const current = { c: `TSC_ARR(${elem.c}, ${src}, ${index})`, ty: elem };
+                        const boxed = this.coerce(current, T_VALUE, element.expression);
+                        pieces.push(`{ tsc_array_t* const ${src} = ${source.c}; for (size_t ${index} = 0; ${index} < ${src}->len; ${index}++) { tsc_value_t ${value} = ${boxed}; tsc_array_push_raw(${array}, &${value}); } }`);
+                        continue;
+                    }
+                    if (source.ty.kind === "value" || source.ty.kind === "string") {
+                        pieces.push(`tsc_array_append(${array}, tsc_value_iter_values(${this.coerce(source, T_VALUE, element.expression)}))`);
+                        continue;
+                    }
+                    unsupported(element, "lazy multi-yield dynamic array spread expects an array or string");
                 }
                 const value = build(element as ts.Expression);
                 const boxed = this.freshTemp("_lazy_dynv");
@@ -55218,8 +55242,37 @@ class Emitter {
             `tsc_array_t* ${array} = ${arrayCtor}(sizeof(${elemType.c}), ${Math.max(8, al.elements.length)})`,
         ];
         for (const element of al.elements) {
-            if (element.kind === ts.SyntaxKind.OmittedExpression || ts.isSpreadElement(element)) {
-                unsupported(element, "lazy multi-yield array literals must be dense and cannot spread");
+            if (element.kind === ts.SyntaxKind.OmittedExpression) {
+                unsupported(element, "lazy multi-yield array literals must be dense");
+            }
+            if (ts.isSpreadElement(element)) {
+                const source = this.emitExpr(element.expression);
+                if (source.ty.kind === "value") {
+                    if (elemType.kind !== "value") unsupported(element, "dynamic spread into a typed lazy array requires an any[] result");
+                    pieces.push(`tsc_array_append(${array}, tsc_value_iter_values(${this.coerce(source, T_VALUE, element.expression)}))`);
+                    continue;
+                }
+                if (source.ty.kind === "string") {
+                    if (elemType.kind !== "string") unsupported(element, "string spread into a typed lazy array requires a string[] result");
+                    pieces.push(`tsc_array_append(${array}, tsc_str_chars(${source.c}))`);
+                    continue;
+                }
+                if (source.ty.kind !== "array" || !source.ty.elem) {
+                    unsupported(element, "lazy multi-yield typed array spread expects an array, string, or dynamic iterable");
+                }
+                if (sameCType(source.ty.elem, elemType)) {
+                    pieces.push(`tsc_array_append(${array}, ${source.c})`);
+                    continue;
+                }
+                const src = this.freshTemp("_lazy_spread_src");
+                const index = this.freshTemp("_lazy_spread_i");
+                const value = this.freshTemp("_lazy_spread_value");
+                const current = source.ty.elem.kind === "value"
+                    ? { c: `(tsc_array_index_present(${src}, ${index}) ? TSC_ARR(${source.ty.elem.c}, ${src}, ${index}) : tsc_value_undefined())`, ty: source.ty.elem }
+                    : { c: `TSC_ARR(${source.ty.elem.c}, ${src}, ${index})`, ty: source.ty.elem };
+                const coerced = this.coerce(current, elemType, element.expression);
+                pieces.push(`{ tsc_array_t* const ${src} = ${source.c}; for (size_t ${index} = 0; ${index} < ${src}->len; ${index}++) { ${elemType.c} ${value} = ${coerced}; tsc_array_push_raw(${array}, &${value}); } }`);
+                continue;
             }
             const value = build(element as ts.Expression);
             const coerced = this.coerce(value, elemType, element);
@@ -55247,6 +55300,13 @@ class Emitter {
             for (const property of ol.properties) {
                 let name: string;
                 let expression: ts.Expression;
+                if (ts.isSpreadAssignment(property)) {
+                    const value = this.emitExpr(property.expression);
+                    pieces.push(
+                        `tsc_value_object_assign(tsc_value_object(${object}), ${this.coerce(value, T_VALUE, property.expression)})`,
+                    );
+                    continue;
+                }
                 if (ts.isPropertyAssignment(property)) {
                     name = this.staticPropertyName(property.name) ??
                         unsupported(property.name, "lazy multi-yield object keys must be static");
@@ -55276,6 +55336,20 @@ class Emitter {
         const pieces: string[] = [
             `${cls}_t* ${object} = (${cls}_t*)${alloc}(sizeof(${cls}_t))`,
         ];
+        const targetFields = this.objectProperties(targetType).map((prop) => {
+            const name = prop.getName();
+            const decl = prop.valueDeclaration ?? prop.getDeclarations()?.[0] ?? ol;
+            return {
+                name,
+                field: mangleIdent(name),
+                type: this.prepareType(mapTsType(
+                    decl,
+                    this.checker.getTypeOfSymbolAtLocation(prop, decl),
+                    this.checker,
+                )),
+            };
+        });
+        const targetByName = new Map(targetFields.map((field) => [field.name, field]));
         for (const property of ol.properties) {
             if (ts.isPropertyAssignment(property)) {
                 const name = this.staticPropertyName(property.name) ??
@@ -55287,8 +55361,34 @@ class Emitter {
                 const value = build(property.name);
                 const fieldType = this.objectFieldType(ol, targetType, property.name.text, property.name);
                 pieces.push(`${object}->${mangleIdent(property.name.text)} = ${this.coerce(value, fieldType, property.name)}`);
+            } else if (ts.isSpreadAssignment(property)) {
+                const sourceTsType = this.expressionDeclaredOrCurrentType(property.expression);
+                const source = this.emitExpr(property.expression);
+                const sourceTmp = this.freshTemp("_lazy_obj_spread");
+                pieces.push(`${source.ty.c} const ${sourceTmp} = ${source.c}`);
+                if (source.ty.kind === "class") {
+                    for (const sourceProp of this.objectProperties(sourceTsType)) {
+                        const targetField = targetByName.get(sourceProp.getName());
+                        if (!targetField) continue;
+                        const decl = sourceProp.valueDeclaration ?? sourceProp.getDeclarations()?.[0] ?? property.expression;
+                        const sourceType = this.prepareType(mapTsType(
+                            decl,
+                            this.checker.getTypeOfSymbolAtLocation(sourceProp, decl),
+                            this.checker,
+                        ));
+                        const raw = { c: `${sourceTmp}->${mangleIdent(sourceProp.getName())}`, ty: sourceType };
+                        pieces.push(`${object}->${targetField.field} = ${this.coerce(raw, targetField.type, property.expression)}`);
+                    }
+                } else if (source.ty.kind === "value" || source.ty.kind === "array" || source.ty.kind === "string") {
+                    const boxed = this.coerce({ c: sourceTmp, ty: source.ty }, T_VALUE, property.expression);
+                    for (const targetField of targetFields) {
+                        const key = `tsc_str_from_lit("${escapeCString(targetField.name)}", ${utf8ByteLen(targetField.name)})`;
+                        const raw = { c: `tsc_value_get_prop(${boxed}, ${key})`, ty: T_VALUE };
+                        pieces.push(`if (tsc_value_has_own_prop(${boxed}, ${key})) ${object}->${targetField.field} = ${this.coerce(raw, targetField.type, property.expression)}`);
+                    }
+                }
             } else {
-                unsupported(property, "lazy multi-yield typed object literals support property assignments and shorthand properties only");
+                unsupported(property, "lazy multi-yield typed object literals support property assignments, shorthand properties, and yield-free spreads only");
             }
         }
         pieces.push(object);

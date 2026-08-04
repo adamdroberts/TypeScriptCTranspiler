@@ -1,0 +1,5 @@
+typed-array false 1 false 4 true 10,2,3,40
+string-array false first false last true left|a|b|right
+dynamic-array false dynamic-one false dynamic-last true left|tail-one|tail-two|x|y|right
+dynamic-object false object-first false object-final true left extra-second extra-third right
+typed-object false 1 false 4 true 10 2 3 40
