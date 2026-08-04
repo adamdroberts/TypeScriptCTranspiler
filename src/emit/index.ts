@@ -53591,9 +53591,7 @@ class Emitter {
             const op = unwrapped.operatorToken.kind;
             if (this.isAssignmentOperatorKind(op)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                const left = this.unwrapTransparentExpression(unwrapped.left);
-                return !ts.isYieldExpression(left) &&
-                    !this.nodeContainsYield(unwrapped.left) &&
+                return this.simpleLazyMultiYieldAssignmentLvalue(unwrapped.left, visit) &&
                     !!this.directLazyYieldCondition(unwrapped.right) &&
                     visit(unwrapped.right);
             }
@@ -53724,6 +53722,23 @@ class Emitter {
         const key = this.unwrapTransparentExpression(operand.argumentExpression);
         if (ts.isYieldExpression(key)) return visit(operand.argumentExpression);
         return !this.nodeContainsYield(operand.argumentExpression);
+    }
+
+    private simpleLazyMultiYieldAssignmentLvalue(
+        left: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+    ): boolean {
+        if (!this.nodeContainsYield(left)) return true;
+        if (ts.isPropertyAccessExpression(left)) {
+            return !!this.directLazyYieldCondition(left.expression) &&
+                visit(left.expression);
+        }
+        if (!ts.isElementAccessExpression(left) ||
+            !this.directLazyYieldCondition(left.expression) ||
+            !visit(left.expression)) return false;
+        const key = this.unwrapTransparentExpression(left.argumentExpression);
+        if (ts.isYieldExpression(key)) return visit(left.argumentExpression);
+        return !this.nodeContainsYield(left.argumentExpression);
     }
 
     private simpleLazyMultiYieldTemplateSpans(

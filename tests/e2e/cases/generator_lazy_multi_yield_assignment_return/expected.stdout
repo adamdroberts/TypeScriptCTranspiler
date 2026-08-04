@@ -4,3 +4,7 @@ direct-done 4 true 9
 compound-before 1 false 8
 compound-middle 1 false 9
 compound-done 5 true 11
+computed-before 5 false 5
+computed-middle-key 5 false value
+computed-middle-rhs 5 false 2
+computed-done 8 true 8

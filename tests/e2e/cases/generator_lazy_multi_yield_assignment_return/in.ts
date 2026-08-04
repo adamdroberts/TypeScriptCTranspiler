@@ -9,6 +9,10 @@ function* compoundAssignmentReturn(): Generator<number, number, number> {
     return (box.value += yield 8) + (yield 9);
 }
 
+function* computedAssignmentReturn(): Generator<any, number, any> {
+    return (yield box)[yield "value"] += yield 2;
+}
+
 const directIterator = directAssignmentReturn();
 const directFirst: any = directIterator.next();
 console.log("direct-before", assigned, directFirst.done, directFirst.value);
@@ -24,3 +28,13 @@ const compoundSecond: any = compoundIterator.next(4);
 console.log("compound-middle", box.value, compoundSecond.done, compoundSecond.value);
 const compoundDone: any = compoundIterator.next(6);
 console.log("compound-done", box.value, compoundDone.done, compoundDone.value);
+
+const computedIterator = computedAssignmentReturn();
+const computedFirst: any = computedIterator.next();
+console.log("computed-before", box.value, computedFirst.done, computedFirst.value.value);
+const computedSecond: any = computedIterator.next(box);
+console.log("computed-middle-key", box.value, computedSecond.done, computedSecond.value);
+const computedThird: any = computedIterator.next("value");
+console.log("computed-middle-rhs", box.value, computedThird.done, computedThird.value);
+const computedDone: any = computedIterator.next(3);
+console.log("computed-done", box.value, computedDone.done, computedDone.value);
