@@ -1,0 +1,3 @@
+{
+  "description": "ordinary awaited loops override source and catch terminal completions with a final awaited finally throw-await while preserving cleanup precedence"
+}

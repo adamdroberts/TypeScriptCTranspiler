@@ -39362,7 +39362,7 @@ class Emitter {
                 ts.isIdentifier(terminalBodyTryStatement.catchClause.variableDeclaration.name)) &&
             (() => {
                 const catchAwaitSequence = terminalBodyCatchAwaitSequence;
-                const finallyAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.finallyBlock.statements);
+                const finallyAwaitSequence = parseTerminalFinallyAwaitSequence(terminalBodyTryStatement.finallyBlock.statements);
                 return catchAwaitSequence !== null &&
                     (catchAwaitSequence.expressions.length > 0 || !!catchAwaitSequence.terminalAwait) &&
                     finallyAwaitSequence !== null && finallyAwaitSequence.expressions.length > 0;
@@ -39372,7 +39372,7 @@ class Emitter {
                 ? { expressions: [], between: [], aliases: [], prelude: [] }
                 : parseTerminalAwaitSequence(tryPrefix, true)!;
             const catchAwaitSequence = terminalBodyCatchAwaitSequence!;
-            const finallyAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.finallyBlock.statements)!;
+            const finallyAwaitSequence = parseTerminalFinallyAwaitSequence(terminalBodyTryStatement.finallyBlock.statements)!;
             const finallyBetweenAwaitStatements = finallyAwaitSequence.between.map((statements, index) =>
                 index === 0 ? [...finallyAwaitSequence.prelude, ...statements] : statements,
             );
@@ -39392,6 +39392,7 @@ class Emitter {
                 ...tryAwaitSequence.expressions,
                 directBodyAwait,
                 ...finallyAwaitSequence.expressions,
+                ...(finallyAwaitSequence.terminalAwait ? [finallyAwaitSequence.terminalAwait] : []),
             ];
             bodyReturnExpr = bodyExpression;
             bodyBetweenAwaitStatements = [
@@ -39411,6 +39412,11 @@ class Emitter {
             bodyAwaitFinallyStartIndex = terminalIndex + 1;
             bodyAwaitFinallyEndIndex = bodyAwaitFinallyStartIndex + finallyAwaitSequence.expressions.length;
             bodyAwaitFinallyPreludeStatements = finallyAwaitSequence.prelude;
+            bodyAwaitFinallyTerminalAwaitExpr = finallyAwaitSequence.terminalAwait ?? undefined;
+            bodyAwaitFinallyTerminalRejectResult = finallyAwaitSequence.terminalRejectResult;
+            bodyAwaitFinallyTerminalIndex = bodyAwaitFinallyTerminalAwaitExpr
+                ? bodyAwaitFinallyEndIndex
+                : undefined;
             bodyAwaitTerminalIndex = terminalIndex;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwaitSequence.expressions[0]!;
             bodyPreludeStatements = [...loopBody.slice(0, -1), ...tryAwaitSequence.prelude];
@@ -39997,12 +40003,19 @@ class Emitter {
                         continuation.bodyAwaitFinallyEndIndex,
                     )
                     : (continuation.bodyAwaitFinallyAwaitExpr ? [continuation.bodyAwaitFinallyAwaitExpr] : []);
+                const finallyTerminalAwait = continuation.bodyAwaitFinallyTerminalAwaitExpr;
                 const catchAwaitExprs = [
                     ...catchRecoveryAwaitExprs,
                     ...(catchTerminalAwait ? [catchTerminalAwait] : []),
                     ...finallyAwaitExprs,
+                    ...(finallyTerminalAwait ? [finallyTerminalAwait] : []),
                     ...(terminalAwait && ts.isAwaitExpression(terminalAwait) ? [terminalAwait] : []),
                 ];
+                const catchTerminalIndex = catchTerminalAwait
+                    ? catchRecoveryAwaitExprs.length
+                    : undefined;
+                const catchFinallyStartIndex = catchRecoveryAwaitExprs.length + (catchTerminalAwait ? 1 : 0);
+                const catchFinallyEndIndex = catchFinallyStartIndex + finallyAwaitExprs.length;
                 bodyCatchAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
                     loopAdapterName,
                     conditionPromiseType,
@@ -40023,18 +40036,24 @@ class Emitter {
                         bodyAwaitCatchTerminalRejectResult: undefined,
                         bodyAwaitCatchAdapter: undefined,
                         bodyAwaitCatchReasonCaptured: true,
-                        bodyAwaitTerminal: catchTerminalAwait
+                        bodyAwaitTerminal: catchTerminalAwait || !!finallyTerminalAwait
                             ? true
                             : terminalTryCatchFallthrough ? false : continuation.bodyAwaitTerminal,
-                        bodyAwaitTerminalIndex: catchTerminalAwait
-                            ? catchRecoveryAwaitExprs.length
-                            : terminalTryCatchFallthrough ? undefined : continuation.bodyAwaitTerminalIndex,
-                        bodyReturnExpr: catchTerminalAwait ?? continuation.bodyReturnExpr,
-                        bodyRejectResult: catchTerminalAwait
-                            ? !!continuation.bodyAwaitCatchTerminalRejectResult
-                            : continuation.bodyRejectResult,
-                        bodyAwaitFinallyStartIndex: catchRecoveryAwaitExprs.length + (catchTerminalAwait ? 1 : 0),
-                        bodyAwaitFinallyEndIndex: catchRecoveryAwaitExprs.length + (catchTerminalAwait ? 1 : 0) + finallyAwaitExprs.length,
+                        bodyAwaitTerminalIndex: catchTerminalIndex ??
+                            (terminalTryCatchFallthrough ? undefined : continuation.bodyAwaitTerminalIndex),
+                        bodyReturnExpr: finallyTerminalAwait ?? catchTerminalAwait ?? continuation.bodyReturnExpr,
+                        bodyRejectResult: finallyTerminalAwait
+                            ? !!continuation.bodyAwaitFinallyTerminalRejectResult
+                            : catchTerminalAwait
+                                ? !!continuation.bodyAwaitCatchTerminalRejectResult
+                                : continuation.bodyRejectResult,
+                        bodyAwaitFinallyStartIndex: catchFinallyStartIndex,
+                        bodyAwaitFinallyEndIndex: catchFinallyEndIndex,
+                        bodyAwaitFinallyTerminalAwaitExpr: finallyTerminalAwait,
+                        bodyAwaitFinallyTerminalRejectResult: continuation.bodyAwaitFinallyTerminalRejectResult,
+                        bodyAwaitFinallyTerminalIndex: finallyTerminalAwait
+                            ? catchFinallyEndIndex
+                            : undefined,
                     },
                     catchAwaitExprs,
                 );
