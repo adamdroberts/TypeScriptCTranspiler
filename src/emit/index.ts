@@ -53615,7 +53615,12 @@ class Emitter {
             if (!ts.isBinaryExpression(unwrapped)) return false;
             const op = unwrapped.operatorToken.kind;
             if (this.isAssignmentOperatorKind(op)) {
-                return !this.nodeContainsYield(unwrapped);
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                const left = this.unwrapTransparentExpression(unwrapped.left);
+                return !ts.isYieldExpression(left) &&
+                    !this.nodeContainsYield(unwrapped.left) &&
+                    !!this.directLazyYieldCondition(unwrapped.right) &&
+                    visit(unwrapped.right);
             }
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;

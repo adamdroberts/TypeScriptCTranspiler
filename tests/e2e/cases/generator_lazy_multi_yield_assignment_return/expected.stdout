@@ -1,0 +1,6 @@
+direct-before 0 false 7
+direct-middle 0 false 8
+direct-done 4 true 9
+compound-before 1 false 8
+compound-middle 1 false 9
+compound-done 5 true 11

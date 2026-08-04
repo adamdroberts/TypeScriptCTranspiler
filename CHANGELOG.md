@@ -49,6 +49,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generator returns now stage direct yielded receivers before prefix/postfix property updates and `delete`, preserving final-resume mutation timing; yielded keys/operands and broader mutation graphs remain deferred. Test: `generator_lazy_multi_yield_mutation_return`.
 
+- Lazy generator returns now stage a direct `yield` on the right-hand side before assigning to a yield-free identifier or dynamic-property lvalue, including compound assignment; yielded lvalues and broader assignment graphs remain deferred. Test: `generator_lazy_multi_yield_assignment_return`.
+
 - Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion, direct local `return`/`throw`, or direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested control-flow exits remain compile-time diagnostics. Test: `using_dispose`.
 
 - `Symbol.dispose` now has stable well-known-symbol identity, description, static-emitter support, and dynamic symbol-key lookup as the synchronous explicit-resource-management hook. Test: `symbols`.
