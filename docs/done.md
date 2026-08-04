@@ -6,6 +6,8 @@
 
 - Ordinary awaited loop bodies now route a rejected body await through one direct awaited catch-recovery stage, one direct awaited `finally` cleanup stage, and then terminal `return await` or `throw await`, preserving recovered state and rejection provenance. Tests: `async_await_loop_body_await_try_catch_await_finally_await_return`, `async_await_loop_body_await_try_catch_await_finally_await_throw`
 
+- Counted awaited loop bodies now route a rejected body await through one direct awaited catch-recovery stage, one direct awaited `finally` cleanup stage, and then terminal `return await` or `throw await`, preserving recovered state and cleanup ordering. Tests: `async_await_for_body_await_try_catch_await_finally_await_return`, `async_await_for_body_await_try_catch_await_finally_await_throw`
+
 - Ordinary awaited loop bodies now retain await-free statements after the try body, catch recovery, and awaited `finally` cleanup before terminal `return await` or `throw await`, including the rejected-body catch path. Tests: `async_await_loop_body_await_try_catch_await_finally_await_postlude_return`, `async_await_loop_body_await_try_catch_await_finally_await_postlude_throw`
 
 - Ordinary awaited loop bodies now preserve awaited catch/finally rejection precedence: a rejected catch recovery remains the rejection after successful cleanup, while a cleanup rejection overrides the recovered path before terminal settlement. Tests: `async_await_loop_body_await_try_catch_await_finally_await_recovery_reject`, `async_await_loop_body_await_try_catch_await_finally_await_cleanup_reject`
