@@ -53628,7 +53628,12 @@ class Emitter {
                 for (const element of unwrapped.elements) {
                     if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
                     if (ts.isSpreadElement(element)) {
-                        if (this.nodeContainsYield(element.expression)) return false;
+                        const spreadExpression = this.unwrapTransparentExpression(element.expression);
+                        if (ts.isYieldExpression(spreadExpression)) {
+                            if (!visit(spreadExpression)) return false;
+                        } else if (this.nodeContainsYield(element.expression)) {
+                            return false;
+                        }
                         continue;
                     }
                     if (!visit(element as ts.Expression)) return false;
@@ -53648,7 +53653,12 @@ class Emitter {
                     } else if (ts.isMethodDeclaration(property)) {
                         if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
                     } else if (ts.isSpreadAssignment(property)) {
-                        if (this.nodeContainsYield(property.expression)) return false;
+                        const spreadExpression = this.unwrapTransparentExpression(property.expression);
+                        if (ts.isYieldExpression(spreadExpression)) {
+                            if (!visit(spreadExpression)) return false;
+                        } else if (this.nodeContainsYield(property.expression)) {
+                            return false;
+                        }
                     } else {
                         return false;
                     }
@@ -55219,7 +55229,7 @@ class Emitter {
                     continue;
                 }
                 if (ts.isSpreadElement(element)) {
-                    const source = this.emitExpr(element.expression);
+                    const source = build(element.expression);
                     if (source.ty.kind === "array") {
                         const src = this.freshTemp("_lazy_dynspread_src");
                         const index = this.freshTemp("_lazy_dynspread_i");
@@ -55263,7 +55273,7 @@ class Emitter {
                 continue;
             }
             if (ts.isSpreadElement(element)) {
-                const source = this.emitExpr(element.expression);
+                const source = build(element.expression);
                 if (source.ty.kind === "value") {
                     if (elemType.kind !== "value") unsupported(element, "dynamic spread into a typed lazy array requires an any[] result");
                     pieces.push(`tsc_array_append(${array}, tsc_value_iter_values(${this.coerce(source, T_VALUE, element.expression)}))`);
@@ -55318,7 +55328,7 @@ class Emitter {
                 let name: string;
                 let expression: ts.Expression;
                 if (ts.isSpreadAssignment(property)) {
-                    const value = this.emitExpr(property.expression);
+                    const value = build(property.expression);
                     pieces.push(
                         `tsc_value_object_assign(tsc_value_object(${object}), ${this.coerce(value, T_VALUE, property.expression)})`,
                     );
@@ -55408,7 +55418,7 @@ class Emitter {
                 pieces.push(`${object}->${mangleIdent(name)} = ${this.coerce(value, fieldType, property)}`);
             } else if (ts.isSpreadAssignment(property)) {
                 const sourceTsType = this.expressionDeclaredOrCurrentType(property.expression);
-                const source = this.emitExpr(property.expression);
+                const source = build(property.expression);
                 const sourceTmp = this.freshTemp("_lazy_obj_spread");
                 pieces.push(`${source.ty.c} const ${sourceTmp} = ${source.c}`);
                 if (source.ty.kind === "class") {
