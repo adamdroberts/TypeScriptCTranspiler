@@ -58252,10 +58252,22 @@ class Emitter {
         statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
     ): void {
         const disposables = this.syncUsingNames(statements);
+        let exited = false;
         for (const stmt of statements) {
+            if (disposables.length > 0 && (ts.isReturnStatement(stmt) || ts.isThrowStatement(stmt))) {
+                this.emitSyncDisposals(buf, disposables);
+                exited = true;
+            }
             this.emitStmt(buf, stmt);
-            if (this.statementAlwaysExits(stmt)) break;
+            if (this.statementAlwaysExits(stmt)) {
+                exited = true;
+                break;
+            }
         }
+        if (!exited) this.emitSyncDisposals(buf, disposables);
+    }
+
+    private emitSyncDisposals(buf: CBuf, disposables: readonly string[]): void {
         for (let i = disposables.length - 1; i >= 0; i--) {
             buf.line(`tsc_value_dispose_sync(${disposables[i]!});`);
         }
@@ -58286,13 +58298,36 @@ class Emitter {
                 names.push(mangleIdent(declaration.name.text));
             }
         }
-        if (names.length > 0 && statements.some((statement) => this.usingScopeHasEarlyExit(statement))) {
+        const firstUsingIndex = statements.findIndex(
+            (statement) => ts.isVariableStatement(statement) &&
+                (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
+        );
+        const directEarlyExitIndexes = statements
+            .map((statement, index) =>
+                (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) ? index : -1,
+            )
+            .filter((index) => index >= 0);
+        const hasUnsupportedEarlyExit = statements.some((statement) =>
+            !(ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) &&
+            this.usingScopeHasEarlyExit(statement),
+        );
+        const hasEarlyExitBeforeUsing = directEarlyExitIndexes.some((index) => index < firstUsingIndex);
+        const hasUsingAfterEarlyExit = directEarlyExitIndexes.some((index) =>
+            statements.slice(index + 1).some(
+                (statement) => ts.isVariableStatement(statement) &&
+                    (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
+            ),
+        );
+        if (names.length > 0 && (hasUnsupportedEarlyExit || hasEarlyExitBeforeUsing || hasUsingAfterEarlyExit)) {
             const usingStatement = statements.find(
                 (statement): statement is ts.VariableStatement =>
                     ts.isVariableStatement(statement) &&
                     (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
             );
-            unsupported(usingStatement ?? statements[0]!, "using scopes with early exit are not supported yet");
+            unsupported(
+                usingStatement ?? statements[0]!,
+                "using scopes only support direct return/throw cleanup after their declarations",
+            );
         }
         return names;
     }
