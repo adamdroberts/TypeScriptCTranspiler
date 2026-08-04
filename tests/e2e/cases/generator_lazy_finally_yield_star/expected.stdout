@@ -1,2 +1,3 @@
 finally-yield-star-normal: false source false cleanup-one false cleanup-two true done
 finally-yield-star-close: false source false cleanup-one false cleanup-two true closed
+finally-yield-star-throw: false source false cleanup-one finalizer-throw

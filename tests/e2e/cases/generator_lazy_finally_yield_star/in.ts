@@ -20,3 +20,14 @@ const closedSecond: any = closed.return("closed");
 const closedThird: any = closed.next("cleanup-one-return");
 const closedDone: any = closed.next("cleanup-two-return");
 console.log("finally-yield-star-close:", closedFirst.done, closedFirst.value, closedSecond.done, closedSecond.value, closedThird.done, closedThird.value, closedDone.done, closedDone.value);
+
+const thrown = cleanup();
+const thrownFirst: any = thrown.next();
+const thrownSecond: any = thrown.next("source-resume");
+let thrownValue: any;
+try {
+    thrown.throw("finalizer-throw");
+} catch (error: any) {
+    thrownValue = error;
+}
+console.log("finally-yield-star-throw:", thrownFirst.done, thrownFirst.value, thrownSecond.done, thrownSecond.value, thrownValue);
