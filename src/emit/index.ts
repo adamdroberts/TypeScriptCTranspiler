@@ -53547,7 +53547,16 @@ class Emitter {
                 return true;
             }
             if (ts.isObjectLiteralExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                for (const property of unwrapped.properties) {
+                    if (ts.isPropertyAssignment(property)) {
+                        if (!this.staticPropertyName(property.name) || !visit(property.initializer)) return false;
+                    } else if (ts.isShorthandPropertyAssignment(property)) {
+                        if (!visit(property.name)) return false;
+                    } else {
+                        return false;
+                    }
+                }
+                return true;
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
                 (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
@@ -54869,6 +54878,43 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: mapped };
     }
 
+    private emitLazyMultiYieldObjectLiteral(
+        ol: ts.ObjectLiteralExpression,
+        build: (node: ts.Expression) => EmitResult,
+    ): EmitResult {
+        const targetType =
+            this.checker.getContextualType(ol) ??
+            this.checker.getTypeAtLocation(ol);
+        const mapped = this.isUntypedJsObjectLiteral(ol)
+            ? T_VALUE
+            : this.prepareType(mapTsType(ol, targetType, this.checker));
+        if (mapped.kind !== "value") {
+            unsupported(ol, "lazy multi-yield object literals currently require a dynamic object result");
+        }
+        const object = this.freshTemp("_lazy_dynobj");
+        const pieces: string[] = [`tsc_object_t* ${object} = tsc_object_new()`];
+        for (const property of ol.properties) {
+            let name: string;
+            let expression: ts.Expression;
+            if (ts.isPropertyAssignment(property)) {
+                name = this.staticPropertyName(property.name) ??
+                    unsupported(property.name, "lazy multi-yield object keys must be static");
+                expression = property.initializer;
+            } else if (ts.isShorthandPropertyAssignment(property)) {
+                name = property.name.text;
+                expression = property.name;
+            } else {
+                unsupported(property, "lazy multi-yield object literals support property assignments and shorthand properties only");
+            }
+            const value = build(expression);
+            pieces.push(
+                `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, expression)})`,
+            );
+        }
+        pieces.push(`tsc_value_object(${object})`);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
     private emitLazyGeneratorMultiYieldReturn(
         buf: CBuf,
         info: { expression: ts.Expression; yields: ts.YieldExpression[] },
@@ -54965,7 +55011,9 @@ class Emitter {
                     : this.emitExpr(unwrapped);
             }
             if (ts.isObjectLiteralExpression(unwrapped)) {
-                return this.emitExpr(unwrapped);
+                return this.nodeContainsYield(unwrapped)
+                    ? this.emitLazyMultiYieldObjectLiteral(unwrapped, build)
+                    : this.emitExpr(unwrapped);
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
                 (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
