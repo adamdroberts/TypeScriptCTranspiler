@@ -53632,7 +53632,8 @@ class Emitter {
                         if (ts.isYieldExpression(spreadExpression)) {
                             if (!visit(spreadExpression)) return false;
                         } else if (this.nodeContainsYield(element.expression)) {
-                            return false;
+                            if (!ts.isArrayLiteralExpression(spreadExpression) && !ts.isObjectLiteralExpression(spreadExpression)) return false;
+                            if (!visit(spreadExpression)) return false;
                         }
                         continue;
                     }
@@ -53657,7 +53658,8 @@ class Emitter {
                         if (ts.isYieldExpression(spreadExpression)) {
                             if (!visit(spreadExpression)) return false;
                         } else if (this.nodeContainsYield(property.expression)) {
-                            return false;
+                            if (!ts.isArrayLiteralExpression(spreadExpression) && !ts.isObjectLiteralExpression(spreadExpression)) return false;
+                            if (!visit(spreadExpression)) return false;
                         }
                     } else {
                         return false;
@@ -55318,7 +55320,8 @@ class Emitter {
         const targetType =
             this.checker.getContextualType(ol) ??
             this.checker.getTypeAtLocation(ol);
-        const mapped = this.isUntypedJsObjectLiteral(ol)
+        const nestedSpreadSource = ts.isSpreadAssignment(ol.parent) || ts.isSpreadElement(ol.parent);
+        const mapped = this.isUntypedJsObjectLiteral(ol) || nestedSpreadSource
             ? T_VALUE
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {

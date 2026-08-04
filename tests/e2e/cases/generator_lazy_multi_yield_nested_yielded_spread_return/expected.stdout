@@ -1,0 +1,4 @@
+typed-array false 1,2 false 3,4 true 10,11,9,20,21
+dynamic-array false prompt false tail true l|e|f|t|inner|middle|right-one|right-two
+typed-object false 1 false 2 false 3 true 10 20 30
+dynamic-object false prompt-first false prompt-middle false prompt-last true left middle right
