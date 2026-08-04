@@ -1,0 +1,6 @@
+normal false source false cleanup-one false cleanup-two true normal
+throw false source false recovery-one false recovery-two false cleanup-one false cleanup-two true caught
+close false source false recovery-one false cleanup-one false cleanup-two true closed
+delegated-normal false delegated-source false delegated-cleanup-one false delegated-cleanup-two true delegated-normal
+delegated-throw false delegated-source false delegated-recovery-one false delegated-recovery-two false delegated-cleanup-one false delegated-cleanup-two true delegated-caught
+delegated-close false delegated-source false delegated-recovery-one false delegated-cleanup-one false delegated-cleanup-two true closed

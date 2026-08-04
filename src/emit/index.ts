@@ -53875,6 +53875,41 @@ class Emitter {
         return count;
     }
 
+    private countSimpleLazyCatchRecoveryYieldStars(node: ts.Node): number {
+        let count = 0;
+        const visit = (cur: ts.Node): void => {
+            if (cur !== node && (ts.isFunctionLike(cur) || ts.isClassLike(cur))) return;
+            if (ts.isTryStatement(cur)) {
+                const handler = this.lazyGeneratorTryCatchReturn(cur);
+                if (handler && handler.finallyStatements.some((statement) => this.nodeContainsYield(statement))) {
+                    let finalizerYieldCount = 0;
+                    let finalizerYieldStarCount = 0;
+                    for (const statement of handler.finallyStatements) {
+                        const yieldExpr = this.simpleLazyYieldExpression(statement);
+                        if (yieldExpr?.asteriskToken) finalizerYieldStarCount++;
+                        const countYields = (current: ts.Node): void => {
+                            if (ts.isYieldExpression(current)) {
+                                finalizerYieldCount++;
+                                return;
+                            }
+                            ts.forEachChild(current, countYields);
+                        };
+                        countYields(statement);
+                    }
+                    const catchRecoveryYieldStars = handler.catchPreludeStatements.reduce((total, statement) => {
+                        const yieldExpr = this.simpleLazyYieldExpression(statement);
+                        return total + (yieldExpr?.asteriskToken ? 1 : 0);
+                    }, 0);
+                    count += finalizerYieldCount * catchRecoveryYieldStars;
+                    if (catchRecoveryYieldStars > 0) count += finalizerYieldStarCount;
+                }
+            }
+            ts.forEachChild(cur, visit);
+        };
+        ts.forEachChild(node, visit);
+        return count;
+    }
+
     private emitLazyGeneratorYieldStar(
         buf: CBuf,
         yieldExpr: ts.YieldExpression,
@@ -55613,7 +55648,8 @@ class Emitter {
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
         const yieldStarCount = this.countSimpleLazyYieldStars(fn.body) +
-            this.countSimpleLazyFinalizerYieldStars(fn.body);
+            this.countSimpleLazyFinalizerYieldStars(fn.body) +
+            this.countSimpleLazyCatchRecoveryYieldStars(fn.body);
         const hasYieldStar = yieldStarCount > 0;
         const multiYieldCount = this.lazyGeneratorMaxMultiYieldTerminal(fn.body);
         const hasMultiYieldTerminal = multiYieldCount > 0;
