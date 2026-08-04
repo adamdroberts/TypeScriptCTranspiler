@@ -1,0 +1,12 @@
+of-success-error:of-throw-finally
+of-source-reject-error:of-throw-finally
+of-stage-reject-error:of-throw-finally
+of-recovery-reject-error:of-throw-finally
+of-catch-terminal-reject-error:of-throw-finally
+of-cleanup-reject-error:of-throw-cleanup
+in-success-error:in-throw-finally
+in-source-reject-error:in-throw-finally
+in-stage-reject-error:in-throw-finally
+in-recovery-reject-error:in-throw-finally
+in-catch-terminal-reject-error:in-throw-finally
+in-cleanup-reject-error:in-throw-cleanup

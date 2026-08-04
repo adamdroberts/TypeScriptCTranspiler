@@ -1,0 +1,3 @@
+{
+  "description": "iterator nested awaited-if catch recovery and terminal completion flow through a synchronous finally throw override"
+}
