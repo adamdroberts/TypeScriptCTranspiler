@@ -309,10 +309,13 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitCatchPresent?: boolean;
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
+    bodyAwaitCatchExprs?: readonly ts.AwaitExpression[];
     bodyAwaitCatchStartIndex?: number;
     bodyAwaitCatchBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyAwaitCatchSymbol?: ts.Symbol;
     bodyAwaitCatchAdapter?: string;
+    bodyAwaitCatchReasonCaptured?: boolean;
+    bodyAwaitFinallyStartIndex?: number;
     bodyPreludeCaptureParams?: readonly AsyncAwaitContinuationParam[];
     bodyPreludeStatements: readonly ts.Statement[];
     bodyLeadingContinuation?: AsyncAwaitLeadingReturnContinuation;
@@ -38902,9 +38905,11 @@ class Emitter {
         let bodyAwaitCatchPresent = false;
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
+        let bodyAwaitCatchExprs: readonly ts.AwaitExpression[] = [];
         let bodyAwaitCatchStartIndex = 0;
         let bodyAwaitCatchBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
+        let bodyAwaitFinallyStartIndex = 0;
         let bodyPreludeCaptureParams: AsyncAwaitContinuationParam[] = [];
         const statementContainsAwait = (statement: ts.Statement): boolean => {
             let found = false;
@@ -38924,11 +38929,11 @@ class Emitter {
             ? loopBody[loopBody.length - 2] as ts.TryStatement
             : null;
         const terminalTryPreludeStatements = terminalTryStatement ? loopBody.slice(0, -2) : [];
-        const terminalTryAwaitSequence = terminalTryStatement ? (() => {
+        const parseTerminalAwaitSequence = (statements: readonly ts.Statement[]) => {
             const expressions: ts.AwaitExpression[] = [];
             const between: ts.Statement[][] = [];
             let pending: ts.Statement[] = [];
-            for (const [statementIndex, statement] of terminalTryStatement.tryBlock.statements.entries()) {
+            for (const [statementIndex, statement] of statements.entries()) {
                 const expression = ts.isExpressionStatement(statement)
                     ? this.unwrapTransparentExpression(statement.expression)
                     : null;
@@ -38946,7 +38951,13 @@ class Emitter {
             if (expressions.length === 0) return null;
             between.push(pending);
             return { expressions, between };
-        })() : null;
+        };
+        const terminalTryAwaitSequence = terminalTryStatement
+            ? parseTerminalAwaitSequence(terminalTryStatement.tryBlock.statements)
+            : null;
+        const terminalCatchAwaitSequence = terminalTryStatement?.catchClause
+            ? parseTerminalAwaitSequence(terminalTryStatement.catchClause.block.statements)
+            : null;
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -39188,18 +39199,13 @@ class Emitter {
             terminalTryAwaitSequence !== null &&
             ts.isAwaitExpression(directBodyAwait) &&
             (!terminalTryStatement.catchClause.variableDeclaration || ts.isIdentifier(terminalTryStatement.catchClause.variableDeclaration.name)) &&
-            terminalTryStatement.catchClause.block.statements.length >= 1 &&
-            ts.isExpressionStatement(terminalTryStatement.catchClause.block.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.catchClause.block.statements[0]!.expression)) &&
-            terminalTryStatement.catchClause.block.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            !terminalTryStatement.catchClause.block.statements.slice(1).some(statementContainsAwait) &&
+            terminalCatchAwaitSequence !== null &&
             terminalTryStatement.finallyBlock.statements.length >= 1 &&
             ts.isExpressionStatement(terminalTryStatement.finallyBlock.statements[0]!) &&
             ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.finallyBlock.statements[0]!.expression)) &&
             terminalTryStatement.finallyBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
             !terminalTryStatement.finallyBlock.statements.slice(1).some(statementContainsAwait)) {
             const tryAwait = terminalTryAwaitSequence.expressions[0]!;
-            const catchAwait = this.unwrapTransparentExpression(terminalTryStatement.catchClause.block.statements[0]!.expression) as ts.AwaitExpression;
             const finallyAwait = this.unwrapTransparentExpression(terminalTryStatement.finallyBlock.statements[0]!.expression) as ts.AwaitExpression;
             bodyAwaitExpr = tryAwait;
             bodyAwaitExprs = [...terminalTryAwaitSequence.expressions, finallyAwait, directBodyAwait];
@@ -39208,14 +39214,16 @@ class Emitter {
                 ...terminalTryAwaitSequence.between,
                 terminalTryStatement.finallyBlock.statements.slice(1),
             ];
-            bodyAwaitCatchAwaitExpr = catchAwait;
+            bodyAwaitCatchAwaitExpr = terminalCatchAwaitSequence.expressions[0]!;
+            bodyAwaitCatchExprs = terminalCatchAwaitSequence.expressions;
             bodyAwaitCatchStartIndex = terminalTryAwaitSequence.expressions.length;
+            bodyAwaitFinallyStartIndex = terminalCatchAwaitSequence.expressions.length;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwait;
             bodyPreludeStatements = terminalTryPreludeStatements;
             bodyAwaitTerminal = true;
             bodyAwaitCatchPresent = true;
             bodyAwaitCatchBetweenAwaitStatements = [
-                terminalTryStatement.catchClause.block.statements.slice(1),
+                ...terminalCatchAwaitSequence.between,
                 terminalTryStatement.finallyBlock.statements.slice(1),
             ];
             bodyAwaitCatchSymbol = terminalTryStatement.catchClause.variableDeclaration &&
@@ -39637,9 +39645,11 @@ class Emitter {
             bodyAwaitCatchPresent,
             bodyAwaitCatchStatements,
             bodyAwaitCatchAwaitExpr,
+            bodyAwaitCatchExprs,
             bodyAwaitCatchBetweenAwaitStatements,
             bodyAwaitCatchSymbol,
             bodyAwaitCatchStartIndex,
+            bodyAwaitFinallyStartIndex,
             bodyPreludeCaptureParams,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
@@ -39686,8 +39696,9 @@ class Emitter {
                 const terminalAwait = continuation.bodyAwaitTerminal
                     ? this.unwrapTransparentExpression(continuation.bodyReturnExpr)
                     : null;
+                const catchRecoveryAwaitExprs = continuation.bodyAwaitCatchExprs ?? [continuation.bodyAwaitCatchAwaitExpr];
                 const catchAwaitExprs = [
-                    continuation.bodyAwaitCatchAwaitExpr,
+                    ...catchRecoveryAwaitExprs,
                     ...(continuation.bodyAwaitFinallyAwaitExpr ? [continuation.bodyAwaitFinallyAwaitExpr] : []),
                     ...(terminalAwait && ts.isAwaitExpression(terminalAwait) ? [terminalAwait] : []),
                 ];
@@ -39701,7 +39712,10 @@ class Emitter {
                         bodyBetweenAwaitStatements: continuation.bodyAwaitCatchBetweenAwaitStatements,
                         bodyAwaitCatchStatements: undefined,
                         bodyAwaitCatchAwaitExpr: undefined,
+                        bodyAwaitCatchExprs: undefined,
                         bodyAwaitCatchAdapter: undefined,
+                        bodyAwaitCatchReasonCaptured: true,
+                        bodyAwaitFinallyStartIndex: catchRecoveryAwaitExprs.length,
                     },
                     catchAwaitExprs,
                 );
@@ -40153,6 +40167,7 @@ class Emitter {
             const name = names[index]!;
             const envType = `${name}_env_t`;
             const awaitExpr = bodyAwaitExprs[index]!;
+            const finallyStartIndex = continuation.bodyAwaitFinallyStartIndex ?? 1;
             const bodyValueVar = this.freshTemp("_await_body_value");
             const nextSourceVar = this.freshTemp("_await_body_next_source");
             const nextEnvVar = this.freshTemp("_await_body_next_env");
@@ -40167,6 +40182,9 @@ class Emitter {
             const scope = new Map<ts.Symbol, string>();
             for (const param of continuation.params) scope.set(param.symbol, `state->${param.field}`);
             for (const param of bodyPreludeCaptureParams) scope.set(param.symbol, `state->${param.field}`);
+            if (continuation.bodyAwaitCatchReasonCaptured && continuation.bodyAwaitCatchSymbol) {
+                scope.set(continuation.bodyAwaitCatchSymbol, "state->rejection_reason");
+            }
             for (const alias of awaitedAliasEntries) {
                 if (alias.index < index) scope.set(alias.symbol, `state->${alias.field}`);
             }
@@ -40207,6 +40225,10 @@ class Emitter {
                 buf.line(`${catchEnvType}* const ${catchEnvVar} = (${catchEnvType}*)TSC_GC_MALLOC(sizeof(${catchEnvType}));`);
                 buf.line(`${catchEnvVar}->receiver = ${catchSourceVar};`);
                 buf.line(`${catchEnvVar}->result_promise = _ret;`);
+                if (continuation.bodyAwaitFinallyAwaitExpr) {
+                    buf.line(`${catchEnvVar}->reject_after_success = false;`);
+                    buf.line(`${catchEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
+                }
                 for (const param of bodyPreludeCaptureParams) buf.line(`${catchEnvVar}->${param.field} = state->${param.field};`);
                 for (const param of continuation.params) buf.line(`${catchEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${catchEnvVar}->this_arg = state->this_arg;`);
@@ -40259,10 +40281,10 @@ class Emitter {
                     if (continuation.thisValue) this.functionThisStack.pop();
                     this.argumentValueScopes.pop();
                 }
-            } else if (index === 0 && continuation.bodyAwaitFinallyAwaitExpr && names.length > 1) {
+            } else if (index < finallyStartIndex && continuation.bodyAwaitFinallyAwaitExpr && names.length > finallyStartIndex) {
                 const rejectedFinallySourceVar = this.freshTemp("_await_rejected_finally_source");
                 const rejectedFinallyEnvVar = this.freshTemp("_await_rejected_finally_env");
-                const rejectedFinallyEnvType = `${names[1]!}_env_t`;
+                const rejectedFinallyEnvType = `${names[finallyStartIndex]!}_env_t`;
                 this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 let rejectedFinallySource: EmitResult;
@@ -40272,7 +40294,7 @@ class Emitter {
                     if (continuation.thisValue) this.functionThisStack.pop();
                     this.argumentValueScopes.pop();
                 }
-                buf.line(`tsc_promise_t* const ${rejectedFinallySourceVar} = ${this.coerce(rejectedFinallySource, promiseTypes[1]!, continuation.bodyAwaitFinallyAwaitExpr.expression)};`);
+                buf.line(`tsc_promise_t* const ${rejectedFinallySourceVar} = ${this.coerce(rejectedFinallySource, promiseTypes[finallyStartIndex]!, continuation.bodyAwaitFinallyAwaitExpr.expression)};`);
                 buf.line(`${rejectedFinallyEnvType}* const ${rejectedFinallyEnvVar} = (${rejectedFinallyEnvType}*)TSC_GC_MALLOC(sizeof(${rejectedFinallyEnvType}));`);
                 buf.line(`${rejectedFinallyEnvVar}->receiver = ${rejectedFinallySourceVar};`);
                 buf.line(`${rejectedFinallyEnvVar}->result_promise = _ret;`);
@@ -40282,10 +40304,10 @@ class Emitter {
                 for (const param of continuation.params) buf.line(`${rejectedFinallyEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${rejectedFinallyEnvVar}->this_arg = state->this_arg;`);
                 buf.open(`if (tsc_promise_is_pending(${rejectedFinallySourceVar}))`);
-                buf.line(`tsc_promise_add_callback(${rejectedFinallySourceVar}, ${names[1]}, ${rejectedFinallyEnvVar});`);
+                buf.line(`tsc_promise_add_callback(${rejectedFinallySourceVar}, ${names[finallyStartIndex]}, ${rejectedFinallyEnvVar});`);
                 buf.close();
                 buf.open("else");
-                buf.line(`${names[1]}(${rejectedFinallyEnvVar});`);
+                buf.line(`${names[finallyStartIndex]}(${rejectedFinallyEnvVar});`);
                 buf.close();
             } else if (index === 0 && continuation.bodyAwaitFinallyStatements && continuation.bodyAwaitFinallyStatements.length > 0) {
                 this.argumentValueScopes.push(rejectionScope);
