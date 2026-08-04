@@ -53608,8 +53608,7 @@ class Emitter {
                 return this.simpleLazyMultiYieldMutationOperand(unwrapped.expression, visit);
             }
             if (ts.isConditionalExpression(unwrapped)) {
-                const yieldedCondition = this.directLazyYieldCondition(unwrapped.condition);
-                if (!yieldedCondition) return !this.nodeContainsYield(unwrapped);
+                if (!this.nodeContainsYield(unwrapped.condition)) return !this.nodeContainsYield(unwrapped);
                 return visit(unwrapped.condition) &&
                     !this.nodeContainsYield(unwrapped.whenTrue) &&
                     !this.nodeContainsYield(unwrapped.whenFalse);
@@ -53637,8 +53636,7 @@ class Emitter {
                                 this.isSimpleLazyMultiYieldCallLike(spreadExpression);
                             const nestedBinary = ts.isBinaryExpression(spreadExpression) &&
                                 !this.isAssignmentOperatorKind(spreadExpression.operatorToken.kind);
-                            const nestedConditional = ts.isConditionalExpression(spreadExpression) &&
-                                !!this.directLazyYieldCondition(spreadExpression.condition);
+                            const nestedConditional = ts.isConditionalExpression(spreadExpression);
                             if (!nestedLiteral && !nestedCall && !nestedBinary && !nestedConditional) return false;
                             if (!visit(spreadExpression)) return false;
                         }
@@ -53670,8 +53668,7 @@ class Emitter {
                                 this.isSimpleLazyMultiYieldCallLike(spreadExpression);
                             const nestedBinary = ts.isBinaryExpression(spreadExpression) &&
                                 !this.isAssignmentOperatorKind(spreadExpression.operatorToken.kind);
-                            const nestedConditional = ts.isConditionalExpression(spreadExpression) &&
-                                !!this.directLazyYieldCondition(spreadExpression.condition);
+                            const nestedConditional = ts.isConditionalExpression(spreadExpression);
                             if (!nestedLiteral && !nestedCall && !nestedBinary && !nestedConditional) return false;
                             if (!visit(spreadExpression)) return false;
                         }

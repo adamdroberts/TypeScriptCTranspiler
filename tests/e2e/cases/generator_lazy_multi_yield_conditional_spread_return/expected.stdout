@@ -1,4 +1,4 @@
-typed-array false typed-array-left false typed-array-right true A|B|G|H|!
+typed-array false typed-array-left false typed-array-right true C|D|G|H|!
 typed-object false typed-object-first false typed-object-second true 4 3
 dynamic-array false dynamic-array-left false dynamic-array-right true Z|P|Q|!
 dynamic-object false dynamic-object-first false dynamic-object-second true l2 !

@@ -6,32 +6,32 @@ interface TypedResult {
 
 function* typedArray(): Generator<string, string[], boolean> {
     return [
-        ...((yield "typed-array-left") ? "AB" : "CD"),
-        ...((yield "typed-array-right") ? "EF" : "GH"),
+        ...(!(yield "typed-array-left") ? "AB" : "CD"),
+        ...(((yield "typed-array-right") === true) ? "EF" : "GH"),
         "!",
     ];
 }
 
 function* typedObject(): Generator<string, TypedResult, boolean> {
     return {
-        ...((yield "typed-object-first") ? { left: 1, right: 0 } : { left: 0, right: 2 }),
-        ...((yield "typed-object-second") ? { left: 8, right: 4 } : { left: 9, right: 5 }),
+        ...(((yield "typed-object-first") && true) ? { left: 1, right: 0 } : { left: 0, right: 2 }),
+        ...(((yield "typed-object-second") !== false) ? { left: 8, right: 4 } : { left: 9, right: 5 }),
         marker: 3,
     };
 }
 
 function* dynamicArray(): Generator<any, any, any> {
     return [
-        ...((yield "dynamic-array-left") ? "XY" : "Z"),
-        ...((yield "dynamic-array-right") ? "PQ" : "MN"),
+        ...(Boolean(yield "dynamic-array-left") ? "XY" : "Z"),
+        ...(((yield "dynamic-array-right") ? true : false) ? "PQ" : "MN"),
         "!",
     ];
 }
 
 function* dynamicObject(): Generator<any, any, any> {
     return {
-        ...((yield "dynamic-object-first") ? { left: "L", right: "R0" } : { left: "l0", right: "r0" }),
-        ...((yield "dynamic-object-second") ? { left: "L1", right: "R1" } : { left: "l2", right: "r2" }),
+        ...(((yield "dynamic-object-first") ? true : false) ? { left: "L", right: "R0" } : { left: "l0", right: "r0" }),
+        ...(((yield "dynamic-object-second") || false) ? { left: "L1", right: "R1" } : { left: "l2", right: "r2" }),
         marker: "!",
     };
 }
