@@ -53077,9 +53077,8 @@ class Emitter {
             ? finallyStatements.slice(0, -1)
             : finallyStatements;
         if (
-            finallyBody.some((child) => this.nodeContainsYield(child)) ||
             finallyBody.some((child) => this.lazyGeneratorContainsAbruptControlFlow(child)) ||
-            !finallyBody.every((child) => this.isValidLazyGeneratorStatement(child))
+            !finallyBody.every((child) => this.isSimpleLazyGeneratorFinalizerStatement(child))
         ) return null;
         const tryStatements = stmt.tryBlock.statements;
         if (!tryStatements.some((child) => this.nodeContainsYield(child)) ||
@@ -53859,8 +53858,11 @@ class Emitter {
         let count = 0;
         const visit = (cur: ts.Node): void => {
             if (cur !== node && (ts.isFunctionLike(cur) || ts.isClassLike(cur))) return;
-            if (ts.isTryStatement(cur) && this.isSimpleLazyGeneratorTryFinally(cur)) {
-                for (const child of cur.finallyBlock!.statements) {
+            if (ts.isTryStatement(cur)) {
+                const handler = this.lazyGeneratorTryCatchReturn(cur);
+                const finalizerStatements = handler?.finallyStatements ??
+                    (this.isSimpleLazyGeneratorTryFinally(cur) ? cur.finallyBlock!.statements : null);
+                if (finalizerStatements) for (const child of finalizerStatements) {
                     const yieldExpr = this.simpleLazyYieldExpression(child);
                     if (yieldExpr?.asteriskToken) count++;
                 }
