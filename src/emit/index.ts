@@ -53626,7 +53626,7 @@ class Emitter {
             }
             if (ts.isArrayLiteralExpression(unwrapped)) {
                 for (const element of unwrapped.elements) {
-                    if (element.kind === ts.SyntaxKind.OmittedExpression) return false;
+                    if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
                     if (ts.isSpreadElement(element)) {
                         if (this.nodeContainsYield(element.expression)) return false;
                         continue;
@@ -55213,7 +55213,10 @@ class Emitter {
             pieces.push(`tsc_array_t* ${array} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, al.elements.length)})`);
             for (const element of al.elements) {
                 if (element.kind === ts.SyntaxKind.OmittedExpression) {
-                    unsupported(element, "lazy multi-yield array literals must be dense");
+                    const hole = this.freshTemp("_lazy_dyn_hole");
+                    pieces.push(`tsc_value_t ${hole} = tsc_value_undefined()`);
+                    pieces.push(`tsc_array_push_raw(${array}, &${hole}); tsc_array_mark_hole(${array}, ${array}->len - 1)`);
+                    continue;
                 }
                 if (ts.isSpreadElement(element)) {
                     const source = this.emitExpr(element.expression);
@@ -55254,7 +55257,10 @@ class Emitter {
         ];
         for (const element of al.elements) {
             if (element.kind === ts.SyntaxKind.OmittedExpression) {
-                unsupported(element, "lazy multi-yield array literals must be dense");
+                const hole = this.freshTemp("_lazy_hole");
+                pieces.push(`${elemType.c} ${hole} = ${this.zeroValue(elemType)}`);
+                pieces.push(`TSC_ARR(${elemType.c}, ${array}, ${array}->len) = ${hole}; ${array}->len++; tsc_array_mark_hole(${array}, ${array}->len - 1)`);
+                continue;
             }
             if (ts.isSpreadElement(element)) {
                 const source = this.emitExpr(element.expression);
