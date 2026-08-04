@@ -2971,6 +2971,7 @@ typedef struct tsc_fs_read_file_async {
     tsc_str_t* result_encoding;
     tsc_str_t* error;
     struct tsc_fs_read_file_async* next;
+    void* owner_object;
 } tsc_fs_read_file_async_t;
 
 static tsc_fs_read_file_async_t* g_tsc_fs_read_file_async = NULL;
@@ -3660,6 +3661,8 @@ static tsc_value_t tsc_fs_file_handle_write_file_builtin(void* env, tsc_value_t 
     return tsc_value_promise(tsc_fs_file_handle_append_start((tsc_fs_file_handle_t*)env, args, false));
 }
 
+static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args);
+
 enum {
     TSC_FS_FILE_HANDLE_CHMOD = 1,
     TSC_FS_FILE_HANDLE_CHOWN = 2,
@@ -4088,6 +4091,12 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         1.0,
         tsc_str_from_lit("writeFile", 9)
     ));
+    tsc_object_set(object, tsc_str_from_lit("readFile", 8), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_read_file_builtin,
+        handle,
+        0.0,
+        tsc_str_from_lit("readFile", 8)
+    ));
     tsc_object_set(object, tsc_str_from_lit("chmod", 5), tsc_value_function_builtin_named(
         tsc_fs_file_handle_chmod_builtin,
         handle,
@@ -4208,7 +4217,11 @@ static void tsc_fs_read_file_async_finish(tsc_fs_read_file_async_t* task, bool s
             if (task->want_buffer) {
                 tsc_buffer_t* out = tsc_buffer_alloc((double)task->len, 0.0);
                 if (task->len > 0) memcpy(out->data, task->bytes, task->len);
-                tsc_promise_fulfill_in_place_ptr(task->promise, out);
+                if (task->path) {
+                    tsc_promise_fulfill_in_place_ptr(task->promise, out);
+                } else {
+                    tsc_promise_fulfill_in_place(task->promise, tsc_value_buffer(out));
+                }
             } else {
                 tsc_str_t* out = str_alloc(task->len);
                 if (task->len > 0) memcpy((char*)out->data, task->bytes, task->len);
@@ -4222,7 +4235,9 @@ static void tsc_fs_read_file_async_finish(tsc_fs_read_file_async_t* task, bool s
         } else {
             tsc_promise_reject_in_place(
                 task->promise,
-                tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.readFileSync: could not read file"))
+                tsc_value_string(task->error ? task->error : tsc_str_from_cstr(task->path
+                    ? "fs.readFileSync: could not read file"
+                    : "fs.promises.FileHandle.readFile: could not read file"))
             );
         }
     }
@@ -4246,6 +4261,10 @@ static void tsc_fs_read_file_async_abort(void* env) {
 static void tsc_fs_read_file_async_close_cb(tsc_uv_fs_t* req);
 
 static void tsc_fs_read_file_async_close_or_finish(tsc_fs_read_file_async_t* task, bool success) {
+    if (!task->path) {
+        tsc_fs_read_file_async_finish(task, success);
+        return;
+    }
     int rc = uv_fs_close(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_read_file_async_close_cb);
     if (rc < 0) {
         task->req_pending = false;
@@ -4287,13 +4306,15 @@ static void tsc_fs_read_file_async_read_next(tsc_fs_read_file_async_t* task) {
         task->fd,
         &task->read_buf,
         1,
-        (int64_t)task->len,
+        task->path ? (int64_t)task->len : -1,
         tsc_fs_read_file_async_read_cb
     );
     if (rc < 0) {
         task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
-        task->error = tsc_str_from_cstr("fs.readFileSync: could not read file");
+        task->error = tsc_str_from_cstr(task->path
+            ? "fs.readFileSync: could not read file"
+            : "fs.promises.FileHandle.readFile: could not read file");
         tsc_fs_read_file_async_close_or_finish(task, false);
     } else {
         task->req_pending = true;
@@ -4311,7 +4332,9 @@ static void tsc_fs_read_file_async_read_cb(tsc_uv_fs_t* req) {
         return;
     }
     if (result < 0) {
-        task->error = tsc_str_from_cstr("fs.readFileSync: could not read file");
+        task->error = tsc_str_from_cstr(task->path
+            ? "fs.readFileSync: could not read file"
+            : "fs.promises.FileHandle.readFile: could not read file");
         tsc_fs_read_file_async_close_or_finish(task, false);
         return;
     }
@@ -4378,6 +4401,74 @@ tsc_promise_t* tsc_fs_promises_read_file_async(const tsc_str_t* path, bool want_
 
 tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, tsc_str_t* encoding, tsc_value_t signal) {
     return tsc_fs_promises_read_file_options_async(path, false, encoding, signal);
+}
+
+static bool tsc_fs_file_handle_read_file_options(
+    tsc_value_t options,
+    bool* want_buffer,
+    tsc_str_t** result_encoding
+) {
+    *want_buffer = true;
+    *result_encoding = NULL;
+    if (tsc_value_is_nullish(options)) return true;
+
+    tsc_value_t encoding_value = options;
+    if (value_is_box(options) && value_tag(options) == TSC_VALUE_TAG_OBJECT) {
+        encoding_value = tsc_value_get_prop(options, tsc_str_from_lit("encoding", 8));
+    }
+    if (tsc_value_is_nullish(encoding_value)) return true;
+    if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
+        tsc_throw_str(tsc_str_from_cstr(
+            "fs.promises.FileHandle.readFile encoding must be UTF-8, hex, base64, buffer, or null"
+        ));
+        return false;
+    }
+    tsc_str_t* encoding = tsc_value_as_string(encoding_value);
+    if (str_lit_eq(encoding, "buffer")) return true;
+    if (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8") && !str_lit_eq(encoding, "hex") && !str_lit_eq(encoding, "base64")) {
+        tsc_throw_str(tsc_str_from_cstr(
+            "fs.promises.FileHandle.readFile encoding must be UTF-8, hex, base64, buffer, or null"
+        ));
+        return false;
+    }
+    *want_buffer = false;
+    *result_encoding = encoding;
+    return true;
+}
+
+static tsc_promise_t* tsc_fs_file_handle_read_file_start(
+    tsc_fs_file_handle_t* handle,
+    tsc_value_t owner_value,
+    tsc_array_t* args
+) {
+    if (!handle || handle->closed || handle->fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+    }
+
+    bool want_buffer = true;
+    tsc_str_t* result_encoding = NULL;
+    tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (!tsc_fs_file_handle_read_file_options(options, &want_buffer, &result_encoding)) return NULL;
+
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_read_file_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->fd = handle->fd;
+    task->owner_object = value_is_box(owner_value) && value_tag(owner_value) == TSC_VALUE_TAG_OBJECT
+        ? value_ptr(owner_value)
+        : NULL;
+    task->want_buffer = want_buffer;
+    task->result_encoding = result_encoding;
+    task->next = g_tsc_fs_read_file_async;
+    g_tsc_fs_read_file_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    tsc_fs_read_file_async_read_next(task);
+    return promise;
+}
+
+static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    return tsc_value_promise(tsc_fs_file_handle_read_file_start((tsc_fs_file_handle_t*)env, this_arg, args));
 }
 
 typedef struct tsc_fs_write_file_async {

@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed FileHandle readFile for default Buffer, current-position reads, encodings, and close rejection"
+}

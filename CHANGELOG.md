@@ -13,6 +13,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- `fs.promises.open` FileHandle values now support libuv-backed asynchronous `readFile()` with default/explicit Buffer results, UTF-8/hex/base64 string encodings, current-position reads, and closed-handle rejection without closing the caller-owned descriptor. Test: `fs_promises_file_handle_read_file`.
+
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `writeFile()` for current-position string/Buffer writes, UTF-8/hex/base64 encodings, optional `flush: true`, and closed-handle rejection without replacing or closing the caller-owned descriptor. Test: `fs_promises_file_handle_write_file`.
 
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `appendFile()` for string/Buffer data, UTF-8/hex/base64 encodings, optional `flush: true`, and closed-handle rejection without closing the caller-owned descriptor. Test: `fs_promises_file_handle_append_file`.
