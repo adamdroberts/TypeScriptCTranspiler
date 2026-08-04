@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded async FileHandle mutation coverage: libuv-backed `fs.promises.open` handles now support `truncate(len?)` with a default zero length and reject after asynchronous `close()`. Test: `fs_promises_file_handle_truncate`.
+
 - Verified bounded async FileHandle metadata coverage: libuv-backed `fs.promises.open` handles now expose `stat()` with typed `FSStats` results and reject after asynchronous `close()`. Test: `fs_promises_file_handle_stat`.
 
 - Verified bounded async FileHandle I/O coverage: the libuv-backed `fs.promises.open` handle now reads and writes Buffer ranges with offset, length, and position arguments, returns Node-shaped byte-count/buffer result objects, and preserves asynchronous close behavior. Test: `fs_promises_file_handle_io`.
@@ -328,6 +330,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
   - Phase 11 cancellation checkpoint: signal-bearing libuv-backed `fs.promises.mkdir`, `rm`, and `rmdir` requests, including recursive state machines, now reject queued/in-flight requests on AbortSignal cancellation, ask the active request to cancel, and suppress late fulfillment. Test: `fs_promises_mutation_abort_libuv`.
   - Phase 11 cancellation checkpoint: libuv-backed `fs.promises.access` and `statfs` requests now accept bounded signal options, reject queued/in-flight requests on AbortSignal cancellation, ask the active request to cancel, and suppress late fulfillment. Test: `fs_promises_access_statfs_abort_libuv`.
   - Phase 11 options checkpoint: `fs.writeFileSync` / `appendFileSync` and libuv-backed `fs.promises.writeFile` / `appendFile` now honor literal `{ flush: true }` through `fflush`/`fsync` or `uv_fs_fsync` before close. Test: `fs_write_append_flush`.
+  - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now support asynchronous `truncate(len?)`, including the default zero length, and closed handles reject later truncation requests. Test: `fs_promises_file_handle_truncate`.
   - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now expose asynchronous `stat()` with typed `FSStats` results, and closed handles reject later `stat()` calls. Test: `fs_promises_file_handle_stat`.
   - Phase 11 FileHandle checkpoint: libuv-backed `fs.promises.open` handles now support Buffer `read()` and `write()` requests with bounded offset/length/position arguments and `{ bytesRead, buffer }` / `{ bytesWritten, buffer }` results, followed by asynchronous `close()`. Test: `fs_promises_file_handle_io`.
   - Phase 12 remaining work: `http` / `https` on OpenSSL plus best-effort `http2`.

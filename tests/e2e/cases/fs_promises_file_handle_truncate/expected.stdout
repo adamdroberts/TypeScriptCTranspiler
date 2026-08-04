@@ -1,0 +1,4 @@
+content: abc
+defaultEmpty: true
+closedError: true
+error: pending

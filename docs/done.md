@@ -1,5 +1,7 @@
 # Implemented features
 
+- `fs.promises.open` FileHandle values now support libuv-backed asynchronous `truncate(len?)`, including the default zero length, and reject after asynchronous close. Test: `fs_promises_file_handle_truncate`.
+
 - `fs.promises.open` FileHandle values now expose libuv-backed asynchronous `stat()` with typed `FSStats` results and reject after asynchronous close. Test: `fs_promises_file_handle_stat`.
 
 - `fs.promises.open` FileHandle values now support libuv-backed Buffer `read()` and `write()` requests with offset, length, and position arguments, returning Node-shaped byte-count/buffer result objects before asynchronous `close()`. Test: `fs_promises_file_handle_io`.
