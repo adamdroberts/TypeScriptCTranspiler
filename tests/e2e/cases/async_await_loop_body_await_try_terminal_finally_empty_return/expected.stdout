@@ -1,0 +1,9 @@
+final-success:undefined
+final-source-reject:undefined
+final-cleanup-reject-error:cleanup
+catch-success:undefined
+catch-source-reject:undefined
+catch-stage-reject:undefined
+catch-recovery-reject:undefined
+catch-terminal-reject:undefined
+catch-cleanup-reject-error:cleanup

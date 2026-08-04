@@ -1,0 +1,6 @@
+of-success:undefined
+of-source-reject:undefined
+of-cleanup-reject-error:of-empty-cleanup
+in-success:undefined
+in-source-reject:undefined
+in-cleanup-reject-error:in-empty-cleanup

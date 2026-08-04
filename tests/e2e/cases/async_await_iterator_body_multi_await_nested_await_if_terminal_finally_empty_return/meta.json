@@ -1,0 +1,3 @@
+{
+  "description": "iterator nested awaited-if bodies apply empty synchronous finally returns after awaited cleanup"
+}

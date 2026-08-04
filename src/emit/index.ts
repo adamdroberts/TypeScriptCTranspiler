@@ -310,6 +310,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitFinallyAfterBetween?: boolean;
     bodyAwaitFinallyTerminalAwaitExpr?: ts.AwaitExpression;
     bodyAwaitFinallyTerminalSynchronousExpr?: ts.Expression;
+    bodyAwaitFinallyTerminalSynchronousReturn?: boolean;
     bodyAwaitFinallyTerminalRejectResult?: boolean;
     bodyAwaitFinallyTerminalIndex?: number;
     bodyAwaitTerminal?: boolean;
@@ -38932,6 +38933,7 @@ class Emitter {
         let bodyAwaitFinallyAfterBetween = false;
         let bodyAwaitFinallyTerminalAwaitExpr: ts.AwaitExpression | undefined;
         let bodyAwaitFinallyTerminalSynchronousExpr: ts.Expression | undefined;
+        let bodyAwaitFinallyTerminalSynchronousReturn = false;
         let bodyAwaitFinallyTerminalRejectResult = false;
         let bodyAwaitFinallyTerminalIndex: number | undefined;
         let bodyAwaitTerminal = false;
@@ -39058,6 +39060,7 @@ class Emitter {
                         ...sequence,
                         terminalAwait: terminalExpression,
                         terminalSynchronous: null,
+                        terminalSynchronousReturn: false,
                         terminalRejectResult: ts.isThrowStatement(terminalStatement),
                     }
                     : null;
@@ -39081,6 +39084,7 @@ class Emitter {
                         ...sequence,
                         terminalAwait: terminalExpression,
                         terminalSynchronous: null,
+                        terminalSynchronousReturn: false,
                         terminalRejectResult: ts.isThrowStatement(terminalStatement),
                     }
                     : null;
@@ -39092,13 +39096,26 @@ class Emitter {
                         ...sequence,
                         terminalAwait: null,
                         terminalSynchronous: terminalExpression,
+                        terminalSynchronousReturn: false,
                         terminalRejectResult: ts.isThrowStatement(terminalStatement!),
+                    }
+                    : null;
+            }
+            if (terminalStatement && ts.isReturnStatement(terminalStatement) && !terminalStatement.expression) {
+                const sequence = parseTerminalAwaitSequence(statements.slice(0, -1), true);
+                return sequence
+                    ? {
+                        ...sequence,
+                        terminalAwait: null,
+                        terminalSynchronous: null,
+                        terminalSynchronousReturn: true,
+                        terminalRejectResult: false,
                     }
                     : null;
             }
             const sequence = parseTerminalAwaitSequence(statements, true);
             return sequence
-                ? { ...sequence, terminalAwait: null, terminalSynchronous: null, terminalRejectResult: false }
+                ? { ...sequence, terminalAwait: null, terminalSynchronous: null, terminalSynchronousReturn: false, terminalRejectResult: false }
                 : null;
         };
         const terminalTryAwaitSequence = terminalTryStatement
@@ -39358,10 +39375,11 @@ class Emitter {
             bodyAwaitFinallyPreludeStatements = finallyAwaitSequence.prelude;
             bodyAwaitFinallyTerminalAwaitExpr = finallyAwaitSequence.terminalAwait ?? undefined;
             bodyAwaitFinallyTerminalSynchronousExpr = finallyAwaitSequence.terminalSynchronous ?? undefined;
+            bodyAwaitFinallyTerminalSynchronousReturn = !!finallyAwaitSequence.terminalSynchronousReturn;
             bodyAwaitFinallyTerminalRejectResult = finallyAwaitSequence.terminalRejectResult;
             bodyAwaitFinallyTerminalIndex = bodyAwaitFinallyTerminalAwaitExpr
                 ? bodyAwaitFinallyEndIndex
-                : bodyAwaitFinallyTerminalSynchronousExpr
+                : bodyAwaitFinallyTerminalSynchronousExpr || bodyAwaitFinallyTerminalSynchronousReturn
                     ? bodyAwaitFinallyEndIndex - 1
                     : undefined;
             bodyAwaitTerminalIndex = terminalIndex;
@@ -39432,10 +39450,11 @@ class Emitter {
             bodyAwaitFinallyPreludeStatements = finallyAwaitSequence.prelude;
             bodyAwaitFinallyTerminalAwaitExpr = finallyAwaitSequence.terminalAwait ?? undefined;
             bodyAwaitFinallyTerminalSynchronousExpr = finallyAwaitSequence.terminalSynchronous ?? undefined;
+            bodyAwaitFinallyTerminalSynchronousReturn = !!finallyAwaitSequence.terminalSynchronousReturn;
             bodyAwaitFinallyTerminalRejectResult = finallyAwaitSequence.terminalRejectResult;
             bodyAwaitFinallyTerminalIndex = bodyAwaitFinallyTerminalAwaitExpr
                 ? bodyAwaitFinallyEndIndex
-                : bodyAwaitFinallyTerminalSynchronousExpr
+                : bodyAwaitFinallyTerminalSynchronousExpr || bodyAwaitFinallyTerminalSynchronousReturn
                     ? bodyAwaitFinallyEndIndex - 1
                     : undefined;
             bodyAwaitTerminalIndex = terminalIndex;
@@ -39953,6 +39972,7 @@ class Emitter {
             bodyAwaitFinallyAfterBetween,
             bodyAwaitFinallyTerminalAwaitExpr,
             bodyAwaitFinallyTerminalSynchronousExpr,
+            bodyAwaitFinallyTerminalSynchronousReturn,
             bodyAwaitFinallyTerminalRejectResult,
             bodyAwaitFinallyTerminalIndex,
             bodyAwaitTerminal,
@@ -40027,6 +40047,7 @@ class Emitter {
                     )
                     : (continuation.bodyAwaitFinallyAwaitExpr ? [continuation.bodyAwaitFinallyAwaitExpr] : []);
                 const finallyTerminalAwait = continuation.bodyAwaitFinallyTerminalAwaitExpr;
+                const finallyTerminalSynchronousReturn = continuation.bodyAwaitFinallyTerminalSynchronousReturn;
                 const catchAwaitExprs = [
                     ...catchRecoveryAwaitExprs,
                     ...(catchTerminalAwait ? [catchTerminalAwait] : []),
@@ -40060,7 +40081,7 @@ class Emitter {
                         bodyAwaitCatchTerminalRejectResult: undefined,
                         bodyAwaitCatchAdapter: undefined,
                         bodyAwaitCatchReasonCaptured: true,
-                        bodyAwaitTerminal: catchTerminalAwait || !!finallyTerminalAwait || !!finallyTerminalSynchronousExpr
+                        bodyAwaitTerminal: catchTerminalAwait || !!finallyTerminalAwait || !!finallyTerminalSynchronousExpr || !!finallyTerminalSynchronousReturn
                             ? true
                             : terminalTryCatchFallthrough ? false : continuation.bodyAwaitTerminal,
                         bodyAwaitTerminalIndex: catchTerminalIndex ??
@@ -40075,10 +40096,11 @@ class Emitter {
                         bodyAwaitFinallyEndIndex: catchFinallyEndIndex,
                         bodyAwaitFinallyTerminalAwaitExpr: finallyTerminalAwait,
                         bodyAwaitFinallyTerminalSynchronousExpr: finallyTerminalSynchronousExpr,
+                        bodyAwaitFinallyTerminalSynchronousReturn: finallyTerminalSynchronousReturn,
                         bodyAwaitFinallyTerminalRejectResult: continuation.bodyAwaitFinallyTerminalRejectResult,
                         bodyAwaitFinallyTerminalIndex: finallyTerminalAwait
                             ? catchFinallyEndIndex
-                            : finallyTerminalSynchronousExpr
+                            : finallyTerminalSynchronousExpr || finallyTerminalSynchronousReturn
                                 ? catchFinallyEndIndex - 1
                                 : undefined,
                     },
@@ -40832,7 +40854,9 @@ class Emitter {
                     }
                     if (continuation.bodyAwaitTerminal) {
                         if (finallyTerminalIndex === index) {
-                            if (continuation.bodyAwaitFinallyTerminalSynchronousExpr) {
+                            if (continuation.bodyAwaitFinallyTerminalSynchronousReturn) {
+                                buf.line("tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));");
+                            } else if (continuation.bodyAwaitFinallyTerminalSynchronousExpr) {
                                 const returned = this.emitExpr(continuation.bodyAwaitFinallyTerminalSynchronousExpr);
                                 if (continuation.bodyAwaitFinallyTerminalRejectResult) {
                                     const rejected = this.coerceToString(returned, continuation.bodyAwaitFinallyTerminalSynchronousExpr);
@@ -43782,6 +43806,7 @@ class Emitter {
             isLastCatchAwait: boolean;
             terminalAction: "return" | "throw" | null;
             terminalSynchronousExpression: ts.Expression | null;
+            terminalSynchronousReturn: boolean;
         };
         type NestedBranchTerminal = {
             action: "return" | "throw";
@@ -43913,6 +43938,7 @@ class Emitter {
                 additionalCaptures: readonly NestedBranchCapture[] = [],
                 terminalAction: "return" | "throw" | null = null,
                 terminalSynchronousExpression: ts.Expression | null = null,
+                terminalSynchronousReturn = false,
             ): boolean => {
                 expressions.push({
                     expression,
@@ -43934,6 +43960,7 @@ class Emitter {
                     isLastCatchAwait,
                     terminalAction,
                     terminalSynchronousExpression,
+                    terminalSynchronousReturn,
                 });
                 pendingStatements = [];
                 return true;
@@ -44410,6 +44437,7 @@ class Emitter {
                     let finallyTerminalAction: "return" | "throw" | null = null;
                     let finallyTerminalExpression: ts.AwaitExpression | null = null;
                     let finallyTerminalSynchronousExpression: ts.Expression | null = null;
+                    let finallyTerminalSynchronousReturn = false;
                     if (finallyTerminalStatement &&
                         (ts.isReturnStatement(finallyTerminalStatement) || ts.isThrowStatement(finallyTerminalStatement))) {
                         const candidate = finallyTerminalStatement.expression
@@ -44421,9 +44449,12 @@ class Emitter {
                         } else if (candidate && this.asyncAwaitSyncReturnExpressionSupported(candidate)) {
                             finallyTerminalAction = ts.isReturnStatement(finallyTerminalStatement) ? "return" : "throw";
                             finallyTerminalSynchronousExpression = candidate;
+                        } else if (ts.isReturnStatement(finallyTerminalStatement) && !finallyTerminalStatement.expression) {
+                            finallyTerminalAction = "return";
+                            finallyTerminalSynchronousReturn = true;
                         }
                     }
-                    const finallyAwaitSourceStatements = finallyTerminalExpression || finallyTerminalSynchronousExpression
+                    const finallyAwaitSourceStatements = finallyTerminalExpression || finallyTerminalSynchronousExpression || finallyTerminalSynchronousReturn
                         ? finallyStatements.slice(0, -1)
                         : finallyStatements;
                     const finallyAwaitSteps: {
@@ -44538,6 +44569,9 @@ class Emitter {
                                 finallyIndex === finallyAwaitSteps.length - 1 && !finallyTerminalExpression
                                     ? finallyTerminalSynchronousExpression
                                     : null,
+                                finallyIndex === finallyAwaitSteps.length - 1 && !finallyTerminalExpression
+                                    ? finallyTerminalSynchronousReturn
+                                    : false,
                             )) return null;
                         }
                         if (finallyTerminalExpression && finallyTerminalAction) {
@@ -45597,7 +45631,7 @@ class Emitter {
                 controlBuf.close();
             }
             if (currentAwait.terminalAction) {
-                if (currentAwait.terminalSynchronousExpression) {
+                if (currentAwait.terminalSynchronousExpression || currentAwait.terminalSynchronousReturn) {
                     const synchronousTerminal: NestedBranchTerminal = {
                         action: currentAwait.terminalAction,
                         conditions: [],

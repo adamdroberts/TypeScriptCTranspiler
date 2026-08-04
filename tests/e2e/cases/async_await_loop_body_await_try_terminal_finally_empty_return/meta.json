@@ -1,0 +1,3 @@
+{
+  "description": "awaited finally cleanup is followed by an empty synchronous return override with and without catch"
+}
