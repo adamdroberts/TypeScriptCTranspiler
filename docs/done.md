@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now compose multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work with an awaited counted-`for` incrementor, preserving each alias through later body suspension before `continue` and skipping the incrementor on `break`. Tests: `async_await_for_incrementor_body_await_assigned_var_multi_continue`, `async_await_for_incrementor_body_await_assigned_var_multi_break`
+
 - Bounded async `for` loops now compose an assigned-before-use `var` alias initialized by direct `value = await ...` body work with an awaited counted-`for` incrementor, preserving that alias through later body suspension before `continue` and skipping the incrementor on `break`. Tests: `async_await_for_incrementor_body_await_assigned_var_continue`, `async_await_for_incrementor_body_await_assigned_var_break`
 
 - Bounded async `for` loops now compose an assigned-before-use `let` alias initialized by direct `value = await ...` body work with an awaited counted-`for` incrementor, preserving that alias through later body suspension before `continue` and skipping the incrementor on `break`. Tests: `async_await_for_incrementor_body_await_assignment_continue`, `async_await_for_incrementor_body_await_assignment_break`

@@ -31034,8 +31034,21 @@ class Emitter {
                 hoistedSymbols.push(capture.symbol);
             }
         }
-        for (const statements of betweenStatements) {
-            if (!this.asyncAwaitInterstitialCaptures(statements, true)) return null;
+        for (let index = 0; index < betweenStatements.length; index++) {
+            const nextStep = steps[index + 1];
+            const nextStepAssignment = nextStep?.variable
+                ? [ts.factory.createExpressionStatement(
+                    ts.factory.createBinaryExpression(
+                        nextStep.variable,
+                        ts.factory.createToken(ts.SyntaxKind.EqualsToken),
+                        nextStep.awaitExpr,
+                    ),
+                )]
+                : [];
+            if (!this.asyncAwaitInterstitialCaptures([
+                ...betweenStatements[index]!,
+                ...nextStepAssignment,
+            ], true)) return null;
         }
         const awaitedStepSymbols = new Set(
             steps
@@ -49910,9 +49923,19 @@ class Emitter {
             ...(firstStep.alternateEighthAfterStatements ?? []),
             ...(firstStep.alternateNinthAfterStatements ?? []),
         ];
+        const nextStepAssignment = steps[1]?.variable
+            ? [ts.factory.createExpressionStatement(
+                ts.factory.createBinaryExpression(
+                    steps[1]!.variable!,
+                    ts.factory.createToken(ts.SyntaxKind.EqualsToken),
+                    steps[1]!.awaitExpr,
+                ),
+            )]
+            : [];
         const interstitialCaptures = this.asyncAwaitInterstitialCaptures([
             ...firstStepPostAwaitStatements,
             ...(betweenStatements[0] ?? []),
+            ...nextStepAssignment,
         ], true)!
             .filter((capture) => !nextStepSymbol || capture.symbol !== nextStepSymbol);
         const nestedParams = [
