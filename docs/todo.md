@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded synchronous `using` coverage: ordinary local block lists can bind dynamic disposable values, dispose them in reverse declaration order on normal completion through `Symbol.dispose`, and reject unsupported `await using` or early-exit scopes at compile time. Test: `using_dispose`.
+
 - Verified bounded `Symbol.dispose` coverage: the well-known symbol now has stable singleton identity, description, static-emitter support, and dynamic symbol-key lookup, providing the synchronous counterpart needed by explicit resource management. Test: `symbols`.
 
 - Verified bounded async FileHandle disposal coverage: `fs.promises.open` handles now expose `Symbol.asyncDispose`, which delegates to asynchronous `close()`, fulfills after disposal, rejects later I/O, and remains idempotent on repeated disposal. Test: `fs_promises_file_handle_async_dispose`.

@@ -1,5 +1,7 @@
 # Implemented features
 
+- Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, disposing resources in reverse declaration order on normal completion through `Symbol.dispose`; unsupported `await using` and early-exit scopes receive compile-time diagnostics. Test: `using_dispose`.
+
 - `Symbol.dispose` now has stable well-known-symbol identity, description, static-emitter support, and dynamic symbol-key lookup as the synchronous explicit-resource-management hook. Test: `symbols`.
 
 - `fs.promises.open` FileHandle values now expose `Symbol.asyncDispose`, delegating to asynchronous `close()`, fulfilling after disposal, rejecting later I/O, and remaining idempotent on repeated disposal. Test: `fs_promises_file_handle_async_dispose`.
@@ -3714,6 +3716,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `switch_exhaustive_missing` | expected diagnostic for a missing finite-domain switch case |
 | `structured_clone_dynamic` | structuredClone deep cloning of dynamic primitives, arrays, plain objects, circular references, and error paths |
 | `symbols` | Symbol values, global registry, well-known symbols, typeof |
+| `using_dispose` | bounded synchronous using declarations, reverse-order Symbol.dispose cleanup, and normal-completion scope handling |
 | `symbol_bigint_object_methods` | Symbol/BigInt toLocaleString and valueOf object methods |
 | `tagged_templates` | tagged template calls with cooked string segments |
 | `string_raw` | String.raw tagged templates preserving raw escape text |

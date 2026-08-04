@@ -25,6 +25,13 @@ interface SymbolConstructor {
 }
 declare var Symbol: SymbolConstructor;
 
+interface Disposable {
+    [Symbol.dispose](): void;
+}
+interface AsyncDisposable {
+    [Symbol.asyncDispose](): PromiseLike<void>;
+}
+
 interface IteratorYieldResult<T> { done?: false; value: T; }
 interface IteratorReturnResult<TReturn> { done: true; value: TReturn; }
 type IteratorResult<T, TReturn = any> = IteratorYieldResult<T> | IteratorReturnResult<TReturn>;

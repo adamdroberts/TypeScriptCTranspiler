@@ -712,6 +712,7 @@ tsc_value_t tsc_value_get_index(tsc_value_t v, double index);
 bool tsc_value_set_index(tsc_value_t v, double index, tsc_value_t value);
 bool tsc_value_set_array_own_index(tsc_value_t v, size_t idx, tsc_value_t value);
 tsc_value_t tsc_value_get_symbol_prop(tsc_value_t v, tsc_symbol_t* key);
+void tsc_value_dispose_sync(tsc_value_t value);
 tsc_value_t tsc_value_define_property(tsc_value_t v, tsc_str_t* key, tsc_value_t value);
 bool tsc_value_define_property_desc(tsc_value_t v, tsc_str_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);
 bool tsc_value_define_symbol_property_desc(tsc_value_t v, tsc_symbol_t* key, tsc_value_t value, bool has_value, bool writable, bool has_writable, bool enumerable, bool has_enumerable, bool configurable, bool has_configurable);

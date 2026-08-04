@@ -167,6 +167,7 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_method_*(recv, ...)` | `tsc_value_t` | Runtime dispatch for common dynamic string/array methods such as `includes`, `indexOf`, `lastIndexOf`, `localeCompare`, `match`, `matchAll`, `normalize`, `padStart`, `padEnd`, `repeat`, `replace`, `replaceAll`, `slice`, `split`, `split(RegExp)`, `substr`, `substring`, `trimStart`, `trimEnd`, `join`, `push`, `pop`, `shift`, `unshift`, `at`, `concat`, `copyWithin`, `fill`, `flat`, `keys`, `values`, `sort`, `splice`, `toReversed`, `toSorted`, `toSpliced`, `with`, and casing/trim helpers |
 | `tsc_value_json_stringify(v)` | `tsc_str_t*` | Recursive dynamic JSON stringify; object properties whose values are `undefined` or boxed function identities are omitted, while array slots stringify as `null` |
 | `tsc_value_apply_function(fn, this_arg, args)` | `tsc_value_t` | Dynamic `Reflect.apply` dispatch for boxed accessor function identities returned from descriptor `get`/`set` fields |
+| `tsc_value_dispose_sync(value)` | `void` | Calls a dynamic value's `[Symbol.dispose]()` method, skipping nullish values and throwing when the value is not synchronously disposable |
 | `tsc_promise_resolve/reject(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled/rejected Promise record used by the settled Promise subset |
 | `tsc_promise_resolve_fs_stats(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<FSStats>` side-channel record |
 | `tsc_promise_resolve_buffer(result)` | `tsc_promise_t*` | Allocates an immediately fulfilled typed `Promise<Buffer>` side-channel record |
@@ -239,6 +240,8 @@ Heap-allocated unique symbol identities with an optional description and a small
 | `tsc_symbol_key_for(sym)` | `tsc_str_t*` | `Symbol.keyFor(sym)`, `NULL` for non-global symbols |
 | `tsc_symbol_iterator()` | `tsc_symbol_t*` | Singleton `Symbol.iterator` |
 | `tsc_symbol_async_iterator()` | `tsc_symbol_t*` | Singleton `Symbol.asyncIterator` |
+| `tsc_symbol_dispose()` | `tsc_symbol_t*` | Singleton `Symbol.dispose` |
+| `tsc_symbol_async_dispose()` | `tsc_symbol_t*` | Singleton `Symbol.asyncDispose` |
 | `tsc_symbol_description(sym)` | `tsc_str_t*` | `.description`, `NULL` when absent |
 | `tsc_symbol_to_string(sym)` | `tsc_str_t*` | `.toString()` / console stringification |
 

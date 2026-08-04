@@ -1007,6 +1007,19 @@ tsc_value_t tsc_value_get_symbol_prop(tsc_value_t v, tsc_symbol_t* key) {
     return tsc_value_undefined();
 }
 
+void tsc_value_dispose_sync(tsc_value_t value) {
+    if (tsc_value_is_nullish(value)) return;
+    tsc_value_t method = tsc_value_get_symbol_prop(value, tsc_symbol_dispose());
+    if (tsc_value_is_undefined(method) || tsc_value_is_nullish(method)) {
+        tsc_throw_str(tsc_str_from_cstr("Object is not disposable"));
+    }
+    if (!tsc_value_is_callable(method)) {
+        tsc_throw_str(tsc_str_from_cstr("Symbol.dispose is not callable"));
+    }
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 0);
+    (void)tsc_value_apply_function(method, value, tsc_value_array(args));
+}
+
 static bool descriptor_field(tsc_value_t desc, const char* name, size_t len, tsc_value_t* out) {
     const tsc_str_t* key = tsc_str_from_lit(name, len);
     if (!tsc_value_has_prop(desc, key)) return false;

@@ -58247,10 +58247,67 @@ class Emitter {
         buf: CBuf,
         statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
     ): void {
+        const disposables = this.syncUsingNames(statements);
         for (const stmt of statements) {
             this.emitStmt(buf, stmt);
             if (this.statementAlwaysExits(stmt)) break;
         }
+        for (let i = disposables.length - 1; i >= 0; i--) {
+            buf.line(`tsc_value_dispose_sync(${disposables[i]!});`);
+        }
+    }
+
+    private syncUsingNames(
+        statements: ts.NodeArray<ts.Statement> | readonly ts.Statement[],
+    ): string[] {
+        const names: string[] = [];
+        for (const stmt of statements) {
+            if (!ts.isVariableStatement(stmt)) continue;
+            const flags = stmt.declarationList.flags;
+            if ((flags & ts.NodeFlags.AwaitUsing) === ts.NodeFlags.AwaitUsing) {
+                unsupported(stmt, "await using declarations are not supported yet");
+            }
+            if ((flags & ts.NodeFlags.Using) === 0) continue;
+            for (const declaration of stmt.declarationList.declarations) {
+                if (!ts.isIdentifier(declaration.name)) {
+                    unsupported(declaration, "using declarations require identifier bindings");
+                }
+                const type = this.variableStorageType(this.prepareType(mapType(declaration, this.checker)));
+                if (type.kind !== "value") {
+                    unsupported(declaration, "using declarations currently require dynamic disposable values");
+                }
+                if (!this.shouldEmitLocalVariable(declaration)) {
+                    unsupported(declaration, "using declarations are only supported in local block scopes");
+                }
+                names.push(mangleIdent(declaration.name.text));
+            }
+        }
+        if (names.length > 0 && statements.some((statement) => this.usingScopeHasEarlyExit(statement))) {
+            const usingStatement = statements.find(
+                (statement): statement is ts.VariableStatement =>
+                    ts.isVariableStatement(statement) &&
+                    (statement.declarationList.flags & ts.NodeFlags.Using) !== 0,
+            );
+            unsupported(usingStatement ?? statements[0]!, "using scopes with early exit are not supported yet");
+        }
+        return names;
+    }
+
+    private usingScopeHasEarlyExit(node: ts.Node): boolean {
+        if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
+        if (
+            ts.isReturnStatement(node) ||
+            ts.isThrowStatement(node) ||
+            node.kind === ts.SyntaxKind.BreakStatement ||
+            node.kind === ts.SyntaxKind.ContinueStatement
+        ) {
+            return true;
+        }
+        let found = false;
+        node.forEachChild((child) => {
+            if (!found && this.usingScopeHasEarlyExit(child)) found = true;
+        });
+        return found;
     }
 
     private statementAlwaysExits(stmt: ts.Statement): boolean {
