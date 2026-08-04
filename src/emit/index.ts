@@ -64121,7 +64121,8 @@ class Emitter {
                     if (ts.isBlock(fnBody)) {
                         const handledAsyncAwait =
                             isAsync &&
-                            (this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
+                            (this.emitAsyncUsingSimpleBody(body, fnBody) ||
+                                this.emitDirectAsyncAwaitReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitAssignmentReturnAlias(body, fnBody) ||
                                 this.emitDirectAsyncAwaitThrowAlias(body, fnBody) ||
                                 this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
@@ -74941,7 +74942,8 @@ class Emitter {
             if (ts.isBlock(info.fn.body)) {
                 const handledAsyncAwait =
                     isAsync &&
-                    (this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
+                    (this.emitAsyncUsingSimpleBody(this.defs, info.fn.body) ||
+                        this.emitDirectAsyncAwaitReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitAssignmentReturnAlias(this.defs, info.fn.body) ||
                         this.emitDirectAsyncAwaitThrowAlias(this.defs, info.fn.body) ||
                         this.emitAsyncAwaitNestedIfAfterAwaitReturnContinuation(
