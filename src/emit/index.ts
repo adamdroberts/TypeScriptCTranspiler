@@ -41008,11 +41008,35 @@ class Emitter {
             };
             const terminalIfContinueAwaitConditionSupported = terminalIfAwaitConditionSupported(terminalIfContinue);
             const terminalIfBreakAwaitConditionSupported = terminalIfAwaitConditionSupported(terminalIfBreak);
+            const bodyDirectAwaitStatementSupported = (statement: ts.Statement): boolean => {
+                if (ts.isExpressionStatement(statement)) {
+                    const expression = this.unwrapTransparentExpression(statement.expression);
+                    return ts.isAwaitExpression(expression);
+                }
+                if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
+                    const declaration = statement.declarationList.declarations[0]!;
+                    return !!declaration.initializer &&
+                        ts.isAwaitExpression(this.unwrapTransparentExpression(declaration.initializer));
+                }
+                return false;
+            };
+            const statementContainsAwait = (statement: ts.Statement): boolean => {
+                let found = false;
+                const visit = (node: ts.Node): void => {
+                    if (found || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                    if (ts.isAwaitExpression(node)) {
+                        found = true;
+                        return;
+                    }
+                    ts.forEachChild(node, visit);
+                };
+                visit(statement);
+                return found;
+            };
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
                 if (
-                    ts.isAwaitExpression(node) ||
                     ts.isFunctionLike(node) ||
                     ts.isClassLike(node) ||
                     ts.isReturnStatement(node) ||
@@ -41028,6 +41052,11 @@ class Emitter {
             for (const statement of loopBodyWithoutTerminalControl) {
                 if ((terminalIfContinueAwaitConditionSupported && terminalIfContinue?.statement === statement) ||
                     (terminalIfBreakAwaitConditionSupported && terminalIfBreak?.statement === statement)) continue;
+                if (bodyDirectAwaitStatementSupported(statement)) continue;
+                if (statementContainsAwait(statement)) {
+                    bodyWithoutControlFlow = false;
+                    break;
+                }
                 visitBody(statement);
             }
             if (

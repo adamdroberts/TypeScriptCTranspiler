@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified awaited-body/incrementor composition: bounded async `for` loops now sequence multiple direct awaited body expressions before an awaited counted-`for` incrementor on `continue`, while terminal `break` skips the incrementor and routes to the awaited post-loop return. Tests: `async_await_for_incrementor_body_await_continue`, `async_await_for_incrementor_body_await_break`.
+
 - Verified multi-condition comma-incrementor coverage: a bounded async `for` loop now preserves multiple direct awaited condition operands before a top-level comma-sequenced incrementor with multiple awaits and supported synchronous interstitial operands, retaining short-circuit skips and suspension order. Test: `async_await_for_incrementor_multi_condition_sequence`.
 
 - Verified mixed-condition incrementor coverage: a bounded async `for` loop now preserves a right-associated `await a || await b && await c` condition before its awaited incrementor, including the expected short-circuit skips and loop re-entry ordering. Test: `async_await_for_incrementor_mixed_condition`.
