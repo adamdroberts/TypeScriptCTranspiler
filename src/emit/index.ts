@@ -309,6 +309,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitCatchPresent?: boolean;
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
+    bodyAwaitCatchStartIndex?: number;
     bodyAwaitCatchBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyAwaitCatchSymbol?: ts.Symbol;
     bodyAwaitCatchAdapter?: string;
@@ -38901,6 +38902,7 @@ class Emitter {
         let bodyAwaitCatchPresent = false;
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
+        let bodyAwaitCatchStartIndex = 0;
         let bodyAwaitCatchBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
         let bodyPreludeCaptureParams: AsyncAwaitContinuationParam[] = [];
@@ -38922,6 +38924,29 @@ class Emitter {
             ? loopBody[loopBody.length - 2] as ts.TryStatement
             : null;
         const terminalTryPreludeStatements = terminalTryStatement ? loopBody.slice(0, -2) : [];
+        const terminalTryAwaitSequence = terminalTryStatement ? (() => {
+            const expressions: ts.AwaitExpression[] = [];
+            const between: ts.Statement[][] = [];
+            let pending: ts.Statement[] = [];
+            for (const [statementIndex, statement] of terminalTryStatement.tryBlock.statements.entries()) {
+                const expression = ts.isExpressionStatement(statement)
+                    ? this.unwrapTransparentExpression(statement.expression)
+                    : null;
+                if (expression && ts.isAwaitExpression(expression)) {
+                    if (expressions.length === 0 && statementIndex !== 0) return null;
+                    if (expressions.length > 0) between.push(pending);
+                    expressions.push(expression);
+                    pending = [];
+                    continue;
+                }
+                if (expressions.length === 0 || statementContainsAwait(statement) ||
+                    !this.asyncAwaitLoopPostStatementSupported(statement)) return null;
+                pending.push(statement);
+            }
+            if (expressions.length === 0) return null;
+            between.push(pending);
+            return { expressions, between };
+        })() : null;
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -39160,11 +39185,8 @@ class Emitter {
                 : undefined;
         } else if (terminalTryStatement && terminalTryPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
             !!terminalTryStatement.catchClause && !!terminalTryStatement.finallyBlock &&
-            terminalTryStatement.tryBlock.statements.length >= 1 &&
-            ts.isExpressionStatement(terminalTryStatement.tryBlock.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.tryBlock.statements[0]!.expression)) &&
+            terminalTryAwaitSequence !== null &&
             ts.isAwaitExpression(directBodyAwait) &&
-            terminalTryStatement.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
             (!terminalTryStatement.catchClause.variableDeclaration || ts.isIdentifier(terminalTryStatement.catchClause.variableDeclaration.name)) &&
             terminalTryStatement.catchClause.block.statements.length >= 1 &&
             ts.isExpressionStatement(terminalTryStatement.catchClause.block.statements[0]!) &&
@@ -39176,17 +39198,18 @@ class Emitter {
             ts.isAwaitExpression(this.unwrapTransparentExpression(terminalTryStatement.finallyBlock.statements[0]!.expression)) &&
             terminalTryStatement.finallyBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
             !terminalTryStatement.finallyBlock.statements.slice(1).some(statementContainsAwait)) {
-            const tryAwait = this.unwrapTransparentExpression(terminalTryStatement.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
+            const tryAwait = terminalTryAwaitSequence.expressions[0]!;
             const catchAwait = this.unwrapTransparentExpression(terminalTryStatement.catchClause.block.statements[0]!.expression) as ts.AwaitExpression;
             const finallyAwait = this.unwrapTransparentExpression(terminalTryStatement.finallyBlock.statements[0]!.expression) as ts.AwaitExpression;
             bodyAwaitExpr = tryAwait;
-            bodyAwaitExprs = [tryAwait, finallyAwait, directBodyAwait];
+            bodyAwaitExprs = [...terminalTryAwaitSequence.expressions, finallyAwait, directBodyAwait];
             bodyReturnExpr = bodyExpression;
             bodyBetweenAwaitStatements = [
-                terminalTryStatement.tryBlock.statements.slice(1),
+                ...terminalTryAwaitSequence.between,
                 terminalTryStatement.finallyBlock.statements.slice(1),
             ];
             bodyAwaitCatchAwaitExpr = catchAwait;
+            bodyAwaitCatchStartIndex = terminalTryAwaitSequence.expressions.length;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwait;
             bodyPreludeStatements = terminalTryPreludeStatements;
             bodyAwaitTerminal = true;
@@ -39616,6 +39639,7 @@ class Emitter {
             bodyAwaitCatchAwaitExpr,
             bodyAwaitCatchBetweenAwaitStatements,
             bodyAwaitCatchSymbol,
+            bodyAwaitCatchStartIndex,
             bodyPreludeCaptureParams,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
@@ -40156,7 +40180,8 @@ class Emitter {
             buf.line("tsc_promise_t* _p = state->receiver;");
             buf.line("tsc_promise_t* _ret = state->result_promise;");
             buf.open("if (tsc_promise_is_rejected(_p))");
-            if (index === 0 && continuation.bodyAwaitCatchAwaitExpr && continuation.bodyAwaitCatchAdapter) {
+            if (continuation.bodyAwaitCatchAwaitExpr && continuation.bodyAwaitCatchAdapter &&
+                index < (continuation.bodyAwaitCatchStartIndex ?? 1)) {
                 const catchSourceVar = this.freshTemp("_await_catch_source");
                 const catchEnvVar = this.freshTemp("_await_catch_env");
                 const catchEnvType = `${continuation.bodyAwaitCatchAdapter}_env_t`;
