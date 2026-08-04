@@ -1,0 +1,11 @@
+catch:terminal
+finally
+for-throw-success:fallback
+catch:terminal
+finally
+for-throw-terminal-reject:fallback
+catch:terminal
+for-throw-cleanup-reject-error:cleanup-1
+catch:try
+finally
+for-throw-stage-reject:fallback
