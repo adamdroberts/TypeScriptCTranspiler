@@ -25909,16 +25909,54 @@ class Emitter {
         const terminal = tail.length > 0 ? tail[tail.length - 1]! : null;
         const terminalIsReturn = !!terminal && ts.isReturnStatement(terminal);
         const terminalIsThrow = !!terminal && ts.isThrowStatement(terminal);
-        const bodyStatements = terminalIsReturn || terminalIsThrow
-            ? tail.slice(0, -1)
-            : tail;
+        const singleCompletion = (statement: ts.Statement): ts.ReturnStatement | ts.ThrowStatement | null => {
+            const unwrapped = ts.isBlock(statement) && statement.statements.length === 1
+                ? statement.statements[0]!
+                : statement;
+            return ts.isReturnStatement(unwrapped) || ts.isThrowStatement(unwrapped)
+                ? unwrapped
+                : null;
+        };
+        let conditional: ts.IfStatement | null = null;
+        let conditionalThen: ts.ReturnStatement | ts.ThrowStatement | null = null;
+        let conditionalElse: ts.ReturnStatement | ts.ThrowStatement | null = null;
+        let conditionalFallback: ts.ReturnStatement | ts.ThrowStatement | null = null;
+        let bodyStatements: ts.Statement[];
+        if (terminal && ts.isIfStatement(terminal)) {
+            const thenCompletion = singleCompletion(terminal.thenStatement);
+            const elseCompletion = terminal.elseStatement
+                ? singleCompletion(terminal.elseStatement)
+                : null;
+            if (!thenCompletion || (terminal.elseStatement && !elseCompletion)) return false;
+            conditional = terminal;
+            conditionalThen = thenCompletion;
+            conditionalElse = elseCompletion;
+            bodyStatements = tail.slice(0, -1);
+        } else if (
+            terminalIsReturn || terminalIsThrow
+        ) {
+            const candidate = tail.length > 1 ? tail[tail.length - 2]! : null;
+            const thenCompletion = candidate && ts.isIfStatement(candidate) && !candidate.elseStatement
+                ? singleCompletion(candidate.thenStatement)
+                : null;
+            if (candidate && ts.isIfStatement(candidate) && thenCompletion) {
+                conditional = candidate;
+                conditionalThen = thenCompletion;
+                conditionalFallback = terminal as ts.ReturnStatement | ts.ThrowStatement;
+                bodyStatements = tail.slice(0, -2);
+            } else {
+                bodyStatements = tail.slice(0, -1);
+            }
+        } else {
+            bodyStatements = tail;
+        }
         const simpleBodyStatement = (statement: ts.Statement): boolean =>
             ts.isExpressionStatement(statement) ||
             ts.isVariableStatement(statement) ||
             ts.isEmptyStatement(statement);
         if (!bodyStatements.every(simpleBodyStatement)) return false;
         if (bodyStatements.some((statement) => this.statementAlwaysExits(statement))) return false;
-        if (terminal && !terminalIsReturn && !terminalIsThrow && !simpleBodyStatement(terminal)) return false;
+        if (!conditional && terminal && !terminalIsReturn && !terminalIsThrow && !simpleBodyStatement(terminal)) return false;
 
         const resourceNames: string[] = [];
         for (const declaration of declarations) {
@@ -25931,7 +25969,35 @@ class Emitter {
         for (const statement of bodyStatements) this.emitStmt(buf, statement);
 
         const resultPromise = this.freshTemp("_await_using_result");
-        if (terminalIsReturn) {
+        const emitCompletion = (completion: ts.ReturnStatement | ts.ThrowStatement): void => {
+            if (ts.isReturnStatement(completion)) {
+                if (!completion.expression) {
+                    buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+                } else {
+                    const returned = this.emitExpr(completion.expression);
+                    buf.line(`${resultPromise} = ${this.promiseResolveResult(returned, completion.expression)};`);
+                }
+            } else {
+                const thrown = this.emitExpr(completion.expression);
+                buf.line(`${resultPromise} = tsc_promise_reject(tsc_value_string(${this.coerceToString(thrown, completion.expression)}));`);
+            }
+        };
+        if (conditional) {
+            buf.line(`tsc_promise_t* ${resultPromise};`);
+            const condition = this.emitExpr(conditional.expression);
+            buf.open(`if (${this.coerce(condition, T_BOOLEAN, conditional.expression)})`);
+            emitCompletion(conditionalThen!);
+            buf.close();
+            buf.open("else");
+            if (conditionalElse) {
+                emitCompletion(conditionalElse);
+            } else if (conditionalFallback) {
+                emitCompletion(conditionalFallback);
+            } else {
+                buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
+            }
+            buf.close();
+        } else if (terminalIsReturn) {
             const returnStatement = terminal as ts.ReturnStatement;
             if (!returnStatement.expression) {
                 buf.line(`tsc_promise_t* const ${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
