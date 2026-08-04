@@ -1,5 +1,7 @@
 # Implemented features
 
+- Ordinary awaited loop bodies now suspend through a no-catch `try` with synchronous `finally` cleanup before terminal `return await` or `throw await`, preserving cleanup ordering and propagating rejection when the body await rejects. Tests: `async_await_loop_body_await_try_finally_return`, `async_await_loop_body_await_try_finally_throw`, `async_await_loop_body_await_try_finally_body_reject`
+
 - Ordinary awaited loop bodies now carry initialized `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `throw await`, preserving captured values and rejection delivery. Test: `async_await_loop_body_await_local_multi_throw`
 
 - Ordinary awaited loop bodies now carry initialized `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `return await`, preserving captured values. Test: `async_await_loop_body_await_local_multi_return`
