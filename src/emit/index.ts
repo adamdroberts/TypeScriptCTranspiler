@@ -53534,31 +53534,11 @@ class Emitter {
             }
             if (ts.isPostfixUnaryExpression(unwrapped)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                const operand = unwrapped.operand;
-                if (ts.isPropertyAccessExpression(operand)) {
-                    return !!this.directLazyYieldCondition(operand.expression) &&
-                        visit(operand.expression);
-                }
-                if (ts.isElementAccessExpression(operand)) {
-                    return !!this.directLazyYieldCondition(operand.expression) &&
-                        !this.nodeContainsYield(operand.argumentExpression) &&
-                        visit(operand.expression);
-                }
-                return false;
+                return this.simpleLazyMultiYieldMutationOperand(unwrapped.operand, visit);
             }
             if (ts.isDeleteExpression(unwrapped)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                const operand = unwrapped.expression;
-                if (ts.isPropertyAccessExpression(operand)) {
-                    return !!this.directLazyYieldCondition(operand.expression) &&
-                        visit(operand.expression);
-                }
-                if (ts.isElementAccessExpression(operand)) {
-                    return !!this.directLazyYieldCondition(operand.expression) &&
-                        !this.nodeContainsYield(operand.argumentExpression) &&
-                        visit(operand.expression);
-                }
-                return false;
+                return this.simpleLazyMultiYieldMutationOperand(unwrapped.expression, visit);
             }
             if (ts.isConditionalExpression(unwrapped)) {
                 const yieldedCondition = this.directLazyYieldCondition(unwrapped.condition);
@@ -53599,17 +53579,7 @@ class Emitter {
             if (ts.isPrefixUnaryExpression(unwrapped) &&
                 (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                const operand = unwrapped.operand;
-                if (ts.isPropertyAccessExpression(operand)) {
-                    return !!this.directLazyYieldCondition(operand.expression) &&
-                        visit(operand.expression);
-                }
-                if (ts.isElementAccessExpression(operand)) {
-                    return !!this.directLazyYieldCondition(operand.expression) &&
-                        !this.nodeContainsYield(operand.argumentExpression) &&
-                        visit(operand.expression);
-                }
-                return false;
+                return this.simpleLazyMultiYieldMutationOperand(unwrapped.operand, visit);
             }
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
@@ -53738,6 +53708,22 @@ class Emitter {
             }
             return !this.nodeContainsYield(argument);
         });
+    }
+
+    private simpleLazyMultiYieldMutationOperand(
+        operand: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+    ): boolean {
+        if (ts.isPropertyAccessExpression(operand)) {
+            return !!this.directLazyYieldCondition(operand.expression) &&
+                visit(operand.expression);
+        }
+        if (!ts.isElementAccessExpression(operand) ||
+            !this.directLazyYieldCondition(operand.expression) ||
+            !visit(operand.expression)) return false;
+        const key = this.unwrapTransparentExpression(operand.argumentExpression);
+        if (ts.isYieldExpression(key)) return visit(operand.argumentExpression);
+        return !this.nodeContainsYield(operand.argumentExpression);
     }
 
     private simpleLazyMultiYieldTemplateSpans(

@@ -4,3 +4,9 @@ postfix-before 11 false 11
 postfix-done 12 true 11
 delete-before true false true
 delete-done true true true
+keyed-prefix-before 12 false 12
+keyed-prefix-middle 12 false value
+keyed-prefix-done 13 true 13
+keyed-delete-before true false true
+keyed-delete-middle true false present
+keyed-delete-done true true true

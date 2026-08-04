@@ -47,7 +47,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generator returns now stage a direct `yield` on the left of `&&`, `||`, or `??` before a yield-free right operand, preserving final-resume short-circuit and nullish timing; yielded right operands and broader logical graphs remain deferred. Test: `generator_lazy_multi_yield_logical_return`.
 
-- Lazy generator returns now stage direct yielded receivers before prefix/postfix property updates and `delete`, preserving final-resume mutation timing; yielded keys/operands and broader mutation graphs remain deferred. Test: `generator_lazy_multi_yield_mutation_return`.
+- Lazy generator returns now stage direct yielded receivers and direct yielded computed keys before prefix/postfix property updates and `delete`, preserving receiver-then-key and final-resume mutation timing; yielded operands outside this receiver/key subset and broader mutation graphs remain deferred. Test: `generator_lazy_multi_yield_mutation_return`.
 
 - Lazy generator returns now stage a direct `yield` on the right-hand side before assigning to a yield-free identifier or dynamic-property lvalue, including compound assignment; yielded lvalues and broader assignment graphs remain deferred. Test: `generator_lazy_multi_yield_assignment_return`.
 
