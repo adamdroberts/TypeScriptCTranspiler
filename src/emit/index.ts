@@ -53525,7 +53525,12 @@ class Emitter {
             if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
                 if (!this.isSimpleLazyMultiYieldCallLike(unwrapped)) return false;
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                return (unwrapped.arguments ?? []).every((argument) => visit(argument as ts.Expression));
+                return (unwrapped.arguments ?? []).every((argument) => {
+                    const expression = this.unwrapTransparentExpression(argument as ts.Expression);
+                    return ts.isYieldExpression(expression)
+                        ? visit(argument as ts.Expression)
+                        : !this.nodeContainsYield(argument);
+                });
             }
             if (ts.isPostfixUnaryExpression(unwrapped)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
@@ -53727,9 +53732,11 @@ class Emitter {
         return args.every((argument) => {
             if (ts.isSpreadElement(argument)) return false;
             const unwrapped = this.unwrapTransparentExpression(argument);
-            return ts.isYieldExpression(unwrapped) &&
-                !unwrapped.asteriskToken &&
-                (!unwrapped.expression || !this.nodeContainsYield(unwrapped.expression));
+            if (ts.isYieldExpression(unwrapped)) {
+                return !unwrapped.asteriskToken &&
+                    (!unwrapped.expression || !this.nodeContainsYield(unwrapped.expression));
+            }
+            return !this.nodeContainsYield(argument);
         });
     }
 

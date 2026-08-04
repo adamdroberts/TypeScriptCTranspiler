@@ -39,7 +39,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generator returns now construct simple dynamic and named typed object literals from finite ordered suspended yield operands after the final `.next(value)`; spreads, methods, and computed keys remain deferred. Tests: `generator_lazy_multi_yield_object_return`, `generator_lazy_multi_yield_typed_object_return`.
 
-- Lazy generator returns now stage finite ordered direct `yield` arguments for calls and constructors, deferring the side-effecting call or `new` expression until the final resume; spread arguments, yielded callee expressions, and nested yielded operands remain deferred. Test: `generator_lazy_multi_yield_call_return`.
+- Lazy generator returns now stage finite ordered direct `yield` arguments alongside yield-free arguments for calls and constructors, deferring the side-effecting call or `new` expression until the final resume; spread arguments, yielded callee expressions, and nested yielded operands remain deferred. Test: `generator_lazy_multi_yield_call_return`.
 
 - Lazy generator returns now stage finite ordered direct `yield` substitutions in standard and identifier-tagged templates before final formatting; nested yielded substitutions and yielded tags remain deferred. Test: `generator_lazy_multi_yield_template_return`.
 

@@ -1,3 +1,3 @@
 {
-  "description": "lazy generator multi-yield returns stage direct call and constructor arguments before final side effects"
+  "description": "lazy generator multi-yield returns stage direct yielded and yield-free call arguments before final side effects"
 }

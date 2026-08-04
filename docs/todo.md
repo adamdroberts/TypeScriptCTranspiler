@@ -28,7 +28,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - Verified bounded lazy-generator multi-yield object-return coverage: simple dynamic and named typed object literals can construct static property assignments from finite ordered suspended yield operands after the last `.next(value)`; spreads, methods, computed keys, and broader expression graphs remain deferred. Tests: `generator_lazy_multi_yield_object_return`, `generator_lazy_multi_yield_typed_object_return`.
 
-- Verified bounded lazy-generator multi-yield call/new coverage: finite ordered direct `yield` arguments can be staged before a call or constructor runs on the final resume; spread arguments, yielded callees, nested yielded operands, and broader expression graphs remain deferred. Test: `generator_lazy_multi_yield_call_return`.
+- Verified bounded lazy-generator multi-yield call/new coverage: finite ordered direct `yield` arguments can be staged alongside yield-free arguments before a call or constructor runs on the final resume; spread arguments, yielded callees, nested yielded operands, and broader expression graphs remain deferred. Test: `generator_lazy_multi_yield_call_return`.
 
 - Verified bounded lazy-generator multi-yield template coverage: standard and identifier-tagged templates can stage finite ordered direct `yield` substitutions before final formatting; nested yielded substitutions and yielded tags remain deferred. Test: `generator_lazy_multi_yield_template_return`.
 
