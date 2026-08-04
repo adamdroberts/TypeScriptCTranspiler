@@ -1,0 +1,5 @@
+success-error:finally
+source-reject-error:finally
+finally-reject-error:finally
+cleanup-reject-error:cleanup
+source-and-finally-reject-error:finally
