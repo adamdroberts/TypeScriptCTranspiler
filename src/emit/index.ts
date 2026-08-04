@@ -308,6 +308,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitFinallyEndIndex?: number;
     bodyAwaitFinallyAfterBetween?: boolean;
     bodyAwaitTerminal?: boolean;
+    bodyAwaitTerminalIndex?: number;
     bodyAwaitCatchPresent?: boolean;
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
@@ -38619,9 +38620,20 @@ class Emitter {
         const alternateBranchStatements = symmetricBreakContinue ? conditionalThenStatements : rawElseStatements;
         const continueBranchStatement = continueBranchStatements[continueBranchStatements.length - 1];
         const alternateBranchStatement = alternateBranchStatements[alternateBranchStatements.length - 1];
-        const bodyAction = conditionalContinueIsContinue || symmetricBreakContinue
+        let bodyAction = conditionalContinueIsContinue || symmetricBreakContinue
             ? continueBranchStatement!
             : finalBodyStatement;
+        const terminalBodyTryStatement = !conditionalContinueIsContinue && !symmetricBreakContinue &&
+            finalBodyStatement && ts.isTryStatement(finalBodyStatement)
+            ? finalBodyStatement
+            : null;
+        const terminalBodyTryTerminalStatement = terminalBodyTryStatement
+            ? terminalBodyTryStatement.tryBlock.statements[terminalBodyTryStatement.tryBlock.statements.length - 1]
+            : null;
+        if (terminalBodyTryTerminalStatement &&
+            (ts.isReturnStatement(terminalBodyTryTerminalStatement) || ts.isThrowStatement(terminalBodyTryTerminalStatement))) {
+            bodyAction = terminalBodyTryTerminalStatement;
+        }
         const bodyContinueCondition = (conditionalContinueIsContinue || symmetricBreakContinue) && conditionalContinue
             ? conditionalContinue.expression
             : null;
@@ -38825,9 +38837,12 @@ class Emitter {
         if (bodyContinueCondition && elseContinueIsBreak && bodyContinueElseBreakAwaitExprs.length > 0 &&
             (!bodyContinueElseBreakPostAwaitStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)))) return false;
         if (!ts.isReturnStatement(bodyAction) && !ts.isThrowStatement(bodyAction) && !bodyContinue) return false;
+        const terminalBodyAction = ts.isReturnStatement(bodyAction) || ts.isThrowStatement(bodyAction)
+            ? bodyAction
+            : null;
         const bodyExpression = bodyContinue
             ? ts.factory.createVoidZero()
-            : bodyAction.expression ?? (ts.isReturnStatement(bodyAction) ? ts.factory.createVoidZero() : null);
+            : terminalBodyAction?.expression ?? (terminalBodyAction && ts.isReturnStatement(terminalBodyAction) ? ts.factory.createVoidZero() : null);
         if (!bodyExpression) return false;
         const bodyLeadingContinuation = !bodyContinue && loopBody.length > 1
             ? this.asyncAwaitLeadingReturnContinuation(
@@ -38907,6 +38922,7 @@ class Emitter {
         let bodyAwaitFinallyEndIndex: number | undefined;
         let bodyAwaitFinallyAfterBetween = false;
         let bodyAwaitTerminal = false;
+        let bodyAwaitTerminalIndex: number | undefined;
         let bodyAwaitCatchPresent = false;
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
@@ -39222,6 +39238,40 @@ class Emitter {
             bodyReturnExpr = bodyExpression;
             bodyPreludeStatements = bodyLeadingChain.preludeStatements;
             bodyRejectResult = !!bodyLeadingChain.terminalThrowStatement;
+        } else if (terminalBodyTryStatement && terminalBodyTryTerminalStatement &&
+            (ts.isReturnStatement(terminalBodyTryTerminalStatement) || ts.isThrowStatement(terminalBodyTryTerminalStatement)) &&
+            !terminalBodyTryStatement.catchClause && !!terminalBodyTryStatement.finallyBlock &&
+            ts.isAwaitExpression(directBodyAwait) &&
+            (() => {
+                const tryPrefix = terminalBodyTryStatement.tryBlock.statements.slice(0, -1);
+                return tryPrefix.length === 0 || parseTerminalAwaitSequence(tryPrefix, true) !== null;
+            })() &&
+            (() => parseTerminalAwaitSequence(terminalBodyTryStatement.finallyBlock!.statements) !== null)()) {
+            const tryPrefix = terminalBodyTryStatement.tryBlock.statements.slice(0, -1);
+            const tryAwaitSequence = tryPrefix.length === 0
+                ? { expressions: [], between: [], aliases: [] }
+                : parseTerminalAwaitSequence(tryPrefix, true)!;
+            const finallyAwaitSequence = parseTerminalAwaitSequence(terminalBodyTryStatement.finallyBlock!.statements)!;
+            const terminalIndex = tryAwaitSequence.expressions.length;
+            bodyAwaitExpr = tryAwaitSequence.expressions[0] ?? directBodyAwait;
+            bodyAwaitExprs = [
+                ...tryAwaitSequence.expressions,
+                directBodyAwait,
+                ...finallyAwaitSequence.expressions,
+            ];
+            bodyReturnExpr = bodyExpression;
+            bodyBetweenAwaitStatements = [
+                ...tryAwaitSequence.between,
+                ...finallyAwaitSequence.between,
+            ];
+            bodyAwaitedAliasSymbols = tryAwaitSequence.aliases.map(({ symbol }) => symbol);
+            bodyAwaitedAliasIndices = tryAwaitSequence.aliases.map(({ index }) => index);
+            bodyAwaitFinallyStartIndex = terminalIndex + 1;
+            bodyAwaitFinallyEndIndex = bodyAwaitFinallyStartIndex + finallyAwaitSequence.expressions.length;
+            bodyAwaitTerminalIndex = terminalIndex;
+            continuationBodyAwaitFinallyAwaitExpr = finallyAwaitSequence.expressions[0]!;
+            bodyPreludeStatements = loopBody.slice(0, -1);
+            bodyAwaitTerminal = true;
         } else if (terminalTryStatement && terminalTryPreludeStatements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
             !!terminalTryStatement.finallyBlock &&
             terminalTryStatement.tryBlock.statements.length >= 1 &&
@@ -39704,6 +39754,7 @@ class Emitter {
             bodyAwaitFinallyAwaitExpr: continuationBodyAwaitFinallyAwaitExpr,
             bodyAwaitFinallyAfterBetween,
             bodyAwaitTerminal,
+            bodyAwaitTerminalIndex,
             bodyAwaitCatchPresent,
             bodyAwaitCatchStatements,
             bodyAwaitCatchAwaitExpr,
@@ -40201,6 +40252,9 @@ class Emitter {
         const names = bodyAwaitExprs.map(() =>
             `tsc_async_await_loop_body_continue_${this.asyncAwaitReturnContinuationAdapters++}`,
         );
+        const terminalIndex = continuation.bodyAwaitTerminalIndex ??
+            (continuation.bodyAwaitTerminal ? names.length - 1 : -1);
+        const carriesTerminalPromise = terminalIndex >= 0 && terminalIndex + 1 < names.length;
         const promiseTypes = bodyAwaitExprs.map((awaitExpr) => this.prepareType(mapTsType(
             awaitExpr.expression,
             this.checker.getTypeAtLocation(awaitExpr.expression),
@@ -40225,6 +40279,7 @@ class Emitter {
             this.structDecls.open(`typedef struct ${envType}`);
             this.structDecls.line("tsc_promise_t* receiver;");
             this.structDecls.line("tsc_promise_t* result_promise;");
+            if (carriesTerminalPromise) this.structDecls.line("tsc_promise_t* terminal_promise;");
             if (continuation.bodyAwaitFinallyAwaitExpr) {
                 this.structDecls.line("bool reject_after_success;");
                 this.structDecls.line("tsc_value_t rejection_reason;");
@@ -40375,6 +40430,7 @@ class Emitter {
                 buf.line(`${rejectedFinallyEnvType}* const ${rejectedFinallyEnvVar} = (${rejectedFinallyEnvType}*)TSC_GC_MALLOC(sizeof(${rejectedFinallyEnvType}));`);
                 buf.line(`${rejectedFinallyEnvVar}->receiver = ${rejectedFinallySourceVar};`);
                 buf.line(`${rejectedFinallyEnvVar}->result_promise = _ret;`);
+                if (carriesTerminalPromise) buf.line(`${rejectedFinallyEnvVar}->terminal_promise = NULL;`);
                 buf.line(`${rejectedFinallyEnvVar}->reject_after_success = true;`);
                 buf.line(`${rejectedFinallyEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
                 for (const param of bodyPreludeCaptureParams) buf.line(`${rejectedFinallyEnvVar}->${param.field} = state->${param.field};`);
@@ -40439,6 +40495,9 @@ class Emitter {
                     buf.line(`${names[index + 1]!}_env_t* ${nextEnvVar} = (${names[index + 1]!}_env_t*)TSC_GC_MALLOC(sizeof(${names[index + 1]!}_env_t));`);
                     buf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
                     buf.line(`${nextEnvVar}->result_promise = _ret;`);
+                    if (carriesTerminalPromise) {
+                        buf.line(`${nextEnvVar}->terminal_promise = ${index === terminalIndex ? "_p" : "state->terminal_promise"};`);
+                    }
                     if (continuation.bodyAwaitFinallyAwaitExpr) {
                         if (index === 0) {
                             buf.line(`${nextEnvVar}->reject_after_success = false;`);
@@ -40470,7 +40529,19 @@ class Emitter {
                         buf.close();
                     }
                     if (continuation.bodyAwaitTerminal) {
-                        if (continuation.bodyRejectResult) {
+                        if (carriesTerminalPromise && terminalIndex !== index) {
+                            const terminalPromiseType = promiseTypes[terminalIndex]!;
+                            if (continuation.bodyRejectResult) {
+                                const terminalValue = this.promiseFulfilledValue(
+                                    terminalPromiseType.elem,
+                                    "state->terminal_promise",
+                                );
+                                const rejected = this.coerceToString(terminalValue, continuation.bodyReturnExpr);
+                                buf.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
+                            } else {
+                                buf.line(`tsc_promise_adopt_into(_ret, ${this.promiseResolveStoredValue(terminalPromiseType.elem, "state->terminal_promise")});`);
+                            }
+                        } else if (continuation.bodyRejectResult) {
                             const rejected = this.coerceToString(
                                 bodyValue
                                     ? { c: bodyValueVar, ty: awaitedTypes[index]! }
@@ -40563,6 +40634,8 @@ class Emitter {
         initialBody = false,
     ): string {
         const name = adapterName ?? `tsc_async_await_loop_condition_return_await_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const bodyCarriesTerminalPromise = continuation.bodyAwaitTerminalIndex !== undefined &&
+            continuation.bodyAwaitTerminalIndex + 1 < continuation.bodyAwaitExprs.length;
         const envType = `${name}_env_t`;
         this.structDecls.open(`typedef struct ${envType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
@@ -40690,6 +40763,7 @@ class Emitter {
                 buf.line(`${bodyEnvType}* const ${bodyEnvVar} = (${bodyEnvType}*)TSC_GC_MALLOC(sizeof(${bodyEnvType}));`);
                 buf.line(`${bodyEnvVar}->receiver = ${bodySourceVar};`);
                 buf.line(`${bodyEnvVar}->result_promise = _ret;`);
+                if (bodyCarriesTerminalPromise) buf.line(`${bodyEnvVar}->terminal_promise = NULL;`);
                 for (const param of continuation.bodyPreludeCaptureParams ?? []) buf.line(`${bodyEnvVar}->${param.field} = ${param.name};`);
                 for (const param of continuation.params) buf.line(`${bodyEnvVar}->${param.field} = state->${param.field};`);
                 if (continuation.thisValue) buf.line(`${bodyEnvVar}->this_arg = state->this_arg;`);

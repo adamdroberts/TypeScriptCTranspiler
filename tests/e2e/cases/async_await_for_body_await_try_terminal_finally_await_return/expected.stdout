@@ -1,0 +1,5 @@
+finally
+success:terminal
+cleanup-reject-error:cleanup-1
+finally
+stage-reject-error:try
