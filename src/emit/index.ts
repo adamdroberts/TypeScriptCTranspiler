@@ -53074,7 +53074,6 @@ class Emitter {
         if (returnStatement && this.nodeContainsYield(returnStatement.expression!)) return null;
         const catchPreludeStatements = catchStatements.slice(0, -1);
         const catchPreludeSymbols = new Set<ts.Symbol>();
-        let catchYieldCount = 0;
         for (const child of catchPreludeStatements) {
             if (this.nodeContainsYield(child)) {
                 const unwrappedChildExpression = ts.isExpressionStatement(child)
@@ -53084,7 +53083,7 @@ class Emitter {
                     ts.isYieldExpression(unwrappedChildExpression) &&
                     !unwrappedChildExpression.asteriskToken &&
                     !this.nodeContainsYield(unwrappedChildExpression.expression ?? unwrappedChildExpression);
-                if (!directYield || catchYieldCount++ > 0) return null;
+                if (!directYield) return null;
                 continue;
             }
             if (this.lazyGeneratorContainsAbruptControlFlow(child) || !this.isValidLazyGeneratorStatement(child)) {

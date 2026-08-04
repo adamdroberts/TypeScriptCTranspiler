@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators sequence multiple direct catch-recovery yields after .throw before terminal completion and finally cleanup"
+}
