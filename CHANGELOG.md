@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Synchronous `using` cleanup now runs after direct `return`/`throw` expressions are evaluated, preserving expression side effects before `Symbol.dispose` callbacks. Regression: `using_dispose`.
+
 - Typed `Object.entries(...)` calls on Error-family values now preserve the declared `[string, any][]` result element layout while retaining the empty non-enumerable Error-object semantics. Regression: `error_object_methods`.
 
 - Typed numeric, bigint, string, and pointer truthiness checks now evaluate their source expressions once before testing the result, preserving side-effect order for awaited conditional selectors. Regression: `async_await_branch_block_source_try_conditional_awaited_string_raw`.

@@ -58261,6 +58261,16 @@ class Emitter {
         const disposables = this.syncUsingNames(statements);
         let exited = false;
         for (const stmt of statements) {
+            if (disposables.length > 0 && ts.isReturnStatement(stmt)) {
+                this.emitReturn(buf, stmt, disposables);
+                exited = true;
+                break;
+            }
+            if (disposables.length > 0 && ts.isThrowStatement(stmt)) {
+                this.emitThrow(buf, stmt, disposables);
+                exited = true;
+                break;
+            }
             if (disposables.length > 0 && this.isDirectUsingExit(stmt)) {
                 this.emitSyncDisposals(buf, disposables);
                 exited = true;
@@ -59034,7 +59044,11 @@ class Emitter {
         return init ? this.staticNullishState(init, seenConsts) : null;
     }
 
-    private emitReturn(buf: CBuf, r: ts.ReturnStatement): void {
+    private emitReturn(
+        buf: CBuf,
+        r: ts.ReturnStatement,
+        syncDisposables: readonly string[] = [],
+    ): void {
         if (this.returnStack.length === 0) {
             unsupported(r, "return outside of function");
         }
@@ -59043,6 +59057,7 @@ class Emitter {
             this.asyncAwaitContinuationReturnTargets[this.asyncAwaitContinuationReturnTargets.length - 1];
         if (continuationReturn) {
             if (!r.expression) {
+                this.emitSyncDisposals(buf, syncDisposables);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
                 buf.line("return;");
@@ -59052,12 +59067,14 @@ class Emitter {
             const returnedType = this.prepareType(expr.ty);
             if (returnedType.kind === "void" || returnedType.kind === "never") {
                 buf.line(`${expr.c};`);
+                this.emitSyncDisposals(buf, syncDisposables);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, tsc_promise_resolve(tsc_value_undefined()));`);
             } else {
                 const returnVar = this.freshTemp("_await_return");
                 const resolvedVar = this.freshTemp("_await_resolved");
                 buf.line(`${returnedType.c} ${returnVar} = ${expr.c};`);
+                this.emitSyncDisposals(buf, syncDisposables);
                 buf.line("tsc_try_pop();");
                 buf.line(`tsc_promise_t* ${resolvedVar} = ${this.promiseResolveResult({ c: returnVar, ty: returnedType }, r.expression)};`);
                 buf.line(`tsc_promise_adopt_into(${continuationReturn.resultPromise}, ${resolvedVar});`);
@@ -59073,12 +59090,14 @@ class Emitter {
                 buf.line(`${gen.arrayVar}->iter_has_return = true;`);
                 buf.line(`${gen.arrayVar}->iter_return_consumed = false;`);
             }
+            this.emitSyncDisposals(buf, syncDisposables);
             buf.line(`return ${gen.arrayVar};`);
             return;
         }
         const asyncCtx = this.asyncFunctionStack[this.asyncFunctionStack.length - 1];
         if (asyncCtx) {
             if (!r.expression) {
+                this.emitSyncDisposals(buf, syncDisposables);
                 buf.line("return tsc_promise_resolve(tsc_value_undefined());");
                 return;
             }
@@ -59086,29 +59105,44 @@ class Emitter {
             if (ts.isAwaitExpression(asyncReturnExpr) && this.tryDepth === 0) {
                 const awaitedSource = this.emitExpr(asyncReturnExpr.expression);
                 if (this.prepareType(awaitedSource.ty).kind === "promise") {
+                    this.emitSyncDisposals(buf, syncDisposables);
                     buf.line(`return tsc_promise_adopt(${awaitedSource.c});`);
                     return;
                 }
             }
             const expr = this.emitExpr(r.expression);
             if (expr.ty.kind === "promise") {
+                this.emitSyncDisposals(buf, syncDisposables);
                 buf.line(`return tsc_promise_adopt(${expr.c});`);
                 return;
             }
+            this.emitSyncDisposals(buf, syncDisposables);
             buf.line(`return ${this.promiseResolveResult(expr, r.expression)};`);
             return;
         }
         if (!r.expression) {
+            this.emitSyncDisposals(buf, syncDisposables);
             buf.line("return;");
             return;
         }
-        if (this.emitTailCallReturn(buf, r.expression)) return;
+        if (this.emitTailCallReturn(buf, r.expression, syncDisposables)) return;
         const expr = this.emitExpr(r.expression);
         const coerced = this.coerce(expr, ret, r.expression);
+        if (syncDisposables.length > 0) {
+            const returnValue = this.freshTemp("_using_return");
+            buf.line(`${ret.c} const ${returnValue} = ${coerced};`);
+            this.emitSyncDisposals(buf, syncDisposables);
+            buf.line(`return ${returnValue};`);
+            return;
+        }
         buf.line(`return ${coerced};`);
     }
 
-    private emitTailCallReturn(buf: CBuf, expr: ts.Expression): boolean {
+    private emitTailCallReturn(
+        buf: CBuf,
+        expr: ts.Expression,
+        syncDisposables: readonly string[] = [],
+    ): boolean {
         const ctx = this.tailFunctionStack[this.tailFunctionStack.length - 1];
         if (!ctx || !ts.isCallExpression(expr) || !ts.isIdentifier(expr.expression)) {
             return false;
@@ -59135,6 +59169,7 @@ class Emitter {
         for (let i = 0; i < temps.length; i++) {
             buf.line(`${ctx.params[i]!.name} = ${temps[i]!.name};`);
         }
+        this.emitSyncDisposals(buf, syncDisposables);
         buf.line(`goto ${ctx.label};`);
         buf.close();
         return true;
@@ -59366,18 +59401,29 @@ class Emitter {
         return null;
     }
 
-    private emitThrow(buf: CBuf, t: ts.ThrowStatement): void {
+    private emitThrow(
+        buf: CBuf,
+        t: ts.ThrowStatement,
+        syncDisposables: readonly string[] = [],
+    ): void {
         const e = this.emitExpr(t.expression);
         const asStr = this.coerceToString(e, t.expression);
+        let thrown = asStr;
+        if (syncDisposables.length > 0) {
+            const thrownValue = this.freshTemp("_using_throw");
+            buf.line(`tsc_str_t* const ${thrownValue} = ${asStr};`);
+            this.emitSyncDisposals(buf, syncDisposables);
+            thrown = thrownValue;
+        }
         if (
             this.asyncFunctionStack.length > 0 &&
             this.tryDepth === 0 &&
             this.asyncAwaitContinuationAdapterDepth === 0
         ) {
-            buf.line(`return tsc_promise_reject(tsc_value_string(${asStr}));`);
+            buf.line(`return tsc_promise_reject(tsc_value_string(${thrown}));`);
             return;
         }
-        buf.line(`tsc_throw_str(${asStr});`);
+        buf.line(`tsc_throw_str(${thrown});`);
     }
 
     private emitTry(buf: CBuf, ts0: ts.TryStatement): void {

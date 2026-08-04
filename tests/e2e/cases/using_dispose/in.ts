@@ -20,7 +20,7 @@ function returnRun(): string {
         events += "r";
     };
     using resource: any = value;
-    return "returned";
+    return (events += "e", "returned");
 }
 
 function throwRun(): void {
@@ -29,7 +29,7 @@ function throwRun(): void {
         events += "t";
     };
     using resource: any = value;
-    throw "thrown";
+    throw (events += "x", "thrown");
 }
 
 function breakRun(): void {
