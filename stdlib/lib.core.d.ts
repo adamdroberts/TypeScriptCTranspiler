@@ -710,6 +710,15 @@ interface AggregateErrorConstructor {
     (errors: any[], message?: string, options?: ErrorOptions, ...ignored: any[]): AggregateError;
 }
 declare var AggregateError: AggregateErrorConstructor;
+interface SuppressedError extends Error {
+    error: any;
+    suppressed: any;
+}
+interface SuppressedErrorConstructor {
+    new(error: any, suppressed: any, message?: string, ...ignored: any[]): SuppressedError;
+    (error: any, suppressed: any, message?: string, ...ignored: any[]): SuppressedError;
+}
+declare var SuppressedError: SuppressedErrorConstructor;
 
 interface Console {
     log(...data: unknown[]): void;

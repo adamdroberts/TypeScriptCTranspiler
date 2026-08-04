@@ -6581,12 +6581,15 @@ class Emitter {
                 name === "ReferenceError" ||
                 name === "EvalError" ||
                 name === "URIError" ||
-                name === "AggregateError"
+                name === "AggregateError" ||
+                name === "SuppressedError"
             ) {
                 return key === "name" ||
                     key === "message" ||
                     key === "cause" ||
-                    key === "errors"
+                    key === "errors" ||
+                    key === "error" ||
+                    key === "suppressed"
                     ? "present"
                     : "absent";
             }
@@ -14684,6 +14687,7 @@ class Emitter {
                 unwrapped.expression.text === "EvalError" ||
                 unwrapped.expression.text === "URIError" ||
                 unwrapped.expression.text === "AggregateError" ||
+                unwrapped.expression.text === "SuppressedError" ||
                 unwrapped.expression.text === "Event" ||
                 unwrapped.expression.text === "EventTarget" ||
                 unwrapped.expression.text === "ArrayBuffer" ||
@@ -22869,7 +22873,7 @@ class Emitter {
             return null;
         }
         const cls = this.identifierName(init.expression);
-        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Event", "EventTarget", "Date", "AggregateError", "RegExp", "URL", "URLSearchParams"].includes(cls) ||
+        if (["Map", "Set", "WeakMap", "WeakSet", "WeakRef", "FinalizationRegistry", "Promise", "EventEmitter", "Event", "EventTarget", "Date", "AggregateError", "SuppressedError", "RegExp", "URL", "URLSearchParams"].includes(cls) ||
             this.isErrorConstructorName(cls)) {
             return null;
         }
@@ -62180,6 +62184,9 @@ class Emitter {
         if (name === "AggregateError") {
             return this.emitAggregateErrorConstructor(call);
         }
+        if (name === "SuppressedError") {
+            return this.emitSuppressedErrorConstructor(call);
+        }
         if (this.isErrorConstructorName(name)) {
             return this.emitErrorConstructor(call, name);
         }
@@ -73137,7 +73144,12 @@ class Emitter {
                 );
             case "hasOwnProperty":
                 if (call.arguments.length < 1) unsupported(call, "Error.hasOwnProperty expects at least 1 arg");
-                return this.emitErrorOwnKeyCheck(call.expression, recv, call.arguments[0]!, this.ignoredArgumentSpecs(call.arguments, 1));
+                return this.emitErrorOwnKeyCheck(
+                    ts.isPropertyAccessExpression(call.expression) ? call.expression.expression : call.expression,
+                    recv,
+                    call.arguments[0]!,
+                    this.ignoredArgumentSpecs(call.arguments, 1),
+                );
             case "propertyIsEnumerable": {
                 if (call.arguments.length < 1) unsupported(call, "Error.propertyIsEnumerable expects at least 1 arg");
                 const key = this.emitExpr(call.arguments[0]!);
@@ -73221,6 +73233,28 @@ class Emitter {
             hasCauseOptions
                 ? `tsc_aggregate_error_new_cause(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'}, ${causeC})`
                 : `tsc_aggregate_error_new(${errorsC}, ${messageC ?? 'tsc_str_from_lit("", 0)'})`,
+        );
+    }
+
+    private emitSuppressedErrorConstructor(call: ts.CallExpression | ts.NewExpression): EmitResult {
+        const args = call.arguments ?? [];
+        if (args.length < 2) unsupported(call, "SuppressedError expects error, suppressed, optional message");
+        const error = this.emitExpr(args[0]!);
+        const suppressed = this.emitExpr(args[1]!);
+        const specs: SequencedCallArg[] = [
+            { value: error, target: T_VALUE, node: args[0]! },
+            { value: suppressed, target: T_VALUE, node: args[1]! },
+        ];
+        if (args[2] && !this.isUndefinedExpression(args[2])) {
+            specs.push({ value: this.emitExpr(args[2]), target: T_STRING, node: args[2] });
+        } else {
+            specs.push({ value: { c: `tsc_str_from_lit("", 0)`, ty: T_STRING } });
+        }
+        for (const arg of args.slice(3)) {
+            specs.push({ value: this.emitExpr(arg), node: arg });
+        }
+        return this.emitSequencedExpr(T_ERROR, specs, ([errorC, suppressedC, messageC]) =>
+            `tsc_suppressed_error_new(${errorC}, ${suppressedC}, ${messageC})`,
         );
     }
 
@@ -82789,13 +82823,26 @@ class Emitter {
         );
     }
 
-    private errorOwnFields(): { name: string; value: (error: string) => string }[] {
-        return [
+    private errorOwnFields(includeSuppressed = false): { name: string; value: (error: string) => string }[] {
+        const fields: { name: string; value: (error: string) => string }[] = [
             { name: "name", value: (error) => `tsc_value_string(${error}->name)` },
             { name: "message", value: (error) => `tsc_value_string(${error}->message)` },
             { name: "cause", value: (error) => `${error}->cause` },
             { name: "errors", value: (error) => `tsc_value_array(${error}->errors ? ${error}->errors : tsc_array_new(sizeof(tsc_value_t), 1))` },
         ];
+        if (includeSuppressed) {
+            fields.push(
+                { name: "error", value: (error) => `${error}->error` },
+                { name: "suppressed", value: (error) => `${error}->suppressed` },
+            );
+        }
+        return fields;
+    }
+
+    private isSuppressedErrorExpression(expr: ts.Expression): boolean {
+        const type = this.checker.getTypeAtLocation(this.unwrapTransparentExpression(expr));
+        return type.getSymbol()?.getName() === "SuppressedError" ||
+            type.aliasSymbol?.getName() === "SuppressedError";
     }
 
     private emitErrorOwnPropertyNames(
@@ -82803,7 +82850,7 @@ class Emitter {
         obj: EmitResult,
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
-        const fields = this.errorOwnFields();
+        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
         return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([error]) => {
             const out = this.freshTemp("_err_keys");
             const pieces = [
@@ -82827,7 +82874,7 @@ class Emitter {
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
         const key = this.emitExpr(keyExpr);
-        const fields = this.errorOwnFields();
+        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
         return this.emitSequencedExpr(T_VALUE, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
@@ -82853,7 +82900,7 @@ class Emitter {
         obj: EmitResult,
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
-        const fields = this.errorOwnFields();
+        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
         return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([error]) => {
             const out = this.freshTemp("_err_descs");
             const pieces = [`tsc_object_t* ${out} = tsc_object_new()`];
@@ -82894,7 +82941,7 @@ class Emitter {
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
         const key = this.emitExpr(keyExpr);
-        const fields = this.errorOwnFields();
+        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
         return this.emitSequencedExpr(T_BOOLEAN, [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
@@ -82915,7 +82962,7 @@ class Emitter {
         ignored: SequencedCallArg[] = [],
     ): EmitResult {
         const key = this.emitExpr(keyExpr);
-        const fields = this.errorOwnFields();
+        const fields = this.errorOwnFields(this.isSuppressedErrorExpression(objExpr));
         const specs: SequencedCallArg[] = [
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
@@ -85813,6 +85860,9 @@ class Emitter {
         if (cls === "AggregateError") {
             return this.emitAggregateErrorConstructor(n);
         }
+        if (cls === "SuppressedError") {
+            return this.emitSuppressedErrorConstructor(n);
+        }
         if (this.isErrorConstructorName(cls)) {
             return this.emitErrorConstructor(n, cls);
         }
@@ -86533,6 +86583,12 @@ class Emitter {
             }
             if (pa.name.text === "errors") {
                 return { c: `(${recv.c}->errors ? ${recv.c}->errors : tsc_array_new(sizeof(tsc_value_t), 1))`, ty: arrayType(T_VALUE) };
+            }
+            if (pa.name.text === "error" && this.isSuppressedErrorExpression(pa.expression)) {
+                return { c: `${recv.c}->error`, ty: T_VALUE };
+            }
+            if (pa.name.text === "suppressed" && this.isSuppressedErrorExpression(pa.expression)) {
+                return { c: `${recv.c}->suppressed`, ty: T_VALUE };
             }
         }
         if (recv.ty.kind === "class") {

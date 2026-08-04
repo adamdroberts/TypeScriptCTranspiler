@@ -1398,6 +1398,11 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         validate_proxy_get_result(o, key, result);
         return result;
     }
+    if (o->is_error && ((const tsc_error_t*)o->class_ptr)->is_suppressed) {
+        const tsc_error_t* error = (const tsc_error_t*)o->class_ptr;
+        if (str_lit_eq(key, "error")) return error->error;
+        if (str_lit_eq(key, "suppressed")) return error->suppressed;
+    }
     ssize_t idx = object_find(o, key);
     if (idx >= 0) {
         const tsc_object_prop_t* prop = &o->props[idx];

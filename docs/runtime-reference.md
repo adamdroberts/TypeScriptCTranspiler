@@ -214,6 +214,13 @@ NaN-boxed `uint64_t` used for `any`, `unknown`, heterogeneous unions, dynamic JS
 | `tsc_value_object_from_entries(entries)` | `tsc_value_t` | Dynamic `Object.fromEntries`, accepting dynamic arrays of dynamic `[key, value]` pairs |
 | `tsc_json_parse(text)` | `tsc_value_t` | Recursive JSON parser for objects, arrays, strings, numbers, booleans, and null |
 
+## Errors (`tsc_error_t`)
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_suppressed_error_new(error, suppressed, message)` | `tsc_error_t*` | Creates a `SuppressedError`-named Error value with dynamic `error` and `suppressed` fields |
+| `tsc_error_to_string(error)` | `tsc_str_t*` | Formats the Error name and message for `.toString()` and exception stringification |
+
 ## BigInt (`tsc_bigint_t`)
 
 GMP-backed arbitrary-precision integers. `bigint` values are heap-allocated wrappers around `mpz_t`; operators are emitted as runtime calls.

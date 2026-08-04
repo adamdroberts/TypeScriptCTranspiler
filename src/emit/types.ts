@@ -458,7 +458,8 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             sym?.getName() === "ReferenceError" ||
             sym?.getName() === "EvalError" ||
             sym?.getName() === "URIError" ||
-            sym?.getName() === "AggregateError"
+            sym?.getName() === "AggregateError" ||
+            sym?.getName() === "SuppressedError"
         ) return T_ERROR;
         if (sym?.getName() === "Buffer") return T_BUFFER;
         if (sym?.getName() === "ArrayBuffer") return T_ARRAY_BUFFER;

@@ -1,0 +1,5 @@
+new: SuppressedError cleanup failed original cleanup SuppressedError: cleanup failed
+call: SuppressedError  call-original call-cleanup
+own: true true true
+reflect: original true original false
+names: name|message|cause|errors|error|suppressed name|message|cause|errors|error|suppressed

@@ -420,12 +420,16 @@ typedef struct tsc_error {
     tsc_str_t* message;
     tsc_value_t cause;
     struct tsc_array* errors;
+    tsc_value_t error;
+    tsc_value_t suppressed;
+    bool is_suppressed;
 } tsc_error_t;
 tsc_error_t* tsc_error_new(tsc_str_t* message);
 tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message);
 tsc_error_t* tsc_error_new_named_cause(tsc_str_t* name, tsc_str_t* message, tsc_value_t cause);
 tsc_error_t* tsc_aggregate_error_new(struct tsc_array* errors, tsc_str_t* message);
 tsc_error_t* tsc_aggregate_error_new_cause(struct tsc_array* errors, tsc_str_t* message, tsc_value_t cause);
+tsc_error_t* tsc_suppressed_error_new(tsc_value_t error, tsc_value_t suppressed, tsc_str_t* message);
 tsc_str_t* tsc_error_to_string(const tsc_error_t* e);
 
 /* ------------- Buffer ------------- */
