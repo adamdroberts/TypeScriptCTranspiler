@@ -53534,7 +53534,11 @@ class Emitter {
                 return !this.nodeContainsYield(unwrapped);
             }
             if (ts.isConditionalExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                const yieldedCondition = this.directLazyYieldCondition(unwrapped.condition);
+                if (!yieldedCondition) return !this.nodeContainsYield(unwrapped);
+                return visit(unwrapped.condition) &&
+                    !this.nodeContainsYield(unwrapped.whenTrue) &&
+                    !this.nodeContainsYield(unwrapped.whenFalse);
             }
             if (ts.isTemplateExpression(unwrapped)) {
                 return this.simpleLazyMultiYieldTemplateSpans(unwrapped, visit);
