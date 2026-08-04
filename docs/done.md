@@ -1,5 +1,7 @@
 # Implemented features
 
+- `fs.promises.open` FileHandle values now support libuv-backed asynchronous `readv()` and `writev()` requests over `Buffer[]` arrays with numeric/null positions, returning Node-shaped byte-count/buffer-array result objects and rejecting after asynchronous close. Test: `fs_promises_file_handle_readv_writev`.
+
 - `fs.promises.open` FileHandle values now support ordered libuv-backed asynchronous `sync()` and `datasync()` durability requests and reject after asynchronous close. Test: `fs_promises_file_handle_sync`.
 
 - `fs.promises.open` FileHandle values now support libuv-backed asynchronous `truncate(len?)`, including the default zero length, and reject after asynchronous close. Test: `fs_promises_file_handle_truncate`.
