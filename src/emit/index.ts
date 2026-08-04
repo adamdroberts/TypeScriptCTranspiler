@@ -81229,6 +81229,16 @@ class Emitter {
                 ...ignored,
             ], ([l, r]) => `tsc_value_object_is(${l}, ${r})`);
         }
+        if (name === "entries" && mapped.kind === "error") {
+            const ignored = this.ignoredArgumentSpecs(args, 1);
+            const value = this.emitExpr(arg);
+            const resultType = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+            const elementType = resultType.kind === "array" ? resultType.elem ?? T_VALUE : T_VALUE;
+            const emptyResultType = resultType.kind === "array" ? resultType : arrayType(elementType);
+            return this.emitSequencedExpr(emptyResultType, [{ value, node: arg }, ...ignored], ([v]) =>
+                `({ (void)${v}; tsc_array_new(sizeof(${elementType.c}), 1); })`
+            );
+        }
         if (name === "keys") {
             const ignored = this.ignoredArgumentSpecs(args, 1);
             if (mapped.kind === "void") {

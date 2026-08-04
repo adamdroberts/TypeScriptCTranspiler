@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Typed `Object.entries(...)` calls on Error-family values now preserve the declared `[string, any][]` result element layout while retaining the empty non-enumerable Error-object semantics. Regression: `error_object_methods`.
+
 - Typed numeric, bigint, string, and pointer truthiness checks now evaluate their source expressions once before testing the result, preserving side-effect order for awaited conditional selectors. Regression: `async_await_branch_block_source_try_conditional_awaited_string_raw`.
 - Top-level dynamic `JSON.stringify` now preserves JavaScript `undefined` for `undefined`, functions, and callable proxies without changing nested array/object JSON substitution or revoked-proxy errors. Regression: `json_stringify_dynamic_top_level` plus the callable-proxy JSON cases.
 - Source-`try` conditional structural return arms now receive the enclosing async return context, preserving homogeneous typed-array values instead of routing them through the pointer-only promise representation. Regression: `async_await_branch_block_source_try_structural_conditional_return_four_await`.
