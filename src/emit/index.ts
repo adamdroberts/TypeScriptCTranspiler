@@ -38743,7 +38743,7 @@ class Emitter {
                 const expression = this.unwrapTransparentExpression(assignment.right);
                 const declarationStatement = breakStatements[statementIndex - 1];
                 if (!declarationStatement || !ts.isVariableStatement(declarationStatement) ||
-                    (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                    (declarationStatement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
                     declarationStatement.declarationList.declarations.length !== 1) return [];
                 const declaration = declarationStatement.declarationList.declarations[0]!;
                 if (!ts.isIdentifier(declaration.name) || declaration.initializer || declaration.name.text !== assignment.left.text) return [];
