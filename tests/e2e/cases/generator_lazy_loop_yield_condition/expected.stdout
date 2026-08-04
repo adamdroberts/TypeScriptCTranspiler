@@ -1,0 +1,15 @@
+while false while-condition while-start
+while false while-body-yield while-start|while-body:0
+while false while-condition while-start|while-body:0
+while false while-condition while-start|while-body:0|while-body:1
+while true while-result while-start|while-body:0|while-body:1|while-done
+do false do-body-yield do-body:0
+do false do-condition do-body:0
+do false do-condition do-body:0|do-body:1
+do true do-result do-body:0|do-body:1|do-done
+for false for-condition none
+for false for-body-yield for-body:0
+for false for-condition for-body:0
+for false for-condition for-body:0|for-body:1
+for true for-result for-body:0|for-body:1|for-done
+close false close-condition true closed close-finally

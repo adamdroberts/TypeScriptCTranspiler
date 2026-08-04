@@ -4,7 +4,9 @@
 
 - `await using` now supports one or more dynamic, non-thenable resources at the start of a non-suspending async body, disposing them through `Symbol.asyncDispose` in reverse order on normal or direct-return completion and continuing later cleanup after an earlier disposal rejection across declarations, async arrows, class methods, and await-free terminal `if` return/throw branches with bounded simple prefixes, one nested await-free selector, and bounded fallback prefixes before completion; deeper nested/loop control-flow exits, thenable initializers, and broader suppression state machines remain deferred. Tests: `await_using_dispose`, `await_using_multiple_dispose`, `await_using_async_values_dispose`, `await_using_branch_dispose`.
 
-- Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing; compound selectors, loop/switch suspension, and broader generator graphs remain deferred. Test: `generator_lazy_if_yield_condition`.
+- Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing; compound selectors and broader generator graphs remain deferred. Test: `generator_lazy_if_yield_condition`.
+
+- Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; compound or nested condition selectors and broader loop/switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.
 
 - Synchronous `using` declarations now support dynamic disposable values in ordinary local block lists, including async functions without suspension in the using scope, disposing resources in reverse declaration order on normal completion, after direct or nested local `return`/`throw` expressions have been evaluated, or on direct loop-body `break`/`continue` exits through `Symbol.dispose`; nested loop-control exits remain compile-time diagnostics. Test: `using_dispose`.
 
@@ -3391,6 +3393,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_do_while` | lazy generators resume across simple do-while loop suspension points |
 | `generator_lazy_if_else` | lazy generators resume across simple if/else control flow |
 | `generator_lazy_if_yield_condition` | lazy generators suspend and resume direct yield expressions used as if selectors |
+| `generator_lazy_loop_yield_condition` | lazy generators suspend direct yield expressions used as while, do-while, and counted for conditions with continue, incrementor, and close/finally coverage |
 | `generator_lazy_params` | lazy generator environments preserve parameters and this receivers |
 | `generator_lazy_locals` | lazy generator environments preserve simple locals across suspension points |
 | `generator_lazy_next_value` | lazy generators receive next(value) into simple suspended yield assignments |

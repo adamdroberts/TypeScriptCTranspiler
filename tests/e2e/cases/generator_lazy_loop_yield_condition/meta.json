@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators suspend direct yield expressions used as while, do-while, and for loop conditions, including continue and close/finally handling"
+}

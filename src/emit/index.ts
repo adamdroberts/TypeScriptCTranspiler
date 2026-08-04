@@ -52871,12 +52871,14 @@ class Emitter {
         }
 
         if (ts.isWhileStatement(stmt)) {
-            return !this.nodeContainsYield(stmt.expression) &&
+            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
+            return (!this.nodeContainsYield(stmt.expression) || !!yieldedCondition) &&
                 this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
         if (ts.isDoStatement(stmt)) {
-            return !this.nodeContainsYield(stmt.expression) &&
+            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
+            return (!this.nodeContainsYield(stmt.expression) || !!yieldedCondition) &&
                 this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -52892,7 +52894,8 @@ class Emitter {
                     return false;
                 }
             }
-            if (stmt.condition && this.nodeContainsYield(stmt.condition)) return false;
+            if (stmt.condition && this.nodeContainsYield(stmt.condition) &&
+                !this.directLazyYieldCondition(stmt.condition)) return false;
             if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor)) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -53420,6 +53423,41 @@ class Emitter {
         if (!ts.isYieldExpression(unwrapped) || unwrapped.asteriskToken) return null;
         if (unwrapped.expression && this.nodeContainsYield(unwrapped.expression)) return null;
         return unwrapped;
+    }
+
+    private emitLazyGeneratorDirectYieldCondition(
+        buf: CBuf,
+        expression: ts.Expression,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): string | null {
+        const yieldedCondition = this.directLazyYieldCondition(expression);
+        if (!yieldedCondition) return null;
+        const nextState = nextStateId();
+        const value = yieldedCondition.expression
+            ? this.emitExpr(yieldedCondition.expression)
+            : { c: "NULL", ty: T_VOID };
+        const valueNode = yieldedCondition.expression ?? yieldedCondition;
+        const tmp = this.freshTemp("_yield");
+        buf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
+        buf.line(`tsc_array_push_raw(a, &${tmp});`);
+        buf.line(`*state = ${nextState};`);
+        buf.line("*done = false;");
+        buf.line("return;");
+        buf.line(`case ${nextState}:;`);
+        this.emitLazyGeneratorCloseGuard(
+            buf,
+            envLocalName,
+            elemType,
+            nextStateId,
+            nextYieldStarSlot,
+        );
+        return this.truthyExprFromEmitResult(
+            { c: "next_arg", ty: T_VALUE },
+            expression,
+        );
     }
 
     private simpleLazyMultiYieldReturn(stmt: ts.Statement): {
@@ -54256,29 +54294,18 @@ class Emitter {
         }
 
         if (ts.isIfStatement(stmt)) {
-            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
-            let condC: string;
-            if (yieldedCondition) {
-                const nextState = nextStateId();
-                const value = yieldedCondition.expression
-                    ? this.emitExpr(yieldedCondition.expression)
-                    : { c: "NULL", ty: T_VOID };
-                const valueNode = yieldedCondition.expression ?? yieldedCondition;
-                const tmp = this.freshTemp("_yield");
-                buf.line(`${elemType.c} ${tmp} = ${this.coerce(value, elemType, valueNode)};`);
-                buf.line(`tsc_array_push_raw(a, &${tmp});`);
-                buf.line(`*state = ${nextState};`);
-                buf.line("*done = false;");
-                buf.line("return;");
-                buf.line(`case ${nextState}:;`);
-                condC = this.truthyExprFromEmitResult(
-                    { c: "next_arg", ty: T_VALUE },
-                    stmt.expression,
-                );
-            } else {
-                const cond = this.emitExpr(stmt.expression);
-                condC = this.truthyExprFromEmitResult(cond, stmt.expression);
-            }
+            const yieldedCondC = this.emitLazyGeneratorDirectYieldCondition(
+                buf,
+                stmt.expression,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            const condC = yieldedCondC ?? this.truthyExprFromEmitResult(
+                this.emitExpr(stmt.expression),
+                stmt.expression,
+            );
             buf.open(`if (${condC})`);
             this.emitLazyGeneratorStmt(buf, stmt.thenStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             if (stmt.elseStatement) {
@@ -54291,6 +54318,31 @@ class Emitter {
         }
 
         if (ts.isWhileStatement(stmt)) {
+            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
+            if (yieldedCondition) {
+                buf.open("while (true)");
+                this.activeLazyGeneratorBreakTargets.push("loop");
+                this.activeLazyGeneratorContinueTargets.push(null);
+                try {
+                    const condC = this.emitLazyGeneratorDirectYieldCondition(
+                        buf,
+                        stmt.expression,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    )!;
+                    buf.open(`if (!(${condC}))`);
+                    buf.line("break;");
+                    buf.close();
+                    this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                } finally {
+                    this.activeLazyGeneratorContinueTargets.pop();
+                    this.activeLazyGeneratorBreakTargets.pop();
+                }
+                buf.close();
+                return;
+            }
             if (this.staticBooleanValue(stmt.expression) === false) return;
             buf.open(`while (${this.emitBoolExpr(stmt.expression)})`);
             this.activeLazyGeneratorBreakTargets.push("loop");
@@ -54306,6 +54358,33 @@ class Emitter {
         }
 
         if (ts.isDoStatement(stmt)) {
+            const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
+            if (yieldedCondition) {
+                buf.open("while (true)");
+                const continueLabel = this.freshTemp("_do_continue");
+                this.activeLazyGeneratorBreakTargets.push("loop");
+                this.activeLazyGeneratorContinueTargets.push(continueLabel);
+                try {
+                    this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                    buf.line(`${continueLabel}:;`);
+                    const condC = this.emitLazyGeneratorDirectYieldCondition(
+                        buf,
+                        stmt.expression,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    )!;
+                    buf.open(`if (!(${condC}))`);
+                    buf.line("break;");
+                    buf.close();
+                } finally {
+                    this.activeLazyGeneratorContinueTargets.pop();
+                    this.activeLazyGeneratorBreakTargets.pop();
+                }
+                buf.close();
+                return;
+            }
             buf.open("do");
             this.activeLazyGeneratorBreakTargets.push("loop");
             this.activeLazyGeneratorContinueTargets.push(null);
@@ -54322,9 +54401,27 @@ class Emitter {
         if (ts.isForStatement(stmt)) {
             buf.open("");
             this.emitLazyGeneratorForInitializer(buf, stmt.initializer);
-            const cond = stmt.condition ? this.emitBoolExpr(stmt.condition) : "true";
+            const yieldedCondition = stmt.condition
+                ? this.directLazyYieldCondition(stmt.condition)
+                : null;
             const continueLabel = stmt.incrementor ? this.freshTemp("_for_continue") : null;
-            buf.open(`while (${cond})`);
+            if (yieldedCondition) {
+                buf.open("while (true)");
+                const condC = this.emitLazyGeneratorDirectYieldCondition(
+                    buf,
+                    stmt.condition!,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                )!;
+                buf.open(`if (!(${condC}))`);
+                buf.line("break;");
+                buf.close();
+            } else {
+                const cond = stmt.condition ? this.emitBoolExpr(stmt.condition) : "true";
+                buf.open(`while (${cond})`);
+            }
             this.activeLazyGeneratorBreakTargets.push("loop");
             this.activeLazyGeneratorContinueTargets.push(continueLabel);
             try {
