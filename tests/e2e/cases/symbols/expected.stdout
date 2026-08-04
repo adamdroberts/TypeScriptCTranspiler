@@ -8,8 +8,10 @@ string: Symbol(local) Symbol()
 typeof: symbol
 iterator: true Symbol.iterator
 async: true Symbol.asyncIterator
+dispose: true Symbol.dispose
 spreadable: true Symbol.isConcatSpreadable
 tag: true Symbol.toStringTag
 species: true Symbol.species
+dispose key: dispose-value
 ignored desc: d true f
 ignored methods: Symbol(d) Symbol(d) true dxufgktlv

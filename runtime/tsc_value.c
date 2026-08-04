@@ -893,6 +893,9 @@ static tsc_str_t* value_known_symbol_internal_key(tsc_symbol_t* key) {
     if (key == tsc_symbol_async_dispose()) {
         return tsc_str_from_cstr("__tsc_symbol_asyncDispose");
     }
+    if (key == tsc_symbol_dispose()) {
+        return tsc_str_from_cstr("__tsc_symbol_dispose");
+    }
     if (key == tsc_symbol_unscopables()) {
         return tsc_str_from_cstr("__tsc_symbol_unscopables");
     }
@@ -912,6 +915,7 @@ static bool value_is_known_symbol_internal_key(const tsc_str_t* key) {
     return str_lit_eq(key, "__tsc_symbol_iterator") ||
         str_lit_eq(key, "__tsc_symbol_asyncIterator") ||
         str_lit_eq(key, "__tsc_symbol_asyncDispose") ||
+        str_lit_eq(key, "__tsc_symbol_dispose") ||
         str_lit_eq(key, "__tsc_symbol_unscopables") ||
         str_lit_eq(key, "__tsc_symbol_isConcatSpreadable") ||
         str_lit_eq(key, "__tsc_symbol_toStringTag") ||
@@ -922,6 +926,7 @@ static tsc_symbol_t* value_known_symbol_from_internal_key(const tsc_str_t* key) 
     if (str_lit_eq(key, "__tsc_symbol_iterator")) return tsc_symbol_iterator();
     if (str_lit_eq(key, "__tsc_symbol_asyncIterator")) return tsc_symbol_async_iterator();
     if (str_lit_eq(key, "__tsc_symbol_asyncDispose")) return tsc_symbol_async_dispose();
+    if (str_lit_eq(key, "__tsc_symbol_dispose")) return tsc_symbol_dispose();
     if (str_lit_eq(key, "__tsc_symbol_unscopables")) return tsc_symbol_unscopables();
     if (str_lit_eq(key, "__tsc_symbol_isConcatSpreadable")) return tsc_symbol_is_concat_spreadable();
     if (str_lit_eq(key, "__tsc_symbol_toStringTag")) return tsc_symbol_to_string_tag();

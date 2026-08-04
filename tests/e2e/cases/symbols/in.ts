@@ -4,6 +4,7 @@ const globalA: symbol = Symbol.for("shared");
 const globalB: symbol = Symbol.for("shared");
 const iter: symbol = Symbol.iterator;
 const asyncIter: symbol = Symbol.asyncIterator;
+const dispose: symbol = Symbol.dispose;
 const spreadable: symbol = Symbol.isConcatSpreadable;
 const toStringTag: symbol = Symbol.toStringTag;
 const species: symbol = Symbol.species;
@@ -24,9 +25,14 @@ console.log("string:", localA.toString(), Symbol().toString());
 console.log("typeof:", typeof localA);
 console.log("iterator:", iter === Symbol.iterator, iter.description);
 console.log("async:", asyncIter === Symbol.asyncIterator, asyncIter.description);
+console.log("dispose:", dispose === Symbol.dispose, dispose.description);
 console.log("spreadable:", spreadable === Symbol.isConcatSpreadable, spreadable.description);
 console.log("tag:", toStringTag === Symbol.toStringTag, toStringTag.description);
 console.log("species:", species === Symbol.species, species.description);
+
+const symbolKeyTarget: any = {};
+symbolKeyTarget[Symbol.dispose] = "dispose-value";
+console.log("dispose key:", symbolKeyTarget[Symbol.dispose]);
 
 const ignoredDesc = Symbol(mark("d"), mark("x"));
 const undefinedDesc = Symbol(undefined, mark("u"));

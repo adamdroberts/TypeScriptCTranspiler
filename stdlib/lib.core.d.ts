@@ -17,6 +17,7 @@ interface SymbolConstructor {
     readonly iterator: symbol;
     readonly asyncIterator: symbol;
     readonly asyncDispose: symbol;
+    readonly dispose: symbol;
     readonly unscopables: symbol;
     readonly isConcatSpreadable: symbol;
     readonly toStringTag: symbol;

@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded `Symbol.dispose` coverage: the well-known symbol now has stable singleton identity, description, static-emitter support, and dynamic symbol-key lookup, providing the synchronous counterpart needed by explicit resource management. Test: `symbols`.
+
 - Verified bounded async FileHandle disposal coverage: `fs.promises.open` handles now expose `Symbol.asyncDispose`, which delegates to asynchronous `close()`, fulfills after disposal, rejects later I/O, and remains idempotent on repeated disposal. Test: `fs_promises_file_handle_async_dispose`.
 
 - Verified bounded async FileHandle write coverage: libuv-backed `fs.promises.open` handles now support `writeFile()` for current-position string/Buffer writes, UTF-8/hex/base64 encodings, optional `flush: true`, and closed-handle rejection without replacing or closing the caller-owned descriptor. Test: `fs_promises_file_handle_write_file`.

@@ -13,6 +13,7 @@ static tsc_symbol_registry_entry_t* tsc_symbol_registry = NULL;
 static tsc_symbol_t* tsc_symbol_iterator_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_async_iterator_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_async_dispose_singleton = NULL;
+static tsc_symbol_t* tsc_symbol_dispose_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_unscopables_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_is_concat_spreadable_singleton = NULL;
 static tsc_symbol_t* tsc_symbol_to_string_tag_singleton = NULL;
@@ -84,6 +85,18 @@ tsc_symbol_t* tsc_symbol_async_dispose(void) {
         tsc_runtime_unlock();
     }
     return tsc_symbol_async_dispose_singleton;
+}
+
+tsc_symbol_t* tsc_symbol_dispose(void) {
+    if (!tsc_symbol_dispose_singleton) {
+        tsc_runtime_lock();
+        if (!tsc_symbol_dispose_singleton) {
+            tsc_symbol_dispose_singleton =
+                tsc_symbol_new(tsc_str_from_lit("Symbol.dispose", 14));
+        }
+        tsc_runtime_unlock();
+    }
+    return tsc_symbol_dispose_singleton;
 }
 
 tsc_symbol_t* tsc_symbol_unscopables(void) {
