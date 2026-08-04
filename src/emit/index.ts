@@ -53112,7 +53112,9 @@ class Emitter {
                     : null;
                 const directYield = !!unwrappedChildExpression &&
                     ts.isYieldExpression(unwrappedChildExpression) &&
-                    !unwrappedChildExpression.asteriskToken &&
+                    (!unwrappedChildExpression.asteriskToken ||
+                        (!!unwrappedChildExpression.expression &&
+                            this.isSimpleLazyYieldStarSource(unwrappedChildExpression.expression))) &&
                     !this.nodeContainsYield(unwrappedChildExpression.expression ?? unwrappedChildExpression);
                 if (!directYield) return null;
                 continue;
@@ -54463,7 +54465,7 @@ class Emitter {
             buf.line("return;");
             buf.close();
         }
-        buf.open(`if (${envLocalName}->lazy_close_throw && !${envLocalName}->lazy_close_handled)`);
+        buf.open(`if (${envLocalName}->lazy_close_throw && !${envLocalName}->lazy_close_handled && !${envLocalName}->lazy_close_dispatching)`);
         buf.line("*state = -1;");
         buf.line("*done = true;");
         buf.line(`tsc_throw_str(tsc_value_to_string(${envLocalName}->lazy_close_arg));`);
@@ -55693,6 +55695,7 @@ class Emitter {
                 this.structDecls.line("bool lazy_close_requested;");
                 this.structDecls.line("bool lazy_close_throw;");
                 this.structDecls.line("bool lazy_close_handled;");
+                this.structDecls.line("bool lazy_close_dispatching;");
                 this.structDecls.line("tsc_value_t lazy_close_arg;");
                 this.structDecls.line("tsc_str_t* lazy_deferred_catch_throw;");
             }
@@ -55868,10 +55871,12 @@ class Emitter {
             closeBuf.line(`${closeEnv}->lazy_close_arg = arg;`);
             const closeYieldStart = this.freshTemp("_lazy_close_len");
             closeBuf.line(`size_t ${closeYieldStart} = a->len;`);
+            closeBuf.line(`${closeEnv}->lazy_close_dispatching = true;`);
             closeBuf.open(`if (a->state >= 0 && a->lazy_next)`);
             closeBuf.line("bool _lazy_close_done = false;");
             closeBuf.line(`a->lazy_next(a, &a->state, a->env, tsc_value_undefined(), &_lazy_close_done);`);
             closeBuf.close();
+            closeBuf.line(`${closeEnv}->lazy_close_dispatching = false;`);
             const closeYieldRaw = `TSC_ARR(${elemType.c}, a, a->len - 1)`;
             const closeYieldValue = this.coerce({ c: closeYieldRaw, ty: elemType }, T_VALUE, fn);
             closeBuf.open(`if (a->len > ${closeYieldStart})`);
@@ -55929,6 +55934,7 @@ class Emitter {
                 buf.line(`${envVar}->lazy_close_requested = false;`);
                 buf.line(`${envVar}->lazy_close_throw = false;`);
                 buf.line(`${envVar}->lazy_close_handled = false;`);
+                buf.line(`${envVar}->lazy_close_dispatching = false;`);
                 buf.line(`${envVar}->lazy_close_arg = tsc_value_undefined();`);
                 buf.line(`${envVar}->lazy_deferred_catch_throw = NULL;`);
             }

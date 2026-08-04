@@ -1,0 +1,4 @@
+catch-yield-star-array: false source false recovery-one false recovery-two true caught-array
+catch-yield-star-lazy: false lazy-source false lazy-one false lazy-two true caught-lazy
+catch-yield-star-array-close: false source false recovery-one true closed
+catch-yield-star-lazy-close: false lazy-source false lazy-one true closed
