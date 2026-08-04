@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified direct awaited loop-initializer extension: a bounded async `for` loop can suspend through a direct awaited loop-owned initializer before its awaited condition and incrementor, carrying the initialized capture through the full initializer-to-body-to-incrementor-to-condition order. Test: `async_await_for_incrementor_await_initializer`.
+
 - **Phase 6 — `async`/`await` + libuv event loop**
   - Verified bounded extension: ordered awaited locals can be carried through await-free statements between suspensions and subsequent awaited body work before `continue`; broader alias sets and loop-body multi-suspension graphs remain part of the remaining state-machine work.
   - Verified adjacent nested-branch coverage: an awaited loop-body `if` branch now has regression proof for multiple awaited locals, await-free interstitial statements, and later awaited body work before `continue`; broader nested branch graphs remain deferred.

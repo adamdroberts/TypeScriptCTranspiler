@@ -1,0 +1,3 @@
+{
+  "description": "async for loops preserve a directly awaited loop initializer before the awaited condition and incrementor"
+}

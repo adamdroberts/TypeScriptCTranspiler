@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now suspend through a direct awaited loop initializer before the awaited condition and incrementor, carrying the loop-owned variable capture through initializer-to-body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_await_initializer`
+
 - Bounded async `for` loops now preserve a top-level `if` with a direct awaited condition guarding an unlabelled `break`, routing the condition result before the awaited incrementor and skipping that incrementor on the break path. Test: `async_await_for_incrementor_if_await_break`
 
 - Bounded async `for` loops now preserve a top-level `if` with a direct awaited condition guarding an unlabelled `continue`, routing the condition result before the awaited incrementor and preserving implicit fallthrough. Test: `async_await_for_incrementor_if_await_continue`

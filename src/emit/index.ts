@@ -37895,6 +37895,10 @@ class Emitter {
         loopIncrementor: ts.Expression | null = null,
         fallthroughRejectResult = false,
         initialBody = false,
+        initialLoopInitializer?: {
+            awaitExpr: ts.AwaitExpression;
+            assignment: ts.Statement;
+        },
     ): boolean {
         if (this.emitAsyncAwaitLoopConditionalTerminal(
             buf,
@@ -39105,9 +39109,88 @@ class Emitter {
             loopAdapterName,
             initialBody,
         );
+        let initialLoopInitializerPromiseType: CType | null = null;
+        let initialLoopInitializerAdapter: string | null = null;
+        if (initialLoopInitializer) {
+            const initializerPromiseType = this.prepareType(mapTsType(
+                initialLoopInitializer.awaitExpr.expression,
+                this.checker.getTypeAtLocation(initialLoopInitializer.awaitExpr.expression),
+                this.checker,
+            ));
+            const initializerAwaitedType = this.prepareType(mapTsType(
+                initialLoopInitializer.awaitExpr,
+                this.checker.getTypeAtLocation(initialLoopInitializer.awaitExpr),
+                this.checker,
+            ));
+            if (initializerPromiseType.kind !== "promise" || initializerAwaitedType.kind === "never") return false;
+            initialLoopInitializerPromiseType = initializerPromiseType;
+            initialLoopInitializerAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                adapter,
+                conditionPromiseType,
+                {
+                    ...continuation,
+                    loopIncrementor: undefined,
+                    bodyAwaitExpr: initialLoopInitializer.awaitExpr,
+                    bodyAwaitExprs: [initialLoopInitializer.awaitExpr],
+                    bodyReturnExpr: ts.factory.createVoidZero(),
+                    bodyAwaitedAliasSymbols: [],
+                    bodyAwaitedAliasIndices: [],
+                    bodyBetweenAwaitStatements: [],
+                    bodyPostAwaitStatements: [initialLoopInitializer.assignment],
+                    bodyAwaitFinallyStatements: [],
+                    bodyAwaitFinallyAwaitExpr: undefined,
+                    bodyAwaitCatchStatements: undefined,
+                    bodyAwaitCatchAwaitExpr: undefined,
+                    bodyAwaitCatchSymbol: undefined,
+                    bodyAwaitCatchAdapter: undefined,
+                    bodyPreludeStatements: [],
+                    bodyLeadingContinuation: undefined,
+                    bodyContinue: true,
+                    bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
+                    bodyContinueConditionNegated: false,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                    bodyContinueElseBreak: false,
+                    bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakAwaitedAliasSymbols: [],
+                    bodyContinueElseBreakAwaitedAliasIndices: [],
+                    bodyContinueElseBreakBetweenAwaitStatements: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
+                    bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnAwaitPreludeExprs: [],
+                    bodyContinueElseReturnAwaitedAliasSymbols: [],
+                    bodyContinueElseReturnAwaitedAliasIndices: [],
+                    bodyContinueElseReturnBetweenAwaitStatements: [],
+                    bodyContinueElseReturnSynchronousExpr: null,
+                    bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnPostAwaitStatements: [],
+                    bodyContinueElseReturnRejectResult: false,
+                    bodyRejectResult: false,
+                },
+                [initialLoopInitializer.awaitExpr],
+            );
+        }
         if (loopInitializer) {
             if (ts.isVariableStatement(loopInitializer)) {
-                this.emitStmt(buf, loopInitializer);
+                const initializerDeclaration = initialLoopInitializer && loopInitializer.declarationList.declarations.length === 1
+                    ? loopInitializer.declarationList.declarations[0]
+                    : undefined;
+                const mutableInitializerDeclaration = initializerDeclaration as (ts.VariableDeclaration & { initializer?: ts.Expression }) | undefined;
+                const savedInitializer = mutableInitializerDeclaration?.initializer;
+                if (mutableInitializerDeclaration && savedInitializer === initialLoopInitializer?.awaitExpr) {
+                    mutableInitializerDeclaration.initializer = undefined;
+                    try {
+                        this.emitStmt(buf, loopInitializer);
+                    } finally {
+                        mutableInitializerDeclaration.initializer = savedInitializer;
+                    }
+                } else {
+                    this.emitStmt(buf, loopInitializer);
+                }
             } else {
                 const initializer = this.emitExpr(loopInitializer);
                 buf.line(`${initializer.c};`);
@@ -39128,7 +39211,10 @@ class Emitter {
             buf.line(`${envType}* const ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
             buf.line(`${env}->receiver = ${sourcePromise};`);
             buf.line(`${env}->result_promise = ${resultPromise};`);
-            for (const param of continuation.params) buf.line(`${env}->${param.field} = ${param.name};`);
+            for (const param of continuation.params) {
+                if (initialLoopInitializer && loopInitializerCaptures.some((capture) => capture.symbol === param.symbol)) continue;
+                buf.line(`${env}->${param.field} = ${param.name};`);
+            }
             if (continuation.thisValue) buf.line(`${env}->this_arg = ${continuation.thisValue.c};`);
             buf.open(`if (tsc_promise_is_pending(${sourcePromise}))`);
             buf.line(`tsc_promise_add_callback(${sourcePromise}, ${adapterName}, ${env});`);
@@ -39137,12 +39223,12 @@ class Emitter {
             buf.line(`${adapterName}(${env});`);
             buf.close();
         };
-        if (initialBody && bodyContinueConditionAwaitExpr && bodyConditionAdapter && bodyContinueConditionPromiseType) {
+        if (!initialLoopInitializer && initialBody && bodyContinueConditionAwaitExpr && bodyConditionAdapter && bodyContinueConditionPromiseType) {
             scheduleInitialAwait(bodyContinueConditionAwaitExpr, bodyContinueConditionPromiseType, bodyConditionAdapter);
             buf.line(`return ${resultPromise};`);
             return true;
         }
-        if (initialBody && continuation.bodyContinueCondition && !bodyContinueConditionAwaitExpr && bodyAdapter && loopAdapterName) {
+        if (!initialLoopInitializer && initialBody && continuation.bodyContinueCondition && !bodyContinueConditionAwaitExpr && bodyAdapter && loopAdapterName) {
             const bodyCondition = this.emitExpr(continuation.bodyContinueCondition);
             const bodyConditionTruth = this.truthyC(bodyCondition, continuation.bodyContinueCondition);
             buf.open(`if (${bodyConditionTruth})`);
@@ -39160,20 +39246,20 @@ class Emitter {
             buf.line(`return ${resultPromise};`);
             return true;
         }
-        if (initialBody && continuation.bodyAwaitExpr) {
+        if (!initialLoopInitializer && initialBody && continuation.bodyAwaitExpr) {
             for (const statement of continuation.bodyPreludeStatements) this.emitStmt(buf, statement);
             if (this.statementListAlwaysExits(continuation.bodyPreludeStatements)) {
                 buf.line(`return ${resultPromise};`);
                 return true;
             }
         }
-        const initialAwaitExpr = initialBody && continuation.bodyAwaitExpr
+        const initialAwaitExpr = initialLoopInitializer?.awaitExpr ?? (initialBody && continuation.bodyAwaitExpr
             ? continuation.bodyAwaitExpr
-            : conditionAwaitExpr;
-        const initialPromiseType = initialBody && bodyPromiseType
+            : conditionAwaitExpr);
+        const initialPromiseType = initialLoopInitializerPromiseType ?? (initialBody && bodyPromiseType
             ? bodyPromiseType
-            : conditionPromiseType;
-        const initialAdapter = initialBody && bodyAdapter ? bodyAdapter : adapter;
+            : conditionPromiseType);
+        const initialAdapter = initialLoopInitializerAdapter ?? (initialBody && bodyAdapter ? bodyAdapter : adapter);
         scheduleInitialAwait(initialAwaitExpr, initialPromiseType, initialAdapter);
         buf.line(`return ${resultPromise};`);
         return true;
@@ -40055,13 +40141,37 @@ class Emitter {
         const loopBody = ts.isBlock(loopStatement)
             ? loopStatement.statements
             : [loopStatement];
-        const loopInitializer = ts.isForStatement(loop) && loop.initializer
+        const rawLoopInitializer = ts.isForStatement(loop) && loop.initializer
             ? ts.isExpression(loop.initializer)
                 ? loop.initializer
                 : ts.factory.createVariableStatement(undefined, loop.initializer)
             : preLoopInitializer && ts.isExpressionStatement(preLoopInitializer)
                 ? preLoopInitializer.expression
                 : preLoopInitializer;
+        const awaitedLoopInitializer = rawLoopInitializer && ts.isVariableStatement(rawLoopInitializer) &&
+            rawLoopInitializer.declarationList.declarations.length === 1
+            ? (() => {
+                const declaration = rawLoopInitializer.declarationList.declarations[0]!;
+                const initializer = declaration.initializer
+                    ? this.unwrapTransparentExpression(declaration.initializer)
+                    : null;
+                if (!ts.isIdentifier(declaration.name) || !initializer || !ts.isAwaitExpression(initializer)) return null;
+                return { declaration, name: declaration.name, awaitExpr: initializer };
+            })()
+            : null;
+        const loopInitializer = rawLoopInitializer;
+        const awaitedLoopInitializerContinuation = awaitedLoopInitializer
+            ? {
+                awaitExpr: awaitedLoopInitializer.awaitExpr,
+                assignment: ts.factory.createExpressionStatement(
+                    ts.factory.createBinaryExpression(
+                        awaitedLoopInitializer.name,
+                        ts.factory.createToken(ts.SyntaxKind.EqualsToken),
+                        awaitedLoopInitializer.awaitExpr,
+                    ),
+                ),
+            }
+            : undefined;
         const doWhile = ts.isDoStatement(loop);
         const loopIncrementor = ts.isForStatement(loop) && loop.incrementor
             ? loop.incrementor
@@ -40522,14 +40632,18 @@ class Emitter {
             const initializerCaptures: AsyncAwaitContinuationParam[] = [];
             const visitInitializer = (node: ts.Node): void => {
                 if (!supported) return;
-                if (ts.isAwaitExpression(node) || ts.isFunctionLike(node) || ts.isClassLike(node)) {
+                if ((ts.isAwaitExpression(node) && node !== awaitedLoopInitializer?.awaitExpr) ||
+                    ts.isFunctionLike(node) || ts.isClassLike(node)) {
                     supported = false;
                     return;
                 }
                 if (ts.isVariableDeclaration(node)) {
-                    const declarationList = node.parent;
-                    const isVarOrLet = ts.isVariableDeclarationList(declarationList) &&
-                        (declarationList.flags & ts.NodeFlags.Const) === 0;
+                    const declarationList = node.parent && ts.isVariableDeclarationList(node.parent)
+                        ? node.parent
+                        : null;
+                    const declarationListFlags = declarationList?.flags ??
+                        (ts.isVariableStatement(loopInitializer) ? loopInitializer.declarationList.flags : ts.NodeFlags.None);
+                    const isVarOrLet = (declarationListFlags & ts.NodeFlags.Const) === 0;
                     if (!ts.isIdentifier(node.name) ||
                         (!node.initializer && !isVarOrLet)) {
                         supported = false;
@@ -40646,6 +40760,7 @@ class Emitter {
                 loopIncrementor,
                 ts.isThrowStatement(fallthrough),
                 doWhile,
+                awaitedLoopInitializerContinuation,
             )) return true;
         }
         if (this.emitAsyncAwaitLoopConditionReturnAwaitContinuation(
@@ -40662,6 +40777,7 @@ class Emitter {
             loopIncrementor,
             ts.isThrowStatement(fallthrough),
             doWhile,
+            awaitedLoopInitializerContinuation,
         )) return true;
         if (ts.isThrowStatement(fallthrough)) return false;
         const commaExpressions = (expressions: readonly ts.Expression[]): ts.Expression => {
