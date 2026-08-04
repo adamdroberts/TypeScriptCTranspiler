@@ -1,5 +1,7 @@
 # Implemented features
 
+- Awaited loop-body `if` branches now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions into a terminal `throw await` expression. Test: `async_await_loop_body_if_await_assigned_var_multi_throw`
+
 - Awaited loop-body `if` branches now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions into a terminal `return await` expression. Test: `async_await_loop_body_if_await_assigned_var_multi_return`
 
 - Awaited loop-body `if` branches now carry multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions before the outer-loop `continue` or `break`. Tests: `async_await_loop_body_if_await_assigned_var_multi_continue`, `async_await_loop_body_if_await_assigned_var_multi_break`

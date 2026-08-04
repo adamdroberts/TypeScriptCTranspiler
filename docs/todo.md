@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified nested awaited loop-body assigned-var multi-alias throw coverage: an awaited loop-body `if` branch now carries multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions into a terminal `throw await` expression. Test: `async_await_loop_body_if_await_assigned_var_multi_throw`.
+
 - Verified nested awaited loop-body assigned-var multi-alias return coverage: an awaited loop-body `if` branch now carries multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions into a terminal `return await` expression. Test: `async_await_loop_body_if_await_assigned_var_multi_return`.
 
 - Verified nested awaited loop-body assigned-var multi-alias coverage: an awaited loop-body `if` branch now carries multiple assigned-before-use `var` aliases initialized by ordered direct `value = await ...` body work through later branch suspensions before the outer-loop `continue` or `break`. Tests: `async_await_loop_body_if_await_assigned_var_multi_continue`, `async_await_loop_body_if_await_assigned_var_multi_break`.
