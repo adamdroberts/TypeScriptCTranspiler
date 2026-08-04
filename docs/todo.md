@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified awaited-initializer two-condition extension: a bounded async `for` loop can now suspend through its direct awaited loop initializer before short-circuiting two direct awaited condition operands and then awaiting its incrementor, preserving the loop-owned capture and evaluation order. Test: `async_await_for_incrementor_await_initializer_multi_condition`.
+
 - Verified awaited-initializer multi-condition extension: a bounded async `for` loop can now suspend through its direct awaited loop initializer before short-circuiting three direct awaited condition operands and then awaiting its incrementor, preserving the loop-owned capture and evaluation order. Test: `async_await_for_incrementor_await_initializer_three_condition`.
 
 - Verified three-await condition/incrementor extension: a bounded async `for` loop can now short-circuit three direct awaited condition operands and then suspend through its awaited incrementor before condition re-entry, preserving loop-owned captures and evaluation order. Test: `async_await_for_incrementor_three_condition`.

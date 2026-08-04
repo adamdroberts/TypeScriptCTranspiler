@@ -35744,6 +35744,10 @@ class Emitter {
         loopIncrementor: ts.Expression | null = null,
         initialBody = false,
         allowAwaitedBodyPrelude = false,
+        initialLoopInitializer?: {
+            awaitExpr: ts.AwaitExpression;
+            assignment: ts.Statement;
+        },
     ): boolean {
         if (awaitExpressions.length !== 2 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
@@ -35961,6 +35965,76 @@ class Emitter {
                     thisValue,
                 },
                 bodyAwaitExpressions,
+            );
+        }
+        let initialLoopInitializerPromiseType: CType | null = null;
+        let initialLoopInitializerAdapter: string | null = null;
+        if (initialLoopInitializer) {
+            const initializerPromiseType = this.prepareType(mapTsType(
+                initialLoopInitializer.awaitExpr.expression,
+                this.checker.getTypeAtLocation(initialLoopInitializer.awaitExpr.expression),
+                this.checker,
+            ));
+            const initializerAwaitedType = this.prepareType(mapTsType(
+                initialLoopInitializer.awaitExpr,
+                this.checker.getTypeAtLocation(initialLoopInitializer.awaitExpr),
+                this.checker,
+            ));
+            if (initializerPromiseType.kind !== "promise" || initializerAwaitedType.kind === "never") return false;
+            initialLoopInitializerPromiseType = initializerPromiseType;
+            initialLoopInitializerAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                firstName,
+                promiseTypes[0]!,
+                {
+                    conditionExpr: condition,
+                    conditionAwaitExpr: awaitExpressions[0]!,
+                    loopIncrementor: undefined,
+                    bodyAwaitExpr: initialLoopInitializer.awaitExpr,
+                    bodyAwaitExprs: [initialLoopInitializer.awaitExpr],
+                    bodyReturnExpr: ts.factory.createVoidZero(),
+                    bodyAwaitedAliasSymbols: [],
+                    bodyAwaitedAliasIndices: [],
+                    bodyBetweenAwaitStatements: [],
+                    bodyPostAwaitStatements: [initialLoopInitializer.assignment],
+                    bodyAwaitFinallyStatements: [],
+                    bodyAwaitFinallyAwaitExpr: undefined,
+                    bodyAwaitCatchStatements: undefined,
+                    bodyAwaitCatchAwaitExpr: undefined,
+                    bodyAwaitCatchSymbol: undefined,
+                    bodyAwaitCatchAdapter: undefined,
+                    bodyPreludeStatements: [],
+                    bodyLeadingContinuation: undefined,
+                    bodyContinue: true,
+                    bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
+                    bodyContinueConditionNegated: false,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                    bodyContinueElseBreak: false,
+                    bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakAwaitedAliasSymbols: [],
+                    bodyContinueElseBreakAwaitedAliasIndices: [],
+                    bodyContinueElseBreakBetweenAwaitStatements: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
+                    bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnAwaitPreludeExprs: [],
+                    bodyContinueElseReturnAwaitedAliasSymbols: [],
+                    bodyContinueElseReturnAwaitedAliasIndices: [],
+                    bodyContinueElseReturnBetweenAwaitStatements: [],
+                    bodyContinueElseReturnSynchronousExpr: null,
+                    bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnPostAwaitStatements: [],
+                    bodyContinueElseReturnRejectResult: false,
+                    bodyRejectResult: false,
+                    fallthroughExpr,
+                    fallthroughAwaitExpr: fallthroughAwait,
+                    params: [...params, ...loopInitializerCaptures],
+                    thisValue,
+                },
+                [initialLoopInitializer.awaitExpr],
             );
         }
         this.structDecls.open(`typedef struct ${firstEnvType}`);
@@ -36261,21 +36335,37 @@ class Emitter {
         this.closureDefs.write(secondBuf.toString());
 
         if (loopInitializer) {
-            if (ts.isVariableStatement(loopInitializer)) this.emitStmt(buf, loopInitializer);
+            if (ts.isVariableStatement(loopInitializer)) {
+                const initializerDeclaration = initialLoopInitializer && loopInitializer.declarationList.declarations.length === 1
+                    ? loopInitializer.declarationList.declarations[0]
+                    : undefined;
+                const mutableInitializerDeclaration = initializerDeclaration as (ts.VariableDeclaration & { initializer?: ts.Expression }) | undefined;
+                const savedInitializer = mutableInitializerDeclaration?.initializer;
+                if (mutableInitializerDeclaration && savedInitializer === initialLoopInitializer?.awaitExpr) {
+                    mutableInitializerDeclaration.initializer = undefined;
+                    try {
+                        this.emitStmt(buf, loopInitializer);
+                    } finally {
+                        mutableInitializerDeclaration.initializer = savedInitializer;
+                    }
+                } else {
+                    this.emitStmt(buf, loopInitializer);
+                }
+            }
             else {
                 const initializer = this.emitExpr(loopInitializer);
                 buf.line(`${initializer.c};`);
             }
         }
-        const initialAwaitExpr = initialBody ? initialBodyAwaitExprs[0]! : awaitExpressions[0]!;
-        const initialPromiseType = initialBody
+        const initialAwaitExpr = initialLoopInitializer?.awaitExpr ?? (initialBody ? initialBodyAwaitExprs[0]! : awaitExpressions[0]!);
+        const initialPromiseType = initialLoopInitializerPromiseType ?? (initialBody
             ? this.prepareType(mapTsType(
                 initialAwaitExpr.expression,
                 this.checker.getTypeAtLocation(initialAwaitExpr.expression),
                 this.checker,
             ))
-            : promiseTypes[0]!;
-        const initialAdapter = initialBody ? initialBodyAdapter! : firstName;
+            : promiseTypes[0]!);
+        const initialAdapter = initialLoopInitializerAdapter ?? (initialBody ? initialBodyAdapter! : firstName);
         if (initialBody) {
             for (const statement of initialBodyPreludeStatements) this.emitStmt(buf, statement);
         }
@@ -36290,7 +36380,9 @@ class Emitter {
         buf.line(`${envVar}->receiver = ${sourceVar};`);
         buf.line(`${envVar}->result_promise = ${resultVar};`);
         for (const param of params) buf.line(`${envVar}->${param.field} = ${param.name};`);
-        for (const capture of loopInitializerCaptures) buf.line(`${envVar}->${capture.field} = ${capture.name};`);
+        if (!initialLoopInitializer) {
+            for (const capture of loopInitializerCaptures) buf.line(`${envVar}->${capture.field} = ${capture.name};`);
+        }
         if (thisValue) buf.line(`${envVar}->this_arg = ${thisValue.c};`);
         buf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
         buf.line(`tsc_promise_add_callback(${sourceVar}, ${initialAdapter}, ${envVar});`);
@@ -41025,7 +41117,7 @@ class Emitter {
             if (!supported) return false;
             loopInitializerCaptures = initializerCaptures;
         }
-        if (!awaitedLoopInitializerContinuation && loopInitializer && ts.isVariableStatement(loopInitializer) && loopTwoAwaitControlSupported &&
+        if (loopInitializer && ts.isVariableStatement(loopInitializer) && loopTwoAwaitControlSupported &&
             awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
@@ -41041,6 +41133,7 @@ class Emitter {
                 loopIncrementor,
                 doWhile,
                 allowAwaitedBodyPrelude,
+                awaitedLoopInitializerContinuation,
             )) return true;
         if (!awaitedLoopInitializerContinuation && loopInitializer && ts.isVariableStatement(loopInitializer) &&
             (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
