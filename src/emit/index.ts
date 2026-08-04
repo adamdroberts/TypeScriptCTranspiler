@@ -309,6 +309,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitCatchPresent?: boolean;
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
+    bodyAwaitCatchBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyAwaitCatchSymbol?: ts.Symbol;
     bodyAwaitCatchAdapter?: string;
     bodyPreludeStatements: readonly ts.Statement[];
@@ -38899,6 +38900,7 @@ class Emitter {
         let bodyAwaitCatchPresent = false;
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
+        let bodyAwaitCatchBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
         const statementContainsAwait = (statement: ts.Statement): boolean => {
             let found = false;
@@ -39157,24 +39159,35 @@ class Emitter {
             ts.isAwaitExpression(directBodyAwait) &&
             loopBody[0]!.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
             (!loopBody[0]!.catchClause.variableDeclaration || ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)) &&
-            loopBody[0]!.catchClause.block.statements.length === 1 &&
+            loopBody[0]!.catchClause.block.statements.length >= 1 &&
             ts.isExpressionStatement(loopBody[0]!.catchClause.block.statements[0]!) &&
             ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.catchClause.block.statements[0]!.expression)) &&
-            loopBody[0]!.finallyBlock.statements.length === 1 &&
+            loopBody[0]!.catchClause.block.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !loopBody[0]!.catchClause.block.statements.slice(1).some(statementContainsAwait) &&
+            loopBody[0]!.finallyBlock.statements.length >= 1 &&
             ts.isExpressionStatement(loopBody[0]!.finallyBlock.statements[0]!) &&
-            ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.finallyBlock.statements[0]!.expression))) {
+            ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.finallyBlock.statements[0]!.expression)) &&
+            loopBody[0]!.finallyBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            !loopBody[0]!.finallyBlock.statements.slice(1).some(statementContainsAwait)) {
             const tryAwait = this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
             const catchAwait = this.unwrapTransparentExpression(loopBody[0]!.catchClause.block.statements[0]!.expression) as ts.AwaitExpression;
             const finallyAwait = this.unwrapTransparentExpression(loopBody[0]!.finallyBlock.statements[0]!.expression) as ts.AwaitExpression;
             bodyAwaitExpr = tryAwait;
             bodyAwaitExprs = [tryAwait, finallyAwait, directBodyAwait];
             bodyReturnExpr = bodyExpression;
-            bodyBetweenAwaitStatements = [loopBody[0]!.tryBlock.statements.slice(1)];
+            bodyBetweenAwaitStatements = [
+                loopBody[0]!.tryBlock.statements.slice(1),
+                loopBody[0]!.finallyBlock.statements.slice(1),
+            ];
             bodyAwaitCatchAwaitExpr = catchAwait;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwait;
             bodyPreludeStatements = [];
             bodyAwaitTerminal = true;
             bodyAwaitCatchPresent = true;
+            bodyAwaitCatchBetweenAwaitStatements = [
+                loopBody[0]!.catchClause.block.statements.slice(1),
+                loopBody[0]!.finallyBlock.statements.slice(1),
+            ];
             bodyAwaitCatchSymbol = loopBody[0]!.catchClause.variableDeclaration &&
                 ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)
                 ? this.symbolForIdentifier(loopBody[0]!.catchClause.variableDeclaration.name) ?? undefined
@@ -39566,6 +39579,7 @@ class Emitter {
             bodyAwaitCatchPresent,
             bodyAwaitCatchStatements,
             bodyAwaitCatchAwaitExpr,
+            bodyAwaitCatchBetweenAwaitStatements,
             bodyAwaitCatchSymbol,
             bodyPreludeStatements,
             bodyLeadingContinuation: bodyLeadingChain ?? undefined,
@@ -39624,7 +39638,7 @@ class Emitter {
                         ...continuation,
                         bodyAwaitExpr: continuation.bodyAwaitCatchAwaitExpr,
                         bodyAwaitExprs: catchAwaitExprs,
-                        bodyBetweenAwaitStatements: [],
+                        bodyBetweenAwaitStatements: continuation.bodyAwaitCatchBetweenAwaitStatements,
                         bodyAwaitCatchStatements: undefined,
                         bodyAwaitCatchAwaitExpr: undefined,
                         bodyAwaitCatchAdapter: undefined,
