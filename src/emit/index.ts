@@ -52852,6 +52852,11 @@ class Emitter {
         let hasNestedFunctionOrClass = false;
         const checkNestedScopes = (node: ts.Node) => {
             if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
+                if (ts.isMethodDeclaration(node) &&
+                    ts.isObjectLiteralExpression(node.parent) &&
+                    !this.nodeContainsYield(node)) {
+                    return;
+                }
                 const closureParent = ts.isParenthesizedExpression(node.parent) ? node.parent.parent : node.parent;
                 if (ts.isFunctionLike(node) && ts.isCallExpression(closureParent) &&
                     this.unwrapTransparentExpression(closureParent.expression) === node &&
@@ -53636,6 +53641,8 @@ class Emitter {
                         if (!this.staticPropertyName(property.name) || !visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         if (!visit(property.name)) return false;
+                    } else if (ts.isMethodDeclaration(property)) {
+                        if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
                     } else if (ts.isSpreadAssignment(property)) {
                         if (this.nodeContainsYield(property.expression)) return false;
                     } else {
@@ -55307,6 +55314,15 @@ class Emitter {
                     );
                     continue;
                 }
+                if (ts.isMethodDeclaration(property)) {
+                    const name = this.staticPropertyName(property.name) ??
+                        unsupported(property.name, "lazy multi-yield object method keys must be static");
+                    const value = this.emitClosureExpression(property);
+                    pieces.push(
+                        `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, property)})`,
+                    );
+                    continue;
+                }
                 if (ts.isPropertyAssignment(property)) {
                     name = this.staticPropertyName(property.name) ??
                         unsupported(property.name, "lazy multi-yield object keys must be static");
@@ -55315,7 +55331,7 @@ class Emitter {
                     name = property.name.text;
                     expression = property.name;
                 } else {
-                    unsupported(property, "lazy multi-yield object literals support property assignments and shorthand properties only");
+                    unsupported(property, "lazy multi-yield object literals support property assignments, shorthand properties, and yield-free methods only");
                 }
                 const value = build(expression);
                 pieces.push(
@@ -55361,6 +55377,12 @@ class Emitter {
                 const value = build(property.name);
                 const fieldType = this.objectFieldType(ol, targetType, property.name.text, property.name);
                 pieces.push(`${object}->${mangleIdent(property.name.text)} = ${this.coerce(value, fieldType, property.name)}`);
+            } else if (ts.isMethodDeclaration(property)) {
+                const name = this.staticPropertyName(property.name) ??
+                    unsupported(property.name, "lazy multi-yield typed object method keys must be static");
+                const value = this.emitClosureExpression(property);
+                const fieldType = this.objectFieldType(ol, targetType, name, property.name);
+                pieces.push(`${object}->${mangleIdent(name)} = ${this.coerce(value, fieldType, property)}`);
             } else if (ts.isSpreadAssignment(property)) {
                 const sourceTsType = this.expressionDeclaredOrCurrentType(property.expression);
                 const source = this.emitExpr(property.expression);
@@ -55388,7 +55410,7 @@ class Emitter {
                     }
                 }
             } else {
-                unsupported(property, "lazy multi-yield typed object literals support property assignments, shorthand properties, and yield-free spreads only");
+                unsupported(property, "lazy multi-yield typed object literals support property assignments, shorthand properties, yield-free methods, and yield-free spreads only");
             }
         }
         pieces.push(object);
