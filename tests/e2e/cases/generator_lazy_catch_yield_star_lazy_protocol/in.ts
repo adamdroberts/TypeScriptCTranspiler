@@ -24,6 +24,35 @@ function* caught(): Generator<any, string, any> {
     return "outer-normal";
 }
 
+function* sourceThrowDelegate(): Generator<string, string, string> {
+    try {
+        events.push("source-throw-start");
+        yield "source-throw-one";
+        throw "source-terminal";
+    } catch (error: any) {
+        events.push("source-throw-catch:" + error);
+        return "source-throw-recovered";
+    } finally {
+        events.push("source-throw-finally");
+    }
+}
+
+function* caughtSourceThrow(): Generator<any, string, any> {
+    try {
+        yield "source-throw-outer";
+    } catch {
+        yield* sourceThrowDelegate();
+        return "source-throw-outer-done";
+    }
+    return "source-throw-outer-normal";
+}
+
+const sourceThrow = caughtSourceThrow();
+const sourceThrowFirst: any = sourceThrow.next();
+const sourceThrowRecovery: any = sourceThrow.throw("outer-source-throw");
+const sourceThrowDone: any = sourceThrow.next("source-throw-resume");
+console.log("source-throw", sourceThrowFirst.done, sourceThrowFirst.value, sourceThrowRecovery.done, sourceThrowRecovery.value, sourceThrowDone.done, sourceThrowDone.value, events.join("|"));
+
 const delegatedNormal = caught();
 const delegatedNormalFirst: any = delegatedNormal.next();
 const delegatedNormalRecovery: any = delegatedNormal.throw("source-throw");

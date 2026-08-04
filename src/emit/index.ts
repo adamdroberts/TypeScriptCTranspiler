@@ -53081,7 +53081,8 @@ class Emitter {
             !finallyBody.every((child) => this.isSimpleLazyGeneratorFinalizerStatement(child))
         ) return null;
         const tryTerminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
-        const tryStatements = tryTerminalReturn
+        const tryTerminalThrow = !tryTerminalReturn ? this.lazyGeneratorTryTerminalThrow(stmt) : null;
+        const tryStatements = tryTerminalReturn || tryTerminalThrow
             ? stmt.tryBlock.statements.slice(0, -1)
             : stmt.tryBlock.statements;
         if (!tryStatements.some((child) => this.nodeContainsYield(child)) ||
@@ -53167,6 +53168,8 @@ class Emitter {
                 if (!catchSymbol || !this.isSimpleLazyCatchReturnExpression(expression, catchSymbol, catchPreludeSymbols)) return null;
             }
         }
+        if (tryTerminalThrow && (!returnStatement || this.nodeContainsYield(returnStatement.expression!) ||
+            catchPreludeStatements.some((child) => this.nodeContainsYield(child)))) return null;
         if (throwCandidate && !throwStatement) {
             if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
             const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
@@ -54814,12 +54817,13 @@ class Emitter {
         if (ts.isTryStatement(stmt) && catchReturn) {
             buf.open("");
             const tryTerminalReturn = this.lazyGeneratorTryTerminalReturn(stmt);
+            const tryTerminalThrow = !tryTerminalReturn ? this.lazyGeneratorTryTerminalThrow(stmt) : null;
             this.activeLazyGeneratorCatchHandlers.push(catchReturn);
             if (catchReturn.finallyStatements.length > 0) {
                 this.activeLazyGeneratorFinalizers.push([...catchReturn.finallyStatements]);
             }
             try {
-                const tryStatements = tryTerminalReturn
+                const tryStatements = tryTerminalReturn || tryTerminalThrow
                     ? stmt.tryBlock.statements.slice(0, -1)
                     : stmt.tryBlock.statements;
                 for (const child of tryStatements) {
@@ -54840,6 +54844,35 @@ class Emitter {
                 }
                 buf.line("a->iter_has_return = true;");
                 buf.line("a->iter_return_consumed = false;");
+            } else if (tryTerminalThrow) {
+                const thrown = this.emitExpr(tryTerminalThrow.expression!);
+                const catchDecl = catchReturn.catchClause.variableDeclaration;
+                const catchSymbol = catchDecl && ts.isIdentifier(catchDecl.name)
+                    ? this.symbolForIdentifier(catchDecl.name)
+                    : null;
+                if (catchDecl) {
+                    if (!catchSymbol) unsupported(catchDecl, "lazy generator catch binding symbol is unavailable");
+                    const catchBindingField = this.lazyGeneratorCatchBindingFields.get(catchReturn.catchClause);
+                    if (!catchBindingField || !envLocalName) unsupported(catchDecl, "lazy generator catch binding requires a resumable environment");
+                    buf.line(`${envLocalName}->${catchBindingField} = ${this.coerceToString(thrown, tryTerminalThrow.expression!)};`);
+                    this.catchStringSymbols.add(catchSymbol);
+                }
+                try {
+                    if (tryTerminalThrow) {
+                        for (const child of catchReturn.catchPreludeStatements) {
+                            this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                        }
+                    }
+                    const returned = catchReturn.returnStatement
+                        ? this.emitExpr(catchReturn.returnStatement.expression!)
+                        : null;
+                    if (!returned) unsupported(stmt, "lazy generator source throw catch recovery requires a terminal return");
+                    buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, catchReturn.returnStatement!.expression!)};`);
+                    buf.line("a->iter_has_return = true;");
+                    buf.line("a->iter_return_consumed = false;");
+                } finally {
+                    if (catchSymbol) this.catchStringSymbols.delete(catchSymbol);
+                }
             }
             for (const child of catchReturn.finallyStatements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
@@ -54868,7 +54901,7 @@ class Emitter {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");
                 buf.line("return;");
-            } else if (tryTerminalReturn) {
+            } else if (tryTerminalReturn || tryTerminalThrow) {
                 buf.line("*state = -1;");
                 buf.line("*done = true;");
                 buf.line("return;");
