@@ -8,13 +8,24 @@ value[Symbol.asyncDispose] = (): Promise<void> => {
 
 async function run(flag: boolean): Promise<string> {
     await using resource: any = value;
-    if (flag) return "yes";
-    return "no";
+    if (flag) {
+        events += "t";
+        const answer = "yes";
+        return answer;
+    } else {
+        events += "f";
+        const answer = "no";
+        return answer;
+    }
 }
 
 async function throwBranch(): Promise<string> {
     await using resource: any = value;
-    if (true) throw "boom";
+    if (true) {
+        events += "x";
+        const reason = "boom";
+        throw reason;
+    }
     return "never";
 }
 

@@ -25906,43 +25906,61 @@ class Emitter {
         const tail = statements.slice(usingStatementCount);
         if (tail.some(containsAwait)) return false;
 
+        const simpleBodyStatement = (statement: ts.Statement): boolean =>
+            ts.isExpressionStatement(statement) ||
+            ts.isVariableStatement(statement) ||
+            ts.isEmptyStatement(statement);
+        type CompletionPath = {
+            prefix: ts.Statement[];
+            completion: ts.ReturnStatement | ts.ThrowStatement;
+        };
+        const completionPath = (statement: ts.Statement): CompletionPath | null => {
+            const path = ts.isBlock(statement)
+                ? Array.from(statement.statements)
+                : [statement];
+            if (path.length === 0) return null;
+            const completion = path[path.length - 1]!;
+            if (!ts.isReturnStatement(completion) && !ts.isThrowStatement(completion)) return null;
+            const prefix = path.slice(0, -1);
+            if (!prefix.every(simpleBodyStatement)) return null;
+            if (prefix.some((entry) => this.statementAlwaysExits(entry))) return null;
+            return {
+                prefix,
+                completion,
+            };
+        };
         const terminal = tail.length > 0 ? tail[tail.length - 1]! : null;
         const terminalIsReturn = !!terminal && ts.isReturnStatement(terminal);
         const terminalIsThrow = !!terminal && ts.isThrowStatement(terminal);
-        const singleCompletion = (statement: ts.Statement): ts.ReturnStatement | ts.ThrowStatement | null => {
-            const unwrapped = ts.isBlock(statement) && statement.statements.length === 1
-                ? statement.statements[0]!
-                : statement;
-            return ts.isReturnStatement(unwrapped) || ts.isThrowStatement(unwrapped)
-                ? unwrapped
-                : null;
-        };
         let conditional: ts.IfStatement | null = null;
-        let conditionalThen: ts.ReturnStatement | ts.ThrowStatement | null = null;
-        let conditionalElse: ts.ReturnStatement | ts.ThrowStatement | null = null;
-        let conditionalFallback: ts.ReturnStatement | ts.ThrowStatement | null = null;
+        let conditionalThen: CompletionPath | null = null;
+        let conditionalElse: CompletionPath | null = null;
+        let conditionalFallback: CompletionPath | null = null;
         let bodyStatements: ts.Statement[];
         if (terminal && ts.isIfStatement(terminal)) {
-            const thenCompletion = singleCompletion(terminal.thenStatement);
-            const elseCompletion = terminal.elseStatement
-                ? singleCompletion(terminal.elseStatement)
+            const thenPath = completionPath(terminal.thenStatement);
+            const elsePath = terminal.elseStatement
+                ? completionPath(terminal.elseStatement)
                 : null;
-            if (!thenCompletion || (terminal.elseStatement && !elseCompletion)) return false;
+            if (!thenPath || (terminal.elseStatement && !elsePath)) return false;
             conditional = terminal;
-            conditionalThen = thenCompletion;
-            conditionalElse = elseCompletion;
+            conditionalThen = thenPath;
+            conditionalElse = elsePath;
             bodyStatements = tail.slice(0, -1);
         } else if (
             terminalIsReturn || terminalIsThrow
         ) {
             const candidate = tail.length > 1 ? tail[tail.length - 2]! : null;
-            const thenCompletion = candidate && ts.isIfStatement(candidate) && !candidate.elseStatement
-                ? singleCompletion(candidate.thenStatement)
+            const thenPath = candidate && ts.isIfStatement(candidate) && !candidate.elseStatement
+                ? completionPath(candidate.thenStatement)
                 : null;
-            if (candidate && ts.isIfStatement(candidate) && thenCompletion) {
+            if (candidate && ts.isIfStatement(candidate) && thenPath) {
                 conditional = candidate;
-                conditionalThen = thenCompletion;
-                conditionalFallback = terminal as ts.ReturnStatement | ts.ThrowStatement;
+                conditionalThen = thenPath;
+                conditionalFallback = {
+                    prefix: [],
+                    completion: terminal as ts.ReturnStatement | ts.ThrowStatement,
+                };
                 bodyStatements = tail.slice(0, -2);
             } else {
                 bodyStatements = tail.slice(0, -1);
@@ -25950,10 +25968,6 @@ class Emitter {
         } else {
             bodyStatements = tail;
         }
-        const simpleBodyStatement = (statement: ts.Statement): boolean =>
-            ts.isExpressionStatement(statement) ||
-            ts.isVariableStatement(statement) ||
-            ts.isEmptyStatement(statement);
         if (!bodyStatements.every(simpleBodyStatement)) return false;
         if (bodyStatements.some((statement) => this.statementAlwaysExits(statement))) return false;
         if (!conditional && terminal && !terminalIsReturn && !terminalIsThrow && !simpleBodyStatement(terminal)) return false;
@@ -25986,13 +26000,16 @@ class Emitter {
             buf.line(`tsc_promise_t* ${resultPromise};`);
             const condition = this.emitExpr(conditional.expression);
             buf.open(`if (${this.coerce(condition, T_BOOLEAN, conditional.expression)})`);
-            emitCompletion(conditionalThen!);
+            for (const statement of conditionalThen!.prefix) this.emitStmt(buf, statement);
+            emitCompletion(conditionalThen!.completion);
             buf.close();
             buf.open("else");
             if (conditionalElse) {
-                emitCompletion(conditionalElse);
+                for (const statement of conditionalElse.prefix) this.emitStmt(buf, statement);
+                emitCompletion(conditionalElse.completion);
             } else if (conditionalFallback) {
-                emitCompletion(conditionalFallback);
+                for (const statement of conditionalFallback.prefix) this.emitStmt(buf, statement);
+                emitCompletion(conditionalFallback.completion);
             } else {
                 buf.line(`${resultPromise} = tsc_promise_resolve(tsc_value_undefined());`);
             }
