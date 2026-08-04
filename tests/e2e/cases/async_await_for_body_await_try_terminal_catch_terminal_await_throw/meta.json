@@ -1,0 +1,3 @@
+{
+  "description": "counted awaited loop bodies carry terminal catch throw-await completion through awaited finally cleanup and preserve rejection precedence"
+}
