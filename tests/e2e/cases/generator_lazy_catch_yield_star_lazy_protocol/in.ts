@@ -73,6 +73,30 @@ function* caughtSourceThrowYieldStar(): Generator<any, string, any> {
     return "source-yield-star-outer-normal";
 }
 
+function* sourceThrowYieldStarCatchThrowDelegate(): Generator<string, string, string> {
+    try {
+        events.push("source-yield-star-catch-throw-start");
+        yield "source-yield-star-catch-throw-one";
+        throw "source-yield-star-catch-throw-source-terminal";
+    } catch (error: any) {
+        events.push("source-yield-star-catch-throw-catch:" + error);
+        yield* recoveryDelegate();
+        throw "source-yield-star-catch-terminal";
+    } finally {
+        events.push("source-yield-star-catch-throw-finally");
+    }
+}
+
+function* caughtSourceThrowYieldStarCatchThrow(): Generator<any, string, any> {
+    try {
+        yield "source-yield-star-catch-throw-outer";
+    } catch {
+        yield* sourceThrowYieldStarCatchThrowDelegate();
+        return "source-yield-star-catch-throw-outer-done";
+    }
+    return "source-yield-star-catch-throw-outer-normal";
+}
+
 function* sourceThrowCatchThrowDelegate(): Generator<string, string, string> {
     try {
         events.push("source-catch-throw-start");
@@ -155,3 +179,21 @@ const delegatedCloseFirst: any = delegatedClose.next();
 const delegatedCloseRecovery: any = delegatedClose.throw("source-throw");
 const delegatedCloseDone: any = delegatedClose.return("closed");
 console.log("close", delegatedCloseFirst.done, delegatedCloseFirst.value, delegatedCloseRecovery.done, delegatedCloseRecovery.value, delegatedCloseDone.done, delegatedCloseDone.value, events.join("|"));
+
+const sourceThrowYieldStarCatchThrow = caughtSourceThrowYieldStarCatchThrow();
+const sourceThrowYieldStarCatchThrowFirst: any = sourceThrowYieldStarCatchThrow.next();
+const sourceThrowYieldStarCatchThrowRecovery: any = sourceThrowYieldStarCatchThrow.throw("outer-source-throw");
+const sourceThrowYieldStarCatchThrowCatchFirst: any = sourceThrowYieldStarCatchThrow.next("source-yield-star-catch-throw-resume");
+const sourceThrowYieldStarCatchThrowCatchSecond: any = sourceThrowYieldStarCatchThrow.next("delegate-one-resume");
+try {
+    sourceThrowYieldStarCatchThrow.next("delegate-two-resume");
+} catch (error: any) {
+    console.log("source-throw-yield-star-catch-throw", sourceThrowYieldStarCatchThrowFirst.done, sourceThrowYieldStarCatchThrowFirst.value, sourceThrowYieldStarCatchThrowRecovery.done, sourceThrowYieldStarCatchThrowRecovery.value, sourceThrowYieldStarCatchThrowCatchFirst.done, sourceThrowYieldStarCatchThrowCatchFirst.value, sourceThrowYieldStarCatchThrowCatchSecond.done, sourceThrowYieldStarCatchThrowCatchSecond.value, error, events.join("|"));
+}
+
+const sourceThrowYieldStarCatchThrowClose = caughtSourceThrowYieldStarCatchThrow();
+const sourceThrowYieldStarCatchThrowCloseFirst: any = sourceThrowYieldStarCatchThrowClose.next();
+const sourceThrowYieldStarCatchThrowCloseRecovery: any = sourceThrowYieldStarCatchThrowClose.throw("outer-source-throw");
+const sourceThrowYieldStarCatchThrowCloseCatch: any = sourceThrowYieldStarCatchThrowClose.next("source-yield-star-catch-throw-resume");
+const sourceThrowYieldStarCatchThrowCloseDone: any = sourceThrowYieldStarCatchThrowClose.return("source-yield-star-catch-throw-closed");
+console.log("source-throw-yield-star-catch-throw-close", sourceThrowYieldStarCatchThrowCloseFirst.done, sourceThrowYieldStarCatchThrowCloseFirst.value, sourceThrowYieldStarCatchThrowCloseRecovery.done, sourceThrowYieldStarCatchThrowCloseRecovery.value, sourceThrowYieldStarCatchThrowCloseCatch.done, sourceThrowYieldStarCatchThrowCloseCatch.value, sourceThrowYieldStarCatchThrowCloseDone.done, sourceThrowYieldStarCatchThrowCloseDone.value, events.join("|"));
