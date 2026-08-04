@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified counted awaited loop-body terminal try/catch/finally prelude coverage: a counted `for` body preserves await-free statements before the first awaited try, catch-recovery, and finally-cleanup stages while retaining initializer/incrementor ordering across return fulfillment, terminal rejection, fulfilled terminal throw, source rejection, and cleanup rejection. Tests: `async_await_for_body_await_try_terminal_catch_finally_await_prelude_return`, `async_await_for_body_await_try_terminal_catch_finally_await_prelude_throw`.
+
 - Verified ordinary awaited loop-body try/finally terminal coverage: a bounded `while` body can suspend inside a no-catch `try`, run synchronous `finally` cleanup in the correct order, and then suspend through terminal `return await` or `throw await`; rejection from the first body await also runs cleanup before propagating. Tests: `async_await_loop_body_await_try_finally_return`, `async_await_loop_body_await_try_finally_throw`, `async_await_loop_body_await_try_finally_body_reject`.
 
 - Verified ordinary awaited loop-body terminal try/catch/finally coverage: a final `try` can route source-stage and terminal-await rejection through direct awaited catch recovery, convert a fulfilled terminal `throw await` into the same catch path, run multiple awaited `finally` cleanup stages, and fall through to the next loop condition after recovery; cleanup rejection still overrides. Tests: `async_await_loop_body_await_try_terminal_catch_finally_await_return`, `async_await_loop_body_await_try_terminal_catch_finally_await_throw`.

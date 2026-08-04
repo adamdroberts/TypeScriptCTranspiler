@@ -1,0 +1,3 @@
+{
+  "description": "counted async for bodies preserve terminal try/catch/finally preludes across throw-await fulfillment and rejection paths"
+}
