@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified awaited assigned-alias/incrementor composition: bounded async `for` loops now carry an assigned-before-use `let` alias initialized by direct `value = await ...` through later body suspension before an awaited counted-`for` incrementor on `continue`, while terminal `break` skips the incrementor. Tests: `async_await_for_incrementor_body_await_assignment_continue`, `async_await_for_incrementor_body_await_assignment_break`.
+
 - Verified awaited-body/incrementor composition: bounded async `for` loops now sequence multiple direct awaited body expressions before an awaited counted-`for` incrementor on `continue`, while terminal `break` skips the incrementor and routes to the awaited post-loop return. Tests: `async_await_for_incrementor_body_await_continue`, `async_await_for_incrementor_body_await_break`.
 
 - Verified multi-condition comma-incrementor coverage: a bounded async `for` loop now preserves multiple direct awaited condition operands before a top-level comma-sequenced incrementor with multiple awaits and supported synchronous interstitial operands, retaining short-circuit skips and suspension order. Test: `async_await_for_incrementor_multi_condition_sequence`.

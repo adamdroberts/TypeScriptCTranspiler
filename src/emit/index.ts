@@ -41008,10 +41008,29 @@ class Emitter {
             };
             const terminalIfContinueAwaitConditionSupported = terminalIfAwaitConditionSupported(terminalIfContinue);
             const terminalIfBreakAwaitConditionSupported = terminalIfAwaitConditionSupported(terminalIfBreak);
-            const bodyDirectAwaitStatementSupported = (statement: ts.Statement): boolean => {
+            const bodyDirectAwaitStatementSupported = (
+                statement: ts.Statement,
+                statementIndex: number,
+                statements: readonly ts.Statement[],
+            ): boolean => {
                 if (ts.isExpressionStatement(statement)) {
                     const expression = this.unwrapTransparentExpression(statement.expression);
-                    return ts.isAwaitExpression(expression);
+                    if (ts.isAwaitExpression(expression)) return true;
+                    if (!ts.isBinaryExpression(expression) ||
+                        expression.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                        !ts.isIdentifier(expression.left)) return false;
+                    const awaitExpression = this.unwrapTransparentExpression(expression.right);
+                    if (!ts.isAwaitExpression(awaitExpression)) return false;
+                    const declarationStatement = statements[statementIndex - 1];
+                    if (!ts.isVariableStatement(declarationStatement) ||
+                        (declarationStatement.declarationList.flags & ts.NodeFlags.Let) === 0 ||
+                        declarationStatement.declarationList.declarations.length !== 1) return false;
+                    const declaration = declarationStatement.declarationList.declarations[0]!;
+                    if (!ts.isIdentifier(declaration.name) || declaration.initializer ||
+                        declaration.name.text !== expression.left.text) return false;
+                    const declarationSymbol = this.symbolForIdentifier(declaration.name);
+                    const assignmentSymbol = this.symbolForIdentifier(expression.left);
+                    return !!declarationSymbol && declarationSymbol === assignmentSymbol;
                 }
                 if (ts.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
                     const declaration = statement.declarationList.declarations[0]!;
@@ -41049,10 +41068,10 @@ class Emitter {
                 }
                 ts.forEachChild(node, visitBody);
             };
-            for (const statement of loopBodyWithoutTerminalControl) {
+            for (const [statementIndex, statement] of loopBodyWithoutTerminalControl.entries()) {
                 if ((terminalIfContinueAwaitConditionSupported && terminalIfContinue?.statement === statement) ||
                     (terminalIfBreakAwaitConditionSupported && terminalIfBreak?.statement === statement)) continue;
-                if (bodyDirectAwaitStatementSupported(statement)) continue;
+                if (bodyDirectAwaitStatementSupported(statement, statementIndex, loopBodyWithoutTerminalControl)) continue;
                 if (statementContainsAwait(statement)) {
                     bodyWithoutControlFlow = false;
                     break;

@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now compose an assigned-before-use `let` alias initialized by direct `value = await ...` body work with an awaited counted-`for` incrementor, preserving that alias through later body suspension before `continue` and skipping the incrementor on `break`. Tests: `async_await_for_incrementor_body_await_assignment_continue`, `async_await_for_incrementor_body_await_assignment_break`
+
 - Bounded async `for` loops now compose direct awaited body expressions with an awaited counted-`for` incrementor: multiple body suspensions run before `continue`, while `break` skips the incrementor and routes to the awaited post-loop return. Tests: `async_await_for_incrementor_body_await_continue`, `async_await_for_incrementor_body_await_break`
 
 - Bounded async `for` loops now compose multiple awaited condition operands with a comma-sequenced incrementor containing multiple awaits and supported synchronous interstitial operands, preserving condition short-circuiting and full body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_multi_condition_sequence`
