@@ -44344,13 +44344,29 @@ class Emitter {
                     }
                     const tryTrailingStatements = tryPendingStatements;
                     const finallyStatements = statement.finallyBlock?.statements ?? [];
+                    const finallyTerminalStatement = finallyStatements[finallyStatements.length - 1];
+                    let finallyTerminalAction: "return" | "throw" | null = null;
+                    let finallyTerminalExpression: ts.AwaitExpression | null = null;
+                    if (finallyTerminalStatement &&
+                        (ts.isReturnStatement(finallyTerminalStatement) || ts.isThrowStatement(finallyTerminalStatement))) {
+                        const candidate = finallyTerminalStatement.expression
+                            ? this.unwrapTransparentExpression(finallyTerminalStatement.expression)
+                            : null;
+                        if (candidate && ts.isAwaitExpression(candidate)) {
+                            finallyTerminalAction = ts.isReturnStatement(finallyTerminalStatement) ? "return" : "throw";
+                            finallyTerminalExpression = candidate;
+                        }
+                    }
+                    const finallyAwaitSourceStatements = finallyTerminalExpression
+                        ? finallyStatements.slice(0, -1)
+                        : finallyStatements;
                     const finallyAwaitSteps: {
                         expression: ts.AwaitExpression;
                         before: readonly ts.Statement[];
                     }[] = [];
                     let finallyPendingStatements: ts.Statement[] = [];
                     let finallyStatementsSupported = true;
-                    for (const finallyStatement of finallyStatements) {
+                    for (const finallyStatement of finallyAwaitSourceStatements) {
                         const finallyExpression = ts.isExpressionStatement(finallyStatement)
                             ? this.unwrapTransparentExpression(finallyStatement.expression)
                             : null;
@@ -44372,9 +44388,11 @@ class Emitter {
                     const hasSupportedFinally = !statement.finallyBlock || finallyStatementsSupported;
                     const hasSupportedTerminalTry = !tryAwaitSteps.some(({ terminalAction }) => !!terminalAction) ||
                         index === statements.length - 1;
+                    const hasSupportedTerminalFinally = !finallyTerminalAction || index === statements.length - 1;
                     const hasSupportedTry = tryStatementsSupported && tryAwaitSteps.length > 0 &&
                         tryTrailingStatements.length === 0 &&
                         hasSupportedTerminalTry &&
+                        hasSupportedTerminalFinally &&
                         (tryAwaitSteps.length === 1 ||
                             catchAwaitSteps.length > 0 ||
                             (!statement.catchClause && !!statement.finallyBlock) ||
@@ -44438,15 +44456,34 @@ class Emitter {
                                 null,
                                 null,
                                 finallyIndex === finallyAwaitSteps.length - 1
-                                    ? finallyTrailingStatements
+                                    ? finallyTerminalExpression ? [] : finallyTrailingStatements
                                     : [],
                                 true,
                                 false,
                                 null,
                                 false,
-                                finallyIndex === finallyAwaitSteps.length - 1,
+                                finallyIndex === finallyAwaitSteps.length - 1 && !finallyTerminalExpression,
                                 false,
                                 false,
+                            )) return null;
+                        }
+                        if (finallyTerminalExpression && finallyTerminalAction) {
+                            pendingStatements = [...finallyTrailingStatements];
+                            if (!addAwait(
+                                finallyTerminalExpression,
+                                null,
+                                null,
+                                null,
+                                [],
+                                true,
+                                false,
+                                null,
+                                false,
+                                true,
+                                false,
+                                false,
+                                [],
+                                finallyTerminalAction,
                             )) return null;
                         }
                         continue;
@@ -45470,7 +45507,7 @@ class Emitter {
                 !deferTerminalFinally) {
                 emitBranchStatements(controlBuf, "state", currentAwait.finallyStatements);
             }
-            if (currentAwait.isFinallyAwait && currentAwait.isLastFinallyAwait) {
+            if (currentAwait.isFinallyAwait && currentAwait.isLastFinallyAwait && !currentAwait.terminalAction) {
                 controlBuf.open("if (state->reject_after_success)");
                 controlBuf.line("tsc_promise_reject_in_place(_ret, state->rejection_reason);");
                 controlBuf.line("return;");
