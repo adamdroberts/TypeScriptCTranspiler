@@ -1,0 +1,3 @@
+{
+  "description": "lazy generator multi-yield returns stage direct yielded receivers before mutation leaves"
+}

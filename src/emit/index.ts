@@ -53528,10 +53528,32 @@ class Emitter {
                 return (unwrapped.arguments ?? []).every((argument) => visit(argument as ts.Expression));
             }
             if (ts.isPostfixUnaryExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                const operand = unwrapped.operand;
+                if (ts.isPropertyAccessExpression(operand)) {
+                    return !!this.directLazyYieldCondition(operand.expression) &&
+                        visit(operand.expression);
+                }
+                if (ts.isElementAccessExpression(operand)) {
+                    return !!this.directLazyYieldCondition(operand.expression) &&
+                        !this.nodeContainsYield(operand.argumentExpression) &&
+                        visit(operand.expression);
+                }
+                return false;
             }
             if (ts.isDeleteExpression(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                const operand = unwrapped.expression;
+                if (ts.isPropertyAccessExpression(operand)) {
+                    return !!this.directLazyYieldCondition(operand.expression) &&
+                        visit(operand.expression);
+                }
+                if (ts.isElementAccessExpression(operand)) {
+                    return !!this.directLazyYieldCondition(operand.expression) &&
+                        !this.nodeContainsYield(operand.argumentExpression) &&
+                        visit(operand.expression);
+                }
+                return false;
             }
             if (ts.isConditionalExpression(unwrapped)) {
                 const yieldedCondition = this.directLazyYieldCondition(unwrapped.condition);
@@ -53571,7 +53593,18 @@ class Emitter {
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
                 (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
-                return !this.nodeContainsYield(unwrapped);
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                const operand = unwrapped.operand;
+                if (ts.isPropertyAccessExpression(operand)) {
+                    return !!this.directLazyYieldCondition(operand.expression) &&
+                        visit(operand.expression);
+                }
+                if (ts.isElementAccessExpression(operand)) {
+                    return !!this.directLazyYieldCondition(operand.expression) &&
+                        !this.nodeContainsYield(operand.argumentExpression) &&
+                        visit(operand.expression);
+                }
+                return false;
             }
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
