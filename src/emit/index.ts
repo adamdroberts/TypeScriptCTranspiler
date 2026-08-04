@@ -53028,8 +53028,16 @@ class Emitter {
         }
         if (!stmt.tryBlock.statements.some((child) => this.nodeContainsYield(child))) return false;
         if (!stmt.tryBlock.statements.every((child) => this.isValidLazyGeneratorStatement(child))) return false;
-        return finallyBody.every((child) =>
-            !this.nodeContainsYield(child) && this.isValidLazyGeneratorStatement(child));
+        return finallyBody.every((child) => this.isSimpleLazyGeneratorFinalizerStatement(child));
+    }
+
+    private isSimpleLazyGeneratorFinalizerStatement(stmt: ts.Statement): boolean {
+        if (!this.nodeContainsYield(stmt)) return this.isValidLazyGeneratorStatement(stmt);
+        if (!ts.isExpressionStatement(stmt)) return false;
+        const expression = this.unwrapTransparentExpression(stmt.expression);
+        return ts.isYieldExpression(expression) &&
+            !expression.asteriskToken &&
+            !this.nodeContainsYield(expression.expression ?? expression);
     }
 
     private lazyGeneratorTryCatchReturn(stmt: ts.TryStatement): LazyGeneratorCatchHandler | null {
@@ -54284,6 +54292,9 @@ class Emitter {
         const deferredCatchThrow = deferredCatchThrowHandler ? this.freshTemp("_lazy_catch_throw") : null;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
         buf.line(`${envLocalName}->lazy_close_requested = false;`);
+        buf.open(`if (!${envLocalName}->lazy_close_throw)`);
+        buf.line(`${envLocalName}->lazy_close_handled = true;`);
+        buf.close();
         if (deferredCatchThrow) buf.line(`tsc_str_t* ${deferredCatchThrow} = NULL;`);
         if (this.activeLazyGeneratorCatchHandlers.length > 0 && this.activeLazyGeneratorCatchRecoveryDepth === 0) {
             buf.open(`if (${envLocalName}->lazy_close_throw)`);
@@ -54431,6 +54442,11 @@ class Emitter {
             buf.line("return;");
             buf.close();
         }
+        buf.open(`if (${envLocalName}->lazy_close_handled && !${envLocalName}->lazy_close_throw)`);
+        buf.line(`a->iter_return = ${envLocalName}->lazy_close_arg;`);
+        buf.line("a->iter_has_return = true;");
+        buf.line("a->iter_return_consumed = false;");
+        buf.close();
         buf.line("*state = -1;");
     buf.line("*done = true;");
         buf.line("return;");
@@ -54933,7 +54949,21 @@ class Emitter {
         }
 
         if (ts.isReturnStatement(stmt)) {
-            if (stmt.expression) {
+            if (envLocalName && this.activeLazyGeneratorCloseEnabled) {
+                buf.open(`if (${envLocalName}->lazy_close_handled && !${envLocalName}->lazy_close_throw)`);
+                buf.line(`a->iter_return = ${envLocalName}->lazy_close_arg;`);
+                buf.line("a->iter_has_return = true;");
+                buf.line("a->iter_return_consumed = false;");
+                buf.close();
+                buf.open("else");
+                if (stmt.expression) {
+                    const expr = this.emitExpr(stmt.expression);
+                    buf.line(`a->iter_return = ${this.coerce(expr, T_VALUE, stmt.expression)};`);
+                    buf.line("a->iter_has_return = true;");
+                    buf.line("a->iter_return_consumed = false;");
+                }
+                buf.close();
+            } else if (stmt.expression) {
                 const expr = this.emitExpr(stmt.expression);
                 buf.line(`a->iter_return = ${this.coerce(expr, T_VALUE, stmt.expression)};`);
                 buf.line("a->iter_has_return = true;");
@@ -55718,6 +55748,13 @@ class Emitter {
                 for (const stmt of fn.body.statements) {
                     this.emitLazyGeneratorStmt(nextBuf, stmt, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                 }
+            }
+            if (envLocalName && hasLazyClose) {
+                nextBuf.open(`if (${envLocalName}->lazy_close_handled && !${envLocalName}->lazy_close_throw)`);
+                nextBuf.line(`a->iter_return = ${envLocalName}->lazy_close_arg;`);
+                nextBuf.line("a->iter_has_return = true;");
+                nextBuf.line("a->iter_return_consumed = false;");
+                nextBuf.close();
             }
             nextBuf.line("*state = -1;");
             nextBuf.line("*done = true;");
