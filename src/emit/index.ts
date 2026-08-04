@@ -53035,9 +53035,11 @@ class Emitter {
         if (!this.nodeContainsYield(stmt)) return this.isValidLazyGeneratorStatement(stmt);
         if (!ts.isExpressionStatement(stmt)) return false;
         const expression = this.unwrapTransparentExpression(stmt.expression);
-        return ts.isYieldExpression(expression) &&
-            !expression.asteriskToken &&
-            !this.nodeContainsYield(expression.expression ?? expression);
+        if (!ts.isYieldExpression(expression)) return false;
+        if (expression.asteriskToken && (!expression.expression || !this.isSimpleLazyYieldStarSource(expression.expression))) {
+            return false;
+        }
+        return !this.nodeContainsYield(expression.expression ?? expression);
     }
 
     private lazyGeneratorTryCatchReturn(stmt: ts.TryStatement): LazyGeneratorCatchHandler | null {
@@ -53847,6 +53849,22 @@ class Emitter {
                 }
             }
             if (cur !== node && (ts.isFunctionLike(cur) || ts.isClassLike(cur))) return;
+            ts.forEachChild(cur, visit);
+        };
+        ts.forEachChild(node, visit);
+        return count;
+    }
+
+    private countSimpleLazyFinalizerYieldStars(node: ts.Node): number {
+        let count = 0;
+        const visit = (cur: ts.Node): void => {
+            if (cur !== node && (ts.isFunctionLike(cur) || ts.isClassLike(cur))) return;
+            if (ts.isTryStatement(cur) && this.isSimpleLazyGeneratorTryFinally(cur)) {
+                for (const child of cur.finallyBlock!.statements) {
+                    const yieldExpr = this.simpleLazyYieldExpression(child);
+                    if (yieldExpr?.asteriskToken) count++;
+                }
+            }
             ts.forEachChild(cur, visit);
         };
         ts.forEachChild(node, visit);
@@ -55583,7 +55601,8 @@ class Emitter {
         }
 
         if (!fn.body || !ts.isBlock(fn.body)) unsupported(fn, "lazy generator function requires a block body");
-        const yieldStarCount = this.countSimpleLazyYieldStars(fn.body);
+        const yieldStarCount = this.countSimpleLazyYieldStars(fn.body) +
+            this.countSimpleLazyFinalizerYieldStars(fn.body);
         const hasYieldStar = yieldStarCount > 0;
         const multiYieldCount = this.lazyGeneratorMaxMultiYieldTerminal(fn.body);
         const hasMultiYieldTerminal = multiYieldCount > 0;
