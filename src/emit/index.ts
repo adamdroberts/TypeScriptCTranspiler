@@ -53585,7 +53585,10 @@ class Emitter {
                 return !this.nodeContainsYield(unwrapped);
             }
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
-                return !this.nodeContainsYield(unwrapped);
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                return !!this.directLazyYieldCondition(unwrapped.left) &&
+                    !this.nodeContainsYield(unwrapped.right) &&
+                    visit(unwrapped.left);
             }
             if (op === ts.SyntaxKind.InstanceOfKeyword) return visit(unwrapped.left);
             if (![ts.SyntaxKind.CommaToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
