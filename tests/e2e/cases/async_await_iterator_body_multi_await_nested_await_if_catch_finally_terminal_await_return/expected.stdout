@@ -1,0 +1,14 @@
+of-success:of-return-finally
+of-source-reject:of-return-finally
+of-stage-reject:of-return-finally
+of-recovery-reject:of-return-finally
+of-catch-terminal-reject:of-return-finally
+of-finally-reject-error:of-return-finally
+of-cleanup-reject-error:of-return-cleanup
+in-success:in-return-finally
+in-source-reject:in-return-finally
+in-stage-reject:in-return-finally
+in-recovery-reject:in-return-finally
+in-catch-terminal-reject:in-return-finally
+in-finally-reject-error:in-return-finally
+in-cleanup-reject-error:in-return-cleanup
