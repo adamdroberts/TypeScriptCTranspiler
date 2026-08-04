@@ -37,3 +37,42 @@ const returnedFirst: any = returned.next();
 const returnedSecond: any = returned.next("source-resume");
 const returnedDone: any = returned.return("delegated-return");
 console.log("finally-yield-star-active-return:", returnedFirst.done, returnedFirst.value, returnedSecond.done, returnedSecond.value, returnedDone.done, returnedDone.value);
+
+function* delegatedCleanup(): Generator<string, string, string> {
+    yield "inner-one";
+    yield "inner-two";
+    return "inner-result";
+}
+
+function* outerDelegatedCleanup(): Generator<string, string, string> {
+    try {
+        yield "source";
+    } finally {
+        yield* delegatedCleanup();
+    }
+    return "outer-done";
+}
+
+const delegatedNormal = outerDelegatedCleanup();
+const delegatedNormalFirst: any = delegatedNormal.next();
+const delegatedNormalSecond: any = delegatedNormal.next("source-resume");
+const delegatedNormalThird: any = delegatedNormal.next("inner-one-resume");
+const delegatedNormalDone: any = delegatedNormal.next("inner-two-resume");
+console.log("finally-yield-star-lazy-normal:", delegatedNormalFirst.done, delegatedNormalFirst.value, delegatedNormalSecond.done, delegatedNormalSecond.value, delegatedNormalThird.done, delegatedNormalThird.value, delegatedNormalDone.done, delegatedNormalDone.value);
+
+const delegatedReturned = outerDelegatedCleanup();
+const delegatedReturnedFirst: any = delegatedReturned.next();
+const delegatedReturnedSecond: any = delegatedReturned.next("source-resume");
+const delegatedReturnedDone: any = delegatedReturned.return("outer-return");
+console.log("finally-yield-star-lazy-return:", delegatedReturnedFirst.done, delegatedReturnedFirst.value, delegatedReturnedSecond.done, delegatedReturnedSecond.value, delegatedReturnedDone.done, delegatedReturnedDone.value);
+
+const delegatedThrown = outerDelegatedCleanup();
+const delegatedThrownFirst: any = delegatedThrown.next();
+const delegatedThrownSecond: any = delegatedThrown.next("source-resume");
+let delegatedThrownValue: any;
+try {
+    delegatedThrown.throw("outer-throw");
+} catch (error: any) {
+    delegatedThrownValue = error;
+}
+console.log("finally-yield-star-lazy-throw:", delegatedThrownFirst.done, delegatedThrownFirst.value, delegatedThrownSecond.done, delegatedThrownSecond.value, delegatedThrownValue);

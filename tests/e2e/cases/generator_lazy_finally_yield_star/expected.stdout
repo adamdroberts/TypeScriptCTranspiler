@@ -2,3 +2,6 @@ finally-yield-star-normal: false source false cleanup-one false cleanup-two true
 finally-yield-star-close: false source false cleanup-one false cleanup-two true closed
 finally-yield-star-throw: false source false cleanup-one finalizer-throw
 finally-yield-star-active-return: false source false cleanup-one true delegated-return
+finally-yield-star-lazy-normal: false source false inner-one false inner-two true outer-done
+finally-yield-star-lazy-return: false source false inner-one true outer-return
+finally-yield-star-lazy-throw: false source false inner-one outer-throw
