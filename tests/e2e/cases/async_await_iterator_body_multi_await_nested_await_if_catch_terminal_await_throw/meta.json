@@ -1,0 +1,3 @@
+{
+  "description": "iterator nested awaited-if bodies carry catch throw-await completion through awaited finally cleanup and preserve rejection precedence"
+}
