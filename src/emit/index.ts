@@ -306,6 +306,7 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitFinallyAwaitExpr?: ts.AwaitExpression;
     bodyAwaitFinallyAfterBetween?: boolean;
     bodyAwaitTerminal?: boolean;
+    bodyAwaitCatchPresent?: boolean;
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
     bodyAwaitCatchSymbol?: ts.Symbol;
@@ -38895,9 +38896,23 @@ class Emitter {
         let continuationBodyAwaitFinallyAwaitExpr: ts.AwaitExpression | undefined;
         let bodyAwaitFinallyAfterBetween = false;
         let bodyAwaitTerminal = false;
+        let bodyAwaitCatchPresent = false;
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
+        const statementContainsAwait = (statement: ts.Statement): boolean => {
+            let found = false;
+            const visit = (node: ts.Node): void => {
+                if (found || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                if (ts.isAwaitExpression(node)) {
+                    found = true;
+                    return;
+                }
+                ts.forEachChild(node, visit);
+            };
+            visit(statement);
+            return found;
+        };
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
             bodyReturnExpr = bodyExpression;
@@ -39107,26 +39122,18 @@ class Emitter {
             bodyPreludeStatements = bodyLeadingChain.preludeStatements;
             bodyRejectResult = !!bodyLeadingChain.terminalThrowStatement;
         } else if (!bodyContinue && loopBody.length === 2 && ts.isTryStatement(loopBody[0]!) &&
-            !loopBody[0]!.catchClause && !!loopBody[0]!.finallyBlock &&
+            !!loopBody[0]!.finallyBlock &&
             loopBody[0]!.tryBlock.statements.length >= 1 &&
             ts.isExpressionStatement(loopBody[0]!.tryBlock.statements[0]!) &&
             ts.isAwaitExpression(this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression)) &&
             ts.isAwaitExpression(directBodyAwait) &&
             loopBody[0]!.tryBlock.statements.slice(1).every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+            (!loopBody[0]!.catchClause ||
+                ((!loopBody[0]!.catchClause.variableDeclaration || ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)) &&
+                    loopBody[0]!.catchClause.block.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
+                    !loopBody[0]!.catchClause.block.statements.some(statementContainsAwait))) &&
             loopBody[0]!.finallyBlock.statements.every((statement) => this.asyncAwaitLoopPostStatementSupported(statement)) &&
-            !loopBody[0]!.finallyBlock.statements.some((statement) => {
-                let found = false;
-                const visit = (node: ts.Node): void => {
-                    if (found || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
-                    if (ts.isAwaitExpression(node)) {
-                        found = true;
-                        return;
-                    }
-                    ts.forEachChild(node, visit);
-                };
-                visit(statement);
-                return found;
-            })) {
+            !loopBody[0]!.finallyBlock.statements.some(statementContainsAwait)) {
             const tryAwait = this.unwrapTransparentExpression(loopBody[0]!.tryBlock.statements[0]!.expression) as ts.AwaitExpression;
             bodyAwaitExpr = tryAwait;
             bodyAwaitExprs = [tryAwait, directBodyAwait];
@@ -39136,6 +39143,12 @@ class Emitter {
             bodyAwaitFinallyAfterBetween = true;
             bodyPreludeStatements = [];
             bodyAwaitTerminal = true;
+            bodyAwaitCatchPresent = !!loopBody[0]!.catchClause;
+            bodyAwaitCatchStatements = loopBody[0]!.catchClause?.block.statements ?? [];
+            bodyAwaitCatchSymbol = loopBody[0]!.catchClause?.variableDeclaration &&
+                ts.isIdentifier(loopBody[0]!.catchClause.variableDeclaration.name)
+                ? this.symbolForIdentifier(loopBody[0]!.catchClause.variableDeclaration.name) ?? undefined
+                : undefined;
         } else if (ts.isAwaitExpression(directBodyAwait)) {
             const nestedBodyAwait = this.unwrapTransparentExpression(directBodyAwait.expression);
             bodyAwaitExpr = ts.isAwaitExpression(nestedBodyAwait)
@@ -39520,6 +39533,7 @@ class Emitter {
             bodyAwaitFinallyAwaitExpr: continuationBodyAwaitFinallyAwaitExpr,
             bodyAwaitFinallyAfterBetween,
             bodyAwaitTerminal,
+            bodyAwaitCatchPresent,
             bodyAwaitCatchStatements,
             bodyAwaitCatchAwaitExpr,
             bodyAwaitCatchSymbol,
@@ -40062,7 +40076,10 @@ class Emitter {
                     this.checker.getTypeAtLocation(continuation.bodyAwaitCatchAwaitExpr.expression),
                     this.checker,
                 ));
-                if (continuation.bodyAwaitCatchSymbol) scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
+                if (continuation.bodyAwaitCatchSymbol) {
+                    scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
+                    rejectionScope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
+                }
                 this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 let catchSource: EmitResult;
@@ -40085,8 +40102,11 @@ class Emitter {
                 buf.line(`${continuation.bodyAwaitCatchAdapter}(${catchEnvVar});`);
                 buf.close();
             } else if (index === 0 && continuation.bodyAwaitCatchStatements &&
-                (!continuation.bodyAwaitTerminal || continuation.bodyAwaitCatchStatements.length > 0)) {
-                if (continuation.bodyAwaitCatchSymbol) scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
+                (!continuation.bodyAwaitTerminal || continuation.bodyAwaitCatchPresent)) {
+                if (continuation.bodyAwaitCatchSymbol) {
+                    scope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
+                    rejectionScope.set(continuation.bodyAwaitCatchSymbol, "tsc_promise_reason(_p)");
+                }
                 this.argumentValueScopes.push(rejectionScope);
                 if (continuation.thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: continuation.thisValue.ty });
                 this.asyncAwaitContinuationAdapterDepth++;
@@ -40094,18 +40114,29 @@ class Emitter {
                     for (const statement of continuation.bodyAwaitCatchStatements) this.emitStmt(buf, statement);
                     for (const statement of continuation.bodyAwaitFinallyStatements ?? []) this.emitStmt(buf, statement);
                     for (const statement of continuation.bodyPostAwaitStatements) this.emitStmt(buf, statement);
-                    const conditionSource = this.emitExpr(continuation.conditionAwaitExpr.expression);
-                    buf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(conditionSource, conditionPromiseType, continuation.conditionAwaitExpr.expression)};`);
-                    buf.line(`${loopAdapterName}_env_t* ${nextEnvVar} = (${loopAdapterName}_env_t*)TSC_GC_MALLOC(sizeof(${loopAdapterName}_env_t));`);
+                    const nextAwaitExpr = continuation.bodyAwaitTerminal
+                        ? continuation.bodyAwaitExprs[1]!
+                        : continuation.conditionAwaitExpr;
+                    const nextAwaitPromiseType = continuation.bodyAwaitTerminal
+                        ? promiseTypes[1]!
+                        : conditionPromiseType;
+                    const nextSource = this.emitExpr(nextAwaitExpr.expression);
+                    buf.line(`tsc_promise_t* const ${nextSourceVar} = ${this.coerce(nextSource, nextAwaitPromiseType, nextAwaitExpr.expression)};`);
+                    const nextAdapterName = continuation.bodyAwaitTerminal ? names[1]! : loopAdapterName;
+                    buf.line(`${nextAdapterName}_env_t* ${nextEnvVar} = (${nextAdapterName}_env_t*)TSC_GC_MALLOC(sizeof(${nextAdapterName}_env_t));`);
                     buf.line(`${nextEnvVar}->receiver = ${nextSourceVar};`);
                     buf.line(`${nextEnvVar}->result_promise = _ret;`);
+                    if (continuation.bodyAwaitFinallyAwaitExpr) {
+                        buf.line(`${nextEnvVar}->reject_after_success = true;`);
+                        buf.line(`${nextEnvVar}->rejection_reason = tsc_promise_reason(_p);`);
+                    }
                     for (const param of continuation.params) buf.line(`${nextEnvVar}->${param.field} = state->${param.field};`);
                     if (continuation.thisValue) buf.line(`${nextEnvVar}->this_arg = state->this_arg;`);
                     buf.open(`if (tsc_promise_is_pending(${nextSourceVar}))`);
-                    buf.line(`tsc_promise_add_callback(${nextSourceVar}, ${loopAdapterName}, ${nextEnvVar});`);
+                    buf.line(`tsc_promise_add_callback(${nextSourceVar}, ${nextAdapterName}, ${nextEnvVar});`);
                     buf.close();
                     buf.open("else");
-                    buf.line(`${loopAdapterName}(${nextEnvVar});`);
+                    buf.line(`${nextAdapterName}(${nextEnvVar});`);
                     buf.close();
                 } finally {
                     this.asyncAwaitContinuationAdapterDepth--;

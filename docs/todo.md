@@ -10,6 +10,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - Verified ordinary awaited loop-body try/finally terminal coverage: a bounded `while` body can suspend inside a no-catch `try`, run synchronous `finally` cleanup in the correct order, and then suspend through terminal `return await` or `throw await`; rejection from the first body await also runs cleanup before propagating. Tests: `async_await_loop_body_await_try_finally_return`, `async_await_loop_body_await_try_finally_throw`, `async_await_loop_body_await_try_finally_body_reject`.
 
+- Verified ordinary awaited loop-body try/catch/finally terminal coverage: a bounded `while` body can suspend inside a `try`, route a rejected body await through an await-free catch with its named reason, run synchronous `finally` cleanup, and then suspend through terminal `return await` or `throw await`. Tests: `async_await_loop_body_await_try_catch_finally_return`, `async_await_loop_body_await_try_catch_finally_throw`, `async_await_loop_body_await_try_catch_finally_body_reject`.
+
 - Verified ordinary awaited loop-body initialized-local multi-await throw coverage: a `while` body can carry `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `throw await`, preserving the captured values and rejection delivery. Test: `async_await_loop_body_await_local_multi_throw`.
 
 - Verified ordinary awaited loop-body initialized-local multi-await return coverage: a `while` body can carry `const` aliases across await-free interstitial work and multiple direct awaits into a terminal `return await`, preserving the captured values. Test: `async_await_loop_body_await_local_multi_return`.
