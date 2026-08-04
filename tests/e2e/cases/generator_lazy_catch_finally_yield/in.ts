@@ -121,3 +121,53 @@ const tailClosedThird: any = tailClosed.next("left-close");
 const tailClosedFourth: any = tailClosed.next("right-close");
 const tailClosedDone: any = tailClosed.next("tail-return-close");
 console.log("catch-finally-yield-tail-close:", tailClosedFirst.done, tailClosedFirst.value, tailClosedSecond.done, tailClosedSecond.value, tailClosedThird.done, tailClosedThird.value, tailClosedFourth.done, tailClosedFourth.value, tailClosedDone.done, tailClosedDone.value);
+
+function* caughtBodyThenThrow(): Generator<string, string, string> {
+    try {
+        yield "throw-tail-source";
+    } catch {
+        return "throw-tail-caught";
+    } finally {
+        yield "throw-tail-cleanup";
+        throw (yield "throw-tail-left") + (yield "throw-tail-right");
+    }
+}
+
+const tailThrowNormal = caughtBodyThenThrow();
+const tailThrowNormalFirst: any = tailThrowNormal.next();
+const tailThrowNormalSecond: any = tailThrowNormal.next("source-resume");
+const tailThrowNormalThird: any = tailThrowNormal.next("left-resume");
+const tailThrowNormalFourth: any = tailThrowNormal.next("right-resume");
+let tailThrowNormalValue: any;
+try {
+    tailThrowNormal.next("throw-resume");
+} catch (error: any) {
+    tailThrowNormalValue = error;
+}
+console.log("catch-finally-yield-tail-throw-normal:", tailThrowNormalFirst.done, tailThrowNormalFirst.value, tailThrowNormalSecond.done, tailThrowNormalSecond.value, tailThrowNormalThird.done, tailThrowNormalThird.value, tailThrowNormalFourth.done, tailThrowNormalFourth.value, tailThrowNormalValue);
+
+const tailThrowThrow = caughtBodyThenThrow();
+const tailThrowThrowFirst: any = tailThrowThrow.next();
+const tailThrowThrowSecond: any = tailThrowThrow.throw("source-throw");
+const tailThrowThrowThird: any = tailThrowThrow.next("left-throw");
+const tailThrowThrowFourth: any = tailThrowThrow.next("right-throw");
+let tailThrowThrowValue: any;
+try {
+    tailThrowThrow.next("throw-throw");
+} catch (error: any) {
+    tailThrowThrowValue = error;
+}
+console.log("catch-finally-yield-tail-throw-throw:", tailThrowThrowFirst.done, tailThrowThrowFirst.value, tailThrowThrowSecond.done, tailThrowThrowSecond.value, tailThrowThrowThird.done, tailThrowThrowThird.value, tailThrowThrowFourth.done, tailThrowThrowFourth.value, tailThrowThrowValue);
+
+const tailThrowClosed = caughtBodyThenThrow();
+const tailThrowClosedFirst: any = tailThrowClosed.next();
+const tailThrowClosedSecond: any = tailThrowClosed.return("closed");
+const tailThrowClosedThird: any = tailThrowClosed.next("left-close");
+const tailThrowClosedFourth: any = tailThrowClosed.next("right-close");
+let tailThrowClosedValue: any;
+try {
+    tailThrowClosed.next("throw-close");
+} catch (error: any) {
+    tailThrowClosedValue = error;
+}
+console.log("catch-finally-yield-tail-throw-close:", tailThrowClosedFirst.done, tailThrowClosedFirst.value, tailThrowClosedSecond.done, tailThrowClosedSecond.value, tailThrowClosedThird.done, tailThrowClosedThird.value, tailThrowClosedFourth.done, tailThrowClosedFourth.value, tailThrowClosedValue);

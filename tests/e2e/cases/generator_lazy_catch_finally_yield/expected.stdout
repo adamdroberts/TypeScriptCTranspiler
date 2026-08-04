@@ -8,3 +8,6 @@ catch-finally-yield-throw-throw: false throw-source false throw-cleanup-one fals
 catch-finally-yield-tail-normal: false tail-source false tail-cleanup false tail-left false tail-right true right-resumetail-return-resume
 catch-finally-yield-tail-throw: false tail-source false tail-cleanup false tail-left false tail-right true right-throwtail-return-throw
 catch-finally-yield-tail-close: false tail-source false tail-cleanup false tail-left false tail-right true right-closetail-return-close
+catch-finally-yield-tail-throw-normal: false throw-tail-source false throw-tail-cleanup false throw-tail-left false throw-tail-right right-resumethrow-resume
+catch-finally-yield-tail-throw-throw: false throw-tail-source false throw-tail-cleanup false throw-tail-left false throw-tail-right right-throwthrow-throw
+catch-finally-yield-tail-throw-close: false throw-tail-source false throw-tail-cleanup false throw-tail-left false throw-tail-right right-closethrow-close
