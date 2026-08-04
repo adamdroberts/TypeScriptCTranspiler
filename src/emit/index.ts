@@ -128,6 +128,7 @@ interface LazyGeneratorCatchHandler {
     finallyStatements: readonly ts.Statement[];
     finallyThrow: ts.ThrowStatement | null;
     finallyReturn: ts.ReturnStatement | null;
+    finallyMultiYieldStatement: ts.Statement | null;
     finallyConditionalStatement: ts.Statement | null;
     finallyConditionalKind: "return" | "throw" | "mixed" | null;
 }
@@ -53052,10 +53053,19 @@ class Emitter {
             this.lazyGeneratorFinallyConditionalKind(finallyTail) !== null
             ? finallyTail
             : null;
+        const finallyMultiYieldReturn = !finallyThrow && !finallyReturn && !finallyConditionalStatement && finallyTail
+            ? this.simpleLazyMultiYieldReturn(finallyTail)
+            : null;
+        const finallyMultiYieldThrow = !finallyThrow && !finallyReturn && !finallyConditionalStatement && !finallyMultiYieldReturn && finallyTail
+            ? this.simpleLazyMultiYieldThrow(finallyTail)
+            : null;
+        const finallyMultiYieldStatement = finallyMultiYieldReturn || finallyMultiYieldThrow ? finallyTail : null;
         const finallyConditionalKind = finallyConditionalStatement
             ? this.lazyGeneratorFinallyConditionalKind(finallyConditionalStatement)
             : null;
-        const finallyBody = finallyThrow || finallyReturn || finallyConditionalStatement ? finallyStatements.slice(0, -1) : finallyStatements;
+        const finallyBody = finallyThrow || finallyReturn || finallyConditionalStatement || finallyMultiYieldStatement
+            ? finallyStatements.slice(0, -1)
+            : finallyStatements;
         if (
             finallyBody.some((child) => this.nodeContainsYield(child)) ||
             finallyBody.some((child) => this.lazyGeneratorContainsAbruptControlFlow(child)) ||
@@ -53160,6 +53170,7 @@ class Emitter {
             finallyStatements: finallyBody,
             finallyThrow,
             finallyReturn,
+            finallyMultiYieldStatement,
             finallyConditionalStatement,
             finallyConditionalKind,
         };
@@ -54267,7 +54278,8 @@ class Emitter {
         if (!envLocalName || !this.activeLazyGeneratorCloseEnabled) return;
         const deferredCatchThrowHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
             .find((handler) => this.activeLazyGeneratorCatchRecoveryDepth === 0 &&
-                (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) &&
+                (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn ||
+                    !!handler.finallyMultiYieldStatement || !!handler.finallyConditionalStatement) &&
                 (!!handler.throwStatement || handler.catchConditionalKind === "throw" || handler.catchConditionalKind === "mixed"));
         const deferredCatchThrow = deferredCatchThrowHandler ? this.freshTemp("_lazy_catch_throw") : null;
         buf.open(`if (${envLocalName}->lazy_close_requested)`);
@@ -54294,7 +54306,8 @@ class Emitter {
                     }
                     this.activeLazyGeneratorCatchRecoveryDepth--;
                     if (handler.catchStatement) {
-                        if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) {
+                        if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn ||
+                            !!handler.finallyMultiYieldStatement || !!handler.finallyConditionalStatement) {
                             if (handler.catchConditionalKind === "throw") {
                                 this.emitLazyGeneratorCatchConditionalThrow(buf, handler.catchStatement, deferredCatchThrow!);
                             } else if (handler.catchConditionalKind === "mixed") {
@@ -54305,7 +54318,8 @@ class Emitter {
                         } else {
                             this.emitLazyGeneratorStmt(buf, handler.catchStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                         }
-                    } else if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement) {
+                    } else if (handler.finallyStatements.length > 0 || !!handler.finallyThrow || !!handler.finallyReturn ||
+                        !!handler.finallyMultiYieldStatement || !!handler.finallyConditionalStatement) {
                         if (handler.returnStatement) {
                             const returned = this.emitExpr(handler.returnStatement.expression!);
                             buf.line(`a->iter_return = ${this.coerce(returned, T_VALUE, handler.returnStatement.expression!)};`);
@@ -54359,8 +54373,30 @@ class Emitter {
                 this.activeLazyGeneratorFinalizerEmissionDepth--;
             }
         }
+        const finallyMultiYieldHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
+            .find((handler) => this.activeLazyGeneratorCatchRecoveryDepth === 0 && !!handler.finallyMultiYieldStatement);
+        if (finallyMultiYieldHandler?.finallyMultiYieldStatement) {
+            this.activeLazyGeneratorCatchRecoveryDepth++;
+            this.activeLazyGeneratorFinalizerEmissionDepth++;
+            try {
+                this.emitLazyGeneratorStmt(
+                    buf,
+                    finallyMultiYieldHandler.finallyMultiYieldStatement,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+            } finally {
+                this.activeLazyGeneratorFinalizerEmissionDepth--;
+                this.activeLazyGeneratorCatchRecoveryDepth--;
+            }
+            buf.close();
+            return;
+        }
         const finallyHandler = [...this.activeLazyGeneratorCatchHandlers].reverse()
-            .find((handler) => !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyConditionalStatement);
+            .find((handler) => !!handler.finallyThrow || !!handler.finallyReturn || !!handler.finallyMultiYieldStatement ||
+                !!handler.finallyConditionalStatement);
         if (finallyHandler?.finallyConditionalStatement) {
             this.emitLazyGeneratorFinallyConditionalCompletion(buf, finallyHandler.finallyConditionalStatement);
             buf.close();
@@ -54711,7 +54747,16 @@ class Emitter {
             for (const child of catchReturn.finallyStatements) {
                 this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             }
-            if (catchReturn.finallyConditionalStatement) {
+            if (catchReturn.finallyMultiYieldStatement) {
+                this.emitLazyGeneratorStmt(
+                    buf,
+                    catchReturn.finallyMultiYieldStatement,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+            } else if (catchReturn.finallyConditionalStatement) {
                 this.emitLazyGeneratorFinallyConditionalCompletion(buf, catchReturn.finallyConditionalStatement);
             } else if (catchReturn.finallyThrow) {
                 buf.line("*state = -1;");

@@ -1,0 +1,4 @@
+catch-finally-return-normal: false return-source false return-left false return-right true leftright
+catch-finally-return-throw: false return-source false return-left false return-right true leftright
+catch-finally-throw-normal: false throw-source false throw-left false throw-right leftright
+catch-finally-throw-throw: false throw-source false throw-left false throw-right leftright

@@ -37,6 +37,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Lazy generators now stage a bounded multi-yield terminal catch return after `.throw(error)` through subsequent `.next(value)` calls when no non-empty `finally` override is present; terminal catch returns combined with `finally` cleanup or overrides remain deferred. Test: `generator_lazy_try_catch_yield_multiple`.
 - Lazy generators now stage a bounded multi-yield terminal catch throw after `.throw(error)` through subsequent `.next(value)` calls when no non-empty `finally` override is present; terminal catch throws combined with `finally` cleanup or overrides remain deferred. Test: `generator_lazy_try_catch_yield_multiple`.
 - Lazy generators now stage finite terminal multi-yield `return` and `throw` expressions in a no-catch `finally` block after a suspended try-body yield; broader finalizer suspension and catch/finally suppression graphs remain deferred. Test: `generator_lazy_finally_multi_yield`.
+- Lazy generators now stage finite multi-yield finalizer `return` and `throw` overrides after bounded catch terminal return/throw completions on both normal resume and `.throw(error)` entry; broader catch/finally suppression graphs remain deferred. Test: `generator_lazy_catch_finally_multi_yield`.
 
 - Lazy generator returns now construct bounded dense typed and dynamic array literals from finite ordered suspended yield operands after the final `.next(value)`; sparse literals and spreads remain deferred. Test: `generator_lazy_multi_yield_array_return`.
 
