@@ -25,6 +25,14 @@ const returnThrowRight: any = returnThrow.next("left-resume");
 const returnThrowDone: any = returnThrow.next("right-resume");
 console.log("return-throw", returnThrowFirst.value, returnThrowRecoveryOne.value, returnThrowRecoveryTwo.value, returnThrowLeft.value, returnThrowRight.value, returnThrowDone.done, returnThrowDone.value);
 
+const returnDelegatedThrow = caughtReturnOverride();
+const returnDelegatedThrowFirst: any = returnDelegatedThrow.next();
+const returnDelegatedThrowRecovery: any = returnDelegatedThrow.throw("source-throw");
+const returnDelegatedThrowLeft: any = returnDelegatedThrow.throw("delegated-throw");
+const returnDelegatedThrowRight: any = returnDelegatedThrow.next("right-resume");
+const returnDelegatedThrowDone: any = returnDelegatedThrow.next("extra-resume");
+console.log("return-delegated-throw", returnDelegatedThrowFirst.value, returnDelegatedThrowRecovery.value, returnDelegatedThrowLeft.value, returnDelegatedThrowRight.value, returnDelegatedThrowDone.done, returnDelegatedThrowDone.value);
+
 const returnClose = caughtReturnOverride();
 const returnCloseFirst: any = returnClose.next();
 const returnCloseRecovery: any = returnClose.throw("source-throw");
@@ -69,6 +77,19 @@ try {
     throwThrowValue = error;
 }
 console.log("throw-throw", throwThrowFirst.value, throwThrowRecoveryOne.value, throwThrowRecoveryTwo.value, throwThrowLeft.value, throwThrowRight.value, throwThrowValue);
+
+const throwDelegatedThrow = caughtThrowOverride();
+const throwDelegatedThrowFirst: any = throwDelegatedThrow.next();
+const throwDelegatedThrowRecovery: any = throwDelegatedThrow.throw("source-throw");
+const throwDelegatedThrowLeft: any = throwDelegatedThrow.throw("delegated-throw");
+const throwDelegatedThrowRight: any = throwDelegatedThrow.next("right-resume");
+let throwDelegatedThrowValue: any;
+try {
+    throwDelegatedThrow.next("extra-resume");
+} catch (error: any) {
+    throwDelegatedThrowValue = error;
+}
+console.log("throw-delegated-throw", throwDelegatedThrowFirst.value, throwDelegatedThrowRecovery.value, throwDelegatedThrowLeft.value, throwDelegatedThrowRight.value, throwDelegatedThrowValue);
 
 const throwClose = caughtThrowOverride();
 const throwCloseFirst: any = throwClose.next();

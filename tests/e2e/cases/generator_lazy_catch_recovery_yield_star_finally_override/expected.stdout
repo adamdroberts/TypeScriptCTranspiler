@@ -1,6 +1,8 @@
 return-normal source left right true left-resumeright-resume
 return-throw source recovery-one recovery-two left right true left-resumeright-resume
+return-delegated-throw source recovery-one left right true right-resumeextra-resume
 return-close source recovery-one left right true right-resumeextra-resume
 throw-normal source left right left-resumeright-resume
 throw-throw source recovery-one recovery-two left right left-resumeright-resume
+throw-delegated-throw source recovery-one left right right-resumeextra-resume
 throw-close source recovery-one left right right-resumeextra-resume
