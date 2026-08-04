@@ -53169,7 +53169,8 @@ class Emitter {
             }
         }
         if (tryTerminalThrow && (!returnStatement || this.nodeContainsYield(returnStatement.expression!) ||
-            catchPreludeStatements.some((child) => this.nodeContainsYield(child)))) return null;
+            catchPreludeStatements.some((child) => ts.isVariableStatement(child) ||
+                (this.nodeContainsYield(child) && !this.simpleLazyYieldExpression(child))))) return null;
         if (throwCandidate && !throwStatement) {
             if (!catchDecl || !ts.isIdentifier(catchDecl.name)) return null;
             const expression = this.unwrapTransparentExpression(throwCandidate.expression!);
@@ -54858,10 +54859,21 @@ class Emitter {
                     this.catchStringSymbols.add(catchSymbol);
                 }
                 try {
-                    if (tryTerminalThrow) {
+                    this.activeLazyGeneratorCatchHandlers.push(catchReturn);
+                    if (catchReturn.finallyStatements.length > 0) {
+                        this.activeLazyGeneratorFinalizers.push([...catchReturn.finallyStatements]);
+                    }
+                    this.activeLazyGeneratorCatchRecoveryDepth++;
+                    try {
                         for (const child of catchReturn.catchPreludeStatements) {
                             this.emitLazyGeneratorStmt(buf, child, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                         }
+                    } finally {
+                        this.activeLazyGeneratorCatchRecoveryDepth--;
+                        if (catchReturn.finallyStatements.length > 0) {
+                            this.activeLazyGeneratorFinalizers.pop();
+                        }
+                        this.activeLazyGeneratorCatchHandlers.pop();
                     }
                     const returned = catchReturn.returnStatement
                         ? this.emitExpr(catchReturn.returnStatement.expression!)

@@ -31,6 +31,8 @@ function* sourceThrowDelegate(): Generator<string, string, string> {
         throw "source-terminal";
     } catch (error: any) {
         events.push("source-throw-catch:" + error);
+        yield "source-throw-recovery-one";
+        yield "source-throw-recovery-two";
         return "source-throw-recovered";
     } finally {
         events.push("source-throw-finally");
@@ -50,8 +52,17 @@ function* caughtSourceThrow(): Generator<any, string, any> {
 const sourceThrow = caughtSourceThrow();
 const sourceThrowFirst: any = sourceThrow.next();
 const sourceThrowRecovery: any = sourceThrow.throw("outer-source-throw");
-const sourceThrowDone: any = sourceThrow.next("source-throw-resume");
-console.log("source-throw", sourceThrowFirst.done, sourceThrowFirst.value, sourceThrowRecovery.done, sourceThrowRecovery.value, sourceThrowDone.done, sourceThrowDone.value, events.join("|"));
+const sourceThrowCatchFirst: any = sourceThrow.next("source-throw-resume");
+const sourceThrowCatchSecond: any = sourceThrow.next("source-throw-recovery-one-resume");
+const sourceThrowDone: any = sourceThrow.next("source-throw-recovery-two-resume");
+console.log("source-throw", sourceThrowFirst.done, sourceThrowFirst.value, sourceThrowRecovery.done, sourceThrowRecovery.value, sourceThrowCatchFirst.done, sourceThrowCatchFirst.value, sourceThrowCatchSecond.done, sourceThrowCatchSecond.value, sourceThrowDone.done, sourceThrowDone.value, events.join("|"));
+
+const sourceThrowClose = caughtSourceThrow();
+const sourceThrowCloseFirst: any = sourceThrowClose.next();
+const sourceThrowCloseRecovery: any = sourceThrowClose.throw("outer-source-throw");
+const sourceThrowCloseCatch: any = sourceThrowClose.next("source-throw-resume");
+const sourceThrowCloseDone: any = sourceThrowClose.return("source-throw-closed");
+console.log("source-throw-close", sourceThrowCloseFirst.done, sourceThrowCloseFirst.value, sourceThrowCloseRecovery.done, sourceThrowCloseRecovery.value, sourceThrowCloseCatch.done, sourceThrowCloseCatch.value, sourceThrowCloseDone.done, sourceThrowCloseDone.value, events.join("|"));
 
 const delegatedNormal = caught();
 const delegatedNormalFirst: any = delegatedNormal.next();
