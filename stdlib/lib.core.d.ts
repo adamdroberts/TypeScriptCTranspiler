@@ -1598,6 +1598,7 @@ interface FSFileHandle {
     readonly fd: number;
     read(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileReadResult>;
     write(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileWriteResult>;
+    stat(...ignored: any[]): Promise<FSStats>;
     close(...ignored: any[]): Promise<void>;
 }
 interface FSPromises {

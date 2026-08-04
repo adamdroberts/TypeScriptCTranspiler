@@ -21910,6 +21910,11 @@ class Emitter {
         return ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["fs", "node:fs"], "promises");
     }
 
+    private isFsFileHandleExpression(expr: ts.Expression): boolean {
+        const type = this.checker.getTypeAtLocation(expr);
+        return type.getSymbol()?.getName() === "FSFileHandle" || type.aliasSymbol?.getName() === "FSFileHandle";
+    }
+
     private isUtilTypesReceiver(expr: ts.Expression): boolean {
         if (ts.isIdentifier(expr) && this.isNamedImportFrom(expr, ["util", "node:util"], "types")) {
             return true;
@@ -65636,6 +65641,10 @@ class Emitter {
         const recv = this.emitExpr(recvExpr);
         if (recv.ty.kind === "array")
             return this.emitArrayMethod(call, recv, memberName);
+        if (recv.ty.kind === "value" && memberName === "stat" && this.isFsFileHandleExpression(recvExpr)) {
+            const dynamic = this.emitDynamicMethod(call, recv, memberName);
+            return { c: `tsc_value_as_promise(${dynamic.c})`, ty: promiseType(T_FS_STATS) };
+        }
         if (recv.ty.kind === "value")
             return this.emitDynamicMethod(call, recv, memberName);
         if (recv.ty.kind === "function" && (memberName === "call" || memberName === "apply")) {
