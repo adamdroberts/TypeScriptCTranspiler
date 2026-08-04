@@ -3071,6 +3071,20 @@ typedef struct tsc_fs_file_handle_metadata_async {
     struct tsc_fs_file_handle_metadata_async* next;
 } tsc_fs_file_handle_metadata_async_t;
 
+typedef struct tsc_fs_file_handle_append_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    tsc_value_t data_value;
+    tsc_buffer_t* buffer;
+    int fd;
+    size_t offset;
+    bool flush;
+    bool req_pending;
+    tsc_str_t* error;
+    tsc_uv_buf_t write_buf;
+    struct tsc_fs_file_handle_append_async* next;
+} tsc_fs_file_handle_append_async_t;
+
 static tsc_fs_open_async_t* g_tsc_fs_open_async = NULL;
 static tsc_fs_file_handle_close_async_t* g_tsc_fs_file_handle_close_async = NULL;
 static tsc_fs_file_handle_io_async_t* g_tsc_fs_file_handle_io_async = NULL;
@@ -3079,6 +3093,7 @@ static tsc_fs_file_handle_stat_async_t* g_tsc_fs_file_handle_stat_async = NULL;
 static tsc_fs_file_handle_truncate_async_t* g_tsc_fs_file_handle_truncate_async = NULL;
 static tsc_fs_file_handle_sync_async_t* g_tsc_fs_file_handle_sync_async = NULL;
 static tsc_fs_file_handle_metadata_async_t* g_tsc_fs_file_handle_metadata_async = NULL;
+static tsc_fs_file_handle_append_async_t* g_tsc_fs_file_handle_append_async = NULL;
 
 static bool tsc_fs_open_flags_from_string(const tsc_str_t* flags_str, int* out_flags) {
     char* flags_c = flags_str ? cstr_dup(flags_str) : NULL;
@@ -3456,6 +3471,169 @@ static tsc_value_t tsc_fs_file_handle_datasync_builtin(void* env, tsc_value_t th
     (void)this_arg;
     (void)args;
     return tsc_value_promise(tsc_fs_file_handle_sync_start((tsc_fs_file_handle_t*)env, true));
+}
+
+static void tsc_fs_file_handle_append_async_remove(tsc_fs_file_handle_append_async_t* task) {
+    tsc_fs_file_handle_append_async_t** cursor = &g_tsc_fs_file_handle_append_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_file_handle_append_async_finish(tsc_fs_file_handle_append_async_t* task, bool success) {
+    if (success) {
+        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+    } else {
+        tsc_promise_reject_in_place(
+            task->promise,
+            tsc_value_string(task->error ? task->error : tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not append file"))
+        );
+    }
+    tsc_fs_file_handle_append_async_remove(task);
+}
+
+static void tsc_fs_file_handle_append_async_fsync_cb(tsc_uv_fs_t* req);
+
+static void tsc_fs_file_handle_append_async_write_next(tsc_fs_file_handle_append_async_t* task);
+
+static void tsc_fs_file_handle_append_async_flush_or_finish(tsc_fs_file_handle_append_async_t* task, bool success) {
+    if (success && task->flush) {
+        task->flush = false;
+        int rc = uv_fs_fsync(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_file_handle_append_async_fsync_cb);
+        if (rc < 0) {
+            task->req_pending = false;
+            uv_fs_req_cleanup(&task->req);
+            task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not flush file");
+            tsc_fs_file_handle_append_async_finish(task, false);
+        } else {
+            task->req_pending = true;
+        }
+        return;
+    }
+    tsc_fs_file_handle_append_async_finish(task, success);
+}
+
+static void tsc_fs_file_handle_append_async_fsync_cb(tsc_uv_fs_t* req) {
+    tsc_fs_file_handle_append_async_t* task = (tsc_fs_file_handle_append_async_t*)req;
+    task->req_pending = false;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0) {
+        task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not flush file");
+        tsc_fs_file_handle_append_async_finish(task, false);
+        return;
+    }
+    tsc_fs_file_handle_append_async_finish(task, true);
+}
+
+static void tsc_fs_file_handle_append_async_write_cb(tsc_uv_fs_t* req) {
+    tsc_fs_file_handle_append_async_t* task = (tsc_fs_file_handle_append_async_t*)req;
+    task->req_pending = false;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    if (result < 0 || result == 0) {
+        task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not append file");
+        tsc_fs_file_handle_append_async_flush_or_finish(task, false);
+        return;
+    }
+    task->offset += (size_t)result;
+    tsc_fs_file_handle_append_async_write_next(task);
+}
+
+static void tsc_fs_file_handle_append_async_write_next(tsc_fs_file_handle_append_async_t* task) {
+    if (task->offset == task->buffer->len) {
+        tsc_fs_file_handle_append_async_flush_or_finish(task, true);
+        return;
+    }
+    task->write_buf.base = (char*)task->buffer->data + task->offset;
+    task->write_buf.len = task->buffer->len - task->offset;
+    int rc = uv_fs_write(
+        g_tsc_fs_uv_loop,
+        &task->req,
+        task->fd,
+        &task->write_buf,
+        1,
+        -1,
+        tsc_fs_file_handle_append_async_write_cb
+    );
+    if (rc < 0) {
+        task->req_pending = false;
+        uv_fs_req_cleanup(&task->req);
+        task->error = tsc_str_from_cstr("fs.promises.FileHandle.appendFile: could not append file");
+        tsc_fs_file_handle_append_async_flush_or_finish(task, false);
+    } else {
+        task->req_pending = true;
+    }
+}
+
+static tsc_str_t* tsc_fs_file_handle_append_encoding(tsc_value_t options) {
+    if (tsc_value_is_nullish(options)) return NULL;
+    tsc_value_t encoding_value = options;
+    if (value_is_box(options) && value_tag(options) == TSC_VALUE_TAG_OBJECT) {
+        encoding_value = tsc_value_get_prop(options, tsc_str_from_lit("encoding", 8));
+    }
+    if (tsc_value_is_nullish(encoding_value)) return NULL;
+    if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
+        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"));
+        return NULL;
+    }
+    tsc_str_t* encoding = tsc_value_as_string(encoding_value);
+    if (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8") && !str_lit_eq(encoding, "hex") && !str_lit_eq(encoding, "base64")) {
+        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"));
+        return NULL;
+    }
+    return encoding;
+}
+
+static bool tsc_fs_file_handle_append_flush(tsc_value_t options) {
+    if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) return false;
+    tsc_value_t flush = tsc_value_get_prop(options, tsc_str_from_lit("flush", 5));
+    return !tsc_value_is_undefined(flush) && tsc_value_as_bool(flush);
+}
+
+static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* handle, tsc_array_t* args) {
+    if (!args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile needs string or Buffer data"));
+        return NULL;
+    }
+    if (!handle || handle->closed || handle->fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+    }
+    tsc_value_t data_value = TSC_ARR(tsc_value_t, args, 0);
+    tsc_str_t* encoding = args->len > 1 ? tsc_fs_file_handle_append_encoding(TSC_ARR(tsc_value_t, args, 1)) : NULL;
+    tsc_buffer_t* buffer = NULL;
+    if (value_is_box(data_value) && value_tag(data_value) == TSC_VALUE_TAG_STRING) {
+        buffer = tsc_buffer_from_str(tsc_value_as_string(data_value), encoding);
+    } else if (tsc_util_types_is_typed_array(data_value)) {
+        buffer = tsc_value_as_buffer(data_value);
+    } else {
+        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.appendFile needs string or Buffer data"));
+        return NULL;
+    }
+
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_file_handle_append_async_t* task = (tsc_fs_file_handle_append_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_append_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->data_value = data_value;
+    task->buffer = buffer;
+    task->fd = handle->fd;
+    task->flush = args->len > 1 && tsc_fs_file_handle_append_flush(TSC_ARR(tsc_value_t, args, 1));
+    task->next = g_tsc_fs_file_handle_append_async;
+    g_tsc_fs_file_handle_append_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    tsc_fs_file_handle_append_async_write_next(task);
+    return promise;
+}
+
+static tsc_value_t tsc_fs_file_handle_append_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    return tsc_value_promise(tsc_fs_file_handle_append_start((tsc_fs_file_handle_t*)env, args));
 }
 
 enum {
@@ -3873,6 +4051,12 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         handle,
         1.0,
         tsc_str_from_lit("writev", 6)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("appendFile", 10), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_append_builtin,
+        handle,
+        1.0,
+        tsc_str_from_lit("appendFile", 10)
     ));
     tsc_object_set(object, tsc_str_from_lit("chmod", 5), tsc_value_function_builtin_named(
         tsc_fs_file_handle_chmod_builtin,
@@ -7278,7 +7462,7 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
 }
 
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_file_handle_io_async != NULL || g_tsc_fs_file_handle_vector_io_async != NULL || g_tsc_fs_file_handle_stat_async != NULL || g_tsc_fs_file_handle_truncate_async != NULL || g_tsc_fs_file_handle_sync_async != NULL || g_tsc_fs_file_handle_metadata_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_file_handle_io_async != NULL || g_tsc_fs_file_handle_vector_io_async != NULL || g_tsc_fs_file_handle_stat_async != NULL || g_tsc_fs_file_handle_truncate_async != NULL || g_tsc_fs_file_handle_sync_async != NULL || g_tsc_fs_file_handle_metadata_async != NULL || g_tsc_fs_file_handle_append_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
 }
 
 void tsc_fs_libuv_run_once(bool block) {
