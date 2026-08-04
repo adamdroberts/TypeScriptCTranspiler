@@ -25935,11 +25935,21 @@ class Emitter {
                     };
                 }
                 if (allowNested && prefix.length > 0) {
-                    const candidate = prefix[prefix.length - 1]!;
-                    const candidatePrefix = prefix.slice(0, -1);
-                    if (ts.isIfStatement(candidate) && !candidate.elseStatement &&
+                    let candidateIndex = -1;
+                    for (let index = prefix.length - 1; index >= 0; index--) {
+                        if (ts.isIfStatement(prefix[index]!)) {
+                            candidateIndex = index;
+                            break;
+                        }
+                    }
+                    const candidate = candidateIndex >= 0 ? prefix[candidateIndex]! : null;
+                    const candidatePrefix = candidateIndex >= 0 ? prefix.slice(0, candidateIndex) : [];
+                    const fallbackPrefix = candidateIndex >= 0 ? prefix.slice(candidateIndex + 1) : [];
+                    if (candidate && ts.isIfStatement(candidate) && !candidate.elseStatement &&
                         candidatePrefix.every(simpleBodyStatement) &&
-                        !candidatePrefix.some((entry) => this.statementAlwaysExits(entry))) {
+                        !candidatePrefix.some((entry) => this.statementAlwaysExits(entry)) &&
+                        fallbackPrefix.every(simpleBodyStatement) &&
+                        !fallbackPrefix.some((entry) => this.statementAlwaysExits(entry))) {
                         const thenPath = completionPath(candidate.thenStatement, false);
                         if (!thenPath) return null;
                         return {
@@ -25948,7 +25958,7 @@ class Emitter {
                                 expression: candidate.expression,
                                 then: thenPath,
                                 else: {
-                                    prefix: [],
+                                    prefix: fallbackPrefix,
                                     completion,
                                 },
                             },

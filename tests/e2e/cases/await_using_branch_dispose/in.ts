@@ -30,6 +30,7 @@ async function throwBranch(): Promise<string> {
     if (true) {
         events += "x";
         if (false) return "never";
+        events += "b";
         throw "boom";
     }
     return "never";

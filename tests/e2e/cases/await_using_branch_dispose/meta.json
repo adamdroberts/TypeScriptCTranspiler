@@ -1,3 +1,3 @@
 {
-  "description": "bounded await using cleanup for nested await-free conditional branches with fallback completion"
+  "description": "bounded await using cleanup for nested await-free conditional branches with fallback prefixes"
 }
