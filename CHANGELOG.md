@@ -13,6 +13,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Bounded async `for` loops now preserve a top-level `if` with a direct awaited condition guarding an unlabelled `break`, routing the condition result before the awaited incrementor and skipping that incrementor on the break path. Test: `async_await_for_incrementor_if_await_break`
 - Bounded async `for` loops now preserve a top-level `if` with a direct awaited condition guarding an unlabelled `continue`, routing the condition result before the awaited incrementor and preserving implicit fallthrough. Test: `async_await_for_incrementor_if_await_continue`
 - Bounded async `for` loops now preserve a synchronous expression-form initializer before the awaited condition and awaited incrementor, carrying the initialized state through body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_expression_initializer`
 - Bounded async `for` loops now preserve a top-level await-free `if` whose then branch ends in an unlabelled `break`, skipping the awaited incrementor on the selected path while running it on implicit fallthrough; supported await-free expression prefixes remain preserved. Test: `async_await_for_incrementor_if_break`

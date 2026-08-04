@@ -40234,9 +40234,11 @@ class Emitter {
             const allowedBreak = terminalBreak
                 ? loopBodyAction
                 : terminalIfBreak?.breakStatement ?? terminalIfBreakElseContinue?.breakStatement ?? terminalIfContinueElseBreak?.breakStatement ?? terminalIfBreakElseFallthrough?.breakStatement;
-            const terminalIfContinueAwaitConditionSupported = (() => {
-                if (!terminalIfContinue) return true;
-                const condition = this.unwrapTransparentExpression(terminalIfContinue.statement.expression);
+            const terminalIfAwaitConditionSupported = (
+                terminal: { statement: ts.IfStatement; thenStatements: readonly ts.Statement[] } | null,
+            ): boolean => {
+                if (!terminal) return true;
+                const condition = this.unwrapTransparentExpression(terminal.statement.expression);
                 if (!ts.isAwaitExpression(condition)) return true;
                 let supported = true;
                 const visitAwaitOperand = (node: ts.Node): void => {
@@ -40248,10 +40250,12 @@ class Emitter {
                     ts.forEachChild(node, visitAwaitOperand);
                 };
                 visitAwaitOperand(condition.expression);
-                return supported && terminalIfContinue.thenStatements.slice(0, -1).every((statement) =>
+                return supported && terminal.thenStatements.slice(0, -1).every((statement) =>
                     this.asyncAwaitLoopPostStatementSupported(statement)
                 );
-            })();
+            };
+            const terminalIfContinueAwaitConditionSupported = terminalIfAwaitConditionSupported(terminalIfContinue);
+            const terminalIfBreakAwaitConditionSupported = terminalIfAwaitConditionSupported(terminalIfBreak);
             let bodyWithoutControlFlow = true;
             const visitBody = (node: ts.Node): void => {
                 if (!bodyWithoutControlFlow) return;
@@ -40270,7 +40274,8 @@ class Emitter {
                 ts.forEachChild(node, visitBody);
             };
             for (const statement of loopBodyWithoutTerminalControl) {
-                if (terminalIfContinueAwaitConditionSupported && terminalIfContinue?.statement === statement) continue;
+                if ((terminalIfContinueAwaitConditionSupported && terminalIfContinue?.statement === statement) ||
+                    (terminalIfBreakAwaitConditionSupported && terminalIfBreak?.statement === statement)) continue;
                 visitBody(statement);
             }
             if (
@@ -40393,15 +40398,20 @@ class Emitter {
                                         ...loopBody.slice(0, -1),
                                         ts.factory.updateIfStatement(
                                             terminalIfBreak.statement,
-                                            // The symmetric break/continue adapter inverts this branch during lowering.
-                                            ts.factory.createPrefixUnaryExpression(
-                                                ts.SyntaxKind.ExclamationToken,
-                                                terminalIfBreak.statement.expression,
-                                            ),
+                                            ts.isAwaitExpression(this.unwrapTransparentExpression(terminalIfBreak.statement.expression))
+                                                ? terminalIfBreak.statement.expression
+                                                : ts.factory.createPrefixUnaryExpression(
+                                                    ts.SyntaxKind.ExclamationToken,
+                                                    terminalIfBreak.statement.expression,
+                                                ),
                                             ts.factory.createBlock([
                                                 ...terminalIfControlPrefix,
                                                 ...terminalIfBreak.thenStatements.slice(0, -1),
-                                                ts.factory.createBreakStatement(),
+                                                ts.isAwaitExpression(this.unwrapTransparentExpression(terminalIfBreak.statement.expression))
+                                                    ? ts.isThrowStatement(fallthrough)
+                                                        ? ts.factory.createThrowStatement(fallthroughExpression)
+                                                        : ts.factory.createReturnStatement(fallthroughExpression)
+                                                    : ts.factory.createBreakStatement(),
                                             ], true),
                                             ts.factory.createBlock([
                                                 ...terminalIfControlPrefix,
