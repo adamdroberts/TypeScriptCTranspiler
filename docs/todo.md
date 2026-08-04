@@ -8,6 +8,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified two-await condition/incrementor extension: a bounded async `for` loop can now short-circuit two direct awaited condition operands and then suspend through its awaited incrementor before condition re-entry, preserving loop-owned captures and evaluation order. Test: `async_await_for_incrementor_multi_condition`.
+
 - Verified direct awaited loop-initializer extension: a bounded async `for` loop can suspend through a direct awaited loop-owned initializer before its awaited condition and incrementor, carrying the initialized capture through the full initializer-to-body-to-incrementor-to-condition order. Test: `async_await_for_incrementor_await_initializer`.
 
 - **Phase 6 — `async`/`await` + libuv event loop**

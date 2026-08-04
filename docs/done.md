@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now compose a short-circuit condition with two direct awaited operands and an awaited incrementor, preserving condition short-circuiting and body-to-incrementor-to-condition ordering for a loop-owned variable initializer. Test: `async_await_for_incrementor_multi_condition`
+
 - Bounded async `for` loops now suspend through a direct awaited loop initializer before the awaited condition and incrementor, carrying the loop-owned variable capture through initializer-to-body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_await_initializer`
 
 - Bounded async `for` loops now preserve a top-level `if` with a direct awaited condition guarding an unlabelled `break`, routing the condition result before the awaited incrementor and skipping that incrementor on the break path. Test: `async_await_for_incrementor_if_await_break`

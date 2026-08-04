@@ -35743,6 +35743,7 @@ class Emitter {
         loopInitializerCaptures: readonly AsyncAwaitContinuationParam[] = [],
         loopIncrementor: ts.Expression | null = null,
         initialBody = false,
+        allowAwaitedBodyPrelude = false,
     ): boolean {
         if (awaitExpressions.length !== 2 || loopBody.length === 0) return false;
         const bodyAction = loopBody[loopBody.length - 1]!;
@@ -35873,6 +35874,95 @@ class Emitter {
                 initialBodyAwaitExprs,
             );
         }
+        const bodyAwaitEntries = bodyPreludeStatements.flatMap((statement, statementIndex) => {
+            if (!ts.isExpressionStatement(statement)) return [];
+            const expression = this.unwrapTransparentExpression(statement.expression);
+            return ts.isAwaitExpression(expression) ? [{ statementIndex, expression }] : [];
+        });
+        let bodyAwaitExpressions: ts.AwaitExpression[] = [];
+        let bodyAwaitPreludeStatements: readonly ts.Statement[] = [];
+        let bodyAwaitBetweenStatements: readonly (readonly ts.Statement[])[] = [];
+        let bodyAwaitPostAwaitStatements: readonly ts.Statement[] = [];
+        let bodyAwaitPromiseTypes: CType[] = [];
+        let bodyAwaitAdapter: string | null = null;
+        if (bodyAwaitEntries.length > 0 && allowAwaitedBodyPrelude && !initialBody && loopInitializer && ts.isVariableStatement(loopInitializer)) {
+            if (!bodyIsContinue) return false;
+            const awaitStatementIndices = bodyAwaitEntries.map(({ statementIndex }) => statementIndex);
+            const firstAwaitIndex = awaitStatementIndices[0]!;
+            const lastAwaitIndex = awaitStatementIndices[awaitStatementIndices.length - 1]!;
+            const awaitStatementSet = new Set(awaitStatementIndices);
+            const bodyStatementsAreSupported = bodyPreludeStatements.every((statement, statementIndex) => {
+                if (awaitStatementSet.has(statementIndex)) return true;
+                return this.asyncAwaitLoopPostStatementSupported(statement);
+            });
+            if (!bodyStatementsAreSupported) return false;
+            bodyAwaitExpressions = bodyAwaitEntries.map(({ expression }) => expression);
+            bodyAwaitPreludeStatements = bodyPreludeStatements.slice(0, firstAwaitIndex);
+            bodyAwaitBetweenStatements = bodyAwaitExpressions.slice(0, -1).map((_, index) =>
+                bodyPreludeStatements.slice(awaitStatementIndices[index]! + 1, awaitStatementIndices[index + 1]!),
+            );
+            bodyAwaitPostAwaitStatements = bodyPreludeStatements.slice(lastAwaitIndex + 1);
+            bodyAwaitPromiseTypes = bodyAwaitExpressions.map((awaitExpr) => this.prepareType(mapTsType(
+                awaitExpr.expression,
+                this.checker.getTypeAtLocation(awaitExpr.expression),
+                this.checker,
+            )));
+            if (bodyAwaitPromiseTypes.some((type) => type.kind !== "promise")) return false;
+            bodyAwaitAdapter = this.ensureAsyncAwaitLoopBodyContinueAdapter(
+                firstName,
+                promiseTypes[0]!,
+                {
+                    conditionExpr: condition,
+                    conditionAwaitExpr: awaitExpressions[0]!,
+                    loopIncrementor: undefined,
+                    bodyAwaitExpr: bodyAwaitExpressions[0]!,
+                    bodyAwaitExprs: bodyAwaitExpressions,
+                    bodyReturnExpr: ts.factory.createVoidZero(),
+                    bodyAwaitedAliasSymbols: [],
+                    bodyAwaitedAliasIndices: [],
+                    bodyBetweenAwaitStatements: bodyAwaitBetweenStatements,
+                    bodyPostAwaitStatements: bodyAwaitPostAwaitStatements,
+                    bodyAwaitFinallyStatements: undefined,
+                    bodyAwaitFinallyAwaitExpr: undefined,
+                    bodyAwaitCatchStatements: undefined,
+                    bodyAwaitCatchAwaitExpr: undefined,
+                    bodyAwaitCatchSymbol: undefined,
+                    bodyAwaitCatchAdapter: undefined,
+                    bodyPreludeStatements: bodyAwaitPreludeStatements,
+                    bodyLeadingContinuation: undefined,
+                    bodyContinue: true,
+                    bodyContinueCondition: null,
+                    bodyContinueConditionAwaitExpr: null,
+                    bodyContinueConditionNegated: false,
+                    bodyContinueElseStatements: [],
+                    bodyContinueElseAwaitExprs: [],
+                    bodyContinueElsePreludeStatements: [],
+                    bodyContinueElsePostAwaitStatements: [],
+                    bodyContinueElseBreak: false,
+                    bodyContinueElseBreakPreludeStatements: [],
+                    bodyContinueElseBreakAwaitExprs: [],
+                    bodyContinueElseBreakAwaitedAliasSymbols: [],
+                    bodyContinueElseBreakAwaitedAliasIndices: [],
+                    bodyContinueElseBreakBetweenAwaitStatements: [],
+                    bodyContinueElseBreakPostAwaitStatements: [],
+                    bodyContinueElseReturnAwaitExpr: null,
+                    bodyContinueElseReturnAwaitPreludeExprs: [],
+                    bodyContinueElseReturnAwaitedAliasSymbols: [],
+                    bodyContinueElseReturnAwaitedAliasIndices: [],
+                    bodyContinueElseReturnBetweenAwaitStatements: [],
+                    bodyContinueElseReturnSynchronousExpr: null,
+                    bodyContinueElseReturnPreludeStatements: [],
+                    bodyContinueElseReturnPostAwaitStatements: [],
+                    bodyContinueElseReturnRejectResult: false,
+                    bodyRejectResult: false,
+                    fallthroughExpr,
+                    fallthroughAwaitExpr: fallthroughAwait,
+                    params: [...params, ...loopInitializerCaptures],
+                    thisValue,
+                },
+                bodyAwaitExpressions,
+            );
+        }
         this.structDecls.open(`typedef struct ${firstEnvType}`);
         this.structDecls.line("tsc_promise_t* receiver;");
         this.structDecls.line("tsc_promise_t* result_promise;");
@@ -35957,6 +36047,39 @@ class Emitter {
                 stageBuf.close();
                 stageBuf.open("else");
                 stageBuf.line(`${initialBodyAdapter}(${envVar});`);
+                stageBuf.close();
+                stageBuf.line("tsc_try_pop();");
+                stageBuf.line("return;");
+                return;
+            }
+            if (bodyAwaitAdapter && bodyAwaitExpressions.length > 0) {
+                this.argumentValueScopes.push(scope);
+                this.awaitExpressionValueScopes.push(awaitScope);
+                if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+                let source: EmitResult;
+                try {
+                    for (const statement of bodyAwaitPreludeStatements) this.emitStmt(stageBuf, statement);
+                    source = this.emitExpr(bodyAwaitExpressions[0]!.expression);
+                } finally {
+                    if (thisValue) this.functionThisStack.pop();
+                    this.awaitExpressionValueScopes.pop();
+                    this.argumentValueScopes.pop();
+                }
+                const sourceVar = this.freshTemp("_await_body_reentry_source");
+                const envVar = this.freshTemp("_await_body_reentry_env");
+                const envType = `${bodyAwaitAdapter}_env_t`;
+                stageBuf.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitPromiseTypes[0]!, bodyAwaitExpressions[0]!.expression)};`);
+                stageBuf.line(`${envType}* const ${envVar} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType}));`);
+                stageBuf.line(`${envVar}->receiver = ${sourceVar};`);
+                stageBuf.line(`${envVar}->result_promise = _ret;`);
+                for (const param of params) stageBuf.line(`${envVar}->${param.field} = state->${param.field};`);
+                for (const capture of loopInitializerCaptures) stageBuf.line(`${envVar}->${capture.field} = state->${capture.field};`);
+                if (thisValue) stageBuf.line(`${envVar}->this_arg = state->this_arg;`);
+                stageBuf.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                stageBuf.line(`tsc_promise_add_callback(${sourceVar}, ${bodyAwaitAdapter}, ${envVar});`);
+                stageBuf.close();
+                stageBuf.open("else");
+                stageBuf.line(`${bodyAwaitAdapter}(${envVar});`);
                 stageBuf.close();
                 stageBuf.line("tsc_try_pop();");
                 stageBuf.line("return;");
@@ -40097,6 +40220,7 @@ class Emitter {
         body: ts.Block,
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
+        allowAwaitedBodyPrelude = false,
     ): boolean {
         if (body.statements.length < 2) return false;
         const preLoopInitializer = body.statements.length === 3 &&
@@ -40395,7 +40519,7 @@ class Emitter {
                     loopInitializerStatement !== null) &&
                 loop.condition &&
                 incrementorAwaitStatements !== null &&
-                awaitExpressions.length === 1 &&
+                (awaitExpressions.length === 1 || awaitExpressions.length === 2) &&
                 bodyWithoutControlFlow &&
                 terminalIfControlPrefixSupported
             ) {
@@ -40548,6 +40672,7 @@ class Emitter {
                     normalizedBody,
                     parameters,
                     thisValue,
+                    true,
                 );
             }
             return false;
@@ -40686,7 +40811,7 @@ class Emitter {
             if (!supported) return false;
             loopInitializerCaptures = initializerCaptures;
         }
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) && loopTwoAwaitControlSupported &&
+        if (!awaitedLoopInitializerContinuation && loopInitializer && ts.isVariableStatement(loopInitializer) && loopTwoAwaitControlSupported &&
             awaitExpressions.length === 2 &&
             this.emitAsyncAwaitLoopConditionTwoAwaitContinue(
                 buf,
@@ -40701,8 +40826,9 @@ class Emitter {
                 loopInitializerCaptures,
                 loopIncrementor,
                 doWhile,
+                allowAwaitedBodyPrelude,
             )) return true;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
+        if (!awaitedLoopInitializerContinuation && loopInitializer && ts.isVariableStatement(loopInitializer) &&
             (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
             awaitExpressions.length === 3 &&
             this.emitAsyncAwaitLoopConditionConditionalContinue(
@@ -40719,7 +40845,7 @@ class Emitter {
                 loopIncrementor,
                 doWhile,
             )) return true;
-        if (loopInitializer && ts.isVariableStatement(loopInitializer) &&
+        if (!awaitedLoopInitializerContinuation && loopInitializer && ts.isVariableStatement(loopInitializer) &&
             (loopBreakSkipsIncrementor || (loopBodyContinues && loopContinueIncrementorSupported)) &&
             awaitExpressions.length >= 3 &&
             this.emitAsyncAwaitLoopConditionMultiAwaitContinue(
