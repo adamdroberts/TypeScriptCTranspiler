@@ -1,5 +1,7 @@
 # Implemented features
 
+- Bounded async `for` loops now compose multiple awaited condition operands with a comma-sequenced incrementor containing multiple awaits and supported synchronous interstitial operands, preserving condition short-circuiting and full body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_multi_condition_sequence`
+
 - Bounded async `for` loops now preserve mixed short-circuit condition operands (`await a || await b && await c`) before an awaited incrementor, retaining branch laziness and body-to-incrementor-to-condition ordering. Test: `async_await_for_incrementor_mixed_condition`
 
 - Bounded async `for` loops now compose a direct awaited loop initializer with a conditional three-await condition (`await flag ? await yes : await no`) and an awaited incrementor, carrying the loop-owned variable through initializer-to-condition-branch-to-body-to-incrementor ordering. Test: `async_await_for_incrementor_await_initializer_conditional_condition`
