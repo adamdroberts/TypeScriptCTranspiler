@@ -310,6 +310,8 @@ interface AsyncAwaitLoopConditionReturnAwaitContinuation {
     bodyAwaitCatchStatements?: readonly ts.Statement[];
     bodyAwaitCatchAwaitExpr?: ts.AwaitExpression;
     bodyAwaitCatchExprs?: readonly ts.AwaitExpression[];
+    bodyAwaitCatchAwaitedAliasSymbols?: readonly ts.Symbol[];
+    bodyAwaitCatchAwaitedAliasIndices?: readonly number[];
     bodyAwaitCatchStartIndex?: number;
     bodyAwaitCatchBetweenAwaitStatements?: readonly (readonly ts.Statement[])[];
     bodyAwaitCatchSymbol?: ts.Symbol;
@@ -38906,6 +38908,8 @@ class Emitter {
         let bodyAwaitCatchStatements: readonly ts.Statement[] = [];
         let bodyAwaitCatchAwaitExpr: ts.AwaitExpression | undefined;
         let bodyAwaitCatchExprs: readonly ts.AwaitExpression[] = [];
+        let bodyAwaitCatchAwaitedAliasSymbols: readonly ts.Symbol[] = [];
+        let bodyAwaitCatchAwaitedAliasIndices: readonly number[] = [];
         let bodyAwaitCatchStartIndex = 0;
         let bodyAwaitCatchBetweenAwaitStatements: readonly (readonly ts.Statement[])[] = [];
         let bodyAwaitCatchSymbol: ts.Symbol | undefined;
@@ -39006,7 +39010,7 @@ class Emitter {
             ? parseTerminalAwaitSequence(terminalTryStatement.tryBlock.statements, true)
             : null;
         const terminalCatchAwaitSequence = terminalTryStatement?.catchClause
-            ? parseTerminalAwaitSequence(terminalTryStatement.catchClause.block.statements)
+            ? parseTerminalAwaitSequence(terminalTryStatement.catchClause.block.statements, true)
             : null;
         if (bodyContinue) {
             if (loopIncrementor && !bodySynchronousExpressionSupported(loopIncrementor)) return false;
@@ -39268,6 +39272,8 @@ class Emitter {
             bodyAwaitedAliasIndices = terminalTryAwaitSequence.aliases.map(({ index }) => index);
             bodyAwaitCatchAwaitExpr = terminalCatchAwaitSequence.expressions[0]!;
             bodyAwaitCatchExprs = terminalCatchAwaitSequence.expressions;
+            bodyAwaitCatchAwaitedAliasSymbols = terminalCatchAwaitSequence.aliases.map(({ symbol }) => symbol);
+            bodyAwaitCatchAwaitedAliasIndices = terminalCatchAwaitSequence.aliases.map(({ index }) => index);
             bodyAwaitCatchStartIndex = terminalTryAwaitSequence.expressions.length;
             bodyAwaitFinallyStartIndex = terminalCatchAwaitSequence.expressions.length;
             continuationBodyAwaitFinallyAwaitExpr = finallyAwait;
@@ -39698,6 +39704,8 @@ class Emitter {
             bodyAwaitCatchStatements,
             bodyAwaitCatchAwaitExpr,
             bodyAwaitCatchExprs,
+            bodyAwaitCatchAwaitedAliasSymbols,
+            bodyAwaitCatchAwaitedAliasIndices,
             bodyAwaitCatchBetweenAwaitStatements,
             bodyAwaitCatchSymbol,
             bodyAwaitCatchStartIndex,
@@ -39761,12 +39769,14 @@ class Emitter {
                         ...continuation,
                         bodyAwaitExpr: continuation.bodyAwaitCatchAwaitExpr,
                         bodyAwaitExprs: catchAwaitExprs,
-                        bodyAwaitedAliasSymbols: [],
-                        bodyAwaitedAliasIndices: [],
+                        bodyAwaitedAliasSymbols: continuation.bodyAwaitCatchAwaitedAliasSymbols ?? [],
+                        bodyAwaitedAliasIndices: continuation.bodyAwaitCatchAwaitedAliasIndices ?? [],
                         bodyBetweenAwaitStatements: continuation.bodyAwaitCatchBetweenAwaitStatements,
                         bodyAwaitCatchStatements: undefined,
                         bodyAwaitCatchAwaitExpr: undefined,
                         bodyAwaitCatchExprs: undefined,
+                        bodyAwaitCatchAwaitedAliasSymbols: undefined,
+                        bodyAwaitCatchAwaitedAliasIndices: undefined,
                         bodyAwaitCatchAdapter: undefined,
                         bodyAwaitCatchReasonCaptured: true,
                         bodyAwaitFinallyStartIndex: catchRecoveryAwaitExprs.length,
