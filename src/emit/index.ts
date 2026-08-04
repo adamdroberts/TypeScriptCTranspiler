@@ -53638,7 +53638,11 @@ class Emitter {
             if (ts.isObjectLiteralExpression(unwrapped)) {
                 for (const property of unwrapped.properties) {
                     if (ts.isPropertyAssignment(property)) {
-                        if (!this.staticPropertyName(property.name) || !visit(property.initializer)) return false;
+                        const staticName = this.staticPropertyName(property.name);
+                        if (staticName === null) {
+                            if (!ts.isComputedPropertyName(property.name) || this.nodeContainsYield(property.name.expression)) return false;
+                        }
+                        if (!visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         if (!visit(property.name)) return false;
                     } else if (ts.isMethodDeclaration(property)) {
@@ -55324,8 +55328,21 @@ class Emitter {
                     continue;
                 }
                 if (ts.isPropertyAssignment(property)) {
-                    name = this.staticPropertyName(property.name) ??
-                        unsupported(property.name, "lazy multi-yield object keys must be static");
+                    const staticName = this.staticPropertyName(property.name);
+                    if (staticName === null) {
+                        if (!ts.isComputedPropertyName(property.name)) {
+                            unsupported(property.name, "lazy multi-yield dynamic object keys must be computed or static");
+                        }
+                        const key = this.emitExpr(property.name.expression);
+                        const keyTemp = this.freshTemp("_lazy_obj_key");
+                        pieces.push(`${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, property.name.expression)}`);
+                        const value = build(property.initializer);
+                        pieces.push(
+                            `tsc_object_set(${object}, ${keyTemp}, ${this.coerce(value, T_VALUE, property.initializer)})`,
+                        );
+                        continue;
+                    }
+                    name = staticName;
                     expression = property.initializer;
                 } else if (ts.isShorthandPropertyAssignment(property)) {
                     name = property.name.text;
