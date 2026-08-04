@@ -54463,6 +54463,12 @@ class Emitter {
             buf.line("return;");
             buf.close();
         }
+        buf.open(`if (${envLocalName}->lazy_close_throw && !${envLocalName}->lazy_close_handled)`);
+        buf.line("*state = -1;");
+        buf.line("*done = true;");
+        buf.line(`tsc_throw_str(tsc_value_to_string(${envLocalName}->lazy_close_arg));`);
+        buf.line("return;");
+        buf.close();
         buf.open(`if (${envLocalName}->lazy_close_handled && !${envLocalName}->lazy_close_throw)`);
         buf.line(`a->iter_return = ${envLocalName}->lazy_close_arg;`);
         buf.line("a->iter_has_return = true;");

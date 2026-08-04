@@ -1,0 +1,3 @@
+nested-finally-normal: false source false inner-one false inner-two false outer-one false outer-two true done
+nested-finally-close: false source false inner-one false inner-two false outer-one false outer-two true closed
+nested-finally-throw: false source false inner-one false inner-two false outer-one false outer-two original-throw
