@@ -38693,6 +38693,19 @@ class Emitter {
                     sawAwait = true;
                     returnAwaitEntries.push({ ...awaitEntry, statement });
                 } else {
+                    const nextStatement = returnPreludeStatements[statementIndex + 1];
+                    const uninitializedAliasBeforeAwaitAssignment = ts.isVariableStatement(statement) &&
+                        (statement.declarationList.flags & ts.NodeFlags.Const) === 0 &&
+                        statement.declarationList.declarations.length === 1 &&
+                        ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
+                        !statement.declarationList.declarations[0]!.initializer &&
+                        ts.isExpressionStatement(nextStatement) &&
+                        ts.isBinaryExpression(nextStatement.expression) &&
+                        nextStatement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                        ts.isIdentifier(nextStatement.expression.left) &&
+                        nextStatement.expression.left.text === statement.declarationList.declarations[0]!.name.text &&
+                        ts.isAwaitExpression(this.unwrapTransparentExpression(nextStatement.expression.right));
+                    if (sawAwait && uninitializedAliasBeforeAwaitAssignment) continue;
                     if (!this.asyncAwaitLoopPostStatementSupported(statement)) return false;
                     if (sawAwait) {
                         sawSuffix = true;
