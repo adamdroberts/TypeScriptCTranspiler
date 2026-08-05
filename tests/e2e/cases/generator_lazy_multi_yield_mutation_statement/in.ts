@@ -34,10 +34,38 @@ Object.defineProperty(memberBox, "child", {
         return memberChild;
     },
 });
+const computedMemberEvents: string[] = [];
+const computedMemberChild: any = { value: 40 };
+const computedMemberBox: any = {};
+Object.defineProperty(computedMemberBox, "outer", {
+    get: () => {
+        computedMemberEvents.push("getter");
+        return computedMemberChild;
+    },
+});
+const stableComputedMemberEvents: string[] = [];
+const stableComputedMemberChild: any = { value: 50 };
+const stableComputedMemberBox: any = {};
+Object.defineProperty(stableComputedMemberBox, "outer", {
+    get: () => {
+        stableComputedMemberEvents.push("getter");
+        return stableComputedMemberChild;
+    },
+});
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
     return "member-done";
+}
+
+function* computedMemberBetweenYields(): Generator<string, string, any> {
+    (yield "computed-member-receiver")[(yield "computed-member-outer-key")][(yield "computed-member-inner-key")]++;
+    return "computed-member-done";
+}
+
+function* stableComputedMemberBetweenYields(): Generator<string, string, any> {
+    (yield "stable-computed-member-receiver")["outer"][(yield "stable-computed-member-inner-key")]++;
+    return "stable-computed-member-done";
 }
 
 const assignment = assignmentMutation();
@@ -79,3 +107,16 @@ const memberFirst: any = member.next();
 const memberSecond: any = member.next(memberBox);
 const memberDone: any = member.next("value");
 console.log("member", memberFirst.done, memberFirst.value, memberSecond.done, memberSecond.value, memberDone.done, memberDone.value, memberEvents.join(","), memberChild.value);
+
+const computedMember = computedMemberBetweenYields();
+const computedMemberFirst: any = computedMember.next();
+const computedMemberSecond: any = computedMember.next(computedMemberBox);
+const computedMemberThird: any = computedMember.next("outer");
+const computedMemberDone: any = computedMember.next("value");
+console.log("computed-member", computedMemberFirst.done, computedMemberFirst.value, computedMemberSecond.done, computedMemberSecond.value, computedMemberThird.done, computedMemberThird.value, computedMemberDone.done, computedMemberDone.value, computedMemberEvents.join(","), computedMemberChild.value);
+
+const stableComputedMember = stableComputedMemberBetweenYields();
+const stableComputedMemberFirst: any = stableComputedMember.next();
+const stableComputedMemberSecond: any = stableComputedMember.next(stableComputedMemberBox);
+const stableComputedMemberDone: any = stableComputedMember.next("value");
+console.log("stable-computed-member", stableComputedMemberFirst.done, stableComputedMemberFirst.value, stableComputedMemberSecond.done, stableComputedMemberSecond.value, stableComputedMemberDone.done, stableComputedMemberDone.value, stableComputedMemberEvents.join(","), stableComputedMemberChild.value);

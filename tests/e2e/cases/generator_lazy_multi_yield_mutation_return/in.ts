@@ -8,6 +8,15 @@ Object.defineProperty(memberBox, "child", {
         return memberChild;
     },
 });
+const computedMemberEvents: string[] = [];
+const computedMemberChild: any = { value: 40 };
+const computedMemberBox: any = {};
+Object.defineProperty(computedMemberBox, "outer", {
+    get: () => {
+        computedMemberEvents.push("getter");
+        return computedMemberChild;
+    },
+});
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -31,6 +40,10 @@ function* keyedDeleteReturn(): Generator<any, boolean, any> {
 
 function* intermediateMemberReturn(): Generator<any, number, any> {
     return ++(yield memberBox).child[(yield "value")];
+}
+
+function* intermediateComputedMemberReturn(): Generator<any, number, any> {
+    return ++(yield computedMemberBox)[(yield "outer")][(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -75,3 +88,10 @@ const intermediateMemberSecond: any = intermediateMemberIterator.next(memberBox)
 console.log("member-middle", memberEvents.join(","), intermediateMemberSecond.done, intermediateMemberSecond.value);
 const intermediateMemberDone: any = intermediateMemberIterator.next("value");
 console.log("member-done", memberEvents.join(","), memberChild.value, intermediateMemberDone.done, intermediateMemberDone.value);
+
+const intermediateComputedMemberIterator = intermediateComputedMemberReturn();
+const intermediateComputedMemberFirst: any = intermediateComputedMemberIterator.next();
+const intermediateComputedMemberSecond: any = intermediateComputedMemberIterator.next(computedMemberBox);
+const intermediateComputedMemberThird: any = intermediateComputedMemberIterator.next("outer");
+const intermediateComputedMemberDone: any = intermediateComputedMemberIterator.next("value");
+console.log("computed-member", intermediateComputedMemberFirst.done, intermediateComputedMemberFirst.value === computedMemberBox, intermediateComputedMemberSecond.done, intermediateComputedMemberSecond.value, intermediateComputedMemberThird.done, intermediateComputedMemberThird.value, intermediateComputedMemberDone.done, intermediateComputedMemberDone.value, computedMemberEvents.join(","), computedMemberChild.value);

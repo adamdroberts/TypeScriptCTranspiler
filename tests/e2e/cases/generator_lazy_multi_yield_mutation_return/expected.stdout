@@ -13,3 +13,4 @@ keyed-delete-done true true true
 member-before 30 false true
 member-middle getter false value
 member-done getter 31 true 31
+computed-member false true false outer false value true 41 getter 41

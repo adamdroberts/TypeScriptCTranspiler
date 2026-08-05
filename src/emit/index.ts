@@ -54445,15 +54445,22 @@ class Emitter {
             return afterYield;
         }
         if (!ts.isElementAccessExpression(receiver)) return null;
-        const afterYield = this.simpleLazyMultiYieldMutationReceiverWithStages(
+        const baseAfterYield = this.simpleLazyMultiYieldMutationReceiverWithStages(
             receiver.expression,
             visit,
             stages,
         );
-        if (!afterYield) return null;
+        if (!baseAfterYield) return null;
         const key = this.unwrapTransparentExpression(receiver.argumentExpression);
-        if (ts.isYieldExpression(key)) return visit(receiver.argumentExpression) ? key : null;
-        return this.isSimpleLazyStableLvaluePart(key) ? afterYield : null;
+        let afterYield = baseAfterYield;
+        if (ts.isYieldExpression(key)) {
+            if (!visit(receiver.argumentExpression)) return null;
+            afterYield = key;
+        } else if (!this.isSimpleLazyStableLvaluePart(key)) {
+            return null;
+        }
+        stages.push({ expression: receiver, afterYield });
+        return afterYield;
     }
 
     private simpleLazyMultiYieldMutationOperandWithStages(
