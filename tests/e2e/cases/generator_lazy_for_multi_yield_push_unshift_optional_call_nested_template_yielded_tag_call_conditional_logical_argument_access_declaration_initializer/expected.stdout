@@ -1,0 +1,19 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-selector
+push-third  push-first false push-left
+push-fourth  push-first false push-right
+push-fifth tag-push-right-value push-first false push-inner
+push-sixth tag-push-right-value push-first false push-outer
+push-seventh tag-push-right-value push-first false push-item
+push-eighth tag-push-right-value push-first,push-tagged-push-push-conditional-logical-inner-push-inner-value-push-outer-value,push-item-value false push-key
+push-ninth tag-push-right-value push-first,push-tagged-push-push-conditional-logical-inner-push-inner-value-push-outer-value,push-item-value false push-body-undefined
+push-done tag-push-right-value push-first,push-tagged-push-push-conditional-logical-inner-push-inner-value-push-outer-value,push-item-value true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-selector
+unshift-third  unshift-first false unshift-left
+unshift-fourth tag- unshift-first false unshift-inner
+unshift-fifth tag- unshift-first false unshift-outer
+unshift-sixth tag- unshift-first false unshift-item
+unshift-seventh tag- unshift-tagged-unshift-unshift-conditional-logical-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-key
+unshift-eighth tag- unshift-tagged-unshift-unshift-conditional-logical-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-body-undefined
+unshift-done tag- unshift-tagged-unshift-unshift-conditional-logical-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first true unshift-done

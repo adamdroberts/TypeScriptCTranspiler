@@ -54542,6 +54542,11 @@ class Emitter {
                 yields.push(...taggedTemplateYields);
                 continue;
             }
+            const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(value);
+            if (conditionalBranches && conditionalBranches.length > 0) {
+                yields.push(...conditionalBranches.flatMap((branch) => branch.yields));
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
