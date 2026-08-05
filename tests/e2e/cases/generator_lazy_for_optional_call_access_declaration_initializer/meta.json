@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage a bounded optional pop call before stable optional final element access in counted-for initializers"
+}

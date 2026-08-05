@@ -55553,9 +55553,13 @@ class Emitter {
             let current: ts.Expression = receiver;
             while (ts.isCallExpression(current)) {
                 const callee = this.unwrapTransparentExpression(current.expression);
-                if (current.questionDotToken ||
-                    !ts.isPropertyAccessExpression(callee) ||
-                    callee.questionDotToken) return null;
+                if (!ts.isPropertyAccessExpression(callee)) return null;
+                const optionalCall = !!current.questionDotToken || !!callee.questionDotToken;
+                if (optionalCall && (
+                    !optionalFinal ||
+                    callee.name.text !== "pop" ||
+                    current.arguments.length !== 0
+                )) return null;
                 callStages.push(current);
                 if (callee.name.text === "concat") {
                     if (current.arguments.length !== 1 || !ts.isSpreadElement(current.arguments[0]!)) return null;

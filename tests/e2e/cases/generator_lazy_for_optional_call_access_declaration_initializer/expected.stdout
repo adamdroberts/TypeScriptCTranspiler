@@ -1,0 +1,6 @@
+present-first 1 false receiver
+present-second 0 false body-ok
+present-done 0 true done
+missing-first null false receiver
+missing-second null false body-undefined
+missing-done null true done
