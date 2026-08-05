@@ -150,6 +150,7 @@ interface LazyMultiYieldTerminalInfo {
     yields: ts.YieldExpression[];
     conditionalBranches?: LazyMultiYieldConditionalBranch[];
     logicalPlan?: LazyMultiYieldLogicalPlan;
+    logicalPlans?: LazyMultiYieldLogicalPlan[];
 }
 
 interface LazyGeneratorCatchHandler {
@@ -53787,6 +53788,8 @@ class Emitter {
         }
         const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(expression);
         const conditionalPlans = new Map<ts.ConditionalExpression, LazyMultiYieldConditionalBranch>();
+        const logicalPlans: LazyMultiYieldLogicalPlan[] = [];
+        const logicalPlanRoots = new Set<ts.BinaryExpression>();
         const registerConditionalPlan = (plan: LazyMultiYieldConditionalBranch): void => {
             conditionalPlans.set(plan.expression, plan);
             for (const arm of [plan.whenTrue, plan.whenFalse]) {
@@ -53929,6 +53932,15 @@ class Emitter {
                     visit(unwrapped.right);
             }
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
+                const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(unwrapped);
+                if (logicalPlan) {
+                    if (!logicalPlanRoots.has(logicalPlan.expression)) {
+                        logicalPlanRoots.add(logicalPlan.expression);
+                        logicalPlans.push(logicalPlan);
+                        yields.push(...logicalPlan.yields);
+                    }
+                    return true;
+                }
                 if (!this.nodeContainsYield(unwrapped)) return true;
                 return !!this.directLazyYieldCondition(unwrapped.left) &&
                     !this.nodeContainsYield(unwrapped.right) &&
@@ -53950,6 +53962,7 @@ class Emitter {
         };
         if (conditionalBranches) {
             if (!visit(expression)) return null;
+            if (logicalPlans.length > 0) return null;
             return {
                 expression,
                 yields,
@@ -53957,7 +53970,9 @@ class Emitter {
             };
         }
         if (!visit(expression) || yields.length < 2) return null;
-        return { expression, yields };
+        return logicalPlans.length > 0
+            ? { expression, yields, logicalPlans }
+            : { expression, yields };
     }
 
     private isSimpleLazyMultiYieldLiteral(expr: ts.Expression): boolean {
@@ -55714,10 +55729,11 @@ class Emitter {
         terminal: "return" | "throw" = "return",
     ): void {
         const resumeSources = new Map<ts.YieldExpression, string>();
-        if (info.logicalPlan) {
-            const plan = info.logicalPlan;
+        if (info.logicalPlan || (info.logicalPlans && info.logicalPlans.length > 0)) {
+            const plans: LazyMultiYieldLogicalPlan[] = info.logicalPlan
+                ? [info.logicalPlan]
+                : info.logicalPlans ?? [];
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
-            const entryLabel = this.freshTemp("_lazy_multi_yield_logical");
             const yieldSlots = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
             const entryBlocks: Array<() => void> = [];
             const resumeBlocks: Array<() => void> = [];
@@ -55839,8 +55855,36 @@ class Emitter {
                     buf.line(`goto ${continuationLabel};`);
                 });
             };
-            schedulePlan(plan, entryLabel, mergeLabel);
-            buf.line(`goto ${entryLabel};`);
+            const plannedYields = new Set(plans.flatMap((plan) => plan.yields));
+            const surroundingYields = info.yields.filter((yieldExpr) => !plannedYields.has(yieldExpr));
+            const events: Array<
+                | { kind: "yield"; expression: ts.YieldExpression; position: number }
+                | { kind: "plan"; plan: LazyMultiYieldLogicalPlan; position: number }
+            > = [
+                ...surroundingYields.map((expression) => ({
+                    kind: "yield" as const,
+                    expression,
+                    position: expression.getStart(),
+                })),
+                ...plans.map((plan) => ({
+                    kind: "plan" as const,
+                    plan,
+                    position: plan.expression.getStart(),
+                })),
+            ].sort((left, right) => left.position - right.position);
+            const eventLabels = events.map(() => this.freshTemp("_lazy_multi_yield_logical_event"));
+            for (let index = 0; index < events.length; index++) {
+                const event = events[index]!;
+                const continuationLabel = index + 1 < events.length
+                    ? eventLabels[index + 1]!
+                    : mergeLabel;
+                if (event.kind === "plan") {
+                    schedulePlan(event.plan, eventLabels[index]!, continuationLabel);
+                    continue;
+                }
+                scheduleOperand(event.expression, eventLabels[index]!, continuationLabel);
+            }
+            buf.line(`goto ${eventLabels[0] ?? mergeLabel};`);
             for (const entryBlock of entryBlocks) entryBlock();
             for (const resumeBlock of resumeBlocks) resumeBlock();
             buf.line(`${mergeLabel}:;`);

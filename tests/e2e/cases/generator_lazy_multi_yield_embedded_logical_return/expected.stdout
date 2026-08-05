@@ -1,0 +1,5 @@
+typed-false false typed-array-left true 1|0|3
+typed-true false typed-array-left false typed-array-right true 1|4|3
+object-true false object-before false object-left false object-after true before|kept|after
+object-false false object-before false object-left false object-right false object-after true before|fallback|after
+siblings false sibling-before false first-left false second-left false second-right false sibling-after true before|0|2|after
