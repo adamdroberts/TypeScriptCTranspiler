@@ -1,0 +1,4 @@
+typed-array false typed-condition false typed-left true A|B|!
+typed-object false typed-object-condition false typed-object-left true 1 0 3
+dynamic-array false dynamic-condition false dynamic-right true C|D|!
+dynamic-object false dynamic-object-condition false dynamic-object-right true R !
