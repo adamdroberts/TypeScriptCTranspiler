@@ -3549,6 +3549,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_fill_access_declaration_initializer` | lazy generators stage a yielded fill value before counted-for computed element access |
 | `generator_lazy_for_multi_yield_copy_within_access_declaration_initializer` | lazy generators stage yielded copyWithin arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_with_access_declaration_initializer` | lazy generators stage yielded with arguments before counted-for computed element access |
+| `generator_lazy_for_multi_yield_to_spliced_access_declaration_initializer` | lazy generators stage a yielded toSpliced delete count before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_chain_access_declaration_initializer` | lazy generators stage ordered receiver calls before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_argument_access_declaration_initializer` | lazy generators stage a yielded splice argument before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_spread_access_declaration_initializer` | lazy generators stage a yielded splice spread before counted-for computed element access |

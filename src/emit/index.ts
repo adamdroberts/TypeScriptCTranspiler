@@ -55659,6 +55659,25 @@ class Emitter {
                         })),
                     };
                 }
+                if (callee.name.text === "toSpliced") {
+                    const startArgument = current.arguments.length > 0
+                        ? this.unwrapTransparentExpression(current.arguments[0]!)
+                        : null;
+                    if (current.arguments.length !== 2 ||
+                        startArgument === null ||
+                        !ts.isNumericLiteral(startArgument) ||
+                        startArgument.text !== "0") return null;
+                    const base = this.directLazyYieldCondition(callee.expression);
+                    const deleteCount = this.directLazyYieldCondition(current.arguments[1]!);
+                    if (!base || !deleteCount) return null;
+                    return {
+                        yields: key ? [base, deleteCount, key] : [base, deleteCount],
+                        stagedExpressions: callStages.reverse().map((call) => ({
+                            expression: call,
+                            afterYield: deleteCount,
+                        })),
+                    };
+                }
                 if (callee.name.text === "slice") {
                     if (current.arguments.length !== 0) return null;
                     const base = this.directLazyYieldCondition(callee.expression);
