@@ -54446,6 +54446,17 @@ class Emitter {
                     for (const yieldExpr of logicalIncrementor.yields) yields.add(yieldExpr);
                 }
             }
+            if (ts.isForStatement(current)) {
+                const initializer = current.initializer;
+                if (initializer && ts.isVariableDeclarationList(initializer)) {
+                    for (const declaration of initializer.declarations) {
+                        const info = this.simpleLazyMultiYieldVariableInitializer(declaration);
+                        if (info?.logicalPlan) {
+                            for (const yieldExpr of info.logicalPlan.yields) yields.add(yieldExpr);
+                        }
+                    }
+                }
+            }
             ts.forEachChild(current, visit);
         };
         visit(node);
@@ -54817,7 +54828,9 @@ class Emitter {
                 if (initializer && ts.isVariableDeclarationList(initializer)) {
                     for (const declaration of initializer.declarations) {
                         const info = this.simpleLazyMultiYieldVariableInitializer(declaration);
-                        if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
+                        if (info && !info.logicalPlan) {
+                            for (const yieldExpr of info.yields) yields.add(yieldExpr);
+                        }
                     }
                 }
             }
@@ -55207,20 +55220,36 @@ class Emitter {
             if (decl.initializer) {
                 const multiYieldInitializer = this.simpleLazyMultiYieldVariableInitializer(decl);
                 if (multiYieldInitializer) {
-                    this.emitLazyGeneratorMultiYieldExpressionStatement(
-                        buf,
-                        multiYieldInitializer,
-                        nextStateId,
-                        nextYieldStarSlot,
-                        elemType,
-                        envLocalName,
-                        (value) => {
-                            const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
-                                ? `((int64_t)(${value.c}))`
-                                : this.coerce(value, targetType, decl.initializer!);
-                            buf.line(`${target} = ${coerced};`);
-                        },
-                    );
+                    if (multiYieldInitializer.logicalPlan) {
+                        const value = this.emitLazyGeneratorLogicalPlan(
+                            buf,
+                            decl.initializer,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        );
+                        if (!value) unsupported(decl.initializer, "lazy generator yielded logical for-init could not suspend");
+                        const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
+                            ? `((int64_t)(${value.c}))`
+                            : this.coerce(value, targetType, decl.initializer);
+                        buf.line(`${target} = ${coerced};`);
+                    } else {
+                        this.emitLazyGeneratorMultiYieldExpressionStatement(
+                            buf,
+                            multiYieldInitializer,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                            (value) => {
+                                const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
+                                    ? `((int64_t)(${value.c}))`
+                                    : this.coerce(value, targetType, decl.initializer!);
+                                buf.line(`${target} = ${coerced};`);
+                            },
+                        );
+                    }
                 } else {
                     const yieldedInitializer = this.directLazyYieldCondition(decl.initializer);
                     const value = yieldedInitializer
@@ -55338,8 +55367,22 @@ class Emitter {
 
     private simpleLazyMultiYieldVariableInitializer(
         declaration: ts.VariableDeclaration,
-    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
+    ): {
+        expression: ts.Expression;
+        yields: ts.YieldExpression[];
+        stagedExpressions: LazyMultiYieldMutationStage[];
+        logicalPlan?: LazyMultiYieldLogicalPlan;
+    } | null {
         if (!declaration.initializer || !ts.isIdentifier(declaration.name)) return null;
+        const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(declaration.initializer);
+        if (logicalPlan?.yields.length) {
+            return {
+                expression: declaration.initializer,
+                yields: logicalPlan.yields,
+                stagedExpressions: [],
+                logicalPlan,
+            };
+        }
         const yields = this.simpleLazyMultiYieldArithmeticExpression(declaration.initializer);
         if (!yields) return null;
         return { expression: declaration.initializer, yields, stagedExpressions: [] };
@@ -58567,6 +58610,7 @@ class Emitter {
         if (originalValue?.ty.kind === "value") return `tsc_value_is_nullish(${originalValue.c})`;
         if (value.ty.kind === "value") return `tsc_value_is_nullish(${value.c})`;
         if (value.ty.kind === "void") return "true";
+        if (value.ty.kind === "number" || value.ty.kind === "boolean") return "false";
         if (isPointerKind(value.ty)) return `(${value.c} == NULL)`;
         this.coerce(value, T_BOOLEAN, node);
         return "false";

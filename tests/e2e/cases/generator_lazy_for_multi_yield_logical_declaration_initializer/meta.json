@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators preserve logical short-circuit order across multiple yielded counted-for variable initializers"
+}
