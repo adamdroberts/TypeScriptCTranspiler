@@ -54538,9 +54538,10 @@ class Emitter {
     private simpleLazyMultiYieldAssignmentRhs(
         right: ts.Expression,
         visit: (node: ts.Expression) => boolean,
+        requireYield = true,
     ): boolean {
         const unwrappedRight = this.unwrapTransparentExpression(right);
-        if (!ts.isYieldExpression(unwrappedRight) && !this.nodeContainsYield(right)) return false;
+        if (!ts.isYieldExpression(unwrappedRight) && !this.nodeContainsYield(right)) return !requireYield;
         let nestedAssignment = false;
         const scan = (node: ts.Node): void => {
             if (nestedAssignment) return;
@@ -54602,7 +54603,10 @@ class Emitter {
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) return !unwrapped.asteriskToken;
-            return !this.nodeContainsYield(node);
+            if (!this.nodeContainsYield(node)) return true;
+            if (!ts.isBinaryExpression(unwrapped) ||
+                this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) return false;
+            return visit(unwrapped.left) && visit(unwrapped.right);
         };
         const stagedExpressions: LazyMultiYieldMutationStage[] = [];
         if (ts.isPostfixUnaryExpression(expression)) {
@@ -54613,9 +54617,8 @@ class Emitter {
         } else if (ts.isDeleteExpression(expression)) {
             if (!this.simpleLazyMultiYieldMutationOperandWithStages(expression.expression, visit, stagedExpressions)) return null;
         } else if (ts.isBinaryExpression(expression) && this.isAssignmentOperatorKind(expression.operatorToken.kind)) {
-            const yieldedRight = this.directLazyYieldCondition(expression.right);
             if (!this.simpleLazyMultiYieldAssignmentLvalueWithStages(expression.left, visit, stagedExpressions) ||
-                (this.nodeContainsYield(expression.right) && !yieldedRight)) return null;
+                !this.simpleLazyMultiYieldAssignmentRhs(expression.right, visit, false)) return null;
         } else {
             return null;
         }

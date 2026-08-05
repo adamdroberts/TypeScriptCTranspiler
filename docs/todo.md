@@ -138,6 +138,8 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 - Verified bounded lazy-generator multi-yield mutation-statement RHS coverage: a direct yielded assignment RHS can stage after the yielded receiver and computed key, preserving receiver/key/RHS order before final mutation; nested RHS yield graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
+- Verified bounded lazy-generator multi-yield mutation-statement nested-RHS coverage: an expression-statement assignment can stage a supported non-assignment binary RHS expression tree containing multiple direct yields after the yielded receiver and computed key, preserving receiver/key/RHS order before final mutation; nested assignment RHS graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+
 - Verified bounded lazy-generator nested mutation-statement receiver coverage: a yielded receiver can stage with a yielded computed key before a final static member postfix update, preserving receiver/key ordering; calls, intermediate side-effecting member steps, and broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
 - Verified bounded lazy-generator intermediate mutation-member coverage: a static member between a yielded receiver and a later yielded computed key is evaluated and stored after the receiver resumes, preserving getter timing before the key suspension; calls, computed intermediate members, deeper member graphs, and broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
@@ -540,6 +542,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
   - Remaining Phase 8 call-spread work: support additional spread positions and methods, nested/non-direct yielded spreads, and broader call/member mutation graphs.
 
   - Phase 8 terminal-assignment refinement: terminal assignments now accept supported non-assignment RHS expression trees containing multiple direct yields after staged receiver/key operands; nested assignment RHS graphs and broader lvalue/assignment expressions remain deferred.
+  - Phase 8 expression-statement assignment refinement: mutation statements now accept supported non-assignment binary RHS expression trees containing multiple direct yields after staged receiver/key operands; nested assignment RHS graphs and broader assignment expressions remain deferred.
 
 - **Phase 9 — `Proxy` + `Reflect`**
   - Verified top-level dynamic `JSON.stringify` semantics: `undefined`, functions, and callable proxies now produce JavaScript `undefined`, while nested arrays retain `null` substitution, objects omit unsupported properties, and revoked callable proxies still throw. Tests: `json_stringify_dynamic_top_level`, `proxy_callable_json`, `proxy_nested_callable_identity`, `proxy_revocable_identity`.
