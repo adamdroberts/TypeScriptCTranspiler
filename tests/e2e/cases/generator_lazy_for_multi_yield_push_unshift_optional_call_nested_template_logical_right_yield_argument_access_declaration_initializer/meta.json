@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yielded right operands inside short-circuit logical template substitutions of optional push and unshift calls while preserving skipped-right timing before mutating computed element access"
+}
