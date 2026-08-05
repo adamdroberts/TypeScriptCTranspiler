@@ -54378,6 +54378,10 @@ class Emitter {
             expr.kind === ts.SyntaxKind.NullKeyword;
     }
 
+    private isSimpleLazyMultiYieldCallArgument(expr: ts.Expression): boolean {
+        return this.isSimpleLazyMultiYieldLiteral(expr) || ts.isRegularExpressionLiteral(expr);
+    }
+
     private isSimpleLazyMultiYieldStringLogicalLeaf(expr: ts.BinaryExpression): boolean {
         if (expr.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
             expr.operatorToken.kind !== ts.SyntaxKind.BarBarToken &&
@@ -55650,7 +55654,7 @@ class Emitter {
                             afterYield = argumentYield;
                             continue;
                         }
-                        if (!this.isSimpleLazyMultiYieldLiteral(expression)) return null;
+                        if (!this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
                     }
                     return {
                         yields: key ? [base, ...argumentYields, key] : [base, ...argumentYields],
@@ -55680,7 +55684,7 @@ class Emitter {
                             afterYield = argumentYield;
                             continue;
                         }
-                        if (!this.isSimpleLazyMultiYieldLiteral(expression)) return null;
+                        if (!this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
                     }
                     return {
                         yields: key ? [base, ...argumentYields, key] : [base, ...argumentYields],

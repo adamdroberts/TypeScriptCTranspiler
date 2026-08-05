@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage regular-expression literal push and unshift arguments alongside direct yielded arguments and spreads before computed element access"
+}
