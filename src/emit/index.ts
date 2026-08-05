@@ -136,10 +136,17 @@ interface LazyMultiYieldConditionalArm {
     yields: ts.YieldExpression[];
 }
 
+interface LazyMultiYieldLogicalPlan {
+    expression: ts.BinaryExpression;
+    left: ts.YieldExpression;
+    right: ts.YieldExpression;
+}
+
 interface LazyMultiYieldTerminalInfo {
     expression: ts.Expression;
     yields: ts.YieldExpression[];
     conditionalBranches?: LazyMultiYieldConditionalBranch[];
+    logicalPlan?: LazyMultiYieldLogicalPlan;
 }
 
 interface LazyGeneratorCatchHandler {
@@ -53578,6 +53585,17 @@ class Emitter {
         return this.simpleLazyMultiYieldTerminal(stmt, "throw");
     }
 
+    private simpleLazyMultiYieldLogicalPlan(
+        expression: ts.Expression,
+    ): LazyMultiYieldLogicalPlan | null {
+        const unwrapped = this.unwrapTransparentExpression(expression);
+        if (!ts.isBinaryExpression(unwrapped) || !this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) return null;
+        const left = this.directLazyYieldCondition(unwrapped.left);
+        const right = this.directLazyYieldCondition(unwrapped.right);
+        if (!left || !right) return null;
+        return { expression: unwrapped, left, right };
+    }
+
     private simpleLazyMultiYieldConditionalBranches(
         expression: ts.Expression,
     ): LazyMultiYieldConditionalBranch[] | null {
@@ -53746,6 +53764,14 @@ class Emitter {
                 : undefined;
         if (!expression) return null;
         const yields: ts.YieldExpression[] = [];
+        const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(expression);
+        if (logicalPlan) {
+            return {
+                expression,
+                yields: [logicalPlan.left, logicalPlan.right],
+                logicalPlan,
+            };
+        }
         const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(expression);
         const conditionalPlans = new Map<ts.ConditionalExpression, LazyMultiYieldConditionalBranch>();
         const registerConditionalPlan = (plan: LazyMultiYieldConditionalBranch): void => {
@@ -55675,7 +55701,55 @@ class Emitter {
         terminal: "return" | "throw" = "return",
     ): void {
         const resumeSources = new Map<ts.YieldExpression, string>();
-        if (info.conditionalBranches && info.conditionalBranches.length > 0) {
+        if (info.logicalPlan) {
+            const plan = info.logicalPlan;
+            const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
+            const rightLabel = this.freshTemp("_lazy_multi_yield_logical_right");
+            const leftState = nextStateId();
+            const rightState = nextStateId();
+            const emitYield = (yieldExpr: ts.YieldExpression, state: number): void => {
+                const value = yieldExpr.expression ? this.emitExpr(yieldExpr.expression) : { c: "NULL", ty: T_VOID };
+                const valueNode = yieldExpr.expression ?? yieldExpr;
+                const yielded = this.freshTemp("_yield");
+                buf.line(`${elemType.c} ${yielded} = ${this.coerce(value, elemType, valueNode)};`);
+                buf.line(`tsc_array_push_raw(a, &${yielded});`);
+                buf.line(`*state = ${state};`);
+                buf.line("*done = false;");
+                buf.line("return;");
+            };
+            emitYield(plan.left, leftState);
+            buf.line(`${rightLabel}:;`);
+            emitYield(plan.right, rightState);
+            const leftType = this.prepareType(mapTsType(
+                plan.left,
+                this.checker.getTypeAtLocation(plan.left),
+                this.checker,
+            ));
+            const resumedLeft = {
+                c: this.coerce({ c: "next_arg", ty: T_VALUE }, leftType, plan.left),
+                ty: leftType,
+            };
+            const truthy = this.truthyExprFromEmitResult(resumedLeft, plan.left);
+            const rightRequired = plan.expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
+                ? truthy
+                : plan.expression.operatorToken.kind === ts.SyntaxKind.BarBarToken
+                    ? `!(${truthy})`
+                    : this.nullishExprFromEmitResult(resumedLeft, plan.left);
+            buf.line(`case ${leftState}:;`);
+            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+            buf.line(`${envLocalName}->multi_yield_values[0] = next_arg;`);
+            buf.open(`if (${rightRequired})`);
+            buf.line(`goto ${rightLabel};`);
+            buf.close();
+            buf.line(`goto ${mergeLabel};`);
+            buf.line(`case ${rightState}:;`);
+            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+            buf.line(`${envLocalName}->multi_yield_values[1] = next_arg;`);
+            buf.line(`goto ${mergeLabel};`);
+            resumeSources.set(plan.left, `${envLocalName}->multi_yield_values[0]`);
+            resumeSources.set(plan.right, `${envLocalName}->multi_yield_values[1]`);
+            buf.line(`${mergeLabel}:;`);
+        } else if (info.conditionalBranches && info.conditionalBranches.length > 0) {
             const plans = info.conditionalBranches;
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
             const yieldSlots = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));

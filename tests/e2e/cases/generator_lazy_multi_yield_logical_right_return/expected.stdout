@@ -1,0 +1,6 @@
+and-false false and-left true 0
+and-true false and-left false and-right true 3
+or-true false or-left true 2
+or-false false or-left false or-right true 4
+nullish-null false nullish-left false nullish-right true R
+nullish-value false nullish-left true L
