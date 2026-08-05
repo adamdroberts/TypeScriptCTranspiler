@@ -1,3 +1,4 @@
 dynamic false dynamic-first false dynamic-final true dynamic-method:done
 accessor false dynamic-accessor-first false dynamic-accessor-final true  true true function function dynamic-accessor get,set:value
+generator-method false dynamic-generator-method-first false dynamic-generator-method-final true false generator-method-yield true generator-method-done
 typed false 2 false 5 true 3 7 true

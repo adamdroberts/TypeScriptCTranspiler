@@ -49,7 +49,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now stage nested array/object literals with direct yielded element and property values after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; spreads, typed computed fields, yielded accessor bodies, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
-- Lazy generators now stage dynamic object RHS literals with static-key, yield-free methods in mutation expression statements alongside yielded property values, preserving method closure construction and later invocation; yielded methods, yielded accessor bodies, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+- Lazy generators now stage dynamic object RHS literals with static-key, yield-free methods and bounded simple generator methods in mutation expression statements alongside yielded property values, preserving method closure construction, nested generator laziness, and later invocation; unsupported generator-method control flow, yielded accessor bodies, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
 - Lazy generators now stage dynamic object RHS literals with static-key, yield-free getters and setters in mutation expression statements alongside yielded property values, preserving accessor descriptor creation and post-resume getter/setter behavior; yielded accessor bodies, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
@@ -134,7 +134,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generator returns now construct simple dynamic and named typed object literals from finite ordered suspended yield operands after the final `.next(value)`; nested yielded spreads and typed computed fields remain deferred. Tests: `generator_lazy_multi_yield_object_return`, `generator_lazy_multi_yield_typed_object_return`.
 
-- Lazy generator multi-yield dynamic and named typed object returns now emit static-key, yield-free methods at final resume through the existing closure subset; methods with suspension or unsupported closure shapes, yielded spreads, and computed method keys remain deferred. Test: `generator_lazy_multi_yield_method_return`.
+- Lazy generator multi-yield dynamic and named typed object returns now emit static-key, yield-free methods and bounded simple generator methods at final resume through the existing closure subset, preserving nested generator laziness and later invocation; unsupported generator-method control flow or closure shapes, yielded spreads, and computed method keys remain deferred. Test: `generator_lazy_multi_yield_method_return`.
 
 - Lazy generator multi-yield dynamic object returns now emit static-key, yield-free getters and setters at final resume, preserving accessor descriptor creation and post-resume getter/setter behavior; yielded accessor bodies, typed accessor fields, and broader expression graphs remain deferred. Test: `generator_lazy_multi_yield_method_return`.
 

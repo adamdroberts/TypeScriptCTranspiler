@@ -78,6 +78,7 @@ function formatComputedKey(prefix: any, suffix: any): string {
 }
 const methodRhsEvents: string[] = [];
 const methodRhsBox: any = { value: null };
+const generatorMethodRhsBox: any = { value: null };
 const accessorRhsEvents: string[] = [];
 const accessorRhsBox: any = { value: null };
 const callSpreadChild: any = { value: 120 };
@@ -207,6 +208,18 @@ function* accessorRhsAssignmentBetweenYields(): Generator<string, string, any> {
     return "accessor-rhs-done";
 }
 
+function* generatorMethodRhsAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "generator-method-rhs-receiver")[yield "generator-method-rhs-slot"] = {
+        first: yield "generator-method-rhs-first",
+        *nested(): Generator<string, string, any> {
+            yield "generator-method-rhs-yield";
+            return "generator-method-rhs-done";
+        },
+        after: yield "generator-method-rhs-after",
+    };
+    return "generator-method-rhs-outer-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -287,6 +300,17 @@ const accessorRhsEventsBeforeAccess = accessorRhsEvents.join(",");
 const accessorRhsRead: any = accessorRhsBox.value.score;
 accessorRhsBox.value.score = "updated";
 console.log("assignment-accessor-rhs", accessorRhsAssignmentFirst.done, accessorRhsAssignmentFirst.value, accessorRhsAssignmentSecond.done, accessorRhsAssignmentSecond.value, accessorRhsAssignmentThird.done, accessorRhsAssignmentThird.value, accessorRhsAssignmentFourth.done, accessorRhsAssignmentFourth.value, accessorRhsEventsBeforeAccess, accessorRhsAssignmentDone.done, accessorRhsAssignmentDone.value, accessorRhsBox.value.first, accessorRhsBox.value.after, accessorRhsDescriptor.enumerable, accessorRhsDescriptor.configurable, typeof accessorRhsDescriptor.get, typeof accessorRhsDescriptor.set, accessorRhsRead, accessorRhsEvents.join(","));
+
+const generatorMethodRhsAssignment = generatorMethodRhsAssignmentBetweenYields();
+const generatorMethodRhsAssignmentFirst: any = generatorMethodRhsAssignment.next();
+const generatorMethodRhsAssignmentSecond: any = generatorMethodRhsAssignment.next(generatorMethodRhsBox);
+const generatorMethodRhsAssignmentThird: any = generatorMethodRhsAssignment.next("value");
+const generatorMethodRhsAssignmentFourth: any = generatorMethodRhsAssignment.next(4);
+const generatorMethodRhsAssignmentDone: any = generatorMethodRhsAssignment.next("after");
+const nestedGeneratorMethodIterator: any = generatorMethodRhsBox.value.nested();
+const nestedGeneratorMethodFirst: any = nestedGeneratorMethodIterator.next();
+const nestedGeneratorMethodDone: any = nestedGeneratorMethodIterator.next("unused");
+console.log("assignment-generator-method-rhs", generatorMethodRhsAssignmentFirst.done, generatorMethodRhsAssignmentFirst.value, generatorMethodRhsAssignmentSecond.done, generatorMethodRhsAssignmentSecond.value, generatorMethodRhsAssignmentThird.done, generatorMethodRhsAssignmentThird.value, generatorMethodRhsAssignmentFourth.done, generatorMethodRhsAssignmentFourth.value, generatorMethodRhsAssignmentDone.done, generatorMethodRhsAssignmentDone.value, nestedGeneratorMethodFirst.done, nestedGeneratorMethodFirst.value, nestedGeneratorMethodDone.done, nestedGeneratorMethodDone.value);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();

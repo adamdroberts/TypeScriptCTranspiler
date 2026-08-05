@@ -30,6 +30,17 @@ function* dynamicAccessorObject(): Generator<any, any, any> {
     };
 }
 
+function* dynamicGeneratorMethodObject(): Generator<any, any, any> {
+    return {
+        first: yield "dynamic-generator-method-first",
+        *nested(): Generator<string, string, any> {
+            yield "generator-method-yield";
+            return "generator-method-done";
+        },
+        final: yield "dynamic-generator-method-final",
+    };
+}
+
 function* typedObject(): Generator<number, TypedMethodResult, number> {
     return {
         first: yield 2,
@@ -57,6 +68,16 @@ const accessorEventsBeforeAccess = accessorEvents.join(",");
 const accessorRead: any = accessorResult.score;
 accessorResult.score = "value";
 console.log("accessor", accessorFirst.done, accessorFirst.value, accessorSecond.done, accessorSecond.value, accessorDone.done, accessorEventsBeforeAccess, accessorDescriptor.enumerable, accessorDescriptor.configurable, typeof accessorDescriptor.get, typeof accessorDescriptor.set, accessorRead, accessorEvents.join(","));
+
+const generatorMethodIterator = dynamicGeneratorMethodObject();
+const generatorMethodFirst: any = generatorMethodIterator.next();
+const generatorMethodSecond: any = generatorMethodIterator.next(3);
+const generatorMethodDone: any = generatorMethodIterator.next(7);
+const generatorMethodResult: any = generatorMethodDone.value;
+const nestedMethodIterator: any = generatorMethodResult.nested();
+const nestedMethodFirst: any = nestedMethodIterator.next();
+const nestedMethodDone: any = nestedMethodIterator.next("unused");
+console.log("generator-method", generatorMethodFirst.done, generatorMethodFirst.value, generatorMethodSecond.done, generatorMethodSecond.value, generatorMethodDone.done, nestedMethodFirst.done, nestedMethodFirst.value, nestedMethodDone.done, nestedMethodDone.value);
 
 const typedIterator = typedObject();
 const typedFirst: any = typedIterator.next();

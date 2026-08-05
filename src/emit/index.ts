@@ -52895,6 +52895,12 @@ class Emitter {
         return true;
     }
 
+    private isSupportedLazyObjectLiteralMethod(method: ts.MethodDeclaration): boolean {
+        if (!this.staticPropertyName(method.name)) return false;
+        if (!this.nodeContainsYield(method)) return true;
+        return !!method.asteriskToken && this.isSimpleSequentialGenerator(method);
+    }
+
     private isValidLazyGeneratorStatement(stmt: ts.Statement, loopDepth = 0): boolean {
         if (ts.isEmptyStatement(stmt)) return true;
         if (ts.isBreakStatement(stmt)) return !stmt.label;
@@ -52903,9 +52909,12 @@ class Emitter {
         let hasNestedFunctionOrClass = false;
         const checkNestedScopes = (node: ts.Node) => {
             if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
-                if ((ts.isMethodDeclaration(node) ||
-                    ts.isGetAccessorDeclaration(node) ||
-                    ts.isSetAccessorDeclaration(node)) &&
+                if (ts.isMethodDeclaration(node) &&
+                    ts.isObjectLiteralExpression(node.parent) &&
+                    this.isSupportedLazyObjectLiteralMethod(node)) {
+                    return;
+                }
+                if ((ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node)) &&
                     ts.isObjectLiteralExpression(node.parent) &&
                     !this.nodeContainsYield(node)) {
                     return;
@@ -54254,7 +54263,7 @@ class Emitter {
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         if (!visit(property.name)) return false;
                     } else if (ts.isMethodDeclaration(property)) {
-                        if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
+                        if (!this.isSupportedLazyObjectLiteralMethod(property)) return false;
                     } else if (ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) {
                         if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
                     } else if (ts.isSpreadAssignment(property)) {
@@ -54715,7 +54724,7 @@ class Emitter {
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         continue;
                     } else if (ts.isMethodDeclaration(property)) {
-                        if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
+                        if (!this.isSupportedLazyObjectLiteralMethod(property)) return false;
                     } else if (ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) {
                         if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
                     } else if (ts.isSpreadAssignment(property)) {
