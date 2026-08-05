@@ -12,9 +12,9 @@ Object.defineProperty(spreadRhsItems, "0", {
 });
 const computedKeyEvents: string[] = [];
 const computedKeyBox: any = { value: null };
-function formatComputedKey(value: any): string {
+function formatComputedKey(prefix: any, suffix: any): string {
     computedKeyEvents.push("key");
-    return String(value);
+    return String(prefix) + String(suffix);
 }
 
 function* directAssignmentReturn(): Generator<number, number, number> {
@@ -42,7 +42,7 @@ function* spreadRhsAssignmentReturn(): Generator<any, any, any> {
 
 function* computedKeyAssignmentReturn(): Generator<any, any, any> {
     return (yield "computed-key-receiver")[yield "computed-key-slot"] = {
-        [formatComputedKey(yield "computed-key-name")]: yield "computed-key-value",
+        [formatComputedKey(yield "computed-key-name-prefix", yield "computed-key-name-suffix")]: yield "computed-key-value",
         after: yield "computed-key-after",
     };
 }
@@ -105,10 +105,12 @@ console.log("computed-key-before", computedKeyFirst.done, computedKeyFirst.value
 const computedKeySecond: any = computedKeyIterator.next(computedKeyBox);
 console.log("computed-key-slot", computedKeySecond.done, computedKeySecond.value);
 const computedKeyThird: any = computedKeyIterator.next("value");
-console.log("computed-key-name", computedKeyThird.done, computedKeyThird.value);
-const computedKeyFourth: any = computedKeyIterator.next("name");
-console.log("computed-key-value", computedKeyEvents.join(","), computedKeyFourth.done, computedKeyFourth.value);
-const computedKeyFifth: any = computedKeyIterator.next(4);
-console.log("computed-key-after", computedKeyEvents.join(","), computedKeyFifth.done, computedKeyFifth.value);
+console.log("computed-key-prefix", computedKeyThird.done, computedKeyThird.value);
+const computedKeyFourth: any = computedKeyIterator.next("prefix");
+console.log("computed-key-suffix", computedKeyFourth.done, computedKeyFourth.value);
+const computedKeyFifth: any = computedKeyIterator.next("suffix");
+console.log("computed-key-value", computedKeyEvents.join(","), computedKeyFifth.done, computedKeyFifth.value);
+const computedKeySixth: any = computedKeyIterator.next(4);
+console.log("computed-key-after", computedKeyEvents.join(","), computedKeySixth.done, computedKeySixth.value);
 const computedKeyDone: any = computedKeyIterator.next("after");
-console.log("computed-key-done", computedKeyDone.done, computedKeyDone.value, computedKeyBox.value.name, computedKeyBox.value.after);
+console.log("computed-key-done", computedKeyDone.done, computedKeyDone.value, computedKeyBox.value.prefixsuffix, computedKeyBox.value.after);

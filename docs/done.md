@@ -20,7 +20,7 @@
 
 - Lazy generators now stage one direct yielded array/object spread source when it is the final yield-bearing literal operand of a terminal assignment RHS, materializing the spread before a later outer yield and preserving spread side effects and final assignment order; non-final or multiple spreads, unsupported iterable shapes, nested assignment RHS graphs, and broader lvalue/assignment expressions remain deferred. Test: `generator_lazy_multi_yield_assignment_return`.
 
-- Lazy generators now stage a supported dynamic-object computed-property key expression containing one direct yield in terminal and expression-statement assignment RHS literals, including bounded yield-free call/new wrappers, evaluating the key before later value yields; typed computed fields, multiple-yield key graphs, and broader object-assignment expressions remain deferred. Tests: `generator_lazy_multi_yield_assignment_return`, `generator_lazy_multi_yield_mutation_statement`.
+- Lazy generators now stage supported dynamic-object computed-property key trees containing finite direct yields in terminal and expression-statement assignment RHS literals, including bounded yield-free call/new wrappers, evaluating the key after its final key yield and before later value yields; typed computed fields and broader key/object-assignment graphs remain deferred. Tests: `generator_lazy_multi_yield_assignment_return`, `generator_lazy_multi_yield_mutation_statement`.
 
 - Lazy generators now stage a bounded direct-yield assignment RHS after yielded receivers and computed keys in multi-yield mutation expression statements, preserving receiver/key/RHS order; nested RHS yield graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 

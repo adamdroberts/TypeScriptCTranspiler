@@ -54232,11 +54232,15 @@ class Emitter {
                         if (staticName === null) {
                             if (!ts.isComputedPropertyName(property.name)) return false;
                             if (this.nodeContainsYield(property.name.expression)) {
-                                const keyYield = this.singleYieldExpressionInExpression(property.name.expression);
-                                if (!keyYield || keyYield.asteriskToken ||
-                                    (keyYield.expression && this.nodeContainsYield(keyYield.expression)) ||
+                                const keyYields = this.simpleLazyMultiYieldExpressionsInExpression(property.name.expression);
+                                if (keyYields.length === 0 || keyYields.some((keyYield) =>
+                                    keyYield.asteriskToken ||
+                                    (keyYield.expression && this.nodeContainsYield(keyYield.expression))) ||
                                     !visit(property.name.expression)) return false;
-                                stagedExpressions.push({ expression: property.name.expression, afterYield: keyYield });
+                                stagedExpressions.push({
+                                    expression: property.name.expression,
+                                    afterYield: keyYields[keyYields.length - 1]!,
+                                });
                             }
                         }
                         if (!visit(property.initializer)) return false;
@@ -54436,6 +54440,20 @@ class Emitter {
         };
         visit(expr);
         return multiple ? null : found;
+    }
+
+    private simpleLazyMultiYieldExpressionsInExpression(expr: ts.Expression): ts.YieldExpression[] {
+        const yields: ts.YieldExpression[] = [];
+        const visit = (node: ts.Node): void => {
+            if (ts.isYieldExpression(node)) {
+                yields.push(node);
+                return;
+            }
+            if (node !== expr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            ts.forEachChild(node, visit);
+        };
+        visit(expr);
+        return yields;
     }
 
     private isSimpleLazyMultiYieldCallLike(expr: ts.CallExpression | ts.NewExpression): boolean {
@@ -54674,11 +54692,15 @@ class Emitter {
                 for (const property of literal.properties) {
                     if (ts.isPropertyAssignment(property)) {
                         if (ts.isComputedPropertyName(property.name) && this.nodeContainsYield(property.name.expression)) {
-                            const keyYield = this.singleYieldExpressionInExpression(property.name.expression);
-                            if (!keyYield || keyYield.asteriskToken ||
-                                (keyYield.expression && this.nodeContainsYield(keyYield.expression)) ||
+                            const keyYields = this.simpleLazyMultiYieldExpressionsInExpression(property.name.expression);
+                            if (keyYields.length === 0 || keyYields.some((keyYield) =>
+                                keyYield.asteriskToken ||
+                                (keyYield.expression && this.nodeContainsYield(keyYield.expression))) ||
                                 !visit(property.name.expression)) return false;
-                            stagedExpressions.push({ expression: property.name.expression, afterYield: keyYield });
+                            stagedExpressions.push({
+                                expression: property.name.expression,
+                                afterYield: keyYields[keyYields.length - 1]!,
+                            });
                         }
                         if (!visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {

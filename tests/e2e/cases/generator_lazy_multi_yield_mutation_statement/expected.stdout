@@ -4,7 +4,7 @@ assignment-nested-rhs false nested-rhs-receiver false nested-rhs-key false neste
 assignment-unary-rhs false unary-rhs-receiver false unary-rhs-key false unary-rhs-number false unary-rhs-mask true unary-rhs-done -6
 assignment-literal-rhs false literal-rhs-receiver false literal-rhs-key false literal-rhs-array false literal-rhs-object true literal-rhs-done 2 4 literal-object
 assignment-spread-rhs false spread-rhs-receiver false spread-rhs-key false spread-rhs-array false spread-rhs-items false spread-rhs-after spread true spread-rhs-done 3 4 6
-assignment-computed-key false computed-key-receiver false computed-key-slot false computed-key-name key false computed-key-value key false computed-key-after true computed-key-done 4 after
+assignment-computed-key false computed-key-receiver false computed-key-slot false computed-key-name-prefix false computed-key-name-suffix key false computed-key-value key false computed-key-after true computed-key-done 4 after
 nested false nested-receiver false nested-outer-key false nested-inner-key true nested-done 21
 postfix false postfix-receiver false postfix-key true postfix-done 11
 delete false delete-receiver false delete-key true delete-done false

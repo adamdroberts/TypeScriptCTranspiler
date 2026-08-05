@@ -72,9 +72,9 @@ Object.defineProperty(spreadRhsItems, "0", {
 });
 const computedKeyEvents: string[] = [];
 const computedKeyBox: any = { value: null };
-function formatComputedKey(value: any): string {
+function formatComputedKey(prefix: any, suffix: any): string {
     computedKeyEvents.push("key");
-    return String(value);
+    return String(prefix) + String(suffix);
 }
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
@@ -170,7 +170,7 @@ function* spreadRhsAssignmentBetweenYields(): Generator<string, string, any> {
 
 function* computedKeyAssignmentBetweenYields(): Generator<string, string, any> {
     (yield "computed-key-receiver")[yield "computed-key-slot"] = {
-        [formatComputedKey(yield "computed-key-name")]: yield "computed-key-value",
+        [formatComputedKey(yield "computed-key-name-prefix", yield "computed-key-name-suffix")]: yield "computed-key-value",
         after: yield "computed-key-after",
     };
     return "computed-key-done";
@@ -231,10 +231,11 @@ const computedKeyAssignment = computedKeyAssignmentBetweenYields();
 const computedKeyAssignmentFirst: any = computedKeyAssignment.next();
 const computedKeyAssignmentSecond: any = computedKeyAssignment.next(computedKeyBox);
 const computedKeyAssignmentThird: any = computedKeyAssignment.next("value");
-const computedKeyAssignmentFourth: any = computedKeyAssignment.next("name");
-const computedKeyAssignmentFifth: any = computedKeyAssignment.next(4);
+const computedKeyAssignmentFourth: any = computedKeyAssignment.next("prefix");
+const computedKeyAssignmentFifth: any = computedKeyAssignment.next("suffix");
+const computedKeyAssignmentSixth: any = computedKeyAssignment.next(4);
 const computedKeyAssignmentDone: any = computedKeyAssignment.next("after");
-console.log("assignment-computed-key", computedKeyAssignmentFirst.done, computedKeyAssignmentFirst.value, computedKeyAssignmentSecond.done, computedKeyAssignmentSecond.value, computedKeyAssignmentThird.done, computedKeyAssignmentThird.value, computedKeyEvents.join(","), computedKeyAssignmentFourth.done, computedKeyAssignmentFourth.value, computedKeyEvents.join(","), computedKeyAssignmentFifth.done, computedKeyAssignmentFifth.value, computedKeyAssignmentDone.done, computedKeyAssignmentDone.value, computedKeyBox.value.name, computedKeyBox.value.after);
+console.log("assignment-computed-key", computedKeyAssignmentFirst.done, computedKeyAssignmentFirst.value, computedKeyAssignmentSecond.done, computedKeyAssignmentSecond.value, computedKeyAssignmentThird.done, computedKeyAssignmentThird.value, computedKeyAssignmentFourth.done, computedKeyAssignmentFourth.value, computedKeyEvents.join(","), computedKeyAssignmentFifth.done, computedKeyAssignmentFifth.value, computedKeyEvents.join(","), computedKeyAssignmentSixth.done, computedKeyAssignmentSixth.value, computedKeyAssignmentDone.done, computedKeyAssignmentDone.value, computedKeyBox.value.prefixsuffix, computedKeyBox.value.after);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();

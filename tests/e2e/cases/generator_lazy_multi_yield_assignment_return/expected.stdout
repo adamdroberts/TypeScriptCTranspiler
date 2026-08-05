@@ -21,7 +21,8 @@ spread-rhs-after spread false spread-rhs-after
 spread-rhs-done true [object Object] 3 4 6 spread-rhs-after
 computed-key-before false computed-key-receiver
 computed-key-slot false computed-key-slot
-computed-key-name false computed-key-name
+computed-key-prefix false computed-key-name-prefix
+computed-key-suffix false computed-key-name-suffix
 computed-key-value key false computed-key-value
 computed-key-after key false computed-key-after
 computed-key-done true [object Object] 4 after
