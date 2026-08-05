@@ -54702,6 +54702,11 @@ class Emitter {
                 yields.push(...conditionalYields);
                 continue;
             }
+            const logicalYields = this.simpleLazyMultiYieldOptionalCallLogicalYields(expression);
+            if (logicalYields) {
+                yields.push(...logicalYields);
+                continue;
+            }
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;

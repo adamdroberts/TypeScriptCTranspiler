@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage logical and nullish yielded left operands inside template and String.raw arguments of optional push and unshift calls while preserving short-circuiting before mutating computed element access"
+}
