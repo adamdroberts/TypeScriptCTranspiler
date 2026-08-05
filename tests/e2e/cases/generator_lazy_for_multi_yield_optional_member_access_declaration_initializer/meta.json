@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators preserve optional final property access after yielded declaration-initializer receivers and keys"
+}

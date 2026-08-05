@@ -55482,14 +55482,25 @@ class Emitter {
         expr: ts.Expression,
     ): { yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
         const unwrapped = this.unwrapTransparentExpression(expr);
-        if (!ts.isElementAccessExpression(unwrapped) ||
-            !unwrapped.argumentExpression) return null;
-        const optionalFinal = !!unwrapped.questionDotToken;
-        const key = optionalFinal ? null : this.directLazyYieldCondition(unwrapped.argumentExpression);
-        if (!key && (!optionalFinal || !this.isSimpleLazyStableLvaluePart(
-            this.unwrapTransparentExpression(unwrapped.argumentExpression),
-        ))) return null;
-        const receiver = this.unwrapTransparentExpression(unwrapped.expression);
+        const finalProperty = ts.isPropertyAccessExpression(unwrapped) && !!unwrapped.questionDotToken;
+        const finalElement = ts.isElementAccessExpression(unwrapped) && !!unwrapped.argumentExpression
+            ? unwrapped
+            : null;
+        if (!finalProperty && !finalElement) return null;
+        const optionalFinal = finalProperty || !!finalElement?.questionDotToken;
+        const key = finalProperty || !finalElement
+            ? null
+            : optionalFinal
+                ? null
+                : this.directLazyYieldCondition(finalElement.argumentExpression);
+        if (!key && !optionalFinal) return null;
+        if (finalElement && optionalFinal && !this.isSimpleLazyStableLvaluePart(
+            this.unwrapTransparentExpression(finalElement.argumentExpression),
+        )) return null;
+        const receiverExpression = ts.isPropertyAccessExpression(unwrapped)
+            ? unwrapped.expression
+            : finalElement!.expression;
+        const receiver = this.unwrapTransparentExpression(receiverExpression);
         const directReceiver = this.directLazyYieldCondition(receiver);
         if (directReceiver) {
             return {
