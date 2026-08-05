@@ -18,6 +18,8 @@
 
 - Lazy generators now stage supported non-assignment terminal assignment RHS expression trees containing multiple direct yields after yielded receivers and computed keys, preserving receiver/key/RHS order and final assignment values; nested assignment RHS graphs and broader lvalue/assignment expressions remain deferred. Test: `generator_lazy_multi_yield_assignment_return`.
 
+- Lazy generators now stage one direct yielded array/object spread source when it is the final yield-bearing literal operand of a terminal assignment RHS, materializing the spread before a later outer yield and preserving spread side effects and final assignment order; non-final or multiple spreads, unsupported iterable shapes, nested assignment RHS graphs, and broader lvalue/assignment expressions remain deferred. Test: `generator_lazy_multi_yield_assignment_return`.
+
 - Lazy generators now stage a bounded direct-yield assignment RHS after yielded receivers and computed keys in multi-yield mutation expression statements, preserving receiver/key/RHS order; nested RHS yield graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
 - Lazy generators now stage supported non-assignment binary RHS expression trees containing multiple direct yields after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; nested assignment RHS graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.

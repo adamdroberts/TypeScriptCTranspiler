@@ -54116,6 +54116,31 @@ class Emitter {
             "yields" in operand ? visit(operand.expression) : visit(operand);
         const visitConditionalArm = (arm: LazyMultiYieldConditionalArm): boolean =>
             visit(arm.expression);
+        const literalYieldOrder = (
+            literal: ts.ArrayLiteralExpression | ts.ObjectLiteralExpression,
+        ): ts.YieldExpression[] => {
+            const yieldsInLiteral: ts.YieldExpression[] = [];
+            const collect = (node: ts.Node): void => {
+                if (ts.isYieldExpression(node)) {
+                    yieldsInLiteral.push(node);
+                    return;
+                }
+                if (node !== literal && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collect);
+            };
+            collect(literal);
+            return yieldsInLiteral;
+        };
+        const stageFinalDirectSpread = (
+            literal: ts.ArrayLiteralExpression | ts.ObjectLiteralExpression,
+            literalYields: readonly ts.YieldExpression[],
+            directSpreadYields: readonly ts.YieldExpression[],
+        ): void => {
+            if (directSpreadYields.length === 1 &&
+                directSpreadYields[0] === literalYields[literalYields.length - 1]) {
+                stagedExpressions.push({ expression: literal, afterYield: directSpreadYields[0] });
+            }
+        };
         visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) {
@@ -54172,11 +54197,14 @@ class Emitter {
                     : !this.nodeContainsYield(unwrapped.template);
             }
             if (ts.isArrayLiteralExpression(unwrapped)) {
+                const literalYields = literalYieldOrder(unwrapped);
+                const directSpreadYields: ts.YieldExpression[] = [];
                 for (const element of unwrapped.elements) {
                     if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
                     if (ts.isSpreadElement(element)) {
                         const spreadExpression = this.unwrapTransparentExpression(element.expression);
                         if (ts.isYieldExpression(spreadExpression)) {
+                            directSpreadYields.push(spreadExpression);
                             if (!visit(spreadExpression)) return false;
                         } else if (this.nodeContainsYield(element.expression)) {
                             const nestedLiteral = ts.isArrayLiteralExpression(spreadExpression) || ts.isObjectLiteralExpression(spreadExpression);
@@ -54192,9 +54220,12 @@ class Emitter {
                     }
                     if (!visit(element as ts.Expression)) return false;
                 }
+                stageFinalDirectSpread(unwrapped, literalYields, directSpreadYields);
                 return true;
             }
             if (ts.isObjectLiteralExpression(unwrapped)) {
+                const literalYields = literalYieldOrder(unwrapped);
+                const directSpreadYields: ts.YieldExpression[] = [];
                 for (const property of unwrapped.properties) {
                     if (ts.isPropertyAssignment(property)) {
                         const staticName = this.staticPropertyName(property.name);
@@ -54209,6 +54240,7 @@ class Emitter {
                     } else if (ts.isSpreadAssignment(property)) {
                         const spreadExpression = this.unwrapTransparentExpression(property.expression);
                         if (ts.isYieldExpression(spreadExpression)) {
+                            directSpreadYields.push(spreadExpression);
                             if (!visit(spreadExpression)) return false;
                         } else if (this.nodeContainsYield(property.expression)) {
                             const nestedLiteral = ts.isArrayLiteralExpression(spreadExpression) || ts.isObjectLiteralExpression(spreadExpression);
@@ -54224,6 +54256,7 @@ class Emitter {
                         return false;
                     }
                 }
+                stageFinalDirectSpread(unwrapped, literalYields, directSpreadYields);
                 return true;
             }
             if (ts.isPrefixUnaryExpression(unwrapped) &&
@@ -55665,7 +55698,7 @@ class Emitter {
                 for (const stage of stagesAfterYield.get(yieldExpr) ?? []) {
                     const slot = stageSlots.get(stage.expression);
                     if (slot === undefined) unsupported(stage.expression, "lazy generator mutation statement contains an unknown staged member");
-                    const value = this.emitExpr(stage.expression);
+                    const value = this.emitLazyMultiYieldStagedExpression(stage.expression);
                     const stored = this.coerce(value, T_VALUE, stage.expression);
                     buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${stored};`);
                     stageValues.set(stage.expression, {
@@ -56635,7 +56668,7 @@ class Emitter {
             for (const stage of stagesAfterYield.get(yieldExpr) ?? []) {
                 const slot = stageSlots.get(stage.expression);
                 if (slot === undefined) unsupported(stage.expression, "lazy multi-yield terminal contains an unknown staged member");
-                const value = this.emitExpr(stage.expression);
+                const value = this.emitLazyMultiYieldStagedExpression(stage.expression);
                 const stored = this.coerce(value, T_VALUE, stage.expression);
                 buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${stored};`);
                 stagedValueResults.set(stage.expression, {
@@ -57284,6 +57317,23 @@ class Emitter {
         buf.line("*state = -1;");
         buf.line("*done = true;");
         buf.line("return;");
+    }
+
+    private emitLazyMultiYieldStagedExpression(expression: ts.Expression): EmitResult {
+        const unwrapped = this.unwrapTransparentExpression(expression);
+        if (ts.isArrayLiteralExpression(unwrapped) && this.nodeContainsYield(unwrapped)) {
+            return this.emitLazyMultiYieldArrayLiteral(
+                unwrapped,
+                (node) => this.emitLazyMultiYieldStagedExpression(node),
+            );
+        }
+        if (ts.isObjectLiteralExpression(unwrapped) && this.nodeContainsYield(unwrapped)) {
+            return this.emitLazyMultiYieldObjectLiteral(
+                unwrapped,
+                (node) => this.emitLazyMultiYieldStagedExpression(node),
+            );
+        }
+        return this.emitExpr(expression);
     }
 
     private emitSimpleLazyResumePrefixUnary(

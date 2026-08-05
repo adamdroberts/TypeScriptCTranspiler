@@ -13,3 +13,9 @@ nested-rhs-key 1 false value
 nested-rhs-left 1 false rhs-left
 nested-rhs-right 1 false rhs-right
 nested-rhs-done 9 true 9
+spread-rhs-before false spread-rhs-receiver
+spread-rhs-key false spread-rhs-key
+spread-rhs-array false spread-rhs-array
+spread-rhs-items false spread-rhs-items
+spread-rhs-after spread false spread-rhs-after
+spread-rhs-done true [object Object] 3 4 6 spread-rhs-after

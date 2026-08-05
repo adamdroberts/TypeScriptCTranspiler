@@ -1,6 +1,15 @@
 let assigned = 0;
 const box: any = { value: 1 };
 const nestedRhsBox: any = { value: 1 };
+const spreadRhsEvents: string[] = [];
+const spreadRhsBox: any = { value: null };
+const spreadRhsItems: any = [5, 6];
+Object.defineProperty(spreadRhsItems, "0", {
+    get: () => {
+        spreadRhsEvents.push("spread");
+        return 5;
+    },
+});
 
 function* directAssignmentReturn(): Generator<number, number, number> {
     return (assigned = yield 7) + (yield 8);
@@ -16,6 +25,13 @@ function* computedAssignmentReturn(): Generator<any, number, any> {
 
 function* nestedRhsAssignmentReturn(): Generator<any, number, any> {
     return (yield nestedRhsBox)[yield "value"] = (yield "rhs-left") + (yield "rhs-right");
+}
+
+function* spreadRhsAssignmentReturn(): Generator<any, any, any> {
+    return (yield "spread-rhs-receiver")[yield "spread-rhs-key"] = {
+        items: [yield "spread-rhs-array", ...(yield "spread-rhs-items")],
+        after: yield "spread-rhs-after",
+    };
 }
 
 const directIterator = directAssignmentReturn();
@@ -55,3 +71,17 @@ const nestedRhsFourth: any = nestedRhsIterator.next(4);
 console.log("nested-rhs-right", nestedRhsBox.value, nestedRhsFourth.done, nestedRhsFourth.value);
 const nestedRhsDone: any = nestedRhsIterator.next(5);
 console.log("nested-rhs-done", nestedRhsBox.value, nestedRhsDone.done, nestedRhsDone.value);
+
+const spreadRhsIterator = spreadRhsAssignmentReturn();
+const spreadRhsFirst: any = spreadRhsIterator.next();
+console.log("spread-rhs-before", spreadRhsFirst.done, spreadRhsFirst.value);
+const spreadRhsSecond: any = spreadRhsIterator.next(spreadRhsBox);
+console.log("spread-rhs-key", spreadRhsSecond.done, spreadRhsSecond.value);
+const spreadRhsThird: any = spreadRhsIterator.next("value");
+console.log("spread-rhs-array", spreadRhsThird.done, spreadRhsThird.value);
+const spreadRhsFourth: any = spreadRhsIterator.next(4);
+console.log("spread-rhs-items", spreadRhsFourth.done, spreadRhsFourth.value);
+const spreadRhsFifth: any = spreadRhsIterator.next(spreadRhsItems);
+console.log("spread-rhs-after", spreadRhsEvents.join(","), spreadRhsFifth.done, spreadRhsFifth.value);
+const spreadRhsDone: any = spreadRhsIterator.next("spread-rhs-after");
+console.log("spread-rhs-done", spreadRhsDone.done, spreadRhsDone.value, spreadRhsBox.value.items.length, spreadRhsBox.value.items[0], spreadRhsBox.value.items[2], spreadRhsBox.value.after);
