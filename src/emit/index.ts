@@ -54491,6 +54491,11 @@ class Emitter {
                 yields.push(...commaYields);
                 continue;
             }
+            const conditionalYields = this.simpleLazyMultiYieldOptionalCallConditionalYields(value);
+            if (conditionalYields) {
+                yields.push(...conditionalYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -54511,6 +54516,18 @@ class Emitter {
                 visit(unwrapped.left) && visit(unwrapped.right);
         };
         return visit(expr) && yields.length > 0 ? yields : null;
+    }
+
+    private simpleLazyMultiYieldOptionalCallConditionalYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isConditionalExpression(unwrapped)) return null;
+        const condition = this.directLazyYieldCondition(unwrapped.condition);
+        if (!condition ||
+            !this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.whenTrue)) ||
+            !this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.whenFalse)) ||
+            this.nodeContainsYield(unwrapped.whenTrue) ||
+            this.nodeContainsYield(unwrapped.whenFalse)) return null;
+        return [condition];
     }
 
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
