@@ -55365,6 +55365,40 @@ class Emitter {
         return { expression: current, yields, stagedExpressions: [] };
     }
 
+    private simpleLazyMultiYieldLiteralInitializer(expr: ts.Expression): ts.YieldExpression[] | null {
+        const yields = this.simpleLazyMultiYieldExpressionsInExpression(expr);
+        if (yields.length < 2 || yields.some((yieldExpr) =>
+            yieldExpr.asteriskToken ||
+            (yieldExpr.expression && this.nodeContainsYield(yieldExpr.expression)))) return null;
+        const isStable = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            return this.isSimpleLazyMultiYieldLiteral(unwrapped) ||
+                ts.isRegularExpressionLiteral(unwrapped) ||
+                ts.isIdentifier(unwrapped) ||
+                unwrapped.kind === ts.SyntaxKind.ThisKeyword;
+        };
+        const visit = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            if (ts.isYieldExpression(unwrapped)) return true;
+            if (!this.nodeContainsYield(unwrapped)) return isStable(unwrapped);
+            if (ts.isArrayLiteralExpression(unwrapped)) {
+                return unwrapped.elements.every((element) =>
+                    element.kind === ts.SyntaxKind.OmittedExpression ||
+                    !ts.isSpreadElement(element) && visit(element),
+                );
+            }
+            if (!ts.isObjectLiteralExpression(unwrapped)) return false;
+            return unwrapped.properties.every((property) => {
+                if (ts.isPropertyAssignment(property)) {
+                    return !ts.isComputedPropertyName(property.name) && visit(property.initializer);
+                }
+                if (ts.isShorthandPropertyAssignment(property)) return isStable(property.name);
+                return false;
+            });
+        };
+        return visit(expr) ? yields : null;
+    }
+
     private simpleLazyMultiYieldVariableInitializer(
         declaration: ts.VariableDeclaration,
     ): {
@@ -55394,6 +55428,8 @@ class Emitter {
                 return { expression: declaration.initializer, yields, stagedExpressions: [] };
             }
         }
+        const literalYields = this.simpleLazyMultiYieldLiteralInitializer(declaration.initializer);
+        if (literalYields) return { expression: declaration.initializer, yields: literalYields, stagedExpressions: [] };
         const yields = this.simpleLazyMultiYieldArithmeticExpression(declaration.initializer);
         if (!yields) return null;
         return { expression: declaration.initializer, yields, stagedExpressions: [] };
