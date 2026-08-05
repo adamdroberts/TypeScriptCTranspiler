@@ -1,6 +1,7 @@
 assignment false assign-receiver false assign-key true assign-done 42
 assignment-rhs false rhs-receiver false rhs-key false rhs-value true rhs-done 42
 assignment-nested-rhs false nested-rhs-receiver false nested-rhs-key false nested-rhs-left false nested-rhs-right true nested-rhs-done 9
+assignment-nested-rhs-graph false nested-assignment-outer-receiver false nested-assignment-outer-key false nested-assignment-inner-receiver false nested-assignment-inner-key false nested-assignment-value true nested-assignment-done 8 8
 assignment-unary-rhs false unary-rhs-receiver false unary-rhs-key false unary-rhs-number false unary-rhs-mask true unary-rhs-done -6
 assignment-literal-rhs false literal-rhs-receiver false literal-rhs-key false literal-rhs-array false literal-rhs-object true literal-rhs-done 2 4 literal-object
 assignment-spread-rhs false spread-rhs-receiver false spread-rhs-key false spread-rhs-array false spread-rhs-items false spread-rhs-after spread true spread-rhs-done 3 4 6

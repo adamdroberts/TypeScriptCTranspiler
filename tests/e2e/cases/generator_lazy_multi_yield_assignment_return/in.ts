@@ -1,6 +1,8 @@
 let assigned = 0;
 const box: any = { value: 1 };
 const nestedRhsBox: any = { value: 1 };
+const nestedAssignmentOuterBox: any = { value: null };
+const nestedAssignmentInnerBox: any = { value: null };
 const spreadRhsEvents: string[] = [];
 const spreadRhsBox: any = { value: null };
 const spreadRhsItems: any = [5, 6];
@@ -31,6 +33,11 @@ function* computedAssignmentReturn(): Generator<any, number, any> {
 
 function* nestedRhsAssignmentReturn(): Generator<any, number, any> {
     return (yield nestedRhsBox)[yield "value"] = (yield "rhs-left") + (yield "rhs-right");
+}
+
+function* nestedAssignmentRhsGraphReturn(): Generator<any, any, any> {
+    return (yield "nested-assignment-outer-receiver")[yield "nested-assignment-outer-key"] =
+        (yield "nested-assignment-inner-receiver")[yield "nested-assignment-inner-key"] = yield "nested-assignment-value";
 }
 
 function* spreadRhsAssignmentReturn(): Generator<any, any, any> {
@@ -84,6 +91,20 @@ const nestedRhsFourth: any = nestedRhsIterator.next(4);
 console.log("nested-rhs-right", nestedRhsBox.value, nestedRhsFourth.done, nestedRhsFourth.value);
 const nestedRhsDone: any = nestedRhsIterator.next(5);
 console.log("nested-rhs-done", nestedRhsBox.value, nestedRhsDone.done, nestedRhsDone.value);
+
+const nestedAssignmentRhsGraphIterator = nestedAssignmentRhsGraphReturn();
+const nestedAssignmentRhsGraphFirst: any = nestedAssignmentRhsGraphIterator.next();
+console.log("nested-assignment-rhs-before", nestedAssignmentRhsGraphFirst.done, nestedAssignmentRhsGraphFirst.value);
+const nestedAssignmentRhsGraphSecond: any = nestedAssignmentRhsGraphIterator.next(nestedAssignmentOuterBox);
+console.log("nested-assignment-rhs-outer-key", nestedAssignmentRhsGraphSecond.done, nestedAssignmentRhsGraphSecond.value);
+const nestedAssignmentRhsGraphThird: any = nestedAssignmentRhsGraphIterator.next("value");
+console.log("nested-assignment-rhs-inner-receiver", nestedAssignmentRhsGraphThird.done, nestedAssignmentRhsGraphThird.value);
+const nestedAssignmentRhsGraphFourth: any = nestedAssignmentRhsGraphIterator.next(nestedAssignmentInnerBox);
+console.log("nested-assignment-rhs-inner-key", nestedAssignmentRhsGraphFourth.done, nestedAssignmentRhsGraphFourth.value);
+const nestedAssignmentRhsGraphFifth: any = nestedAssignmentRhsGraphIterator.next("value");
+console.log("nested-assignment-rhs-value", nestedAssignmentRhsGraphFifth.done, nestedAssignmentRhsGraphFifth.value);
+const nestedAssignmentRhsGraphDone: any = nestedAssignmentRhsGraphIterator.next(8);
+console.log("nested-assignment-rhs-done", nestedAssignmentRhsGraphDone.done, nestedAssignmentRhsGraphDone.value, nestedAssignmentOuterBox.value, nestedAssignmentInnerBox.value);
 
 const spreadRhsIterator = spreadRhsAssignmentReturn();
 const spreadRhsFirst: any = spreadRhsIterator.next();

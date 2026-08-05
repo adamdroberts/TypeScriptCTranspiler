@@ -54618,18 +54618,7 @@ class Emitter {
     ): boolean {
         const unwrappedRight = this.unwrapTransparentExpression(right);
         if (!ts.isYieldExpression(unwrappedRight) && !this.nodeContainsYield(right)) return !requireYield;
-        let nestedAssignment = false;
-        const scan = (node: ts.Node): void => {
-            if (nestedAssignment) return;
-            if (node !== right && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
-            if (ts.isBinaryExpression(node) && this.isAssignmentOperatorKind(node.operatorToken.kind)) {
-                nestedAssignment = true;
-                return;
-            }
-            ts.forEachChild(node, scan);
-        };
-        scan(right);
-        return !nestedAssignment && visit(right);
+        return visit(right);
     }
 
     private simpleLazyMultiYieldMutationOperand(
@@ -54762,8 +54751,11 @@ class Emitter {
                         : !this.nodeContainsYield(argument);
                 });
             }
-            if (!ts.isBinaryExpression(unwrapped) ||
-                this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) return false;
+            if (!ts.isBinaryExpression(unwrapped)) return false;
+            if (this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) {
+                return this.simpleLazyMultiYieldAssignmentLvalueWithStages(unwrapped.left, visit, stagedExpressions) &&
+                    this.simpleLazyMultiYieldAssignmentRhs(unwrapped.right, visit, false);
+            }
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
         if (ts.isPostfixUnaryExpression(expression)) {

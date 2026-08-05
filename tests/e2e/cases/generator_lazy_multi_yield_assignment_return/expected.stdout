@@ -13,6 +13,12 @@ nested-rhs-key 1 false value
 nested-rhs-left 1 false rhs-left
 nested-rhs-right 1 false rhs-right
 nested-rhs-done 9 true 9
+nested-assignment-rhs-before false nested-assignment-outer-receiver
+nested-assignment-rhs-outer-key false nested-assignment-outer-key
+nested-assignment-rhs-inner-receiver false nested-assignment-inner-receiver
+nested-assignment-rhs-inner-key false nested-assignment-inner-key
+nested-assignment-rhs-value false nested-assignment-value
+nested-assignment-rhs-done true 8 8 8
 spread-rhs-before false spread-rhs-receiver
 spread-rhs-key false spread-rhs-key
 spread-rhs-array false spread-rhs-array
