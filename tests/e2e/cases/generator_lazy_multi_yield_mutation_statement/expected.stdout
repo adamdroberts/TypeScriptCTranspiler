@@ -1,0 +1,3 @@
+assignment false assign-receiver false assign-key true assign-done 42
+postfix false postfix-receiver false postfix-key true postfix-done 11
+delete false delete-receiver false delete-key true delete-done false

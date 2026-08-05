@@ -778,6 +778,7 @@ class Emitter {
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyGeneratorMultiYieldResumeValues: Map<ts.YieldExpression, EmitResult> | null = null;
     private lazyGeneratorLogicalConditionSlots = new WeakMap<ts.YieldExpression, number>();
+    private lazyGeneratorMultiYieldExpressionSlots = new WeakMap<ts.YieldExpression, number>();
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
     private lazyGeneratorForInInfos = new WeakMap<ts.ForInStatement, LazyForInInfo>();
@@ -53057,6 +53058,7 @@ class Emitter {
                     if (!ts.isIdentifier(decl.name)) return false;
                 }
             }
+            if (this.simpleLazyMultiYieldExpressionStatement(stmt)) return true;
             if (this.simpleLazyMultiYieldReturn(stmt) || this.simpleLazyMultiYieldThrow(stmt)) return true;
             const yieldExpr = this.simpleLazyYieldExpression(stmt);
             if (yieldExpr) {
@@ -54433,6 +54435,66 @@ class Emitter {
         return !this.nodeContainsYield(left.argumentExpression);
     }
 
+    private simpleLazyMultiYieldExpressionStatement(
+        stmt: ts.Statement,
+    ): { expression: ts.Expression; yields: ts.YieldExpression[] } | null {
+        if (!ts.isExpressionStatement(stmt)) return null;
+        const expression = this.unwrapTransparentExpression(stmt.expression);
+        if (!this.nodeContainsYield(expression)) return null;
+        const yields: ts.YieldExpression[] = [];
+        let invalidYield = false;
+        const collect = (node: ts.Node): void => {
+            if (ts.isYieldExpression(node)) {
+                if (node.asteriskToken || (node.expression && this.nodeContainsYield(node.expression))) {
+                    invalidYield = true;
+                    return;
+                }
+                yields.push(node);
+                return;
+            }
+            if (node !== expression && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            ts.forEachChild(node, collect);
+        };
+        collect(expression);
+        if (invalidYield || yields.length < 2) return null;
+        const visit = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            if (ts.isYieldExpression(unwrapped)) return !unwrapped.asteriskToken;
+            return !this.nodeContainsYield(node);
+        };
+        if (ts.isPostfixUnaryExpression(expression)) {
+            if (!this.simpleLazyMultiYieldMutationOperand(expression.operand, visit)) return null;
+        } else if (ts.isPrefixUnaryExpression(expression) &&
+            (expression.operator === ts.SyntaxKind.PlusPlusToken || expression.operator === ts.SyntaxKind.MinusMinusToken)) {
+            if (!this.simpleLazyMultiYieldMutationOperand(expression.operand, visit)) return null;
+        } else if (ts.isDeleteExpression(expression)) {
+            if (!this.simpleLazyMultiYieldMutationOperand(expression.expression, visit)) return null;
+        } else if (ts.isBinaryExpression(expression) && this.isAssignmentOperatorKind(expression.operatorToken.kind)) {
+            if (!this.simpleLazyMultiYieldAssignmentLvalue(expression.left, visit) ||
+                this.nodeContainsYield(expression.right)) return null;
+        } else {
+            return null;
+        }
+        return {
+            expression,
+            yields: yields.sort((left, right) => left.getStart() - right.getStart()),
+        };
+    }
+
+    private lazyGeneratorMultiYieldExpressionYields(node: ts.Node): ts.YieldExpression[] {
+        const yields = new Set<ts.YieldExpression>();
+        const visit = (current: ts.Node): void => {
+            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+            if (ts.isExpressionStatement(current)) {
+                const info = this.simpleLazyMultiYieldExpressionStatement(current);
+                if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return Array.from(yields).sort((left, right) => left.getStart() - right.getStart());
+    }
+
     private simpleLazyMultiYieldTemplateSpans(
         expr: ts.TemplateExpression,
         visit: (node: ts.Expression) => boolean,
@@ -55316,6 +55378,65 @@ class Emitter {
         buf.line(`${deferredThrow} = ${this.coerceToString(thrown, stmt.expression)};`);
     }
 
+    private emitLazyGeneratorMultiYieldExpressionStatement(
+        buf: CBuf,
+        info: { expression: ts.Expression; yields: ts.YieldExpression[] },
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): void {
+        if (!envLocalName) unsupported(info.expression, "lazy generator multi-yield mutation statements require an environment");
+        const slots = new Map(info.yields.map((yieldExpr) => [
+            yieldExpr,
+            this.lazyGeneratorMultiYieldExpressionSlots.get(yieldExpr),
+        ]));
+        for (const yieldExpr of info.yields) {
+            const slot = slots.get(yieldExpr);
+            if (slot === undefined) unsupported(yieldExpr, "lazy generator mutation statement contains an unknown yield");
+            const state = nextStateId();
+            const value = yieldExpr.expression
+                ? this.emitExpr(yieldExpr.expression)
+                : { c: "NULL", ty: T_VOID };
+            const valueNode = yieldExpr.expression ?? yieldExpr;
+            const yielded = this.freshTemp("_yield");
+            buf.line(`${elemType.c} ${yielded} = ${this.coerce(value, elemType, valueNode)};`);
+            buf.line(`tsc_array_push_raw(a, &${yielded});`);
+            buf.line(`*state = ${state};`);
+            buf.line("*done = false;");
+            buf.line("return;");
+            buf.line(`case ${state}:;`);
+            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+            buf.line(`${envLocalName}->multi_yield_values[${slot}] = next_arg;`);
+        }
+        const resumeValues = new Map<ts.YieldExpression, EmitResult>();
+        for (const yieldExpr of info.yields) {
+            const slot = slots.get(yieldExpr);
+            if (slot === undefined) unsupported(yieldExpr, "lazy generator mutation statement contains an unknown yield");
+            const type = this.prepareType(mapTsType(
+                yieldExpr,
+                this.checker.getTypeAtLocation(yieldExpr),
+                this.checker,
+            ));
+            resumeValues.set(yieldExpr, {
+                c: this.coerce(
+                    { c: `${envLocalName}->multi_yield_values[${slot}]`, ty: T_VALUE },
+                    type,
+                    yieldExpr,
+                ),
+                ty: type,
+            });
+        }
+        const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+        this.lazyGeneratorMultiYieldResumeValues = resumeValues;
+        try {
+            const result = this.emitExpr(info.expression);
+            buf.line(`(void)(${result.c});`);
+        } finally {
+            this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
+        }
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -55789,6 +55910,19 @@ class Emitter {
             } else {
                 buf.line("break;");
             }
+            return;
+        }
+
+        const multiYieldExpression = this.simpleLazyMultiYieldExpressionStatement(stmt);
+        if (multiYieldExpression) {
+            this.emitLazyGeneratorMultiYieldExpressionStatement(
+                buf,
+                multiYieldExpression,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
             return;
         }
 
@@ -57115,7 +57249,14 @@ class Emitter {
                 terminalMultiYieldCount + index,
             );
         }
-        const multiYieldCount = terminalMultiYieldCount + logicalConditionYields.length;
+        const multiYieldExpressionYields = this.lazyGeneratorMultiYieldExpressionYields(fn.body);
+        for (let index = 0; index < multiYieldExpressionYields.length; index++) {
+            this.lazyGeneratorMultiYieldExpressionSlots.set(
+                multiYieldExpressionYields[index]!,
+                terminalMultiYieldCount + logicalConditionYields.length + index,
+            );
+        }
+        const multiYieldCount = terminalMultiYieldCount + logicalConditionYields.length + multiYieldExpressionYields.length;
         const hasMultiYieldTerminal = multiYieldCount > 0;
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
         const hasLazyCatch = this.lazyGeneratorHasCatchReturn(fn.body);

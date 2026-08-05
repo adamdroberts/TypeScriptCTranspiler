@@ -33,6 +33,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now stage conditional expressions used as `switch` discriminants and case labels when the selector is a direct-yield or logical plan and both arms are yield-free, preserving case-order comparison, short-circuit suspension, selected-arm laziness, and default/fallthrough routing; yielded arms and broader conditional graphs remain deferred. Test: `generator_lazy_switch_conditional_selector`.
 
+- Lazy generators now stage bounded multi-yield mutation expression statements with direct yielded receivers and computed keys before assignment, prefix/postfix update, or `delete` side effects, preserving receiver-then-key ordering and final-resume timing; broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+
 - Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as `while`, `do...while`, and counted `for` conditions, preserving short-circuit suspension order across body re-entry and incrementors; compound switch conditions and broader loop graphs remain deferred. Test: `generator_lazy_loop_logical_condition`.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; broader condition selectors and switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.

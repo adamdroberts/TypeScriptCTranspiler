@@ -14,6 +14,8 @@
 
 - Lazy generators now stage conditional expressions used as `switch` discriminants and case labels when the selector is a direct-yield or logical plan and both arms are yield-free, preserving case-order comparison, short-circuit suspension, selected-arm laziness, and default/fallthrough routing; yielded arms and broader conditional graphs remain deferred. Test: `generator_lazy_switch_conditional_selector`.
 
+- Lazy generators now stage bounded multi-yield mutation expression statements with direct yielded receivers and computed keys before assignment, prefix/postfix update, or `delete` side effects, preserving receiver-then-key ordering and final-resume timing; broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+
 - Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as `while`, `do...while`, and counted `for` conditions, preserving short-circuit suspension order across body re-entry and incrementors; compound switch conditions and broader loop graphs remain deferred. Test: `generator_lazy_loop_logical_condition`.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; broader condition selectors and switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.
@@ -3453,6 +3455,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `function_value_spread` | spread calls through first-class function values |
 | `generator_functions` | synchronous function* materialized Iterator/IterableIterator lowering with yield, bounded yield*, next, return, and throw |
 | `generator_lazy` | narrow lazy lowering for sequential generators with on-demand next/materialization |
+| `generator_lazy_multi_yield_mutation_statement` | lazy generators stage direct yielded receivers and computed keys across multiple mutation-statement suspensions |
 | `generator_lazy_for` | lazy generators resume across simple counted for-loop suspension points |
 | `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived class/interface field overrides; regular `for_in` covers the same multi-level inherited-field resolver, override path, and inherited interface path |
 | `generator_lazy_continue` | lazy generators support unlabeled continue inside while, do-while, and counted for loops |
