@@ -54682,6 +54682,11 @@ class Emitter {
                 yields.push(direct);
                 continue;
             }
+            const nestedCallYields = this.simpleLazyMultiYieldNestedCallYields(expression);
+            if (nestedCallYields) {
+                yields.push(...nestedCallYields);
+                continue;
+            }
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
