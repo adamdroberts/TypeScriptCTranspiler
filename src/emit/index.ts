@@ -54385,12 +54385,31 @@ class Emitter {
         if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
         }
+        if (ts.isBinaryExpression(expr)) return this.isSimpleLazyMultiYieldCallBinaryArgument(expr);
         if (!ts.isPrefixUnaryExpression(expr)) return false;
         if (expr.operator !== ts.SyntaxKind.PlusToken &&
             expr.operator !== ts.SyntaxKind.MinusToken &&
             expr.operator !== ts.SyntaxKind.TildeToken &&
             expr.operator !== ts.SyntaxKind.ExclamationToken) return false;
-        return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.operand));
+        if (!this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.operand))) return false;
+        return true;
+    }
+
+    private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
+        if (!ts.isBinaryExpression(expr)) return false;
+        if (![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
+            ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken, ts.SyntaxKind.AsteriskAsteriskToken,
+            ts.SyntaxKind.AmpersandToken, ts.SyntaxKind.BarToken, ts.SyntaxKind.CaretToken,
+            ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken,
+            ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+            ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken,
+            ts.SyntaxKind.ExclamationEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken,
+            ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
+            ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(expr.operatorToken.kind)) {
+            return false;
+        }
+        return (this.isSimpleLazyMultiYieldCallArgument(expr.left) || this.isSimpleLazyMultiYieldCallBinaryArgument(expr.left)) &&
+            (this.isSimpleLazyMultiYieldCallArgument(expr.right) || this.isSimpleLazyMultiYieldCallBinaryArgument(expr.right));
     }
 
     private isSimpleLazyMultiYieldStringLogicalLeaf(expr: ts.BinaryExpression): boolean {
