@@ -1,0 +1,20 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-tag-seed
+push-third tag-push-seed-value push-first false push-inner-one
+push-fourth tag-push-seed-value push-first false push-inner-two
+push-fifth tag-push-seed-value push-first false push-outer
+push-sixth tag-push-seed-value push-first false push-item
+push-seventh tag-push-seed-value push-first false push-spread
+push-eighth tag-push-seed-value push-first,push-tagged-push-push-call-inner-push-inner-one-value-push-inner-two-value-push-outer-value,push-direct,push-spread-one,push-spread-two false push-key
+push-ninth tag-push-seed-value push-first,push-tagged-push-push-call-inner-push-inner-one-value-push-inner-two-value-push-outer-value,push-direct,push-spread-one,push-spread-two false push-body-undefined
+push-done tag-push-seed-value push-first,push-tagged-push-push-call-inner-push-inner-one-value-push-inner-two-value-push-outer-value,push-direct,push-spread-one,push-spread-two true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-tag-seed
+unshift-third tag-unshift-seed-value unshift-first false unshift-inner-one
+unshift-fourth tag-unshift-seed-value unshift-first false unshift-inner-two
+unshift-fifth tag-unshift-seed-value unshift-first false unshift-outer
+unshift-sixth tag-unshift-seed-value unshift-first false unshift-item
+unshift-seventh tag-unshift-seed-value unshift-first false unshift-spread
+unshift-eighth tag-unshift-seed-value unshift-tagged-unshift-unshift-call-inner-unshift-inner-one-value-unshift-inner-two-value-unshift-outer-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-key
+unshift-ninth tag-unshift-seed-value unshift-tagged-unshift-unshift-call-inner-unshift-inner-one-value-unshift-inner-two-value-unshift-outer-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-body-undefined
+unshift-done tag-unshift-seed-value unshift-tagged-unshift-unshift-call-inner-unshift-inner-one-value-unshift-inner-two-value-unshift-outer-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first true unshift-done

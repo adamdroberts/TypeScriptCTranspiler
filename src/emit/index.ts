@@ -54762,6 +54762,11 @@ class Emitter {
             const templateYields = this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
             return templateYields ? [directTag, ...templateYields] : [directTag];
         }
+        const yieldedTagCall = this.simpleLazyMultiYieldNestedCallYields(tag);
+        if (yieldedTagCall) {
+            const templateYields = this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
+            return templateYields ? [...yieldedTagCall, ...templateYields] : yieldedTagCall;
+        }
         if (!ts.isIdentifier(tag) && !this.isStringRawTag(tag) &&
             (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag))) return null;
         return ts.isTemplateExpression(unwrapped.template)
@@ -54774,15 +54779,23 @@ class Emitter {
         yields: readonly ts.YieldExpression[],
         afterYield: ts.YieldExpression,
     ): LazyMultiYieldMutationStage[] | null {
-        const dynamicTags: ts.Expression[] = [];
+        const dynamicTags: Array<{ expression: ts.Expression; afterYield?: ts.YieldExpression }> = [];
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isTaggedTemplateExpression(unwrapped)) {
                 const tag = this.unwrapTransparentExpression(unwrapped.tag);
                 const directTag = this.directLazyYieldCondition(tag);
                 if (!directTag && !ts.isIdentifier(tag) && !this.isStringRawTag(tag)) {
-                    if (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag)) return false;
-                    dynamicTags.push(unwrapped.tag);
+                    const yieldedTagCall = this.simpleLazyMultiYieldNestedCallYields(tag);
+                    if (yieldedTagCall) {
+                        dynamicTags.push({
+                            expression: unwrapped.tag,
+                            afterYield: yieldedTagCall[yieldedTagCall.length - 1],
+                        });
+                    } else {
+                        if (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag)) return false;
+                        dynamicTags.push({ expression: unwrapped.tag });
+                    }
                 }
                 return ts.isTemplateExpression(unwrapped.template) ? visit(unwrapped.template) : true;
             }
@@ -54797,11 +54810,14 @@ class Emitter {
         };
         if (!visit(expr)) return null;
         const orderedYields = [...yields].sort((left, right) => left.getStart() - right.getStart());
-        const uniqueTags = Array.from(new Set(dynamicTags))
-            .sort((left, right) => left.getStart() - right.getStart());
+        const uniqueTags = Array.from(
+            new Map(dynamicTags.map((tag) => [tag.expression, tag])).values(),
+        ).sort((left, right) => left.expression.getStart() - right.expression.getStart());
         return uniqueTags.map((tag) => ({
-            expression: tag,
-            afterYield: orderedYields.filter((yieldExpr) => yieldExpr.getStart() < tag.getStart()).pop() ?? afterYield,
+            expression: tag.expression,
+            afterYield: tag.afterYield ??
+                orderedYields.filter((yieldExpr) => yieldExpr.getStart() < tag.expression.getStart()).pop() ??
+                afterYield,
         }));
     }
 
