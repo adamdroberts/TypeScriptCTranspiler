@@ -6,3 +6,4 @@ delete false delete-receiver false delete-key true delete-done false
 member false member-receiver false member-key true member-done getter 31
 computed-member false computed-member-receiver false computed-member-outer-key false computed-member-inner-key true computed-member-done getter 41
 stable-computed-member false stable-computed-member-receiver false stable-computed-member-inner-key true stable-computed-member-done getter 51
+call-member false call-member-receiver false call-member-key true call-member-done 0 61

@@ -54434,6 +54434,21 @@ class Emitter {
     ): ts.YieldExpression | null {
         const directYield = this.directLazyYieldCondition(receiver);
         if (directYield) return visit(receiver) ? directYield : null;
+        if (ts.isCallExpression(receiver)) {
+            const callee = this.unwrapTransparentExpression(receiver.expression);
+            if (
+                receiver.questionDotToken ||
+                !ts.isPropertyAccessExpression(callee) ||
+                callee.questionDotToken
+            ) return null;
+            const afterYield = this.directLazyYieldCondition(callee.expression);
+            if (!afterYield || !visit(callee.expression)) return null;
+            if (receiver.arguments.some((argument) =>
+                ts.isSpreadElement(argument) || this.nodeContainsYield(argument)
+            )) return null;
+            stages.push({ expression: receiver, afterYield });
+            return afterYield;
+        }
         if (ts.isPropertyAccessExpression(receiver)) {
             const afterYield = this.simpleLazyMultiYieldMutationReceiverWithStages(
                 receiver.expression,

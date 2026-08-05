@@ -17,6 +17,8 @@ Object.defineProperty(computedMemberBox, "outer", {
         return computedMemberChild;
     },
 });
+const callMemberChild: any = { value: 70 };
+const callMemberBox: any = [callMemberChild];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -44,6 +46,10 @@ function* intermediateMemberReturn(): Generator<any, number, any> {
 
 function* intermediateComputedMemberReturn(): Generator<any, number, any> {
     return ++(yield computedMemberBox)[(yield "outer")][(yield "value")];
+}
+
+function* intermediateCallMemberReturn(): Generator<any, number, any> {
+    return ++(yield callMemberBox).pop()[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -95,3 +101,9 @@ const intermediateComputedMemberSecond: any = intermediateComputedMemberIterator
 const intermediateComputedMemberThird: any = intermediateComputedMemberIterator.next("outer");
 const intermediateComputedMemberDone: any = intermediateComputedMemberIterator.next("value");
 console.log("computed-member", intermediateComputedMemberFirst.done, intermediateComputedMemberFirst.value === computedMemberBox, intermediateComputedMemberSecond.done, intermediateComputedMemberSecond.value, intermediateComputedMemberThird.done, intermediateComputedMemberThird.value, intermediateComputedMemberDone.done, intermediateComputedMemberDone.value, computedMemberEvents.join(","), computedMemberChild.value);
+
+const intermediateCallMemberIterator = intermediateCallMemberReturn();
+const intermediateCallMemberFirst: any = intermediateCallMemberIterator.next();
+const intermediateCallMemberSecond: any = intermediateCallMemberIterator.next(callMemberBox);
+const intermediateCallMemberDone: any = intermediateCallMemberIterator.next("value");
+console.log("call-member", intermediateCallMemberFirst.done, intermediateCallMemberFirst.value === callMemberBox, intermediateCallMemberSecond.done, intermediateCallMemberSecond.value, intermediateCallMemberDone.done, intermediateCallMemberDone.value, callMemberBox.length, callMemberChild.value);

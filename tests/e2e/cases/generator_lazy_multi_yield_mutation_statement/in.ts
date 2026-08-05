@@ -52,6 +52,8 @@ Object.defineProperty(stableComputedMemberBox, "outer", {
         return stableComputedMemberChild;
     },
 });
+const callMemberChild: any = { value: 60 };
+const callMemberBox: any = [callMemberChild];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -66,6 +68,11 @@ function* computedMemberBetweenYields(): Generator<string, string, any> {
 function* stableComputedMemberBetweenYields(): Generator<string, string, any> {
     (yield "stable-computed-member-receiver")["outer"][(yield "stable-computed-member-inner-key")]++;
     return "stable-computed-member-done";
+}
+
+function* callMemberBetweenYields(): Generator<string, string, any> {
+    (yield "call-member-receiver").pop()[(yield "call-member-key")]++;
+    return "call-member-done";
 }
 
 const assignment = assignmentMutation();
@@ -120,3 +127,9 @@ const stableComputedMemberFirst: any = stableComputedMember.next();
 const stableComputedMemberSecond: any = stableComputedMember.next(stableComputedMemberBox);
 const stableComputedMemberDone: any = stableComputedMember.next("value");
 console.log("stable-computed-member", stableComputedMemberFirst.done, stableComputedMemberFirst.value, stableComputedMemberSecond.done, stableComputedMemberSecond.value, stableComputedMemberDone.done, stableComputedMemberDone.value, stableComputedMemberEvents.join(","), stableComputedMemberChild.value);
+
+const callMember = callMemberBetweenYields();
+const callMemberFirst: any = callMember.next();
+const callMemberSecond: any = callMember.next(callMemberBox);
+const callMemberDone: any = callMember.next("value");
+console.log("call-member", callMemberFirst.done, callMemberFirst.value, callMemberSecond.done, callMemberSecond.value, callMemberDone.done, callMemberDone.value, callMemberBox.length, callMemberChild.value);
