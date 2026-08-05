@@ -3507,7 +3507,8 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for` | lazy generators resume across simple counted for-loop suspension points |
 | `generator_lazy_for_incrementor_yield` | lazy generators suspend and resume direct yielded counted-for incrementors before condition re-entry |
 | `generator_lazy_for_assignment_incrementor_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for incrementor |
-| `generator_lazy_for_initializer_yield` | lazy generators suspend and resume a direct yielded counted-for variable initializer before condition evaluation |
+| `generator_lazy_for_initializer_yield` | lazy generators suspend and resume direct yielded counted-for variable initializers before condition evaluation |
+| `generator_lazy_for_multiple_initializers_yield` | lazy generators preserve source order across multiple direct yielded counted-for variable initializers |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |
 | `generator_lazy_for_in_yield_source` | lazy generators suspend on a direct yielded dynamic `for...in` source before enumerating the resumed value |

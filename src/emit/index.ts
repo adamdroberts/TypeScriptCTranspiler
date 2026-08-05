@@ -52976,9 +52976,7 @@ class Emitter {
                             return false;
                         }
                         if (this.nodeContainsYield(decl) &&
-                            (stmt.initializer.declarations.length !== 1 ||
-                                !decl.initializer ||
-                                !this.directLazyYieldCondition(decl.initializer))) return false;
+                            (!decl.initializer || !this.directLazyYieldCondition(decl.initializer))) return false;
                     }
                 } else if (this.nodeContainsYield(stmt.initializer)) {
                     if (!ts.isBinaryExpression(stmt.initializer) ||
