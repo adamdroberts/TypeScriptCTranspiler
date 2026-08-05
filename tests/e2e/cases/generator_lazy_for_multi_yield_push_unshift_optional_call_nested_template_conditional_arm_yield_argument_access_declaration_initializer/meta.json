@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage selected yielded conditional template-substitution arms inside optional push and unshift calls before mutating computed element access"
+}
