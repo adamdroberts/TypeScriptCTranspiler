@@ -54615,7 +54615,7 @@ class Emitter {
             const receiver = this.unwrapTransparentExpression(unwrapped.expression);
             const directReceiver = this.directLazyYieldCondition(receiver);
             if (directReceiver) return [directReceiver];
-            return null;
+            return this.simpleLazyMultiYieldOptionalCallNestedMemberYields(receiver);
         }
         if (!ts.isElementAccessExpression(unwrapped) ||
             unwrapped.questionDotToken || !unwrapped.argumentExpression) return null;
@@ -54625,6 +54625,11 @@ class Emitter {
             const direct = this.directLazyYieldCondition(current);
             if (direct) {
                 yields.push(direct);
+                return true;
+            }
+            const nested = this.simpleLazyMultiYieldOptionalCallNestedMemberYields(current);
+            if (nested) {
+                yields.push(...nested);
                 return true;
             }
             return !this.nodeContainsYield(part) && this.isSimpleLazyMultiYieldCallArgument(current);

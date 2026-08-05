@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators recursively stage direct yielded receiver and computed-key parts of nested non-optional member chains inside optional-call arguments in push and unshift before mutating computed element access"
+}
