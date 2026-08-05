@@ -54523,6 +54523,11 @@ class Emitter {
                 yields.push(...literalYields);
                 continue;
             }
+            const templateYields = this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(value);
+            if (templateYields) {
+                yields.push(...templateYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -54637,6 +54642,22 @@ class Emitter {
         for (const property of unwrapped.properties) {
             if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name) ||
                 !visitValue(property.initializer)) return null;
+        }
+        return yields.length > 0 ? yields : null;
+    }
+
+    private simpleLazyMultiYieldOptionalCallNestedTemplateYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isTemplateExpression(unwrapped)) return null;
+        const yields: ts.YieldExpression[] = [];
+        for (const span of unwrapped.templateSpans) {
+            const expression = this.unwrapTransparentExpression(span.expression);
+            const direct = this.directLazyYieldCondition(expression);
+            if (direct) {
+                yields.push(direct);
+                continue;
+            }
+            if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
     }
