@@ -54481,6 +54481,11 @@ class Emitter {
                 yields.push(value);
                 continue;
             }
+            const arithmeticYields = this.simpleLazyMultiYieldArithmeticExpression(value, 1);
+            if (arithmeticYields) {
+                yields.push(...arithmeticYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
