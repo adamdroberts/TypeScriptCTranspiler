@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yielded callees with yield-free arguments inside optional calls in push and unshift before mutating computed element access"
+}
