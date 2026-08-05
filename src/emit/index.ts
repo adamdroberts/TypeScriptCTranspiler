@@ -159,6 +159,7 @@ interface LazyMultiYieldMutationStage {
     expression: ts.Expression;
     afterYield: ts.YieldExpression;
     afterLogicalPlan?: LazyMultiYieldLogicalPlan;
+    afterConditionalPlan?: LazyMultiYieldConditionalBranch;
 }
 
 interface LazyGeneratorCatchHandler {
@@ -54714,11 +54715,6 @@ class Emitter {
                 yields.push(...conditionalYields);
                 continue;
             }
-            const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(expression);
-            if (conditionalBranches && conditionalBranches.length > 0) {
-                yields.push(...conditionalBranches.flatMap((branch) => branch.yields));
-                continue;
-            }
             const logicalYields = this.simpleLazyMultiYieldOptionalCallLogicalYields(expression);
             if (logicalYields) {
                 yields.push(...logicalYields);
@@ -54747,6 +54743,11 @@ class Emitter {
             const taggedTemplateYields = this.simpleLazyMultiYieldOptionalCallNestedTaggedTemplateYields(expression);
             if (taggedTemplateYields) {
                 yields.push(...taggedTemplateYields);
+                continue;
+            }
+            const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(expression);
+            if (conditionalBranches && conditionalBranches.length > 0) {
+                yields.push(...conditionalBranches.flatMap((branch) => branch.yields));
                 continue;
             }
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
@@ -54784,6 +54785,7 @@ class Emitter {
             expression: ts.Expression;
             afterYield?: ts.YieldExpression;
             afterLogicalPlan?: LazyMultiYieldLogicalPlan;
+            afterConditionalPlan?: LazyMultiYieldConditionalBranch;
         }> = [];
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
@@ -54795,10 +54797,13 @@ class Emitter {
                     if (yieldedTagCall) {
                         const tagLogicalPlans = this.simpleLazyMultiYieldNestedTemplateLogicalPlans(tag);
                         const tagLogicalPlan = tagLogicalPlans.length === 1 ? tagLogicalPlans[0] : undefined;
+                        const tagConditionalBranches = this.simpleLazyMultiYieldNestedTemplateConditionalBranches(tag);
+                        if (tagConditionalBranches.length > 1) return false;
                         dynamicTags.push({
                             expression: unwrapped.tag,
                             afterYield: yieldedTagCall[yieldedTagCall.length - 1],
                             afterLogicalPlan: tagLogicalPlan,
+                            afterConditionalPlan: tagConditionalBranches[0],
                         });
                     } else {
                         if (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag)) return false;
@@ -54827,6 +54832,7 @@ class Emitter {
                 orderedYields.filter((yieldExpr) => yieldExpr.getStart() < tag.expression.getStart()).pop() ??
                 afterYield,
             afterLogicalPlan: tag.afterLogicalPlan,
+            afterConditionalPlan: tag.afterConditionalPlan,
         }));
     }
 
@@ -54864,6 +54870,13 @@ class Emitter {
         const branches: LazyMultiYieldConditionalBranch[] = [];
         const visit = (node: ts.Node): void => {
             if (node !== expr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (ts.isConditionalExpression(node)) {
+                const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(node);
+                if (conditionalBranches && conditionalBranches.length > 0) {
+                    branches.push(...conditionalBranches);
+                    return;
+                }
+            }
             if (ts.isTemplateExpression(node)) {
                 for (const span of node.templateSpans) {
                     const expression = this.unwrapTransparentExpression(span.expression);
@@ -57366,12 +57379,17 @@ class Emitter {
         ]));
         const stagesAfterYield = new Map<ts.YieldExpression, LazyMultiYieldMutationStage[]>();
         const stagesAfterLogicalPlan = new Map<ts.BinaryExpression, LazyMultiYieldMutationStage[]>();
+        const stagesAfterConditionalPlan = new Map<ts.ConditionalExpression, LazyMultiYieldMutationStage[]>();
         for (const stage of info.stagedExpressions) {
-            const stages = stage.afterLogicalPlan
+            const stages = stage.afterConditionalPlan
+                ? stagesAfterConditionalPlan.get(stage.afterConditionalPlan.expression) ?? []
+                : stage.afterLogicalPlan
                 ? stagesAfterLogicalPlan.get(stage.afterLogicalPlan.expression) ?? []
                 : stagesAfterYield.get(stage.afterYield) ?? [];
             stages.push(stage);
-            if (stage.afterLogicalPlan) {
+            if (stage.afterConditionalPlan) {
+                stagesAfterConditionalPlan.set(stage.afterConditionalPlan.expression, stages);
+            } else if (stage.afterLogicalPlan) {
                 stagesAfterLogicalPlan.set(stage.afterLogicalPlan.expression, stages);
             } else {
                 stagesAfterYield.set(stage.afterYield, stages);
@@ -57412,6 +57430,9 @@ class Emitter {
         };
         const emitStagesAfterLogicalPlan = (plan: LazyMultiYieldLogicalPlan): void => {
             for (const stage of stagesAfterLogicalPlan.get(plan.expression) ?? []) emitStage(stage);
+        };
+        const emitStagesAfterConditionalPlan = (plan: LazyMultiYieldConditionalBranch): void => {
+            for (const stage of stagesAfterConditionalPlan.get(plan.expression) ?? []) emitStage(stage);
         };
         const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
         const previousStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
@@ -57601,8 +57622,9 @@ class Emitter {
                     entryLabel: string,
                     continuationLabel: string,
                 ): void => {
-                    const trueLabel = scheduleEvents(current.whenTrue.events, continuationLabel);
-                    const falseLabel = scheduleEvents(current.whenFalse.events, continuationLabel);
+                    const planCompleteLabel = this.freshTemp("_lazy_multi_yield_conditional_complete");
+                    const trueLabel = scheduleEvents(current.whenTrue.events, planCompleteLabel);
+                    const falseLabel = scheduleEvents(current.whenFalse.events, planCompleteLabel);
                     const conditionDecisionLabel = this.freshTemp("_lazy_multi_yield_conditional_decide");
                     const condition = current.condition;
                     let conditionC: string;
@@ -57633,6 +57655,11 @@ class Emitter {
                         buf.line(`goto ${trueLabel};`);
                         buf.close();
                         buf.line(`goto ${falseLabel};`);
+                    });
+                    resumeBlocks.push(() => {
+                        buf.line(`${planCompleteLabel}:;`);
+                        emitStagesAfterConditionalPlan(current);
+                        buf.line(`goto ${continuationLabel};`);
                     });
                 };
                 const plannedYields = new Set(conditionalBranches.flatMap((branch) => branch.yields));
