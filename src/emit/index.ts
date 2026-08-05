@@ -154,6 +154,11 @@ interface LazyMultiYieldTerminalInfo {
     logicalPlans?: LazyMultiYieldLogicalPlan[];
 }
 
+interface LazyMultiYieldMutationStage {
+    expression: ts.Expression;
+    afterYield: ts.YieldExpression;
+}
+
 interface LazyGeneratorCatchHandler {
     catchPreludeStatements: readonly ts.Statement[];
     catchStatement: ts.Statement | null;
@@ -777,8 +782,10 @@ class Emitter {
     private activeLazyGeneratorOuterCaptureSymbols: ReadonlySet<ts.Symbol> = new Set();
     private lazyGeneratorResumeOverride: { expr: ts.Expression; result: EmitResult } | null = null;
     private lazyGeneratorMultiYieldResumeValues: Map<ts.YieldExpression, EmitResult> | null = null;
+    private lazyGeneratorMultiYieldMutationStageValues: Map<ts.Expression, EmitResult> | null = null;
     private lazyGeneratorLogicalConditionSlots = new WeakMap<ts.YieldExpression, number>();
     private lazyGeneratorMultiYieldExpressionSlots = new WeakMap<ts.YieldExpression, number>();
+    private lazyGeneratorMultiYieldMutationStageSlots = new WeakMap<ts.Expression, number>();
     private lazyCompoundResumeSlots = new WeakMap<ts.BinaryExpression, LazyCompoundResumeSlot>();
     private lazyGeneratorForOfInfos = new WeakMap<ts.ForOfStatement, LazyForOfInfo>();
     private lazyGeneratorForInInfos = new WeakMap<ts.ForInStatement, LazyForInInfo>();
@@ -54416,6 +54423,60 @@ class Emitter {
         return this.isSimpleLazyStableLvaluePart(key);
     }
 
+    private simpleLazyMultiYieldMutationReceiverWithStages(
+        receiver: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+        stages: LazyMultiYieldMutationStage[],
+    ): ts.YieldExpression | null {
+        const directYield = this.directLazyYieldCondition(receiver);
+        if (directYield) return visit(receiver) ? directYield : null;
+        if (ts.isPropertyAccessExpression(receiver)) {
+            const afterYield = this.simpleLazyMultiYieldMutationReceiverWithStages(
+                receiver.expression,
+                visit,
+                stages,
+            );
+            if (!afterYield) return null;
+            stages.push({ expression: receiver, afterYield });
+            return afterYield;
+        }
+        if (!ts.isElementAccessExpression(receiver)) return null;
+        const afterYield = this.simpleLazyMultiYieldMutationReceiverWithStages(
+            receiver.expression,
+            visit,
+            stages,
+        );
+        if (!afterYield) return null;
+        const key = this.unwrapTransparentExpression(receiver.argumentExpression);
+        if (ts.isYieldExpression(key)) return visit(receiver.argumentExpression) ? key : null;
+        return this.isSimpleLazyStableLvaluePart(key) ? afterYield : null;
+    }
+
+    private simpleLazyMultiYieldMutationOperandWithStages(
+        operand: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+        stages: LazyMultiYieldMutationStage[],
+    ): boolean {
+        if (ts.isPropertyAccessExpression(operand)) {
+            return !!this.simpleLazyMultiYieldMutationReceiverWithStages(operand.expression, visit, stages);
+        }
+        if (!ts.isElementAccessExpression(operand)) return false;
+        const afterYield = this.simpleLazyMultiYieldMutationReceiverWithStages(operand.expression, visit, stages);
+        if (!afterYield) return false;
+        const key = this.unwrapTransparentExpression(operand.argumentExpression);
+        if (ts.isYieldExpression(key)) return visit(operand.argumentExpression);
+        return !this.nodeContainsYield(operand.argumentExpression);
+    }
+
+    private simpleLazyMultiYieldAssignmentLvalueWithStages(
+        left: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+        stages: LazyMultiYieldMutationStage[],
+    ): boolean {
+        if (!this.nodeContainsYield(left)) return true;
+        return this.simpleLazyMultiYieldMutationOperandWithStages(left, visit, stages);
+    }
+
     private simpleLazyMultiYieldMutationOperand(
         operand: ts.Expression,
         visit: (node: ts.Expression) => boolean,
@@ -54440,7 +54501,7 @@ class Emitter {
 
     private simpleLazyMultiYieldExpressionStatement(
         stmt: ts.Statement,
-    ): { expression: ts.Expression; yields: ts.YieldExpression[] } | null {
+    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
         if (!ts.isExpressionStatement(stmt)) return null;
         const expression = this.unwrapTransparentExpression(stmt.expression);
         if (!this.nodeContainsYield(expression)) return null;
@@ -54465,16 +54526,17 @@ class Emitter {
             if (ts.isYieldExpression(unwrapped)) return !unwrapped.asteriskToken;
             return !this.nodeContainsYield(node);
         };
+        const stagedExpressions: LazyMultiYieldMutationStage[] = [];
         if (ts.isPostfixUnaryExpression(expression)) {
-            if (!this.simpleLazyMultiYieldMutationOperand(expression.operand, visit)) return null;
+            if (!this.simpleLazyMultiYieldMutationOperandWithStages(expression.operand, visit, stagedExpressions)) return null;
         } else if (ts.isPrefixUnaryExpression(expression) &&
             (expression.operator === ts.SyntaxKind.PlusPlusToken || expression.operator === ts.SyntaxKind.MinusMinusToken)) {
-            if (!this.simpleLazyMultiYieldMutationOperand(expression.operand, visit)) return null;
+            if (!this.simpleLazyMultiYieldMutationOperandWithStages(expression.operand, visit, stagedExpressions)) return null;
         } else if (ts.isDeleteExpression(expression)) {
-            if (!this.simpleLazyMultiYieldMutationOperand(expression.expression, visit)) return null;
+            if (!this.simpleLazyMultiYieldMutationOperandWithStages(expression.expression, visit, stagedExpressions)) return null;
         } else if (ts.isBinaryExpression(expression) && this.isAssignmentOperatorKind(expression.operatorToken.kind)) {
             const yieldedRight = this.directLazyYieldCondition(expression.right);
-            if (!this.simpleLazyMultiYieldAssignmentLvalue(expression.left, visit) ||
+            if (!this.simpleLazyMultiYieldAssignmentLvalueWithStages(expression.left, visit, stagedExpressions) ||
                 (this.nodeContainsYield(expression.right) && !yieldedRight)) return null;
         } else {
             return null;
@@ -54482,6 +54544,8 @@ class Emitter {
         return {
             expression,
             yields: yields.sort((left, right) => left.getStart() - right.getStart()),
+            stagedExpressions: stagedExpressions.sort((left, right) =>
+                left.expression.getStart() - right.expression.getStart()),
         };
     }
 
@@ -54497,6 +54561,20 @@ class Emitter {
         };
         visit(node);
         return Array.from(yields).sort((left, right) => left.getStart() - right.getStart());
+    }
+
+    private lazyGeneratorMultiYieldMutationStageExpressions(node: ts.Node): ts.Expression[] {
+        const stages = new Set<ts.Expression>();
+        const visit = (current: ts.Node): void => {
+            if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
+            if (ts.isExpressionStatement(current)) {
+                const info = this.simpleLazyMultiYieldExpressionStatement(current);
+                if (info) for (const stage of info.stagedExpressions) stages.add(stage.expression);
+            }
+            ts.forEachChild(current, visit);
+        };
+        visit(node);
+        return Array.from(stages).sort((left, right) => left.getStart() - right.getStart());
     }
 
     private simpleLazyMultiYieldTemplateSpans(
@@ -55384,7 +55462,7 @@ class Emitter {
 
     private emitLazyGeneratorMultiYieldExpressionStatement(
         buf: CBuf,
-        info: { expression: ts.Expression; yields: ts.YieldExpression[] },
+        info: { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] },
         nextStateId: () => number,
         nextYieldStarSlot: () => number,
         elemType: CType,
@@ -55395,23 +55473,15 @@ class Emitter {
             yieldExpr,
             this.lazyGeneratorMultiYieldExpressionSlots.get(yieldExpr),
         ]));
-        for (const yieldExpr of info.yields) {
-            const slot = slots.get(yieldExpr);
-            if (slot === undefined) unsupported(yieldExpr, "lazy generator mutation statement contains an unknown yield");
-            const state = nextStateId();
-            const value = yieldExpr.expression
-                ? this.emitExpr(yieldExpr.expression)
-                : { c: "NULL", ty: T_VOID };
-            const valueNode = yieldExpr.expression ?? yieldExpr;
-            const yielded = this.freshTemp("_yield");
-            buf.line(`${elemType.c} ${yielded} = ${this.coerce(value, elemType, valueNode)};`);
-            buf.line(`tsc_array_push_raw(a, &${yielded});`);
-            buf.line(`*state = ${state};`);
-            buf.line("*done = false;");
-            buf.line("return;");
-            buf.line(`case ${state}:;`);
-            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-            buf.line(`${envLocalName}->multi_yield_values[${slot}] = next_arg;`);
+        const stageSlots = new Map(info.stagedExpressions.map((stage) => [
+            stage.expression,
+            this.lazyGeneratorMultiYieldMutationStageSlots.get(stage.expression),
+        ]));
+        const stagesAfterYield = new Map<ts.YieldExpression, LazyMultiYieldMutationStage[]>();
+        for (const stage of info.stagedExpressions) {
+            const stages = stagesAfterYield.get(stage.afterYield) ?? [];
+            stages.push(stage);
+            stagesAfterYield.set(stage.afterYield, stages);
         }
         const resumeValues = new Map<ts.YieldExpression, EmitResult>();
         for (const yieldExpr of info.yields) {
@@ -55431,13 +55501,46 @@ class Emitter {
                 ty: type,
             });
         }
+        const stageValues = new Map<ts.Expression, EmitResult>();
         const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+        const previousStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
         this.lazyGeneratorMultiYieldResumeValues = resumeValues;
+        this.lazyGeneratorMultiYieldMutationStageValues = stageValues;
         try {
+            for (const yieldExpr of info.yields) {
+                const slot = slots.get(yieldExpr);
+                if (slot === undefined) unsupported(yieldExpr, "lazy generator mutation statement contains an unknown yield");
+                const state = nextStateId();
+                const value = yieldExpr.expression
+                    ? this.emitExpr(yieldExpr.expression)
+                    : { c: "NULL", ty: T_VOID };
+                const valueNode = yieldExpr.expression ?? yieldExpr;
+                const yielded = this.freshTemp("_yield");
+                buf.line(`${elemType.c} ${yielded} = ${this.coerce(value, elemType, valueNode)};`);
+                buf.line(`tsc_array_push_raw(a, &${yielded});`);
+                buf.line(`*state = ${state};`);
+                buf.line("*done = false;");
+                buf.line("return;");
+                buf.line(`case ${state}:;`);
+                this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                buf.line(`${envLocalName}->multi_yield_values[${slot}] = next_arg;`);
+                for (const stage of stagesAfterYield.get(yieldExpr) ?? []) {
+                    const slot = stageSlots.get(stage.expression);
+                    if (slot === undefined) unsupported(stage.expression, "lazy generator mutation statement contains an unknown staged member");
+                    const value = this.emitExpr(stage.expression);
+                    const stored = this.coerce(value, T_VALUE, stage.expression);
+                    buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${stored};`);
+                    stageValues.set(stage.expression, {
+                        c: `${envLocalName}->multi_yield_values[${slot}]`,
+                        ty: T_VALUE,
+                    });
+                }
+            }
             const result = this.emitExpr(info.expression);
             buf.line(`(void)(${result.c});`);
         } finally {
             this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
+            this.lazyGeneratorMultiYieldMutationStageValues = previousStageValues;
         }
     }
 
@@ -57260,7 +57363,17 @@ class Emitter {
                 terminalMultiYieldCount + logicalConditionYields.length + index,
             );
         }
-        const multiYieldCount = terminalMultiYieldCount + logicalConditionYields.length + multiYieldExpressionYields.length;
+        const multiYieldMutationStageExpressions = this.lazyGeneratorMultiYieldMutationStageExpressions(fn.body);
+        const multiYieldMutationStageOffset = terminalMultiYieldCount +
+            logicalConditionYields.length +
+            multiYieldExpressionYields.length;
+        for (let index = 0; index < multiYieldMutationStageExpressions.length; index++) {
+            this.lazyGeneratorMultiYieldMutationStageSlots.set(
+                multiYieldMutationStageExpressions[index]!,
+                multiYieldMutationStageOffset + index,
+            );
+        }
+        const multiYieldCount = multiYieldMutationStageOffset + multiYieldMutationStageExpressions.length;
         const hasMultiYieldTerminal = multiYieldCount > 0;
         const hasLazyFinalizer = this.lazyGeneratorHasFinalizer(fn.body);
         const hasLazyCatch = this.lazyGeneratorHasCatchReturn(fn.body);
@@ -62081,6 +62194,8 @@ class Emitter {
             ? this.lazyGeneratorMultiYieldResumeValues?.get(expr)
             : undefined;
         if (multiYieldResumeValue) return multiYieldResumeValue;
+        const multiYieldMutationStageValue = this.lazyGeneratorMultiYieldMutationStageValues?.get(expr);
+        if (multiYieldMutationStageValue) return multiYieldMutationStageValue;
         if (this.lazyGeneratorResumeOverride?.expr === expr) {
             return this.lazyGeneratorResumeOverride.result;
         }

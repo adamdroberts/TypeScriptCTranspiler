@@ -3,3 +3,4 @@ assignment-rhs false rhs-receiver false rhs-key false rhs-value true rhs-done 42
 nested false nested-receiver false nested-outer-key false nested-inner-key true nested-done 21
 postfix false postfix-receiver false postfix-key true postfix-done 11
 delete false delete-receiver false delete-key true delete-done false
+member false member-receiver false member-key true member-done getter 31

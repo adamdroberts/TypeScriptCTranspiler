@@ -25,6 +25,21 @@ function* deleteMutation(): Generator<string, string, any> {
     return "delete-done";
 }
 
+const memberEvents: string[] = [];
+const memberChild: any = { value: 30 };
+const memberBox: any = {};
+Object.defineProperty(memberBox, "child", {
+    get: () => {
+        memberEvents.push("getter");
+        return memberChild;
+    },
+});
+
+function* memberBetweenYields(): Generator<string, string, any> {
+    (yield "member-receiver").child[(yield "member-key")]++;
+    return "member-done";
+}
+
 const assignment = assignmentMutation();
 const assignmentFirst: any = assignment.next();
 const assignmentSecond: any = assignment.next(box);
@@ -58,3 +73,9 @@ const deletionFirst: any = deletion.next();
 const deletionSecond: any = deletion.next(box);
 const deletionDone: any = deletion.next("other");
 console.log("delete", deletionFirst.done, deletionFirst.value, deletionSecond.done, deletionSecond.value, deletionDone.done, deletionDone.value, Object.hasOwn(box, "other"));
+
+const member = memberBetweenYields();
+const memberFirst: any = member.next();
+const memberSecond: any = member.next(memberBox);
+const memberDone: any = member.next("value");
+console.log("member", memberFirst.done, memberFirst.value, memberSecond.done, memberSecond.value, memberDone.done, memberDone.value, memberEvents.join(","), memberChild.value);
