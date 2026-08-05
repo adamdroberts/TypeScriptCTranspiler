@@ -70,6 +70,14 @@ const pushSpreadBox: any = [];
 const pushSpreadFirst: any = { value: 200 };
 const pushSpreadSecond: any = { value: 210 };
 const pushSpreadItems: any = [pushSpreadFirst, pushSpreadSecond];
+const callMethodSpreadEvents: string[] = [];
+function callMethodSpreadTarget(this: any, value: any): any {
+    callMethodSpreadEvents.push(value.value);
+    return { value: 260 };
+}
+const callMethodSpreadFn: any = callMethodSpreadTarget as any;
+const callMethodSpreadArg: any = { value: "call-arg" };
+const callMethodSpreadItems: any = [callMethodSpreadArg];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -114,6 +122,11 @@ function* concatSpreadBetweenYields(): Generator<string, string, any> {
 function* pushSpreadBetweenYields(): Generator<string, string, any> {
     (yield "push-spread-receiver").push(...(yield "push-spread-items"))[(yield "push-spread-key")]++;
     return "push-spread-done";
+}
+
+function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
+    (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
+    return "call-method-spread-done";
 }
 
 const assignment = assignmentMutation();
@@ -208,3 +221,10 @@ const pushSpreadIteratorSecond: any = pushSpread.next(pushSpreadBox);
 const pushSpreadIteratorThird: any = pushSpread.next(pushSpreadItems);
 const pushSpreadDone: any = pushSpread.next("value");
 console.log("push-spread", pushSpreadIteratorFirst.done, pushSpreadIteratorFirst.value, pushSpreadIteratorSecond.done, pushSpreadIteratorSecond.value, pushSpreadIteratorThird.done, pushSpreadIteratorThird.value, pushSpreadDone.done, pushSpreadDone.value, pushSpreadBox.length, pushSpreadBox[0].value, pushSpreadBox[1].value);
+
+const callMethodSpread = callMethodSpreadBetweenYields();
+const callMethodSpreadFirst: any = callMethodSpread.next();
+const callMethodSpreadSecond: any = callMethodSpread.next(callMethodSpreadFn);
+const callMethodSpreadThird: any = callMethodSpread.next(callMethodSpreadItems);
+const callMethodSpreadDone: any = callMethodSpread.next("value");
+console.log("call-method-spread", callMethodSpreadFirst.done, callMethodSpreadFirst.value, callMethodSpreadSecond.done, callMethodSpreadSecond.value, callMethodSpreadThird.done, callMethodSpreadThird.value, callMethodSpreadDone.done, callMethodSpreadDone.value, callMethodSpreadEvents.join(","));

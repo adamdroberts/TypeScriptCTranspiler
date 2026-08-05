@@ -12,3 +12,4 @@ call-argument false call-argument-receiver false call-argument-count false call-
 call-spread false call-spread-receiver false call-spread-items false call-spread-key true call-spread-done 1 130 121
 concat-spread false concat-spread-receiver false concat-spread-items false concat-spread-key true concat-spread-done 1 171
 push-spread false push-spread-receiver false push-spread-items false push-spread-key true push-spread-done 2 200 210
+call-method-spread false call-method-spread-receiver false call-method-spread-items false call-method-spread-key true call-method-spread-done call-arg

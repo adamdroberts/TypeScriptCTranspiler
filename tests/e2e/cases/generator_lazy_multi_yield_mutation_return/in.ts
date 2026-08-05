@@ -36,6 +36,12 @@ const unshiftSpreadBox: any = [unshiftSpreadBase];
 const unshiftSpreadFirst: any = { value: 230 };
 const unshiftSpreadSecond: any = { value: 240 };
 const unshiftSpreadItems: any = [unshiftSpreadFirst, unshiftSpreadSecond];
+function terminalCallMethodSpreadTarget(this: any, value: any): any {
+    return { value: 300 };
+}
+const terminalCallMethodSpreadFn: any = terminalCallMethodSpreadTarget as any;
+const terminalCallMethodSpreadArg: any = { value: "terminal-call-arg" };
+const terminalCallMethodSpreadItems: any = [terminalCallMethodSpreadArg];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -87,6 +93,10 @@ function* intermediateConcatSpreadReturn(): Generator<any, number, any> {
 
 function* intermediateUnshiftSpreadReturn(): Generator<any, boolean, any> {
     return delete (yield unshiftSpreadBox).unshift(...(yield "items"))[(yield "value")];
+}
+
+function* intermediateCallMethodSpreadReturn(): Generator<any, number, any> {
+    return ++(yield terminalCallMethodSpreadFn).call(null, ...(yield "items"))[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -178,3 +188,10 @@ const intermediateUnshiftSpreadSecond: any = intermediateUnshiftSpreadIterator.n
 const intermediateUnshiftSpreadThird: any = intermediateUnshiftSpreadIterator.next(unshiftSpreadItems);
 const intermediateUnshiftSpreadDone: any = intermediateUnshiftSpreadIterator.next("value");
 console.log("unshift-spread", intermediateUnshiftSpreadFirst.done, intermediateUnshiftSpreadFirst.value === unshiftSpreadBox, intermediateUnshiftSpreadSecond.done, intermediateUnshiftSpreadSecond.value, intermediateUnshiftSpreadThird.done, intermediateUnshiftSpreadThird.value, intermediateUnshiftSpreadDone.done, intermediateUnshiftSpreadDone.value, unshiftSpreadBox.length, unshiftSpreadBox[0].value, unshiftSpreadBox[1].value, unshiftSpreadBox[2].value);
+
+const intermediateCallMethodSpreadIterator = intermediateCallMethodSpreadReturn();
+const intermediateCallMethodSpreadFirst: any = intermediateCallMethodSpreadIterator.next();
+const intermediateCallMethodSpreadSecond: any = intermediateCallMethodSpreadIterator.next(terminalCallMethodSpreadFn);
+const intermediateCallMethodSpreadThird: any = intermediateCallMethodSpreadIterator.next(terminalCallMethodSpreadItems);
+const intermediateCallMethodSpreadDone: any = intermediateCallMethodSpreadIterator.next("value");
+console.log("call-method-spread", intermediateCallMethodSpreadFirst.done, intermediateCallMethodSpreadFirst.value === terminalCallMethodSpreadFn, intermediateCallMethodSpreadSecond.done, intermediateCallMethodSpreadSecond.value, intermediateCallMethodSpreadThird.done, intermediateCallMethodSpreadThird.value, intermediateCallMethodSpreadDone.done, intermediateCallMethodSpreadDone.value);

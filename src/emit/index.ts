@@ -54465,7 +54465,8 @@ class Emitter {
                 const argument = receiver.arguments[index]!;
                 const spread = ts.isSpreadElement(argument);
                 if (spread && (
-                    !["concat", "push", "splice", "unshift"].includes(callee.name.text) ||
+                    !["call", "concat", "push", "splice", "unshift"].includes(callee.name.text) ||
+                    callee.name.text === "call" && index < 1 ||
                     callee.name.text === "splice" && index < 2
                 )) return null;
                 const argumentExpression = spread ? argument.expression : argument as ts.Expression;
