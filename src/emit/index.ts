@@ -55679,6 +55679,18 @@ class Emitter {
                         })),
                     };
                 }
+                if (callee.name.text === "flat") {
+                    if (current.arguments.length !== 0) return null;
+                    const base = this.directLazyYieldCondition(callee.expression);
+                    if (!base) return null;
+                    return {
+                        yields: key ? [base, key] : [base],
+                        stagedExpressions: callStages.reverse().map((call) => ({
+                            expression: call,
+                            afterYield: base,
+                        })),
+                    };
+                }
                 if (callee.name.text !== "pop" || current.arguments.length !== 0) return null;
                 current = this.unwrapTransparentExpression(callee.expression);
             }
