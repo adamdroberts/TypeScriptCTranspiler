@@ -54379,9 +54379,18 @@ class Emitter {
     }
 
     private isSimpleLazyMultiYieldCallArgument(expr: ts.Expression): boolean {
-        return this.isSimpleLazyMultiYieldLiteral(expr) ||
+        if (this.isSimpleLazyMultiYieldLiteral(expr) ||
             ts.isRegularExpressionLiteral(expr) ||
-            ts.isIdentifier(expr);
+            ts.isIdentifier(expr)) return true;
+        if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
+            return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
+        }
+        if (!ts.isPrefixUnaryExpression(expr)) return false;
+        if (expr.operator !== ts.SyntaxKind.PlusToken &&
+            expr.operator !== ts.SyntaxKind.MinusToken &&
+            expr.operator !== ts.SyntaxKind.TildeToken &&
+            expr.operator !== ts.SyntaxKind.ExclamationToken) return false;
+        return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.operand));
     }
 
     private isSimpleLazyMultiYieldStringLogicalLeaf(expr: ts.BinaryExpression): boolean {
