@@ -53014,17 +53014,22 @@ class Emitter {
         if (ts.isSwitchStatement(stmt)) {
             const yieldedDiscriminant = this.directLazyYieldCondition(stmt.expression);
             const logicalDiscriminant = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const conditionalDiscriminant = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant &&
-                (!logicalDiscriminant || logicalDiscriminant.yields.length === 0)) return false;
+                (!logicalDiscriminant || logicalDiscriminant.yields.length === 0) && !conditionalDiscriminant) return false;
             for (const clause of stmt.caseBlock.clauses) {
                 const yieldedCase = ts.isCaseClause(clause) ? this.directLazyYieldCondition(clause.expression) : null;
                 const logicalCase = ts.isCaseClause(clause)
                     ? this.simpleLazyMultiYieldLogicalPlan(clause.expression)
                     : null;
+                const conditionalCase = ts.isCaseClause(clause) && !yieldedCase &&
+                    (!logicalCase || logicalCase.yields.length === 0)
+                    ? this.simpleLazyGeneratorConditionalSelector(clause.expression)
+                    : null;
                 if (ts.isCaseClause(clause)) {
                     if (this.nodeContainsYield(clause.expression) && !yieldedCase &&
-                        (!logicalCase || logicalCase.yields.length === 0)) return false;
-                    if (!yieldedCase && (!logicalCase || logicalCase.yields.length === 0) &&
+                        (!logicalCase || logicalCase.yields.length === 0) && !conditionalCase) return false;
+                    if (!yieldedCase && (!logicalCase || logicalCase.yields.length === 0) && !conditionalCase &&
                         !this.switchCaseKey(clause.expression)) return false;
                 }
                 let sawBreak = false;
@@ -53563,7 +53568,8 @@ class Emitter {
         return stmt.caseBlock.clauses.some((clause) =>
             ts.isCaseClause(clause) && (
                 !!this.directLazyYieldCondition(clause.expression) ||
-                !!this.simpleLazyMultiYieldLogicalPlan(clause.expression)?.yields.length
+                !!this.simpleLazyMultiYieldLogicalPlan(clause.expression)?.yields.length ||
+                !!this.simpleLazyGeneratorConditionalSelector(clause.expression)
             ));
     }
 
@@ -54737,6 +54743,9 @@ class Emitter {
             const logicalDiscriminant = directDiscriminant
                 ? null
                 : this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const conditionalDiscriminant = directDiscriminant || logicalDiscriminant
+                ? null
+                : this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             const yieldedDiscriminant = directDiscriminant
                 ? this.emitLazyGeneratorDirectYieldValue(
                     buf,
@@ -54755,6 +54764,15 @@ class Emitter {
                         elemType,
                         envLocalName,
                     )
+                    : conditionalDiscriminant
+                        ? this.emitLazyGeneratorConditionalSelector(
+                            buf,
+                            stmt.expression,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        )
                     : null;
             const disc = yieldedDiscriminant ?? this.emitExpr(stmt.expression);
             const hasYieldedCase = this.lazyGeneratorSwitchHasYieldedCase(stmt);
@@ -54785,6 +54803,9 @@ class Emitter {
                 const logicalCase = yieldedCase
                     ? null
                     : this.simpleLazyMultiYieldLogicalPlan(caseExpr);
+                const conditionalCase = yieldedCase || (logicalCase && logicalCase.yields.length > 0)
+                    ? null
+                    : this.simpleLazyGeneratorConditionalSelector(caseExpr);
                 const caseVal = yieldedCase
                     ? this.emitLazyGeneratorDirectYieldValue(
                             buf,
@@ -54803,6 +54824,15 @@ class Emitter {
                             elemType,
                             envLocalName,
                         )!
+                        : conditionalCase
+                            ? this.emitLazyGeneratorConditionalSelector(
+                                buf,
+                                caseExpr,
+                                nextStateId,
+                                nextYieldStarSlot,
+                                elemType,
+                                envLocalName,
+                            )!
                         : this.emitExpr(caseExpr);
                 if (isDynamic) {
                     return `tsc_value_eq(${discRef}, ${this.coerce(caseVal, T_VALUE, caseExpr)})`;

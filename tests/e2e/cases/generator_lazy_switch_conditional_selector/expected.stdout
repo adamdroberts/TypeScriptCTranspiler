@@ -1,0 +1,6 @@
+direct-false false direct-discriminant true direct-miss direct-false
+direct-true false direct-discriminant true direct-hit direct-true
+logical-false false logical-left false logical-right true logical-miss
+logical-true false logical-left false logical-right true logical-hit
+case-false false case-left true static-case case-false
+case-true false case-left false case-right true conditional-case case-true
