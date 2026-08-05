@@ -55478,18 +55478,27 @@ class Emitter {
             : null;
     }
 
-    private simpleLazyMultiYieldAccessInitializer(expr: ts.Expression): ts.YieldExpression[] | null {
+    private simpleLazyMultiYieldAccessInitializer(
+        expr: ts.Expression,
+    ): { yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
         const unwrapped = this.unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(unwrapped) ||
             unwrapped.questionDotToken ||
             !unwrapped.argumentExpression) return null;
+        const key = this.directLazyYieldCondition(unwrapped.argumentExpression);
+        if (!key) return null;
         const receiver = this.unwrapTransparentExpression(unwrapped.expression);
-        const key = this.unwrapTransparentExpression(unwrapped.argumentExpression);
-        if (!ts.isYieldExpression(receiver) || !ts.isYieldExpression(key) ||
-            receiver.asteriskToken || key.asteriskToken ||
-            (receiver.expression && this.nodeContainsYield(receiver.expression)) ||
-            (key.expression && this.nodeContainsYield(key.expression))) return null;
-        return [receiver, key];
+        const directReceiver = this.directLazyYieldCondition(receiver);
+        if (directReceiver) {
+            return { yields: [directReceiver, key], stagedExpressions: [] };
+        }
+        if (!ts.isPropertyAccessExpression(receiver) || receiver.questionDotToken) return null;
+        const base = this.directLazyYieldCondition(receiver.expression);
+        if (!base) return null;
+        return {
+            yields: [base, key],
+            stagedExpressions: [{ expression: receiver, afterYield: base }],
+        };
     }
 
     private simpleLazyMultiYieldVariableInitializer(
@@ -55522,7 +55531,13 @@ class Emitter {
             }
         }
         const accessYields = this.simpleLazyMultiYieldAccessInitializer(declaration.initializer);
-        if (accessYields) return { expression: declaration.initializer, yields: accessYields, stagedExpressions: [] };
+        if (accessYields) {
+            return {
+                expression: declaration.initializer,
+                yields: accessYields.yields,
+                stagedExpressions: accessYields.stagedExpressions,
+            };
+        }
         const templateYields = this.simpleLazyMultiYieldTemplateInitializer(declaration.initializer);
         if (templateYields) return { expression: declaration.initializer, yields: templateYields, stagedExpressions: [] };
         const literalInfo = this.simpleLazyMultiYieldLiteralInitializer(declaration.initializer);

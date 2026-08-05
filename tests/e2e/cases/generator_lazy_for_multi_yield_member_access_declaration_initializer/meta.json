@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage a static member between a yielded receiver and computed key in counted-for declaration initializers"
+}
