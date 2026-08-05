@@ -52976,7 +52976,9 @@ class Emitter {
                             return false;
                         }
                         if (this.nodeContainsYield(decl) &&
-                            (!decl.initializer || !this.directLazyYieldCondition(decl.initializer))) return false;
+                            (!decl.initializer ||
+                                (!this.directLazyYieldCondition(decl.initializer) &&
+                                    !this.simpleLazyMultiYieldVariableInitializer(decl)))) return false;
                     }
                 } else if (this.nodeContainsYield(stmt.initializer) &&
                     !this.isValidLazyGeneratorForInitializerExpression(stmt.initializer)) {
@@ -54810,6 +54812,15 @@ class Emitter {
                 const info = this.simpleLazyMultiYieldCompoundIncrementor(current.incrementor);
                 if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
             }
+            if (ts.isForStatement(current)) {
+                const initializer = current.initializer;
+                if (initializer && ts.isVariableDeclarationList(initializer)) {
+                    for (const declaration of initializer.declarations) {
+                        const info = this.simpleLazyMultiYieldVariableInitializer(declaration);
+                        if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
+                    }
+                }
+            }
             if (ts.isForStatement(current) && current.initializer && !ts.isVariableDeclarationList(current.initializer)) {
                 const collectInitializer = (initializer: ts.Expression): void => {
                     const unwrapped = this.unwrapTransparentExpression(initializer);
@@ -55194,22 +55205,40 @@ class Emitter {
                 this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
             const target = envBinding ? `*${envBinding.ptr}` : this.identifierName(decl.name);
             if (decl.initializer) {
-                const yieldedInitializer = this.directLazyYieldCondition(decl.initializer);
-                const value = yieldedInitializer
-                    ? this.emitLazyGeneratorDirectYieldValue(
+                const multiYieldInitializer = this.simpleLazyMultiYieldVariableInitializer(decl);
+                if (multiYieldInitializer) {
+                    this.emitLazyGeneratorMultiYieldExpressionStatement(
                         buf,
-                        decl.initializer,
+                        multiYieldInitializer,
                         nextStateId,
                         nextYieldStarSlot,
                         elemType,
                         envLocalName,
-                    )
-                    : this.emitExpr(decl.initializer);
-                if (!value) unsupported(decl.initializer, "lazy generator yielded for-init could not suspend");
-                const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
-                    ? `((int64_t)(${value.c}))`
-                    : this.coerce(value, targetType, decl.initializer);
-                buf.line(`${target} = ${coerced};`);
+                        (value) => {
+                            const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
+                                ? `((int64_t)(${value.c}))`
+                                : this.coerce(value, targetType, decl.initializer!);
+                            buf.line(`${target} = ${coerced};`);
+                        },
+                    );
+                } else {
+                    const yieldedInitializer = this.directLazyYieldCondition(decl.initializer);
+                    const value = yieldedInitializer
+                        ? this.emitLazyGeneratorDirectYieldValue(
+                            buf,
+                            decl.initializer,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        )
+                        : this.emitExpr(decl.initializer);
+                    if (!value) unsupported(decl.initializer, "lazy generator yielded for-init could not suspend");
+                    const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
+                        ? `((int64_t)(${value.c}))`
+                        : this.coerce(value, targetType, decl.initializer);
+                    buf.line(`${target} = ${coerced};`);
+                }
             } else {
                 buf.line(`${target} = ${this.zeroValue(targetType)};`);
             }
@@ -55245,19 +55274,7 @@ class Emitter {
         return ts.isIdentifier(current.left) && this.isSimpleLazyYieldCompoundAssignment(current);
     }
 
-    private simpleLazyMultiYieldCompoundIncrementor(
-        expr: ts.Expression,
-        allowAssignment = false,
-    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
-        const current = this.unwrapTransparentExpression(expr);
-        const isAssignment = ts.isBinaryExpression(current) &&
-            current.operatorToken.kind === ts.SyntaxKind.EqualsToken;
-        if (!ts.isBinaryExpression(current) ||
-            (isAssignment && !allowAssignment) ||
-            !ts.isIdentifier(current.left) ||
-            (!isAssignment && !this.isSimpleLazyYieldCompoundAssignment(current))) {
-            return null;
-        }
+    private simpleLazyMultiYieldArithmeticExpression(expr: ts.Expression): ts.YieldExpression[] | null {
         const arithmeticOperators = [
             ts.SyntaxKind.PlusToken,
             ts.SyntaxKind.MinusToken,
@@ -55298,8 +55315,34 @@ class Emitter {
                 isArithmeticOperator(unwrapped.operatorToken.kind) &&
                 visit(unwrapped.left) && visit(unwrapped.right);
         };
-        if (!visit(current.right) || yields.length < 2) return null;
+        return visit(this.unwrapTransparentExpression(expr)) && yields.length >= 2 ? yields : null;
+    }
+
+    private simpleLazyMultiYieldCompoundIncrementor(
+        expr: ts.Expression,
+        allowAssignment = false,
+    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
+        const current = this.unwrapTransparentExpression(expr);
+        const isAssignment = ts.isBinaryExpression(current) &&
+            current.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+        if (!ts.isBinaryExpression(current) ||
+            (isAssignment && !allowAssignment) ||
+            !ts.isIdentifier(current.left) ||
+            (!isAssignment && !this.isSimpleLazyYieldCompoundAssignment(current))) {
+            return null;
+        }
+        const yields = this.simpleLazyMultiYieldArithmeticExpression(current.right);
+        if (!yields) return null;
         return { expression: current, yields, stagedExpressions: [] };
+    }
+
+    private simpleLazyMultiYieldVariableInitializer(
+        declaration: ts.VariableDeclaration,
+    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
+        if (!declaration.initializer || !ts.isIdentifier(declaration.name)) return null;
+        const yields = this.simpleLazyMultiYieldArithmeticExpression(declaration.initializer);
+        if (!yields) return null;
+        return { expression: declaration.initializer, yields, stagedExpressions: [] };
     }
 
     private simpleLazyMultiYieldLogicalCompoundIncrementor(
@@ -56147,6 +56190,7 @@ class Emitter {
         nextYieldStarSlot: () => number,
         elemType: CType,
         envLocalName: string,
+        finalizeResult?: (result: EmitResult) => void,
     ): void {
         if (!envLocalName) unsupported(info.expression, "lazy generator multi-yield mutation statements require an environment");
         const slots = new Map(info.yields.map((yieldExpr) => [
@@ -56217,7 +56261,11 @@ class Emitter {
                 }
             }
             const result = this.emitExpr(info.expression);
-            buf.line(`(void)(${result.c});`);
+            if (finalizeResult) {
+                finalizeResult(result);
+            } else {
+                buf.line(`(void)(${result.c});`);
+            }
         } finally {
             this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
             this.lazyGeneratorMultiYieldMutationStageValues = previousStageValues;
