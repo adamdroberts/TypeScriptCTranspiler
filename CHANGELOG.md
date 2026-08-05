@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Class-valued template substitutions now evaluate their emitted class expression for side effects before applying the established `[object ClassName]` stringification. Regression: `generator_lazy_for_multi_yield_push_unshift_optional_call_nested_template_constructor_yield_argument_access_declaration_initializer`.
 - Synchronous `using` cleanup now runs after direct `return`/`throw` expressions are evaluated, preserving expression side effects before `Symbol.dispose` callbacks. Regression: `using_dispose`.
 - Synchronous `using` scopes now clean up across nested local `return`/`throw` branches while retaining the bounded diagnostic for nested loop-control exits. Regression: `using_dispose`.
 - Synchronous `using` cleanup in non-suspending async functions now evaluates direct return values before disposal, including promise adoption and resolved-result paths. Regression: `using_dispose`.
@@ -19,6 +20,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Async branch-return context propagation now applies only to array/object literals inside return expressions, so await-free iterator preludes retain their own inferred collection types when a longer leading awaited-local chain is resumed. Regression: `async_await_eight_step_chain`.
 
 ### Added
+- Lazy generators now stage direct non-asterisk yielded arguments of identifier constructors inside untagged or `String.raw` template substitutions nested in optional `push` and `unshift` calls, constructing after the final constructor-argument yield and before the enclosing mutation while preserving constructor side effects, template/optional-call result construction, receiver mutation, local assignment, condition/body ordering, terminal return, and later computed-key access; deeper constructor/call graphs and unsupported substitutions remain deferred. Test: `generator_lazy_for_multi_yield_push_unshift_optional_call_nested_template_constructor_yield_argument_access_declaration_initializer`.
 - `SuppressedError` callable and constructable forms now create typed Error values with optional messages, ignored extras, direct `.error` / `.suppressed` field access, Error stringification, and bounded own-property Object/Reflect reflection. Test: `suppressed_error`.
 
 - `await using` now supports one or more dynamic, non-thenable resources at the start of a non-suspending async body, disposing them through `Symbol.asyncDispose` in reverse order on normal or direct-return completion and continuing later cleanup after an earlier disposal rejection across declarations, async arrows, class methods, and await-free terminal `if` return/throw branches with bounded simple prefixes, one nested await-free selector, and bounded fallback prefixes before completion; deeper nested/loop control-flow exits, thenable initializers, and broader suppression state machines remain deferred. Tests: `await_using_dispose`, `await_using_multiple_dispose`, `await_using_async_values_dispose`, `await_using_branch_dispose`.

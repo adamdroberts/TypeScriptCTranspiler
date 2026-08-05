@@ -54707,6 +54707,11 @@ class Emitter {
                 yields.push(...logicalYields);
                 continue;
             }
+            const constructorYields = this.simpleLazyMultiYieldNestedConstructorYields(expression);
+            if (constructorYields) {
+                yields.push(...constructorYields);
+                continue;
+            }
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -92101,7 +92106,7 @@ class Emitter {
         if (r.ty.kind === "class") {
             const cls = r.ty.className!;
             const s = `[object ${cls}]`;
-            return `tsc_str_from_lit("${escapeCString(s)}", ${utf8ByteLen(s)})`;
+            return `({ (void)(${r.c}); tsc_str_from_lit("${escapeCString(s)}", ${utf8ByteLen(s)}); })`;
         }
         unsupported(node, `cannot stringify ${r.ty.c}`);
     }

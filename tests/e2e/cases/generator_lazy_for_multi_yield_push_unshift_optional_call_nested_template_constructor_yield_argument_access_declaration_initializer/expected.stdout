@@ -1,0 +1,16 @@
+push-first push-first <empty> false push-receiver
+push-second push-first <empty> false push-constructor
+push-third push-first <empty> false push-tail
+push-fourth push-first <empty> false push-item
+push-fifth push-first <empty> false push-spread
+push-sixth push-first,push-template-constructor-push-[object PushTemplateConstructor]-push-tail-value,push-direct,push-spread-one,push-spread-two push-constructor-value false push-key
+push-seventh push-first,push-template-constructor-push-[object PushTemplateConstructor]-push-tail-value,push-direct,push-spread-one,push-spread-two push-constructor-value false push-body-undefined
+push-done push-first,push-template-constructor-push-[object PushTemplateConstructor]-push-tail-value,push-direct,push-spread-one,push-spread-two push-constructor-value true push-done
+unshift-first unshift-first <empty> false unshift-receiver
+unshift-second unshift-first <empty> false unshift-constructor
+unshift-third unshift-first <empty> false unshift-tail
+unshift-fourth unshift-first <empty> false unshift-item
+unshift-fifth unshift-first <empty> false unshift-spread
+unshift-sixth unshift-template-constructor-unshift-[object UnshiftTemplateConstructor]-unshift-tail-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first unshift-constructor-value false unshift-key
+unshift-seventh unshift-template-constructor-unshift-[object UnshiftTemplateConstructor]-unshift-tail-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first unshift-constructor-value false unshift-body-undefined
+unshift-done unshift-template-constructor-unshift-[object UnshiftTemplateConstructor]-unshift-tail-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first unshift-constructor-value true unshift-done
