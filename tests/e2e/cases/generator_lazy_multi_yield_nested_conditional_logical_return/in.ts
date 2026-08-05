@@ -6,6 +6,16 @@ function* nestedConditionalLogicalOrReturn(): Generator<string, string, any> {
     return (yield "or-left") || ((yield "or-selector") ? (yield "or-true") : (yield "or-false"));
 }
 
+function* nestedConditionalLogicalNullishReturn(): Generator<string, string, any> {
+    return (yield "nullish-left") ?? ((yield "nullish-selector") ? (yield "nullish-true") : (yield "nullish-false"));
+}
+
+function* nestedConditionalLogicalSelectorReturn(): Generator<string, string, any> {
+    return (yield "selector-left") && (((yield "selector-condition-left") || (yield "selector-condition-right"))
+        ? (yield "selector-true")
+        : (yield "selector-false"));
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -37,3 +47,47 @@ const orSelectedArm: any = orSelected.next(false);
 console.log("or-selected-arm", orSelectedArm.done, orSelectedArm.value);
 const orSelectedDone: any = orSelected.next("or-arm-result");
 console.log("or-selected-done", orSelectedDone.done, orSelectedDone.value);
+
+const nullishSkipped = nestedConditionalLogicalNullishReturn();
+const nullishSkippedFirst: any = nullishSkipped.next();
+console.log("nullish-skipped-first", nullishSkippedFirst.done, nullishSkippedFirst.value);
+const nullishSkippedDone: any = nullishSkipped.next("nullish-result");
+console.log("nullish-skipped-done", nullishSkippedDone.done, nullishSkippedDone.value);
+
+const nullishSelected = nestedConditionalLogicalNullishReturn();
+const nullishSelectedFirst: any = nullishSelected.next();
+console.log("nullish-selected-first", nullishSelectedFirst.done, nullishSelectedFirst.value);
+const nullishSelectedSecond: any = nullishSelected.next(null);
+console.log("nullish-selected-second", nullishSelectedSecond.done, nullishSelectedSecond.value);
+const nullishSelectedArm: any = nullishSelected.next(false);
+console.log("nullish-selected-arm", nullishSelectedArm.done, nullishSelectedArm.value);
+const nullishSelectedDone: any = nullishSelected.next("nullish-arm-result");
+console.log("nullish-selected-done", nullishSelectedDone.done, nullishSelectedDone.value);
+
+const selectorSkipped = nestedConditionalLogicalSelectorReturn();
+const selectorSkippedFirst: any = selectorSkipped.next();
+console.log("selector-skipped-first", selectorSkippedFirst.done, selectorSkippedFirst.value);
+const selectorSkippedDone: any = selectorSkipped.next(false);
+console.log("selector-skipped-done", selectorSkippedDone.done, selectorSkippedDone.value);
+
+const selectorShortCircuited = nestedConditionalLogicalSelectorReturn();
+const selectorShortCircuitedFirst: any = selectorShortCircuited.next();
+console.log("selector-short-circuited-first", selectorShortCircuitedFirst.done, selectorShortCircuitedFirst.value);
+const selectorShortCircuitedSecond: any = selectorShortCircuited.next(true);
+console.log("selector-short-circuited-second", selectorShortCircuitedSecond.done, selectorShortCircuitedSecond.value);
+const selectorShortCircuitedArm: any = selectorShortCircuited.next(true);
+console.log("selector-short-circuited-arm", selectorShortCircuitedArm.done, selectorShortCircuitedArm.value);
+const selectorShortCircuitedDone: any = selectorShortCircuited.next("selector-true-result");
+console.log("selector-short-circuited-done", selectorShortCircuitedDone.done, selectorShortCircuitedDone.value);
+
+const selectorNested = nestedConditionalLogicalSelectorReturn();
+const selectorNestedFirst: any = selectorNested.next();
+console.log("selector-nested-first", selectorNestedFirst.done, selectorNestedFirst.value);
+const selectorNestedSecond: any = selectorNested.next(true);
+console.log("selector-nested-second", selectorNestedSecond.done, selectorNestedSecond.value);
+const selectorNestedThird: any = selectorNested.next(false);
+console.log("selector-nested-third", selectorNestedThird.done, selectorNestedThird.value);
+const selectorNestedArm: any = selectorNested.next(false);
+console.log("selector-nested-arm", selectorNestedArm.done, selectorNestedArm.value);
+const selectorNestedDone: any = selectorNested.next("selector-false-result");
+console.log("selector-nested-done", selectorNestedDone.done, selectorNestedDone.value);
