@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage String.raw template push and unshift arguments at the mutating call point before computed element access"
+}

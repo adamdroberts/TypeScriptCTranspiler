@@ -54391,7 +54391,7 @@ class Emitter {
         }
         if (ts.isTaggedTemplateExpression(expr)) {
             const tag = this.unwrapTransparentExpression(expr.tag);
-            if (!ts.isIdentifier(tag)) return false;
+            if (!ts.isIdentifier(tag) && !this.isStringRawTag(tag)) return false;
             return ts.isTemplateExpression(expr.template)
                 ? expr.template.templateSpans.every((span) =>
                     this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(span.expression)))

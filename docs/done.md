@@ -3575,6 +3575,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_push_unshift_literal_spread_argument_access_declaration_initializer` | lazy generators stage spread array and object push and unshift arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_push_unshift_template_argument_access_declaration_initializer` | lazy generators stage template push and unshift arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_push_unshift_tagged_template_argument_access_declaration_initializer` | lazy generators stage identifier-tagged template push and unshift arguments before counted-for computed element access |
+| `generator_lazy_for_multi_yield_push_unshift_string_raw_template_argument_access_declaration_initializer` | lazy generators stage String.raw template push and unshift arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_unshift_multi_spread_access_declaration_initializer` | lazy generators stage multiple yielded unshift spreads before counted-for computed element access |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_multi_yield_assignment_initializer` | lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers |
