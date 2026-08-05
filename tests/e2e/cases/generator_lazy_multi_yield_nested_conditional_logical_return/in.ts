@@ -16,6 +16,12 @@ function* nestedConditionalLogicalSelectorReturn(): Generator<string, string, an
         : (yield "selector-false"));
 }
 
+function* nestedConditionalLogicalArmReturn(): Generator<string, string, any> {
+    return (yield "arm-left") && ((yield "arm-selector")
+        ? ((yield "arm-true-left") || (yield "arm-true-right"))
+        : ((yield "arm-false-left") ?? (yield "arm-false-right")));
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -91,3 +97,31 @@ const selectorNestedArm: any = selectorNested.next(false);
 console.log("selector-nested-arm", selectorNestedArm.done, selectorNestedArm.value);
 const selectorNestedDone: any = selectorNested.next("selector-false-result");
 console.log("selector-nested-done", selectorNestedDone.done, selectorNestedDone.value);
+
+const armSkipped = nestedConditionalLogicalArmReturn();
+const armSkippedFirst: any = armSkipped.next();
+console.log("arm-skipped-first", armSkippedFirst.done, armSkippedFirst.value);
+const armSkippedDone: any = armSkipped.next(false);
+console.log("arm-skipped-done", armSkippedDone.done, armSkippedDone.value);
+
+const armTrue = nestedConditionalLogicalArmReturn();
+const armTrueFirst: any = armTrue.next();
+console.log("arm-true-first", armTrueFirst.done, armTrueFirst.value);
+const armTrueSecond: any = armTrue.next(true);
+console.log("arm-true-second", armTrueSecond.done, armTrueSecond.value);
+const armTrueThird: any = armTrue.next(true);
+console.log("arm-true-third", armTrueThird.done, armTrueThird.value);
+const armTrueDone: any = armTrue.next("arm-true-result");
+console.log("arm-true-done", armTrueDone.done, armTrueDone.value);
+
+const armFalse = nestedConditionalLogicalArmReturn();
+const armFalseFirst: any = armFalse.next();
+console.log("arm-false-first", armFalseFirst.done, armFalseFirst.value);
+const armFalseSecond: any = armFalse.next(true);
+console.log("arm-false-second", armFalseSecond.done, armFalseSecond.value);
+const armFalseThird: any = armFalse.next(false);
+console.log("arm-false-third", armFalseThird.done, armFalseThird.value);
+const armFalseFourth: any = armFalse.next(null);
+console.log("arm-false-fourth", armFalseFourth.done, armFalseFourth.value);
+const armFalseDone: any = armFalse.next("arm-false-result");
+console.log("arm-false-done", armFalseDone.done, armFalseDone.value);

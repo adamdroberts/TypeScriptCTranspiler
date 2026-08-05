@@ -27,3 +27,14 @@ selector-nested-second false selector-condition-left
 selector-nested-third false selector-condition-right
 selector-nested-arm false selector-false
 selector-nested-done true selector-false-result
+arm-skipped-first false arm-left
+arm-skipped-done true false
+arm-true-first false arm-left
+arm-true-second false arm-selector
+arm-true-third false arm-true-left
+arm-true-done true arm-true-result
+arm-false-first false arm-left
+arm-false-second false arm-selector
+arm-false-third false arm-false-left
+arm-false-fourth false arm-false-right
+arm-false-done true arm-false-result

@@ -5,7 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
-- Terminal lazy-generator logical-plan staging now recognizes nested conditional operands across `&&`, `||`, and `??`, including conditional selectors that are themselves direct-yield logical plans, while preserving skipped conditional/logical RHS laziness, source-order suspension, resumed values, and terminal return. Regression: `generator_lazy_multi_yield_nested_conditional_logical_return`.
+- Terminal lazy-generator logical-plan staging now recognizes nested conditional operands across `&&`, `||`, and `??`, including conditional selectors and selected arms that are themselves logical plans, while preserving skipped conditional/logical RHS laziness, source-order suspension, resumed values, and terminal return. Regression: `generator_lazy_multi_yield_nested_conditional_logical_return`.
 - Lazy-generator logical-plan staging now accepts direct yielded spread arguments inside nested optional calls while collecting nested dynamic-tag stages. Regression: `generator_lazy_for_multi_yield_push_unshift_optional_call_nested_yielded_spread_argument_access_declaration_initializer`.
 - Class-valued template substitutions now evaluate their emitted class expression for side effects before applying the established `[object ClassName]` stringification. Regression: `generator_lazy_for_multi_yield_push_unshift_optional_call_nested_template_constructor_yield_argument_access_declaration_initializer`.
 - Synchronous `using` cleanup now runs after direct `return`/`throw` expressions are evaluated, preserving expression side effects before `Symbol.dispose` callbacks. Regression: `using_dispose`.
