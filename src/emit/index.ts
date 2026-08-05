@@ -55663,18 +55663,26 @@ class Emitter {
                     const startArgument = current.arguments.length > 0
                         ? this.unwrapTransparentExpression(current.arguments[0]!)
                         : null;
-                    if (current.arguments.length !== 2 ||
+                    if ((current.arguments.length !== 2 && current.arguments.length !== 3) ||
                         startArgument === null ||
                         !ts.isNumericLiteral(startArgument) ||
                         startArgument.text !== "0") return null;
                     const base = this.directLazyYieldCondition(callee.expression);
                     const deleteCount = this.directLazyYieldCondition(current.arguments[1]!);
                     if (!base || !deleteCount) return null;
+                    let afterYield = deleteCount;
+                    const yields = [base, deleteCount];
+                    if (current.arguments.length === 3) {
+                        const inserted = this.directLazyYieldCondition(current.arguments[2]!);
+                        if (!inserted) return null;
+                        yields.push(inserted);
+                        afterYield = inserted;
+                    }
                     return {
-                        yields: key ? [base, deleteCount, key] : [base, deleteCount],
+                        yields: key ? [...yields, key] : yields,
                         stagedExpressions: callStages.reverse().map((call) => ({
                             expression: call,
-                            afterYield: deleteCount,
+                            afterYield,
                         })),
                     };
                 }
