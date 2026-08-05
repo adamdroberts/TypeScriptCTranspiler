@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage multiple direct yielded toSpliced insertion items before final counted-for element access"
+}

@@ -55663,7 +55663,7 @@ class Emitter {
                     const startArgument = current.arguments.length > 0
                         ? this.unwrapTransparentExpression(current.arguments[0]!)
                         : null;
-                    if ((current.arguments.length !== 2 && current.arguments.length !== 3) ||
+                    if (current.arguments.length < 2 ||
                         startArgument === null ||
                         !ts.isNumericLiteral(startArgument) ||
                         startArgument.text !== "0") return null;
@@ -55672,8 +55672,8 @@ class Emitter {
                     if (!base || !deleteCount) return null;
                     let afterYield = deleteCount;
                     const yields = [base, deleteCount];
-                    if (current.arguments.length === 3) {
-                        const inserted = this.directLazyYieldCondition(current.arguments[2]!);
+                    for (const argument of current.arguments.slice(2)) {
+                        const inserted = this.directLazyYieldCondition(argument);
                         if (!inserted) return null;
                         yields.push(inserted);
                         afterYield = inserted;
