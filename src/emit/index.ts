@@ -54398,8 +54398,15 @@ class Emitter {
                 : true;
         }
         if (ts.isCallExpression(expr)) {
-            if (this.nodeContainsYield(expr) ||
-                !ts.isIdentifier(this.unwrapTransparentExpression(expr.expression))) return false;
+            if (this.nodeContainsYield(expr)) return false;
+            const callee = this.unwrapTransparentExpression(expr.expression);
+            const simpleCallee = ts.isIdentifier(callee) ||
+                (ts.isElementAccessExpression(callee) &&
+                    (!!expr.questionDotToken || !!callee.questionDotToken) &&
+                    !!callee.argumentExpression &&
+                    this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(callee.expression)) &&
+                    this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(callee.argumentExpression)));
+            if (!simpleCallee) return false;
             return expr.arguments.every((argument) =>
                 !ts.isSpreadElement(argument) &&
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
