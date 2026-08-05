@@ -54230,7 +54230,14 @@ class Emitter {
                     if (ts.isPropertyAssignment(property)) {
                         const staticName = this.staticPropertyName(property.name);
                         if (staticName === null) {
-                            if (!ts.isComputedPropertyName(property.name) || this.nodeContainsYield(property.name.expression)) return false;
+                            if (!ts.isComputedPropertyName(property.name)) return false;
+                            if (this.nodeContainsYield(property.name.expression)) {
+                                const keyYield = this.singleYieldExpressionInExpression(property.name.expression);
+                                if (!keyYield || keyYield.asteriskToken ||
+                                    (keyYield.expression && this.nodeContainsYield(keyYield.expression)) ||
+                                    !visit(property.name.expression)) return false;
+                                stagedExpressions.push({ expression: property.name.expression, afterYield: keyYield });
+                            }
                         }
                         if (!visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {
@@ -54666,7 +54673,13 @@ class Emitter {
             } else {
                 for (const property of literal.properties) {
                     if (ts.isPropertyAssignment(property)) {
-                        if (ts.isComputedPropertyName(property.name) && this.nodeContainsYield(property.name.expression)) return false;
+                        if (ts.isComputedPropertyName(property.name) && this.nodeContainsYield(property.name.expression)) {
+                            const keyYield = this.singleYieldExpressionInExpression(property.name.expression);
+                            if (!keyYield || keyYield.asteriskToken ||
+                                (keyYield.expression && this.nodeContainsYield(keyYield.expression)) ||
+                                !visit(property.name.expression)) return false;
+                            stagedExpressions.push({ expression: property.name.expression, afterYield: keyYield });
+                        }
                         if (!visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         continue;
@@ -54695,6 +54708,16 @@ class Emitter {
                 return visit(unwrapped.expression);
             }
             if (ts.isArrayLiteralExpression(unwrapped) || ts.isObjectLiteralExpression(unwrapped)) return visitLiteral(unwrapped);
+            if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
+                if (!this.isSimpleLazyMultiYieldCallLike(unwrapped)) return false;
+                if (!this.nodeContainsYield(unwrapped)) return true;
+                return (unwrapped.arguments ?? []).every((argument) => {
+                    const expression = this.unwrapTransparentExpression(argument as ts.Expression);
+                    return ts.isYieldExpression(expression)
+                        ? visit(argument as ts.Expression)
+                        : !this.nodeContainsYield(argument);
+                });
+            }
             if (!ts.isBinaryExpression(unwrapped) ||
                 this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
@@ -56527,7 +56550,7 @@ class Emitter {
                         if (!ts.isComputedPropertyName(property.name)) {
                             unsupported(property.name, "lazy multi-yield dynamic object keys must be computed or static");
                         }
-                        const key = this.emitExpr(property.name.expression);
+                        const key = build(property.name.expression);
                         const keyTemp = this.freshTemp("_lazy_obj_key");
                         pieces.push(`${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, property.name.expression)}`);
                         const value = build(property.initializer);
@@ -58478,7 +58501,21 @@ class Emitter {
                 } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (!staticName) {
-                        unsupported(prop.name, "dynamic object key must be a string/number literal");
+                        if (!ts.isComputedPropertyName(prop.name)) {
+                            unsupported(prop.name, "dynamic object key must be a string/number literal");
+                        }
+                        const key = this.singleYieldExpressionInExpression(prop.name.expression)
+                            ? this.emitSimpleLazyResumeExpression(prop.name.expression, nextArg)
+                            : this.emitExpr(prop.name.expression);
+                        const keyTemp = this.freshTemp("_obj_key");
+                        const value = this.singleYieldExpressionInExpression(prop.initializer)
+                            ? this.emitSimpleLazyResumeExpression(prop.initializer, nextArg)
+                            : this.emitExpr(prop.initializer);
+                        pieces.push(
+                            `${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, prop.name.expression)}`,
+                            `tsc_object_set(${obj}, ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
+                        );
+                        continue;
                     }
                     fieldName = staticName;
                     expr = prop.initializer;
@@ -90098,7 +90135,17 @@ class Emitter {
                 } else if (ts.isPropertyAssignment(prop)) {
                     const staticName = this.staticPropertyName(prop.name);
                     if (!staticName) {
-                        unsupported(prop.name, "dynamic object key must be a string/number literal");
+                        if (!ts.isComputedPropertyName(prop.name)) {
+                            unsupported(prop.name, "dynamic object key must be a string/number literal");
+                        }
+                        const key = this.emitExpr(prop.name.expression);
+                        const keyTemp = this.freshTemp("_obj_key");
+                        const value = this.emitExpr(prop.initializer);
+                        pieces.push(
+                            `${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, prop.name.expression)}`,
+                            `tsc_object_set(${obj}, ${keyTemp}, ${this.coerce(value, T_VALUE, prop.initializer)})`,
+                        );
+                        continue;
                     }
                     fieldName = staticName;
                     expr = prop.initializer;

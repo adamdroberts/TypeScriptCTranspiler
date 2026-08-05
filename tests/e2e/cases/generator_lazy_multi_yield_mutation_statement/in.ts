@@ -70,6 +70,12 @@ Object.defineProperty(spreadRhsItems, "0", {
         return 5;
     },
 });
+const computedKeyEvents: string[] = [];
+const computedKeyBox: any = { value: null };
+function formatComputedKey(value: any): string {
+    computedKeyEvents.push("key");
+    return String(value);
+}
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
@@ -162,6 +168,14 @@ function* spreadRhsAssignmentBetweenYields(): Generator<string, string, any> {
     return "spread-rhs-done";
 }
 
+function* computedKeyAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "computed-key-receiver")[yield "computed-key-slot"] = {
+        [formatComputedKey(yield "computed-key-name")]: yield "computed-key-value",
+        after: yield "computed-key-after",
+    };
+    return "computed-key-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -212,6 +226,15 @@ const spreadRhsAssignmentFourth: any = spreadRhsAssignment.next(4);
 const spreadRhsAssignmentFifth: any = spreadRhsAssignment.next(spreadRhsItems);
 const spreadRhsAssignmentDone: any = spreadRhsAssignment.next("spread-rhs-after");
 console.log("assignment-spread-rhs", spreadRhsAssignmentFirst.done, spreadRhsAssignmentFirst.value, spreadRhsAssignmentSecond.done, spreadRhsAssignmentSecond.value, spreadRhsAssignmentThird.done, spreadRhsAssignmentThird.value, spreadRhsAssignmentFourth.done, spreadRhsAssignmentFourth.value, spreadRhsAssignmentFifth.done, spreadRhsAssignmentFifth.value, spreadRhsEvents.join(","), spreadRhsAssignmentDone.done, spreadRhsAssignmentDone.value, spreadRhsBox.value.items.length, spreadRhsBox.value.items[0], spreadRhsBox.value.items[2]);
+
+const computedKeyAssignment = computedKeyAssignmentBetweenYields();
+const computedKeyAssignmentFirst: any = computedKeyAssignment.next();
+const computedKeyAssignmentSecond: any = computedKeyAssignment.next(computedKeyBox);
+const computedKeyAssignmentThird: any = computedKeyAssignment.next("value");
+const computedKeyAssignmentFourth: any = computedKeyAssignment.next("name");
+const computedKeyAssignmentFifth: any = computedKeyAssignment.next(4);
+const computedKeyAssignmentDone: any = computedKeyAssignment.next("after");
+console.log("assignment-computed-key", computedKeyAssignmentFirst.done, computedKeyAssignmentFirst.value, computedKeyAssignmentSecond.done, computedKeyAssignmentSecond.value, computedKeyAssignmentThird.done, computedKeyAssignmentThird.value, computedKeyEvents.join(","), computedKeyAssignmentFourth.done, computedKeyAssignmentFourth.value, computedKeyEvents.join(","), computedKeyAssignmentFifth.done, computedKeyAssignmentFifth.value, computedKeyAssignmentDone.done, computedKeyAssignmentDone.value, computedKeyBox.value.name, computedKeyBox.value.after);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();
