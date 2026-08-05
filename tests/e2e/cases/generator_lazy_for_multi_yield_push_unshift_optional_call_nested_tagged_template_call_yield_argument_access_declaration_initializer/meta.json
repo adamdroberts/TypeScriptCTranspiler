@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage ordinary and optional nested calls inside identifier-tagged and String.raw template substitutions used by optional push and unshift calls before mutating computed element access"
+}
