@@ -55511,6 +55511,7 @@ class Emitter {
         if (ts.isElementAccessExpression(receiver)) {
             const yields: ts.YieldExpression[] = [];
             const stagedExpressions: LazyMultiYieldMutationStage[] = [];
+            let optionalElementChainStarted = false;
             const receiverAfterYield = (current: ts.Expression): ts.YieldExpression | null => {
                 const direct = this.directLazyYieldCondition(current);
                 if (direct) {
@@ -55519,13 +55520,15 @@ class Emitter {
                 }
                 const element = this.unwrapTransparentExpression(current);
                 if (!ts.isElementAccessExpression(element) ||
-                    element.questionDotToken ||
                     !element.argumentExpression) return null;
+                if (optionalElementChainStarted && !element.questionDotToken) return null;
+                if (element.questionDotToken && !optionalFinal) return null;
                 const baseAfterYield = receiverAfterYield(element.expression);
                 if (!baseAfterYield) return null;
                 const intermediateKey = this.directLazyYieldCondition(element.argumentExpression);
                 let afterYield = baseAfterYield;
                 if (intermediateKey) {
+                    if (element.questionDotToken) return null;
                     yields.push(intermediateKey);
                     afterYield = intermediateKey;
                 } else if (!this.isSimpleLazyStableLvaluePart(
@@ -55533,6 +55536,7 @@ class Emitter {
                 )) {
                     return null;
                 }
+                if (element.questionDotToken) optionalElementChainStarted = true;
                 stagedExpressions.push({ expression: element, afterYield });
                 return afterYield;
             };
