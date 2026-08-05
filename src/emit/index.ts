@@ -55483,14 +55483,19 @@ class Emitter {
     ): { yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
         const unwrapped = this.unwrapTransparentExpression(expr);
         if (!ts.isElementAccessExpression(unwrapped) ||
-            unwrapped.questionDotToken ||
             !unwrapped.argumentExpression) return null;
-        const key = this.directLazyYieldCondition(unwrapped.argumentExpression);
-        if (!key) return null;
+        const optionalFinal = !!unwrapped.questionDotToken;
+        const key = optionalFinal ? null : this.directLazyYieldCondition(unwrapped.argumentExpression);
+        if (!key && (!optionalFinal || !this.isSimpleLazyStableLvaluePart(
+            this.unwrapTransparentExpression(unwrapped.argumentExpression),
+        ))) return null;
         const receiver = this.unwrapTransparentExpression(unwrapped.expression);
         const directReceiver = this.directLazyYieldCondition(receiver);
         if (directReceiver) {
-            return { yields: [directReceiver, key], stagedExpressions: [] };
+            return {
+                yields: key ? [directReceiver, key] : [directReceiver],
+                stagedExpressions: [],
+            };
         }
         if (ts.isElementAccessExpression(receiver)) {
             const yields: ts.YieldExpression[] = [];
@@ -55523,7 +55528,7 @@ class Emitter {
             const afterYield = receiverAfterYield(receiver);
             if (afterYield) {
                 return {
-                    yields: [...yields, key],
+                    yields: key ? [...yields, key] : yields,
                     stagedExpressions,
                 };
             }
@@ -55543,7 +55548,7 @@ class Emitter {
                     const spreadSource = this.directLazyYieldCondition(current.arguments[0]!.expression);
                     if (!base || !spreadSource) return null;
                     return {
-                        yields: [base, spreadSource, key],
+                        yields: key ? [base, spreadSource, key] : [base, spreadSource],
                         stagedExpressions: callStages.reverse().map((call) => ({
                             expression: call,
                             afterYield: spreadSource,
@@ -55576,7 +55581,7 @@ class Emitter {
                         return null;
                     }
                     return {
-                        yields: [...yields, key],
+                        yields: key ? [...yields, key] : yields,
                         stagedExpressions: callStages.reverse().map((call) => ({
                             expression: call,
                             afterYield,
@@ -55589,7 +55594,7 @@ class Emitter {
             const base = this.directLazyYieldCondition(current);
             if (!base) return null;
             return {
-                yields: [base, key],
+                yields: key ? [base, key] : [base],
                 stagedExpressions: callStages.reverse().map((call) => ({ expression: call, afterYield: base })),
             };
         }
@@ -55604,7 +55609,7 @@ class Emitter {
         const base = this.directLazyYieldCondition(current);
         if (!base) return null;
         return {
-            yields: [base, key],
+            yields: key ? [base, key] : [base],
             stagedExpressions: memberStages.reverse().map((member) => ({ expression: member, afterYield: base })),
         };
     }
