@@ -37,6 +37,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now preserve comma-sequenced counted-`for` incrementors with yield-free interstitial expressions and source-order direct-yield assignment/compound stages across repeated loop iterations before condition re-entry; nested non-comma yielded graphs and broader incrementor expressions remain deferred. Test: `generator_lazy_for_comma_incrementor_yield`.
 
+- Lazy generators now preserve comma-sequenced counted-`for` expression initializers with source-order direct-yield assignment stages and yield-free interstitial expressions before condition evaluation; compound/non-assignment initializers and broader graphs remain deferred. Test: `generator_lazy_for_comma_initializer_yield`.
+
 - Lazy generators now suspend on direct non-asterisk `yield` expressions in one or more counted-`for` variable initializers, assign resumed values in declaration order before condition evaluation, and preserve condition/body ordering and terminal return; yielded compound initializers and broader loop graphs remain deferred. Tests: `generator_lazy_for_initializer_yield`, `generator_lazy_for_multiple_initializers_yield`.
 
 - Lazy generators now suspend on a direct non-asterisk yielded RHS in a plain `=` counted-`for` expression initializer, assign the resumed value through the existing lvalue path before condition evaluation, and preserve condition/body ordering and terminal return; compound assignments, multiple yields, and broader initializer graphs remain deferred. Test: `generator_lazy_for_assignment_initializer_yield`.

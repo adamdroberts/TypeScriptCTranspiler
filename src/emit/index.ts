@@ -52978,10 +52978,9 @@ class Emitter {
                         if (this.nodeContainsYield(decl) &&
                             (!decl.initializer || !this.directLazyYieldCondition(decl.initializer))) return false;
                     }
-                } else if (this.nodeContainsYield(stmt.initializer)) {
-                    if (!ts.isBinaryExpression(stmt.initializer) ||
-                        stmt.initializer.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-                        !this.directLazyYieldCondition(stmt.initializer.right)) return false;
+                } else if (this.nodeContainsYield(stmt.initializer) &&
+                    !this.isValidLazyGeneratorForInitializerExpression(stmt.initializer)) {
+                    return false;
                 }
             }
             const conditionalSelector = stmt.condition
@@ -55053,26 +55052,46 @@ class Emitter {
     ): void {
         if (!initializer) return;
         if (!ts.isVariableDeclarationList(initializer)) {
-            if (
-                ts.isBinaryExpression(initializer) &&
-                initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                this.directLazyYieldCondition(initializer.right)
-            ) {
-                const value = this.emitLazyGeneratorDirectYieldValue(
+            const current = this.unwrapTransparentExpression(initializer);
+            if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+                this.emitLazyGeneratorForInitializer(
                     buf,
-                    initializer.right,
+                    current.left,
                     nextStateId,
                     nextYieldStarSlot,
                     elemType,
                     envLocalName,
                 );
-                if (!value) unsupported(initializer.right, "lazy generator yielded assignment for-init could not suspend");
-                const lhs = this.emitLvalue(initializer.left);
-                const lhsType = this.storageType(initializer.left);
-                buf.line(`${lhs} = ${this.coerce(value, lhsType, initializer.right)};`);
+                this.emitLazyGeneratorForInitializer(
+                    buf,
+                    current.right,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
                 return;
             }
-            const expr = this.emitExpr(initializer);
+            if (
+                ts.isBinaryExpression(current) &&
+                current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                this.directLazyYieldCondition(current.right)
+            ) {
+                const value = this.emitLazyGeneratorDirectYieldValue(
+                    buf,
+                    current.right,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                if (!value) unsupported(current.right, "lazy generator yielded assignment for-init could not suspend");
+                const lhs = this.emitLvalue(current.left);
+                const lhsType = this.storageType(current.left);
+                buf.line(`${lhs} = ${this.coerce(value, lhsType, current.right)};`);
+                return;
+            }
+            const expr = this.emitExpr(current);
             buf.line(`(void)(${expr.c});`);
             return;
         }
@@ -55104,6 +55123,18 @@ class Emitter {
                 buf.line(`${target} = ${this.zeroValue(targetType)};`);
             }
         }
+    }
+
+    private isValidLazyGeneratorForInitializerExpression(expr: ts.Expression): boolean {
+        const current = this.unwrapTransparentExpression(expr);
+        if (!this.nodeContainsYield(current)) return true;
+        if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+            return this.isValidLazyGeneratorForInitializerExpression(current.left) &&
+                this.isValidLazyGeneratorForInitializerExpression(current.right);
+        }
+        return ts.isBinaryExpression(current) &&
+            current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            !!this.directLazyYieldCondition(current.right);
     }
 
     private isValidLazyGeneratorForIncrementor(expr: ts.Expression): boolean {
