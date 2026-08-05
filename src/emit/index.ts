@@ -55383,6 +55383,17 @@ class Emitter {
                 logicalPlan,
             };
         }
+        const initializerExpression = this.unwrapTransparentExpression(declaration.initializer);
+        if (ts.isCallExpression(initializerExpression) || ts.isNewExpression(initializerExpression)) {
+            const yields = this.simpleLazyMultiYieldExpressionsInExpression(initializerExpression);
+            if (yields.length >= 2 &&
+                yields.every((yieldExpr) =>
+                    !yieldExpr.asteriskToken &&
+                    (!yieldExpr.expression || !this.nodeContainsYield(yieldExpr.expression))) &&
+                this.isSimpleLazyMultiYieldCallLike(initializerExpression)) {
+                return { expression: declaration.initializer, yields, stagedExpressions: [] };
+            }
+        }
         const yields = this.simpleLazyMultiYieldArithmeticExpression(declaration.initializer);
         if (!yields) return null;
         return { expression: declaration.initializer, yields, stagedExpressions: [] };

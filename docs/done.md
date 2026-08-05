@@ -3520,6 +3520,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multiple_initializers_yield` | lazy generators preserve source order across multiple direct yielded counted-for variable initializers |
 | `generator_lazy_for_multi_yield_declaration_initializer` | lazy generators preserve declaration order across multiple yielded counted-for variable initializers |
 | `generator_lazy_for_multi_yield_logical_declaration_initializer` | lazy generators preserve logical short-circuit order across multiple yielded counted-for variable initializers |
+| `generator_lazy_for_multi_yield_call_declaration_initializer` | lazy generators defer counted-for declaration initializer calls until yielded arguments resume |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_multi_yield_assignment_initializer` | lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |

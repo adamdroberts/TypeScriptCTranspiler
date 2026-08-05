@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators defer counted-for declaration initializer calls until all direct yielded arguments resume"
+}
