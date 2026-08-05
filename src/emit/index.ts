@@ -54528,6 +54528,11 @@ class Emitter {
                 yields.push(...templateYields);
                 continue;
             }
+            const taggedTemplateYields = this.simpleLazyMultiYieldOptionalCallNestedTaggedTemplateYields(value);
+            if (taggedTemplateYields) {
+                yields.push(...taggedTemplateYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -54660,6 +54665,14 @@ class Emitter {
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
+    }
+
+    private simpleLazyMultiYieldOptionalCallNestedTaggedTemplateYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isTaggedTemplateExpression(unwrapped)) return null;
+        const tag = this.unwrapTransparentExpression(unwrapped.tag);
+        if ((!ts.isIdentifier(tag) && !this.isStringRawTag(tag)) || !ts.isTemplateExpression(unwrapped.template)) return null;
+        return this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
     }
 
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
