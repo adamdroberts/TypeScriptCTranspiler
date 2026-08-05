@@ -54407,9 +54407,15 @@ class Emitter {
                     this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(callee.expression)) &&
                     this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(callee.argumentExpression)));
             if (!simpleCallee) return false;
+            const optionalCall = !!expr.questionDotToken ||
+                (ts.isElementAccessExpression(callee) && !!callee.questionDotToken);
+            const spreadArguments = expr.arguments.filter(ts.isSpreadElement);
+            if (spreadArguments.length > 1 ||
+                (spreadArguments.length > 0 && (!optionalCall || !ts.isIdentifier(callee)))) return false;
             return expr.arguments.every((argument) =>
-                !ts.isSpreadElement(argument) &&
-                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
+                ts.isSpreadElement(argument)
+                    ? this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument.expression))
+                    : this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
         }
         if (ts.isNewExpression(expr)) {
             if (this.nodeContainsYield(expr) ||
