@@ -52981,7 +52981,9 @@ class Emitter {
                                 !this.directLazyYieldCondition(decl.initializer))) return false;
                     }
                 } else if (this.nodeContainsYield(stmt.initializer)) {
-                    return false;
+                    if (!ts.isBinaryExpression(stmt.initializer) ||
+                        stmt.initializer.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                        !this.directLazyYieldCondition(stmt.initializer.right)) return false;
                 }
             }
             const conditionalSelector = stmt.condition
@@ -55052,6 +55054,25 @@ class Emitter {
     ): void {
         if (!initializer) return;
         if (!ts.isVariableDeclarationList(initializer)) {
+            if (
+                ts.isBinaryExpression(initializer) &&
+                initializer.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                this.directLazyYieldCondition(initializer.right)
+            ) {
+                const value = this.emitLazyGeneratorDirectYieldValue(
+                    buf,
+                    initializer.right,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                if (!value) unsupported(initializer.right, "lazy generator yielded assignment for-init could not suspend");
+                const lhs = this.emitLvalue(initializer.left);
+                const lhsType = this.storageType(initializer.left);
+                buf.line(`${lhs} = ${this.coerce(value, lhsType, initializer.right)};`);
+                return;
+            }
             const expr = this.emitExpr(initializer);
             buf.line(`(void)(${expr.c});`);
             return;

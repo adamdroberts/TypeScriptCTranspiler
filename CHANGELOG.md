@@ -31,6 +31,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now suspend on a direct non-asterisk `yield` in a single counted-`for` variable initializer, assign the resumed value before condition evaluation, and preserve condition/body ordering and terminal return; multiple yielded declarations, yielded compound initializers, and broader loop graphs remain deferred. Test: `generator_lazy_for_initializer_yield`.
 
+- Lazy generators now suspend on a direct non-asterisk yielded RHS in a plain `=` counted-`for` expression initializer, assign the resumed value through the existing lvalue path before condition evaluation, and preserve condition/body ordering and terminal return; compound assignments, multiple yields, and broader initializer graphs remain deferred. Test: `generator_lazy_for_assignment_initializer_yield`.
+
 - Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing while leaving broader condition graphs and compound switch selectors deferred. Test: `generator_lazy_if_yield_condition`.
 
 - Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as ordinary `if` selectors, suspending only the short-circuit path that is required and preserving selected-branch laziness; compound switch conditions and broader generator graphs remain deferred. Test: `generator_lazy_if_logical_condition`.
