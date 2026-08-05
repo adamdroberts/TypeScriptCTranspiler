@@ -52898,7 +52898,7 @@ class Emitter {
     private isSupportedLazyObjectLiteralMethod(method: ts.MethodDeclaration): boolean {
         if (!this.staticPropertyName(method.name)) return false;
         if (!this.nodeContainsYield(method)) return true;
-        return !!method.asteriskToken && this.isSimpleSequentialGenerator(method);
+        return !!method.asteriskToken && !this.isAsyncDeclaration(method);
     }
 
     private isValidLazyGeneratorStatement(stmt: ts.Statement, loopDepth = 0): boolean {

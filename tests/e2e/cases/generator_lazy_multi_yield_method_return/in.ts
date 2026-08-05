@@ -37,6 +37,14 @@ function* dynamicGeneratorMethodObject(): Generator<any, any, any> {
             yield "generator-method-yield";
             return "generator-method-done";
         },
+        *recovered(): Generator<string, string, any> {
+            try {
+                throw "generator-method-control-flow-error";
+            } catch (_error) {
+                yield "generator-method-control-flow-yield";
+            }
+            return "generator-method-control-flow-done";
+        },
         final: yield "dynamic-generator-method-final",
     };
 }
@@ -77,7 +85,10 @@ const generatorMethodResult: any = generatorMethodDone.value;
 const nestedMethodIterator: any = generatorMethodResult.nested();
 const nestedMethodFirst: any = nestedMethodIterator.next();
 const nestedMethodDone: any = nestedMethodIterator.next("unused");
-console.log("generator-method", generatorMethodFirst.done, generatorMethodFirst.value, generatorMethodSecond.done, generatorMethodSecond.value, generatorMethodDone.done, nestedMethodFirst.done, nestedMethodFirst.value, nestedMethodDone.done, nestedMethodDone.value);
+const recoveredMethodIterator: any = generatorMethodResult.recovered();
+const recoveredMethodFirst: any = recoveredMethodIterator.next();
+const recoveredMethodDone: any = recoveredMethodIterator.next("unused");
+console.log("generator-method", generatorMethodFirst.done, generatorMethodFirst.value, generatorMethodSecond.done, generatorMethodSecond.value, generatorMethodDone.done, nestedMethodFirst.done, nestedMethodFirst.value, nestedMethodDone.done, nestedMethodDone.value, recoveredMethodFirst.done, recoveredMethodFirst.value, recoveredMethodDone.done, recoveredMethodDone.value);
 
 const typedIterator = typedObject();
 const typedFirst: any = typedIterator.next();

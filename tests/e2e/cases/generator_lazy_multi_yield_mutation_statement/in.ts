@@ -215,6 +215,14 @@ function* generatorMethodRhsAssignmentBetweenYields(): Generator<string, string,
             yield "generator-method-rhs-yield";
             return "generator-method-rhs-done";
         },
+        *recovered(): Generator<string, string, any> {
+            try {
+                throw "generator-method-rhs-control-flow-error";
+            } catch (_error) {
+                yield "generator-method-rhs-control-flow-yield";
+            }
+            return "generator-method-rhs-control-flow-done";
+        },
         after: yield "generator-method-rhs-after",
     };
     return "generator-method-rhs-outer-done";
@@ -310,7 +318,10 @@ const generatorMethodRhsAssignmentDone: any = generatorMethodRhsAssignment.next(
 const nestedGeneratorMethodIterator: any = generatorMethodRhsBox.value.nested();
 const nestedGeneratorMethodFirst: any = nestedGeneratorMethodIterator.next();
 const nestedGeneratorMethodDone: any = nestedGeneratorMethodIterator.next("unused");
-console.log("assignment-generator-method-rhs", generatorMethodRhsAssignmentFirst.done, generatorMethodRhsAssignmentFirst.value, generatorMethodRhsAssignmentSecond.done, generatorMethodRhsAssignmentSecond.value, generatorMethodRhsAssignmentThird.done, generatorMethodRhsAssignmentThird.value, generatorMethodRhsAssignmentFourth.done, generatorMethodRhsAssignmentFourth.value, generatorMethodRhsAssignmentDone.done, generatorMethodRhsAssignmentDone.value, nestedGeneratorMethodFirst.done, nestedGeneratorMethodFirst.value, nestedGeneratorMethodDone.done, nestedGeneratorMethodDone.value);
+const recoveredGeneratorMethodIterator: any = generatorMethodRhsBox.value.recovered();
+const recoveredGeneratorMethodFirst: any = recoveredGeneratorMethodIterator.next();
+const recoveredGeneratorMethodDone: any = recoveredGeneratorMethodIterator.next("unused");
+console.log("assignment-generator-method-rhs", generatorMethodRhsAssignmentFirst.done, generatorMethodRhsAssignmentFirst.value, generatorMethodRhsAssignmentSecond.done, generatorMethodRhsAssignmentSecond.value, generatorMethodRhsAssignmentThird.done, generatorMethodRhsAssignmentThird.value, generatorMethodRhsAssignmentFourth.done, generatorMethodRhsAssignmentFourth.value, generatorMethodRhsAssignmentDone.done, generatorMethodRhsAssignmentDone.value, nestedGeneratorMethodFirst.done, nestedGeneratorMethodFirst.value, nestedGeneratorMethodDone.done, nestedGeneratorMethodDone.value, recoveredGeneratorMethodFirst.done, recoveredGeneratorMethodFirst.value, recoveredGeneratorMethodDone.done, recoveredGeneratorMethodDone.value);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();
