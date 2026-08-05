@@ -54496,6 +54496,11 @@ class Emitter {
                 yields.push(...conditionalYields);
                 continue;
             }
+            const logicalYields = this.simpleLazyMultiYieldOptionalCallLogicalYields(value);
+            if (logicalYields) {
+                yields.push(...logicalYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -54528,6 +54533,19 @@ class Emitter {
             this.nodeContainsYield(unwrapped.whenTrue) ||
             this.nodeContainsYield(unwrapped.whenFalse)) return null;
         return [condition];
+    }
+
+    private simpleLazyMultiYieldOptionalCallLogicalYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isBinaryExpression(unwrapped) ||
+            (unwrapped.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken &&
+                unwrapped.operatorToken.kind !== ts.SyntaxKind.BarBarToken &&
+                unwrapped.operatorToken.kind !== ts.SyntaxKind.QuestionQuestionToken)) return null;
+        const left = this.directLazyYieldCondition(unwrapped.left);
+        if (!left ||
+            this.nodeContainsYield(unwrapped.right) ||
+            !this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.right))) return null;
+        return [left];
     }
 
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
