@@ -52918,8 +52918,9 @@ class Emitter {
         if (ts.isIfStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedCondition &&
-                (!logicalCondition || logicalCondition.yields.length === 0)) return false;
+                (!logicalCondition || logicalCondition.yields.length === 0) && !conditionalSelector) return false;
             if (!this.isValidLazyGeneratorStatement(stmt.thenStatement, loopDepth)) return false;
             return !stmt.elseStatement || this.isValidLazyGeneratorStatement(stmt.elseStatement, loopDepth);
         }
@@ -53541,6 +53542,18 @@ class Emitter {
         return unwrapped;
     }
 
+    private simpleLazyGeneratorConditionalSelector(expr: ts.Expression): ts.ConditionalExpression | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isConditionalExpression(unwrapped)) return null;
+        const directCondition = this.directLazyYieldCondition(unwrapped.condition);
+        const logicalCondition = directCondition
+            ? null
+            : this.simpleLazyMultiYieldLogicalPlan(unwrapped.condition);
+        if (!directCondition && (!logicalCondition || logicalCondition.yields.length === 0)) return null;
+        if (this.nodeContainsYield(unwrapped.whenTrue) || this.nodeContainsYield(unwrapped.whenFalse)) return null;
+        return unwrapped;
+    }
+
     private lazyGeneratorSwitchHasYieldedCase(stmt: ts.SwitchStatement): boolean {
         return stmt.caseBlock.clauses.some((clause) =>
             ts.isCaseClause(clause) && (
@@ -53755,6 +53768,43 @@ class Emitter {
         for (const resumeBlock of resumeBlocks) resumeBlock();
         buf.line(`${mergeLabel}:;`);
         return logicalOperand(plan);
+    }
+
+    private emitLazyGeneratorConditionalSelector(
+        buf: CBuf,
+        expression: ts.Expression,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
+    ): EmitResult | null {
+        const conditional = this.simpleLazyGeneratorConditionalSelector(expression);
+        if (!conditional) return null;
+        const directCondition = this.directLazyYieldCondition(conditional.condition);
+        const selector = directCondition
+            ? this.emitLazyGeneratorDirectYieldValue(
+                buf,
+                conditional.condition,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            )
+            : this.emitLazyGeneratorLogicalPlan(
+                buf,
+                conditional.condition,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+        if (!selector) return null;
+        return this.emitSimpleLazyResumeConditional(
+            conditional,
+            selector,
+            this.emitExpr(conditional.whenTrue),
+            this.emitExpr(conditional.whenFalse),
+        );
     }
 
     private simpleLazyMultiYieldReturn(stmt: ts.Statement): LazyMultiYieldTerminalInfo | null {
@@ -54265,6 +54315,14 @@ class Emitter {
 
     private lazyGeneratorLogicalConditionYields(node: ts.Node): ts.YieldExpression[] {
         const yields = new Set<ts.YieldExpression>();
+        const collectCondition = (condition: ts.Expression): void => {
+            const plan = this.simpleLazyMultiYieldLogicalPlan(condition);
+            if (plan) {
+                for (const yieldExpr of plan.yields) yields.add(yieldExpr);
+            }
+            const unwrapped = this.unwrapTransparentExpression(condition);
+            if (ts.isConditionalExpression(unwrapped)) collectCondition(unwrapped.condition);
+        };
         const visit = (current: ts.Node): void => {
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
             const conditions: ts.Expression[] = [];
@@ -54279,10 +54337,7 @@ class Emitter {
                 }
             }
             for (const condition of conditions) {
-                const plan = this.simpleLazyMultiYieldLogicalPlan(condition);
-                if (plan) {
-                    for (const yieldExpr of plan.yields) yields.add(yieldExpr);
-                }
+                collectCondition(condition);
             }
             ts.forEachChild(current, visit);
         };
@@ -55267,9 +55322,21 @@ class Emitter {
                     elemType,
                     envLocalName,
                 );
+            const conditionalSelector = directCondition || logicalCondition
+                ? null
+                : this.emitLazyGeneratorConditionalSelector(
+                    buf,
+                    stmt.expression,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
             const condC = yieldedCondC ?? (logicalCondition
                 ? this.truthyExprFromEmitResult(logicalCondition, stmt.expression)
-                : this.truthyExprFromEmitResult(this.emitExpr(stmt.expression), stmt.expression));
+                : conditionalSelector
+                    ? this.truthyExprFromEmitResult(conditionalSelector, stmt.expression)
+                    : this.truthyExprFromEmitResult(this.emitExpr(stmt.expression), stmt.expression));
             buf.open(`if (${condC})`);
             this.emitLazyGeneratorStmt(buf, stmt.thenStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             if (stmt.elseStatement) {

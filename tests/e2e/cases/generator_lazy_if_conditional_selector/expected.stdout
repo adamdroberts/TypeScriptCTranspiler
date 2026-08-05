@@ -1,0 +1,6 @@
+direct-false false direct-condition true direct-else
+direct-true false direct-condition true direct-then
+logical-false false logical-left true logical-else
+logical-true false logical-left false logical-right true logical-then
+arms-false false arm-condition true arm-else else-arm
+arms-true false arm-condition true arm-then then-arm
