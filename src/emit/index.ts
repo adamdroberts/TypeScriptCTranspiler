@@ -53030,12 +53030,16 @@ class Emitter {
         if (ts.isForInStatement(stmt)) {
             if (!ts.isVariableDeclarationList(stmt.initializer) || stmt.initializer.declarations.length !== 1) return false;
             const decl = stmt.initializer.declarations[0]!;
-            if (!ts.isIdentifier(decl.name) || this.nodeContainsYield(stmt.expression)) return false;
-            const sourceType = this.prepareType(mapTsType(
-                stmt.expression,
-                this.checker.getTypeAtLocation(stmt.expression),
-                this.checker,
-            ));
+            if (!ts.isIdentifier(decl.name)) return false;
+            const yieldedSource = this.directLazyYieldCondition(stmt.expression);
+            if (this.nodeContainsYield(stmt.expression) && !yieldedSource) return false;
+            const sourceType = yieldedSource
+                ? T_VALUE
+                : this.prepareType(mapTsType(
+                    stmt.expression,
+                    this.checker.getTypeAtLocation(stmt.expression),
+                    this.checker,
+                ));
             if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value" && sourceType.kind !== "class") return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -55378,7 +55382,22 @@ class Emitter {
             unsupported(stmt, "lazy generator for-in metadata is unavailable");
         }
         const decl = stmt.initializer.declarations[0]!;
-        const source = this.emitExpr(stmt.expression);
+        const yieldedSource = this.directLazyYieldCondition(stmt.expression);
+        let source: EmitResult;
+        if (yieldedSource) {
+            const resumed = this.emitLazyGeneratorDirectYieldValue(
+                buf,
+                stmt.expression,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            if (!resumed) unsupported(stmt.expression, "lazy generator yielded for-in source could not suspend");
+            source = resumed;
+        } else {
+            source = this.emitExpr(stmt.expression);
+        }
         const keys = source.ty.kind === "class"
             ? (() => {
                 const fields = this.classOwnPropertyNames(stmt.expression, source);
@@ -57629,11 +57648,13 @@ class Emitter {
 
             const collectForInInfos = (node: ts.Node) => {
                 if (ts.isForInStatement(node)) {
-                    const sourceType = this.prepareType(mapTsType(
-                        node.expression,
-                        this.checker.getTypeAtLocation(node.expression),
-                        this.checker,
-                    ));
+                    const sourceType = this.directLazyYieldCondition(node.expression)
+                        ? T_VALUE
+                        : this.prepareType(mapTsType(
+                            node.expression,
+                            this.checker.getTypeAtLocation(node.expression),
+                            this.checker,
+                        ));
                     if (sourceType.kind !== "array" && sourceType.kind !== "string" && sourceType.kind !== "buffer" && sourceType.kind !== "value" && sourceType.kind !== "class") {
                         unsupported(node.expression, "lazy generator for-in currently supports arrays, strings, Buffers, typed classes, and dynamic values");
                     }

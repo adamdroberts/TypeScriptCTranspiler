@@ -3506,6 +3506,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_multi_yield_mutation_statement` | lazy generators stage direct yielded receivers and computed keys across multiple mutation-statement suspensions |
 | `generator_lazy_for` | lazy generators resume across simple counted for-loop suspension points |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |
+| `generator_lazy_for_in_yield_source` | lazy generators suspend on a direct yielded dynamic `for...in` source before enumerating the resumed value |
 | `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived class/interface field overrides; regular `for_in` covers the same multi-level inherited-field resolver, override path, and inherited interface path |
 | `generator_lazy_continue` | lazy generators support unlabeled continue inside while, do-while, and counted for loops |
 | `generator_lazy_do_while` | lazy generators resume across simple do-while loop suspension points |
