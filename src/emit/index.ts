@@ -53670,7 +53670,7 @@ class Emitter {
             ts.forEachChild(node, collectYields);
         };
         collectYields(expression);
-        if (yields.length !== plan.yields.length || plan.yields.some((yieldExpr) => !yields.includes(yieldExpr))) {
+        if (plan.yields.some((yieldExpr) => !yields.includes(yieldExpr))) {
             return null;
         }
         return plan;
@@ -53854,7 +53854,7 @@ class Emitter {
             if (!visit(expression)) return null;
             return {
                 expression,
-                yields: conditionalBranch.yields,
+                yields,
                 conditionalBranch,
             };
         }
@@ -55620,6 +55620,15 @@ class Emitter {
             const plan = info.conditionalBranch;
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
             const yieldSlots = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
+            const plannedYields = new Set(plan.yields);
+            const surroundingYields = info.yields.filter((yieldExpr) => !plannedYields.has(yieldExpr));
+            const rootStart = plan.expression.getStart();
+            const rootEnd = plan.expression.getEnd();
+            const prefixYields = surroundingYields.filter((yieldExpr) => yieldExpr.getEnd() <= rootStart);
+            const suffixYields = surroundingYields.filter((yieldExpr) => yieldExpr.getStart() >= rootEnd);
+            if (prefixYields.length + suffixYields.length !== surroundingYields.length) {
+                unsupported(plan.expression, "lazy multi-yield conditional contains an unsupported surrounding yield order");
+            }
             const entryBlocks: Array<() => void> = [];
             const resumeBlocks: Array<() => void> = [];
             const emitYield = (yieldExpr: ts.YieldExpression, state: number): void => {
@@ -55703,10 +55712,49 @@ class Emitter {
                     buf.line(`goto ${falseLabel};`);
                 });
             };
-            schedulePlan(plan);
+            const rootLabel = this.freshTemp("_lazy_multi_yield_root");
+            schedulePlan(plan, rootLabel);
+            if (prefixYields.length > 0) {
+                const states = prefixYields.map(() => nextStateId());
+                emitYield(prefixYields[0]!, states[0]!);
+                for (let index = 0; index < prefixYields.length; index++) {
+                    resumeBlocks.push(() => {
+                        buf.line(`case ${states[index]}:;`);
+                        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                        buf.line(`${envLocalName}->multi_yield_values[${slotForYield(prefixYields[index]!)}] = next_arg;`);
+                        if (index + 1 < prefixYields.length) {
+                            emitYield(prefixYields[index + 1]!, states[index + 1]!);
+                        } else {
+                            buf.line(`goto ${rootLabel};`);
+                        }
+                    });
+                }
+            } else {
+                buf.line(`goto ${rootLabel};`);
+            }
+            const suffixStates = suffixYields.map(() => nextStateId());
+            const finalLabel = suffixYields.length > 0
+                ? this.freshTemp("_lazy_multi_yield_final")
+                : mergeLabel;
+            for (let index = 0; index < suffixYields.length; index++) {
+                resumeBlocks.push(() => {
+                    buf.line(`case ${suffixStates[index]}:;`);
+                    this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                    buf.line(`${envLocalName}->multi_yield_values[${slotForYield(suffixYields[index]!)}] = next_arg;`);
+                    if (index + 1 < suffixYields.length) {
+                        emitYield(suffixYields[index + 1]!, suffixStates[index + 1]!);
+                    } else {
+                        buf.line(`goto ${finalLabel};`);
+                    }
+                });
+            }
             for (const entryBlock of entryBlocks) entryBlock();
             for (const resumeBlock of resumeBlocks) resumeBlock();
             buf.line(`${mergeLabel}:;`);
+            if (suffixYields.length > 0) {
+                emitYield(suffixYields[0]!, suffixStates[0]!);
+                buf.line(`${finalLabel}:;`);
+            }
             for (const [yieldExpr, slot] of yieldSlots) {
                 resumeSources.set(yieldExpr, `${envLocalName}->multi_yield_values[${slot}]`);
             }

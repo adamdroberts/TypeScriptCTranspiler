@@ -1,0 +1,3 @@
+typed-true false typed-before false typed-condition false typed-true false typed-after true 10 20 3 30
+typed-false false typed-before false typed-condition false typed-false false typed-after true 11 21 3 31
+dynamic-array false array-before false array-condition false array-true false array-after true B|T|A
