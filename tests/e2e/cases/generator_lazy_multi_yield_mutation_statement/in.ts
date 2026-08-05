@@ -54,6 +54,8 @@ Object.defineProperty(stableComputedMemberBox, "outer", {
 });
 const callMemberChild: any = { value: 60 };
 const callMemberBox: any = [callMemberChild];
+const callChainChild: any = { value: 80 };
+const callChainBox: any = [callChainChild];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -73,6 +75,11 @@ function* stableComputedMemberBetweenYields(): Generator<string, string, any> {
 function* callMemberBetweenYields(): Generator<string, string, any> {
     (yield "call-member-receiver").pop()[(yield "call-member-key")]++;
     return "call-member-done";
+}
+
+function* callChainBetweenYields(): Generator<string, string, any> {
+    (yield "call-chain-receiver").splice(0, 1).pop()[(yield "call-chain-key")]++;
+    return "call-chain-done";
 }
 
 const assignment = assignmentMutation();
@@ -133,3 +140,9 @@ const callMemberFirst: any = callMember.next();
 const callMemberSecond: any = callMember.next(callMemberBox);
 const callMemberDone: any = callMember.next("value");
 console.log("call-member", callMemberFirst.done, callMemberFirst.value, callMemberSecond.done, callMemberSecond.value, callMemberDone.done, callMemberDone.value, callMemberBox.length, callMemberChild.value);
+
+const callChain = callChainBetweenYields();
+const callChainFirst: any = callChain.next();
+const callChainSecond: any = callChain.next(callChainBox);
+const callChainDone: any = callChain.next("value");
+console.log("call-chain", callChainFirst.done, callChainFirst.value, callChainSecond.done, callChainSecond.value, callChainDone.done, callChainDone.value, callChainBox.length, callChainChild.value);

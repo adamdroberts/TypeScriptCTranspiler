@@ -15,3 +15,4 @@ member-middle getter false value
 member-done getter 31 true 31
 computed-member false true false outer false value true 41 getter 41
 call-member false true false value true 71 0 71
+call-chain false true false value true 91 0 91

@@ -19,6 +19,8 @@ Object.defineProperty(computedMemberBox, "outer", {
 });
 const callMemberChild: any = { value: 70 };
 const callMemberBox: any = [callMemberChild];
+const callChainChild: any = { value: 90 };
+const callChainBox: any = [callChainChild];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -50,6 +52,10 @@ function* intermediateComputedMemberReturn(): Generator<any, number, any> {
 
 function* intermediateCallMemberReturn(): Generator<any, number, any> {
     return ++(yield callMemberBox).pop()[(yield "value")];
+}
+
+function* intermediateCallChainReturn(): Generator<any, number, any> {
+    return ++(yield callChainBox).splice(0, 1).pop()[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -107,3 +113,9 @@ const intermediateCallMemberFirst: any = intermediateCallMemberIterator.next();
 const intermediateCallMemberSecond: any = intermediateCallMemberIterator.next(callMemberBox);
 const intermediateCallMemberDone: any = intermediateCallMemberIterator.next("value");
 console.log("call-member", intermediateCallMemberFirst.done, intermediateCallMemberFirst.value === callMemberBox, intermediateCallMemberSecond.done, intermediateCallMemberSecond.value, intermediateCallMemberDone.done, intermediateCallMemberDone.value, callMemberBox.length, callMemberChild.value);
+
+const intermediateCallChainIterator = intermediateCallChainReturn();
+const intermediateCallChainFirst: any = intermediateCallChainIterator.next();
+const intermediateCallChainSecond: any = intermediateCallChainIterator.next(callChainBox);
+const intermediateCallChainDone: any = intermediateCallChainIterator.next("value");
+console.log("call-chain", intermediateCallChainFirst.done, intermediateCallChainFirst.value === callChainBox, intermediateCallChainSecond.done, intermediateCallChainSecond.value, intermediateCallChainDone.done, intermediateCallChainDone.value, callChainBox.length, callChainChild.value);
