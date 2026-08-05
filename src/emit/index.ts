@@ -54404,6 +54404,13 @@ class Emitter {
                 !ts.isSpreadElement(argument) &&
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
         }
+        if (ts.isNewExpression(expr)) {
+            if (this.nodeContainsYield(expr) ||
+                !ts.isIdentifier(this.unwrapTransparentExpression(expr.expression))) return false;
+            return (expr.arguments ?? []).every((argument) =>
+                !ts.isSpreadElement(argument) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
+        }
         if (ts.isArrayLiteralExpression(expr)) {
             return expr.elements.every((element) => {
                 if (ts.isSpreadElement(element)) {

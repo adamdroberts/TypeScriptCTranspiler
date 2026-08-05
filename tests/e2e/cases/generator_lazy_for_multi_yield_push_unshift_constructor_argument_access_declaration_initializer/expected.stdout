@@ -1,0 +1,12 @@
+push-first 1 false push-receiver 0
+push-second 1 false push-item 0
+push-third 1 false push-spread 0
+push-fourth 5 true false push-key 1
+push-fifth 5 true false push-body-undefined 1
+push-done 5 true true push-done 1
+unshift-first 1 false unshift-receiver 1
+unshift-second 1 false unshift-item 1
+unshift-third 1 false unshift-spread 1
+unshift-fourth 5 true false unshift-key 2
+unshift-fifth 5 true false unshift-body-undefined 2
+unshift-done 5 true true unshift-done 2
