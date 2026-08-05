@@ -55613,15 +55613,21 @@ class Emitter {
         const memberStages: ts.PropertyAccessExpression[] = [];
         let current: ts.Expression = receiver;
         while (ts.isPropertyAccessExpression(current)) {
-            if (current.questionDotToken) return null;
             memberStages.push(current);
             current = this.unwrapTransparentExpression(current.expression);
         }
+        const orderedMembers = memberStages.slice().reverse();
+        let optionalChainStarted = false;
+        for (const member of orderedMembers) {
+            if (optionalChainStarted && !member.questionDotToken) return null;
+            if (member.questionDotToken) optionalChainStarted = true;
+        }
+        if (optionalChainStarted && !optionalFinal) return null;
         const base = this.directLazyYieldCondition(current);
         if (!base) return null;
         return {
             yields: key ? [base, key] : [base],
-            stagedExpressions: memberStages.reverse().map((member) => ({ expression: member, afterYield: base })),
+            stagedExpressions: orderedMembers.map((member) => ({ expression: member, afterYield: base })),
         };
     }
 
