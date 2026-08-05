@@ -59032,8 +59032,16 @@ class Emitter {
             const yieldSlots = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
             const entryBlocks: Array<() => void> = [];
             const resumeBlocks: Array<() => void> = [];
+            const conditionalPlans = new Map(
+                plans.flatMap((plan) => plan.conditionalOperands ?? [])
+                    .map((conditional) => [conditional.expression, conditional] as const),
+            );
             const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
                 "yields" in operand;
+            const conditionalPlanFor = (operand: LazyMultiYieldLogicalOperand): LazyMultiYieldConditionalBranch | undefined =>
+                !isLogicalPlan(operand) && ts.isConditionalExpression(operand)
+                    ? conditionalPlans.get(operand)
+                    : undefined;
             const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
                 !isLogicalPlan(operand) && ts.isYieldExpression(operand);
             const slotForYield = (yieldExpr: ts.YieldExpression): number => {
@@ -59067,9 +59075,18 @@ class Emitter {
                 };
             };
 
+            const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+            this.lazyGeneratorMultiYieldResumeValues = new Map(
+                plans.flatMap((plan) => plan.yields).map((yieldExpr) => [yieldExpr, resumedYield(yieldExpr)]),
+            );
+
             const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) {
                     return this.truthyExprFromEmitResult(resumedYield(operand), operand);
+                }
+                const conditionalPlan = conditionalPlanFor(operand);
+                if (conditionalPlan) {
+                    return this.truthyExprFromEmitResult(this.emitExpr(conditionalPlan.expression), conditionalPlan.expression);
                 }
                 if (!isLogicalPlan(operand)) {
                     return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
@@ -59088,6 +59105,10 @@ class Emitter {
             const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) {
                     return this.nullishExprFromEmitResult(resumedYield(operand), operand);
+                }
+                const conditionalPlan = conditionalPlanFor(operand);
+                if (conditionalPlan) {
+                    return this.nullishExprFromEmitResult(this.emitExpr(conditionalPlan.expression), conditionalPlan.expression);
                 }
                 if (!isLogicalPlan(operand)) {
                     return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
@@ -59129,6 +59150,11 @@ class Emitter {
                     schedulePlan(operand, operandEntryLabel, continuationLabel);
                     return;
                 }
+                const conditionalPlan = conditionalPlanFor(operand);
+                if (conditionalPlan) {
+                    scheduleConditionalPlan(conditionalPlan, operandEntryLabel, continuationLabel);
+                    return;
+                }
                 if (!isYieldOperand(operand)) {
                     entryBlocks.push(() => {
                         buf.line(`${operandEntryLabel}:;`);
@@ -59148,6 +59174,43 @@ class Emitter {
                     buf.line(`goto ${continuationLabel};`);
                 });
             };
+            let scheduleConditionalPlan: (
+                current: LazyMultiYieldConditionalBranch,
+                entryLabel: string,
+                continuationLabel: string,
+            ) => void;
+            const scheduleConditionalEvents = (
+                events: readonly LazyMultiYieldConditionalArmEvent[],
+                continuationLabel: string,
+            ): string => {
+                const labels = events.map(() => this.freshTemp("_lazy_multi_yield_logical_conditional_event"));
+                for (let index = 0; index < events.length; index++) {
+                    const event = events[index]!;
+                    const eventContinuation = index + 1 < events.length
+                        ? labels[index + 1]!
+                        : continuationLabel;
+                    if (event.kind === "conditional") {
+                        scheduleConditionalPlan(event.conditionalBranch, labels[index]!, eventContinuation);
+                        continue;
+                    }
+                    if (event.kind === "logical") {
+                        schedulePlan(event.logicalPlan, labels[index]!, eventContinuation);
+                        continue;
+                    }
+                    const state = nextStateId();
+                    entryBlocks.push(() => {
+                        buf.line(`${labels[index]}:;`);
+                        emitYield(event.expression, state);
+                    });
+                    resumeBlocks.push(() => {
+                        buf.line(`case ${state}:;`);
+                        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                        buf.line(`${envLocalName}->multi_yield_values[${slotForYield(event.expression)}] = next_arg;`);
+                        buf.line(`goto ${eventContinuation};`);
+                    });
+                }
+                return labels[0] ?? continuationLabel;
+            };
             schedulePlan = (
                 current: LazyMultiYieldLogicalPlan,
                 currentEntryLabel: string,
@@ -59162,6 +59225,47 @@ class Emitter {
                     buf.open(`if (${rightRequiredFor(current.expression, current.left)})`);
                     buf.line(`goto ${rightEntryLabel};`);
                     buf.close();
+                    buf.line(`goto ${continuationLabel};`);
+                });
+            };
+            scheduleConditionalPlan = (
+                current: LazyMultiYieldConditionalBranch,
+                entryLabel: string,
+                continuationLabel: string,
+            ): void => {
+                const completeLabel = this.freshTemp("_lazy_multi_yield_logical_conditional_complete");
+                const trueLabel = scheduleConditionalEvents(current.whenTrue.events, completeLabel);
+                const falseLabel = scheduleConditionalEvents(current.whenFalse.events, completeLabel);
+                const decisionLabel = this.freshTemp("_lazy_multi_yield_logical_conditional_decide");
+                if (isLogicalPlan(current.condition)) {
+                    schedulePlan(current.condition, entryLabel, decisionLabel);
+                } else {
+                    const yieldedCondition = current.condition;
+                    if (!isYieldOperand(yieldedCondition)) {
+                        unsupported(current.expression, "lazy multi-yield logical conditional operands require a direct-yield or logical selector");
+                        return;
+                    }
+                    const state = nextStateId();
+                    entryBlocks.push(() => {
+                        buf.line(`${entryLabel}:;`);
+                        emitYield(yieldedCondition, state);
+                    });
+                    resumeBlocks.push(() => {
+                        buf.line(`case ${state}:;`);
+                        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                        buf.line(`${envLocalName}->multi_yield_values[${slotForYield(yieldedCondition)}] = next_arg;`);
+                        buf.line(`goto ${decisionLabel};`);
+                    });
+                }
+                resumeBlocks.push(() => {
+                    buf.line(`${decisionLabel}:;`);
+                    buf.open(`if (${truthyOperand(current.condition)})`);
+                    buf.line(`goto ${trueLabel};`);
+                    buf.close();
+                    buf.line(`goto ${falseLabel};`);
+                });
+                resumeBlocks.push(() => {
+                    buf.line(`${completeLabel}:;`);
                     buf.line(`goto ${continuationLabel};`);
                 });
             };
@@ -59201,6 +59305,7 @@ class Emitter {
             for (const yieldExpr of info.yields) {
                 resumeSources.set(yieldExpr, `${envLocalName}->multi_yield_values[${slotForYield(yieldExpr)}]`);
             }
+            this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
         } else if (info.conditionalBranches && info.conditionalBranches.length > 0) {
             const plans = info.conditionalBranches;
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");

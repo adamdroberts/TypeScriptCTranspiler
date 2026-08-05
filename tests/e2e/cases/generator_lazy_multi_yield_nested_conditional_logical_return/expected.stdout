@@ -1,0 +1,12 @@
+and-skipped-first false and-left
+and-skipped-done true false
+and-selected-first false and-left
+and-selected-second false and-selector
+and-selected-arm false and-true
+and-selected-done true and-arm-result
+or-skipped-first false or-left
+or-skipped-done true true
+or-selected-first false or-left
+or-selected-second false or-selector
+or-selected-arm false or-false
+or-selected-done true or-arm-result
