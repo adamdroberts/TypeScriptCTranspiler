@@ -54467,9 +54467,9 @@ class Emitter {
         return true;
     }
 
-    private simpleLazyMultiYieldOptionalCallNestedYields(expr: ts.Expression): ts.YieldExpression[] | null {
+    private simpleLazyMultiYieldNestedCallYields(expr: ts.Expression): ts.YieldExpression[] | null {
         const unwrapped = this.unwrapTransparentExpression(expr);
-        if (!ts.isCallExpression(unwrapped) || !unwrapped.questionDotToken) return null;
+        if (!ts.isCallExpression(unwrapped)) return null;
         const callee = this.unwrapTransparentExpression(unwrapped.expression);
         const directCalleeYield = this.directLazyYieldCondition(callee);
         if (!directCalleeYield && (!ts.isIdentifier(callee) || !this.isDirectCallableIdentifier(callee))) return null;
@@ -54488,7 +54488,7 @@ class Emitter {
                 yields.push(value);
                 continue;
             }
-            const nestedOptionalCallYields = this.simpleLazyMultiYieldOptionalCallNestedYields(value);
+            const nestedOptionalCallYields = this.simpleLazyMultiYieldNestedCallYields(value);
             if (nestedOptionalCallYields) {
                 yields.push(...nestedOptionalCallYields);
                 continue;
@@ -55971,7 +55971,7 @@ class Emitter {
                             afterYield = argumentYield;
                             continue;
                         }
-                        const nestedCallYields = this.simpleLazyMultiYieldOptionalCallNestedYields(expression);
+                        const nestedCallYields = this.simpleLazyMultiYieldNestedCallYields(expression);
                         if (nestedCallYields) {
                             argumentYields.push(...nestedCallYields);
                             afterYield = nestedCallYields[nestedCallYields.length - 1]!;
@@ -56007,7 +56007,7 @@ class Emitter {
                             afterYield = argumentYield;
                             continue;
                         }
-                        const nestedCallYields = this.simpleLazyMultiYieldOptionalCallNestedYields(expression);
+                        const nestedCallYields = this.simpleLazyMultiYieldNestedCallYields(expression);
                         if (nestedCallYields) {
                             argumentYields.push(...nestedCallYields);
                             afterYield = nestedCallYields[nestedCallYields.length - 1]!;
