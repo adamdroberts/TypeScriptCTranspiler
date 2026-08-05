@@ -120,7 +120,7 @@ interface LazyCompoundResumeSlot {
 
 interface LazyMultiYieldConditionalBranch {
     expression: ts.ConditionalExpression;
-    condition: ts.YieldExpression;
+    condition: LazyMultiYieldLogicalOperand;
     whenTrue: LazyMultiYieldConditionalArm;
     whenFalse: LazyMultiYieldConditionalArm;
     yields: ts.YieldExpression[];
@@ -53707,7 +53707,7 @@ class Emitter {
         };
 
         const buildPlan = (node: ts.ConditionalExpression): LazyMultiYieldConditionalBranch | null => {
-            const condition = this.directLazyYieldCondition(node.condition);
+            const condition = this.directLazyYieldCondition(node.condition) ?? this.simpleLazyMultiYieldLogicalPlan(node.condition);
             if (!condition) return null;
             const buildArm = (branch: ts.Expression): LazyMultiYieldConditionalArm | null => {
                 const nestedRoots = findConditionalRoots(branch);
@@ -53784,7 +53784,13 @@ class Emitter {
                 condition,
                 whenTrue,
                 whenFalse,
-                yields: [condition, ...whenTrue.yields, ...whenFalse.yields],
+                yields: [
+                    ...( "yields" in condition
+                        ? condition.yields
+                        : [condition]),
+                    ...whenTrue.yields,
+                    ...whenFalse.yields,
+                ],
             };
         };
 
@@ -53849,6 +53855,7 @@ class Emitter {
         const conditionalLogicalPlanRoots = new Set<ts.BinaryExpression>();
         const registerConditionalPlan = (plan: LazyMultiYieldConditionalBranch): void => {
             conditionalPlans.set(plan.expression, plan);
+            if ("yields" in plan.condition) conditionalLogicalPlanRoots.add(plan.condition.expression);
             for (const arm of [plan.whenTrue, plan.whenFalse]) {
                 for (const event of arm.events) {
                     if (event.kind === "conditional") registerConditionalPlan(event.conditionalBranch);
@@ -53858,6 +53865,8 @@ class Emitter {
         };
         for (const conditionalBranch of conditionalBranches ?? []) registerConditionalPlan(conditionalBranch);
         let visit: (node: ts.Expression) => boolean;
+        const visitLogicalOperand = (operand: LazyMultiYieldLogicalOperand): boolean =>
+            "yields" in operand ? visit(operand.expression) : visit(operand);
         const visitConditionalArm = (arm: LazyMultiYieldConditionalArm): boolean =>
             visit(arm.expression);
         visit = (node: ts.Expression): boolean => {
@@ -53896,7 +53905,7 @@ class Emitter {
             if (ts.isConditionalExpression(unwrapped)) {
                 const plan = conditionalPlans.get(unwrapped);
                 if (plan) {
-                    return visit(plan.condition) &&
+                    return visitLogicalOperand(plan.condition) &&
                         visitConditionalArm(plan.whenTrue) &&
                         visitConditionalArm(plan.whenFalse);
                 }
@@ -56162,28 +56171,43 @@ class Emitter {
                 entryLabel: string,
                 continuationLabel: string,
             ): void => {
-                const conditionState = nextStateId();
                 const trueLabel = scheduleEvents(current.whenTrue.events, continuationLabel);
                 const falseLabel = scheduleEvents(current.whenFalse.events, continuationLabel);
-                const emitConditionEntry = (): void => {
-                    buf.line(`${entryLabel}:;`);
-                    emitYield(current.condition, conditionState);
-                };
-                entryBlocks.push(emitConditionEntry);
-                const conditionType = this.prepareType(mapTsType(
-                    current.condition,
-                    this.checker.getTypeAtLocation(current.condition),
-                    this.checker,
-                ));
-                const resumedCondition = {
-                    c: this.coerce({ c: "next_arg", ty: T_VALUE }, conditionType, current.condition),
-                    ty: conditionType,
-                };
-                const conditionC = this.truthyExprFromEmitResult(resumedCondition, current.condition);
+                const conditionDecisionLabel = this.freshTemp("_lazy_multi_yield_condition_decide");
+                let conditionC: string;
+                if (isLogicalPlan(current.condition)) {
+                    scheduleLogicalPlan(current.condition, entryLabel, conditionDecisionLabel);
+                    conditionC = truthyOperand(current.condition);
+                } else {
+                    if (!isYieldOperand(current.condition)) {
+                        unsupported(current.expression, "lazy multi-yield conditional selectors require a direct yield or logical plan");
+                        return;
+                    }
+                    const yieldedCondition = current.condition;
+                    const conditionState = nextStateId();
+                    entryBlocks.push(() => {
+                        buf.line(`${entryLabel}:;`);
+                        emitYield(yieldedCondition, conditionState);
+                    });
+                    const conditionType = this.prepareType(mapTsType(
+                        yieldedCondition,
+                        this.checker.getTypeAtLocation(yieldedCondition),
+                        this.checker,
+                    ));
+                    const resumedCondition = {
+                        c: this.coerce({ c: "next_arg", ty: T_VALUE }, conditionType, yieldedCondition),
+                        ty: conditionType,
+                    };
+                    conditionC = this.truthyExprFromEmitResult(resumedCondition, yieldedCondition);
+                    resumeBlocks.push(() => {
+                        buf.line(`case ${conditionState}:;`);
+                        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                        buf.line(`${envLocalName}->multi_yield_values[${slotForYield(yieldedCondition)}] = next_arg;`);
+                        buf.line(`goto ${conditionDecisionLabel};`);
+                    });
+                }
                 resumeBlocks.push(() => {
-                    buf.line(`case ${conditionState}:;`);
-                    this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-                    buf.line(`${envLocalName}->multi_yield_values[${slotForYield(current.condition)}] = next_arg;`);
+                    buf.line(`${conditionDecisionLabel}:;`);
                     buf.open(`if (${conditionC})`);
                     buf.line(`goto ${trueLabel};`);
                     buf.close();
