@@ -11,7 +11,7 @@ function* assignmentWithYieldedRight(): Generator<string, string, any> {
 }
 
 function* nestedMutation(): Generator<string, string, any> {
-    (yield "nested-receiver").child[yield "nested-key"]++;
+    (yield "nested-receiver")[(yield "nested-outer-key")][(yield "nested-inner-key")]++;
     return "nested-done";
 }
 
@@ -41,8 +41,9 @@ console.log("assignment-rhs", rhsFirst.done, rhsFirst.value, rhsSecond.done, rhs
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();
 const nestedSecond: any = nested.next(box);
+const nestedThird: any = nested.next("child");
 const nestedDone: any = nested.next("value");
-console.log("nested", nestedFirst.done, nestedFirst.value, nestedSecond.done, nestedSecond.value, nestedDone.done, nestedDone.value, box.child.value);
+console.log("nested", nestedFirst.done, nestedFirst.value, nestedSecond.done, nestedSecond.value, nestedThird.done, nestedThird.value, nestedDone.done, nestedDone.value, box.child.value);
 
 box.value = 10;
 const postfix = postfixMutation();

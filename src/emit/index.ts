@@ -54409,14 +54409,11 @@ class Emitter {
         if (this.directLazyYieldCondition(receiver)) {
             return visit(receiver);
         }
-        if (ts.isPropertyAccessExpression(receiver)) {
-            return this.simpleLazyMultiYieldMutationReceiver(receiver.expression, visit);
-        }
         if (!ts.isElementAccessExpression(receiver) ||
             !this.simpleLazyMultiYieldMutationReceiver(receiver.expression, visit)) return false;
         const key = this.unwrapTransparentExpression(receiver.argumentExpression);
         if (ts.isYieldExpression(key)) return visit(receiver.argumentExpression);
-        return !this.nodeContainsYield(receiver.argumentExpression);
+        return this.isSimpleLazyStableLvaluePart(key);
     }
 
     private simpleLazyMultiYieldMutationOperand(
@@ -89593,6 +89590,16 @@ class Emitter {
         }
         if (recv.ty.kind === "value") {
             const idx = precomputedArgument ?? this.emitExpr(ea.argumentExpression);
+            const yieldedIndex = this.unwrapTransparentExpression(ea.argumentExpression);
+            if (idx.ty.kind === "value" &&
+                ts.isYieldExpression(yieldedIndex) &&
+                this.lazyGeneratorMultiYieldResumeValues?.has(yieldedIndex)) {
+                const key = this.coerce(idx, T_STRING, ea.argumentExpression);
+                return {
+                    c: `tsc_value_get_prop(${recv.c}, ${key})`,
+                    ty: T_VALUE,
+                };
+            }
             if (isOpt) {
                 let accessKind: "index" | "prop" | "symbol";
                 if (idx.ty.kind === "number") {
