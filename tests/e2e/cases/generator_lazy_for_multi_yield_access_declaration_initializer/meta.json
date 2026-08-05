@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators suspend direct yielded element-access receivers and computed keys in counted-for declaration initializers"
+}

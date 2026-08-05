@@ -55478,6 +55478,20 @@ class Emitter {
             : null;
     }
 
+    private simpleLazyMultiYieldAccessInitializer(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isElementAccessExpression(unwrapped) ||
+            unwrapped.questionDotToken ||
+            !unwrapped.argumentExpression) return null;
+        const receiver = this.unwrapTransparentExpression(unwrapped.expression);
+        const key = this.unwrapTransparentExpression(unwrapped.argumentExpression);
+        if (!ts.isYieldExpression(receiver) || !ts.isYieldExpression(key) ||
+            receiver.asteriskToken || key.asteriskToken ||
+            (receiver.expression && this.nodeContainsYield(receiver.expression)) ||
+            (key.expression && this.nodeContainsYield(key.expression))) return null;
+        return [receiver, key];
+    }
+
     private simpleLazyMultiYieldVariableInitializer(
         declaration: ts.VariableDeclaration,
     ): {
@@ -55507,6 +55521,8 @@ class Emitter {
                 return { expression: declaration.initializer, yields, stagedExpressions: [] };
             }
         }
+        const accessYields = this.simpleLazyMultiYieldAccessInitializer(declaration.initializer);
+        if (accessYields) return { expression: declaration.initializer, yields: accessYields, stagedExpressions: [] };
         const templateYields = this.simpleLazyMultiYieldTemplateInitializer(declaration.initializer);
         if (templateYields) return { expression: declaration.initializer, yields: templateYields, stagedExpressions: [] };
         const literalInfo = this.simpleLazyMultiYieldLiteralInitializer(declaration.initializer);
