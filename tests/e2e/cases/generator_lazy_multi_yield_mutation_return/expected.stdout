@@ -10,3 +10,6 @@ keyed-prefix-done 13 true 13
 keyed-delete-before true false true
 keyed-delete-middle true false present
 keyed-delete-done true true true
+member-before 30 false true
+member-middle getter false value
+member-done getter 31 true 31

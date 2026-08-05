@@ -149,6 +149,7 @@ interface LazyMultiYieldLogicalPlan {
 interface LazyMultiYieldTerminalInfo {
     expression: ts.Expression;
     yields: ts.YieldExpression[];
+    stagedExpressions?: LazyMultiYieldMutationStage[];
     conditionalBranches?: LazyMultiYieldConditionalBranch[];
     logicalPlan?: LazyMultiYieldLogicalPlan;
     logicalPlans?: LazyMultiYieldLogicalPlan[];
@@ -54085,6 +54086,7 @@ class Emitter {
                 : undefined;
         if (!expression) return null;
         const yields: ts.YieldExpression[] = [];
+        const stagedExpressions: LazyMultiYieldMutationStage[] = [];
         const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(expression);
         if (logicalPlan && logicalPlan.yields.length >= 2) {
             return {
@@ -54141,11 +54143,11 @@ class Emitter {
             }
             if (ts.isPostfixUnaryExpression(unwrapped)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                return this.simpleLazyMultiYieldMutationOperand(unwrapped.operand, visit);
+                return this.simpleLazyMultiYieldMutationOperandWithStages(unwrapped.operand, visit, stagedExpressions);
             }
             if (ts.isDeleteExpression(unwrapped)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                return this.simpleLazyMultiYieldMutationOperand(unwrapped.expression, visit);
+                return this.simpleLazyMultiYieldMutationOperandWithStages(unwrapped.expression, visit, stagedExpressions);
             }
             if (ts.isConditionalExpression(unwrapped)) {
                 const plan = conditionalPlans.get(unwrapped);
@@ -54227,7 +54229,7 @@ class Emitter {
             if (ts.isPrefixUnaryExpression(unwrapped) &&
                 (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                return this.simpleLazyMultiYieldMutationOperand(unwrapped.operand, visit);
+                return this.simpleLazyMultiYieldMutationOperandWithStages(unwrapped.operand, visit, stagedExpressions);
             }
             if (ts.isTypeOfExpression(unwrapped)) return visit(unwrapped.expression);
             if (ts.isVoidExpression(unwrapped)) return visit(unwrapped.expression);
@@ -54239,7 +54241,7 @@ class Emitter {
             const op = unwrapped.operatorToken.kind;
             if (this.isAssignmentOperatorKind(op)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                return this.simpleLazyMultiYieldAssignmentLvalue(unwrapped.left, visit) &&
+                return this.simpleLazyMultiYieldAssignmentLvalueWithStages(unwrapped.left, visit, stagedExpressions) &&
                     !!this.directLazyYieldCondition(unwrapped.right) &&
                     visit(unwrapped.right);
             }
@@ -54274,6 +54276,7 @@ class Emitter {
         };
         if (conditionalBranches) {
             if (!visit(expression)) return null;
+            if (stagedExpressions.length > 0) return null;
             if (logicalPlans.length > 0) return null;
             return {
                 expression,
@@ -54282,9 +54285,10 @@ class Emitter {
             };
         }
         if (!visit(expression) || yields.length < 2) return null;
+        if (logicalPlans.length > 0 && stagedExpressions.length > 0) return null;
         return logicalPlans.length > 0
             ? { expression, yields, logicalPlans }
-            : { expression, yields };
+            : { expression, yields, stagedExpressions };
     }
 
     private isSimpleLazyMultiYieldLiteral(expr: ts.Expression): boolean {
@@ -54326,7 +54330,7 @@ class Emitter {
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
             const info = this.simpleLazyMultiYieldReturn(current as ts.Statement) ??
                 this.simpleLazyMultiYieldThrow(current as ts.Statement);
-            if (info) max = Math.max(max, info.yields.length);
+            if (info) max = Math.max(max, info.yields.length + (info.stagedExpressions?.length ?? 0));
             ts.forEachChild(current, visit);
         };
         visit(node);
@@ -56468,6 +56472,44 @@ class Emitter {
         terminal: "return" | "throw" = "return",
     ): void {
         const resumeSources = new Map<ts.YieldExpression, string>();
+        const stagedExpressions = info.stagedExpressions ?? [];
+        const stageSlots = new Map(stagedExpressions.map((stage, index) => [
+            stage.expression,
+            info.yields.length + index,
+        ]));
+        const stagesAfterYield = new Map<ts.YieldExpression, LazyMultiYieldMutationStage[]>();
+        for (const stage of stagedExpressions) {
+            const stages = stagesAfterYield.get(stage.afterYield) ?? [];
+            stages.push(stage);
+            stagesAfterYield.set(stage.afterYield, stages);
+        }
+        const stagedResumeValues = new Map<ts.YieldExpression, EmitResult>();
+        const stagedValueResults = new Map<ts.Expression, EmitResult>();
+        const recordResumeSource = (yieldExpr: ts.YieldExpression, source: string): void => {
+            resumeSources.set(yieldExpr, source);
+            const type = this.prepareType(mapTsType(
+                yieldExpr,
+                this.checker.getTypeAtLocation(yieldExpr),
+                this.checker,
+            ));
+            stagedResumeValues.set(yieldExpr, {
+                c: this.coerce({ c: source, ty: T_VALUE }, type, yieldExpr),
+                ty: type,
+            });
+        };
+        const emitStagesAfterYield = (yieldExpr: ts.YieldExpression): void => {
+            for (const stage of stagesAfterYield.get(yieldExpr) ?? []) {
+                const slot = stageSlots.get(stage.expression);
+                if (slot === undefined) unsupported(stage.expression, "lazy multi-yield terminal contains an unknown staged member");
+                const value = this.emitExpr(stage.expression);
+                const stored = this.coerce(value, T_VALUE, stage.expression);
+                buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${stored};`);
+                stagedValueResults.set(stage.expression, {
+                    c: `${envLocalName}->multi_yield_values[${slot}]`,
+                    ty: T_VALUE,
+                });
+            }
+        };
         if (info.logicalPlan || (info.logicalPlans && info.logicalPlans.length > 0)) {
             const plans: LazyMultiYieldLogicalPlan[] = info.logicalPlan
                 ? [info.logicalPlan]
@@ -56916,30 +56958,41 @@ class Emitter {
                 resumeSources.set(yieldExpr, `${envLocalName}->multi_yield_values[${slot}]`);
             }
         } else {
-            const states = info.yields.map(() => nextStateId());
-            for (let i = 0; i < info.yields.length; i++) {
-                if (i > 0) {
-                    buf.line(`case ${states[i - 1]}:;`);
-                    this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-                    buf.line(`${envLocalName}->multi_yield_values[${i - 1}] = next_arg;`);
-                    resumeSources.set(info.yields[i - 1]!, `${envLocalName}->multi_yield_values[${i - 1}]`);
+            const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+            const previousStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
+            this.lazyGeneratorMultiYieldResumeValues = stagedResumeValues;
+            this.lazyGeneratorMultiYieldMutationStageValues = stagedValueResults;
+            try {
+                const states = info.yields.map(() => nextStateId());
+                for (let i = 0; i < info.yields.length; i++) {
+                    if (i > 0) {
+                        buf.line(`case ${states[i - 1]}:;`);
+                        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                        const resumedYield = info.yields[i - 1]!;
+                        const source = `${envLocalName}->multi_yield_values[${i - 1}]`;
+                        buf.line(`${source} = next_arg;`);
+                        recordResumeSource(resumedYield, source);
+                        emitStagesAfterYield(resumedYield);
+                    }
+                    const yieldExpr = info.yields[i]!;
+                    const value = yieldExpr.expression ? this.emitExpr(yieldExpr.expression) : { c: "NULL", ty: T_VOID };
+                    const valueNode = yieldExpr.expression ?? yieldExpr;
+                    const yielded = this.freshTemp("_yield");
+                    buf.line(`${elemType.c} ${yielded} = ${this.coerce(value, elemType, valueNode)};`);
+                    buf.line(`tsc_array_push_raw(a, &${yielded});`);
+                    buf.line(`*state = ${states[i]};`);
+                    buf.line("*done = false;");
+                    buf.line("return;");
                 }
-                const yieldExpr = info.yields[i]!;
-                const value = yieldExpr.expression ? this.emitExpr(yieldExpr.expression) : { c: "NULL", ty: T_VOID };
-                const valueNode = yieldExpr.expression ?? yieldExpr;
-                const yielded = this.freshTemp("_yield");
-                buf.line(`${elemType.c} ${yielded} = ${this.coerce(value, elemType, valueNode)};`);
-                buf.line(`tsc_array_push_raw(a, &${yielded});`);
-                buf.line(`*state = ${states[i]};`);
-                buf.line("*done = false;");
-                buf.line("return;");
+                buf.line(`case ${states[states.length - 1]}:;`);
+                this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                const finalYield = info.yields[info.yields.length - 1]!;
+                recordResumeSource(finalYield, "next_arg");
+                emitStagesAfterYield(finalYield);
+            } finally {
+                this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
+                this.lazyGeneratorMultiYieldMutationStageValues = previousStageValues;
             }
-            buf.line(`case ${states[states.length - 1]}:;`);
-            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-            resumeSources.set(
-                info.yields[info.yields.length - 1]!,
-                "next_arg",
-            );
         }
         const yieldByNode = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
         const resumeValues = new Map<ts.YieldExpression, EmitResult>();
@@ -56955,6 +57008,9 @@ class Emitter {
         }
         const build = (node: ts.Expression): EmitResult => {
             const unwrapped = this.unwrapTransparentExpression(node);
+            const stagedValue = this.lazyGeneratorMultiYieldMutationStageValues?.get(node) ??
+                this.lazyGeneratorMultiYieldMutationStageValues?.get(unwrapped);
+            if (stagedValue) return stagedValue;
             if (ts.isYieldExpression(unwrapped)) {
                 if (!yieldByNode.has(unwrapped)) unsupported(node, "lazy multi-yield return contains an unknown yield");
                 const type = this.prepareType(mapTsType(unwrapped, this.checker.getTypeAtLocation(unwrapped), this.checker));
@@ -57071,12 +57127,15 @@ class Emitter {
             return this.emitSimpleLazyResumeBinary(unwrapped, build(unwrapped.left), build(unwrapped.right));
         };
         const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+        const previousStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
         this.lazyGeneratorMultiYieldResumeValues = resumeValues;
+        this.lazyGeneratorMultiYieldMutationStageValues = stagedValueResults;
         let result: EmitResult;
         try {
             result = build(info.expression);
         } finally {
             this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
+            this.lazyGeneratorMultiYieldMutationStageValues = previousStageValues;
         }
         if (terminal === "throw") {
             buf.line("*state = -1;");
