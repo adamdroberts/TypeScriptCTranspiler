@@ -52996,12 +52996,16 @@ class Emitter {
             if (stmt.awaitModifier || !ts.isVariableDeclarationList(stmt.initializer)) return false;
             if (stmt.initializer.declarations.length !== 1) return false;
             const decl = stmt.initializer.declarations[0]!;
-            if (!ts.isIdentifier(decl.name) || this.nodeContainsYield(stmt.expression)) return false;
-            const sourceType = this.prepareType(mapTsType(
-                stmt.expression,
-                this.checker.getTypeAtLocation(stmt.expression),
-                this.checker,
-            ));
+            if (!ts.isIdentifier(decl.name)) return false;
+            const yieldedSource = this.directLazyYieldCondition(stmt.expression);
+            if (this.nodeContainsYield(stmt.expression) && !yieldedSource) return false;
+            const sourceType = yieldedSource
+                ? T_VALUE
+                : this.prepareType(mapTsType(
+                    stmt.expression,
+                    this.checker.getTypeAtLocation(stmt.expression),
+                    this.checker,
+                ));
             const elemType = sourceType.kind === "array"
                 ? sourceType.elem
                 : sourceType.kind === "string"
@@ -55294,7 +55298,22 @@ class Emitter {
             unsupported(stmt, "lazy generator for-of metadata is unavailable");
         }
         const decl = stmt.initializer.declarations[0]!;
-        const source = this.emitExpr(stmt.expression);
+        const yieldedSource = this.directLazyYieldCondition(stmt.expression);
+        let source: EmitResult;
+        if (yieldedSource) {
+            const resumed = this.emitLazyGeneratorDirectYieldValue(
+                buf,
+                stmt.expression,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            if (!resumed) unsupported(stmt.expression, "lazy generator yielded for-of source could not suspend");
+            source = resumed;
+        } else {
+            source = this.emitExpr(stmt.expression);
+        }
         let sourceElemType = info.elemType;
         let sourceArray = source.ty.kind === "string"
             ? `tsc_str_chars(${source.c})`
@@ -55306,6 +55325,8 @@ class Emitter {
                     ? `tsc_url_search_params_entries(${source.c})`
                 : source.ty.kind === "buffer"
                     ? `({ tsc_buffer_t* const _lazy_for_of_buffer = ${source.c}; tsc_array_t* _lazy_for_of_values = tsc_array_new(sizeof(double), _lazy_for_of_buffer->len ? _lazy_for_of_buffer->len : 1); for (size_t _lazy_for_of_i = 0; _lazy_for_of_i < _lazy_for_of_buffer->len; _lazy_for_of_i++) { double _lazy_for_of_byte = (double)_lazy_for_of_buffer->data[_lazy_for_of_i]; tsc_array_push_raw(_lazy_for_of_values, &_lazy_for_of_byte); } _lazy_for_of_values; })`
+                : source.ty.kind === "value"
+                    ? `tsc_value_iter_values(${source.c})`
                 : source.c;
         if (source.ty.kind === "class") {
             const custom = this.emitCustomIterableArray(stmt.expression, source) ??
@@ -57566,11 +57587,13 @@ class Emitter {
 
             const collectForOfInfos = (node: ts.Node) => {
                 if (ts.isForOfStatement(node)) {
-                    const sourceType = this.prepareType(mapTsType(
-                        node.expression,
-                        this.checker.getTypeAtLocation(node.expression),
-                        this.checker,
-                    ));
+                    const sourceType = this.directLazyYieldCondition(node.expression)
+                        ? T_VALUE
+                        : this.prepareType(mapTsType(
+                            node.expression,
+                            this.checker.getTypeAtLocation(node.expression),
+                            this.checker,
+                        ));
                     const elemType = sourceType.kind === "array"
                         ? sourceType.elem
                         : sourceType.kind === "string"
