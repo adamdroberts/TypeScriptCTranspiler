@@ -55664,13 +55664,24 @@ class Emitter {
                     const base = this.directLazyYieldCondition(callee.expression);
                     if (!base || current.arguments.length === 0) return null;
                     const argumentYields: ts.YieldExpression[] = [];
+                    let afterYield = base;
                     for (const argument of current.arguments) {
-                        const expression = ts.isSpreadElement(argument) ? argument.expression : argument;
+                        if (ts.isSpreadElement(argument)) {
+                            const spreadSource = this.directLazyYieldCondition(argument.expression);
+                            if (!spreadSource) return null;
+                            argumentYields.push(spreadSource);
+                            afterYield = spreadSource;
+                            continue;
+                        }
+                        const expression = this.unwrapTransparentExpression(argument);
                         const argumentYield = this.directLazyYieldCondition(expression);
-                        if (!argumentYield) return null;
-                        argumentYields.push(argumentYield);
+                        if (argumentYield) {
+                            argumentYields.push(argumentYield);
+                            afterYield = argumentYield;
+                            continue;
+                        }
+                        if (!this.isSimpleLazyMultiYieldLiteral(expression)) return null;
                     }
-                    const afterYield = argumentYields[argumentYields.length - 1]!;
                     return {
                         yields: key ? [base, ...argumentYields, key] : [base, ...argumentYields],
                         stagedExpressions: callStages.reverse().map((call) => ({
