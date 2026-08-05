@@ -54385,6 +54385,11 @@ class Emitter {
         if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
         }
+        if (ts.isConditionalExpression(expr)) {
+            return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.condition)) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.whenTrue)) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.whenFalse));
+        }
         if (ts.isBinaryExpression(expr)) return this.isSimpleLazyMultiYieldCallBinaryArgument(expr);
         if (!ts.isPrefixUnaryExpression(expr)) return false;
         if (expr.operator !== ts.SyntaxKind.PlusToken &&
