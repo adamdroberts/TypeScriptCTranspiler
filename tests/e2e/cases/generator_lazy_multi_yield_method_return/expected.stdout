@@ -1,2 +1,3 @@
 dynamic false dynamic-first false dynamic-final true dynamic-method:done
+accessor false dynamic-accessor-first false dynamic-accessor-final true  true true function function dynamic-accessor get,set:value
 typed false 2 false 5 true 3 7 true

@@ -136,6 +136,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generator multi-yield dynamic and named typed object returns now emit static-key, yield-free methods at final resume through the existing closure subset; methods with suspension or unsupported closure shapes, yielded spreads, and computed method keys remain deferred. Test: `generator_lazy_multi_yield_method_return`.
 
+- Lazy generator multi-yield dynamic object returns now emit static-key, yield-free getters and setters at final resume, preserving accessor descriptor creation and post-resume getter/setter behavior; yielded accessor bodies, typed accessor fields, and broader expression graphs remain deferred. Test: `generator_lazy_multi_yield_method_return`.
+
 - Lazy generator multi-yield dynamic object returns now evaluate yield-free computed property keys during final construction before assigning their values; typed object computed fields, yielded key expressions, and broader expression graphs remain deferred. Test: `generator_lazy_multi_yield_computed_key_return`.
 
 - Lazy generator returns now stage finite ordered direct `yield` arguments alongside yield-free arguments for calls and constructors, deferring the side-effecting call or `new` expression until the final resume; spread arguments, yielded callee expressions, and nested yielded operands remain deferred. Test: `generator_lazy_multi_yield_call_return`.
