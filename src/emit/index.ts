@@ -55562,6 +55562,17 @@ class Emitter {
                 )) return null;
                 callStages.push(current);
                 if (callee.name.text === "concat") {
+                    if (current.arguments.length === 0) {
+                        const base = this.directLazyYieldCondition(callee.expression);
+                        if (!base) return null;
+                        return {
+                            yields: key ? [base, key] : [base],
+                            stagedExpressions: callStages.reverse().map((call) => ({
+                                expression: call,
+                                afterYield: base,
+                            })),
+                        };
+                    }
                     if (current.arguments.length !== 1 || !ts.isSpreadElement(current.arguments[0]!)) return null;
                     const base = this.directLazyYieldCondition(callee.expression);
                     const spreadSource = this.directLazyYieldCondition(current.arguments[0]!.expression);
