@@ -55602,7 +55602,19 @@ class Emitter {
                     const yields = [base, argument];
                     if (current.arguments.length === 3) {
                         const spread = current.arguments[2]!;
-                        if (!ts.isSpreadElement(spread)) return null;
+                        if (!ts.isSpreadElement(spread)) {
+                            const inserted = this.directLazyYieldCondition(spread);
+                            if (!inserted) return null;
+                            yields.push(inserted);
+                            afterYield = inserted;
+                            return {
+                                yields: key ? [...yields, key] : yields,
+                                stagedExpressions: callStages.reverse().map((call) => ({
+                                    expression: call,
+                                    afterYield,
+                                })),
+                            };
+                        }
                         const spreadSource = this.directLazyYieldCondition(spread.expression);
                         if (!spreadSource) return null;
                         yields.push(spreadSource);
