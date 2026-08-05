@@ -54461,9 +54461,16 @@ class Emitter {
                 afterYield = directBaseYield && visit(base) ? directBaseYield : null;
             }
             if (!afterYield) return null;
-            if (receiver.arguments.some((argument) =>
-                ts.isSpreadElement(argument) || this.nodeContainsYield(argument)
-            )) return null;
+            for (const argument of receiver.arguments) {
+                if (ts.isSpreadElement(argument)) return null;
+                const unwrappedArgument = this.unwrapTransparentExpression(argument as ts.Expression);
+                if (ts.isYieldExpression(unwrappedArgument)) {
+                    if (!visit(argument as ts.Expression)) return null;
+                    afterYield = unwrappedArgument;
+                } else if (this.nodeContainsYield(argument)) {
+                    return null;
+                }
+            }
             stages.push({ expression: receiver, afterYield });
             return afterYield;
         }

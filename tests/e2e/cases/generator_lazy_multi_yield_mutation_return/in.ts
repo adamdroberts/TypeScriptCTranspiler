@@ -21,6 +21,8 @@ const callMemberChild: any = { value: 70 };
 const callMemberBox: any = [callMemberChild];
 const callChainChild: any = { value: 90 };
 const callChainBox: any = [callChainChild];
+const callArgumentChild: any = { value: 110 };
+const callArgumentBox: any = [callArgumentChild];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -56,6 +58,10 @@ function* intermediateCallMemberReturn(): Generator<any, number, any> {
 
 function* intermediateCallChainReturn(): Generator<any, number, any> {
     return ++(yield callChainBox).splice(0, 1).pop()[(yield "value")];
+}
+
+function* intermediateCallArgumentReturn(): Generator<any, number, any> {
+    return ++(yield callArgumentBox).splice(0, (yield "count")).pop()[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -119,3 +125,10 @@ const intermediateCallChainFirst: any = intermediateCallChainIterator.next();
 const intermediateCallChainSecond: any = intermediateCallChainIterator.next(callChainBox);
 const intermediateCallChainDone: any = intermediateCallChainIterator.next("value");
 console.log("call-chain", intermediateCallChainFirst.done, intermediateCallChainFirst.value === callChainBox, intermediateCallChainSecond.done, intermediateCallChainSecond.value, intermediateCallChainDone.done, intermediateCallChainDone.value, callChainBox.length, callChainChild.value);
+
+const intermediateCallArgumentIterator = intermediateCallArgumentReturn();
+const intermediateCallArgumentFirst: any = intermediateCallArgumentIterator.next();
+const intermediateCallArgumentSecond: any = intermediateCallArgumentIterator.next(callArgumentBox);
+const intermediateCallArgumentThird: any = intermediateCallArgumentIterator.next(1);
+const intermediateCallArgumentDone: any = intermediateCallArgumentIterator.next("value");
+console.log("call-argument", intermediateCallArgumentFirst.done, intermediateCallArgumentFirst.value === callArgumentBox, intermediateCallArgumentSecond.done, intermediateCallArgumentSecond.value, intermediateCallArgumentThird.done, intermediateCallArgumentThird.value, intermediateCallArgumentDone.done, intermediateCallArgumentDone.value, callArgumentBox.length, callArgumentChild.value);

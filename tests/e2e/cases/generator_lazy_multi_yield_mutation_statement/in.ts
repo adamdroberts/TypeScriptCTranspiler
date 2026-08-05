@@ -56,6 +56,8 @@ const callMemberChild: any = { value: 60 };
 const callMemberBox: any = [callMemberChild];
 const callChainChild: any = { value: 80 };
 const callChainBox: any = [callChainChild];
+const callArgumentChild: any = { value: 100 };
+const callArgumentBox: any = [callArgumentChild];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -80,6 +82,11 @@ function* callMemberBetweenYields(): Generator<string, string, any> {
 function* callChainBetweenYields(): Generator<string, string, any> {
     (yield "call-chain-receiver").splice(0, 1).pop()[(yield "call-chain-key")]++;
     return "call-chain-done";
+}
+
+function* callArgumentBetweenYields(): Generator<string, string, any> {
+    (yield "call-argument-receiver").splice(0, (yield "call-argument-count")).pop()[(yield "call-argument-key")]++;
+    return "call-argument-done";
 }
 
 const assignment = assignmentMutation();
@@ -146,3 +153,10 @@ const callChainFirst: any = callChain.next();
 const callChainSecond: any = callChain.next(callChainBox);
 const callChainDone: any = callChain.next("value");
 console.log("call-chain", callChainFirst.done, callChainFirst.value, callChainSecond.done, callChainSecond.value, callChainDone.done, callChainDone.value, callChainBox.length, callChainChild.value);
+
+const callArgument = callArgumentBetweenYields();
+const callArgumentFirst: any = callArgument.next();
+const callArgumentSecond: any = callArgument.next(callArgumentBox);
+const callArgumentThird: any = callArgument.next(1);
+const callArgumentDone: any = callArgument.next("value");
+console.log("call-argument", callArgumentFirst.done, callArgumentFirst.value, callArgumentSecond.done, callArgumentSecond.value, callArgumentThird.done, callArgumentThird.value, callArgumentDone.done, callArgumentDone.value, callArgumentBox.length, callArgumentChild.value);
