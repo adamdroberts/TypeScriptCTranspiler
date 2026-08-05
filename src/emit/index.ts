@@ -55618,6 +55618,19 @@ class Emitter {
                         })),
                     };
                 }
+                if (callee.name.text === "fill") {
+                    if (current.arguments.length !== 1) return null;
+                    const base = this.directLazyYieldCondition(callee.expression);
+                    const value = this.directLazyYieldCondition(current.arguments[0]!);
+                    if (!base || !value) return null;
+                    return {
+                        yields: key ? [base, value, key] : [base, value],
+                        stagedExpressions: callStages.reverse().map((call) => ({
+                            expression: call,
+                            afterYield: value,
+                        })),
+                    };
+                }
                 if (callee.name.text === "slice") {
                     if (current.arguments.length !== 0) return null;
                     const base = this.directLazyYieldCondition(callee.expression);
