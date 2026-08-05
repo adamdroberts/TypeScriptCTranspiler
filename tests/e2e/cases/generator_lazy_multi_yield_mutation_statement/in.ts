@@ -60,6 +60,7 @@ const callArgumentChild: any = { value: 100 };
 const callArgumentBox: any = [callArgumentChild];
 const nestedRhsBox: any = { value: 1 };
 const unaryRhsBox: any = { value: 1 };
+const literalRhsBox: any = { value: null };
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
@@ -136,6 +137,14 @@ function* unaryRhsAssignmentBetweenYields(): Generator<string, string, any> {
     return "unary-rhs-done";
 }
 
+function* literalRhsAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "literal-rhs-receiver")[yield "literal-rhs-key"] = [
+        yield "literal-rhs-array",
+        { value: yield "literal-rhs-object" },
+    ];
+    return "literal-rhs-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -169,6 +178,14 @@ const unaryRhsAssignmentThird: any = unaryRhsAssignment.next("value");
 const unaryRhsAssignmentFourth: any = unaryRhsAssignment.next(4);
 const unaryRhsAssignmentDone: any = unaryRhsAssignment.next(1);
 console.log("assignment-unary-rhs", unaryRhsAssignmentFirst.done, unaryRhsAssignmentFirst.value, unaryRhsAssignmentSecond.done, unaryRhsAssignmentSecond.value, unaryRhsAssignmentThird.done, unaryRhsAssignmentThird.value, unaryRhsAssignmentFourth.done, unaryRhsAssignmentFourth.value, unaryRhsAssignmentDone.done, unaryRhsAssignmentDone.value, unaryRhsBox.value);
+
+const literalRhsAssignment = literalRhsAssignmentBetweenYields();
+const literalRhsAssignmentFirst: any = literalRhsAssignment.next();
+const literalRhsAssignmentSecond: any = literalRhsAssignment.next(literalRhsBox);
+const literalRhsAssignmentThird: any = literalRhsAssignment.next("value");
+const literalRhsAssignmentFourth: any = literalRhsAssignment.next(4);
+const literalRhsAssignmentDone: any = literalRhsAssignment.next("literal-object");
+console.log("assignment-literal-rhs", literalRhsAssignmentFirst.done, literalRhsAssignmentFirst.value, literalRhsAssignmentSecond.done, literalRhsAssignmentSecond.value, literalRhsAssignmentThird.done, literalRhsAssignmentThird.value, literalRhsAssignmentFourth.done, literalRhsAssignmentFourth.value, literalRhsAssignmentDone.done, literalRhsAssignmentDone.value, literalRhsBox.value.length, literalRhsBox.value[0], literalRhsBox.value[1].value);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();

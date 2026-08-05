@@ -54611,6 +54611,22 @@ class Emitter {
             if (ts.isTypeOfExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
                 return visit(unwrapped.expression);
             }
+            if (ts.isArrayLiteralExpression(unwrapped)) {
+                return unwrapped.elements.every((element) =>
+                    element.kind === ts.SyntaxKind.OmittedExpression ||
+                    !ts.isSpreadElement(element) && visit(element),
+                );
+            }
+            if (ts.isObjectLiteralExpression(unwrapped)) {
+                return unwrapped.properties.every((property) => {
+                    if (ts.isPropertyAssignment(property)) {
+                        if (ts.isComputedPropertyName(property.name) && this.nodeContainsYield(property.name.expression)) return false;
+                        return visit(property.initializer);
+                    }
+                    if (ts.isShorthandPropertyAssignment(property)) return true;
+                    return false;
+                });
+            }
             if (!ts.isBinaryExpression(unwrapped) ||
                 this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
