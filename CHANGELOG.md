@@ -31,6 +31,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now suspend on a direct non-asterisk yielded RHS in a plain `=` counted-`for` incrementor, assign the resumed value through the existing lvalue path, and preserve condition re-entry and terminal return; compound assignments, multiple yields, and broader incrementor graphs remain deferred. Test: `generator_lazy_for_assignment_incrementor_yield`.
 
+- Lazy generators now suspend on a direct non-asterisk yielded RHS in identifier-lvalue arithmetic/bitwise compound counted-`for` incrementors, apply the resumed value before condition re-entry, and preserve terminal return; logical compound operators, member/computed lvalues, multiple yields, and broader incrementor graphs remain deferred. Test: `generator_lazy_for_compound_incrementor_yield`.
+
 - Lazy generators now suspend on direct non-asterisk `yield` expressions in one or more counted-`for` variable initializers, assign resumed values in declaration order before condition evaluation, and preserve condition/body ordering and terminal return; yielded compound initializers and broader loop graphs remain deferred. Tests: `generator_lazy_for_initializer_yield`, `generator_lazy_for_multiple_initializers_yield`.
 
 - Lazy generators now suspend on a direct non-asterisk yielded RHS in a plain `=` counted-`for` expression initializer, assign the resumed value through the existing lvalue path before condition evaluation, and preserve condition/body ordering and terminal return; compound assignments, multiple yields, and broader initializer graphs remain deferred. Test: `generator_lazy_for_assignment_initializer_yield`.

@@ -52997,7 +52997,12 @@ class Emitter {
                 const yieldedAssignmentIncrementor = ts.isBinaryExpression(stmt.incrementor) &&
                     stmt.incrementor.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
                     this.directLazyYieldCondition(stmt.incrementor.right);
-                if (!yieldedIncrementor && !yieldedAssignmentIncrementor) return false;
+                const yieldedCompoundIncrementor = ts.isBinaryExpression(stmt.incrementor) &&
+                    ts.isIdentifier(stmt.incrementor.left) &&
+                    this.isSimpleLazyYieldCompoundAssignment(stmt.incrementor) &&
+                    !this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(stmt.incrementor.operatorToken.kind) &&
+                    this.directLazyYieldCondition(stmt.incrementor.right);
+                if (!yieldedIncrementor && !yieldedAssignmentIncrementor && !yieldedCompoundIncrementor) return false;
             }
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -56136,6 +56141,11 @@ class Emitter {
             if (stmt.incrementor) {
                 buf.line(`${continueLabel}:;`);
                 const yieldedIncrementor = this.directLazyYieldCondition(stmt.incrementor);
+                const yieldedCompoundIncrementor = ts.isBinaryExpression(stmt.incrementor) &&
+                    ts.isIdentifier(stmt.incrementor.left) &&
+                    this.isSimpleLazyYieldCompoundAssignment(stmt.incrementor) &&
+                    !this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(stmt.incrementor.operatorToken.kind) &&
+                    !!this.directLazyYieldCondition(stmt.incrementor.right);
                 if (yieldedIncrementor) {
                     this.emitLazyGeneratorDirectYieldValue(
                         buf,
@@ -56145,6 +56155,19 @@ class Emitter {
                         elemType,
                         envLocalName,
                     );
+                } else if (yieldedCompoundIncrementor) {
+                    const value = this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        stmt.incrementor.right,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                    if (!value) unsupported(stmt.incrementor.right, "lazy generator yielded compound incrementor could not suspend");
+                    const lhs = this.emitLvalue(stmt.incrementor.left);
+                    const lhsType = this.storageType(stmt.incrementor.left);
+                    buf.line(`${this.emitSimpleLazyCompoundAssignment(stmt.incrementor, lhs, lhs, lhsType, value)};`);
                 } else if (
                     ts.isBinaryExpression(stmt.incrementor) &&
                     stmt.incrementor.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
