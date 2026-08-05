@@ -55385,6 +55385,7 @@ class Emitter {
             yieldExpr.asteriskToken ||
             (yieldExpr.expression && this.nodeContainsYield(yieldExpr.expression)))) return null;
         const stagedExpressions: LazyMultiYieldMutationStage[] = [];
+        const spreadYields: ts.YieldExpression[] = [];
         const isStable = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             return this.isSimpleLazyMultiYieldLiteral(unwrapped) ||
@@ -55398,10 +55399,16 @@ class Emitter {
             if (!this.nodeContainsYield(unwrapped)) return isStable(unwrapped);
             if (this.simpleLazyMultiYieldArithmeticExpression(unwrapped, 1)) return true;
             if (ts.isArrayLiteralExpression(unwrapped)) {
-                return unwrapped.elements.every((element) =>
-                    element.kind === ts.SyntaxKind.OmittedExpression ||
-                    !ts.isSpreadElement(element) && visit(element),
-                );
+                return unwrapped.elements.every((element) => {
+                    if (element.kind === ts.SyntaxKind.OmittedExpression) return true;
+                    if (ts.isSpreadElement(element)) {
+                        const spread = this.unwrapTransparentExpression(element.expression);
+                        if (!ts.isYieldExpression(spread)) return false;
+                        spreadYields.push(spread);
+                        return true;
+                    }
+                    return visit(element);
+                });
             }
             if (!ts.isObjectLiteralExpression(unwrapped)) return false;
             return unwrapped.properties.every((property) => {
@@ -55424,10 +55431,19 @@ class Emitter {
                     return visit(property.initializer);
                 }
                 if (ts.isShorthandPropertyAssignment(property)) return isStable(property.name);
+                if (ts.isSpreadAssignment(property)) {
+                    const spread = this.unwrapTransparentExpression(property.expression);
+                    if (!ts.isYieldExpression(spread)) return false;
+                    spreadYields.push(spread);
+                    return true;
+                }
                 return false;
             });
         };
-        return visit(expr)
+        const valid = visit(expr);
+        if (!valid || (spreadYields.length > 0 &&
+            (spreadYields.length !== 1 || spreadYields[0] !== yields[yields.length - 1]))) return null;
+        return valid
             ? {
                 yields,
                 stagedExpressions: stagedExpressions.sort((left, right) =>

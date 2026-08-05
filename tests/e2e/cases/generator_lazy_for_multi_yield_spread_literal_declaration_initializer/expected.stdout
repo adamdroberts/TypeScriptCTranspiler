@@ -1,0 +1,7 @@
+first false array-first
+second false array-spread
+third false object-first
+fourth false object-spread
+fifth false body-3:4:5
+sixth false body-3:5:5
+seventh true done
