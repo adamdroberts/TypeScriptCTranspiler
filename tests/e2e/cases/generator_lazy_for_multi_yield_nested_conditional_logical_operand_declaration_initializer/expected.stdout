@@ -1,0 +1,17 @@
+first false left
+second false body-false
+third true done
+fourth true undefined
+fifth true undefined
+sixth true undefined
+selected-first false left
+selected-second false selector
+selected-third false true-arm
+selected-fourth false body-and-value
+selected-fifth true done
+or-first false or-left
+or-second false or-selector
+or-third false or-false-arm
+or-fourth false or-body-undefined
+or-fifth true or-done
+or-sixth true undefined
