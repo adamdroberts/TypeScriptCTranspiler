@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage nested conditional arguments inside selected dynamic tag-call arms before outer yielded tag calls and nested tagged-template substitutions inside optional push and unshift calls before mutating computed element access"
+}
