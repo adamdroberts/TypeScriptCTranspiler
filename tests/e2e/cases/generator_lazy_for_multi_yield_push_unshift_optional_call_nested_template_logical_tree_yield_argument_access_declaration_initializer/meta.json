@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage nested short-circuit logical template-substitution yield trees inside optional push and unshift calls before mutating computed element access"
+}
