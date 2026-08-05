@@ -1,0 +1,3 @@
+typed-true false typed-outer false typed-inner false typed-true-false-left false typed-true-false-right true 10 20 3
+typed-false false typed-outer false typed-outer-false-left false typed-outer-false-right true 20 30 3
+dynamic-array false array-outer false array-inner false array-true true A|!
