@@ -1,5 +1,6 @@
 let assigned = 0;
 const box: any = { value: 1 };
+const nestedRhsBox: any = { value: 1 };
 
 function* directAssignmentReturn(): Generator<number, number, number> {
     return (assigned = yield 7) + (yield 8);
@@ -11,6 +12,10 @@ function* compoundAssignmentReturn(): Generator<number, number, number> {
 
 function* computedAssignmentReturn(): Generator<any, number, any> {
     return (yield box)[yield "value"] += yield 2;
+}
+
+function* nestedRhsAssignmentReturn(): Generator<any, number, any> {
+    return (yield nestedRhsBox)[yield "value"] = (yield "rhs-left") + (yield "rhs-right");
 }
 
 const directIterator = directAssignmentReturn();
@@ -38,3 +43,15 @@ const computedThird: any = computedIterator.next("value");
 console.log("computed-middle-rhs", box.value, computedThird.done, computedThird.value);
 const computedDone: any = computedIterator.next(3);
 console.log("computed-done", box.value, computedDone.done, computedDone.value);
+
+const nestedRhsIterator = nestedRhsAssignmentReturn();
+const nestedRhsFirst: any = nestedRhsIterator.next();
+console.log("nested-rhs-before", nestedRhsBox.value, nestedRhsFirst.done, nestedRhsFirst.value.value);
+const nestedRhsSecond: any = nestedRhsIterator.next(nestedRhsBox);
+console.log("nested-rhs-key", nestedRhsBox.value, nestedRhsSecond.done, nestedRhsSecond.value);
+const nestedRhsThird: any = nestedRhsIterator.next("value");
+console.log("nested-rhs-left", nestedRhsBox.value, nestedRhsThird.done, nestedRhsThird.value);
+const nestedRhsFourth: any = nestedRhsIterator.next(4);
+console.log("nested-rhs-right", nestedRhsBox.value, nestedRhsFourth.done, nestedRhsFourth.value);
+const nestedRhsDone: any = nestedRhsIterator.next(5);
+console.log("nested-rhs-done", nestedRhsBox.value, nestedRhsDone.done, nestedRhsDone.value);

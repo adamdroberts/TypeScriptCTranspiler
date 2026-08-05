@@ -35,6 +35,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now stage bounded multi-yield mutation expression statements with direct yielded receivers and computed keys before assignment, prefix/postfix update, or `delete` side effects, preserving receiver-then-key ordering and final-resume timing; broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
+- Lazy generators now stage supported non-assignment terminal assignment RHS expression trees containing multiple direct yields after yielded receivers and computed keys, preserving receiver/key/RHS order and final assignment values; nested assignment RHS graphs and broader lvalue/assignment expressions remain deferred. Test: `generator_lazy_multi_yield_assignment_return`.
+
 - Lazy generators now stage a bounded direct-yield assignment RHS after yielded receivers and computed keys in multi-yield mutation expression statements, preserving receiver/key/RHS order; nested RHS yield graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
 - Lazy generators now stage bounded nested yielded receiver/key chains in multi-yield mutation expression statements, including a yielded receiver followed by a yielded computed key and final static member update while preserving yield order; calls, intermediate side-effecting member steps, and broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.

@@ -54241,9 +54241,9 @@ class Emitter {
             const op = unwrapped.operatorToken.kind;
             if (this.isAssignmentOperatorKind(op)) {
                 if (!this.nodeContainsYield(unwrapped)) return true;
-                return this.simpleLazyMultiYieldAssignmentLvalueWithStages(unwrapped.left, visit, stagedExpressions) &&
-                    !!this.directLazyYieldCondition(unwrapped.right) &&
-                    visit(unwrapped.right);
+                const validLeft = this.simpleLazyMultiYieldAssignmentLvalueWithStages(unwrapped.left, visit, stagedExpressions);
+                const validRight = this.simpleLazyMultiYieldAssignmentRhs(unwrapped.right, visit);
+                return validLeft && validRight;
             }
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
                 const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(unwrapped);
@@ -54533,6 +54533,26 @@ class Emitter {
     ): boolean {
         if (!this.nodeContainsYield(left)) return true;
         return this.simpleLazyMultiYieldMutationOperandWithStages(left, visit, stages);
+    }
+
+    private simpleLazyMultiYieldAssignmentRhs(
+        right: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+    ): boolean {
+        const unwrappedRight = this.unwrapTransparentExpression(right);
+        if (!ts.isYieldExpression(unwrappedRight) && !this.nodeContainsYield(right)) return false;
+        let nestedAssignment = false;
+        const scan = (node: ts.Node): void => {
+            if (nestedAssignment) return;
+            if (node !== right && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (ts.isBinaryExpression(node) && this.isAssignmentOperatorKind(node.operatorToken.kind)) {
+                nestedAssignment = true;
+                return;
+            }
+            ts.forEachChild(node, scan);
+        };
+        scan(right);
+        return !nestedAssignment && visit(right);
     }
 
     private simpleLazyMultiYieldMutationOperand(

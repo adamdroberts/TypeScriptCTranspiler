@@ -8,3 +8,8 @@ computed-before 5 false 5
 computed-middle-key 5 false value
 computed-middle-rhs 5 false 2
 computed-done 8 true 8
+nested-rhs-before 1 false 1
+nested-rhs-key 1 false value
+nested-rhs-left 1 false rhs-left
+nested-rhs-right 1 false rhs-right
+nested-rhs-done 9 true 9
