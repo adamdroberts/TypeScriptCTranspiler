@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage ordered zero-argument pop calls on a yielded receiver before computed element access in counted-for declaration initializers"
+}
