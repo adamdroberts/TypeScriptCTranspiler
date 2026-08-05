@@ -54467,6 +54467,25 @@ class Emitter {
         return true;
     }
 
+    private simpleLazyMultiYieldOptionalCallNestedYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isCallExpression(unwrapped) || !unwrapped.questionDotToken) return null;
+        const callee = this.unwrapTransparentExpression(unwrapped.expression);
+        if (!ts.isIdentifier(callee) || !this.isDirectCallableIdentifier(callee)) return null;
+        const yields: ts.YieldExpression[] = [];
+        for (const argument of unwrapped.arguments) {
+            if (ts.isSpreadElement(argument)) return null;
+            const value = this.unwrapTransparentExpression(argument);
+            if (ts.isYieldExpression(value)) {
+                if (value.asteriskToken || (value.expression && this.nodeContainsYield(value.expression))) return null;
+                yields.push(value);
+                continue;
+            }
+            if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
+        }
+        return yields.length > 0 ? yields : null;
+    }
+
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
         if (!ts.isBinaryExpression(expr)) return false;
         if (![ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
@@ -55758,6 +55777,12 @@ class Emitter {
                             afterYield = argumentYield;
                             continue;
                         }
+                        const nestedCallYields = this.simpleLazyMultiYieldOptionalCallNestedYields(expression);
+                        if (nestedCallYields) {
+                            argumentYields.push(...nestedCallYields);
+                            afterYield = nestedCallYields[nestedCallYields.length - 1]!;
+                            continue;
+                        }
                         if (!this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
                     }
                     return {
@@ -55786,6 +55811,12 @@ class Emitter {
                         if (argumentYield) {
                             argumentYields.push(argumentYield);
                             afterYield = argumentYield;
+                            continue;
+                        }
+                        const nestedCallYields = this.simpleLazyMultiYieldOptionalCallNestedYields(expression);
+                        if (nestedCallYields) {
+                            argumentYields.push(...nestedCallYields);
+                            afterYield = nestedCallYields[nestedCallYields.length - 1]!;
                             continue;
                         }
                         if (!this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
