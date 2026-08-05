@@ -55505,18 +55505,32 @@ class Emitter {
                     const startArgument = current.arguments.length > 0
                         ? this.unwrapTransparentExpression(current.arguments[0]!)
                         : null;
-                    if (current.arguments.length !== 2 ||
+                    if ((current.arguments.length !== 2 && current.arguments.length !== 3) ||
                         startArgument === null ||
                         !ts.isNumericLiteral(startArgument) ||
                         startArgument.text !== "0") return null;
                     const base = this.directLazyYieldCondition(callee.expression);
-                    const argument = this.directLazyYieldCondition(current.arguments[1]!);
+                    const argument = current.arguments.length > 1
+                        ? this.directLazyYieldCondition(current.arguments[1]!)
+                        : null;
                     if (!base || !argument) return null;
+                    let afterYield = argument;
+                    const yields = [base, argument];
+                    if (current.arguments.length === 3) {
+                        const spread = current.arguments[2]!;
+                        if (!ts.isSpreadElement(spread)) return null;
+                        const spreadSource = this.directLazyYieldCondition(spread.expression);
+                        if (!spreadSource) return null;
+                        yields.push(spreadSource);
+                        afterYield = spreadSource;
+                    } else if (current.arguments.length !== 2) {
+                        return null;
+                    }
                     return {
-                        yields: [base, argument, key],
+                        yields: [...yields, key],
                         stagedExpressions: callStages.reverse().map((call) => ({
                             expression: call,
-                            afterYield: argument,
+                            afterYield,
                         })),
                     };
                 }
