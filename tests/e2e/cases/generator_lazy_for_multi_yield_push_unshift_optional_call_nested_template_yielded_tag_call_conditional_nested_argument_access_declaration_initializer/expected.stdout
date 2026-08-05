@@ -1,0 +1,19 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-selector
+push-third  push-first false push-nested-selector
+push-fourth  push-first false push-nested-selected
+push-fifth tag-push-nested-selected-value push-first false push-inner
+push-sixth tag-push-nested-selected-value push-first false push-outer
+push-seventh tag-push-nested-selected-value push-first false push-item
+push-eighth tag-push-nested-selected-value push-first,push-tagged-push-push-conditional-nested-inner-push-inner-value-push-outer-value,push-item-value false push-key
+push-ninth tag-push-nested-selected-value push-first,push-tagged-push-push-conditional-nested-inner-push-inner-value-push-outer-value,push-item-value false push-body-undefined
+push-done tag-push-nested-selected-value push-first,push-tagged-push-push-conditional-nested-inner-push-inner-value-push-outer-value,push-item-value true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-selector
+unshift-third  unshift-first false unshift-nested-selector
+unshift-fourth tag-unshift-nested-fallback unshift-first false unshift-inner
+unshift-fifth tag-unshift-nested-fallback unshift-first false unshift-outer
+unshift-sixth tag-unshift-nested-fallback unshift-first false unshift-item
+unshift-seventh tag-unshift-nested-fallback unshift-tagged-unshift-unshift-conditional-nested-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-key
+unshift-eighth tag-unshift-nested-fallback unshift-tagged-unshift-unshift-conditional-nested-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-body-undefined
+unshift-done tag-unshift-nested-fallback unshift-tagged-unshift-unshift-conditional-nested-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first true unshift-done
