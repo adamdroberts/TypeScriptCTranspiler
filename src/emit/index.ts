@@ -54508,6 +54508,11 @@ class Emitter {
                 yields.push(...logicalYields);
                 continue;
             }
+            const constructorYields = this.simpleLazyMultiYieldOptionalCallNestedConstructorYields(value);
+            if (constructorYields) {
+                yields.push(...constructorYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -54553,6 +54558,24 @@ class Emitter {
             this.nodeContainsYield(unwrapped.right) ||
             !this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.right))) return null;
         return [left];
+    }
+
+    private simpleLazyMultiYieldOptionalCallNestedConstructorYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (!ts.isNewExpression(unwrapped) ||
+            !ts.isIdentifier(this.unwrapTransparentExpression(unwrapped.expression))) return null;
+        const yields: ts.YieldExpression[] = [];
+        for (const argument of unwrapped.arguments ?? []) {
+            if (ts.isSpreadElement(argument)) return null;
+            const value = this.unwrapTransparentExpression(argument);
+            const directYield = this.directLazyYieldCondition(value);
+            if (directYield) {
+                yields.push(directYield);
+                continue;
+            }
+            if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
+        }
+        return yields.length > 0 ? yields : null;
     }
 
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {

@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage direct yielded constructor arguments inside statically non-null optional identifier calls in push and unshift before mutating computed element access"
+}
