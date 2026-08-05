@@ -53002,7 +53002,13 @@ class Emitter {
                     this.isSimpleLazyYieldCompoundAssignment(stmt.incrementor) &&
                     !this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(stmt.incrementor.operatorToken.kind) &&
                     this.directLazyYieldCondition(stmt.incrementor.right);
-                if (!yieldedIncrementor && !yieldedAssignmentIncrementor && !yieldedCompoundIncrementor) return false;
+                const yieldedLogicalCompoundIncrementor = ts.isBinaryExpression(stmt.incrementor) &&
+                    ts.isIdentifier(stmt.incrementor.left) &&
+                    this.isSimpleLazyYieldCompoundAssignment(stmt.incrementor) &&
+                    this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(stmt.incrementor.operatorToken.kind) &&
+                    this.directLazyYieldCondition(stmt.incrementor.right);
+                if (!yieldedIncrementor && !yieldedAssignmentIncrementor &&
+                    !yieldedCompoundIncrementor && !yieldedLogicalCompoundIncrementor) return false;
             }
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -56146,6 +56152,11 @@ class Emitter {
                     this.isSimpleLazyYieldCompoundAssignment(stmt.incrementor) &&
                     !this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(stmt.incrementor.operatorToken.kind) &&
                     !!this.directLazyYieldCondition(stmt.incrementor.right);
+                const yieldedLogicalCompoundIncrementor = ts.isBinaryExpression(stmt.incrementor) &&
+                    ts.isIdentifier(stmt.incrementor.left) &&
+                    this.isSimpleLazyYieldCompoundAssignment(stmt.incrementor) &&
+                    this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(stmt.incrementor.operatorToken.kind) &&
+                    !!this.directLazyYieldCondition(stmt.incrementor.right);
                 if (yieldedIncrementor) {
                     this.emitLazyGeneratorDirectYieldValue(
                         buf,
@@ -56167,7 +56178,29 @@ class Emitter {
                     if (!value) unsupported(stmt.incrementor.right, "lazy generator yielded compound incrementor could not suspend");
                     const lhs = this.emitLvalue(stmt.incrementor.left);
                     const lhsType = this.storageType(stmt.incrementor.left);
-                    buf.line(`${this.emitSimpleLazyCompoundAssignment(stmt.incrementor, lhs, lhs, lhsType, value)};`);
+                        buf.line(`${this.emitSimpleLazyCompoundAssignment(stmt.incrementor, lhs, lhs, lhsType, value)};`);
+                } else if (yieldedLogicalCompoundIncrementor) {
+                    const lhs = this.emitLvalue(stmt.incrementor.left);
+                    const lhsType = this.storageType(stmt.incrementor.left);
+                    const current = this.emitExpr(stmt.incrementor.left);
+                    const truthy = this.truthyExprFromEmitResult(current, stmt.incrementor.left);
+                    const shouldSuspend = stmt.incrementor.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                        ? truthy
+                        : stmt.incrementor.operatorToken.kind === ts.SyntaxKind.BarBarEqualsToken
+                            ? `!(${truthy})`
+                            : this.nullishExprFromEmitResult(current, stmt.incrementor.left);
+                    buf.open(`if (${shouldSuspend})`);
+                    const value = this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        stmt.incrementor.right,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                    if (!value) unsupported(stmt.incrementor.right, "lazy generator yielded logical compound incrementor could not suspend");
+                    buf.line(`${lhs} = ${this.coerce(value, lhsType, stmt.incrementor.right)};`);
+                    buf.close();
                 } else if (
                     ts.isBinaryExpression(stmt.incrementor) &&
                     stmt.incrementor.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
