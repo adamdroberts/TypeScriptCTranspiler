@@ -31,6 +31,11 @@ const concatSpreadBase: any = { value: 180 };
 const concatSpreadBox: any = [concatSpreadBase];
 const concatSpreadInserted: any = { value: 190 };
 const concatSpreadItems: any = [concatSpreadInserted];
+const unshiftSpreadBase: any = { value: 220 };
+const unshiftSpreadBox: any = [unshiftSpreadBase];
+const unshiftSpreadFirst: any = { value: 230 };
+const unshiftSpreadSecond: any = { value: 240 };
+const unshiftSpreadItems: any = [unshiftSpreadFirst, unshiftSpreadSecond];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -78,6 +83,10 @@ function* intermediateCallSpreadReturn(): Generator<any, number, any> {
 
 function* intermediateConcatSpreadReturn(): Generator<any, number, any> {
     return ++(yield concatSpreadBox).concat(...(yield "items")).pop()[(yield "value")];
+}
+
+function* intermediateUnshiftSpreadReturn(): Generator<any, boolean, any> {
+    return delete (yield unshiftSpreadBox).unshift(...(yield "items"))[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -162,3 +171,10 @@ const intermediateConcatSpreadSecond: any = intermediateConcatSpreadIterator.nex
 const intermediateConcatSpreadThird: any = intermediateConcatSpreadIterator.next(concatSpreadItems);
 const intermediateConcatSpreadDone: any = intermediateConcatSpreadIterator.next("value");
 console.log("concat-spread", intermediateConcatSpreadFirst.done, intermediateConcatSpreadFirst.value === concatSpreadBox, intermediateConcatSpreadSecond.done, intermediateConcatSpreadSecond.value, intermediateConcatSpreadThird.done, intermediateConcatSpreadThird.value, intermediateConcatSpreadDone.done, intermediateConcatSpreadDone.value, concatSpreadBox.length, concatSpreadInserted.value);
+
+const intermediateUnshiftSpreadIterator = intermediateUnshiftSpreadReturn();
+const intermediateUnshiftSpreadFirst: any = intermediateUnshiftSpreadIterator.next();
+const intermediateUnshiftSpreadSecond: any = intermediateUnshiftSpreadIterator.next(unshiftSpreadBox);
+const intermediateUnshiftSpreadThird: any = intermediateUnshiftSpreadIterator.next(unshiftSpreadItems);
+const intermediateUnshiftSpreadDone: any = intermediateUnshiftSpreadIterator.next("value");
+console.log("unshift-spread", intermediateUnshiftSpreadFirst.done, intermediateUnshiftSpreadFirst.value === unshiftSpreadBox, intermediateUnshiftSpreadSecond.done, intermediateUnshiftSpreadSecond.value, intermediateUnshiftSpreadThird.done, intermediateUnshiftSpreadThird.value, intermediateUnshiftSpreadDone.done, intermediateUnshiftSpreadDone.value, unshiftSpreadBox.length, unshiftSpreadBox[0].value, unshiftSpreadBox[1].value, unshiftSpreadBox[2].value);

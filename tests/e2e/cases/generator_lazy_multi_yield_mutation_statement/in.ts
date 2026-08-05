@@ -66,6 +66,10 @@ const concatSpreadBase: any = { value: 160 };
 const concatSpreadBox: any = [concatSpreadBase];
 const concatSpreadInserted: any = { value: 170 };
 const concatSpreadItems: any = [concatSpreadInserted];
+const pushSpreadBox: any = [];
+const pushSpreadFirst: any = { value: 200 };
+const pushSpreadSecond: any = { value: 210 };
+const pushSpreadItems: any = [pushSpreadFirst, pushSpreadSecond];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -105,6 +109,11 @@ function* callSpreadBetweenYields(): Generator<string, string, any> {
 function* concatSpreadBetweenYields(): Generator<string, string, any> {
     (yield "concat-spread-receiver").concat(...(yield "concat-spread-items")).pop()[(yield "concat-spread-key")]++;
     return "concat-spread-done";
+}
+
+function* pushSpreadBetweenYields(): Generator<string, string, any> {
+    (yield "push-spread-receiver").push(...(yield "push-spread-items"))[(yield "push-spread-key")]++;
+    return "push-spread-done";
 }
 
 const assignment = assignmentMutation();
@@ -192,3 +201,10 @@ const concatSpreadSecond: any = concatSpread.next(concatSpreadBox);
 const concatSpreadThird: any = concatSpread.next(concatSpreadItems);
 const concatSpreadDone: any = concatSpread.next("value");
 console.log("concat-spread", concatSpreadFirst.done, concatSpreadFirst.value, concatSpreadSecond.done, concatSpreadSecond.value, concatSpreadThird.done, concatSpreadThird.value, concatSpreadDone.done, concatSpreadDone.value, concatSpreadBox.length, concatSpreadInserted.value);
+
+const pushSpread = pushSpreadBetweenYields();
+const pushSpreadIteratorFirst: any = pushSpread.next();
+const pushSpreadIteratorSecond: any = pushSpread.next(pushSpreadBox);
+const pushSpreadIteratorThird: any = pushSpread.next(pushSpreadItems);
+const pushSpreadDone: any = pushSpread.next("value");
+console.log("push-spread", pushSpreadIteratorFirst.done, pushSpreadIteratorFirst.value, pushSpreadIteratorSecond.done, pushSpreadIteratorSecond.value, pushSpreadIteratorThird.done, pushSpreadIteratorThird.value, pushSpreadDone.done, pushSpreadDone.value, pushSpreadBox.length, pushSpreadBox[0].value, pushSpreadBox[1].value);

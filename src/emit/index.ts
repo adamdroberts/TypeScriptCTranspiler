@@ -54465,7 +54465,7 @@ class Emitter {
                 const argument = receiver.arguments[index]!;
                 const spread = ts.isSpreadElement(argument);
                 if (spread && (
-                    !["concat", "splice"].includes(callee.name.text) ||
+                    !["concat", "push", "splice", "unshift"].includes(callee.name.text) ||
                     callee.name.text === "splice" && index < 2
                 )) return null;
                 const argumentExpression = spread ? argument.expression : argument as ts.Expression;
@@ -69136,6 +69136,16 @@ class Emitter {
                     ([target]) => `tsc_value_method_pop(${target})`,
                 );
             case "push": {
+                if (args.some((arg) => ts.isSpreadElement(arg))) {
+                    const items = this.emitSpreadCallArgumentList(args);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: items, target: arrayType(T_VALUE), node: call },
+                    ], ([target, itemList]) => {
+                        const index = this.freshTemp("_push_i");
+                        return `({ if (${itemList}->len == 0) tsc_value_method_push_empty(${target}); for (size_t ${index} = 0; ${index} < ${itemList}->len; ${index}++) tsc_value_method_push(${target}, TSC_ARR(tsc_value_t, ${itemList}, ${index})); tsc_value_num(tsc_value_length(${target})); })`;
+                    });
+                }
                 const specs: SequencedCallArg[] = [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ];
@@ -69159,6 +69169,16 @@ class Emitter {
                     ([target]) => `tsc_value_method_shift(${target})`,
                 );
             case "unshift": {
+                if (args.some((arg) => ts.isSpreadElement(arg))) {
+                    const items = this.emitSpreadCallArgumentList(args);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: items, target: arrayType(T_VALUE), node: call },
+                    ], ([target, itemList]) => {
+                        const index = this.freshTemp("_unshift_i");
+                        return `({ if (${itemList}->len == 0) tsc_value_method_unshift_empty(${target}); for (size_t ${index} = ${itemList}->len; ${index} > 0; ${index}--) tsc_value_method_unshift(${target}, TSC_ARR(tsc_value_t, ${itemList}, ${index} - 1)); tsc_value_num(tsc_value_length(${target})); })`;
+                    });
+                }
                 const specs: SequencedCallArg[] = [
                     { value: recv, target: T_VALUE, node: call.expression },
                 ];
