@@ -53599,6 +53599,7 @@ class Emitter {
             };
             find(rootExpression);
             return nodes.filter((node) => {
+                if (node === rootExpression) return true;
                 for (let parent: ts.Node | undefined = node.parent; parent && parent !== rootExpression; parent = parent.parent) {
                     if (ts.isConditionalExpression(parent)) return false;
                     if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
@@ -53626,7 +53627,7 @@ class Emitter {
                 ts.forEachChild(node, collect);
             };
             collect(branch);
-            return valid && branchYields.length > 0 ? branchYields : null;
+            return valid ? branchYields : null;
         };
 
         const buildPlan = (node: ts.ConditionalExpression): LazyMultiYieldConditionalBranch | null => {
@@ -53699,13 +53700,7 @@ class Emitter {
             };
         };
 
-        const roots = conditionalNodes.filter((node) => {
-            for (let parent: ts.Node | undefined = node.parent; parent && parent !== expression; parent = parent.parent) {
-                if (ts.isConditionalExpression(parent)) return false;
-                if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
-            }
-            return true;
-        });
+        const roots = findConditionalRoots(expression);
         const plans = roots.map((root) => buildPlan(root));
         if (plans.some((plan) => plan === null)) return null;
         const resolvedPlans = plans as LazyMultiYieldConditionalBranch[];
@@ -55758,7 +55753,7 @@ class Emitter {
                         buf.line(`goto ${eventContinuation};`);
                     });
                 }
-                return labels[0]!;
+                return labels[0] ?? continuationLabel;
             };
             schedulePlan = (
                 current: LazyMultiYieldConditionalBranch,

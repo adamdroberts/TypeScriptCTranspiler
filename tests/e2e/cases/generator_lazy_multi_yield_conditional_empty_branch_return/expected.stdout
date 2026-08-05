@@ -1,0 +1,4 @@
+typed-true false typed-condition true 7
+typed-false false typed-condition false typed-false-value true 42
+dynamic-true false array-condition true true|!
+dynamic-false false array-condition false array-false-value true F|!
