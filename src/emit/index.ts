@@ -55492,6 +55492,20 @@ class Emitter {
         if (directReceiver) {
             return { yields: [directReceiver, key], stagedExpressions: [] };
         }
+        if (ts.isCallExpression(receiver)) {
+            const callee = this.unwrapTransparentExpression(receiver.expression);
+            if (receiver.questionDotToken ||
+                !ts.isPropertyAccessExpression(callee) ||
+                callee.questionDotToken ||
+                callee.name.text !== "pop" ||
+                receiver.arguments.length !== 0) return null;
+            const base = this.directLazyYieldCondition(callee.expression);
+            if (!base) return null;
+            return {
+                yields: [base, key],
+                stagedExpressions: [{ expression: receiver, afterYield: base }],
+            };
+        }
         if (!ts.isPropertyAccessExpression(receiver) || receiver.questionDotToken) return null;
         const base = this.directLazyYieldCondition(receiver.expression);
         if (!base) return null;
