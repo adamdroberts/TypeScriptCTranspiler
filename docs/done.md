@@ -3525,6 +3525,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_nested_arithmetic_literal_initializer` | lazy generators preserve yielded arithmetic trees nested in counted-for literal initializers |
 | `generator_lazy_for_multi_yield_computed_literal_declaration_initializer` | lazy generators stage yielded computed keys before later counted-for literal property values |
 | `generator_lazy_for_multi_yield_spread_literal_declaration_initializer` | lazy generators stage a final yielded spread in counted-for literal initializers |
+| `generator_lazy_for_multi_yield_template_declaration_initializer` | lazy generators defer template declaration initializers until yielded substitutions resume |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_multi_yield_assignment_initializer` | lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |

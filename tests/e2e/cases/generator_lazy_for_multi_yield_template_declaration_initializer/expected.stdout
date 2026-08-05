@@ -1,0 +1,8 @@
+standard-first false standard-a
+standard-second false standard-b
+standard-third false body-left A middle B right
+standard-done true done
+tagged-first 0 false tagged-a
+tagged-second 0 false tagged-b
+tagged-third 1 false body-start C end D!
+tagged-done 1 true done
