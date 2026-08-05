@@ -1,0 +1,12 @@
+push-first push-first false push-receiver 0
+push-second push-first false push-item 0
+push-third push-first false push-spread 0
+push-fourth push-first,push-after-left-push-after-right,push-direct,push-spread-one,push-spread-two false push-key 1
+push-fifth push-first,push-after-left-push-after-right,push-direct,push-spread-one,push-spread-two false push-body-undefined 1
+push-done push-first,push-after-left-push-after-right,push-direct,push-spread-one,push-spread-two true push-done 1
+unshift-first unshift-first false unshift-receiver 1
+unshift-second unshift-first false unshift-item 1
+unshift-third unshift-first false unshift-spread 1
+unshift-fourth unshift-after-left-unshift-after-right,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-key 2
+unshift-fifth unshift-after-left-unshift-after-right,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-body-undefined 2
+unshift-done unshift-after-left-unshift-after-right,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first true unshift-done 2
