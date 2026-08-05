@@ -76,6 +76,8 @@ function formatComputedKey(prefix: any, suffix: any): string {
     computedKeyEvents.push("key");
     return String(prefix) + String(suffix);
 }
+const methodRhsEvents: string[] = [];
+const methodRhsBox: any = { value: null };
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
@@ -176,6 +178,18 @@ function* computedKeyAssignmentBetweenYields(): Generator<string, string, any> {
     return "computed-key-done";
 }
 
+function* methodRhsAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "method-rhs-receiver")[yield "method-rhs-slot"] = {
+        first: yield "method-rhs-first",
+        add(value: any) {
+            methodRhsEvents.push("call");
+            return "method:" + value;
+        },
+        after: yield "method-rhs-after",
+    };
+    return "method-rhs-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -236,6 +250,14 @@ const computedKeyAssignmentFifth: any = computedKeyAssignment.next("suffix");
 const computedKeyAssignmentSixth: any = computedKeyAssignment.next(4);
 const computedKeyAssignmentDone: any = computedKeyAssignment.next("after");
 console.log("assignment-computed-key", computedKeyAssignmentFirst.done, computedKeyAssignmentFirst.value, computedKeyAssignmentSecond.done, computedKeyAssignmentSecond.value, computedKeyAssignmentThird.done, computedKeyAssignmentThird.value, computedKeyAssignmentFourth.done, computedKeyAssignmentFourth.value, computedKeyEvents.join(","), computedKeyAssignmentFifth.done, computedKeyAssignmentFifth.value, computedKeyEvents.join(","), computedKeyAssignmentSixth.done, computedKeyAssignmentSixth.value, computedKeyAssignmentDone.done, computedKeyAssignmentDone.value, computedKeyBox.value.prefixsuffix, computedKeyBox.value.after);
+
+const methodRhsAssignment = methodRhsAssignmentBetweenYields();
+const methodRhsAssignmentFirst: any = methodRhsAssignment.next();
+const methodRhsAssignmentSecond: any = methodRhsAssignment.next(methodRhsBox);
+const methodRhsAssignmentThird: any = methodRhsAssignment.next("value");
+const methodRhsAssignmentFourth: any = methodRhsAssignment.next(4);
+const methodRhsAssignmentDone: any = methodRhsAssignment.next("after");
+console.log("assignment-method-rhs", methodRhsAssignmentFirst.done, methodRhsAssignmentFirst.value, methodRhsAssignmentSecond.done, methodRhsAssignmentSecond.value, methodRhsAssignmentThird.done, methodRhsAssignmentThird.value, methodRhsAssignmentFourth.done, methodRhsAssignmentFourth.value, methodRhsEvents.join(","), methodRhsAssignmentDone.done, methodRhsAssignmentDone.value, methodRhsBox.value.first, methodRhsBox.value.after, methodRhsBox.value.add("done"), methodRhsEvents.join(","));
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();

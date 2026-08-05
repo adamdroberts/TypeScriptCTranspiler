@@ -47,7 +47,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now stage supported prefix/unary RHS expressions over direct yields after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; unsupported unary operators, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
-- Lazy generators now stage nested array/object literals with direct yielded element and property values after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; spreads, yielded computed keys, accessor/method properties, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+- Lazy generators now stage nested array/object literals with direct yielded element and property values after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; spreads, typed computed fields, accessor properties, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+
+- Lazy generators now stage dynamic object RHS literals with static-key, yield-free methods in mutation expression statements alongside yielded property values, preserving method closure construction and later invocation; accessor properties, yielded methods, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
 - Lazy generators now stage one direct yielded array/object spread source when it is the final yield-bearing literal operand, materializing the spread before a later outer yield and preserving spread side effects and final mutation order; non-final or multiple spreads, unsupported iterable shapes, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 

@@ -54705,6 +54705,8 @@ class Emitter {
                         if (!visit(property.initializer)) return false;
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         continue;
+                    } else if (ts.isMethodDeclaration(property)) {
+                        if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
                     } else if (ts.isSpreadAssignment(property)) {
                         if (!visitSpread(property.expression)) return false;
                     } else {
