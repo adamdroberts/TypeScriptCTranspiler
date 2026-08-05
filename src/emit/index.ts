@@ -54407,7 +54407,7 @@ class Emitter {
             ts.SyntaxKind.LessThanToken, ts.SyntaxKind.LessThanEqualsToken,
             ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken,
             ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken,
-            ts.SyntaxKind.QuestionQuestionToken].includes(expr.operatorToken.kind)) {
+            ts.SyntaxKind.QuestionQuestionToken, ts.SyntaxKind.CommaToken].includes(expr.operatorToken.kind)) {
             return false;
         }
         return (this.isSimpleLazyMultiYieldCallArgument(expr.left) || this.isSimpleLazyMultiYieldCallBinaryArgument(expr.left)) &&
