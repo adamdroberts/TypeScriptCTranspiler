@@ -55499,10 +55499,28 @@ class Emitter {
                 const callee = this.unwrapTransparentExpression(current.expression);
                 if (current.questionDotToken ||
                     !ts.isPropertyAccessExpression(callee) ||
-                    callee.questionDotToken ||
-                    callee.name.text !== "pop" ||
-                    current.arguments.length !== 0) return null;
+                    callee.questionDotToken) return null;
                 callStages.push(current);
+                if (callee.name.text === "splice") {
+                    const startArgument = current.arguments.length > 0
+                        ? this.unwrapTransparentExpression(current.arguments[0]!)
+                        : null;
+                    if (current.arguments.length !== 2 ||
+                        startArgument === null ||
+                        !ts.isNumericLiteral(startArgument) ||
+                        startArgument.text !== "0") return null;
+                    const base = this.directLazyYieldCondition(callee.expression);
+                    const argument = this.directLazyYieldCondition(current.arguments[1]!);
+                    if (!base || !argument) return null;
+                    return {
+                        yields: [base, argument, key],
+                        stagedExpressions: callStages.reverse().map((call) => ({
+                            expression: call,
+                            afterYield: argument,
+                        })),
+                    };
+                }
+                if (callee.name.text !== "pop" || current.arguments.length !== 0) return null;
                 current = this.unwrapTransparentExpression(callee.expression);
             }
             const base = this.directLazyYieldCondition(current);
