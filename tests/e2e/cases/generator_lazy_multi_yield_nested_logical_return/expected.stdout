@@ -1,0 +1,10 @@
+and-or-false false and-or-outer false and-or-fallback true 7
+and-or-nested-false false and-or-outer false and-or-inner false and-or-fallback true 8
+and-or-true false and-or-outer false and-or-inner true 2
+and-nullish-false false and-nullish-outer true 0
+and-nullish-null false and-nullish-outer false and-nullish-left false and-nullish-right true right
+and-nullish-value false and-nullish-outer false and-nullish-left true kept
+nullish-and-null false nullish-and-outer false nullish-and-fallback false nullish-and-right true 2
+nullish-and-value false nullish-and-outer false nullish-and-right true 3
+typed-false false true false true true true
+typed-nested false true false false false true true true

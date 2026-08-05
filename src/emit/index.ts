@@ -136,10 +136,13 @@ interface LazyMultiYieldConditionalArm {
     yields: ts.YieldExpression[];
 }
 
+type LazyMultiYieldLogicalOperand = ts.YieldExpression | LazyMultiYieldLogicalPlan;
+
 interface LazyMultiYieldLogicalPlan {
     expression: ts.BinaryExpression;
-    left: ts.YieldExpression;
-    right: ts.YieldExpression;
+    left: LazyMultiYieldLogicalOperand;
+    right: LazyMultiYieldLogicalOperand;
+    yields: ts.YieldExpression[];
 }
 
 interface LazyMultiYieldTerminalInfo {
@@ -53590,10 +53593,20 @@ class Emitter {
     ): LazyMultiYieldLogicalPlan | null {
         const unwrapped = this.unwrapTransparentExpression(expression);
         if (!ts.isBinaryExpression(unwrapped) || !this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) return null;
-        const left = this.directLazyYieldCondition(unwrapped.left);
-        const right = this.directLazyYieldCondition(unwrapped.right);
+        const buildOperand = (operand: ts.Expression): LazyMultiYieldLogicalOperand | null =>
+            this.directLazyYieldCondition(operand) ?? this.simpleLazyMultiYieldLogicalPlan(operand);
+        const left = buildOperand(unwrapped.left);
+        const right = buildOperand(unwrapped.right);
         if (!left || !right) return null;
-        return { expression: unwrapped, left, right };
+        return {
+            expression: unwrapped,
+            left,
+            right,
+            yields: [
+                ...("yields" in left ? left.yields : [left]),
+                ...("yields" in right ? right.yields : [right]),
+            ],
+        };
     }
 
     private simpleLazyMultiYieldConditionalBranches(
@@ -53768,7 +53781,7 @@ class Emitter {
         if (logicalPlan) {
             return {
                 expression,
-                yields: [logicalPlan.left, logicalPlan.right],
+                yields: logicalPlan.yields,
                 logicalPlan,
             };
         }
@@ -55704,9 +55717,17 @@ class Emitter {
         if (info.logicalPlan) {
             const plan = info.logicalPlan;
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
-            const rightLabel = this.freshTemp("_lazy_multi_yield_logical_right");
-            const leftState = nextStateId();
-            const rightState = nextStateId();
+            const entryLabel = this.freshTemp("_lazy_multi_yield_logical");
+            const yieldSlots = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
+            const entryBlocks: Array<() => void> = [];
+            const resumeBlocks: Array<() => void> = [];
+            const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
+                !("yields" in operand);
+            const slotForYield = (yieldExpr: ts.YieldExpression): number => {
+                const slot = yieldSlots.get(yieldExpr);
+                if (slot === undefined) unsupported(yieldExpr, "lazy multi-yield logical plan contains an unknown yield");
+                return slot;
+            };
             const emitYield = (yieldExpr: ts.YieldExpression, state: number): void => {
                 const value = yieldExpr.expression ? this.emitExpr(yieldExpr.expression) : { c: "NULL", ty: T_VOID };
                 const valueNode = yieldExpr.expression ?? yieldExpr;
@@ -55717,38 +55738,115 @@ class Emitter {
                 buf.line("*done = false;");
                 buf.line("return;");
             };
-            emitYield(plan.left, leftState);
-            buf.line(`${rightLabel}:;`);
-            emitYield(plan.right, rightState);
-            const leftType = this.prepareType(mapTsType(
-                plan.left,
-                this.checker.getTypeAtLocation(plan.left),
-                this.checker,
-            ));
-            const resumedLeft = {
-                c: this.coerce({ c: "next_arg", ty: T_VALUE }, leftType, plan.left),
-                ty: leftType,
+            const resumedYield = (yieldExpr: ts.YieldExpression): EmitResult => {
+                const type = this.prepareType(mapTsType(
+                    yieldExpr,
+                    this.checker.getTypeAtLocation(yieldExpr),
+                    this.checker,
+                ));
+                return {
+                    c: this.coerce(
+                        { c: `${envLocalName}->multi_yield_values[${slotForYield(yieldExpr)}]`, ty: T_VALUE },
+                        type,
+                        yieldExpr,
+                    ),
+                    ty: type,
+                };
             };
-            const truthy = this.truthyExprFromEmitResult(resumedLeft, plan.left);
-            const rightRequired = plan.expression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
-                ? truthy
-                : plan.expression.operatorToken.kind === ts.SyntaxKind.BarBarToken
-                    ? `!(${truthy})`
-                    : this.nullishExprFromEmitResult(resumedLeft, plan.left);
-            buf.line(`case ${leftState}:;`);
-            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-            buf.line(`${envLocalName}->multi_yield_values[0] = next_arg;`);
-            buf.open(`if (${rightRequired})`);
-            buf.line(`goto ${rightLabel};`);
-            buf.close();
-            buf.line(`goto ${mergeLabel};`);
-            buf.line(`case ${rightState}:;`);
-            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-            buf.line(`${envLocalName}->multi_yield_values[1] = next_arg;`);
-            buf.line(`goto ${mergeLabel};`);
-            resumeSources.set(plan.left, `${envLocalName}->multi_yield_values[0]`);
-            resumeSources.set(plan.right, `${envLocalName}->multi_yield_values[1]`);
+
+            const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
+                if (isYieldOperand(operand)) {
+                    return this.truthyExprFromEmitResult(resumedYield(operand), operand);
+                }
+                const left = truthyOperand(operand.left);
+                const right = truthyOperand(operand.right);
+                switch (operand.expression.operatorToken.kind) {
+                    case ts.SyntaxKind.AmpersandAmpersandToken:
+                        return `(${left} && ${right})`;
+                    case ts.SyntaxKind.BarBarToken:
+                        return `(${left} || ${right})`;
+                    default:
+                        return `(${nullishOperand(operand.left)} ? ${right} : ${left})`;
+                }
+            };
+            const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
+                if (isYieldOperand(operand)) {
+                    return this.nullishExprFromEmitResult(resumedYield(operand), operand);
+                }
+                const leftTruthy = truthyOperand(operand.left);
+                const leftNullish = nullishOperand(operand.left);
+                const rightNullish = nullishOperand(operand.right);
+                switch (operand.expression.operatorToken.kind) {
+                    case ts.SyntaxKind.AmpersandAmpersandToken:
+                        return `(${leftTruthy} ? ${rightNullish} : false)`;
+                    case ts.SyntaxKind.BarBarToken:
+                        return `(${leftTruthy} ? false : ${rightNullish})`;
+                    default:
+                        return `(${leftNullish} && ${rightNullish})`;
+                }
+            };
+            const rightRequiredFor = (expression: ts.BinaryExpression, left: LazyMultiYieldLogicalOperand): string => {
+                const leftTruthy = truthyOperand(left);
+                switch (expression.operatorToken.kind) {
+                    case ts.SyntaxKind.AmpersandAmpersandToken:
+                        return leftTruthy;
+                    case ts.SyntaxKind.BarBarToken:
+                        return `!(${leftTruthy})`;
+                    default:
+                        return nullishOperand(left);
+                }
+            };
+            let schedulePlan: (
+                current: LazyMultiYieldLogicalPlan,
+                entryLabel: string,
+                continuationLabel: string,
+            ) => void;
+            const scheduleOperand = (
+                operand: LazyMultiYieldLogicalOperand,
+                operandEntryLabel: string,
+                continuationLabel: string,
+            ): void => {
+                if (!isYieldOperand(operand)) {
+                    schedulePlan(operand, operandEntryLabel, continuationLabel);
+                    return;
+                }
+                const state = nextStateId();
+                entryBlocks.push(() => {
+                    buf.line(`${operandEntryLabel}:;`);
+                    emitYield(operand, state);
+                });
+                resumeBlocks.push(() => {
+                    buf.line(`case ${state}:;`);
+                    this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                    buf.line(`${envLocalName}->multi_yield_values[${slotForYield(operand)}] = next_arg;`);
+                    buf.line(`goto ${continuationLabel};`);
+                });
+            };
+            schedulePlan = (
+                current: LazyMultiYieldLogicalPlan,
+                currentEntryLabel: string,
+                continuationLabel: string,
+            ): void => {
+                const leftDecisionLabel = this.freshTemp("_lazy_multi_yield_logical_decide");
+                const rightEntryLabel = this.freshTemp("_lazy_multi_yield_logical_right");
+                scheduleOperand(current.left, currentEntryLabel, leftDecisionLabel);
+                scheduleOperand(current.right, rightEntryLabel, continuationLabel);
+                resumeBlocks.push(() => {
+                    buf.line(`${leftDecisionLabel}:;`);
+                    buf.open(`if (${rightRequiredFor(current.expression, current.left)})`);
+                    buf.line(`goto ${rightEntryLabel};`);
+                    buf.close();
+                    buf.line(`goto ${continuationLabel};`);
+                });
+            };
+            schedulePlan(plan, entryLabel, mergeLabel);
+            buf.line(`goto ${entryLabel};`);
+            for (const entryBlock of entryBlocks) entryBlock();
+            for (const resumeBlock of resumeBlocks) resumeBlock();
             buf.line(`${mergeLabel}:;`);
+            for (const yieldExpr of info.yields) {
+                resumeSources.set(yieldExpr, `${envLocalName}->multi_yield_values[${slotForYield(yieldExpr)}]`);
+            }
         } else if (info.conditionalBranches && info.conditionalBranches.length > 0) {
             const plans = info.conditionalBranches;
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
