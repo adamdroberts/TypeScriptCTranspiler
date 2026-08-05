@@ -53007,14 +53007,19 @@ class Emitter {
 
         if (ts.isSwitchStatement(stmt)) {
             const yieldedDiscriminant = this.directLazyYieldCondition(stmt.expression);
-            if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant) return false;
+            const logicalDiscriminant = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant &&
+                (!logicalDiscriminant || logicalDiscriminant.yields.length === 0)) return false;
             for (const clause of stmt.caseBlock.clauses) {
                 const yieldedCase = ts.isCaseClause(clause) ? this.directLazyYieldCondition(clause.expression) : null;
-                if (ts.isCaseClause(clause) && this.nodeContainsYield(clause.expression) && !yieldedCase) {
-                    return false;
-                }
-                if (ts.isCaseClause(clause) && !yieldedCase && !this.switchCaseKey(clause.expression)) {
-                    return false;
+                const logicalCase = ts.isCaseClause(clause)
+                    ? this.simpleLazyMultiYieldLogicalPlan(clause.expression)
+                    : null;
+                if (ts.isCaseClause(clause)) {
+                    if (this.nodeContainsYield(clause.expression) && !yieldedCase &&
+                        (!logicalCase || logicalCase.yields.length === 0)) return false;
+                    if (!yieldedCase && (!logicalCase || logicalCase.yields.length === 0) &&
+                        !this.switchCaseKey(clause.expression)) return false;
                 }
                 let sawBreak = false;
                 for (const child of clause.statements) {
@@ -53536,9 +53541,12 @@ class Emitter {
         return unwrapped;
     }
 
-    private lazyGeneratorSwitchHasDirectYieldCase(stmt: ts.SwitchStatement): boolean {
+    private lazyGeneratorSwitchHasYieldedCase(stmt: ts.SwitchStatement): boolean {
         return stmt.caseBlock.clauses.some((clause) =>
-            ts.isCaseClause(clause) && !!this.directLazyYieldCondition(clause.expression));
+            ts.isCaseClause(clause) && (
+                !!this.directLazyYieldCondition(clause.expression) ||
+                !!this.simpleLazyMultiYieldLogicalPlan(clause.expression)?.yields.length
+            ));
     }
 
     private emitLazyGeneratorDirectYieldValue(
@@ -53592,14 +53600,14 @@ class Emitter {
         return resumed ? this.truthyExprFromEmitResult(resumed, expression) : null;
     }
 
-    private emitLazyGeneratorLogicalCondition(
+    private emitLazyGeneratorLogicalPlan(
         buf: CBuf,
         expression: ts.Expression,
         nextStateId: () => number,
         nextYieldStarSlot: () => number,
         elemType: CType,
         envLocalName: string,
-    ): string | null {
+    ): EmitResult | null {
         const plan = this.simpleLazyMultiYieldLogicalPlan(expression);
         if (!plan || plan.yields.length === 0 || !envLocalName) return null;
 
@@ -53669,6 +53677,15 @@ class Emitter {
                     return `(${leftNullish} && ${rightNullish})`;
             }
         };
+        const logicalOperand = (operand: LazyMultiYieldLogicalOperand): EmitResult => {
+            if (isYieldOperand(operand)) return resumedYield(operand);
+            if (!isLogicalPlan(operand)) return this.emitExpr(operand);
+            return this.emitSimpleLazyResumeBinary(
+                operand.expression,
+                logicalOperand(operand.left),
+                logicalOperand(operand.right),
+            );
+        };
         const rightRequiredFor = (current: ts.BinaryExpression, left: LazyMultiYieldLogicalOperand): string => {
             const leftTruthy = truthyOperand(left);
             switch (current.operatorToken.kind) {
@@ -53737,7 +53754,7 @@ class Emitter {
         for (const entryBlock of entryBlocks) entryBlock();
         for (const resumeBlock of resumeBlocks) resumeBlock();
         buf.line(`${mergeLabel}:;`);
-        return truthyOperand(plan);
+        return logicalOperand(plan);
     }
 
     private simpleLazyMultiYieldReturn(stmt: ts.Statement): LazyMultiYieldTerminalInfo | null {
@@ -54250,13 +54267,18 @@ class Emitter {
         const yields = new Set<ts.YieldExpression>();
         const visit = (current: ts.Node): void => {
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
-            const condition = ts.isIfStatement(current) || ts.isWhileStatement(current) ||
-                ts.isDoStatement(current)
-                ? current.expression
-                : ts.isForStatement(current)
-                    ? current.condition
-                    : undefined;
-            if (condition) {
+            const conditions: ts.Expression[] = [];
+            if (ts.isIfStatement(current) || ts.isWhileStatement(current) || ts.isDoStatement(current)) {
+                conditions.push(current.expression);
+            } else if (ts.isForStatement(current) && current.condition) {
+                conditions.push(current.condition);
+            } else if (ts.isSwitchStatement(current)) {
+                conditions.push(current.expression);
+                for (const clause of current.caseBlock.clauses) {
+                    if (ts.isCaseClause(clause)) conditions.push(clause.expression);
+                }
+            }
+            for (const condition of conditions) {
                 const plan = this.simpleLazyMultiYieldLogicalPlan(condition);
                 if (plan) {
                     for (const yieldExpr of plan.yields) yields.add(yieldExpr);
@@ -54651,16 +54673,31 @@ class Emitter {
         this.activeLazyGeneratorBreakTargets.push("switch");
         this.activeLazyGeneratorSwitchEndLabels.push(endLabel);
         try {
-            const yieldedDiscriminant = this.emitLazyGeneratorDirectYieldValue(
-                buf,
-                stmt.expression,
-                nextStateId,
-                nextYieldStarSlot,
-                elemType,
-                envLocalName,
-            );
+            const directDiscriminant = this.directLazyYieldCondition(stmt.expression);
+            const logicalDiscriminant = directDiscriminant
+                ? null
+                : this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const yieldedDiscriminant = directDiscriminant
+                ? this.emitLazyGeneratorDirectYieldValue(
+                    buf,
+                    stmt.expression,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                )
+                : logicalDiscriminant && logicalDiscriminant.yields.length > 0
+                    ? this.emitLazyGeneratorLogicalPlan(
+                        buf,
+                        stmt.expression,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    )
+                    : null;
             const disc = yieldedDiscriminant ?? this.emitExpr(stmt.expression);
-            const hasYieldedCase = this.lazyGeneratorSwitchHasDirectYieldCase(stmt);
+            const hasYieldedCase = this.lazyGeneratorSwitchHasYieldedCase(stmt);
             const isDynamic = disc.ty.kind === "value" || hasYieldedCase;
             const isStr = disc.ty.kind === "string";
             const isBool = disc.ty.kind === "boolean";
@@ -54685,16 +54722,28 @@ class Emitter {
 
             const buildCond = (caseExpr: ts.Expression): string => {
                 const yieldedCase = this.directLazyYieldCondition(caseExpr);
+                const logicalCase = yieldedCase
+                    ? null
+                    : this.simpleLazyMultiYieldLogicalPlan(caseExpr);
                 const caseVal = yieldedCase
                     ? this.emitLazyGeneratorDirectYieldValue(
-                        buf,
-                        caseExpr,
-                        nextStateId,
-                        nextYieldStarSlot,
-                        elemType,
-                        envLocalName,
-                    )!
-                    : this.emitExpr(caseExpr);
+                            buf,
+                            caseExpr,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        )!
+                    : logicalCase && logicalCase.yields.length > 0
+                        ? this.emitLazyGeneratorLogicalPlan(
+                            buf,
+                            caseExpr,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        )!
+                        : this.emitExpr(caseExpr);
                 if (isDynamic) {
                     return `tsc_value_eq(${discRef}, ${this.coerce(caseVal, T_VALUE, caseExpr)})`;
                 }
@@ -55197,7 +55246,8 @@ class Emitter {
         }
 
         if (ts.isIfStatement(stmt)) {
-            const yieldedCondC = this.directLazyYieldCondition(stmt.expression)
+            const directCondition = this.directLazyYieldCondition(stmt.expression);
+            const yieldedCondC = directCondition
                 ? this.emitLazyGeneratorDirectYieldCondition(
                     buf,
                     stmt.expression,
@@ -55206,7 +55256,10 @@ class Emitter {
                     elemType,
                     envLocalName,
                 )
-                : this.emitLazyGeneratorLogicalCondition(
+                : null;
+            const logicalCondition = directCondition
+                ? null
+                : this.emitLazyGeneratorLogicalPlan(
                     buf,
                     stmt.expression,
                     nextStateId,
@@ -55214,10 +55267,9 @@ class Emitter {
                     elemType,
                     envLocalName,
                 );
-            const condC = yieldedCondC ?? this.truthyExprFromEmitResult(
-                this.emitExpr(stmt.expression),
-                stmt.expression,
-            );
+            const condC = yieldedCondC ?? (logicalCondition
+                ? this.truthyExprFromEmitResult(logicalCondition, stmt.expression)
+                : this.truthyExprFromEmitResult(this.emitExpr(stmt.expression), stmt.expression));
             buf.open(`if (${condC})`);
             this.emitLazyGeneratorStmt(buf, stmt.thenStatement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             if (stmt.elseStatement) {
@@ -55237,6 +55289,16 @@ class Emitter {
                 this.activeLazyGeneratorBreakTargets.push("loop");
                 this.activeLazyGeneratorContinueTargets.push(null);
                 try {
+                    const logicalResult = yieldedCondition
+                        ? null
+                        : this.emitLazyGeneratorLogicalPlan(
+                            buf,
+                            stmt.expression,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        );
                     const condC = yieldedCondition
                         ? this.emitLazyGeneratorDirectYieldCondition(
                             buf,
@@ -55246,14 +55308,7 @@ class Emitter {
                             elemType,
                             envLocalName,
                         )!
-                        : this.emitLazyGeneratorLogicalCondition(
-                            buf,
-                            stmt.expression,
-                            nextStateId,
-                            nextYieldStarSlot,
-                            elemType,
-                            envLocalName,
-                        )!;
+                        : this.truthyExprFromEmitResult(logicalResult!, stmt.expression);
                     buf.open(`if (!(${condC}))`);
                     buf.line("break;");
                     buf.close();
@@ -55290,6 +55345,16 @@ class Emitter {
                 try {
                     this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
                     buf.line(`${continueLabel}:;`);
+                    const logicalResult = yieldedCondition
+                        ? null
+                        : this.emitLazyGeneratorLogicalPlan(
+                            buf,
+                            stmt.expression,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        );
                     const condC = yieldedCondition
                         ? this.emitLazyGeneratorDirectYieldCondition(
                             buf,
@@ -55299,14 +55364,7 @@ class Emitter {
                             elemType,
                             envLocalName,
                         )!
-                        : this.emitLazyGeneratorLogicalCondition(
-                            buf,
-                            stmt.expression,
-                            nextStateId,
-                            nextYieldStarSlot,
-                            elemType,
-                            envLocalName,
-                        )!;
+                        : this.truthyExprFromEmitResult(logicalResult!, stmt.expression);
                     buf.open(`if (!(${condC}))`);
                     buf.line("break;");
                     buf.close();
@@ -55342,6 +55400,16 @@ class Emitter {
             const continueLabel = stmt.incrementor ? this.freshTemp("_for_continue") : null;
             if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0)) {
                 buf.open("while (true)");
+                const logicalResult = yieldedCondition
+                    ? null
+                    : this.emitLazyGeneratorLogicalPlan(
+                        buf,
+                        stmt.condition!,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
                 const condC = yieldedCondition
                     ? this.emitLazyGeneratorDirectYieldCondition(
                         buf,
@@ -55351,14 +55419,7 @@ class Emitter {
                         elemType,
                         envLocalName,
                     )!
-                    : this.emitLazyGeneratorLogicalCondition(
-                        buf,
-                        stmt.condition!,
-                        nextStateId,
-                        nextYieldStarSlot,
-                        elemType,
-                        envLocalName,
-                    )!;
+                    : this.truthyExprFromEmitResult(logicalResult!, stmt.condition!);
                 buf.open(`if (!(${condC}))`);
                 buf.line("break;");
                 buf.close();
@@ -56861,7 +56922,7 @@ class Emitter {
             ts.forEachChild(fn.body, collectForInInfos);
 
             const collectSwitchResumeInfos = (node: ts.Node) => {
-                if (ts.isSwitchStatement(node) && this.lazyGeneratorSwitchHasDirectYieldCase(node)) {
+                if (ts.isSwitchStatement(node) && this.lazyGeneratorSwitchHasYieldedCase(node)) {
                     const index = switchResumeInfos.length;
                     const info: LazySwitchResumeInfo = { field: `switch_disc_${index}` };
                     switchResumeInfos.push({ statement: node, info });

@@ -31,9 +31,11 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; broader condition selectors and switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.
 
-- Lazy generators now suspend and resume a direct `yield` used as a `switch` discriminant, matching static string, numeric, and boolean case keys through the resumed value while preserving default/fallthrough routing and close/finally handling; compound discriminants and broader switch graphs remain deferred. Test: `generator_lazy_switch_yield_condition`.
+- Lazy generators now suspend and resume a direct `yield` used as a `switch` discriminant, matching static string, numeric, and boolean case keys through the resumed value while preserving default/fallthrough routing and close/finally handling; broader discriminant graphs and switch graphs remain deferred. Test: `generator_lazy_switch_yield_condition`.
 
-- Lazy generators now suspend direct `yield` expressions used as `switch` case labels at any clause position, preserve the discriminant across each suspension, evaluate multiple yielded labels in order before selecting a match or default, and route close/finally cleanup; compound yielded labels remain deferred. Tests: `generator_lazy_switch_yield_case`, `generator_lazy_switch_yield_case_order`.
+- Lazy generators now suspend direct `yield` expressions used as `switch` case labels at any clause position, preserve the discriminant across each suspension, evaluate multiple yielded labels in order before selecting a match or default, and route close/finally cleanup; broader case-label graphs remain deferred. Tests: `generator_lazy_switch_yield_case`, `generator_lazy_switch_yield_case_order`.
+
+- Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as `switch` discriminants and case labels, preserving case-order comparison and default routing while suspending only required short-circuit operands; broader switch condition graphs remain deferred. Test: `generator_lazy_switch_logical_condition`.
 
 - Lazy generators now support one direct catch-recovery `yield` after a suspended try-block yield entered through `.throw(error)`, returning that recovery value before terminal catch completion and non-suspending `finally` cleanup. Test: `generator_lazy_try_catch_yield`.
 

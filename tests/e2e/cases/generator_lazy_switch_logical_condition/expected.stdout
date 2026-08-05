@@ -1,0 +1,5 @@
+left-false false disc-left false disc-right true matched
+middle-match false disc-left false disc-middle true matched
+right-fallback false disc-left false disc-middle false disc-right true fallback
+case-false false case-left true static-case
+case-true false case-left false case-right true logical-case
