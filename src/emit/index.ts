@@ -54398,7 +54398,7 @@ class Emitter {
                 : true;
         }
         if (ts.isCallExpression(expr)) {
-            if (expr.questionDotToken || this.nodeContainsYield(expr) ||
+            if (this.nodeContainsYield(expr) ||
                 !ts.isIdentifier(this.unwrapTransparentExpression(expr.expression))) return false;
             return expr.arguments.every((argument) =>
                 !ts.isSpreadElement(argument) &&
