@@ -1,0 +1,18 @@
+push-first  push-first false push-receiver
+push-second tag push-first false push-inner-one
+push-third tag push-first false push-inner-two
+push-fourth tag push-first false push-outer
+push-fifth tag push-first false push-item
+push-sixth tag push-first false push-spread
+push-seventh tag push-first,push-tagged-push-push-dynamic-inner-push-inner-one-value-push-inner-two-value-push-outer-value,push-direct,push-spread-one,push-spread-two false push-key
+push-eighth tag push-first,push-tagged-push-push-dynamic-inner-push-inner-one-value-push-inner-two-value-push-outer-value,push-direct,push-spread-one,push-spread-two false push-body-undefined
+push-done tag push-first,push-tagged-push-push-dynamic-inner-push-inner-one-value-push-inner-two-value-push-outer-value,push-direct,push-spread-one,push-spread-two true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second tag unshift-first false unshift-inner-one
+unshift-third tag unshift-first false unshift-inner-two
+unshift-fourth tag unshift-first false unshift-outer
+unshift-fifth tag unshift-first false unshift-item
+unshift-sixth tag unshift-first false unshift-spread
+unshift-seventh tag unshift-tagged-unshift-unshift-dynamic-inner-unshift-inner-one-value-unshift-inner-two-value-unshift-outer-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-key
+unshift-eighth tag unshift-tagged-unshift-unshift-dynamic-inner-unshift-inner-one-value-unshift-inner-two-value-unshift-outer-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-body-undefined
+unshift-done tag unshift-tagged-unshift-unshift-dynamic-inner-unshift-inner-one-value-unshift-inner-two-value-unshift-outer-value,unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first true unshift-done

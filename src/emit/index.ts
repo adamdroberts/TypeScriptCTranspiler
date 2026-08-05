@@ -54392,7 +54392,8 @@ class Emitter {
         }
         if (ts.isTaggedTemplateExpression(expr)) {
             const tag = this.unwrapTransparentExpression(expr.tag);
-            if (!ts.isIdentifier(tag) && !this.isStringRawTag(tag)) return false;
+            if (!ts.isIdentifier(tag) && !this.isStringRawTag(tag) &&
+                (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag))) return false;
             return ts.isTemplateExpression(expr.template)
                 ? expr.template.templateSpans.every((span) =>
                     this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(span.expression)))
@@ -54761,8 +54762,47 @@ class Emitter {
             const templateYields = this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
             return templateYields ? [directTag, ...templateYields] : [directTag];
         }
-        if ((!ts.isIdentifier(tag) && !this.isStringRawTag(tag)) || !ts.isTemplateExpression(unwrapped.template)) return null;
-        return this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
+        if (!ts.isIdentifier(tag) && !this.isStringRawTag(tag) &&
+            (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag))) return null;
+        return ts.isTemplateExpression(unwrapped.template)
+            ? this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template)
+            : null;
+    }
+
+    private simpleLazyMultiYieldNestedDynamicTaggedTemplateStages(
+        expr: ts.Expression,
+        yields: readonly ts.YieldExpression[],
+        afterYield: ts.YieldExpression,
+    ): LazyMultiYieldMutationStage[] | null {
+        const dynamicTags: ts.Expression[] = [];
+        const visit = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            if (ts.isTaggedTemplateExpression(unwrapped)) {
+                const tag = this.unwrapTransparentExpression(unwrapped.tag);
+                const directTag = this.directLazyYieldCondition(tag);
+                if (!directTag && !ts.isIdentifier(tag) && !this.isStringRawTag(tag)) {
+                    if (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag)) return false;
+                    dynamicTags.push(unwrapped.tag);
+                }
+                return ts.isTemplateExpression(unwrapped.template) ? visit(unwrapped.template) : true;
+            }
+            if (ts.isTemplateExpression(unwrapped)) {
+                return unwrapped.templateSpans.every((span) => visit(span.expression));
+            }
+            if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
+                return (unwrapped.arguments ?? []).every((argument) =>
+                    !ts.isSpreadElement(argument) && visit(argument));
+            }
+            return true;
+        };
+        if (!visit(expr)) return null;
+        const orderedYields = [...yields].sort((left, right) => left.getStart() - right.getStart());
+        const uniqueTags = Array.from(new Set(dynamicTags))
+            .sort((left, right) => left.getStart() - right.getStart());
+        return uniqueTags.map((tag) => ({
+            expression: tag,
+            afterYield: orderedYields.filter((yieldExpr) => yieldExpr.getStart() < tag.getStart()).pop() ?? afterYield,
+        }));
     }
 
     private simpleLazyMultiYieldNestedTemplateLogicalPlans(expr: ts.Expression): LazyMultiYieldLogicalPlan[] {
@@ -56086,6 +56126,7 @@ class Emitter {
                     const base = this.directLazyYieldCondition(callee.expression);
                     if (!base || current.arguments.length === 0) return null;
                     const argumentYields: ts.YieldExpression[] = [];
+                    const dynamicTagStages: LazyMultiYieldMutationStage[] = [];
                     let afterYield = base;
                     for (const argument of current.arguments) {
                         if (ts.isSpreadElement(argument)) {
@@ -56104,6 +56145,13 @@ class Emitter {
                         }
                         const nestedCallYields = this.simpleLazyMultiYieldNestedCallYields(expression);
                         if (nestedCallYields) {
+                            const nestedDynamicTagStages = this.simpleLazyMultiYieldNestedDynamicTaggedTemplateStages(
+                                expression,
+                                nestedCallYields,
+                                afterYield,
+                            );
+                            if (!nestedDynamicTagStages) return null;
+                            dynamicTagStages.push(...nestedDynamicTagStages);
                             argumentYields.push(...nestedCallYields);
                             afterYield = nestedCallYields[nestedCallYields.length - 1]!;
                             continue;
@@ -56118,16 +56166,20 @@ class Emitter {
                     }
                     return {
                         yields: key ? [base, ...argumentYields, key] : [base, ...argumentYields],
-                        stagedExpressions: callStages.reverse().map((call) => ({
+                        stagedExpressions: [
+                            ...dynamicTagStages,
+                            ...callStages.reverse().map((call) => ({
                             expression: call,
                             afterYield,
-                        })),
+                            })),
+                        ],
                     };
                 }
                 if (callee.name.text === "unshift") {
                     const base = this.directLazyYieldCondition(callee.expression);
                     if (!base || current.arguments.length === 0) return null;
                     const argumentYields: ts.YieldExpression[] = [];
+                    const dynamicTagStages: LazyMultiYieldMutationStage[] = [];
                     let afterYield = base;
                     for (const argument of current.arguments) {
                         if (ts.isSpreadElement(argument)) {
@@ -56146,6 +56198,13 @@ class Emitter {
                         }
                         const nestedCallYields = this.simpleLazyMultiYieldNestedCallYields(expression);
                         if (nestedCallYields) {
+                            const nestedDynamicTagStages = this.simpleLazyMultiYieldNestedDynamicTaggedTemplateStages(
+                                expression,
+                                nestedCallYields,
+                                afterYield,
+                            );
+                            if (!nestedDynamicTagStages) return null;
+                            dynamicTagStages.push(...nestedDynamicTagStages);
                             argumentYields.push(...nestedCallYields);
                             afterYield = nestedCallYields[nestedCallYields.length - 1]!;
                             continue;
@@ -56160,10 +56219,13 @@ class Emitter {
                     }
                     return {
                         yields: key ? [base, ...argumentYields, key] : [base, ...argumentYields],
-                        stagedExpressions: callStages.reverse().map((call) => ({
+                        stagedExpressions: [
+                            ...dynamicTagStages,
+                            ...callStages.reverse().map((call) => ({
                             expression: call,
                             afterYield,
-                        })),
+                            })),
+                        ],
                     };
                 }
                 if (callee.name.text === "fill") {
@@ -64548,7 +64610,8 @@ class Emitter {
             ? this.lazyGeneratorMultiYieldResumeValues?.get(expr)
             : undefined;
         if (multiYieldResumeValue) return multiYieldResumeValue;
-        const multiYieldMutationStageValue = this.lazyGeneratorMultiYieldMutationStageValues?.get(expr);
+        const multiYieldMutationStageValue = this.lazyGeneratorMultiYieldMutationStageValues?.get(expr) ??
+            this.lazyGeneratorMultiYieldMutationStageValues?.get(this.unwrapTransparentExpression(expr));
         if (multiYieldMutationStageValue) return multiYieldMutationStageValue;
         if (this.lazyGeneratorResumeOverride?.expr === expr) {
             return this.lazyGeneratorResumeOverride.result;
@@ -65129,7 +65192,11 @@ class Emitter {
             return this.emitDynamicTaggedTemplate(tt, tag);
         }
         if (!ts.isIdentifier(tt.tag)) {
-            unsupported(tt.tag, "tagged template tag must be a function identifier");
+            const tag = this.emitExpr(tt.tag);
+            if (tag.ty.kind !== "value") {
+                unsupported(tt.tag, "dynamic tagged template tag must be a callable value");
+            }
+            return this.emitDynamicTaggedTemplate(tt, tag);
         }
         const parts = this.templateStringParts(tt.template);
         const expressions = ts.isTemplateExpression(tt.template)
