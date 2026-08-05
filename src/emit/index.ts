@@ -54692,6 +54692,11 @@ class Emitter {
                 yields.push(...arithmeticYields);
                 continue;
             }
+            const commaYields = this.simpleLazyMultiYieldOptionalCallCommaYields(expression);
+            if (commaYields) {
+                yields.push(...commaYields);
+                continue;
+            }
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
