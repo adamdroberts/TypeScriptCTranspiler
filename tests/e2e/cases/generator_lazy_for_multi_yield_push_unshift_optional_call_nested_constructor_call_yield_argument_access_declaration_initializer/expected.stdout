@@ -1,0 +1,18 @@
+push-first push-first false push-receiver
+push-second push-first false push-nested
+push-constructed-after-nested <empty>
+push-third push-first false push-item
+push-fourth push-first false push-spread
+push-fifth push-first,[object Object],push-direct,push-spread-one,push-spread-two false push-key
+push-constructed-after-key push-inner-push-nested-value
+push-sixth push-first,[object Object],push-direct,push-spread-one,push-spread-two false push-body-undefined
+push-done push-first,[object Object],push-direct,push-spread-one,push-spread-two true push-done
+unshift-first unshift-first false unshift-receiver
+unshift-second unshift-first false unshift-nested
+unshift-constructed-after-nested <empty>
+unshift-third unshift-first false unshift-item
+unshift-fourth unshift-first false unshift-spread
+unshift-fifth [object Object],unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-key
+unshift-constructed-after-key unshift-inner-unshift-nested-value
+unshift-sixth [object Object],unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first false unshift-body-undefined
+unshift-done [object Object],unshift-direct,unshift-spread-one,unshift-spread-two,unshift-first true unshift-done

@@ -54513,7 +54513,7 @@ class Emitter {
                 yields.push(...logicalYields);
                 continue;
             }
-            const constructorYields = this.simpleLazyMultiYieldOptionalCallNestedConstructorYields(value);
+            const constructorYields = this.simpleLazyMultiYieldNestedConstructorYields(value);
             if (constructorYields) {
                 yields.push(...constructorYields);
                 continue;
@@ -54585,7 +54585,7 @@ class Emitter {
         return [left];
     }
 
-    private simpleLazyMultiYieldOptionalCallNestedConstructorYields(expr: ts.Expression): ts.YieldExpression[] | null {
+    private simpleLazyMultiYieldNestedConstructorYields(expr: ts.Expression): ts.YieldExpression[] | null {
         const unwrapped = this.unwrapTransparentExpression(expr);
         if (!ts.isNewExpression(unwrapped) ||
             !ts.isIdentifier(this.unwrapTransparentExpression(unwrapped.expression))) return null;
@@ -54596,6 +54596,11 @@ class Emitter {
             const directYield = this.directLazyYieldCondition(value);
             if (directYield) {
                 yields.push(directYield);
+                continue;
+            }
+            const nestedCallYields = this.simpleLazyMultiYieldNestedCallYields(value);
+            if (nestedCallYields) {
+                yields.push(...nestedCallYields);
                 continue;
             }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
@@ -55977,6 +55982,12 @@ class Emitter {
                             afterYield = nestedCallYields[nestedCallYields.length - 1]!;
                             continue;
                         }
+                        const nestedConstructorYields = this.simpleLazyMultiYieldNestedConstructorYields(expression);
+                        if (nestedConstructorYields) {
+                            argumentYields.push(...nestedConstructorYields);
+                            afterYield = nestedConstructorYields[nestedConstructorYields.length - 1]!;
+                            continue;
+                        }
                         if (!this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
                     }
                     return {
@@ -56011,6 +56022,12 @@ class Emitter {
                         if (nestedCallYields) {
                             argumentYields.push(...nestedCallYields);
                             afterYield = nestedCallYields[nestedCallYields.length - 1]!;
+                            continue;
+                        }
+                        const nestedConstructorYields = this.simpleLazyMultiYieldNestedConstructorYields(expression);
+                        if (nestedConstructorYields) {
+                            argumentYields.push(...nestedConstructorYields);
+                            afterYield = nestedConstructorYields[nestedConstructorYields.length - 1]!;
                             continue;
                         }
                         if (!this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
