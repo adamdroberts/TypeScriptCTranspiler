@@ -54518,6 +54518,11 @@ class Emitter {
                 yields.push(...memberYields);
                 continue;
             }
+            const literalYields = this.simpleLazyMultiYieldOptionalCallNestedLiteralYields(value);
+            if (literalYields) {
+                yields.push(...literalYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
@@ -54607,6 +54612,33 @@ class Emitter {
         return visitPart(unwrapped.expression) && visitPart(unwrapped.argumentExpression) && yields.length > 0
             ? yields
             : null;
+    }
+
+    private simpleLazyMultiYieldOptionalCallNestedLiteralYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        const yields: ts.YieldExpression[] = [];
+        const visitValue = (value: ts.Expression): boolean => {
+            const current = this.unwrapTransparentExpression(value);
+            const direct = this.directLazyYieldCondition(current);
+            if (direct) {
+                yields.push(direct);
+                return true;
+            }
+            return !this.nodeContainsYield(value) && this.isSimpleLazyMultiYieldCallArgument(current);
+        };
+        if (ts.isArrayLiteralExpression(unwrapped)) {
+            if (unwrapped.elements.some((element) =>
+                ts.isSpreadElement(element) || ts.isOmittedExpression(element))) return null;
+            return unwrapped.elements.every((element) => visitValue(element)) && yields.length > 0
+                ? yields
+                : null;
+        }
+        if (!ts.isObjectLiteralExpression(unwrapped)) return null;
+        for (const property of unwrapped.properties) {
+            if (!ts.isPropertyAssignment(property) || ts.isComputedPropertyName(property.name) ||
+                !visitValue(property.initializer)) return null;
+        }
+        return yields.length > 0 ? yields : null;
     }
 
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
