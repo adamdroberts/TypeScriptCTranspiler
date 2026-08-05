@@ -54475,7 +54475,13 @@ class Emitter {
         if (!directCalleeYield && (!ts.isIdentifier(callee) || !this.isDirectCallableIdentifier(callee))) return null;
         const yields: ts.YieldExpression[] = directCalleeYield ? [directCalleeYield] : [];
         for (const argument of unwrapped.arguments) {
-            if (ts.isSpreadElement(argument)) return null;
+            if (ts.isSpreadElement(argument)) {
+                if (directCalleeYield) return null;
+                const spreadSource = this.directLazyYieldCondition(argument.expression);
+                if (!spreadSource) return null;
+                yields.push(spreadSource);
+                continue;
+            }
             const value = this.unwrapTransparentExpression(argument);
             if (ts.isYieldExpression(value)) {
                 if (value.asteriskToken || (value.expression && this.nodeContainsYield(value.expression))) return null;
