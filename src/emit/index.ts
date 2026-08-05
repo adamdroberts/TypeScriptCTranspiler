@@ -54389,6 +54389,14 @@ class Emitter {
             return expr.templateSpans.every((span) =>
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(span.expression)));
         }
+        if (ts.isTaggedTemplateExpression(expr)) {
+            const tag = this.unwrapTransparentExpression(expr.tag);
+            if (!ts.isIdentifier(tag)) return false;
+            return ts.isTemplateExpression(expr.template)
+                ? expr.template.templateSpans.every((span) =>
+                    this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(span.expression)))
+                : true;
+        }
         if (ts.isArrayLiteralExpression(expr)) {
             return expr.elements.every((element) => {
                 if (ts.isSpreadElement(element)) {
