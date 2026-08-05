@@ -52988,7 +52988,8 @@ class Emitter {
                 const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.condition);
                 if (!logicalCondition || logicalCondition.yields.length === 0) return false;
             }
-            if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor)) return false;
+            if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor) &&
+                !this.directLazyYieldCondition(stmt.incrementor)) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -56084,8 +56085,20 @@ class Emitter {
             }
             if (stmt.incrementor) {
                 buf.line(`${continueLabel}:;`);
-                const inc = this.emitExpr(stmt.incrementor);
-                buf.line(`(void)(${inc.c});`);
+                const yieldedIncrementor = this.directLazyYieldCondition(stmt.incrementor);
+                if (yieldedIncrementor) {
+                    this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        stmt.incrementor,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                } else {
+                    const inc = this.emitExpr(stmt.incrementor);
+                    buf.line(`(void)(${inc.c});`);
+                }
             }
             buf.close();
             buf.close();
