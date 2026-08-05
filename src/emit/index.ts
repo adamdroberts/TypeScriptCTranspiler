@@ -54402,17 +54402,32 @@ class Emitter {
         });
     }
 
+    private simpleLazyMultiYieldMutationReceiver(
+        receiver: ts.Expression,
+        visit: (node: ts.Expression) => boolean,
+    ): boolean {
+        if (this.directLazyYieldCondition(receiver)) {
+            return visit(receiver);
+        }
+        if (ts.isPropertyAccessExpression(receiver)) {
+            return this.simpleLazyMultiYieldMutationReceiver(receiver.expression, visit);
+        }
+        if (!ts.isElementAccessExpression(receiver) ||
+            !this.simpleLazyMultiYieldMutationReceiver(receiver.expression, visit)) return false;
+        const key = this.unwrapTransparentExpression(receiver.argumentExpression);
+        if (ts.isYieldExpression(key)) return visit(receiver.argumentExpression);
+        return !this.nodeContainsYield(receiver.argumentExpression);
+    }
+
     private simpleLazyMultiYieldMutationOperand(
         operand: ts.Expression,
         visit: (node: ts.Expression) => boolean,
     ): boolean {
         if (ts.isPropertyAccessExpression(operand)) {
-            return !!this.directLazyYieldCondition(operand.expression) &&
-                visit(operand.expression);
+            return this.simpleLazyMultiYieldMutationReceiver(operand.expression, visit);
         }
         if (!ts.isElementAccessExpression(operand) ||
-            !this.directLazyYieldCondition(operand.expression) ||
-            !visit(operand.expression)) return false;
+            !this.simpleLazyMultiYieldMutationReceiver(operand.expression, visit)) return false;
         const key = this.unwrapTransparentExpression(operand.argumentExpression);
         if (ts.isYieldExpression(key)) return visit(operand.argumentExpression);
         return !this.nodeContainsYield(operand.argumentExpression);
@@ -54423,16 +54438,7 @@ class Emitter {
         visit: (node: ts.Expression) => boolean,
     ): boolean {
         if (!this.nodeContainsYield(left)) return true;
-        if (ts.isPropertyAccessExpression(left)) {
-            return !!this.directLazyYieldCondition(left.expression) &&
-                visit(left.expression);
-        }
-        if (!ts.isElementAccessExpression(left) ||
-            !this.directLazyYieldCondition(left.expression) ||
-            !visit(left.expression)) return false;
-        const key = this.unwrapTransparentExpression(left.argumentExpression);
-        if (ts.isYieldExpression(key)) return visit(left.argumentExpression);
-        return !this.nodeContainsYield(left.argumentExpression);
+        return this.simpleLazyMultiYieldMutationOperand(left, visit);
     }
 
     private simpleLazyMultiYieldExpressionStatement(

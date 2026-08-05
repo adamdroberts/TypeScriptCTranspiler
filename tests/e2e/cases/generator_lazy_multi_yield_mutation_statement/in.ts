@@ -1,4 +1,4 @@
-let box: any = { value: 10, other: 3 };
+let box: any = { value: 10, other: 3, child: { value: 20 } };
 
 function* assignmentMutation(): Generator<string, string, any> {
     (yield "assign-receiver")[yield "assign-key"] = 42;
@@ -8,6 +8,11 @@ function* assignmentMutation(): Generator<string, string, any> {
 function* assignmentWithYieldedRight(): Generator<string, string, any> {
     (yield "rhs-receiver")[yield "rhs-key"] = yield "rhs-value";
     return "rhs-done";
+}
+
+function* nestedMutation(): Generator<string, string, any> {
+    (yield "nested-receiver").child[yield "nested-key"]++;
+    return "nested-done";
 }
 
 function* postfixMutation(): Generator<string, string, any> {
@@ -32,6 +37,12 @@ const rhsSecond: any = rhsAssignment.next(box);
 const rhsThird: any = rhsAssignment.next("value");
 const rhsDone: any = rhsAssignment.next(42);
 console.log("assignment-rhs", rhsFirst.done, rhsFirst.value, rhsSecond.done, rhsSecond.value, rhsThird.done, rhsThird.value, rhsDone.done, rhsDone.value, box.value);
+
+const nested = nestedMutation();
+const nestedFirst: any = nested.next();
+const nestedSecond: any = nested.next(box);
+const nestedDone: any = nested.next("value");
+console.log("nested", nestedFirst.done, nestedFirst.value, nestedSecond.done, nestedSecond.value, nestedDone.done, nestedDone.value, box.child.value);
 
 box.value = 10;
 const postfix = postfixMutation();
