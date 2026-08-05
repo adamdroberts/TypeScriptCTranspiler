@@ -54486,9 +54486,31 @@ class Emitter {
                 yields.push(...arithmeticYields);
                 continue;
             }
+            const commaYields = this.simpleLazyMultiYieldOptionalCallCommaYields(value);
+            if (commaYields) {
+                yields.push(...commaYields);
+                continue;
+            }
             if (this.nodeContainsYield(argument) || !this.isSimpleLazyMultiYieldCallArgument(value)) return null;
         }
         return yields.length > 0 ? yields : null;
+    }
+
+    private simpleLazyMultiYieldOptionalCallCommaYields(expr: ts.Expression): ts.YieldExpression[] | null {
+        const yields: ts.YieldExpression[] = [];
+        const visit = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            const directYield = this.directLazyYieldCondition(unwrapped);
+            if (directYield) {
+                yields.push(directYield);
+                return true;
+            }
+            if (!this.nodeContainsYield(unwrapped)) return this.isSimpleLazyMultiYieldCallArgument(unwrapped);
+            return ts.isBinaryExpression(unwrapped) &&
+                unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken &&
+                visit(unwrapped.left) && visit(unwrapped.right);
+        };
+        return visit(expr) && yields.length > 0 ? yields : null;
     }
 
     private isSimpleLazyMultiYieldCallBinaryArgument(expr: ts.Expression): boolean {
