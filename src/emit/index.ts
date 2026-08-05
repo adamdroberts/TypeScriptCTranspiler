@@ -55650,15 +55650,21 @@ class Emitter {
                     };
                 }
                 if (callee.name.text === "unshift") {
-                    if (current.arguments.length !== 1 || !ts.isSpreadElement(current.arguments[0]!)) return null;
                     const base = this.directLazyYieldCondition(callee.expression);
-                    const spreadSource = this.directLazyYieldCondition(current.arguments[0]!.expression);
-                    if (!base || !spreadSource) return null;
+                    if (!base || current.arguments.length === 0) return null;
+                    const spreadSources: ts.YieldExpression[] = [];
+                    for (const argument of current.arguments) {
+                        if (!ts.isSpreadElement(argument)) return null;
+                        const spreadSource = this.directLazyYieldCondition(argument.expression);
+                        if (!spreadSource) return null;
+                        spreadSources.push(spreadSource);
+                    }
+                    const afterYield = spreadSources[spreadSources.length - 1]!;
                     return {
-                        yields: key ? [base, spreadSource, key] : [base, spreadSource],
+                        yields: key ? [base, ...spreadSources, key] : [base, ...spreadSources],
                         stagedExpressions: callStages.reverse().map((call) => ({
                             expression: call,
-                            afterYield: spreadSource,
+                            afterYield,
                         })),
                     };
                 }
