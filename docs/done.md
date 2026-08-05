@@ -3519,6 +3519,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_initializer_yield` | lazy generators suspend and resume direct yielded counted-for variable initializers before condition evaluation |
 | `generator_lazy_for_multiple_initializers_yield` | lazy generators preserve source order across multiple direct yielded counted-for variable initializers |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
+| `generator_lazy_for_multi_yield_assignment_initializer` | lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |
 | `generator_lazy_for_in_yield_source` | lazy generators suspend on a direct yielded dynamic `for...in` source before enumerating the resumed value |
 | `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived class/interface field overrides; regular `for_in` covers the same multi-level inherited-field resolver, override path, and inherited interface path |

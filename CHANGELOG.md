@@ -51,7 +51,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now suspend on direct non-asterisk `yield` expressions in one or more counted-`for` variable initializers, assign resumed values in declaration order before condition evaluation, and preserve condition/body ordering and terminal return; broader declaration-initializer graphs remain deferred. Tests: `generator_lazy_for_initializer_yield`, `generator_lazy_for_multiple_initializers_yield`.
 
-- Lazy generators now suspend on a direct non-asterisk yielded RHS in a plain `=` counted-`for` expression initializer, assign the resumed value through the existing lvalue path before condition evaluation, and preserve condition/body ordering and terminal return; compound assignments, multiple yields, and broader initializer graphs remain deferred. Test: `generator_lazy_for_assignment_initializer_yield`.
+- Lazy generators now suspend on a direct non-asterisk yielded RHS in a plain `=` counted-`for` expression initializer, assign the resumed value through the existing lvalue path before condition evaluation, and preserve condition/body ordering and terminal return; broader initializer graphs remain deferred. Test: `generator_lazy_for_assignment_initializer_yield`.
+
+- Lazy generators now stage multiple direct non-asterisk yielded arithmetic/bitwise RHS operands in identifier-lvalue plain `=` and arithmetic/bitwise compound counted-`for` expression initializers before condition evaluation, preserving source order, assignment, body ordering, and terminal return; logical RHS trees, side-effecting operands, member/computed lvalues, declaration initializers, and broader initializer graphs remain deferred. Test: `generator_lazy_for_multi_yield_assignment_initializer`.
 
 - Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing while leaving broader condition graphs and compound switch selectors deferred. Test: `generator_lazy_if_yield_condition`.
 

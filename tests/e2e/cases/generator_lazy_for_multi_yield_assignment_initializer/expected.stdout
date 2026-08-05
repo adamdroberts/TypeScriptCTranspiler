@@ -1,0 +1,8 @@
+assign-1 false assign-a
+assign-2 false assign-b
+assign-3 false assign-body-2
+assign-4 true assign-done
+compound-1 false compound-a
+compound-2 false compound-b
+compound-3 false compound-body-2
+compound-4 true compound-done

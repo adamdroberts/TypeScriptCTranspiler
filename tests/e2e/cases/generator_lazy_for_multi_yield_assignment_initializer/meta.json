@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers"
+}

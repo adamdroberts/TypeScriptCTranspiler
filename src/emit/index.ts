@@ -54810,6 +54810,18 @@ class Emitter {
                 const info = this.simpleLazyMultiYieldCompoundIncrementor(current.incrementor);
                 if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
             }
+            if (ts.isForStatement(current) && current.initializer && !ts.isVariableDeclarationList(current.initializer)) {
+                const collectInitializer = (initializer: ts.Expression): void => {
+                    const unwrapped = this.unwrapTransparentExpression(initializer);
+                    const info = this.simpleLazyMultiYieldCompoundIncrementor(unwrapped, true);
+                    if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
+                    if (ts.isBinaryExpression(unwrapped) && unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+                        collectInitializer(unwrapped.left);
+                        collectInitializer(unwrapped.right);
+                    }
+                };
+                collectInitializer(current.initializer);
+            }
             ts.forEachChild(current, visit);
         };
         visit(node);
@@ -55094,6 +55106,18 @@ class Emitter {
                 if (!value) unsupported(current, "lazy generator yielded expression for-init could not suspend");
                 return;
             }
+            const multiYieldAssignment = this.simpleLazyMultiYieldCompoundIncrementor(current, true);
+            if (multiYieldAssignment) {
+                this.emitLazyGeneratorMultiYieldExpressionStatement(
+                    buf,
+                    multiYieldAssignment,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                return;
+            }
             if (
                 ts.isBinaryExpression(current) &&
                 current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -55200,6 +55224,7 @@ class Emitter {
             return this.isValidLazyGeneratorForInitializerExpression(current.left) &&
                 this.isValidLazyGeneratorForInitializerExpression(current.right);
         }
+        if (this.simpleLazyMultiYieldCompoundIncrementor(current, true)) return true;
         if (!ts.isBinaryExpression(current) || !this.directLazyYieldCondition(current.right)) return false;
         if (current.operatorToken.kind === ts.SyntaxKind.EqualsToken) return true;
         return ts.isIdentifier(current.left) && this.isSimpleLazyYieldCompoundAssignment(current);
@@ -55222,12 +55247,15 @@ class Emitter {
 
     private simpleLazyMultiYieldCompoundIncrementor(
         expr: ts.Expression,
+        allowAssignment = false,
     ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
         const current = this.unwrapTransparentExpression(expr);
+        const isAssignment = ts.isBinaryExpression(current) &&
+            current.operatorToken.kind === ts.SyntaxKind.EqualsToken;
         if (!ts.isBinaryExpression(current) ||
-            current.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+            (isAssignment && !allowAssignment) ||
             !ts.isIdentifier(current.left) ||
-            !this.isSimpleLazyYieldCompoundAssignment(current)) {
+            (!isAssignment && !this.isSimpleLazyYieldCompoundAssignment(current))) {
             return null;
         }
         const arithmeticOperators = [
