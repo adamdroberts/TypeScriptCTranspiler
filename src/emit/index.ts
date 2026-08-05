@@ -54464,7 +54464,10 @@ class Emitter {
             for (let index = 0; index < receiver.arguments.length; index++) {
                 const argument = receiver.arguments[index]!;
                 const spread = ts.isSpreadElement(argument);
-                if (spread && (callee.name.text !== "splice" || index < 2)) return null;
+                if (spread && (
+                    !["concat", "splice"].includes(callee.name.text) ||
+                    callee.name.text === "splice" && index < 2
+                )) return null;
                 const argumentExpression = spread ? argument.expression : argument as ts.Expression;
                 const unwrappedArgument = this.unwrapTransparentExpression(argumentExpression);
                 if (ts.isYieldExpression(unwrappedArgument)) {
@@ -69172,6 +69175,17 @@ class Emitter {
                 });
             }
             case "concat": {
+                if (args.some((arg) => ts.isSpreadElement(arg))) {
+                    const items = this.emitSpreadCallArgumentList(args);
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: items, target: arrayType(T_VALUE), node: call },
+                    ], ([target, itemList]) => {
+                        const out = this.freshTemp("_concat");
+                        const index = this.freshTemp("_concat_i");
+                        return `({ tsc_value_t ${out} = ${itemList}->len == 0 ? tsc_value_method_concat_empty(${target}) : ${target}; for (size_t ${index} = 0; ${index} < ${itemList}->len; ${index}++) ${out} = tsc_value_method_concat(${out}, TSC_ARR(tsc_value_t, ${itemList}, ${index})); ${out}; })`;
+                    });
+                }
                 if (args.length === 0) {
                     return this.emitSequencedCall("tsc_value_method_concat_empty", T_VALUE, [
                         { value: recv, target: T_VALUE, node: call.expression },

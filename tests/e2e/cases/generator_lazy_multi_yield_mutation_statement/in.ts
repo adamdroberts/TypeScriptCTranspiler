@@ -62,6 +62,10 @@ const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
 const callSpreadItems: any = [callSpreadInserted];
+const concatSpreadBase: any = { value: 160 };
+const concatSpreadBox: any = [concatSpreadBase];
+const concatSpreadInserted: any = { value: 170 };
+const concatSpreadItems: any = [concatSpreadInserted];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -96,6 +100,11 @@ function* callArgumentBetweenYields(): Generator<string, string, any> {
 function* callSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-spread-receiver").splice(0, 1, ...(yield "call-spread-items")).pop()[(yield "call-spread-key")]++;
     return "call-spread-done";
+}
+
+function* concatSpreadBetweenYields(): Generator<string, string, any> {
+    (yield "concat-spread-receiver").concat(...(yield "concat-spread-items")).pop()[(yield "concat-spread-key")]++;
+    return "concat-spread-done";
 }
 
 const assignment = assignmentMutation();
@@ -176,3 +185,10 @@ const callSpreadSecond: any = callSpread.next(callSpreadBox);
 const callSpreadThird: any = callSpread.next(callSpreadItems);
 const callSpreadDone: any = callSpread.next("value");
 console.log("call-spread", callSpreadFirst.done, callSpreadFirst.value, callSpreadSecond.done, callSpreadSecond.value, callSpreadThird.done, callSpreadThird.value, callSpreadDone.done, callSpreadDone.value, callSpreadBox.length, callSpreadBox[0].value, callSpreadChild.value);
+
+const concatSpread = concatSpreadBetweenYields();
+const concatSpreadFirst: any = concatSpread.next();
+const concatSpreadSecond: any = concatSpread.next(concatSpreadBox);
+const concatSpreadThird: any = concatSpread.next(concatSpreadItems);
+const concatSpreadDone: any = concatSpread.next("value");
+console.log("concat-spread", concatSpreadFirst.done, concatSpreadFirst.value, concatSpreadSecond.done, concatSpreadSecond.value, concatSpreadThird.done, concatSpreadThird.value, concatSpreadDone.done, concatSpreadDone.value, concatSpreadBox.length, concatSpreadInserted.value);

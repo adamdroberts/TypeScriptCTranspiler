@@ -27,6 +27,10 @@ const callSpreadChild: any = { value: 140 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 150 };
 const callSpreadItems: any = [callSpreadInserted];
+const concatSpreadBase: any = { value: 180 };
+const concatSpreadBox: any = [concatSpreadBase];
+const concatSpreadInserted: any = { value: 190 };
+const concatSpreadItems: any = [concatSpreadInserted];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -70,6 +74,10 @@ function* intermediateCallArgumentReturn(): Generator<any, number, any> {
 
 function* intermediateCallSpreadReturn(): Generator<any, number, any> {
     return ++(yield callSpreadBox).splice(0, 1, ...(yield "items")).pop()[(yield "value")];
+}
+
+function* intermediateConcatSpreadReturn(): Generator<any, number, any> {
+    return ++(yield concatSpreadBox).concat(...(yield "items")).pop()[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -147,3 +155,10 @@ const intermediateCallSpreadSecond: any = intermediateCallSpreadIterator.next(ca
 const intermediateCallSpreadThird: any = intermediateCallSpreadIterator.next(callSpreadItems);
 const intermediateCallSpreadDone: any = intermediateCallSpreadIterator.next("value");
 console.log("call-spread", intermediateCallSpreadFirst.done, intermediateCallSpreadFirst.value === callSpreadBox, intermediateCallSpreadSecond.done, intermediateCallSpreadSecond.value, intermediateCallSpreadThird.done, intermediateCallSpreadThird.value, intermediateCallSpreadDone.done, intermediateCallSpreadDone.value, callSpreadBox.length, callSpreadBox[0].value, callSpreadChild.value);
+
+const intermediateConcatSpreadIterator = intermediateConcatSpreadReturn();
+const intermediateConcatSpreadFirst: any = intermediateConcatSpreadIterator.next();
+const intermediateConcatSpreadSecond: any = intermediateConcatSpreadIterator.next(concatSpreadBox);
+const intermediateConcatSpreadThird: any = intermediateConcatSpreadIterator.next(concatSpreadItems);
+const intermediateConcatSpreadDone: any = intermediateConcatSpreadIterator.next("value");
+console.log("concat-spread", intermediateConcatSpreadFirst.done, intermediateConcatSpreadFirst.value === concatSpreadBox, intermediateConcatSpreadSecond.done, intermediateConcatSpreadSecond.value, intermediateConcatSpreadThird.done, intermediateConcatSpreadThird.value, intermediateConcatSpreadDone.done, intermediateConcatSpreadDone.value, concatSpreadBox.length, concatSpreadInserted.value);
