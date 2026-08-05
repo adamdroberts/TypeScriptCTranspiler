@@ -642,7 +642,12 @@ interface AsyncAwaitContinuationReturnTarget {
 }
 
 type GenericCallableDeclaration = ts.FunctionDeclaration | ts.MethodDeclaration;
-type ClosureLikeDeclaration = ts.ArrowFunction | ts.FunctionExpression | ts.MethodDeclaration;
+type ClosureLikeDeclaration =
+    | ts.ArrowFunction
+    | ts.FunctionExpression
+    | ts.MethodDeclaration
+    | ts.GetAccessorDeclaration
+    | ts.SetAccessorDeclaration;
 type LiftableFunctionDeclaration = ts.ArrowFunction | ts.FunctionExpression;
 type CommonJsExportAccess = ts.PropertyAccessExpression | ts.ElementAccessExpression;
 type CommonJsObjectAssignExportEntry =
@@ -52898,7 +52903,9 @@ class Emitter {
         let hasNestedFunctionOrClass = false;
         const checkNestedScopes = (node: ts.Node) => {
             if (node !== stmt && (ts.isFunctionLike(node) || ts.isClassLike(node))) {
-                if (ts.isMethodDeclaration(node) &&
+                if ((ts.isMethodDeclaration(node) ||
+                    ts.isGetAccessorDeclaration(node) ||
+                    ts.isSetAccessorDeclaration(node)) &&
                     ts.isObjectLiteralExpression(node.parent) &&
                     !this.nodeContainsYield(node)) {
                     return;
@@ -54706,6 +54713,8 @@ class Emitter {
                     } else if (ts.isShorthandPropertyAssignment(property)) {
                         continue;
                     } else if (ts.isMethodDeclaration(property)) {
+                        if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
+                    } else if (ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) {
                         if (!this.staticPropertyName(property.name) || this.nodeContainsYield(property)) return false;
                     } else if (ts.isSpreadAssignment(property)) {
                         if (!visitSpread(property.expression)) return false;
@@ -56543,7 +56552,10 @@ class Emitter {
             this.checker.getContextualType(ol) ??
             this.checker.getTypeAtLocation(ol);
         const nestedSpreadSource = ts.isSpreadAssignment(ol.parent) || ts.isSpreadElement(ol.parent);
-        const mapped = this.isUntypedJsObjectLiteral(ol) || nestedSpreadSource
+        const hasAccessor = ol.properties.some((property) =>
+            ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
+        );
+        const mapped = this.isUntypedJsObjectLiteral(ol) || nestedSpreadSource || hasAccessor
             ? T_VALUE
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
@@ -56565,6 +56577,18 @@ class Emitter {
                     const value = this.emitClosureExpression(property);
                     pieces.push(
                         `tsc_object_set(${object}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, property)})`,
+                    );
+                    continue;
+                }
+                if (ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property)) {
+                    const name = this.staticPropertyName(property.name) ??
+                        unsupported(property.name, "lazy multi-yield object accessor keys must be static");
+                    const value = this.emitClosureExpression(property);
+                    const define = ts.isGetAccessorDeclaration(property)
+                        ? "tsc_value_object_define_getter"
+                        : "tsc_value_object_define_setter";
+                    pieces.push(
+                        `${define}(tsc_value_object(${object}), tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ${this.coerce(value, T_VALUE, property)})`,
                     );
                     continue;
                 }
@@ -58553,8 +58577,21 @@ class Emitter {
                     }
                     fieldName = staticName;
                     expr = prop;
+                } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
+                    const staticName = this.staticPropertyName(prop.name);
+                    if (!staticName) {
+                        unsupported(prop.name, "dynamic object accessor key must be a string/number literal");
+                    }
+                    const value = this.emitClosureExpression(prop);
+                    const define = ts.isGetAccessorDeclaration(prop)
+                        ? "tsc_value_object_define_getter"
+                        : "tsc_value_object_define_setter";
+                    pieces.push(
+                        `${define}(tsc_value_object(${obj}), tsc_str_from_lit("${escapeCString(staticName)}", ${utf8ByteLen(staticName)}), ${this.coerce(value, T_VALUE, prop)})`,
+                    );
+                    continue;
                 } else {
-                    unsupported(prop, `object literal property kind ${ts.SyntaxKind[prop.kind]}`);
+                    unsupported(prop, `object literal property kind ${ts.SyntaxKind[(prop as ts.Node).kind]}`);
                 }
                 const value = ts.isMethodDeclaration(expr)
                     ? this.emitClosureExpression(expr)
@@ -90141,7 +90178,10 @@ class Emitter {
             this.asyncAwaitReturnContextTypes.get(ol) ??
             this.checker.getContextualType(ol) ??
             this.checker.getTypeAtLocation(ol);
-        const mapped = this.isUntypedJsObjectLiteral(ol)
+        const hasAccessor = ol.properties.some((property) =>
+            ts.isGetAccessorDeclaration(property) || ts.isSetAccessorDeclaration(property),
+        );
+        const mapped = this.isUntypedJsObjectLiteral(ol) || hasAccessor
             ? T_VALUE
             : this.prepareType(mapTsType(ol, targetType, this.checker));
         if (mapped.kind === "value") {
@@ -90183,8 +90223,21 @@ class Emitter {
                     }
                     fieldName = staticName;
                     expr = prop;
+                } else if (ts.isGetAccessorDeclaration(prop) || ts.isSetAccessorDeclaration(prop)) {
+                    const staticName = this.staticPropertyName(prop.name);
+                    if (!staticName) {
+                        unsupported(prop.name, "dynamic object accessor key must be a string/number literal");
+                    }
+                    const value = this.emitClosureExpression(prop);
+                    const define = ts.isGetAccessorDeclaration(prop)
+                        ? "tsc_value_object_define_getter"
+                        : "tsc_value_object_define_setter";
+                    pieces.push(
+                        `${define}(tsc_value_object(${obj}), tsc_str_from_lit("${escapeCString(staticName)}", ${utf8ByteLen(staticName)}), ${this.coerce(value, T_VALUE, prop)})`,
+                    );
+                    continue;
                 } else {
-                    unsupported(prop, `object literal property kind ${ts.SyntaxKind[prop.kind]}`);
+                    unsupported(prop, `object literal property kind ${ts.SyntaxKind[(prop as ts.Node).kind]}`);
                 }
                 const value = ts.isMethodDeclaration(expr)
                     ? this.emitClosureExpression(expr)

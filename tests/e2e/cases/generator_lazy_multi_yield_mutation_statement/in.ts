@@ -78,6 +78,8 @@ function formatComputedKey(prefix: any, suffix: any): string {
 }
 const methodRhsEvents: string[] = [];
 const methodRhsBox: any = { value: null };
+const accessorRhsEvents: string[] = [];
+const accessorRhsBox: any = { value: null };
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
@@ -190,6 +192,21 @@ function* methodRhsAssignmentBetweenYields(): Generator<string, string, any> {
     return "method-rhs-done";
 }
 
+function* accessorRhsAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "accessor-rhs-receiver")[yield "accessor-rhs-slot"] = {
+        first: yield "accessor-rhs-first",
+        get score() {
+            accessorRhsEvents.push("get");
+            return "score";
+        },
+        set score(value: any) {
+            accessorRhsEvents.push("set:" + value);
+        },
+        after: yield "accessor-rhs-after",
+    };
+    return "accessor-rhs-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -258,6 +275,18 @@ const methodRhsAssignmentThird: any = methodRhsAssignment.next("value");
 const methodRhsAssignmentFourth: any = methodRhsAssignment.next(4);
 const methodRhsAssignmentDone: any = methodRhsAssignment.next("after");
 console.log("assignment-method-rhs", methodRhsAssignmentFirst.done, methodRhsAssignmentFirst.value, methodRhsAssignmentSecond.done, methodRhsAssignmentSecond.value, methodRhsAssignmentThird.done, methodRhsAssignmentThird.value, methodRhsAssignmentFourth.done, methodRhsAssignmentFourth.value, methodRhsEvents.join(","), methodRhsAssignmentDone.done, methodRhsAssignmentDone.value, methodRhsBox.value.first, methodRhsBox.value.after, methodRhsBox.value.add("done"), methodRhsEvents.join(","));
+
+const accessorRhsAssignment = accessorRhsAssignmentBetweenYields();
+const accessorRhsAssignmentFirst: any = accessorRhsAssignment.next();
+const accessorRhsAssignmentSecond: any = accessorRhsAssignment.next(accessorRhsBox);
+const accessorRhsAssignmentThird: any = accessorRhsAssignment.next("value");
+const accessorRhsAssignmentFourth: any = accessorRhsAssignment.next(4);
+const accessorRhsAssignmentDone: any = accessorRhsAssignment.next("after");
+const accessorRhsDescriptor: any = Object.getOwnPropertyDescriptor(accessorRhsBox.value, "score");
+const accessorRhsEventsBeforeAccess = accessorRhsEvents.join(",");
+const accessorRhsRead: any = accessorRhsBox.value.score;
+accessorRhsBox.value.score = "updated";
+console.log("assignment-accessor-rhs", accessorRhsAssignmentFirst.done, accessorRhsAssignmentFirst.value, accessorRhsAssignmentSecond.done, accessorRhsAssignmentSecond.value, accessorRhsAssignmentThird.done, accessorRhsAssignmentThird.value, accessorRhsAssignmentFourth.done, accessorRhsAssignmentFourth.value, accessorRhsEventsBeforeAccess, accessorRhsAssignmentDone.done, accessorRhsAssignmentDone.value, accessorRhsBox.value.first, accessorRhsBox.value.after, accessorRhsDescriptor.enumerable, accessorRhsDescriptor.configurable, typeof accessorRhsDescriptor.get, typeof accessorRhsDescriptor.set, accessorRhsRead, accessorRhsEvents.join(","));
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();
