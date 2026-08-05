@@ -128,7 +128,8 @@ interface LazyMultiYieldConditionalBranch {
 
 type LazyMultiYieldConditionalArmEvent =
     | { kind: "yield"; expression: ts.YieldExpression }
-    | { kind: "conditional"; conditionalBranch: LazyMultiYieldConditionalBranch };
+    | { kind: "conditional"; conditionalBranch: LazyMultiYieldConditionalBranch }
+    | { kind: "logical"; logicalPlan: LazyMultiYieldLogicalPlan };
 
 interface LazyMultiYieldConditionalArm {
     expression: ts.Expression;
@@ -53651,11 +53652,43 @@ class Emitter {
             });
         };
 
-        const collectDirectYields = (branch: ts.Expression): ts.YieldExpression[] | null => {
+        const findLogicalRoots = (
+            rootExpression: ts.Expression,
+            excludedConditionals: readonly ts.ConditionalExpression[],
+        ): LazyMultiYieldLogicalPlan[] => {
+            const plans: LazyMultiYieldLogicalPlan[] = [];
+            const find = (node: ts.Node): void => {
+                if (node !== rootExpression && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                if (ts.isConditionalExpression(node) && excludedConditionals.includes(node)) return;
+                if (ts.isBinaryExpression(node)) {
+                    const plan = this.simpleLazyMultiYieldLogicalPlan(node);
+                    if (plan) {
+                        plans.push(plan);
+                        return;
+                    }
+                }
+                ts.forEachChild(node, find);
+            };
+            find(rootExpression);
+            return plans;
+        };
+
+        const collectDirectYields = (
+            branch: ts.Expression,
+            excludedConditionals: readonly ts.ConditionalExpression[],
+            logicalPlans: readonly LazyMultiYieldLogicalPlan[],
+        ): ts.YieldExpression[] | null => {
             const branchYields: ts.YieldExpression[] = [];
+            const logicalRoots = new Set(logicalPlans.map((plan) => plan.expression));
             let valid = true;
             const collect = (node: ts.Node): void => {
                 if (!valid || (node !== branch && (ts.isFunctionLike(node) || ts.isClassLike(node)))) return;
+                if (ts.isConditionalExpression(node) && excludedConditionals.includes(node)) {
+                    return;
+                }
+                if (ts.isBinaryExpression(node) && logicalRoots.has(node)) {
+                    return;
+                }
                 if (ts.isConditionalExpression(node)) {
                     valid = false;
                     return;
@@ -53681,16 +53714,19 @@ class Emitter {
                 const nestedPlans = nestedRoots.map((root) => buildPlan(root));
                 if (nestedPlans.some((plan) => plan === null)) return null;
                 const resolvedNestedPlans = nestedPlans as LazyMultiYieldConditionalBranch[];
+                const resolvedLogicalPlans = findLogicalRoots(branch, nestedRoots);
                 const directYields: ts.YieldExpression[] = [];
                 let valid = true;
                 if (nestedRoots.length === 0) {
-                    const yields = collectDirectYields(branch);
+                    const yields = collectDirectYields(branch, nestedRoots, resolvedLogicalPlans);
                     if (!yields) return null;
                     directYields.push(...yields);
                 } else {
+                    const logicalRoots = new Set(resolvedLogicalPlans.map((plan) => plan.expression));
                     const collect = (node: ts.Node): void => {
                         if (!valid || (node !== branch && (ts.isFunctionLike(node) || ts.isClassLike(node)))) return;
                         if (ts.isConditionalExpression(node) && nestedRoots.includes(node)) return;
+                        if (ts.isBinaryExpression(node) && logicalRoots.has(node)) return;
                         if (ts.isYieldExpression(node)) {
                             if (node.asteriskToken || (node.expression && this.nodeContainsYield(node.expression))) {
                                 valid = false;
@@ -53706,6 +53742,7 @@ class Emitter {
                 const eventCandidates: Array<
                     | { kind: "yield"; expression: ts.YieldExpression; position: number }
                     | { kind: "conditional"; conditionalBranch: LazyMultiYieldConditionalBranch; position: number }
+                    | { kind: "logical"; logicalPlan: LazyMultiYieldLogicalPlan; position: number }
                 > = [
                     ...directYields.map((expression) => ({
                         kind: "yield" as const,
@@ -53717,17 +53754,25 @@ class Emitter {
                         conditionalBranch,
                         position: conditionalBranch.expression.getStart(),
                     })),
+                    ...resolvedLogicalPlans.map((logicalPlan) => ({
+                        kind: "logical" as const,
+                        logicalPlan,
+                        position: logicalPlan.expression.getStart(),
+                    })),
                 ].sort((left, right) => left.position - right.position);
                 return {
                     expression: branch,
                     events: eventCandidates.map((event) =>
                         event.kind === "yield"
                             ? { kind: "yield" as const, expression: event.expression }
-                            : { kind: "conditional" as const, conditionalBranch: event.conditionalBranch },
+                            : event.kind === "conditional"
+                                ? { kind: "conditional" as const, conditionalBranch: event.conditionalBranch }
+                                : { kind: "logical" as const, logicalPlan: event.logicalPlan },
                     ),
                     yields: [
                         ...directYields,
                         ...resolvedNestedPlans.flatMap((conditionalBranch) => conditionalBranch.yields),
+                        ...resolvedLogicalPlans.flatMap((logicalPlan) => logicalPlan.yields),
                     ],
                 };
             };
@@ -53801,11 +53846,13 @@ class Emitter {
         const conditionalPlans = new Map<ts.ConditionalExpression, LazyMultiYieldConditionalBranch>();
         const logicalPlans: LazyMultiYieldLogicalPlan[] = [];
         const logicalPlanRoots = new Set<ts.BinaryExpression>();
+        const conditionalLogicalPlanRoots = new Set<ts.BinaryExpression>();
         const registerConditionalPlan = (plan: LazyMultiYieldConditionalBranch): void => {
             conditionalPlans.set(plan.expression, plan);
             for (const arm of [plan.whenTrue, plan.whenFalse]) {
                 for (const event of arm.events) {
                     if (event.kind === "conditional") registerConditionalPlan(event.conditionalBranch);
+                    if (event.kind === "logical") conditionalLogicalPlanRoots.add(event.logicalPlan.expression);
                 }
             }
         };
@@ -53945,11 +53992,11 @@ class Emitter {
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
                 const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(unwrapped);
                 if (logicalPlan) {
-                    if (!logicalPlanRoots.has(logicalPlan.expression)) {
+                    if (!conditionalLogicalPlanRoots.has(logicalPlan.expression) && !logicalPlanRoots.has(logicalPlan.expression)) {
                         logicalPlanRoots.add(logicalPlan.expression);
                         logicalPlans.push(logicalPlan);
-                        yields.push(...logicalPlan.yields);
                     }
+                    yields.push(...logicalPlan.yields);
                     return true;
                 }
                 if (!this.nodeContainsYield(unwrapped)) return true;
@@ -55964,6 +56011,115 @@ class Emitter {
                 if (slot === undefined) unsupported(yieldExpr, "lazy multi-yield conditional branch contains an unknown yield");
                 return slot;
             };
+            const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
+                "yields" in operand;
+            const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
+                !isLogicalPlan(operand) && ts.isYieldExpression(operand);
+            const resumedYield = (yieldExpr: ts.YieldExpression): EmitResult => {
+                const type = this.prepareType(mapTsType(
+                    yieldExpr,
+                    this.checker.getTypeAtLocation(yieldExpr),
+                    this.checker,
+                ));
+                return {
+                    c: this.coerce(
+                        { c: `${envLocalName}->multi_yield_values[${slotForYield(yieldExpr)}]`, ty: T_VALUE },
+                        type,
+                        yieldExpr,
+                    ),
+                    ty: type,
+                };
+            };
+            const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
+                if (isYieldOperand(operand)) return this.truthyExprFromEmitResult(resumedYield(operand), operand);
+                if (!isLogicalPlan(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
+                const left = truthyOperand(operand.left);
+                const right = truthyOperand(operand.right);
+                switch (operand.expression.operatorToken.kind) {
+                    case ts.SyntaxKind.AmpersandAmpersandToken:
+                        return `(${left} && ${right})`;
+                    case ts.SyntaxKind.BarBarToken:
+                        return `(${left} || ${right})`;
+                    default:
+                        return `(${nullishOperand(operand.left)} ? ${right} : ${left})`;
+                }
+            };
+            const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
+                if (isYieldOperand(operand)) return this.nullishExprFromEmitResult(resumedYield(operand), operand);
+                if (!isLogicalPlan(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
+                const leftTruthy = truthyOperand(operand.left);
+                const leftNullish = nullishOperand(operand.left);
+                const rightNullish = nullishOperand(operand.right);
+                switch (operand.expression.operatorToken.kind) {
+                    case ts.SyntaxKind.AmpersandAmpersandToken:
+                        return `(${leftTruthy} ? ${rightNullish} : false)`;
+                    case ts.SyntaxKind.BarBarToken:
+                        return `(${leftTruthy} ? false : ${rightNullish})`;
+                    default:
+                        return `(${leftNullish} && ${rightNullish})`;
+                }
+            };
+            const rightRequiredFor = (expression: ts.BinaryExpression, left: LazyMultiYieldLogicalOperand): string => {
+                const leftTruthy = truthyOperand(left);
+                switch (expression.operatorToken.kind) {
+                    case ts.SyntaxKind.AmpersandAmpersandToken:
+                        return leftTruthy;
+                    case ts.SyntaxKind.BarBarToken:
+                        return `!(${leftTruthy})`;
+                    default:
+                        return nullishOperand(left);
+                }
+            };
+            let scheduleLogicalPlan: (
+                current: LazyMultiYieldLogicalPlan,
+                entryLabel: string,
+                continuationLabel: string,
+            ) => void;
+            const scheduleLogicalOperand = (
+                operand: LazyMultiYieldLogicalOperand,
+                entryLabel: string,
+                continuationLabel: string,
+            ): void => {
+                if (isLogicalPlan(operand)) {
+                    scheduleLogicalPlan(operand, entryLabel, continuationLabel);
+                    return;
+                }
+                if (!isYieldOperand(operand)) {
+                    entryBlocks.push(() => {
+                        buf.line(`${entryLabel}:;`);
+                        buf.line(`goto ${continuationLabel};`);
+                    });
+                    return;
+                }
+                const state = nextStateId();
+                entryBlocks.push(() => {
+                    buf.line(`${entryLabel}:;`);
+                    emitYield(operand, state);
+                });
+                resumeBlocks.push(() => {
+                    buf.line(`case ${state}:;`);
+                    this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                    buf.line(`${envLocalName}->multi_yield_values[${slotForYield(operand)}] = next_arg;`);
+                    buf.line(`goto ${continuationLabel};`);
+                });
+            };
+            scheduleLogicalPlan = (
+                current: LazyMultiYieldLogicalPlan,
+                entryLabel: string,
+                continuationLabel: string,
+            ): void => {
+                const leftDecisionLabel = this.freshTemp("_lazy_multi_yield_conditional_logical_decide");
+                const rightEntryLabel = this.freshTemp("_lazy_multi_yield_conditional_logical_right");
+                scheduleLogicalOperand(current.left, entryLabel, leftDecisionLabel);
+                scheduleLogicalOperand(current.right, rightEntryLabel, continuationLabel);
+                resumeBlocks.push(() => {
+                    buf.line(`${leftDecisionLabel}:;`);
+                    buf.open(`if (${rightRequiredFor(current.expression, current.left)})`);
+                    buf.line(`goto ${rightEntryLabel};`);
+                    buf.close();
+                    buf.line(`goto ${continuationLabel};`);
+                });
+            };
             let schedulePlan: (
                 current: LazyMultiYieldConditionalBranch,
                 entryLabel: string,
@@ -55981,6 +56137,10 @@ class Emitter {
                         : continuationLabel;
                     if (event.kind === "conditional") {
                         schedulePlan(event.conditionalBranch, labels[index]!, eventContinuation);
+                        continue;
+                    }
+                    if (event.kind === "logical") {
+                        scheduleLogicalPlan(event.logicalPlan, labels[index]!, eventContinuation);
                         continue;
                     }
                     const state = nextStateId();

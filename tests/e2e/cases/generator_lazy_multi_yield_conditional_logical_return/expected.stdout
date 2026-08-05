@@ -1,0 +1,4 @@
+root-true-false false condition false true-left true 0
+root-false-false false condition false false-left false false-right true 4
+array-true-false false before false array-condition false array-true-left false after true before|0|after
+array-false-false false before false array-condition false array-false-left false array-false-right false after true before|4|after
