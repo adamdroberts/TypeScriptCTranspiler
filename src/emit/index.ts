@@ -158,6 +158,7 @@ interface LazyMultiYieldTerminalInfo {
 interface LazyMultiYieldMutationStage {
     expression: ts.Expression;
     afterYield: ts.YieldExpression;
+    afterLogicalPlan?: LazyMultiYieldLogicalPlan;
 }
 
 interface LazyGeneratorCatchHandler {
@@ -54779,7 +54780,11 @@ class Emitter {
         yields: readonly ts.YieldExpression[],
         afterYield: ts.YieldExpression,
     ): LazyMultiYieldMutationStage[] | null {
-        const dynamicTags: Array<{ expression: ts.Expression; afterYield?: ts.YieldExpression }> = [];
+        const dynamicTags: Array<{
+            expression: ts.Expression;
+            afterYield?: ts.YieldExpression;
+            afterLogicalPlan?: LazyMultiYieldLogicalPlan;
+        }> = [];
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isTaggedTemplateExpression(unwrapped)) {
@@ -54788,9 +54793,12 @@ class Emitter {
                 if (!directTag && !ts.isIdentifier(tag) && !this.isStringRawTag(tag)) {
                     const yieldedTagCall = this.simpleLazyMultiYieldNestedCallYields(tag);
                     if (yieldedTagCall) {
+                        const tagLogicalPlans = this.simpleLazyMultiYieldNestedTemplateLogicalPlans(tag);
+                        const tagLogicalPlan = tagLogicalPlans.length === 1 ? tagLogicalPlans[0] : undefined;
                         dynamicTags.push({
                             expression: unwrapped.tag,
                             afterYield: yieldedTagCall[yieldedTagCall.length - 1],
+                            afterLogicalPlan: tagLogicalPlan,
                         });
                     } else {
                         if (this.nodeContainsYield(tag) || !this.isSimpleLazyMultiYieldCallArgument(tag)) return false;
@@ -54818,6 +54826,7 @@ class Emitter {
             afterYield: tag.afterYield ??
                 orderedYields.filter((yieldExpr) => yieldExpr.getStart() < tag.expression.getStart()).pop() ??
                 afterYield,
+            afterLogicalPlan: tag.afterLogicalPlan,
         }));
     }
 
@@ -54825,6 +54834,13 @@ class Emitter {
         const plans: LazyMultiYieldLogicalPlan[] = [];
         const visit = (node: ts.Node): void => {
             if (node !== expr && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+            if (ts.isBinaryExpression(node)) {
+                const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(node);
+                if (logicalPlan && logicalPlan.yields.length >= 2) {
+                    plans.push(logicalPlan);
+                    return;
+                }
+            }
             if (ts.isTemplateExpression(node)) {
                 for (const span of node.templateSpans) {
                     const expression = this.unwrapTransparentExpression(span.expression);
@@ -57349,10 +57365,17 @@ class Emitter {
             this.lazyGeneratorMultiYieldMutationStageSlots.get(stage.expression),
         ]));
         const stagesAfterYield = new Map<ts.YieldExpression, LazyMultiYieldMutationStage[]>();
+        const stagesAfterLogicalPlan = new Map<ts.BinaryExpression, LazyMultiYieldMutationStage[]>();
         for (const stage of info.stagedExpressions) {
-            const stages = stagesAfterYield.get(stage.afterYield) ?? [];
+            const stages = stage.afterLogicalPlan
+                ? stagesAfterLogicalPlan.get(stage.afterLogicalPlan.expression) ?? []
+                : stagesAfterYield.get(stage.afterYield) ?? [];
             stages.push(stage);
-            stagesAfterYield.set(stage.afterYield, stages);
+            if (stage.afterLogicalPlan) {
+                stagesAfterLogicalPlan.set(stage.afterLogicalPlan.expression, stages);
+            } else {
+                stagesAfterYield.set(stage.afterYield, stages);
+            }
         }
         const resumeValues = new Map<ts.YieldExpression, EmitResult>();
         for (const yieldExpr of info.yields) {
@@ -57373,18 +57396,22 @@ class Emitter {
             });
         }
         const stageValues = new Map<ts.Expression, EmitResult>();
+        const emitStage = (stage: LazyMultiYieldMutationStage): void => {
+            const slot = stageSlots.get(stage.expression);
+            if (slot === undefined) unsupported(stage.expression, "lazy generator mutation statement contains an unknown staged member");
+            const value = this.emitLazyMultiYieldStagedExpression(stage.expression);
+            const stored = this.coerce(value, T_VALUE, stage.expression);
+            buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${stored};`);
+            stageValues.set(stage.expression, {
+                c: `${envLocalName}->multi_yield_values[${slot}]`,
+                ty: T_VALUE,
+            });
+        };
         const emitStagesAfterYield = (yieldExpr: ts.YieldExpression): void => {
-            for (const stage of stagesAfterYield.get(yieldExpr) ?? []) {
-                const slot = stageSlots.get(stage.expression);
-                if (slot === undefined) unsupported(stage.expression, "lazy generator mutation statement contains an unknown staged member");
-                const value = this.emitLazyMultiYieldStagedExpression(stage.expression);
-                const stored = this.coerce(value, T_VALUE, stage.expression);
-                buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${stored};`);
-                stageValues.set(stage.expression, {
-                    c: `${envLocalName}->multi_yield_values[${slot}]`,
-                    ty: T_VALUE,
-                });
-            }
+            for (const stage of stagesAfterYield.get(yieldExpr) ?? []) emitStage(stage);
+        };
+        const emitStagesAfterLogicalPlan = (plan: LazyMultiYieldLogicalPlan): void => {
+            for (const stage of stagesAfterLogicalPlan.get(plan.expression) ?? []) emitStage(stage);
         };
         const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
         const previousStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
@@ -57520,13 +57547,19 @@ class Emitter {
                 ): void => {
                     const leftDecisionLabel = this.freshTemp("_lazy_multi_yield_conditional_logical_decide");
                     const rightEntryLabel = this.freshTemp("_lazy_multi_yield_conditional_logical_right");
+                    const planCompleteLabel = this.freshTemp("_lazy_multi_yield_conditional_logical_complete");
                     scheduleLogicalOperand(current.left, entryLabel, leftDecisionLabel);
-                    scheduleLogicalOperand(current.right, rightEntryLabel, continuationLabel);
+                    scheduleLogicalOperand(current.right, rightEntryLabel, planCompleteLabel);
                     resumeBlocks.push(() => {
                         buf.line(`${leftDecisionLabel}:;`);
                         buf.open(`if (${rightRequiredFor(current.expression, current.left)})`);
                         buf.line(`goto ${rightEntryLabel};`);
                         buf.close();
+                        buf.line(`goto ${planCompleteLabel};`);
+                    });
+                    resumeBlocks.push(() => {
+                        buf.line(`${planCompleteLabel}:;`);
+                        emitStagesAfterLogicalPlan(current);
                         buf.line(`goto ${continuationLabel};`);
                     });
                 };
@@ -57768,13 +57801,19 @@ class Emitter {
                 ): void => {
                     const leftDecisionLabel = this.freshTemp("_lazy_multi_yield_logical_decide");
                     const rightEntryLabel = this.freshTemp("_lazy_multi_yield_logical_right");
+                    const planCompleteLabel = this.freshTemp("_lazy_multi_yield_logical_complete");
                     scheduleOperand(current.left, entryLabel, leftDecisionLabel);
-                    scheduleOperand(current.right, rightEntryLabel, continuationLabel);
+                    scheduleOperand(current.right, rightEntryLabel, planCompleteLabel);
                     resumeBlocks.push(() => {
                         buf.line(`${leftDecisionLabel}:;`);
                         buf.open(`if (${rightRequiredFor(current.expression, current.left)})`);
                         buf.line(`goto ${rightEntryLabel};`);
                         buf.close();
+                        buf.line(`goto ${planCompleteLabel};`);
+                    });
+                    resumeBlocks.push(() => {
+                        buf.line(`${planCompleteLabel}:;`);
+                        emitStagesAfterLogicalPlan(current);
                         buf.line(`goto ${continuationLabel};`);
                     });
                 };

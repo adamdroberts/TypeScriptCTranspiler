@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yielded arithmetic and logical tag-call arguments before nested tagged-template substitutions inside optional push and unshift calls before mutating computed element access"
+}
