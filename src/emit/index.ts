@@ -54756,6 +54756,11 @@ class Emitter {
         const unwrapped = this.unwrapTransparentExpression(expr);
         if (!ts.isTaggedTemplateExpression(unwrapped)) return null;
         const tag = this.unwrapTransparentExpression(unwrapped.tag);
+        const directTag = this.directLazyYieldCondition(tag);
+        if (directTag) {
+            const templateYields = this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
+            return templateYields ? [directTag, ...templateYields] : [directTag];
+        }
         if ((!ts.isIdentifier(tag) && !this.isStringRawTag(tag)) || !ts.isTemplateExpression(unwrapped.template)) return null;
         return this.simpleLazyMultiYieldOptionalCallNestedTemplateYields(unwrapped.template);
     }
@@ -65115,6 +65120,14 @@ class Emitter {
         if (this.isStringRawTag(tt.tag)) {
             return this.emitStringRawTaggedTemplate(tt);
         }
+        const unwrappedTag = this.unwrapTransparentExpression(tt.tag);
+        if (ts.isYieldExpression(unwrappedTag)) {
+            const tag = this.emitExpr(tt.tag);
+            if (tag.ty.kind !== "value") {
+                unsupported(tt.tag, "yielded tagged template tag must be a dynamic callable value");
+            }
+            return this.emitDynamicTaggedTemplate(tt, tag);
+        }
         if (!ts.isIdentifier(tt.tag)) {
             unsupported(tt.tag, "tagged template tag must be a function identifier");
         }
@@ -65153,6 +65166,39 @@ class Emitter {
             retType,
             specs,
         );
+    }
+
+    private emitDynamicTaggedTemplate(tt: ts.TaggedTemplateExpression, tag: EmitResult): EmitResult {
+        const parts = this.templateStringParts(tt.template);
+        const expressions = ts.isTemplateExpression(tt.template)
+            ? tt.template.templateSpans.map((span) => span.expression)
+            : [];
+        const specs: SequencedCallArg[] = [
+            { value: tag, target: T_VALUE, node: tt.tag },
+            {
+                value: {
+                    c: this.stringArrayLiteral(parts),
+                    ty: arrayType(T_STRING),
+                },
+                target: T_VALUE,
+                node: tt.template,
+            },
+            ...expressions.map((expression) => ({
+                value: this.emitExpr(expression),
+                target: T_VALUE,
+                node: expression,
+            })),
+        ];
+        return this.emitSequencedExpr(T_VALUE, specs, ([fn, strings, ...values]) => {
+            const args = this.freshTemp("_tag_args");
+            const pieces = [
+                `tsc_array_t* ${args} = tsc_array_new(sizeof(tsc_value_t), ${Math.max(1, values.length + 1)})`,
+                `tsc_array_push_value(${args}, ${strings})`,
+                ...values.map((value) => `tsc_array_push_value(${args}, ${value})`),
+            ];
+            pieces.push(`tsc_value_apply_function(${fn}, tsc_value_undefined(), tsc_value_array(${args}))`);
+            return `({ ${pieces.join("; ")}; })`;
+        });
     }
 
     private isStringRawTag(expr: ts.Expression): boolean {
