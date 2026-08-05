@@ -54412,12 +54412,10 @@ class Emitter {
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
         }
         if (ts.isPropertyAccessExpression(expr)) {
-            return !expr.questionDotToken &&
-                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
+            return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
         }
         if (ts.isElementAccessExpression(expr)) {
-            return !expr.questionDotToken &&
-                !!expr.argumentExpression &&
+            return !!expr.argumentExpression &&
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression)) &&
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.argumentExpression));
         }

@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage optional member push and unshift arguments at the mutating call point before computed element access"
+}

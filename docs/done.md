@@ -3579,6 +3579,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_push_unshift_call_argument_access_declaration_initializer` | lazy generators stage yield-free identifier-call push and unshift arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_push_unshift_constructor_argument_access_declaration_initializer` | lazy generators stage identifier-constructor push and unshift arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_push_unshift_member_argument_access_declaration_initializer` | lazy generators stage member-access push and unshift arguments before counted-for computed element access |
+| `generator_lazy_for_multi_yield_push_unshift_optional_member_argument_access_declaration_initializer` | lazy generators stage optional member-access push and unshift arguments before counted-for computed element access |
 | `generator_lazy_for_multi_yield_unshift_multi_spread_access_declaration_initializer` | lazy generators stage multiple yielded unshift spreads before counted-for computed element access |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_multi_yield_assignment_initializer` | lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers |
