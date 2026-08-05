@@ -55501,6 +55501,19 @@ class Emitter {
                     !ts.isPropertyAccessExpression(callee) ||
                     callee.questionDotToken) return null;
                 callStages.push(current);
+                if (callee.name.text === "concat") {
+                    if (current.arguments.length !== 1 || !ts.isSpreadElement(current.arguments[0]!)) return null;
+                    const base = this.directLazyYieldCondition(callee.expression);
+                    const spreadSource = this.directLazyYieldCondition(current.arguments[0]!.expression);
+                    if (!base || !spreadSource) return null;
+                    return {
+                        yields: [base, spreadSource, key],
+                        stagedExpressions: callStages.reverse().map((call) => ({
+                            expression: call,
+                            afterYield: spreadSource,
+                        })),
+                    };
+                }
                 if (callee.name.text === "splice") {
                     const startArgument = current.arguments.length > 0
                         ? this.unwrapTransparentExpression(current.arguments[0]!)
