@@ -54800,6 +54800,10 @@ class Emitter {
                 const info = this.simpleLazyMultiYieldExpressionStatement(current);
                 if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
             }
+            if (ts.isForStatement(current) && current.incrementor) {
+                const info = this.simpleLazyMultiYieldCompoundIncrementor(current.incrementor);
+                if (info) for (const yieldExpr of info.yields) yields.add(yieldExpr);
+            }
             ts.forEachChild(current, visit);
         };
         visit(node);
@@ -55190,9 +55194,65 @@ class Emitter {
             return this.isValidLazyGeneratorForIncrementor(current.left) &&
                 this.isValidLazyGeneratorForIncrementor(current.right);
         }
+        if (this.simpleLazyMultiYieldCompoundIncrementor(current)) return true;
         if (!ts.isBinaryExpression(current) || !this.directLazyYieldCondition(current.right)) return false;
         if (current.operatorToken.kind === ts.SyntaxKind.EqualsToken) return true;
         return ts.isIdentifier(current.left) && this.isSimpleLazyYieldCompoundAssignment(current);
+    }
+
+    private simpleLazyMultiYieldCompoundIncrementor(
+        expr: ts.Expression,
+    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
+        const current = this.unwrapTransparentExpression(expr);
+        if (!ts.isBinaryExpression(current) ||
+            current.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+            !ts.isIdentifier(current.left) ||
+            !this.isSimpleLazyYieldCompoundAssignment(current) ||
+            this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(current.operatorToken.kind)) {
+            return null;
+        }
+        const arithmeticOperators = [
+            ts.SyntaxKind.PlusToken,
+            ts.SyntaxKind.MinusToken,
+            ts.SyntaxKind.AsteriskToken,
+            ts.SyntaxKind.SlashToken,
+            ts.SyntaxKind.PercentToken,
+            ts.SyntaxKind.AmpersandToken,
+            ts.SyntaxKind.BarToken,
+            ts.SyntaxKind.CaretToken,
+            ts.SyntaxKind.LessThanLessThanToken,
+            ts.SyntaxKind.GreaterThanGreaterThanToken,
+            ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+            ts.SyntaxKind.AsteriskAsteriskToken,
+        ];
+        const isArithmeticOperator = (kind: ts.SyntaxKind): boolean => arithmeticOperators.includes(kind);
+        const isPure = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            if (this.isSimpleLazyMultiYieldLiteral(unwrapped) || ts.isIdentifier(unwrapped) ||
+                unwrapped.kind === ts.SyntaxKind.ThisKeyword) return true;
+            if (ts.isPrefixUnaryExpression(unwrapped) &&
+                [ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) {
+                return isPure(unwrapped.operand);
+            }
+            return ts.isBinaryExpression(unwrapped) &&
+                isArithmeticOperator(unwrapped.operatorToken.kind) &&
+                isPure(unwrapped.left) && isPure(unwrapped.right);
+        };
+        const yields: ts.YieldExpression[] = [];
+        const visit = (node: ts.Expression): boolean => {
+            const unwrapped = this.unwrapTransparentExpression(node);
+            const directYield = this.directLazyYieldCondition(unwrapped);
+            if (directYield) {
+                yields.push(directYield);
+                return true;
+            }
+            if (!this.nodeContainsYield(unwrapped)) return isPure(unwrapped);
+            return ts.isBinaryExpression(unwrapped) &&
+                isArithmeticOperator(unwrapped.operatorToken.kind) &&
+                visit(unwrapped.left) && visit(unwrapped.right);
+        };
+        if (!visit(current.right) || yields.length < 2) return null;
+        return { expression: current, yields, stagedExpressions: [] };
     }
 
     private emitLazyGeneratorForIncrementor(
@@ -55238,6 +55298,18 @@ class Emitter {
         if (!this.nodeContainsYield(current)) {
             const value = this.emitExpr(current);
             buf.line(`(void)(${value.c});`);
+            return;
+        }
+        const multiYieldCompound = this.simpleLazyMultiYieldCompoundIncrementor(current);
+        if (multiYieldCompound) {
+            this.emitLazyGeneratorMultiYieldExpressionStatement(
+                buf,
+                multiYieldCompound,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
             return;
         }
         if (!ts.isBinaryExpression(current) || !this.directLazyYieldCondition(current.right)) {
