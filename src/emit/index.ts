@@ -136,7 +136,7 @@ interface LazyMultiYieldConditionalArm {
     yields: ts.YieldExpression[];
 }
 
-type LazyMultiYieldLogicalOperand = ts.YieldExpression | LazyMultiYieldLogicalPlan;
+type LazyMultiYieldLogicalOperand = ts.Expression | LazyMultiYieldLogicalPlan;
 
 interface LazyMultiYieldLogicalPlan {
     expression: ts.BinaryExpression;
@@ -53594,18 +53594,29 @@ class Emitter {
     ): LazyMultiYieldLogicalPlan | null {
         const unwrapped = this.unwrapTransparentExpression(expression);
         if (!ts.isBinaryExpression(unwrapped) || !this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) return null;
-        const buildOperand = (operand: ts.Expression): LazyMultiYieldLogicalOperand | null =>
-            this.directLazyYieldCondition(operand) ?? this.simpleLazyMultiYieldLogicalPlan(operand);
+        const buildOperand = (operand: ts.Expression): LazyMultiYieldLogicalOperand | null => {
+            const directYield = this.directLazyYieldCondition(operand);
+            if (directYield) return directYield;
+            const nestedPlan = this.simpleLazyMultiYieldLogicalPlan(operand);
+            if (nestedPlan) return nestedPlan;
+            const unwrappedOperand = this.unwrapTransparentExpression(operand);
+            return this.isSimpleLazyMultiYieldLiteral(unwrappedOperand) ? unwrappedOperand : null;
+        };
         const left = buildOperand(unwrapped.left);
         const right = buildOperand(unwrapped.right);
         if (!left || !right) return null;
+        const yieldsForOperand = (operand: LazyMultiYieldLogicalOperand): ts.YieldExpression[] => {
+            if ("yields" in operand) return operand.yields;
+            const directYield = this.directLazyYieldCondition(operand);
+            return directYield ? [directYield] : [];
+        };
         return {
             expression: unwrapped,
             left,
             right,
             yields: [
-                ...("yields" in left ? left.yields : [left]),
-                ...("yields" in right ? right.yields : [right]),
+                ...yieldsForOperand(left),
+                ...yieldsForOperand(right),
             ],
         };
     }
@@ -53779,7 +53790,7 @@ class Emitter {
         if (!expression) return null;
         const yields: ts.YieldExpression[] = [];
         const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(expression);
-        if (logicalPlan) {
+        if (logicalPlan && logicalPlan.yields.length >= 2) {
             return {
                 expression,
                 yields: logicalPlan.yields,
@@ -55737,8 +55748,10 @@ class Emitter {
             const yieldSlots = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
             const entryBlocks: Array<() => void> = [];
             const resumeBlocks: Array<() => void> = [];
+            const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
+                "yields" in operand;
             const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
-                !("yields" in operand);
+                !isLogicalPlan(operand) && ts.isYieldExpression(operand);
             const slotForYield = (yieldExpr: ts.YieldExpression): number => {
                 const slot = yieldSlots.get(yieldExpr);
                 if (slot === undefined) unsupported(yieldExpr, "lazy multi-yield logical plan contains an unknown yield");
@@ -55774,6 +55787,9 @@ class Emitter {
                 if (isYieldOperand(operand)) {
                     return this.truthyExprFromEmitResult(resumedYield(operand), operand);
                 }
+                if (!isLogicalPlan(operand)) {
+                    return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
+                }
                 const left = truthyOperand(operand.left);
                 const right = truthyOperand(operand.right);
                 switch (operand.expression.operatorToken.kind) {
@@ -55788,6 +55804,9 @@ class Emitter {
             const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) {
                     return this.nullishExprFromEmitResult(resumedYield(operand), operand);
+                }
+                if (!isLogicalPlan(operand)) {
+                    return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
                 }
                 const leftTruthy = truthyOperand(operand.left);
                 const leftNullish = nullishOperand(operand.left);
@@ -55822,8 +55841,15 @@ class Emitter {
                 operandEntryLabel: string,
                 continuationLabel: string,
             ): void => {
-                if (!isYieldOperand(operand)) {
+                if (isLogicalPlan(operand)) {
                     schedulePlan(operand, operandEntryLabel, continuationLabel);
+                    return;
+                }
+                if (!isYieldOperand(operand)) {
+                    entryBlocks.push(() => {
+                        buf.line(`${operandEntryLabel}:;`);
+                        buf.line(`goto ${continuationLabel};`);
+                    });
                     return;
                 }
                 const state = nextStateId();

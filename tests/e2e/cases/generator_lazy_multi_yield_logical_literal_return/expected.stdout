@@ -1,0 +1,7 @@
+literal-false false outer false fallback true fallback
+literal-true false outer true true
+nullish-value false nullish-outer true kept
+nullish-null false nullish-outer false nullish-inner true 3
+embedded-false false embedded-left false embedded-tail true head|0|tail
+embedded-true false embedded-left false embedded-tail true head|literal-right|tail
+single-literal false single true 0
