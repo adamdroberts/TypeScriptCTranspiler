@@ -1,0 +1,20 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-selector
+push-third  push-first false push-true-seed
+push-fourth  push-first false push-true-value
+push-fifth true-push-true-seed-value,outer-push-true-true-push-true-value push-first false push-inner
+push-sixth true-push-true-seed-value,outer-push-true-true-push-true-value push-first false push-outer
+push-seventh true-push-true-seed-value,outer-push-true-true-push-true-value push-first false push-item
+push-eighth true-push-true-seed-value,outer-push-true-true-push-true-value push-first,push-tagged-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value false push-key
+push-ninth true-push-true-seed-value,outer-push-true-true-push-true-value push-first,push-tagged-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value false push-body-undefined
+push-done true-push-true-seed-value,outer-push-true-true-push-true-value push-first,push-tagged-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-selector
+unshift-third  unshift-first false unshift-false-seed
+unshift-fourth  unshift-first false unshift-false-value
+unshift-fifth false-unshift-false-seed-value,outer-unshift-false-false-unshift-false-value unshift-first false unshift-inner
+unshift-sixth false-unshift-false-seed-value,outer-unshift-false-false-unshift-false-value unshift-first false unshift-outer
+unshift-seventh false-unshift-false-seed-value,outer-unshift-false-false-unshift-false-value unshift-first false unshift-item
+unshift-eighth false-unshift-false-seed-value,outer-unshift-false-false-unshift-false-value unshift-tagged-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-key
+unshift-ninth false-unshift-false-seed-value,outer-unshift-false-false-unshift-false-value unshift-tagged-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-body-undefined
+unshift-done false-unshift-false-seed-value,outer-unshift-false-false-unshift-false-value unshift-tagged-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first true unshift-done
