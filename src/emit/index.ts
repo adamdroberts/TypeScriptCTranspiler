@@ -54379,7 +54379,9 @@ class Emitter {
     }
 
     private isSimpleLazyMultiYieldCallArgument(expr: ts.Expression): boolean {
-        return this.isSimpleLazyMultiYieldLiteral(expr) || ts.isRegularExpressionLiteral(expr);
+        return this.isSimpleLazyMultiYieldLiteral(expr) ||
+            ts.isRegularExpressionLiteral(expr) ||
+            ts.isIdentifier(expr);
     }
 
     private isSimpleLazyMultiYieldStringLogicalLeaf(expr: ts.BinaryExpression): boolean {
