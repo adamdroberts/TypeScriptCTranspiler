@@ -3542,6 +3542,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_shift_access_declaration_initializer` | lazy generators stage a zero-argument shift call before counted-for computed element access |
 | `generator_lazy_for_multi_yield_reverse_access_declaration_initializer` | lazy generators stage a zero-argument reverse call before counted-for computed element access |
 | `generator_lazy_for_multi_yield_to_reversed_access_declaration_initializer` | lazy generators stage a zero-argument toReversed call before counted-for computed element access |
+| `generator_lazy_for_multi_yield_to_sorted_access_declaration_initializer` | lazy generators stage a zero-argument toSorted call before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_chain_access_declaration_initializer` | lazy generators stage ordered receiver calls before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_argument_access_declaration_initializer` | lazy generators stage a yielded splice argument before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_spread_access_declaration_initializer` | lazy generators stage a yielded splice spread before counted-for computed element access |

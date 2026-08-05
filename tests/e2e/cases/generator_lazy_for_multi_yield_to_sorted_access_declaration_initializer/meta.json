@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage a yield-free zero-argument toSorted call before final counted-for element access"
+}
