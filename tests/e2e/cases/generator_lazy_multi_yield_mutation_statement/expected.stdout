@@ -1,6 +1,7 @@
 assignment false assign-receiver false assign-key true assign-done 42
 assignment-rhs false rhs-receiver false rhs-key false rhs-value true rhs-done 42
 assignment-nested-rhs false nested-rhs-receiver false nested-rhs-key false nested-rhs-left false nested-rhs-right true nested-rhs-done 9
+assignment-unary-rhs false unary-rhs-receiver false unary-rhs-key false unary-rhs-number false unary-rhs-mask true unary-rhs-done -6
 nested false nested-receiver false nested-outer-key false nested-inner-key true nested-done 21
 postfix false postfix-receiver false postfix-key true postfix-done 11
 delete false delete-receiver false delete-key true delete-done false

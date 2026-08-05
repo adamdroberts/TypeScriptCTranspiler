@@ -59,6 +59,7 @@ const callChainBox: any = [callChainChild];
 const callArgumentChild: any = { value: 100 };
 const callArgumentBox: any = [callArgumentChild];
 const nestedRhsBox: any = { value: 1 };
+const unaryRhsBox: any = { value: 1 };
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
@@ -130,6 +131,11 @@ function* nestedRhsAssignmentBetweenYields(): Generator<string, string, any> {
     return "nested-rhs-done";
 }
 
+function* unaryRhsAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "unary-rhs-receiver")[yield "unary-rhs-key"] = -(yield "unary-rhs-number") + ~(yield "unary-rhs-mask");
+    return "unary-rhs-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -155,6 +161,14 @@ const nestedRhsAssignmentThird: any = nestedRhsAssignment.next("value");
 const nestedRhsAssignmentFourth: any = nestedRhsAssignment.next(4);
 const nestedRhsAssignmentDone: any = nestedRhsAssignment.next(5);
 console.log("assignment-nested-rhs", nestedRhsAssignmentFirst.done, nestedRhsAssignmentFirst.value, nestedRhsAssignmentSecond.done, nestedRhsAssignmentSecond.value, nestedRhsAssignmentThird.done, nestedRhsAssignmentThird.value, nestedRhsAssignmentFourth.done, nestedRhsAssignmentFourth.value, nestedRhsAssignmentDone.done, nestedRhsAssignmentDone.value, nestedRhsBox.value);
+
+const unaryRhsAssignment = unaryRhsAssignmentBetweenYields();
+const unaryRhsAssignmentFirst: any = unaryRhsAssignment.next();
+const unaryRhsAssignmentSecond: any = unaryRhsAssignment.next(unaryRhsBox);
+const unaryRhsAssignmentThird: any = unaryRhsAssignment.next("value");
+const unaryRhsAssignmentFourth: any = unaryRhsAssignment.next(4);
+const unaryRhsAssignmentDone: any = unaryRhsAssignment.next(1);
+console.log("assignment-unary-rhs", unaryRhsAssignmentFirst.done, unaryRhsAssignmentFirst.value, unaryRhsAssignmentSecond.done, unaryRhsAssignmentSecond.value, unaryRhsAssignmentThird.done, unaryRhsAssignmentThird.value, unaryRhsAssignmentFourth.done, unaryRhsAssignmentFourth.value, unaryRhsAssignmentDone.done, unaryRhsAssignmentDone.value, unaryRhsBox.value);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();

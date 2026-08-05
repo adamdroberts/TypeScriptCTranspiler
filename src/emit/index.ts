@@ -54604,6 +54604,13 @@ class Emitter {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) return !unwrapped.asteriskToken;
             if (!this.nodeContainsYield(node)) return true;
+            if (ts.isPrefixUnaryExpression(unwrapped)) {
+                if (![ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) return false;
+                return visit(unwrapped.operand);
+            }
+            if (ts.isTypeOfExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
+                return visit(unwrapped.expression);
+            }
             if (!ts.isBinaryExpression(unwrapped) ||
                 this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);

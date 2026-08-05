@@ -22,6 +22,8 @@
 
 - Lazy generators now stage supported non-assignment binary RHS expression trees containing multiple direct yields after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; nested assignment RHS graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
+- Lazy generators now stage supported prefix/unary RHS expressions over direct yields after yielded receivers and computed keys in mutation expression statements, preserving receiver/key/RHS order before final mutation; unsupported unary operators, nested assignment RHS graphs, and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+
 - Lazy generators now stage bounded nested yielded receiver/key chains in multi-yield mutation expression statements, including a yielded receiver followed by a yielded computed key and final static member update while preserving yield order; calls, intermediate side-effecting member steps, and broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
 - Lazy generators now stage a bounded static member between a yielded receiver and a later yielded computed key in multi-yield mutation expression statements, evaluating and storing the member after receiver resume so getter timing remains before the key suspension; calls, computed intermediate members, deeper member graphs, and broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
