@@ -54411,6 +54411,16 @@ class Emitter {
                 !ts.isSpreadElement(argument) &&
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(argument)));
         }
+        if (ts.isPropertyAccessExpression(expr)) {
+            return !expr.questionDotToken &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
+        }
+        if (ts.isElementAccessExpression(expr)) {
+            return !expr.questionDotToken &&
+                !!expr.argumentExpression &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression)) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.argumentExpression));
+        }
         if (ts.isArrayLiteralExpression(expr)) {
             return expr.elements.every((element) => {
                 if (ts.isSpreadElement(element)) {
