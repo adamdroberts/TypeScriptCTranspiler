@@ -55091,6 +55091,51 @@ class Emitter {
                 buf.line(`${lhs} = ${this.coerce(value, lhsType, current.right)};`);
                 return;
             }
+            if (
+                ts.isBinaryExpression(current) &&
+                this.directLazyYieldCondition(current.right) &&
+                current.operatorToken.kind !== ts.SyntaxKind.EqualsToken
+            ) {
+                if (!ts.isIdentifier(current.left) || !this.isSimpleLazyYieldCompoundAssignment(current)) {
+                    unsupported(current, "lazy generator yielded for-init compound assignment needs a supported identifier lvalue");
+                }
+                const lhs = this.emitLvalue(current.left);
+                const lhsType = this.storageType(current.left);
+                const isLogicalCompound = this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(current.operatorToken.kind);
+                if (isLogicalCompound) {
+                    const currentValue = this.emitExpr(current.left);
+                    const truthy = this.truthyExprFromEmitResult(currentValue, current.left);
+                    const shouldSuspend = current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                        ? truthy
+                        : current.operatorToken.kind === ts.SyntaxKind.BarBarEqualsToken
+                            ? `!(${truthy})`
+                            : this.nullishExprFromEmitResult(currentValue, current.left);
+                    buf.open(`if (${shouldSuspend})`);
+                    const value = this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        current.right,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                    if (!value) unsupported(current.right, "lazy generator yielded logical compound for-init could not suspend");
+                    buf.line(`${lhs} = ${this.coerce(value, lhsType, current.right)};`);
+                    buf.close();
+                    return;
+                }
+                const value = this.emitLazyGeneratorDirectYieldValue(
+                    buf,
+                    current.right,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                if (!value) unsupported(current.right, "lazy generator yielded compound for-init could not suspend");
+                buf.line(`${this.emitSimpleLazyCompoundAssignment(current, lhs, lhs, lhsType, value)};`);
+                return;
+            }
             const expr = this.emitExpr(current);
             buf.line(`(void)(${expr.c});`);
             return;
@@ -55132,9 +55177,9 @@ class Emitter {
             return this.isValidLazyGeneratorForInitializerExpression(current.left) &&
                 this.isValidLazyGeneratorForInitializerExpression(current.right);
         }
-        return ts.isBinaryExpression(current) &&
-            current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-            !!this.directLazyYieldCondition(current.right);
+        if (!ts.isBinaryExpression(current) || !this.directLazyYieldCondition(current.right)) return false;
+        if (current.operatorToken.kind === ts.SyntaxKind.EqualsToken) return true;
+        return ts.isIdentifier(current.left) && this.isSimpleLazyYieldCompoundAssignment(current);
     }
 
     private isValidLazyGeneratorForIncrementor(expr: ts.Expression): boolean {
