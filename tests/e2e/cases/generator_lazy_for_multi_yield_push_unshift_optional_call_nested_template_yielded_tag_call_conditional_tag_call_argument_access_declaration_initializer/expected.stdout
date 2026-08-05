@@ -1,0 +1,20 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-selector
+push-third  push-first false push-arm-seed
+push-fourth  push-first false push-arm-value
+push-fifth arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first false push-inner
+push-sixth arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first false push-outer
+push-seventh arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first false push-item
+push-eighth arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first,push-tagged-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value false push-key
+push-ninth arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first,push-tagged-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value false push-body-undefined
+push-done arm-push-arm-seed-value,outer-push-arm-arm-push-arm-value push-first,push-tagged-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-selector
+unshift-third  unshift-first false unshift-arm-seed
+unshift-fourth  unshift-first false unshift-arm-value
+unshift-fifth arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-inner
+unshift-sixth arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-outer
+unshift-seventh arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-item
+unshift-eighth arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-tagged-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-key
+unshift-ninth arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-tagged-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-body-undefined
+unshift-done arm-unshift-arm-seed-value,outer-unshift-arm-arm-unshift-arm-value unshift-tagged-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first true unshift-done
