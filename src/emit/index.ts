@@ -55207,8 +55207,7 @@ class Emitter {
         if (!ts.isBinaryExpression(current) ||
             current.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
             !ts.isIdentifier(current.left) ||
-            !this.isSimpleLazyYieldCompoundAssignment(current) ||
-            this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(current.operatorToken.kind)) {
+            !this.isSimpleLazyYieldCompoundAssignment(current)) {
             return null;
         }
         const arithmeticOperators = [
@@ -55302,14 +55301,39 @@ class Emitter {
         }
         const multiYieldCompound = this.simpleLazyMultiYieldCompoundIncrementor(current);
         if (multiYieldCompound) {
-            this.emitLazyGeneratorMultiYieldExpressionStatement(
-                buf,
-                multiYieldCompound,
-                nextStateId,
-                nextYieldStarSlot,
-                elemType,
-                envLocalName,
-            );
+            const compoundExpression = multiYieldCompound.expression;
+            if (!ts.isBinaryExpression(compoundExpression)) {
+                unsupported(compoundExpression, "lazy generator multi-yield compound incrementor must be a binary assignment");
+            }
+            const isLogicalCompound = this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(compoundExpression.operatorToken.kind);
+            if (isLogicalCompound) {
+                const currentValue = this.emitExpr(compoundExpression.left);
+                const truthy = this.truthyExprFromEmitResult(currentValue, compoundExpression.left);
+                const shouldSuspend = compoundExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                    ? truthy
+                    : compoundExpression.operatorToken.kind === ts.SyntaxKind.BarBarEqualsToken
+                        ? `!(${truthy})`
+                        : this.nullishExprFromEmitResult(currentValue, compoundExpression.left);
+                buf.open(`if (${shouldSuspend})`);
+                this.emitLazyGeneratorMultiYieldExpressionStatement(
+                    buf,
+                    multiYieldCompound,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                buf.close();
+            } else {
+                this.emitLazyGeneratorMultiYieldExpressionStatement(
+                    buf,
+                    multiYieldCompound,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+            }
             return;
         }
         if (!ts.isBinaryExpression(current) || !this.directLazyYieldCondition(current.right)) {
