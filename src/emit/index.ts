@@ -55557,12 +55557,19 @@ class Emitter {
                 stagedExpressions: callStages.reverse().map((call) => ({ expression: call, afterYield: base })),
             };
         }
-        if (!ts.isPropertyAccessExpression(receiver) || receiver.questionDotToken) return null;
-        const base = this.directLazyYieldCondition(receiver.expression);
+        if (!ts.isPropertyAccessExpression(receiver)) return null;
+        const memberStages: ts.PropertyAccessExpression[] = [];
+        let current: ts.Expression = receiver;
+        while (ts.isPropertyAccessExpression(current)) {
+            if (current.questionDotToken) return null;
+            memberStages.push(current);
+            current = this.unwrapTransparentExpression(current.expression);
+        }
+        const base = this.directLazyYieldCondition(current);
         if (!base) return null;
         return {
             yields: [base, key],
-            stagedExpressions: [{ expression: receiver, afterYield: base }],
+            stagedExpressions: memberStages.reverse().map((member) => ({ expression: member, afterYield: base })),
         };
     }
 
