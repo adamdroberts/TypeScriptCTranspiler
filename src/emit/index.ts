@@ -54438,6 +54438,12 @@ class Emitter {
             for (const condition of conditions) {
                 collectCondition(condition);
             }
+            if (ts.isForStatement(current) && current.incrementor) {
+                const logicalIncrementor = this.simpleLazyMultiYieldLogicalCompoundIncrementor(current.incrementor);
+                if (logicalIncrementor) {
+                    for (const yieldExpr of logicalIncrementor.yields) yields.add(yieldExpr);
+                }
+            }
             ts.forEachChild(current, visit);
         };
         visit(node);
@@ -55194,6 +55200,7 @@ class Emitter {
             return this.isValidLazyGeneratorForIncrementor(current.left) &&
                 this.isValidLazyGeneratorForIncrementor(current.right);
         }
+        if (this.simpleLazyMultiYieldLogicalCompoundIncrementor(current)) return true;
         if (this.simpleLazyMultiYieldCompoundIncrementor(current)) return true;
         if (!ts.isBinaryExpression(current) || !this.directLazyYieldCondition(current.right)) return false;
         if (current.operatorToken.kind === ts.SyntaxKind.EqualsToken) return true;
@@ -55254,6 +55261,21 @@ class Emitter {
         return { expression: current, yields, stagedExpressions: [] };
     }
 
+    private simpleLazyMultiYieldLogicalCompoundIncrementor(
+        expr: ts.Expression,
+    ): { expression: ts.Expression; yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
+        const current = this.unwrapTransparentExpression(expr);
+        if (!ts.isBinaryExpression(current) ||
+            !this.isSimpleLazyYieldLogicalCompoundAssignmentOperator(current.operatorToken.kind) ||
+            !ts.isIdentifier(current.left) ||
+            !this.isSimpleLazyYieldCompoundAssignment(current)) {
+            return null;
+        }
+        const plan = this.simpleLazyMultiYieldLogicalPlan(current.right);
+        if (!plan || plan.yields.length < 2) return null;
+        return { expression: current, yields: plan.yields, stagedExpressions: [] };
+    }
+
     private emitLazyGeneratorForIncrementor(
         buf: CBuf,
         expr: ts.Expression,
@@ -55297,6 +55319,35 @@ class Emitter {
         if (!this.nodeContainsYield(current)) {
             const value = this.emitExpr(current);
             buf.line(`(void)(${value.c});`);
+            return;
+        }
+        const multiYieldLogicalCompound = this.simpleLazyMultiYieldLogicalCompoundIncrementor(current);
+        if (multiYieldLogicalCompound) {
+            const compoundExpression = multiYieldLogicalCompound.expression;
+            if (!ts.isBinaryExpression(compoundExpression)) {
+                unsupported(compoundExpression, "lazy generator multi-yield logical incrementor must be a binary assignment");
+            }
+            const lhs = this.emitLvalue(compoundExpression.left);
+            const lhsType = this.storageType(compoundExpression.left);
+            const currentValue = this.emitExpr(compoundExpression.left);
+            const truthy = this.truthyExprFromEmitResult(currentValue, compoundExpression.left);
+            const shouldSuspend = compoundExpression.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandEqualsToken
+                ? truthy
+                : compoundExpression.operatorToken.kind === ts.SyntaxKind.BarBarEqualsToken
+                    ? `!(${truthy})`
+                    : this.nullishExprFromEmitResult(currentValue, compoundExpression.left);
+            buf.open(`if (${shouldSuspend})`);
+            const value = this.emitLazyGeneratorLogicalPlan(
+                buf,
+                compoundExpression.right,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
+            if (!value) unsupported(compoundExpression.right, "lazy generator yielded logical compound incrementor could not suspend");
+            buf.line(`${lhs} = ${this.coerce(value, lhsType, compoundExpression.right)};`);
+            buf.close();
             return;
         }
         const multiYieldCompound = this.simpleLazyMultiYieldCompoundIncrementor(current);
