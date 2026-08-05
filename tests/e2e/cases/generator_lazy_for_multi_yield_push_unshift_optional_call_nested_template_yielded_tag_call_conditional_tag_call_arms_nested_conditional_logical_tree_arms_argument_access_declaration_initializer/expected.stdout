@@ -1,0 +1,28 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-selector
+push-third  push-first false push-nested-selector
+push-fourth  push-first false push-true-left
+push-fifth  push-first false push-true-middle
+push-sixth  push-first false push-true-seed
+push-seventh  push-first false push-true-value
+push-eighth  push-first false push-arm-value
+push-ninth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first false push-inner
+push-tenth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first false push-outer
+push-eleventh true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first false push-item
+push-twelfth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first,push-callback-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value false push-key
+push-thirteenth true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first,push-callback-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value false push-body-undefined
+push-done true-nested-push-true-seed-value,arm-push-true-nested-nested-push-true-value,outer-push-arm-arm-push-arm-value push-first,push-callback-push-push-outer-inner-push-inner-value-push-outer-value,push-item-value true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-selector
+unshift-third  unshift-first false unshift-nested-selector
+unshift-fourth  unshift-first false unshift-false-left
+unshift-fifth  unshift-first false unshift-false-middle
+unshift-sixth  unshift-first false unshift-false-seed
+unshift-seventh  unshift-first false unshift-false-value
+unshift-eighth  unshift-first false unshift-arm-value
+unshift-ninth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-inner
+unshift-tenth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-outer
+unshift-eleventh false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-first false unshift-item
+unshift-twelfth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-callback-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-key
+unshift-thirteenth false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-callback-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first false unshift-body-undefined
+unshift-done false-nested-unshift-false-seed-value,arm-unshift-false-nested-nested-unshift-false-value,outer-unshift-arm-arm-unshift-arm-value unshift-callback-unshift-unshift-outer-inner-unshift-inner-value-unshift-outer-value,unshift-item-value,unshift-first true unshift-done
