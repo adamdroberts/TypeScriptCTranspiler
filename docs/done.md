@@ -3539,6 +3539,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_optional_call_access_declaration_initializer` | lazy generators stage an optional pop call before stable optional final element access |
 | `generator_lazy_for_multi_yield_call_access_declaration_initializer` | lazy generators stage a bounded receiver call before counted-for computed element access |
 | `generator_lazy_for_multi_yield_slice_access_declaration_initializer` | lazy generators stage a zero-argument slice call before counted-for computed element access |
+| `generator_lazy_for_multi_yield_shift_access_declaration_initializer` | lazy generators stage a zero-argument shift call before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_chain_access_declaration_initializer` | lazy generators stage ordered receiver calls before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_argument_access_declaration_initializer` | lazy generators stage a yielded splice argument before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_spread_access_declaration_initializer` | lazy generators stage a yielded splice spread before counted-for computed element access |
