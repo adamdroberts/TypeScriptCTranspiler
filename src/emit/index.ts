@@ -54385,6 +54385,19 @@ class Emitter {
         if (ts.isTypeOfExpression(expr) || ts.isVoidExpression(expr)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.expression));
         }
+        if (ts.isArrayLiteralExpression(expr)) {
+            return expr.elements.every((element) =>
+                !ts.isSpreadElement(element) &&
+                !ts.isOmittedExpression(element) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(element)));
+        }
+        if (ts.isObjectLiteralExpression(expr)) {
+            return expr.properties.every((property) =>
+                ts.isPropertyAssignment(property) &&
+                !ts.isComputedPropertyName(property.name) &&
+                (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) || ts.isNumericLiteral(property.name)) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(property.initializer)));
+        }
         if (ts.isConditionalExpression(expr)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.condition)) &&
                 this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(expr.whenTrue)) &&
