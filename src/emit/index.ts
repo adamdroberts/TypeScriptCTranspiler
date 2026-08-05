@@ -55652,16 +55652,16 @@ class Emitter {
                 if (callee.name.text === "unshift") {
                     const base = this.directLazyYieldCondition(callee.expression);
                     if (!base || current.arguments.length === 0) return null;
-                    const spreadSources: ts.YieldExpression[] = [];
+                    const argumentYields: ts.YieldExpression[] = [];
                     for (const argument of current.arguments) {
-                        if (!ts.isSpreadElement(argument)) return null;
-                        const spreadSource = this.directLazyYieldCondition(argument.expression);
-                        if (!spreadSource) return null;
-                        spreadSources.push(spreadSource);
+                        const expression = ts.isSpreadElement(argument) ? argument.expression : argument;
+                        const argumentYield = this.directLazyYieldCondition(expression);
+                        if (!argumentYield) return null;
+                        argumentYields.push(argumentYield);
                     }
-                    const afterYield = spreadSources[spreadSources.length - 1]!;
+                    const afterYield = argumentYields[argumentYields.length - 1]!;
                     return {
-                        yields: key ? [base, ...spreadSources, key] : [base, ...spreadSources],
+                        yields: key ? [base, ...argumentYields, key] : [base, ...argumentYields],
                         stagedExpressions: callStages.reverse().map((call) => ({
                             expression: call,
                             afterYield,
