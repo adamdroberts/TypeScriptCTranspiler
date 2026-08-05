@@ -54488,6 +54488,11 @@ class Emitter {
                 yields.push(value);
                 continue;
             }
+            const nestedOptionalCallYields = this.simpleLazyMultiYieldOptionalCallNestedYields(value);
+            if (nestedOptionalCallYields) {
+                yields.push(...nestedOptionalCallYields);
+                continue;
+            }
             const arithmeticYields = this.simpleLazyMultiYieldArithmeticExpression(value, 1);
             if (arithmeticYields) {
                 yields.push(...arithmeticYields);
