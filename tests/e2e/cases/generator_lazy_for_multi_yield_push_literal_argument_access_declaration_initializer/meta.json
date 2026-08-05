@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yield-free literal push arguments alongside yielded arguments and spreads before computed element access"
+}

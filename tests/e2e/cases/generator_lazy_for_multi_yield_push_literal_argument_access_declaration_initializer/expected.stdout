@@ -1,0 +1,6 @@
+first first false receiver
+second first false direct-item
+third first false spread-items
+fourth first,literal,direct-one,spread-one,spread-two,true false key
+fifth first,literal,direct-one,spread-one,spread-two,true false body-undefined
+done first,literal,direct-one,spread-one,spread-two,true true done
