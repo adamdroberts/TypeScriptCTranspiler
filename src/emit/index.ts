@@ -54860,6 +54860,15 @@ class Emitter {
                 const info = this.simpleLazyMultiYieldExpressionStatement(current);
                 if (info) for (const stage of info.stagedExpressions) stages.add(stage.expression);
             }
+            if (ts.isForStatement(current)) {
+                const initializer = current.initializer;
+                if (initializer && ts.isVariableDeclarationList(initializer)) {
+                    for (const declaration of initializer.declarations) {
+                        const info = this.simpleLazyMultiYieldVariableInitializer(declaration);
+                        if (info) for (const stage of info.stagedExpressions) stages.add(stage.expression);
+                    }
+                }
+            }
             ts.forEachChild(current, visit);
         };
         visit(node);
@@ -55368,11 +55377,14 @@ class Emitter {
         return { expression: current, yields, stagedExpressions: [] };
     }
 
-    private simpleLazyMultiYieldLiteralInitializer(expr: ts.Expression): ts.YieldExpression[] | null {
+    private simpleLazyMultiYieldLiteralInitializer(
+        expr: ts.Expression,
+    ): { yields: ts.YieldExpression[]; stagedExpressions: LazyMultiYieldMutationStage[] } | null {
         const yields = this.simpleLazyMultiYieldExpressionsInExpression(expr);
         if (yields.length < 2 || yields.some((yieldExpr) =>
             yieldExpr.asteriskToken ||
             (yieldExpr.expression && this.nodeContainsYield(yieldExpr.expression)))) return null;
+        const stagedExpressions: LazyMultiYieldMutationStage[] = [];
         const isStable = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             return this.isSimpleLazyMultiYieldLiteral(unwrapped) ||
@@ -55394,13 +55406,34 @@ class Emitter {
             if (!ts.isObjectLiteralExpression(unwrapped)) return false;
             return unwrapped.properties.every((property) => {
                 if (ts.isPropertyAssignment(property)) {
-                    return !ts.isComputedPropertyName(property.name) && visit(property.initializer);
+                    if (ts.isComputedPropertyName(property.name)) {
+                        const key = property.name.expression;
+                        const keyYields = this.simpleLazyMultiYieldExpressionsInExpression(key);
+                        if (keyYields.length === 0 ||
+                            keyYields.some((yieldExpr) =>
+                                yieldExpr.asteriskToken ||
+                                (yieldExpr.expression && this.nodeContainsYield(yieldExpr.expression))) ||
+                            !visit(key)) return false;
+                        stagedExpressions.push({
+                            expression: key,
+                            afterYield: keyYields[keyYields.length - 1]!,
+                        });
+                    } else if (this.nodeContainsYield(property.name) || !isStable(property.name as ts.Expression)) {
+                        return false;
+                    }
+                    return visit(property.initializer);
                 }
                 if (ts.isShorthandPropertyAssignment(property)) return isStable(property.name);
                 return false;
             });
         };
-        return visit(expr) ? yields : null;
+        return visit(expr)
+            ? {
+                yields,
+                stagedExpressions: stagedExpressions.sort((left, right) =>
+                    left.expression.getStart() - right.expression.getStart()),
+            }
+            : null;
     }
 
     private simpleLazyMultiYieldVariableInitializer(
@@ -55432,8 +55465,14 @@ class Emitter {
                 return { expression: declaration.initializer, yields, stagedExpressions: [] };
             }
         }
-        const literalYields = this.simpleLazyMultiYieldLiteralInitializer(declaration.initializer);
-        if (literalYields) return { expression: declaration.initializer, yields: literalYields, stagedExpressions: [] };
+        const literalInfo = this.simpleLazyMultiYieldLiteralInitializer(declaration.initializer);
+        if (literalInfo) {
+            return {
+                expression: declaration.initializer,
+                yields: literalInfo.yields,
+                stagedExpressions: literalInfo.stagedExpressions,
+            };
+        }
         const yields = this.simpleLazyMultiYieldArithmeticExpression(declaration.initializer);
         if (!yields) return null;
         return { expression: declaration.initializer, yields, stagedExpressions: [] };

@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yielded computed object keys before later literal property values in counted-for initializers"
+}
