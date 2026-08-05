@@ -55492,6 +55492,18 @@ class Emitter {
         if (directReceiver) {
             return { yields: [directReceiver, key], stagedExpressions: [] };
         }
+        if (ts.isElementAccessExpression(receiver) &&
+            !receiver.questionDotToken &&
+            receiver.argumentExpression) {
+            const intermediateKey = this.directLazyYieldCondition(receiver.argumentExpression);
+            const base = this.directLazyYieldCondition(receiver.expression);
+            if (base && intermediateKey) {
+                return {
+                    yields: [base, intermediateKey, key],
+                    stagedExpressions: [{ expression: receiver, afterYield: intermediateKey }],
+                };
+            }
+        }
         if (ts.isCallExpression(receiver)) {
             const callStages: ts.CallExpression[] = [];
             let current: ts.Expression = receiver;
