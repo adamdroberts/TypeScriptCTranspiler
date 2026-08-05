@@ -3514,6 +3514,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_logical_compound_incrementor` | lazy generators preserve short-circuit semantics for multiple yielded logical compound incrementor RHS operands |
 | `generator_lazy_for_nested_logical_compound_incrementor` | lazy generators preserve nested logical short-circuit trees in compound counted-for incrementors |
 | `generator_lazy_for_comma_initializer_yield` | lazy generators preserve source order across comma-sequenced yielded counted-for initializers |
+| `generator_lazy_for_yield_expression_initializer` | lazy generators preserve direct yielded non-assignment counted-for initializer stages |
 | `generator_lazy_for_compound_initializer_yield` | lazy generators preserve direct yielded arithmetic and logical compound counted-for initializers |
 | `generator_lazy_for_initializer_yield` | lazy generators suspend and resume direct yielded counted-for variable initializers before condition evaluation |
 | `generator_lazy_for_multiple_initializers_yield` | lazy generators preserve source order across multiple direct yielded counted-for variable initializers |

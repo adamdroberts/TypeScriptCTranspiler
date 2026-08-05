@@ -43,7 +43,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - Lazy generators now stage recursive direct-yield logical RHS plans inside identifier-lvalue `&&=`, `||=`, and `??=` counted-`for` incrementors, preserving nested left/right short-circuit timing, skipped inner RHS operands, assignment, and condition re-entry; broader logical operands, side-effecting interstitial expressions, member/computed lvalues, and broader incrementor graphs remain deferred. Test: `generator_lazy_for_nested_logical_compound_incrementor`.
 
-- Lazy generators now preserve comma-sequenced counted-`for` expression initializers with source-order direct-yield assignment stages and yield-free interstitial expressions before condition evaluation; compound/non-assignment initializers and broader graphs remain deferred. Test: `generator_lazy_for_comma_initializer_yield`.
+- Lazy generators now preserve comma-sequenced counted-`for` expression initializers with source-order direct-yield assignment stages and yield-free interstitial expressions before condition evaluation; broader compound initializer graphs remain deferred. Test: `generator_lazy_for_comma_initializer_yield`.
+
+- Lazy generators now suspend direct-yield non-assignment counted-`for` expression initializers, including comma-sequenced direct-yield stages, discard resumed values before condition evaluation, and preserve condition/body ordering and terminal return; broader initializer graphs remain deferred. Test: `generator_lazy_for_yield_expression_initializer`.
 
 - Lazy generators now suspend direct non-asterisk yielded RHS values in identifier-lvalue arithmetic/bitwise and logical compound counted-`for` initializers before condition evaluation, preserving assignment and short-circuit semantics plus condition/body ordering; member/computed lvalues, multiple yields, and broader initializer graphs remain deferred. Test: `generator_lazy_for_compound_initializer_yield`.
 

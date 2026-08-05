@@ -55082,6 +55082,18 @@ class Emitter {
                 );
                 return;
             }
+            if (this.directLazyYieldCondition(current)) {
+                const value = this.emitLazyGeneratorDirectYieldValue(
+                    buf,
+                    current,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+                if (!value) unsupported(current, "lazy generator yielded expression for-init could not suspend");
+                return;
+            }
             if (
                 ts.isBinaryExpression(current) &&
                 current.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -55183,6 +55195,7 @@ class Emitter {
     private isValidLazyGeneratorForInitializerExpression(expr: ts.Expression): boolean {
         const current = this.unwrapTransparentExpression(expr);
         if (!this.nodeContainsYield(current)) return true;
+        if (this.directLazyYieldCondition(current)) return true;
         if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.CommaToken) {
             return this.isValidLazyGeneratorForInitializerExpression(current.left) &&
                 this.isValidLazyGeneratorForInitializerExpression(current.right);
