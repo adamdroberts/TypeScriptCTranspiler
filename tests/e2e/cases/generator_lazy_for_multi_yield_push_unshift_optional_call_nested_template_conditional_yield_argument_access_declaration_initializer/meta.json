@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yielded conditional selectors inside template and String.raw arguments of optional push and unshift calls while preserving selected-arm laziness before mutating computed element access"
+}
