@@ -61,6 +61,15 @@ const callArgumentBox: any = [callArgumentChild];
 const nestedRhsBox: any = { value: 1 };
 const unaryRhsBox: any = { value: 1 };
 const literalRhsBox: any = { value: null };
+const spreadRhsEvents: string[] = [];
+const spreadRhsBox: any = { value: null };
+const spreadRhsItems: any = [5, 6];
+Object.defineProperty(spreadRhsItems, "0", {
+    get: () => {
+        spreadRhsEvents.push("spread");
+        return 5;
+    },
+});
 const callSpreadChild: any = { value: 120 };
 const callSpreadBox: any = [callSpreadChild];
 const callSpreadInserted: any = { value: 130 };
@@ -145,6 +154,14 @@ function* literalRhsAssignmentBetweenYields(): Generator<string, string, any> {
     return "literal-rhs-done";
 }
 
+function* spreadRhsAssignmentBetweenYields(): Generator<string, string, any> {
+    (yield "spread-rhs-receiver")[yield "spread-rhs-key"] = {
+        items: [yield "spread-rhs-array", ...(yield "spread-rhs-items")],
+        after: yield "spread-rhs-after",
+    };
+    return "spread-rhs-done";
+}
+
 function* callMethodSpreadBetweenYields(): Generator<string, string, any> {
     (yield "call-method-spread-receiver").call(null, ...(yield "call-method-spread-items"))[(yield "call-method-spread-key")]++;
     return "call-method-spread-done";
@@ -186,6 +203,15 @@ const literalRhsAssignmentThird: any = literalRhsAssignment.next("value");
 const literalRhsAssignmentFourth: any = literalRhsAssignment.next(4);
 const literalRhsAssignmentDone: any = literalRhsAssignment.next("literal-object");
 console.log("assignment-literal-rhs", literalRhsAssignmentFirst.done, literalRhsAssignmentFirst.value, literalRhsAssignmentSecond.done, literalRhsAssignmentSecond.value, literalRhsAssignmentThird.done, literalRhsAssignmentThird.value, literalRhsAssignmentFourth.done, literalRhsAssignmentFourth.value, literalRhsAssignmentDone.done, literalRhsAssignmentDone.value, literalRhsBox.value.length, literalRhsBox.value[0], literalRhsBox.value[1].value);
+
+const spreadRhsAssignment = spreadRhsAssignmentBetweenYields();
+const spreadRhsAssignmentFirst: any = spreadRhsAssignment.next();
+const spreadRhsAssignmentSecond: any = spreadRhsAssignment.next(spreadRhsBox);
+const spreadRhsAssignmentThird: any = spreadRhsAssignment.next("value");
+const spreadRhsAssignmentFourth: any = spreadRhsAssignment.next(4);
+const spreadRhsAssignmentFifth: any = spreadRhsAssignment.next(spreadRhsItems);
+const spreadRhsAssignmentDone: any = spreadRhsAssignment.next("spread-rhs-after");
+console.log("assignment-spread-rhs", spreadRhsAssignmentFirst.done, spreadRhsAssignmentFirst.value, spreadRhsAssignmentSecond.done, spreadRhsAssignmentSecond.value, spreadRhsAssignmentThird.done, spreadRhsAssignmentThird.value, spreadRhsAssignmentFourth.done, spreadRhsAssignmentFourth.value, spreadRhsAssignmentFifth.done, spreadRhsAssignmentFifth.value, spreadRhsEvents.join(","), spreadRhsAssignmentDone.done, spreadRhsAssignmentDone.value, spreadRhsBox.value.items.length, spreadRhsBox.value.items[0], spreadRhsBox.value.items[2]);
 
 const nested = nestedMutation();
 const nestedFirst: any = nested.next();

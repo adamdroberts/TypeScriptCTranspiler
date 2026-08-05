@@ -54600,6 +54600,56 @@ class Emitter {
         };
         collect(expression);
         if (invalidYield || yields.length < 2) return null;
+        const stagedExpressions: LazyMultiYieldMutationStage[] = [];
+        const visitLiteral = (
+            literal: ts.ArrayLiteralExpression | ts.ObjectLiteralExpression,
+        ): boolean => {
+            const spreadYields: ts.YieldExpression[] = [];
+            const collectLiteralYields = (node: ts.Node): void => {
+                if (ts.isYieldExpression(node)) {
+                    spreadYields.push(node);
+                    return;
+                }
+                if (node !== literal && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
+                ts.forEachChild(node, collectLiteralYields);
+            };
+            collectLiteralYields(literal);
+            const directSpreadYields: ts.YieldExpression[] = [];
+            const visitSpread = (expression: ts.Expression): boolean => {
+                const unwrapped = this.unwrapTransparentExpression(expression);
+                if (!ts.isYieldExpression(unwrapped) || unwrapped.asteriskToken) return false;
+                directSpreadYields.push(unwrapped);
+                return true;
+            };
+            if (ts.isArrayLiteralExpression(literal)) {
+                for (const element of literal.elements) {
+                    if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                    if (ts.isSpreadElement(element)) {
+                        if (!visitSpread(element.expression)) return false;
+                    } else if (!visit(element)) {
+                        return false;
+                    }
+                }
+            } else {
+                for (const property of literal.properties) {
+                    if (ts.isPropertyAssignment(property)) {
+                        if (ts.isComputedPropertyName(property.name) && this.nodeContainsYield(property.name.expression)) return false;
+                        if (!visit(property.initializer)) return false;
+                    } else if (ts.isShorthandPropertyAssignment(property)) {
+                        continue;
+                    } else if (ts.isSpreadAssignment(property)) {
+                        if (!visitSpread(property.expression)) return false;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            if (directSpreadYields.length === 0) return true;
+            if (directSpreadYields.length !== 1 ||
+                directSpreadYields[0] !== spreadYields[spreadYields.length - 1]) return false;
+            stagedExpressions.push({ expression: literal, afterYield: directSpreadYields[0] });
+            return true;
+        };
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) return !unwrapped.asteriskToken;
@@ -54611,27 +54661,11 @@ class Emitter {
             if (ts.isTypeOfExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
                 return visit(unwrapped.expression);
             }
-            if (ts.isArrayLiteralExpression(unwrapped)) {
-                return unwrapped.elements.every((element) =>
-                    element.kind === ts.SyntaxKind.OmittedExpression ||
-                    !ts.isSpreadElement(element) && visit(element),
-                );
-            }
-            if (ts.isObjectLiteralExpression(unwrapped)) {
-                return unwrapped.properties.every((property) => {
-                    if (ts.isPropertyAssignment(property)) {
-                        if (ts.isComputedPropertyName(property.name) && this.nodeContainsYield(property.name.expression)) return false;
-                        return visit(property.initializer);
-                    }
-                    if (ts.isShorthandPropertyAssignment(property)) return true;
-                    return false;
-                });
-            }
+            if (ts.isArrayLiteralExpression(unwrapped) || ts.isObjectLiteralExpression(unwrapped)) return visitLiteral(unwrapped);
             if (!ts.isBinaryExpression(unwrapped) ||
                 this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
-        const stagedExpressions: LazyMultiYieldMutationStage[] = [];
         if (ts.isPostfixUnaryExpression(expression)) {
             if (!this.simpleLazyMultiYieldMutationOperandWithStages(expression.operand, visit, stagedExpressions)) return null;
         } else if (ts.isPrefixUnaryExpression(expression) &&
