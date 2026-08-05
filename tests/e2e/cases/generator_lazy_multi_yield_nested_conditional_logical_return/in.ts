@@ -22,6 +22,18 @@ function* nestedConditionalLogicalArmReturn(): Generator<string, string, any> {
         : ((yield "arm-false-left") ?? (yield "arm-false-right")));
 }
 
+function* pureAndOperandReturn(prefix: string): Generator<string, string, any> {
+    return (yield "pure-and-left") && (prefix + "-and");
+}
+
+function* pureOrOperandReturn(prefix: string): Generator<string, string, any> {
+    return (yield "pure-or-left") || (prefix + "-or");
+}
+
+function* pureNullishOperandReturn(prefix: string): Generator<string, string, any> {
+    return (yield "pure-nullish-left") ?? (prefix + "-nullish");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -125,3 +137,39 @@ const armFalseFourth: any = armFalse.next(null);
 console.log("arm-false-fourth", armFalseFourth.done, armFalseFourth.value);
 const armFalseDone: any = armFalse.next("arm-false-result");
 console.log("arm-false-done", armFalseDone.done, armFalseDone.value);
+
+const pureAndSkipped = pureAndOperandReturn("prefix");
+const pureAndSkippedFirst: any = pureAndSkipped.next();
+console.log("pure-and-skipped-first", pureAndSkippedFirst.done, pureAndSkippedFirst.value);
+const pureAndSkippedDone: any = pureAndSkipped.next(false);
+console.log("pure-and-skipped-done", pureAndSkippedDone.done, pureAndSkippedDone.value);
+
+const pureAndSelected = pureAndOperandReturn("prefix");
+const pureAndSelectedFirst: any = pureAndSelected.next();
+console.log("pure-and-selected-first", pureAndSelectedFirst.done, pureAndSelectedFirst.value);
+const pureAndSelectedDone: any = pureAndSelected.next(true);
+console.log("pure-and-selected-done", pureAndSelectedDone.done, pureAndSelectedDone.value);
+
+const pureOrSkipped = pureOrOperandReturn("prefix");
+const pureOrSkippedFirst: any = pureOrSkipped.next();
+console.log("pure-or-skipped-first", pureOrSkippedFirst.done, pureOrSkippedFirst.value);
+const pureOrSkippedDone: any = pureOrSkipped.next(true);
+console.log("pure-or-skipped-done", pureOrSkippedDone.done, pureOrSkippedDone.value);
+
+const pureOrSelected = pureOrOperandReturn("prefix");
+const pureOrSelectedFirst: any = pureOrSelected.next();
+console.log("pure-or-selected-first", pureOrSelectedFirst.done, pureOrSelectedFirst.value);
+const pureOrSelectedDone: any = pureOrSelected.next(false);
+console.log("pure-or-selected-done", pureOrSelectedDone.done, pureOrSelectedDone.value);
+
+const pureNullishSkipped = pureNullishOperandReturn("prefix");
+const pureNullishSkippedFirst: any = pureNullishSkipped.next();
+console.log("pure-nullish-skipped-first", pureNullishSkippedFirst.done, pureNullishSkippedFirst.value);
+const pureNullishSkippedDone: any = pureNullishSkipped.next("left");
+console.log("pure-nullish-skipped-done", pureNullishSkippedDone.done, pureNullishSkippedDone.value);
+
+const pureNullishSelected = pureNullishOperandReturn("prefix");
+const pureNullishSelectedFirst: any = pureNullishSelected.next();
+console.log("pure-nullish-selected-first", pureNullishSelectedFirst.done, pureNullishSelectedFirst.value);
+const pureNullishSelectedDone: any = pureNullishSelected.next(null);
+console.log("pure-nullish-selected-done", pureNullishSelectedDone.done, pureNullishSelectedDone.value);

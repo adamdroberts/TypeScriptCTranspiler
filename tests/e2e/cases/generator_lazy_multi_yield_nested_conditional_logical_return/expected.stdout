@@ -38,3 +38,15 @@ arm-false-second false arm-selector
 arm-false-third false arm-false-left
 arm-false-fourth false arm-false-right
 arm-false-done true arm-false-result
+pure-and-skipped-first false pure-and-left
+pure-and-skipped-done true false
+pure-and-selected-first false pure-and-left
+pure-and-selected-done true prefix-and
+pure-or-skipped-first false pure-or-left
+pure-or-skipped-done true true
+pure-or-selected-first false pure-or-left
+pure-or-selected-done true prefix-or
+pure-nullish-skipped-first false pure-nullish-left
+pure-nullish-skipped-done true left
+pure-nullish-selected-first false pure-nullish-left
+pure-nullish-selected-done true prefix-nullish

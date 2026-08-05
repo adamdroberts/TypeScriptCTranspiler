@@ -53992,7 +53992,7 @@ class Emitter {
                 conditionalOperands.push(conditionalPlan);
                 return unwrappedOperand;
             }
-            return this.isSimpleLazyMultiYieldLiteral(unwrappedOperand) ? unwrappedOperand : null;
+            return this.isSimpleLazyMultiYieldLogicalOperand(unwrappedOperand) ? unwrappedOperand : null;
         };
         const left = buildOperand(unwrapped.left);
         const right = buildOperand(unwrapped.right);
@@ -54494,6 +54494,46 @@ class Emitter {
             expr.kind === ts.SyntaxKind.TrueKeyword ||
             expr.kind === ts.SyntaxKind.FalseKeyword ||
             expr.kind === ts.SyntaxKind.NullKeyword;
+    }
+
+    private isSimpleLazyMultiYieldLogicalOperand(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (this.isSimpleLazyMultiYieldLiteral(unwrapped) ||
+            ts.isIdentifier(unwrapped) ||
+            unwrapped.kind === ts.SyntaxKind.ThisKeyword) {
+            return true;
+        }
+        if (ts.isPrefixUnaryExpression(unwrapped) &&
+            [ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) {
+            return this.isSimpleLazyMultiYieldLogicalOperand(unwrapped.operand);
+        }
+        if (!ts.isBinaryExpression(unwrapped) ||
+            ![
+                ts.SyntaxKind.PlusToken,
+                ts.SyntaxKind.MinusToken,
+                ts.SyntaxKind.AsteriskToken,
+                ts.SyntaxKind.SlashToken,
+                ts.SyntaxKind.PercentToken,
+                ts.SyntaxKind.AsteriskAsteriskToken,
+                ts.SyntaxKind.AmpersandToken,
+                ts.SyntaxKind.BarToken,
+                ts.SyntaxKind.CaretToken,
+                ts.SyntaxKind.LessThanLessThanToken,
+                ts.SyntaxKind.GreaterThanGreaterThanToken,
+                ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+                ts.SyntaxKind.EqualsEqualsToken,
+                ts.SyntaxKind.EqualsEqualsEqualsToken,
+                ts.SyntaxKind.ExclamationEqualsToken,
+                ts.SyntaxKind.ExclamationEqualsEqualsToken,
+                ts.SyntaxKind.LessThanToken,
+                ts.SyntaxKind.LessThanEqualsToken,
+                ts.SyntaxKind.GreaterThanToken,
+                ts.SyntaxKind.GreaterThanEqualsToken,
+            ].includes(unwrapped.operatorToken.kind)) {
+            return false;
+        }
+        return this.isSimpleLazyMultiYieldLogicalOperand(unwrapped.left) &&
+            this.isSimpleLazyMultiYieldLogicalOperand(unwrapped.right);
     }
 
     private isSimpleLazyMultiYieldCallArgument(expr: ts.Expression): boolean {
