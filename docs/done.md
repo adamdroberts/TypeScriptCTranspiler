@@ -16,6 +16,8 @@
 
 - Lazy generators now stage bounded multi-yield mutation expression statements with direct yielded receivers and computed keys before assignment, prefix/postfix update, or `delete` side effects, preserving receiver-then-key ordering and final-resume timing; broader mutation expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
 
+- Lazy generators now stage a bounded direct-yield assignment RHS after yielded receivers and computed keys in multi-yield mutation expression statements, preserving receiver/key/RHS order; nested RHS yield graphs and broader assignment expressions remain deferred. Test: `generator_lazy_multi_yield_mutation_statement`.
+
 - Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as `while`, `do...while`, and counted `for` conditions, preserving short-circuit suspension order across body re-entry and incrementors; compound switch conditions and broader loop graphs remain deferred. Test: `generator_lazy_loop_logical_condition`.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; broader condition selectors and switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.

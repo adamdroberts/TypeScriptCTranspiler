@@ -54470,8 +54470,9 @@ class Emitter {
         } else if (ts.isDeleteExpression(expression)) {
             if (!this.simpleLazyMultiYieldMutationOperand(expression.expression, visit)) return null;
         } else if (ts.isBinaryExpression(expression) && this.isAssignmentOperatorKind(expression.operatorToken.kind)) {
+            const yieldedRight = this.directLazyYieldCondition(expression.right);
             if (!this.simpleLazyMultiYieldAssignmentLvalue(expression.left, visit) ||
-                this.nodeContainsYield(expression.right)) return null;
+                (this.nodeContainsYield(expression.right) && !yieldedRight)) return null;
         } else {
             return null;
         }

@@ -5,6 +5,11 @@ function* assignmentMutation(): Generator<string, string, any> {
     return "assign-done";
 }
 
+function* assignmentWithYieldedRight(): Generator<string, string, any> {
+    (yield "rhs-receiver")[yield "rhs-key"] = yield "rhs-value";
+    return "rhs-done";
+}
+
 function* postfixMutation(): Generator<string, string, any> {
     (yield "postfix-receiver")[yield "postfix-key"]++;
     return "postfix-done";
@@ -20,6 +25,13 @@ const assignmentFirst: any = assignment.next();
 const assignmentSecond: any = assignment.next(box);
 const assignmentDone: any = assignment.next("value");
 console.log("assignment", assignmentFirst.done, assignmentFirst.value, assignmentSecond.done, assignmentSecond.value, assignmentDone.done, assignmentDone.value, box.value);
+
+const rhsAssignment = assignmentWithYieldedRight();
+const rhsFirst: any = rhsAssignment.next();
+const rhsSecond: any = rhsAssignment.next(box);
+const rhsThird: any = rhsAssignment.next("value");
+const rhsDone: any = rhsAssignment.next(42);
+console.log("assignment-rhs", rhsFirst.done, rhsFirst.value, rhsSecond.done, rhsSecond.value, rhsThird.done, rhsThird.value, rhsDone.done, rhsDone.value, box.value);
 
 box.value = 10;
 const postfix = postfixMutation();
