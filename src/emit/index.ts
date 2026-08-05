@@ -55630,6 +55630,19 @@ class Emitter {
                         })),
                     };
                 }
+                if (callee.name.text === "push") {
+                    if (current.arguments.length !== 1 || !ts.isSpreadElement(current.arguments[0]!)) return null;
+                    const base = this.directLazyYieldCondition(callee.expression);
+                    const spreadSource = this.directLazyYieldCondition(current.arguments[0]!.expression);
+                    if (!base || !spreadSource) return null;
+                    return {
+                        yields: key ? [base, spreadSource, key] : [base, spreadSource],
+                        stagedExpressions: callStages.reverse().map((call) => ({
+                            expression: call,
+                            afterYield: spreadSource,
+                        })),
+                    };
+                }
                 if (callee.name.text === "fill") {
                     if (current.arguments.length !== 1) return null;
                     const base = this.directLazyYieldCondition(callee.expression);
