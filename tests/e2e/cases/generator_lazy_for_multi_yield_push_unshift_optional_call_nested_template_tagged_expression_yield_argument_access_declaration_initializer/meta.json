@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage yields in nested tagged-template expressions inside untagged and String.raw templates nested in optional push and unshift calls before mutating computed element access"
+}

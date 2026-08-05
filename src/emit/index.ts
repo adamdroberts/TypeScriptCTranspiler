@@ -54727,6 +54727,11 @@ class Emitter {
                 yields.push(...templateYields);
                 continue;
             }
+            const taggedTemplateYields = this.simpleLazyMultiYieldOptionalCallNestedTaggedTemplateYields(expression);
+            if (taggedTemplateYields) {
+                yields.push(...taggedTemplateYields);
+                continue;
+            }
             if (this.nodeContainsYield(span.expression) || !this.isSimpleLazyMultiYieldCallArgument(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
