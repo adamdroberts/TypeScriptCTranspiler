@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage a direct yielded unshift spread source before computed element access in counted-for declaration initializers"
+}

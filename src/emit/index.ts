@@ -55630,7 +55630,7 @@ class Emitter {
                         })),
                     };
                 }
-                if (callee.name.text === "push") {
+                if (callee.name.text === "push" || callee.name.text === "unshift") {
                     if (current.arguments.length !== 1 || !ts.isSpreadElement(current.arguments[0]!)) return null;
                     const base = this.directLazyYieldCondition(callee.expression);
                     const spreadSource = this.directLazyYieldCondition(current.arguments[0]!.expression);
