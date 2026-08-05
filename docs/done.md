@@ -3506,6 +3506,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_multi_yield_mutation_statement` | lazy generators stage direct yielded receivers and computed keys across multiple mutation-statement suspensions |
 | `generator_lazy_for` | lazy generators resume across simple counted for-loop suspension points |
 | `generator_lazy_for_incrementor_yield` | lazy generators suspend and resume direct yielded counted-for incrementors before condition re-entry |
+| `generator_lazy_for_assignment_incrementor_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for incrementor |
 | `generator_lazy_for_initializer_yield` | lazy generators suspend and resume a direct yielded counted-for variable initializer before condition evaluation |
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |

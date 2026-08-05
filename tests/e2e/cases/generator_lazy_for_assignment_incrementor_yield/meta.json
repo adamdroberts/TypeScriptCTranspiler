@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators suspend and resume a direct yielded assignment in a counted-for incrementor"
+}

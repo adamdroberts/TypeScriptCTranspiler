@@ -52994,8 +52994,13 @@ class Emitter {
                 const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.condition);
                 if (!logicalCondition || logicalCondition.yields.length === 0) return false;
             }
-            if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor) &&
-                !this.directLazyYieldCondition(stmt.incrementor)) return false;
+            if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor)) {
+                const yieldedIncrementor = this.directLazyYieldCondition(stmt.incrementor);
+                const yieldedAssignmentIncrementor = ts.isBinaryExpression(stmt.incrementor) &&
+                    stmt.incrementor.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    this.directLazyYieldCondition(stmt.incrementor.right);
+                if (!yieldedIncrementor && !yieldedAssignmentIncrementor) return false;
+            }
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -56142,6 +56147,23 @@ class Emitter {
                         elemType,
                         envLocalName,
                     );
+                } else if (
+                    ts.isBinaryExpression(stmt.incrementor) &&
+                    stmt.incrementor.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                    this.directLazyYieldCondition(stmt.incrementor.right)
+                ) {
+                    const value = this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        stmt.incrementor.right,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                    if (!value) unsupported(stmt.incrementor.right, "lazy generator yielded assignment incrementor could not suspend");
+                    const lhs = this.emitLvalue(stmt.incrementor.left);
+                    const lhsType = this.storageType(stmt.incrementor.left);
+                    buf.line(`${lhs} = ${this.coerce(value, lhsType, stmt.incrementor.right)};`);
                 } else {
                     const inc = this.emitExpr(stmt.incrementor);
                     buf.line(`(void)(${inc.c});`);
