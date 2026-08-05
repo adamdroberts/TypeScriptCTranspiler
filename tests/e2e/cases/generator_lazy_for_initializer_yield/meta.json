@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators suspend and resume a direct yielded counted-for variable initializer before condition evaluation"
+}

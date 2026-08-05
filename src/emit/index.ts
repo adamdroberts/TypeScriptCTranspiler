@@ -52972,9 +52972,13 @@ class Emitter {
             if (stmt.initializer) {
                 if (ts.isVariableDeclarationList(stmt.initializer)) {
                     for (const decl of stmt.initializer.declarations) {
-                        if (!ts.isIdentifier(decl.name) || this.nodeContainsYield(decl)) {
+                        if (!ts.isIdentifier(decl.name)) {
                             return false;
                         }
+                        if (this.nodeContainsYield(decl) &&
+                            (stmt.initializer.declarations.length !== 1 ||
+                                !decl.initializer ||
+                                !this.directLazyYieldCondition(decl.initializer))) return false;
                     }
                 } else if (this.nodeContainsYield(stmt.initializer)) {
                     return false;
@@ -55041,6 +55045,10 @@ class Emitter {
     private emitLazyGeneratorForInitializer(
         buf: CBuf,
         initializer: ts.ForInitializer | undefined,
+        nextStateId: () => number,
+        nextYieldStarSlot: () => number,
+        elemType: CType,
+        envLocalName: string,
     ): void {
         if (!initializer) return;
         if (!ts.isVariableDeclarationList(initializer)) {
@@ -55056,7 +55064,18 @@ class Emitter {
                 this.variableStorageType(this.prepareType(mapType(decl, this.checker)));
             const target = envBinding ? `*${envBinding.ptr}` : this.identifierName(decl.name);
             if (decl.initializer) {
-                const value = this.emitExpr(decl.initializer);
+                const yieldedInitializer = this.directLazyYieldCondition(decl.initializer);
+                const value = yieldedInitializer
+                    ? this.emitLazyGeneratorDirectYieldValue(
+                        buf,
+                        decl.initializer,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    )
+                    : this.emitExpr(decl.initializer);
+                if (!value) unsupported(decl.initializer, "lazy generator yielded for-init could not suspend");
                 const coerced = targetType.c === "int64_t" && value.ty.kind === "number"
                     ? `((int64_t)(${value.c}))`
                     : this.coerce(value, targetType, decl.initializer);
@@ -56021,7 +56040,14 @@ class Emitter {
 
         if (ts.isForStatement(stmt)) {
             buf.open("");
-            this.emitLazyGeneratorForInitializer(buf, stmt.initializer);
+            this.emitLazyGeneratorForInitializer(
+                buf,
+                stmt.initializer,
+                nextStateId,
+                nextYieldStarSlot,
+                elemType,
+                envLocalName,
+            );
             const yieldedCondition = stmt.condition
                 ? this.directLazyYieldCondition(stmt.condition)
                 : null;
