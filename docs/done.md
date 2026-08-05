@@ -3531,6 +3531,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_multi_yield_member_chain_access_declaration_initializer` | lazy generators stage ordered static members before counted-for computed element access |
 | `generator_lazy_for_multi_yield_computed_member_access_declaration_initializer` | lazy generators stage a yielded intermediate computed member before counted-for element access |
 | `generator_lazy_for_multi_yield_stable_computed_member_access_declaration_initializer` | lazy generators stage a stable computed intermediate member before counted-for element access |
+| `generator_lazy_for_multi_yield_computed_member_chain_access_declaration_initializer` | lazy generators stage computed intermediate-member chains before counted-for element access |
 | `generator_lazy_for_multi_yield_call_access_declaration_initializer` | lazy generators stage a bounded receiver call before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_chain_access_declaration_initializer` | lazy generators stage ordered receiver calls before counted-for computed element access |
 | `generator_lazy_for_multi_yield_call_argument_access_declaration_initializer` | lazy generators stage a yielded splice argument before counted-for computed element access |

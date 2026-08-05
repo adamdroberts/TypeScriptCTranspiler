@@ -55492,22 +55492,39 @@ class Emitter {
         if (directReceiver) {
             return { yields: [directReceiver, key], stagedExpressions: [] };
         }
-        if (ts.isElementAccessExpression(receiver) &&
-            !receiver.questionDotToken &&
-            receiver.argumentExpression) {
-            const intermediateKey = this.directLazyYieldCondition(receiver.argumentExpression);
-            const base = this.directLazyYieldCondition(receiver.expression);
-            if (base && intermediateKey) {
+        if (ts.isElementAccessExpression(receiver)) {
+            const yields: ts.YieldExpression[] = [];
+            const stagedExpressions: LazyMultiYieldMutationStage[] = [];
+            const receiverAfterYield = (current: ts.Expression): ts.YieldExpression | null => {
+                const direct = this.directLazyYieldCondition(current);
+                if (direct) {
+                    yields.push(direct);
+                    return direct;
+                }
+                const element = this.unwrapTransparentExpression(current);
+                if (!ts.isElementAccessExpression(element) ||
+                    element.questionDotToken ||
+                    !element.argumentExpression) return null;
+                const baseAfterYield = receiverAfterYield(element.expression);
+                if (!baseAfterYield) return null;
+                const intermediateKey = this.directLazyYieldCondition(element.argumentExpression);
+                let afterYield = baseAfterYield;
+                if (intermediateKey) {
+                    yields.push(intermediateKey);
+                    afterYield = intermediateKey;
+                } else if (!this.isSimpleLazyStableLvaluePart(
+                    this.unwrapTransparentExpression(element.argumentExpression),
+                )) {
+                    return null;
+                }
+                stagedExpressions.push({ expression: element, afterYield });
+                return afterYield;
+            };
+            const afterYield = receiverAfterYield(receiver);
+            if (afterYield) {
                 return {
-                    yields: [base, intermediateKey, key],
-                    stagedExpressions: [{ expression: receiver, afterYield: intermediateKey }],
-                };
-            }
-            const stableIntermediateKey = this.unwrapTransparentExpression(receiver.argumentExpression);
-            if (base && this.isSimpleLazyStableLvaluePart(stableIntermediateKey)) {
-                return {
-                    yields: [base, key],
-                    stagedExpressions: [{ expression: receiver, afterYield: base }],
+                    yields: [...yields, key],
+                    stagedExpressions,
                 };
             }
         }
