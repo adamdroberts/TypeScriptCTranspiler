@@ -23,7 +23,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 - `await using` now supports one or more dynamic, non-thenable resources at the start of a non-suspending async body, disposing them through `Symbol.asyncDispose` in reverse order on normal or direct-return completion and continuing later cleanup after an earlier disposal rejection across declarations, async arrows, class methods, and await-free terminal `if` return/throw branches with bounded simple prefixes, one nested await-free selector, and bounded fallback prefixes before completion; deeper nested/loop control-flow exits, thenable initializers, and broader suppression state machines remain deferred. Tests: `await_using_dispose`, `await_using_multiple_dispose`, `await_using_async_values_dispose`, `await_using_branch_dispose`.
 
-- Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing while leaving compound selectors and broader generator graphs deferred. Test: `generator_lazy_if_yield_condition`.
+- Lazy generators now suspend and resume a direct `yield` used as an `if` selector, including nested selectors, preserving branch laziness and post-branch sequencing while leaving broader condition graphs and compound loop/switch selectors deferred. Test: `generator_lazy_if_yield_condition`.
+
+- Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as ordinary `if` selectors, suspending only the short-circuit path that is required and preserving selected-branch laziness; compound loop/switch conditions and broader generator graphs remain deferred. Test: `generator_lazy_if_logical_condition`.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; compound or nested condition selectors and broader loop/switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.
 

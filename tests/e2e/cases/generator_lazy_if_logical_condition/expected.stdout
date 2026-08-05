@@ -1,0 +1,9 @@
+and-false false and-left true and-false
+and-true false and-left false and-right true and-true
+or-true false or-left true or-true
+or-false false or-left false or-right true or-true
+nullish-value false nullish-left true nullish-true
+nullish-null false nullish-left false nullish-right true nullish-true
+nested-left-false false nested-left true nested-false
+nested-middle-true false nested-left false nested-middle true nested-true
+nested-middle-false false nested-left false nested-middle false nested-right true nested-true
