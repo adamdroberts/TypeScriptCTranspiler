@@ -55303,7 +55303,10 @@ class Emitter {
         return ts.isIdentifier(current.left) && this.isSimpleLazyYieldCompoundAssignment(current);
     }
 
-    private simpleLazyMultiYieldArithmeticExpression(expr: ts.Expression): ts.YieldExpression[] | null {
+    private simpleLazyMultiYieldArithmeticExpression(
+        expr: ts.Expression,
+        minimumYields = 2,
+    ): ts.YieldExpression[] | null {
         const arithmeticOperators = [
             ts.SyntaxKind.PlusToken,
             ts.SyntaxKind.MinusToken,
@@ -55344,7 +55347,7 @@ class Emitter {
                 isArithmeticOperator(unwrapped.operatorToken.kind) &&
                 visit(unwrapped.left) && visit(unwrapped.right);
         };
-        return visit(this.unwrapTransparentExpression(expr)) && yields.length >= 2 ? yields : null;
+        return visit(this.unwrapTransparentExpression(expr)) && yields.length >= minimumYields ? yields : null;
     }
 
     private simpleLazyMultiYieldCompoundIncrementor(
@@ -55381,6 +55384,7 @@ class Emitter {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) return true;
             if (!this.nodeContainsYield(unwrapped)) return isStable(unwrapped);
+            if (this.simpleLazyMultiYieldArithmeticExpression(unwrapped, 1)) return true;
             if (ts.isArrayLiteralExpression(unwrapped)) {
                 return unwrapped.elements.every((element) =>
                     element.kind === ts.SyntaxKind.OmittedExpression ||
