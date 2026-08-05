@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage array and object spread push and unshift literal arguments at the mutating call point before computed element access"
+}
