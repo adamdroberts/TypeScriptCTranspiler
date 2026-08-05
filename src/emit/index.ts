@@ -121,8 +121,8 @@ interface LazyCompoundResumeSlot {
 interface LazyMultiYieldConditionalBranch {
     expression: ts.ConditionalExpression;
     condition: ts.YieldExpression;
-    whenTrue: ts.YieldExpression;
-    whenFalse: ts.YieldExpression;
+    whenTrue: ts.YieldExpression[];
+    whenFalse: ts.YieldExpression[];
 }
 
 interface LazyMultiYieldTerminalInfo {
@@ -53584,9 +53584,27 @@ class Emitter {
         const found = candidate as ts.ConditionalExpression | null;
         if (conditionalCount !== 1 || !found) return null;
         const condition = this.directLazyYieldCondition(found.condition);
-        const whenTrue = this.directLazyYieldCondition(found.whenTrue);
-        const whenFalse = this.directLazyYieldCondition(found.whenFalse);
-        if (!condition || !whenTrue || !whenFalse) return null;
+        if (!condition) return null;
+        const collectDirectYields = (branch: ts.Expression): ts.YieldExpression[] | null => {
+            const branchYields: ts.YieldExpression[] = [];
+            let valid = true;
+            const collect = (node: ts.Node): void => {
+                if (!valid || (node !== branch && (ts.isFunctionLike(node) || ts.isClassLike(node)))) return;
+                if (ts.isYieldExpression(node)) {
+                    if (node.asteriskToken || (node.expression && this.nodeContainsYield(node.expression))) {
+                        valid = false;
+                        return;
+                    }
+                    branchYields.push(node);
+                }
+                ts.forEachChild(node, collect);
+            };
+            collect(branch);
+            return valid && branchYields.length > 0 ? branchYields : null;
+        };
+        const whenTrue = collectDirectYields(found.whenTrue);
+        const whenFalse = collectDirectYields(found.whenFalse);
+        if (!whenTrue || !whenFalse) return null;
         const yields: ts.YieldExpression[] = [];
         const collectYields = (node: ts.Node): void => {
             if (node !== expression && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
@@ -53594,7 +53612,12 @@ class Emitter {
             ts.forEachChild(node, collectYields);
         };
         collectYields(expression);
-        if (yields.length !== 3 || !yields.includes(condition) || !yields.includes(whenTrue) || !yields.includes(whenFalse)) {
+        if (
+            yields.length !== 1 + whenTrue.length + whenFalse.length ||
+            !yields.includes(condition) ||
+            whenTrue.some((yieldExpr) => !yields.includes(yieldExpr)) ||
+            whenFalse.some((yieldExpr) => !yields.includes(yieldExpr))
+        ) {
             return null;
         }
         return { expression: found, condition, whenTrue, whenFalse };
@@ -53610,14 +53633,6 @@ class Emitter {
                 ? stmt.expression
                 : undefined;
         if (!expression) return null;
-        const conditionalBranch = this.simpleLazyMultiYieldConditionalBranch(expression);
-        if (conditionalBranch) {
-            return {
-                expression,
-                yields: [conditionalBranch.condition, conditionalBranch.whenTrue, conditionalBranch.whenFalse],
-                conditionalBranch,
-            };
-        }
         const yields: ts.YieldExpression[] = [];
         const visit = (node: ts.Expression): boolean => {
             const unwrapped = this.unwrapTransparentExpression(node);
@@ -53762,6 +53777,23 @@ class Emitter {
                 ts.SyntaxKind.AsteriskAsteriskToken].includes(op)) return false;
             return visit(unwrapped.left) && visit(unwrapped.right);
         };
+        const conditionalBranch = this.simpleLazyMultiYieldConditionalBranch(expression);
+        if (conditionalBranch) {
+            if (!visit(conditionalBranch.condition) ||
+                !visit(conditionalBranch.expression.whenTrue) ||
+                !visit(conditionalBranch.expression.whenFalse)) {
+                return null;
+            }
+            return {
+                expression,
+                yields: [
+                    conditionalBranch.condition,
+                    ...conditionalBranch.whenTrue,
+                    ...conditionalBranch.whenFalse,
+                ],
+                conditionalBranch,
+            };
+        }
         if (!visit(expression) || yields.length < 2) return null;
         return { expression, yields };
     }
@@ -55523,8 +55555,8 @@ class Emitter {
         if (info.conditionalBranch) {
             const { condition, whenTrue, whenFalse } = info.conditionalBranch;
             const conditionState = nextStateId();
-            const trueState = nextStateId();
-            const falseState = nextStateId();
+            const trueStates = whenTrue.map(() => nextStateId());
+            const falseStates = whenFalse.map(() => nextStateId());
             const conditionValue = condition.expression
                 ? this.emitExpr(condition.expression)
                 : { c: "NULL", ty: T_VOID };
@@ -55559,23 +55591,40 @@ class Emitter {
                 buf.line("return;");
             };
             buf.open(`if (${conditionC})`);
-            emitConditionalBranchYield(whenTrue, trueState);
+            emitConditionalBranchYield(whenTrue[0]!, trueStates[0]!);
             buf.close();
             buf.open("else");
-            emitConditionalBranchYield(whenFalse, falseState);
+            emitConditionalBranchYield(whenFalse[0]!, falseStates[0]!);
             buf.close();
             const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
-            buf.line(`case ${trueState}:;`);
-            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-            buf.line(`${envLocalName}->multi_yield_values[1] = next_arg;`);
-            buf.line(`goto ${mergeLabel};`);
-            buf.line(`case ${falseState}:;`);
-            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
-            buf.line(`${envLocalName}->multi_yield_values[2] = next_arg;`);
+            for (let index = 0; index < trueStates.length; index++) {
+                buf.line(`case ${trueStates[index]}:;`);
+                this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                buf.line(`${envLocalName}->multi_yield_values[${1 + index}] = next_arg;`);
+                if (index + 1 < whenTrue.length) {
+                    emitConditionalBranchYield(whenTrue[index + 1]!, trueStates[index + 1]!);
+                } else {
+                    buf.line(`goto ${mergeLabel};`);
+                }
+            }
+            for (let index = 0; index < falseStates.length; index++) {
+                buf.line(`case ${falseStates[index]}:;`);
+                this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                buf.line(`${envLocalName}->multi_yield_values[${1 + whenTrue.length + index}] = next_arg;`);
+                if (index + 1 < whenFalse.length) {
+                    emitConditionalBranchYield(whenFalse[index + 1]!, falseStates[index + 1]!);
+                } else {
+                    buf.line(`goto ${mergeLabel};`);
+                }
+            }
             buf.line(`${mergeLabel}:;`);
             resumeSources.set(condition, `${envLocalName}->multi_yield_values[0]`);
-            resumeSources.set(whenTrue, `${envLocalName}->multi_yield_values[1]`);
-            resumeSources.set(whenFalse, `${envLocalName}->multi_yield_values[2]`);
+            whenTrue.forEach((yieldExpr, index) => {
+                resumeSources.set(yieldExpr, `${envLocalName}->multi_yield_values[${1 + index}]`);
+            });
+            whenFalse.forEach((yieldExpr, index) => {
+                resumeSources.set(yieldExpr, `${envLocalName}->multi_yield_values[${1 + whenTrue.length + index}]`);
+            });
         } else {
             const states = info.yields.map(() => nextStateId());
             for (let i = 0; i < info.yields.length; i++) {
@@ -55617,12 +55666,10 @@ class Emitter {
         const build = (node: ts.Expression): EmitResult => {
             const unwrapped = this.unwrapTransparentExpression(node);
             if (ts.isYieldExpression(unwrapped)) {
-                const index = yieldByNode.get(unwrapped);
-                if (index === undefined) unsupported(node, "lazy multi-yield return contains an unknown yield");
+                if (!yieldByNode.has(unwrapped)) unsupported(node, "lazy multi-yield return contains an unknown yield");
                 const type = this.prepareType(mapTsType(unwrapped, this.checker.getTypeAtLocation(unwrapped), this.checker));
-                const source = index === info.yields.length - 1
-                    ? "next_arg"
-                    : `${envLocalName}->multi_yield_values[${index}]`;
+                const source = resumeSources.get(unwrapped);
+                if (!source) unsupported(node, "lazy multi-yield return contains an untracked resumed yield");
                 return {
                     c: this.coerce({ c: source, ty: T_VALUE }, type, unwrapped),
                     ty: type,
