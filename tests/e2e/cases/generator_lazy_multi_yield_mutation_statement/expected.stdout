@@ -9,3 +9,4 @@ stable-computed-member false stable-computed-member-receiver false stable-comput
 call-member false call-member-receiver false call-member-key true call-member-done 0 61
 call-chain false call-chain-receiver false call-chain-key true call-chain-done 0 81
 call-argument false call-argument-receiver false call-argument-count false call-argument-key true call-argument-done 0 101
+call-spread false call-spread-receiver false call-spread-items false call-spread-key true call-spread-done 1 130 121

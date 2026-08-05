@@ -58,6 +58,10 @@ const callChainChild: any = { value: 80 };
 const callChainBox: any = [callChainChild];
 const callArgumentChild: any = { value: 100 };
 const callArgumentBox: any = [callArgumentChild];
+const callSpreadChild: any = { value: 120 };
+const callSpreadBox: any = [callSpreadChild];
+const callSpreadInserted: any = { value: 130 };
+const callSpreadItems: any = [callSpreadInserted];
 
 function* memberBetweenYields(): Generator<string, string, any> {
     (yield "member-receiver").child[(yield "member-key")]++;
@@ -87,6 +91,11 @@ function* callChainBetweenYields(): Generator<string, string, any> {
 function* callArgumentBetweenYields(): Generator<string, string, any> {
     (yield "call-argument-receiver").splice(0, (yield "call-argument-count")).pop()[(yield "call-argument-key")]++;
     return "call-argument-done";
+}
+
+function* callSpreadBetweenYields(): Generator<string, string, any> {
+    (yield "call-spread-receiver").splice(0, 1, ...(yield "call-spread-items")).pop()[(yield "call-spread-key")]++;
+    return "call-spread-done";
 }
 
 const assignment = assignmentMutation();
@@ -160,3 +169,10 @@ const callArgumentSecond: any = callArgument.next(callArgumentBox);
 const callArgumentThird: any = callArgument.next(1);
 const callArgumentDone: any = callArgument.next("value");
 console.log("call-argument", callArgumentFirst.done, callArgumentFirst.value, callArgumentSecond.done, callArgumentSecond.value, callArgumentThird.done, callArgumentThird.value, callArgumentDone.done, callArgumentDone.value, callArgumentBox.length, callArgumentChild.value);
+
+const callSpread = callSpreadBetweenYields();
+const callSpreadFirst: any = callSpread.next();
+const callSpreadSecond: any = callSpread.next(callSpreadBox);
+const callSpreadThird: any = callSpread.next(callSpreadItems);
+const callSpreadDone: any = callSpread.next("value");
+console.log("call-spread", callSpreadFirst.done, callSpreadFirst.value, callSpreadSecond.done, callSpreadSecond.value, callSpreadThird.done, callSpreadThird.value, callSpreadDone.done, callSpreadDone.value, callSpreadBox.length, callSpreadBox[0].value, callSpreadChild.value);

@@ -54461,13 +54461,16 @@ class Emitter {
                 afterYield = directBaseYield && visit(base) ? directBaseYield : null;
             }
             if (!afterYield) return null;
-            for (const argument of receiver.arguments) {
-                if (ts.isSpreadElement(argument)) return null;
-                const unwrappedArgument = this.unwrapTransparentExpression(argument as ts.Expression);
+            for (let index = 0; index < receiver.arguments.length; index++) {
+                const argument = receiver.arguments[index]!;
+                const spread = ts.isSpreadElement(argument);
+                if (spread && (callee.name.text !== "splice" || index < 2)) return null;
+                const argumentExpression = spread ? argument.expression : argument as ts.Expression;
+                const unwrappedArgument = this.unwrapTransparentExpression(argumentExpression);
                 if (ts.isYieldExpression(unwrappedArgument)) {
-                    if (!visit(argument as ts.Expression)) return null;
+                    if (!visit(argumentExpression)) return null;
                     afterYield = unwrappedArgument;
-                } else if (this.nodeContainsYield(argument)) {
+                } else if (this.nodeContainsYield(argumentExpression)) {
                     return null;
                 }
             }
@@ -69231,6 +69234,22 @@ class Emitter {
                 );
             }
             case "splice": {
+                const spreadIndex = args.findIndex((arg) => ts.isSpreadElement(arg));
+                if (spreadIndex >= 0) {
+                    if (spreadIndex < 2) unsupported(call, "splice spread arguments require start and deleteCount");
+                    const start = this.emitExpr(args[0]!);
+                    const deleteCount = this.emitExpr(args[1]!);
+                    const items = this.emitSpreadCallArgumentList(args.slice(2));
+                    return this.emitSequencedExpr(T_VALUE, [
+                        { value: recv, target: T_VALUE, node: call.expression },
+                        { value: start, target: T_VALUE, node: args[0]! },
+                        { value: deleteCount, target: T_VALUE, node: args[1]! },
+                        { value: items, target: arrayType(T_VALUE), node: call },
+                    ], ([target, startArg, deleteArg, itemList]) => {
+                        const argc = `((${itemList}->len > (size_t)(INT_MAX - 2)) ? INT_MAX : (int)(2 + ${itemList}->len))`;
+                        return `tsc_value_method_splice(${target}, ${startArg}, ${deleteArg}, ${argc}, ${itemList})`;
+                    });
+                }
                 if (args.length === 0) {
                     const zero: EmitResult = { c: "tsc_value_num(0.0)", ty: T_VALUE };
                     const items: EmitResult = { c: "tsc_array_new(sizeof(tsc_value_t), 1)", ty: arrayType(T_VALUE) };

@@ -23,6 +23,10 @@ const callChainChild: any = { value: 90 };
 const callChainBox: any = [callChainChild];
 const callArgumentChild: any = { value: 110 };
 const callArgumentBox: any = [callArgumentChild];
+const callSpreadChild: any = { value: 140 };
+const callSpreadBox: any = [callSpreadChild];
+const callSpreadInserted: any = { value: 150 };
+const callSpreadItems: any = [callSpreadInserted];
 
 function* prefixReturn(): Generator<any, number, any> {
     return ++(yield box).value;
@@ -62,6 +66,10 @@ function* intermediateCallChainReturn(): Generator<any, number, any> {
 
 function* intermediateCallArgumentReturn(): Generator<any, number, any> {
     return ++(yield callArgumentBox).splice(0, (yield "count")).pop()[(yield "value")];
+}
+
+function* intermediateCallSpreadReturn(): Generator<any, number, any> {
+    return ++(yield callSpreadBox).splice(0, 1, ...(yield "items")).pop()[(yield "value")];
 }
 
 const prefixIterator = prefixReturn();
@@ -132,3 +140,10 @@ const intermediateCallArgumentSecond: any = intermediateCallArgumentIterator.nex
 const intermediateCallArgumentThird: any = intermediateCallArgumentIterator.next(1);
 const intermediateCallArgumentDone: any = intermediateCallArgumentIterator.next("value");
 console.log("call-argument", intermediateCallArgumentFirst.done, intermediateCallArgumentFirst.value === callArgumentBox, intermediateCallArgumentSecond.done, intermediateCallArgumentSecond.value, intermediateCallArgumentThird.done, intermediateCallArgumentThird.value, intermediateCallArgumentDone.done, intermediateCallArgumentDone.value, callArgumentBox.length, callArgumentChild.value);
+
+const intermediateCallSpreadIterator = intermediateCallSpreadReturn();
+const intermediateCallSpreadFirst: any = intermediateCallSpreadIterator.next();
+const intermediateCallSpreadSecond: any = intermediateCallSpreadIterator.next(callSpreadBox);
+const intermediateCallSpreadThird: any = intermediateCallSpreadIterator.next(callSpreadItems);
+const intermediateCallSpreadDone: any = intermediateCallSpreadIterator.next("value");
+console.log("call-spread", intermediateCallSpreadFirst.done, intermediateCallSpreadFirst.value === callSpreadBox, intermediateCallSpreadSecond.done, intermediateCallSpreadSecond.value, intermediateCallSpreadThird.done, intermediateCallSpreadThird.value, intermediateCallSpreadDone.done, intermediateCallSpreadDone.value, callSpreadBox.length, callSpreadBox[0].value, callSpreadChild.value);
