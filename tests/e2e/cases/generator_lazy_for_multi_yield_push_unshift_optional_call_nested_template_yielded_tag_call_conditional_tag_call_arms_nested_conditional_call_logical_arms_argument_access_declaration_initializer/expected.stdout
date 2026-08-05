@@ -1,0 +1,24 @@
+push-first  push-first false push-receiver
+push-second  push-first false push-selector
+push-third  push-first false push-nested-selector
+push-fourth  push-first false push-true-left
+push-fifth  push-first false push-true-call
+push-sixth  push-first false push-inner
+push-seventh call-push-true-call-value,arm-push-call-result-push-true-call-value,outer-push-arm-inner-push-inner-value push-first false push-outer
+push-eighth call-push-true-call-value,arm-push-call-result-push-true-call-value,outer-push-arm-inner-push-inner-value push-first false push-item
+push-ninth call-push-true-call-value,arm-push-call-result-push-true-call-value,outer-push-arm-inner-push-inner-value push-first false push-element
+push-tenth call-push-true-call-value,arm-push-call-result-push-true-call-value,outer-push-arm-inner-push-inner-value push-first,push-callback-push-push-outer-outer-push-outer-value-push-item-value,push-element-value false push-key
+push-eleventh call-push-true-call-value,arm-push-call-result-push-true-call-value,outer-push-arm-inner-push-inner-value push-first,push-callback-push-push-outer-outer-push-outer-value-push-item-value,push-element-value false push-body-undefined
+push-done call-push-true-call-value,arm-push-call-result-push-true-call-value,outer-push-arm-inner-push-inner-value push-first,push-callback-push-push-outer-outer-push-outer-value-push-item-value,push-element-value true push-done
+unshift-first  unshift-first false unshift-receiver
+unshift-second  unshift-first false unshift-selector
+unshift-third  unshift-first false unshift-nested-selector
+unshift-fourth  unshift-first false unshift-false-left
+unshift-fifth  unshift-first false unshift-false-call
+unshift-sixth  unshift-first false unshift-inner
+unshift-seventh call-unshift-false-call-value,arm-unshift-call-result-unshift-false-call-value,outer-unshift-arm-inner-unshift-inner-value unshift-first false unshift-outer
+unshift-eighth call-unshift-false-call-value,arm-unshift-call-result-unshift-false-call-value,outer-unshift-arm-inner-unshift-inner-value unshift-first false unshift-item
+unshift-ninth call-unshift-false-call-value,arm-unshift-call-result-unshift-false-call-value,outer-unshift-arm-inner-unshift-inner-value unshift-first false unshift-element
+unshift-tenth call-unshift-false-call-value,arm-unshift-call-result-unshift-false-call-value,outer-unshift-arm-inner-unshift-inner-value unshift-callback-unshift-unshift-outer-outer-unshift-outer-value-unshift-item-value,unshift-element-value,unshift-first false unshift-key
+unshift-eleventh call-unshift-false-call-value,arm-unshift-call-result-unshift-false-call-value,outer-unshift-arm-inner-unshift-inner-value unshift-callback-unshift-unshift-outer-outer-unshift-outer-value-unshift-item-value,unshift-element-value,unshift-first false unshift-body-undefined
+unshift-done call-unshift-false-call-value,arm-unshift-call-result-unshift-false-call-value,outer-unshift-arm-inner-unshift-inner-value unshift-callback-unshift-unshift-outer-outer-unshift-outer-value-unshift-item-value,unshift-element-value,unshift-first true unshift-done
