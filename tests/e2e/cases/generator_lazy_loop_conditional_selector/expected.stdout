@@ -1,0 +1,6 @@
+while false while-condition 
+while false while-body-1 while-then
+while false while-condition while-then
+while true while-1 while-then|while-else
+do false do-body-1 false do-left false do-right false do-body-2 false do-left true do-2
+for false for-left false for-right false for-body-0 false for-left false for-right true for-1

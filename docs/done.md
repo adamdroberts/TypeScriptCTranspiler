@@ -10,6 +10,8 @@
 
 - Lazy generators now stage conditional expressions used as ordinary `if` selectors when the selector is a direct-yield or logical plan and both arms are yield-free, preserving selector short-circuiting and selected-arm laziness; yielded arms and broader conditional graphs remain deferred. Test: `generator_lazy_if_conditional_selector`.
 
+- Lazy generators now stage conditional expressions used as `while`, `do...while`, and counted `for` conditions when the selector is a direct-yield or logical plan and both arms are yield-free, preserving loop re-entry, short-circuit suspension, incrementor ordering, and selected-arm laziness; yielded arms and broader conditional graphs remain deferred. Test: `generator_lazy_loop_conditional_selector`.
+
 - Lazy generators now suspend and resume recursive direct-yield `&&`, `||`, and `??` plans used as `while`, `do...while`, and counted `for` conditions, preserving short-circuit suspension order across body re-entry and incrementors; compound switch conditions and broader loop graphs remain deferred. Test: `generator_lazy_loop_logical_condition`.
 
 - Lazy generators now suspend and resume direct `yield` expressions used as `while`, `do...while`, and counted `for` conditions, preserving loop `continue`, counted incrementor ordering, and close/finally handling while a condition is suspended; broader condition selectors and switch generator graphs remain deferred. Test: `generator_lazy_loop_yield_condition`.
@@ -3457,6 +3459,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_if_yield_condition` | lazy generators suspend and resume direct yield expressions used as if selectors |
 | `generator_lazy_if_logical_condition` | lazy generators suspend and resume recursive logical yield plans used as if selectors |
 | `generator_lazy_if_conditional_selector` | lazy generators stage yield-free conditional expressions with resumable selectors used as if conditions |
+| `generator_lazy_loop_conditional_selector` | lazy generators stage yield-free conditional expressions with resumable selectors used as while, do-while, and counted-for conditions |
 | `generator_lazy_loop_yield_condition` | lazy generators suspend direct yield expressions used as while, do-while, and counted for conditions with continue, incrementor, and close/finally coverage |
 | `generator_lazy_loop_logical_condition` | lazy generators suspend and resume recursive logical yield plans used as while, do-while, and counted for conditions |
 | `generator_lazy_switch_yield_condition` | lazy generators suspend a direct yield used as a switch discriminant with static case matching, fallthrough, and close/finally coverage |

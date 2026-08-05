@@ -52928,8 +52928,9 @@ class Emitter {
         if (ts.isWhileStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             return (!this.nodeContainsYield(stmt.expression) || !!yieldedCondition ||
-                (!!logicalCondition && logicalCondition.yields.length > 0)) &&
+                (!!logicalCondition && logicalCondition.yields.length > 0) || !!conditionalSelector) &&
                 this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -52937,7 +52938,8 @@ class Emitter {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
             return (!this.nodeContainsYield(stmt.expression) || !!yieldedCondition ||
-                (!!logicalCondition && logicalCondition.yields.length > 0)) &&
+                (!!logicalCondition && logicalCondition.yields.length > 0) ||
+                !!this.simpleLazyGeneratorConditionalSelector(stmt.expression)) &&
                 this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -52953,8 +52955,11 @@ class Emitter {
                     return false;
                 }
             }
+            const conditionalSelector = stmt.condition
+                ? this.simpleLazyGeneratorConditionalSelector(stmt.condition)
+                : null;
             if (stmt.condition && this.nodeContainsYield(stmt.condition) &&
-                !this.directLazyYieldCondition(stmt.condition)) {
+                !this.directLazyYieldCondition(stmt.condition) && !conditionalSelector) {
                 const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.condition);
                 if (!logicalCondition || logicalCondition.yields.length === 0) return false;
             }
@@ -55351,14 +55356,27 @@ class Emitter {
         if (ts.isWhileStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
-            if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0)) {
+            const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
+            if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
                 this.activeLazyGeneratorBreakTargets.push("loop");
                 this.activeLazyGeneratorContinueTargets.push(null);
                 try {
                     const logicalResult = yieldedCondition
                         ? null
-                        : this.emitLazyGeneratorLogicalPlan(
+                        : conditionalSelector
+                            ? null
+                            : this.emitLazyGeneratorLogicalPlan(
+                            buf,
+                            stmt.expression,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        );
+                    const conditionalResult = yieldedCondition || logicalResult
+                        ? null
+                        : this.emitLazyGeneratorConditionalSelector(
                             buf,
                             stmt.expression,
                             nextStateId,
@@ -55375,7 +55393,9 @@ class Emitter {
                             elemType,
                             envLocalName,
                         )!
-                        : this.truthyExprFromEmitResult(logicalResult!, stmt.expression);
+                        : logicalResult
+                            ? this.truthyExprFromEmitResult(logicalResult, stmt.expression)
+                            : this.truthyExprFromEmitResult(conditionalResult!, stmt.expression);
                     buf.open(`if (!(${condC}))`);
                     buf.line("break;");
                     buf.close();
@@ -55404,7 +55424,8 @@ class Emitter {
         if (ts.isDoStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
-            if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0)) {
+            const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
+            if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
                 const continueLabel = this.freshTemp("_do_continue");
                 this.activeLazyGeneratorBreakTargets.push("loop");
@@ -55414,7 +55435,19 @@ class Emitter {
                     buf.line(`${continueLabel}:;`);
                     const logicalResult = yieldedCondition
                         ? null
-                        : this.emitLazyGeneratorLogicalPlan(
+                        : conditionalSelector
+                            ? null
+                            : this.emitLazyGeneratorLogicalPlan(
+                            buf,
+                            stmt.expression,
+                            nextStateId,
+                            nextYieldStarSlot,
+                            elemType,
+                            envLocalName,
+                        );
+                    const conditionalResult = yieldedCondition || logicalResult
+                        ? null
+                        : this.emitLazyGeneratorConditionalSelector(
                             buf,
                             stmt.expression,
                             nextStateId,
@@ -55431,7 +55464,9 @@ class Emitter {
                             elemType,
                             envLocalName,
                         )!
-                        : this.truthyExprFromEmitResult(logicalResult!, stmt.expression);
+                        : logicalResult
+                            ? this.truthyExprFromEmitResult(logicalResult, stmt.expression)
+                            : this.truthyExprFromEmitResult(conditionalResult!, stmt.expression);
                     buf.open(`if (!(${condC}))`);
                     buf.line("break;");
                     buf.close();
@@ -55464,12 +55499,27 @@ class Emitter {
             const logicalCondition = stmt.condition
                 ? this.simpleLazyMultiYieldLogicalPlan(stmt.condition)
                 : null;
+            const conditionalSelector = stmt.condition
+                ? this.simpleLazyGeneratorConditionalSelector(stmt.condition)
+                : null;
             const continueLabel = stmt.incrementor ? this.freshTemp("_for_continue") : null;
-            if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0)) {
+            if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
                 const logicalResult = yieldedCondition
                     ? null
-                    : this.emitLazyGeneratorLogicalPlan(
+                    : conditionalSelector
+                        ? null
+                        : this.emitLazyGeneratorLogicalPlan(
+                        buf,
+                        stmt.condition!,
+                        nextStateId,
+                        nextYieldStarSlot,
+                        elemType,
+                        envLocalName,
+                    );
+                const conditionalResult = yieldedCondition || logicalResult
+                    ? null
+                    : this.emitLazyGeneratorConditionalSelector(
                         buf,
                         stmt.condition!,
                         nextStateId,
@@ -55486,7 +55536,9 @@ class Emitter {
                         elemType,
                         envLocalName,
                     )!
-                    : this.truthyExprFromEmitResult(logicalResult!, stmt.condition!);
+                    : logicalResult
+                        ? this.truthyExprFromEmitResult(logicalResult, stmt.condition!)
+                        : this.truthyExprFromEmitResult(conditionalResult!, stmt.condition!);
                 buf.open(`if (!(${condC}))`);
                 buf.line("break;");
                 buf.close();
