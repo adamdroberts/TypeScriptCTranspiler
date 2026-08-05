@@ -55503,6 +55503,13 @@ class Emitter {
                     stagedExpressions: [{ expression: receiver, afterYield: intermediateKey }],
                 };
             }
+            const stableIntermediateKey = this.unwrapTransparentExpression(receiver.argumentExpression);
+            if (base && this.isSimpleLazyStableLvaluePart(stableIntermediateKey)) {
+                return {
+                    yields: [base, key],
+                    stagedExpressions: [{ expression: receiver, afterYield: base }],
+                };
+            }
         }
         if (ts.isCallExpression(receiver)) {
             const callStages: ts.CallExpression[] = [];

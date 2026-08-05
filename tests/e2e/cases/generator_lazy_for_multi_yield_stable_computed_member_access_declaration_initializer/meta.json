@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators stage a stable computed intermediate member before final computed element access in counted-for declaration initializers"
+}
