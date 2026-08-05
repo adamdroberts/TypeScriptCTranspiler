@@ -1,0 +1,3 @@
+{
+  "description": "lazy generators preserve multiple direct yielded push spread sources before computed element access in counted-for declaration initializers"
+}
