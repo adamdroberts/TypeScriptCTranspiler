@@ -1,0 +1,6 @@
+first a 3 false receiver
+second a 3 false target
+third a 3 false start
+fourth c 3 false key
+fifth c 3 false body-c
+done c 3 true done
