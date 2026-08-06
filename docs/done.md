@@ -1,5 +1,6 @@
 # Implemented features
 
+- Lazy generators now preserve bounded labeled `break` and `continue` routing across labeled blocks and supported `while`, `do...while`, counted `for`, `for...of`, and `for...in` loops, including cross-loop continuation anchors; broader suspended label/control-flow graphs remain deferred. Test: `generator_lazy_labeled_control`.
 - Ordinary labeled statements now emit bounded labeled blocks with `break label` routing, including nested labeled blocks, and preserve same-loop plus cross-loop labeled `continue` through `while`, `do...while`, counted `for`, `for...in`, ordinary `for...of`, typed `Map`, `URLSearchParams`, custom iterator objects, and dynamic/entry destructuring paths; broader label control-flow graphs remain deferred. Test: `labeled_statement`.
 - `debugger;` statements now emit as semantics-preserving no-ops in ordinary functions, lazy generators, and await-free nested loop-control prefixes. Test: `debugger_statement`.
 - The bounded post-await awaited-condition continuation now preserves await-free empty-statement prefixes before direct unlabelled or same-loop labelled nested-loop `break`/`continue`, retaining surrounding statement ordering before outer incrementor/condition re-entry or terminal-await fallthrough; suspended prefixes, escaping controls, and broader nested control-flow graphs remain deferred. Test: `async_await_post_await_if_await_condition_nested_awaited_var_for_loop_control`.
@@ -3751,6 +3752,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_in_yield_source` | lazy generators suspend on a direct yielded dynamic `for...in` source before enumerating the resumed value |
 | `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived class/interface field overrides; regular `for_in` covers the same multi-level inherited-field resolver, override path, and inherited interface path |
 | `generator_lazy_continue` | lazy generators support unlabeled continue inside while, do-while, and counted for loops |
+| `generator_lazy_labeled_control` | lazy generators preserve bounded labeled break and continue routing across supported loop forms |
 | `generator_lazy_do_while` | lazy generators resume across simple do-while loop suspension points |
 | `generator_lazy_if_else` | lazy generators resume across simple if/else control flow |
 | `generator_lazy_if_yield_condition` | lazy generators suspend and resume direct yield expressions used as if selectors |

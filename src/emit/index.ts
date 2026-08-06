@@ -832,6 +832,8 @@ class Emitter {
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
     private activeLazyGeneratorSwitchEndLabels: string[] = [];
+    private activeLazyGeneratorLabeledBreakTargets: Array<Map<string, string>> = [];
+    private activeLazyGeneratorLabeledContinueTargets: Array<Map<string, string | null>> = [];
     private activeLazyGeneratorFinalizers: ts.Statement[][] = [];
     private activeLazyGeneratorFinalizerEmissionDepth = 0;
     private activeLazyGeneratorCatchHandlers: LazyGeneratorCatchHandler[] = [];
@@ -59525,6 +59527,10 @@ class Emitter {
         buf.line(`${envLocalName}->${info.indexField} = 0;`);
         buf.close();
         const continueLabel = this.freshTemp("_for_of_continue");
+        const labeledContinueTarget = this.directLabeledLoopName(stmt)
+            ? continueLabel
+            : null;
+        this.registerLazyGeneratorLabeledContinueTarget(stmt, labeledContinueTarget);
         buf.open(`while (${envLocalName}->${info.indexField} < ${envLocalName}->${info.arrayField}->len)`);
         this.activeLazyGeneratorBreakTargets.push("loop");
         this.activeLazyGeneratorContinueTargets.push(continueLabel);
@@ -59598,6 +59604,10 @@ class Emitter {
         buf.line(`${envLocalName}->${info.indexField} = 0;`);
         buf.close();
         const continueLabel = this.freshTemp("_for_in_continue");
+        const labeledContinueTarget = this.directLabeledLoopName(stmt)
+            ? continueLabel
+            : null;
+        this.registerLazyGeneratorLabeledContinueTarget(stmt, labeledContinueTarget);
         buf.open(`while (${envLocalName}->${info.indexField} < ${envLocalName}->${info.keysField}->len)`);
         this.activeLazyGeneratorBreakTargets.push("loop");
         this.activeLazyGeneratorContinueTargets.push(continueLabel);
@@ -60670,6 +60680,21 @@ class Emitter {
         }
     }
 
+    private registerLazyGeneratorLabeledContinueTarget(
+        statement: ts.Statement,
+        target: string | null,
+    ): void {
+        const label = this.directLabeledLoopName(statement);
+        if (!label) return;
+        for (let index = this.activeLazyGeneratorLabeledContinueTargets.length - 1; index >= 0; index--) {
+            const targets = this.activeLazyGeneratorLabeledContinueTargets[index]!;
+            if (targets.has(label)) {
+                targets.set(label, target);
+                return;
+            }
+        }
+    }
+
     private emitLazyGeneratorStmt(
         buf: CBuf,
         stmt: ts.Statement,
@@ -60680,6 +60705,29 @@ class Emitter {
     ): void {
         if (ts.isDebuggerStatement(stmt)) return;
         if (ts.isEmptyStatement(stmt)) return;
+
+        if (ts.isLabeledStatement(stmt)) {
+            const endLabel = this.freshTemp(`_${mangleIdent(stmt.label.text)}_end`);
+            buf.open("");
+            this.activeLazyGeneratorLabeledBreakTargets.push(new Map([[stmt.label.text, endLabel]]));
+            this.activeLazyGeneratorLabeledContinueTargets.push(new Map([[stmt.label.text, null]]));
+            try {
+                this.emitLazyGeneratorStmt(
+                    buf,
+                    stmt.statement,
+                    nextStateId,
+                    nextYieldStarSlot,
+                    elemType,
+                    envLocalName,
+                );
+            } finally {
+                this.activeLazyGeneratorLabeledContinueTargets.pop();
+                this.activeLazyGeneratorLabeledBreakTargets.pop();
+            }
+            buf.line(`${endLabel}:;`);
+            buf.close();
+            return;
+        }
 
         if (ts.isBlock(stmt)) {
             buf.open("");
@@ -60744,6 +60792,10 @@ class Emitter {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
+            const labeledContinueTarget = this.directLabeledLoopName(stmt)
+                ? this.freshTemp("_lazy_while_labeled_continue")
+                : null;
+            this.registerLazyGeneratorLabeledContinueTarget(stmt, labeledContinueTarget);
             if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
                 this.activeLazyGeneratorBreakTargets.push("loop");
@@ -60789,6 +60841,7 @@ class Emitter {
                     buf.line("break;");
                     buf.close();
                     this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                    if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
                 } finally {
                     this.activeLazyGeneratorContinueTargets.pop();
                     this.activeLazyGeneratorBreakTargets.pop();
@@ -60802,6 +60855,7 @@ class Emitter {
             this.activeLazyGeneratorContinueTargets.push(null);
             try {
                 this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
             } finally {
                 this.activeLazyGeneratorContinueTargets.pop();
                 this.activeLazyGeneratorBreakTargets.pop();
@@ -60814,9 +60868,15 @@ class Emitter {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
             const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
+            const continueLabel = yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector
+                ? this.freshTemp("_do_continue")
+                : null;
+            const labeledContinueTarget = this.directLabeledLoopName(stmt)
+                ? continueLabel ?? this.freshTemp("_lazy_do_labeled_continue")
+                : null;
+            this.registerLazyGeneratorLabeledContinueTarget(stmt, labeledContinueTarget);
             if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
-                const continueLabel = this.freshTemp("_do_continue");
                 this.activeLazyGeneratorBreakTargets.push("loop");
                 this.activeLazyGeneratorContinueTargets.push(continueLabel);
                 try {
@@ -60873,6 +60933,7 @@ class Emitter {
             this.activeLazyGeneratorContinueTargets.push(null);
             try {
                 this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
+                if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
             } finally {
                 this.activeLazyGeneratorContinueTargets.pop();
                 this.activeLazyGeneratorBreakTargets.pop();
@@ -60946,6 +61007,10 @@ class Emitter {
                 const cond = stmt.condition ? this.emitBoolExpr(stmt.condition) : "true";
                 buf.open(`while (${cond})`);
             }
+            const labeledContinueTarget = this.directLabeledLoopName(stmt)
+                ? continueLabel ?? this.freshTemp("_lazy_for_labeled_continue")
+                : null;
+            this.registerLazyGeneratorLabeledContinueTarget(stmt, labeledContinueTarget);
             this.activeLazyGeneratorBreakTargets.push("loop");
             this.activeLazyGeneratorContinueTargets.push(continueLabel);
             try {
@@ -60964,6 +61029,8 @@ class Emitter {
                     elemType,
                     envLocalName,
                 );
+            } else if (labeledContinueTarget) {
+                buf.line(`${labeledContinueTarget}:;`);
             }
             buf.close();
             buf.close();
@@ -61146,7 +61213,23 @@ class Emitter {
         }
 
         if (ts.isContinueStatement(stmt)) {
-            if (stmt.label) unsupported(stmt, "labeled continues are not supported in lazy generators");
+            if (stmt.label) {
+                let found = false;
+                let target: string | null = null;
+                for (let index = this.activeLazyGeneratorLabeledContinueTargets.length - 1; index >= 0; index--) {
+                    const candidate = this.activeLazyGeneratorLabeledContinueTargets[index]!.get(stmt.label.text);
+                    if (candidate !== undefined) {
+                        found = true;
+                        target = candidate;
+                        break;
+                    }
+                }
+                if (!found || !this.labeledContinueTargetsLabeledLoop(stmt)) {
+                    unsupported(stmt, "labeled continue must target an active lazy-generator loop");
+                }
+                buf.line(target ? `goto ${target};` : "continue;");
+                return;
+            }
             const target = this.activeLazyGeneratorContinueTargets[this.activeLazyGeneratorContinueTargets.length - 1];
             if (target) {
                 buf.line(`goto ${target};`);
@@ -61157,7 +61240,19 @@ class Emitter {
         }
 
         if (ts.isBreakStatement(stmt)) {
-            if (stmt.label) unsupported(stmt, "labeled breaks are not supported in lazy generators");
+            if (stmt.label) {
+                let target: string | null = null;
+                for (let index = this.activeLazyGeneratorLabeledBreakTargets.length - 1; index >= 0; index--) {
+                    const candidate = this.activeLazyGeneratorLabeledBreakTargets[index]!.get(stmt.label.text);
+                    if (candidate) {
+                        target = candidate;
+                        break;
+                    }
+                }
+                if (!target) unsupported(stmt, "labeled break must target an active lazy-generator label");
+                buf.line(`goto ${target};`);
+                return;
+            }
             const innermost = this.activeLazyGeneratorBreakTargets[this.activeLazyGeneratorBreakTargets.length - 1];
             if (innermost === "switch") {
                 const label = this.activeLazyGeneratorSwitchEndLabels[this.activeLazyGeneratorSwitchEndLabels.length - 1]!;
