@@ -186,3 +186,16 @@ yielded-tagged-template-skipped-done true false 0
 yielded-tagged-template-selected-first false yielded-tagged-template-left 0
 yielded-tagged-template-selected-second false yielded-tagged-template-first 0
 yielded-tagged-template-selected-done true tagged-yielded-1 1
+conditional-yielded-call-skipped-first false conditional-call-logical-left 0
+conditional-yielded-call-skipped-done true false 0
+conditional-yielded-call-fallback-first false conditional-call-logical-left 0
+conditional-yielded-call-fallback-second false conditional-call-selector 0
+conditional-yielded-call-fallback-done true conditional-call-fallback 0
+conditional-yielded-call-arm-skipped-first false conditional-call-logical-left 0
+conditional-yielded-call-arm-skipped-second false conditional-call-selector 0
+conditional-yielded-call-arm-skipped-done true conditional-call-fallback 0
+conditional-yielded-call-selected-first false conditional-call-logical-left 0
+conditional-yielded-call-selected-second false conditional-call-selector 0
+conditional-yielded-call-selected-third false conditional-call-arm-left 0
+conditional-yielded-call-selected-argument false conditional-call-argument 0
+conditional-yielded-call-selected-done true conditional-call-argument1 1

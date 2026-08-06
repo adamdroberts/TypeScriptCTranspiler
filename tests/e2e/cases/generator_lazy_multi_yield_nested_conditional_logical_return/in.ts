@@ -253,6 +253,12 @@ function* stagedYieldedTaggedTemplateLogicalOperandReturn(): Generator<string, a
     return (yield "yielded-tagged-template-left") && logicalYieldedTaggedTemplateValue`tagged-${yield "yielded-tagged-template-first"}`;
 }
 
+function* stagedConditionalYieldedCallLogicalOperandReturn(): Generator<string, any, any> {
+    return (yield "conditional-call-logical-left") && ((yield "conditional-call-selector")
+        ? ((yield "conditional-call-arm-left") && sideEffectingLogicalCall(yield "conditional-call-argument"))
+        : "conditional-call-fallback");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -822,3 +828,41 @@ const yieldedTaggedTemplateSelectedSecond: any = yieldedTaggedTemplateSelected.n
 console.log("yielded-tagged-template-selected-second", yieldedTaggedTemplateSelectedSecond.done, yieldedTaggedTemplateSelectedSecond.value, logicalTaggedTemplateCount);
 const yieldedTaggedTemplateSelectedDone: any = yieldedTaggedTemplateSelected.next("tagged-first");
 console.log("yielded-tagged-template-selected-done", yieldedTaggedTemplateSelectedDone.done, yieldedTaggedTemplateSelectedDone.value, logicalTaggedTemplateCount);
+
+logicalCallCount = 0;
+const conditionalYieldedCallSkipped = stagedConditionalYieldedCallLogicalOperandReturn();
+const conditionalYieldedCallSkippedFirst: any = conditionalYieldedCallSkipped.next();
+console.log("conditional-yielded-call-skipped-first", conditionalYieldedCallSkippedFirst.done, conditionalYieldedCallSkippedFirst.value, logicalCallCount);
+const conditionalYieldedCallSkippedDone: any = conditionalYieldedCallSkipped.next(false);
+console.log("conditional-yielded-call-skipped-done", conditionalYieldedCallSkippedDone.done, conditionalYieldedCallSkippedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const conditionalYieldedCallFallback = stagedConditionalYieldedCallLogicalOperandReturn();
+const conditionalYieldedCallFallbackFirst: any = conditionalYieldedCallFallback.next();
+console.log("conditional-yielded-call-fallback-first", conditionalYieldedCallFallbackFirst.done, conditionalYieldedCallFallbackFirst.value, logicalCallCount);
+const conditionalYieldedCallFallbackSecond: any = conditionalYieldedCallFallback.next(true);
+console.log("conditional-yielded-call-fallback-second", conditionalYieldedCallFallbackSecond.done, conditionalYieldedCallFallbackSecond.value, logicalCallCount);
+const conditionalYieldedCallFallbackDone: any = conditionalYieldedCallFallback.next(false);
+console.log("conditional-yielded-call-fallback-done", conditionalYieldedCallFallbackDone.done, conditionalYieldedCallFallbackDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const conditionalYieldedCallArmSkipped = stagedConditionalYieldedCallLogicalOperandReturn();
+const conditionalYieldedCallArmSkippedFirst: any = conditionalYieldedCallArmSkipped.next();
+console.log("conditional-yielded-call-arm-skipped-first", conditionalYieldedCallArmSkippedFirst.done, conditionalYieldedCallArmSkippedFirst.value, logicalCallCount);
+const conditionalYieldedCallArmSkippedSecond: any = conditionalYieldedCallArmSkipped.next(true);
+console.log("conditional-yielded-call-arm-skipped-second", conditionalYieldedCallArmSkippedSecond.done, conditionalYieldedCallArmSkippedSecond.value, logicalCallCount);
+const conditionalYieldedCallArmSkippedDone: any = conditionalYieldedCallArmSkipped.next(false);
+console.log("conditional-yielded-call-arm-skipped-done", conditionalYieldedCallArmSkippedDone.done, conditionalYieldedCallArmSkippedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const conditionalYieldedCallSelected = stagedConditionalYieldedCallLogicalOperandReturn();
+const conditionalYieldedCallSelectedFirst: any = conditionalYieldedCallSelected.next();
+console.log("conditional-yielded-call-selected-first", conditionalYieldedCallSelectedFirst.done, conditionalYieldedCallSelectedFirst.value, logicalCallCount);
+const conditionalYieldedCallSelectedSecond: any = conditionalYieldedCallSelected.next(true);
+console.log("conditional-yielded-call-selected-second", conditionalYieldedCallSelectedSecond.done, conditionalYieldedCallSelectedSecond.value, logicalCallCount);
+const conditionalYieldedCallSelectedThird: any = conditionalYieldedCallSelected.next(true);
+console.log("conditional-yielded-call-selected-third", conditionalYieldedCallSelectedThird.done, conditionalYieldedCallSelectedThird.value, logicalCallCount);
+const conditionalYieldedCallSelectedArgument: any = conditionalYieldedCallSelected.next("conditional-call-argument");
+console.log("conditional-yielded-call-selected-argument", conditionalYieldedCallSelectedArgument.done, conditionalYieldedCallSelectedArgument.value, logicalCallCount);
+const conditionalYieldedCallSelectedDone: any = conditionalYieldedCallSelected.next("conditional-call-argument");
+console.log("conditional-yielded-call-selected-done", conditionalYieldedCallSelectedDone.done, conditionalYieldedCallSelectedDone.value, logicalCallCount);

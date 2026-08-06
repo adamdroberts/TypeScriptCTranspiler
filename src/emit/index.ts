@@ -54035,7 +54035,11 @@ class Emitter {
             );
             if (nestedPlan) return nestedPlan;
             const unwrappedOperand = this.unwrapTransparentExpression(operand);
-            const conditionalPlans = this.simpleLazyMultiYieldConditionalBranches(unwrappedOperand);
+            const conditionalPlans = this.simpleLazyMultiYieldConditionalBranches(
+                unwrappedOperand,
+                allowSideEffecting,
+                allowYieldedOperand,
+            );
             const conditionalPlan = conditionalPlans?.find((plan) => plan.expression === unwrappedOperand);
             if (conditionalPlan && conditionalPlans && conditionalPlans.length === 1) {
                 conditionalOperands.push(conditionalPlan);
@@ -54132,6 +54136,8 @@ class Emitter {
 
     private simpleLazyMultiYieldConditionalBranches(
         expression: ts.Expression,
+        allowSideEffecting = false,
+        allowYieldedLogicalOperands = false,
     ): LazyMultiYieldConditionalBranch[] | null {
         const conditionalNodes: ts.ConditionalExpression[] = [];
         const findConditional = (node: ts.Node): void => {
@@ -54170,7 +54176,11 @@ class Emitter {
                 if (node !== rootExpression && (ts.isFunctionLike(node) || ts.isClassLike(node))) return;
                 if (ts.isConditionalExpression(node) && excludedConditionals.includes(node)) return;
                 if (ts.isBinaryExpression(node)) {
-                    const plan = this.simpleLazyMultiYieldLogicalPlan(node);
+                    const plan = this.simpleLazyMultiYieldLogicalPlan(
+                        node,
+                        allowSideEffecting,
+                        allowYieldedLogicalOperands,
+                    );
                     if (plan) {
                         plans.push(plan);
                         return;
@@ -54216,7 +54226,11 @@ class Emitter {
         };
 
         const buildPlan = (node: ts.ConditionalExpression): LazyMultiYieldConditionalBranch | null => {
-            const condition = this.directLazyYieldCondition(node.condition) ?? this.simpleLazyMultiYieldLogicalPlan(node.condition);
+            const condition = this.directLazyYieldCondition(node.condition) ?? this.simpleLazyMultiYieldLogicalPlan(
+                node.condition,
+                allowSideEffecting,
+                allowYieldedLogicalOperands,
+            );
             if (!condition) return null;
             const buildArm = (branch: ts.Expression): LazyMultiYieldConditionalArm | null => {
                 const nestedRoots = findConditionalRoots(branch);
