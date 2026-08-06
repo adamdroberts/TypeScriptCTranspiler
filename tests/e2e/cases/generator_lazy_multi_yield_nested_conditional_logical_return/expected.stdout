@@ -105,3 +105,26 @@ prefix-skipped-first false prefix-left 20
 prefix-skipped-done true false 20
 prefix-selected-first false prefix-left 20
 prefix-selected-done true 21 21
+typeof-skipped-first false typeof-left
+typeof-skipped-done true false
+typeof-selected-first false typeof-left
+typeof-selected-done true string
+void-skipped-first false void-left
+void-skipped-done true false
+void-selected-first false void-left
+void-selected-done true undefined
+void-left-first false void-inner
+void-left-second false void-outer
+void-left-done true true
+in-skipped-first false in-left
+in-skipped-done true false
+in-selected-first false in-left
+in-selected-done true true
+instanceof-skipped-first false instanceof-left
+instanceof-skipped-done true false
+instanceof-selected-first false instanceof-left
+instanceof-selected-done true true
+comma-skipped-first false comma-left 0
+comma-skipped-done true false 0
+comma-selected-first false comma-left 0
+comma-selected-done true comma-result 1

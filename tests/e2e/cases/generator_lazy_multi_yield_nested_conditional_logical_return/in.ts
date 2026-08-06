@@ -154,6 +154,44 @@ function* stagedPrefixOperandReturn(): Generator<string, any, any> {
     return (yield "prefix-left") && ++logicalPrefixValue;
 }
 
+const logicalTypeofValue = "typeof-value";
+const logicalOperatorBox: any = { marker: true };
+let logicalCommaCount = 0;
+
+function logicalCommaFirst(): string {
+    logicalCommaCount++;
+    return "comma-first";
+}
+
+class LogicalInstanceMarker {}
+
+const logicalInstanceValue = new LogicalInstanceMarker();
+
+function* stagedTypeofOperandReturn(): Generator<string, any, any> {
+    return (yield "typeof-left") && typeof logicalTypeofValue;
+}
+
+function* stagedVoidOperandReturn(): Generator<string, any, any> {
+    return (yield "void-left") && void logicalTypeofValue;
+}
+
+function* stagedVoidLeftOperandReturn(): Generator<string, any, any> {
+    // @ts-expect-error TS2873: deliberate void logical-selector coverage
+    return (((void logicalTypeofValue) as any) || (yield "void-inner")) && (yield "void-outer");
+}
+
+function* stagedInOperandReturn(): Generator<string, any, any> {
+    return (yield "in-left") && "marker" in logicalOperatorBox;
+}
+
+function* stagedInstanceofOperandReturn(): Generator<string, any, any> {
+    return (yield "instanceof-left") && logicalInstanceValue instanceof LogicalInstanceMarker;
+}
+
+function* stagedCommaOperandReturn(): Generator<string, any, any> {
+    return (yield "comma-left") && (logicalCommaFirst(), "comma-result");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -483,3 +521,73 @@ const prefixSelectedFirst: any = prefixSelected.next();
 console.log("prefix-selected-first", prefixSelectedFirst.done, prefixSelectedFirst.value, logicalPrefixValue);
 const prefixSelectedDone: any = prefixSelected.next(true);
 console.log("prefix-selected-done", prefixSelectedDone.done, prefixSelectedDone.value, logicalPrefixValue);
+
+const typeofSkipped = stagedTypeofOperandReturn();
+const typeofSkippedFirst: any = typeofSkipped.next();
+console.log("typeof-skipped-first", typeofSkippedFirst.done, typeofSkippedFirst.value);
+const typeofSkippedDone: any = typeofSkipped.next(false);
+console.log("typeof-skipped-done", typeofSkippedDone.done, typeofSkippedDone.value);
+
+const typeofSelected = stagedTypeofOperandReturn();
+const typeofSelectedFirst: any = typeofSelected.next();
+console.log("typeof-selected-first", typeofSelectedFirst.done, typeofSelectedFirst.value);
+const typeofSelectedDone: any = typeofSelected.next(true);
+console.log("typeof-selected-done", typeofSelectedDone.done, typeofSelectedDone.value);
+
+const voidSkipped = stagedVoidOperandReturn();
+const voidSkippedFirst: any = voidSkipped.next();
+console.log("void-skipped-first", voidSkippedFirst.done, voidSkippedFirst.value);
+const voidSkippedDone: any = voidSkipped.next(false);
+console.log("void-skipped-done", voidSkippedDone.done, voidSkippedDone.value);
+
+const voidSelected = stagedVoidOperandReturn();
+const voidSelectedFirst: any = voidSelected.next();
+console.log("void-selected-first", voidSelectedFirst.done, voidSelectedFirst.value);
+const voidSelectedDone: any = voidSelected.next(true);
+console.log("void-selected-done", voidSelectedDone.done, voidSelectedDone.value);
+
+const voidLeftSelected = stagedVoidLeftOperandReturn();
+const voidLeftFirst: any = voidLeftSelected.next();
+console.log("void-left-first", voidLeftFirst.done, voidLeftFirst.value);
+const voidLeftSecond: any = voidLeftSelected.next(true);
+console.log("void-left-second", voidLeftSecond.done, voidLeftSecond.value);
+const voidLeftDone: any = voidLeftSelected.next(true);
+console.log("void-left-done", voidLeftDone.done, voidLeftDone.value);
+
+const inSkipped = stagedInOperandReturn();
+const inSkippedFirst: any = inSkipped.next();
+console.log("in-skipped-first", inSkippedFirst.done, inSkippedFirst.value);
+const inSkippedDone: any = inSkipped.next(false);
+console.log("in-skipped-done", inSkippedDone.done, inSkippedDone.value);
+
+const inSelected = stagedInOperandReturn();
+const inSelectedFirst: any = inSelected.next();
+console.log("in-selected-first", inSelectedFirst.done, inSelectedFirst.value);
+const inSelectedDone: any = inSelected.next(true);
+console.log("in-selected-done", inSelectedDone.done, inSelectedDone.value);
+
+const instanceofSkipped = stagedInstanceofOperandReturn();
+const instanceofSkippedFirst: any = instanceofSkipped.next();
+console.log("instanceof-skipped-first", instanceofSkippedFirst.done, instanceofSkippedFirst.value);
+const instanceofSkippedDone: any = instanceofSkipped.next(false);
+console.log("instanceof-skipped-done", instanceofSkippedDone.done, instanceofSkippedDone.value);
+
+const instanceofSelected = stagedInstanceofOperandReturn();
+const instanceofSelectedFirst: any = instanceofSelected.next();
+console.log("instanceof-selected-first", instanceofSelectedFirst.done, instanceofSelectedFirst.value);
+const instanceofSelectedDone: any = instanceofSelected.next(true);
+console.log("instanceof-selected-done", instanceofSelectedDone.done, instanceofSelectedDone.value);
+
+const commaSkipped = stagedCommaOperandReturn();
+const commaSkippedFirst: any = commaSkipped.next();
+logicalCommaCount = 0;
+console.log("comma-skipped-first", commaSkippedFirst.done, commaSkippedFirst.value, logicalCommaCount);
+const commaSkippedDone: any = commaSkipped.next(false);
+console.log("comma-skipped-done", commaSkippedDone.done, commaSkippedDone.value, logicalCommaCount);
+
+const commaSelected = stagedCommaOperandReturn();
+const commaSelectedFirst: any = commaSelected.next();
+logicalCommaCount = 0;
+console.log("comma-selected-first", commaSelectedFirst.done, commaSelectedFirst.value, logicalCommaCount);
+const commaSelectedDone: any = commaSelected.next(true);
+console.log("comma-selected-done", commaSelectedDone.done, commaSelectedDone.value, logicalCommaCount);

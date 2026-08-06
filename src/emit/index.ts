@@ -54548,6 +54548,9 @@ class Emitter {
             unwrapped.kind === ts.SyntaxKind.ThisKeyword) {
             return true;
         }
+        if (ts.isTypeOfExpression(unwrapped) || ts.isVoidExpression(unwrapped)) {
+            return this.isSimpleLazyMultiYieldLogicalOperand(unwrapped.expression);
+        }
         if (ts.isPrefixUnaryExpression(unwrapped) &&
             [ts.SyntaxKind.ExclamationToken, ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.TildeToken].includes(unwrapped.operator)) {
             return this.isSimpleLazyMultiYieldLogicalOperand(unwrapped.operand);
@@ -54574,6 +54577,9 @@ class Emitter {
                 ts.SyntaxKind.LessThanEqualsToken,
                 ts.SyntaxKind.GreaterThanToken,
                 ts.SyntaxKind.GreaterThanEqualsToken,
+                ts.SyntaxKind.InKeyword,
+                ts.SyntaxKind.InstanceOfKeyword,
+                ts.SyntaxKind.CommaToken,
             ].includes(unwrapped.operatorToken.kind)) {
             return false;
         }
@@ -55286,6 +55292,11 @@ class Emitter {
         }
         if (ts.isDeleteExpression(unwrapped)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.expression));
+        }
+        if (ts.isBinaryExpression(unwrapped) &&
+            unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+            return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.left)) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.right));
         }
         if (ts.isBinaryExpression(unwrapped) && this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) {
             return this.isSimpleLazyMultiYieldLogicalMutationTarget(unwrapped.left) &&
@@ -61316,6 +61327,7 @@ class Emitter {
 
     private truthyExprFromEmitResult(value: EmitResult, node: ts.Expression): string {
         if (value.ty.kind === "value") return `tsc_value_is_truthy(${value.c})`;
+        if (value.ty.kind === "void") return "false";
         if (value.ty.kind === "boolean") return value.c;
         if (value.ty.kind === "number") return `(${value.c} != 0.0 && !isnan(${value.c}))`;
         if (value.ty.kind === "bigint") return `(${value.c} != NULL && tsc_bigint_cmp(${value.c}, tsc_bigint_from_lit("0")) != 0)`;
@@ -61365,7 +61377,8 @@ class Emitter {
                     ([lv]) => `(${this.truthyExprFromEmitResult({ c: lv!, ty: left.ty }, bin.left)} ? ${right.c} : ${lv})`,
                 );
             }
-            if (left.ty.kind === "value" || right.ty.kind === "value") {
+            if (left.ty.kind === "value" || right.ty.kind === "value" ||
+                left.ty.kind === "void" || right.ty.kind === "void") {
                 const rc = this.coerce(right, T_VALUE, bin.right);
                 return this.emitSequencedExpr(
                     T_VALUE,
@@ -61389,7 +61402,8 @@ class Emitter {
                     ([lv]) => `(${this.truthyExprFromEmitResult({ c: lv!, ty: left.ty }, bin.left)} ? ${lv} : ${right.c})`,
                 );
             }
-            if (left.ty.kind === "value" || right.ty.kind === "value") {
+            if (left.ty.kind === "value" || right.ty.kind === "value" ||
+                left.ty.kind === "void" || right.ty.kind === "void") {
                 const rc = this.coerce(right, T_VALUE, bin.right);
                 return this.emitSequencedExpr(
                     T_VALUE,
@@ -61402,7 +61416,8 @@ class Emitter {
             return { c: `(${lb} || ${rb})`, ty: T_BOOLEAN };
         }
         if (op === ts.SyntaxKind.QuestionQuestionToken) {
-            if (left.ty.kind === "value" || right.ty.kind === "value") {
+            if (left.ty.kind === "value" || right.ty.kind === "value" ||
+                left.ty.kind === "void" || right.ty.kind === "void") {
                 const rc = this.coerce(right, T_VALUE, bin.right);
                 return this.emitSequencedExpr(
                     T_VALUE,
