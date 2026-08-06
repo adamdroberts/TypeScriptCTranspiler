@@ -1,0 +1,6 @@
+rejected condition-rejected
+thrown condition-thrown
+true first-true
+false first-false
+method method-first-true
+arrow arrow-first-false
