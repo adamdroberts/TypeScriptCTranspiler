@@ -50369,43 +50369,50 @@ class Emitter {
                 for (const declaration of declarations) {
                     if (declaration.initializer && referencesUninitialized(declaration.initializer, uninitializedSymbols)) return false;
                 }
-                const consumeAssignmentSequence = (
+                const emitter = this;
+                function consumeAssignmentSequence(
                     statements: readonly ts.Statement[],
                     symbols: ReadonlySet<ts.Symbol>,
-                ): Set<ts.Symbol> => {
+                ): Set<ts.Symbol> {
                     const pending = new Set(symbols);
                     const assigned = new Set<ts.Symbol>();
                     for (const statement of statements) {
                         const current = pending.values().next().value as ts.Symbol | undefined;
                         const assignment = ts.isExpressionStatement(statement)
-                            ? this.unwrapTransparentExpression(statement.expression)
+                            ? emitter.unwrapTransparentExpression(statement.expression)
                             : null;
                         if (current && assignment && ts.isBinaryExpression(assignment) &&
                             assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
                             ts.isIdentifier(assignment.left) &&
-                            this.symbolForIdentifier(assignment.left) === current) {
+                            emitter.symbolForIdentifier(assignment.left) === current) {
                             if (referencesUninitialized(assignment.right, pending) ||
-                                !this.asyncAwaitInterstitialControlFlowSupported(statement)) {
+                                !emitter.asyncAwaitInterstitialControlFlowSupported(statement)) {
                                 return new Set();
                             }
                             pending.delete(current);
                             assigned.add(current);
                             continue;
                         }
+                        const nestedAssigned = nestedConditionalAssignedSymbols(statement, pending);
+                        if (nestedAssigned) {
+                            for (const assignedSymbol of nestedAssigned) pending.delete(assignedSymbol);
+                            for (const assignedSymbol of nestedAssigned) assigned.add(assignedSymbol);
+                            continue;
+                        }
                         if (referencesUninitialized(statement, pending) ||
-                            !this.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                            !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
                             return new Set();
                         }
                     }
                     return assigned;
-                };
-                const nestedConditionalAssignedSymbols = (
+                }
+                function nestedConditionalAssignedSymbols(
                     statement: ts.Statement,
                     symbols: ReadonlySet<ts.Symbol>,
-                ): Set<ts.Symbol> | null => {
+                ): Set<ts.Symbol> | null {
                     if (!ts.isIfStatement(statement) || !statement.elseStatement ||
                         referencesUninitialized(statement.expression, symbols) ||
-                        !this.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                        !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
                         return null;
                     }
                     const branchStatements = (branch: ts.Statement): readonly ts.Statement[] =>
@@ -50423,7 +50430,7 @@ class Emitter {
                         if (elseAssigned.has(symbol)) assigned.add(symbol);
                     }
                     return assigned;
-                };
+                }
                 const pendingSymbols = new Set(uninitializedSymbols);
                 let assignmentIndex = declarationIndex + 1;
                 for (const declaration of uninitialized) {

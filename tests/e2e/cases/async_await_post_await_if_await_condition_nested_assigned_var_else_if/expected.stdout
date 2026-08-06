@@ -1,0 +1,6 @@
+condition-reject nested-else-if-condition-rejected
+selector-reject nested-else-if-selector-thrown
+return nested-else-if-first-true-return
+throw nested-else-if-first-false-throw
+return nested-else-if-first-alternate-return
+trace selector:nested-else-if-selector-first|nested-else-if-first-true-label|nested-else-if-first-false-label|nested-else-if-first-alternate-label|
