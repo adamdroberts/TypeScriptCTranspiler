@@ -58,6 +58,20 @@ function* nestedConditionalLogicalNestedOperand(): Generator<string, string, any
     return "deep-done";
 }
 
+function* nestedConditionalNullishSideEffectingOperand(): Generator<string, string, any> {
+    for (
+        let value: any = (yield "nullish-left") ?? ((yield "nullish-selector")
+            ? ((yield "nullish-arm-left") ?? sideEffectingConditionalCall(yield "nullish-call-arg"))
+            : sideEffectingConditionalCall(yield "nullish-fallback-arg")),
+        count = 0;
+        count < 1;
+        count++
+    ) {
+        yield "nullish-body-" + String(value);
+    }
+    return "nullish-done";
+}
+
 const iterator = nestedConditionalLogicalOperand();
 const first: any = iterator.next();
 console.log("first", first.done, first.value);
@@ -146,3 +160,50 @@ const deepSelectedSixth: any = deepSelectedIterator.next("deep-value");
 console.log("deep-selected-sixth", deepSelectedSixth.done, deepSelectedSixth.value, sideEffectingCallCount);
 const deepSelectedDone: any = deepSelectedIterator.next();
 console.log("deep-selected-done", deepSelectedDone.done, deepSelectedDone.value, sideEffectingCallCount);
+
+sideEffectingCallCount = 0;
+const nullishSkippedIterator = nestedConditionalNullishSideEffectingOperand();
+const nullishSkippedFirst: any = nullishSkippedIterator.next();
+console.log("nullish-skipped-first", nullishSkippedFirst.done, nullishSkippedFirst.value, sideEffectingCallCount);
+const nullishSkippedSecond: any = nullishSkippedIterator.next("left-value");
+console.log("nullish-skipped-second", nullishSkippedSecond.done, nullishSkippedSecond.value, sideEffectingCallCount);
+const nullishSkippedDone: any = nullishSkippedIterator.next();
+console.log("nullish-skipped-done", nullishSkippedDone.done, nullishSkippedDone.value, sideEffectingCallCount);
+
+const nullishSelectedIterator = nestedConditionalNullishSideEffectingOperand();
+const nullishSelectedFirst: any = nullishSelectedIterator.next();
+console.log("nullish-selected-first", nullishSelectedFirst.done, nullishSelectedFirst.value, sideEffectingCallCount);
+const nullishSelectedSecond: any = nullishSelectedIterator.next(null);
+console.log("nullish-selected-second", nullishSelectedSecond.done, nullishSelectedSecond.value, sideEffectingCallCount);
+const nullishSelectedThird: any = nullishSelectedIterator.next(true);
+console.log("nullish-selected-third", nullishSelectedThird.done, nullishSelectedThird.value, sideEffectingCallCount);
+const nullishSelectedFourth: any = nullishSelectedIterator.next("arm-value");
+console.log("nullish-selected-fourth", nullishSelectedFourth.done, nullishSelectedFourth.value, sideEffectingCallCount);
+const nullishSelectedDone: any = nullishSelectedIterator.next();
+console.log("nullish-selected-done", nullishSelectedDone.done, nullishSelectedDone.value, sideEffectingCallCount);
+
+const nullishCallIterator = nestedConditionalNullishSideEffectingOperand();
+const nullishCallFirst: any = nullishCallIterator.next();
+console.log("nullish-call-first", nullishCallFirst.done, nullishCallFirst.value, sideEffectingCallCount);
+const nullishCallSecond: any = nullishCallIterator.next(null);
+console.log("nullish-call-second", nullishCallSecond.done, nullishCallSecond.value, sideEffectingCallCount);
+const nullishCallThird: any = nullishCallIterator.next(true);
+console.log("nullish-call-third", nullishCallThird.done, nullishCallThird.value, sideEffectingCallCount);
+const nullishCallFourth: any = nullishCallIterator.next(null);
+console.log("nullish-call-fourth", nullishCallFourth.done, nullishCallFourth.value, sideEffectingCallCount);
+const nullishCallFifth: any = nullishCallIterator.next("nullish-value");
+console.log("nullish-call-fifth", nullishCallFifth.done, nullishCallFifth.value, sideEffectingCallCount);
+const nullishCallDone: any = nullishCallIterator.next();
+console.log("nullish-call-done", nullishCallDone.done, nullishCallDone.value, sideEffectingCallCount);
+
+const nullishFallbackIterator = nestedConditionalNullishSideEffectingOperand();
+const nullishFallbackFirst: any = nullishFallbackIterator.next();
+console.log("nullish-fallback-first", nullishFallbackFirst.done, nullishFallbackFirst.value, sideEffectingCallCount);
+const nullishFallbackSecond: any = nullishFallbackIterator.next(null);
+console.log("nullish-fallback-second", nullishFallbackSecond.done, nullishFallbackSecond.value, sideEffectingCallCount);
+const nullishFallbackThird: any = nullishFallbackIterator.next(false);
+console.log("nullish-fallback-third", nullishFallbackThird.done, nullishFallbackThird.value, sideEffectingCallCount);
+const nullishFallbackFourth: any = nullishFallbackIterator.next("fallback-value");
+console.log("nullish-fallback-fourth", nullishFallbackFourth.done, nullishFallbackFourth.value, sideEffectingCallCount);
+const nullishFallbackDone: any = nullishFallbackIterator.next();
+console.log("nullish-fallback-done", nullishFallbackDone.done, nullishFallbackDone.value, sideEffectingCallCount);
