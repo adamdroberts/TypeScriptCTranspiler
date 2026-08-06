@@ -50295,8 +50295,8 @@ class Emitter {
             if (!ts.isIfStatement(branch) || !branch.elseStatement) return null;
             const nestedAwait = this.unwrapTransparentExpression(branch.expression);
             if (!ts.isAwaitExpression(nestedAwait)) return null;
-            const thenBranch = terminalBranch(branch.thenStatement);
-            const elseBranch = terminalBranch(branch.elseStatement);
+            const thenBranch = parseBranch(branch.thenStatement);
+            const elseBranch = parseBranch(branch.elseStatement);
             if (!thenBranch || !elseBranch) return null;
             return {
                 kind: "condition",

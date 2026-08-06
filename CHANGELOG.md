@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Async continuations now compose a second direct awaited `else if` condition after an earlier awaited local, preserving the captured value and four-way branch ordering. Regression: `async_await_post_await_if_await_condition_deep_chain`.
 - Async continuations now compose one direct awaited `else if` condition after an earlier awaited local, preserving the captured value and three-way branch ordering. Regression: `async_await_post_await_if_await_condition_chain`.
 - Async continuations now route mixed `throw await` and `return await` branches correctly when an awaited `if` condition follows an earlier awaited local. Regression: `async_await_post_await_if_await_condition_throw`.
 - Async continuations now preserve an explicit `else` branch when an awaited `if` condition follows an earlier awaited local, including the alternate `return await` settlement path. Regression: `async_await_post_await_if_await_condition_else`.
