@@ -1,6 +1,11 @@
 let continueCount = 0;
 let breakCount = 0;
 let incrementorCount = 0;
+let trace = "";
+
+function mark(value: string): void {
+    trace += value + "|";
+}
 
 function laterString(value: string): Promise<string> {
     return new Promise<string>((resolve) => setImmediate(() => resolve(value)));
@@ -40,6 +45,7 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             await laterBoolean(repeats < 2);
             repeats++
         ) {
+            mark("condition");
             continue;
         }
         return await laterString(escaped + "-" + String(repeats));
@@ -56,6 +62,7 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
             incrementorCount < 4;
             await laterIncrementorOnly()
         ) {
+            mark("incrementor");
             continue;
         }
         return await laterString(escaped + "-" + String(incrementorCount));
@@ -73,6 +80,7 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             await laterBoolean(continueCount < 2);
             await laterContinueIncrement()
         ) {
+            mark("continue");
             continue;
         }
         return await laterString(escaped + "-" + String(continueCount));
@@ -90,6 +98,7 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
             await laterBoolean(breakCount < 2);
             await laterBreakIncrement()
         ) {
+            mark("break");
             break;
         }
         return await laterString(escaped + "-" + String(breakCount));
@@ -111,3 +120,4 @@ awaitedIfNestedAwaitedVarForConditionContinue().then((value) => {
     (value) => console.log("break", value),
     (reason) => console.log("unexpected", reason),
 );
+setTimeout(() => console.log("trace", trace), 20);

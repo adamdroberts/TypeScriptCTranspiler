@@ -50349,6 +50349,7 @@ class Emitter {
         awaitedCondition: ts.AwaitExpression,
         awaitedIncrementor: ts.AwaitExpression | undefined,
         loopControl: "break" | "continue" | undefined,
+        loopControlPrelude: readonly ts.Statement[],
         terminalAdapter: string,
         terminalPromiseType: CType,
         terminalAwaitExpr: ts.AwaitExpression,
@@ -50509,12 +50510,17 @@ class Emitter {
             out.line(`${incrementorName}(${incrementorEnvVar});`);
             out.close();
         };
+        const emitLoopControlPrelude = (out: CBuf): void => {
+            for (const statement of loopControlPrelude) this.emitStmt(out, statement);
+        };
         const emitLoopBody = (out: CBuf): void => {
             if (loopControl === "break") {
+                emitLoopControlPrelude(out);
                 emitTerminal(out);
                 return;
             }
             if (loopControl === "continue") {
+                emitLoopControlPrelude(out);
                 if (awaitedIncrementor) {
                     emitIncrementor(out);
                 } else if (forStatement.incrementor) {
@@ -50631,6 +50637,7 @@ class Emitter {
         forStatement: ts.ForStatement,
         awaitedIncrementor: ts.AwaitExpression,
         loopControl: "break" | "continue" | undefined,
+        loopControlPrelude: readonly ts.Statement[],
         terminalAdapter: string,
         terminalPromiseType: CType,
         terminalAwaitExpr: ts.AwaitExpression,
@@ -50745,8 +50752,12 @@ class Emitter {
             const truth = this.truthyC(condition, forStatement.condition!);
             out.open(`if (${truth})`);
             if (loopControl === "break") {
+                for (const statement of loopControlPrelude) this.emitStmt(out, statement);
                 emitTerminal(out);
             } else {
+                if (loopControl === "continue") {
+                    for (const statement of loopControlPrelude) this.emitStmt(out, statement);
+                }
                 if (loopControl !== "continue") this.emitStmt(out, forStatement.statement);
                 emitIncrementor(out);
             }
@@ -50963,6 +50974,7 @@ class Emitter {
             awaitedCondition?: ts.AwaitExpression;
             awaitedIncrementor?: ts.AwaitExpression;
             loopControl?: "break" | "continue";
+            loopControlPrelude?: readonly ts.Statement[];
         };
         type AwaitedIfForInitializerSelector = {
             kind: "selector";
@@ -51419,13 +51431,18 @@ class Emitter {
                 const loopBodyStatements = ts.isBlock(statement.statement)
                     ? statement.statement.statements
                     : [statement.statement];
-                const loopControl = loopBodyStatements.length === 1
-                    ? ts.isBreakStatement(loopBodyStatements[0]!) && !loopBodyStatements[0]!.label
+                const loopControlStatement = loopBodyStatements[loopBodyStatements.length - 1];
+                const loopControl = loopControlStatement
+                    ? ts.isBreakStatement(loopControlStatement) && !loopControlStatement.label
                         ? "break" as const
-                        : ts.isContinueStatement(loopBodyStatements[0]!) && !loopBodyStatements[0]!.label
+                        : ts.isContinueStatement(loopControlStatement) && !loopControlStatement.label
                             ? "continue" as const
                             : undefined
                     : undefined;
+                const loopControlPrelude = loopControl ? loopBodyStatements.slice(0, -1) : [];
+                if (loopControl && !loopControlPrelude.every((prefixStatement) =>
+                    ts.isExpressionStatement(prefixStatement) &&
+                    this.asyncAwaitInterstitialControlFlowSupported(prefixStatement))) return null;
                 if ((statement.condition && containsAwait(statement.condition) && !awaitedCondition) ||
                     (statement.incrementor && containsAwait(statement.incrementor) && !awaitedIncrementor) ||
                     (awaitedIncrementor && !statement.condition) ||
@@ -51440,7 +51457,8 @@ class Emitter {
                         }
                         ts.forEachChild(node, visitLoopControl);
                     };
-                    visitLoopControl(statement.statement);
+                    const controlPrelude = loopControl ? loopControlPrelude : loopBodyStatements;
+                    for (const prefixStatement of controlPrelude) visitLoopControl(prefixStatement);
                     if (hasLoopControl && !loopControl) return null;
                 }
                 const initializerPromiseType = this.prepareType(mapTsType(
@@ -51490,6 +51508,7 @@ class Emitter {
                     awaitedCondition,
                     awaitedIncrementor,
                     loopControl,
+                    loopControlPrelude,
                 };
             };
             const awaitedForInitializerBranch = (
@@ -51900,6 +51919,7 @@ class Emitter {
                             branch.awaitedForInitializer.awaitedCondition,
                             branch.awaitedForInitializer.awaitedIncrementor,
                             branch.awaitedForInitializer.loopControl,
+                            branch.awaitedForInitializer.loopControlPrelude ?? [],
                             terminalAdapter,
                             typeInfo.promiseType,
                             branch.awaitExpr,
@@ -51916,6 +51936,7 @@ class Emitter {
                             branch.awaitedForInitializer.forStatement,
                             branch.awaitedForInitializer.awaitedIncrementor,
                             branch.awaitedForInitializer.loopControl,
+                            branch.awaitedForInitializer.loopControlPrelude ?? [],
                             terminalAdapter,
                             typeInfo.promiseType,
                             branch.awaitExpr,
