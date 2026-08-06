@@ -1,0 +1,5 @@
+condition-reject do-condition-rejected
+selector-reject do-selector-thrown
+return do-first-true-return
+throw do-first-false-throw
+trace true:do:do-first:1|false:do:do-first:2|false:do:do-first:1|throw:body:do-throw-first|throw:selector:do-throw-first|
