@@ -50287,6 +50287,115 @@ class Emitter {
         return true;
     }
 
+    private ensureAsyncAwaitNestedForInitializerReturnContinuationAdapter(
+        promiseType: CType,
+        awaitedType: CType,
+        awaitExpr: ts.AwaitExpression,
+        forStatement: ts.ForStatement,
+        terminalAdapter: string,
+        terminalPromiseType: CType,
+        terminalAwaitExpr: ts.AwaitExpression,
+        params: readonly AsyncAwaitContinuationParam[],
+        thisValue: EmitResult | null,
+        carriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[],
+        hoistedAliases: readonly (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[],
+    ): string {
+        const name = `tsc_async_await_nested_for_initializer_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const envType = `${name}_env_t`;
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${name}(void* env);`);
+
+        const valueVar = this.freshTemp("_await_nested_for_value");
+        const terminalSourceVar = this.freshTemp("_await_nested_for_terminal_source");
+        const terminalEnvVar = this.freshTemp("_await_nested_for_terminal_env");
+        const eh = this.freshTemp("_await_nested_for_eh");
+        const awaitedValue = this.coerce(
+            this.promiseFulfilledValue(promiseType.elem, "_p"),
+            awaitedType,
+            awaitExpr,
+        );
+        const scope = new Map<ts.Symbol, string>();
+        for (const param of params) scope.set(param.symbol, `state->${param.field}`);
+        const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        awaitScope.set(awaitExpr, { c: valueVar, ty: awaitedType });
+
+        const buf = new CBuf();
+        buf.open(`void ${name}(void* env)`);
+        buf.line(`${envType}* state = (${envType}*)env;`);
+        buf.line("tsc_promise_t* _p = state->receiver;");
+        buf.line("tsc_promise_t* _ret = state->result_promise;");
+        buf.open("if (tsc_promise_is_rejected(_p))");
+        buf.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+        buf.line("return;");
+        buf.close();
+        buf.open("if (!tsc_promise_is_fulfilled(_p))");
+        buf.line("return;");
+        buf.close();
+        buf.line(`tsc_try_frame_t ${eh};`);
+        buf.line(`tsc_try_push(&${eh});`);
+        buf.open(`if (setjmp(${eh}.jb) == 0)`);
+        buf.line(`${awaitedType.c} ${valueVar} = ${awaitedValue};`);
+        const addedHoistedSymbols: ts.Symbol[] = [];
+        for (const alias of hoistedAliases) {
+            if (!this.asyncAwaitHoistedPreludeSymbols.has(alias.symbol)) {
+                this.asyncAwaitHoistedPreludeSymbols.add(alias.symbol);
+                addedHoistedSymbols.push(alias.symbol);
+            }
+        }
+        const addedDeclaredSymbols = hoistedAliases
+            .map((alias) => alias.symbol)
+            .filter((symbol) => !this.asyncAwaitHoistedPreludeDeclaredSymbols.has(symbol));
+        this.emitAsyncAwaitPreludeHoistedDeclarations(buf, hoistedAliases);
+        this.argumentValueScopes.push(scope);
+        this.awaitExpressionValueScopes.push(awaitScope);
+        if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+        this.asyncAwaitContinuationAdapterDepth++;
+        try {
+            this.emitStmt(buf, forStatement);
+            const terminalSource = this.emitExpr(terminalAwaitExpr.expression);
+            const terminalEnvType = `${terminalAdapter}_env_t`;
+            buf.line(`tsc_promise_t* const ${terminalSourceVar} = ${this.coerce(terminalSource, terminalPromiseType, terminalAwaitExpr.expression)};`);
+            buf.line(`${terminalEnvType}* const ${terminalEnvVar} = (${terminalEnvType}*)TSC_GC_MALLOC(sizeof(${terminalEnvType}));`);
+            buf.line(`${terminalEnvVar}->receiver = ${terminalSourceVar};`);
+            buf.line(`${terminalEnvVar}->result_promise = _ret;`);
+            for (const param of params) buf.line(`${terminalEnvVar}->${param.field} = state->${param.field};`);
+            if (thisValue) buf.line(`${terminalEnvVar}->this_arg = state->this_arg;`);
+            for (const alias of carriedAliases) {
+                buf.line(`${terminalEnvVar}->${alias.field} = ${this.identifierRead(alias.identifier)};`);
+            }
+            buf.open(`if (tsc_promise_is_pending(${terminalSourceVar}))`);
+            buf.line(`tsc_promise_add_callback(${terminalSourceVar}, ${terminalAdapter}, ${terminalEnvVar});`);
+            buf.close();
+            buf.open("else");
+            buf.line(`${terminalAdapter}(${terminalEnvVar});`);
+            buf.close();
+            buf.line("tsc_try_pop();");
+            buf.line("return;");
+        } finally {
+            this.asyncAwaitContinuationAdapterDepth--;
+            if (thisValue) this.functionThisStack.pop();
+            this.awaitExpressionValueScopes.pop();
+            this.argumentValueScopes.pop();
+            for (const symbol of addedHoistedSymbols) this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+            for (const symbol of addedDeclaredSymbols) this.asyncAwaitHoistedPreludeDeclaredSymbols.delete(symbol);
+        }
+        buf.close();
+        buf.open("else");
+        buf.line("tsc_try_pop();");
+        buf.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+        buf.close();
+        buf.close();
+        buf.line();
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
     private emitAsyncAwaitAwaitedIfConditionAfterAwaitReturnContinuation(
         buf: CBuf,
         body: ts.Block,
@@ -50314,6 +50423,10 @@ class Emitter {
             field: string;
             identifier: ts.Identifier;
         };
+        type AwaitedIfForInitializer = {
+            forStatement: ts.ForStatement;
+            awaitExpr: ts.AwaitExpression;
+        };
         type AwaitedIfBranch =
             | {
                 kind: "terminal";
@@ -50322,6 +50435,7 @@ class Emitter {
                 preludeStatements: readonly ts.Statement[];
                 carriedAliases: readonly AwaitedIfCarriedAlias[];
                 hoistedAliases: readonly (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[];
+                awaitedForInitializer: AwaitedIfForInitializer | null;
             }
             | { kind: "condition"; awaitExpr: ts.AwaitExpression; thenBranch: AwaitedIfBranch; elseBranch: AwaitedIfBranch };
         const terminalBranch = (branch: ts.Statement): AwaitedIfBranch | null => {
@@ -50711,6 +50825,46 @@ class Emitter {
                 visit(statement);
                 return safe;
             };
+            const awaitedForInitializer = (statement: ts.Statement): AwaitedIfForInitializer | null => {
+                if (!ts.isForStatement(statement)) return null;
+                const initializer = statement.initializer;
+                if (!initializer || !ts.isVariableDeclarationList(initializer) ||
+                    (initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 ||
+                    initializer.declarations.length === 0) return null;
+                const firstDeclaration = initializer.declarations[0]!;
+                if (!ts.isIdentifier(firstDeclaration.name) || !firstDeclaration.initializer) return null;
+                const firstInitializer = this.unwrapTransparentExpression(firstDeclaration.initializer);
+                if (!ts.isAwaitExpression(firstInitializer)) return null;
+                const containsAwait = (node: ts.Node): boolean => {
+                    if (ts.isAwaitExpression(node)) return true;
+                    if (ts.isFunctionLike(node) || ts.isClassLike(node)) return false;
+                    let found = false;
+                    ts.forEachChild(node, (child) => {
+                        if (!found) found = containsAwait(child);
+                    });
+                    return found;
+                };
+                for (const declaration of initializer.declarations.slice(1)) {
+                    if (!ts.isIdentifier(declaration.name) || !declaration.initializer ||
+                        containsAwait(declaration.initializer)) return null;
+                }
+                if ((statement.condition && containsAwait(statement.condition)) ||
+                    (statement.incrementor && containsAwait(statement.incrementor)) ||
+                    containsAwait(statement.statement) || !nestedPreludeSafe(statement)) return null;
+                const initializerPromiseType = this.prepareType(mapTsType(
+                    firstInitializer.expression,
+                    this.checker.getTypeAtLocation(firstInitializer.expression),
+                    this.checker,
+                ));
+                const initializerAwaitedType = this.prepareType(mapTsType(
+                    firstInitializer,
+                    this.checker.getTypeAtLocation(firstInitializer),
+                    this.checker,
+                ));
+                if (initializerPromiseType.kind !== "promise" ||
+                    initializerAwaitedType.kind === "void" || initializerAwaitedType.kind === "never") return null;
+                return { forStatement: statement, awaitExpr: firstInitializer };
+            };
             const nestedVarPreludeEscapes = (statement: ts.Statement, index: number): readonly ts.Identifier[] => {
                 const declared = new Map<ts.Symbol, ts.Identifier>();
                 const collect = (node: ts.Node): void => {
@@ -50754,6 +50908,7 @@ class Emitter {
                 return referencesDeclared(terminal) ? [...declared.values()] : [];
             };
             const branchPreludeSupported = (statement: ts.Statement, index: number): boolean => {
+                if (preludeStatements.length === 1 && awaitedForInitializer(statement)) return true;
                 const variableDeclarations = ts.isVariableStatement(statement)
                     ? statement.declarationList.declarations
                     : null;
@@ -50865,6 +51020,9 @@ class Emitter {
                 }
             }
             const returned = this.unwrapTransparentExpression(terminal.expression);
+            const awaitedFor = preludeStatements.length === 1
+                ? awaitedForInitializer(preludeStatements[0]!)
+                : null;
             return ts.isAwaitExpression(returned)
                 ? {
                     kind: "terminal",
@@ -50873,6 +51031,7 @@ class Emitter {
                     preludeStatements,
                     carriedAliases,
                     hoistedAliases,
+                    awaitedForInitializer: awaitedFor,
                 }
                 : null;
         };
@@ -51003,19 +51162,53 @@ class Emitter {
                         identifier: alias.identifier,
                     });
                 }
+                const terminalAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
+                    typeInfo.promiseType,
+                    typeInfo.awaitedType,
+                    branch.awaitExpr,
+                    branch.awaitExpr,
+                    continuationParams,
+                    callbackThis,
+                    branch.rejectResult,
+                    [],
+                    [],
+                    carriedAliases,
+                );
+                if (branch.awaitedForInitializer) {
+                    const initializerPromiseType = this.prepareType(mapTsType(
+                        branch.awaitedForInitializer.awaitExpr.expression,
+                        this.checker.getTypeAtLocation(branch.awaitedForInitializer.awaitExpr.expression),
+                        this.checker,
+                    ));
+                    const initializerAwaitedType = this.prepareType(mapTsType(
+                        branch.awaitedForInitializer.awaitExpr,
+                        this.checker.getTypeAtLocation(branch.awaitedForInitializer.awaitExpr),
+                        this.checker,
+                    ));
+                    return {
+                        adapter: this.ensureAsyncAwaitNestedForInitializerReturnContinuationAdapter(
+                            initializerPromiseType,
+                            initializerAwaitedType,
+                            branch.awaitedForInitializer.awaitExpr,
+                            branch.awaitedForInitializer.forStatement,
+                            terminalAdapter,
+                            typeInfo.promiseType,
+                            branch.awaitExpr,
+                            continuationParams,
+                            callbackThis,
+                            carriedAliases,
+                            branch.hoistedAliases,
+                        ),
+                        promiseType: initializerPromiseType,
+                        awaitExpr: branch.awaitedForInitializer.awaitExpr,
+                        rejectResult: false,
+                        preludeStatements: [],
+                        carriedAliases: [],
+                        hoistedAliases: branch.hoistedAliases,
+                    };
+                }
                 return {
-                    adapter: this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
-                        typeInfo.promiseType,
-                        typeInfo.awaitedType,
-                        branch.awaitExpr,
-                        branch.awaitExpr,
-                        continuationParams,
-                        callbackThis,
-                        branch.rejectResult,
-                        [],
-                        [],
-                        carriedAliases,
-                    ),
+                    adapter: terminalAdapter,
                     promiseType: typeInfo.promiseType,
                     awaitExpr: branch.awaitExpr,
                     rejectResult: branch.rejectResult,

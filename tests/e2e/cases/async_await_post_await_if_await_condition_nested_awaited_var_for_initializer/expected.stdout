@@ -1,0 +1,6 @@
+condition-reject awaited-var-for-condition-rejected
+selector-reject awaited-var-for-selector-thrown
+return awaited-var-for-first-true-return
+throw awaited-var-for-first-false-throw
+return awaited-var-for-first-true-return
+trace selector:awaited-var-for-selector-first|awaited-var-for-first-true-label|awaited-var-for-first-false-label|awaited-var-for-first-true-label|
