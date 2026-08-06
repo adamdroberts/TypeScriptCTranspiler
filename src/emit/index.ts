@@ -50511,7 +50511,7 @@ class Emitter {
             out.close();
         };
         const emitLoopControlPrelude = (out: CBuf): void => {
-            for (const statement of loopControlPrelude) this.emitStmt(out, statement);
+            this.emitAsyncAwaitLoopControlPrelude(out, loopControlPrelude);
         };
         const emitLoopBody = (out: CBuf): void => {
             if (loopControl === "break") {
@@ -50752,11 +50752,11 @@ class Emitter {
             const truth = this.truthyC(condition, forStatement.condition!);
             out.open(`if (${truth})`);
             if (loopControl === "break") {
-                for (const statement of loopControlPrelude) this.emitStmt(out, statement);
+                this.emitAsyncAwaitLoopControlPrelude(out, loopControlPrelude);
                 emitTerminal(out);
             } else {
                 if (loopControl === "continue") {
-                    for (const statement of loopControlPrelude) this.emitStmt(out, statement);
+                    this.emitAsyncAwaitLoopControlPrelude(out, loopControlPrelude);
                 }
                 if (loopControl !== "continue") this.emitStmt(out, forStatement.statement);
                 emitIncrementor(out);
@@ -51470,7 +51470,8 @@ class Emitter {
                         ts.isForStatement(prefixStatement) ||
                         ts.isForOfStatement(prefixStatement) ||
                         ts.isForInStatement(prefixStatement) ||
-                        ts.isTryStatement(prefixStatement)) &&
+                        ts.isTryStatement(prefixStatement) ||
+                        ts.isLabeledStatement(prefixStatement)) &&
                     this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
                     nestedPreludeSafe(prefixStatement))) return null;
                 if ((forStatement.condition && containsAwait(forStatement.condition) && !awaitedCondition) ||
@@ -64251,6 +64252,17 @@ class Emitter {
     }
 
     // ---------------- statements ----------------
+
+    private emitAsyncAwaitLoopControlPrelude(
+        buf: CBuf,
+        statements: readonly ts.Statement[],
+    ): void {
+        for (const statement of statements) {
+            let unwrapped: ts.Statement = statement;
+            while (ts.isLabeledStatement(unwrapped)) unwrapped = unwrapped.statement;
+            this.emitStmt(buf, unwrapped);
+        }
+    }
 
     private emitStmt(buf: CBuf, stmt: ts.Statement): void {
         this.emitLineDirective(buf, stmt);

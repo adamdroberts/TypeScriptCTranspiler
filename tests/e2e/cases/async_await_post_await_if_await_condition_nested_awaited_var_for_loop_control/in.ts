@@ -77,6 +77,9 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             } finally {
                 mark("condition-finally");
             }
+            conditionLabel: for (const value of ["condition-label"]) {
+                mark(value);
+            }
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -133,6 +136,9 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
                 mark("incrementor-try");
             } finally {
                 mark("incrementor-finally");
+            }
+            incrementorLabel: for (const value of ["incrementor-label"]) {
+                mark(value);
             }
             switch (incrementorCount) {
                 case 0:
@@ -193,6 +199,9 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             } finally {
                 mark("continue-finally");
             }
+            continueLabel: for (const value of ["continue-label"]) {
+                mark(value);
+            }
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -251,6 +260,9 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
                 mark("break-try");
             } finally {
                 mark("break-finally");
+            }
+            breakLabel: for (const value of ["break-label"]) {
+                mark(value);
             }
             switch (breakCount) {
                 case 0:
