@@ -1,0 +1,5 @@
+condition-reject for-in-condition-rejected
+source-reject for-in-source-thrown
+return for-in-first-true-return
+throw for-in-first-false-throw
+trace true:for-in:for-in-first:0|true:for-in:for-in-first:1|false:for-in:for-in-first:0|false:for-in:for-in-first:1|throw:source:for-in-throw-first|
