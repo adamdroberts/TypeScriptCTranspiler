@@ -50356,8 +50356,7 @@ class Emitter {
                     }
                     if (ts.isVariableStatement(node)) {
                         const declarations = node.declarationList.declarations;
-                        if ((node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
-                            declarations.length === 0 ||
+                        if (declarations.length === 0 ||
                             !declarations.every((declaration) =>
                                 ts.isIdentifier(declaration.name) && !!declaration.initializer)) {
                             safe = false;
@@ -50375,6 +50374,38 @@ class Emitter {
                 };
                 visit(statement);
                 return safe;
+            };
+            const nestedVarPreludeEscapes = (statement: ts.Statement, index: number): boolean => {
+                const declared = new Set<ts.Symbol>();
+                const collect = (node: ts.Node): void => {
+                    if (ts.isVariableStatement(node) &&
+                        (node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
+                        for (const declaration of node.declarationList.declarations) {
+                            if (ts.isIdentifier(declaration.name)) {
+                                const symbol = this.symbolForIdentifier(declaration.name);
+                                if (symbol) declared.add(symbol);
+                            }
+                        }
+                    }
+                    ts.forEachChild(node, collect);
+                };
+                collect(statement);
+                if (declared.size === 0) return false;
+                const referencesDeclared = (node: ts.Node): boolean => {
+                    if (ts.isIdentifier(node)) {
+                        const symbol = this.symbolForIdentifier(node);
+                        if (symbol && declared.has(symbol)) return true;
+                    }
+                    let found = false;
+                    ts.forEachChild(node, (child) => {
+                        if (!found && referencesDeclared(child)) found = true;
+                    });
+                    return found;
+                };
+                for (let laterIndex = index + 1; laterIndex < preludeStatements.length; laterIndex++) {
+                    if (referencesDeclared(preludeStatements[laterIndex]!)) return true;
+                }
+                return referencesDeclared(terminal);
             };
             const branchPreludeSupported = (statement: ts.Statement, index: number): boolean => {
                 const variableDeclarations = ts.isVariableStatement(statement)
@@ -50405,15 +50436,17 @@ class Emitter {
                             this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement);
                     }) && hasUninitializedDeclaration;
                 })();
-                const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
-                const nestedSwitchPrelude = ts.isSwitchStatement(statement) && nestedPreludeSafe(statement);
-                const nestedWhilePrelude = ts.isWhileStatement(statement) && nestedPreludeSafe(statement);
-                const nestedDoPrelude = ts.isDoStatement(statement) && nestedPreludeSafe(statement);
-                const nestedForPrelude = ts.isForStatement(statement) && nestedPreludeSafe(statement);
-                const nestedForOfPrelude = ts.isForOfStatement(statement) && nestedPreludeSafe(statement);
-                const nestedForInPrelude = ts.isForInStatement(statement) && nestedPreludeSafe(statement);
+                const nestedPrelude = (isNestedControlFlow: boolean): boolean =>
+                    isNestedControlFlow && nestedPreludeSafe(statement) && !nestedVarPreludeEscapes(statement, index);
+                const nestedIfPrelude = nestedPrelude(ts.isIfStatement(statement));
+                const nestedSwitchPrelude = nestedPrelude(ts.isSwitchStatement(statement));
+                const nestedWhilePrelude = nestedPrelude(ts.isWhileStatement(statement));
+                const nestedDoPrelude = nestedPrelude(ts.isDoStatement(statement));
+                const nestedForPrelude = nestedPrelude(ts.isForStatement(statement));
+                const nestedForOfPrelude = nestedPrelude(ts.isForOfStatement(statement));
+                const nestedForInPrelude = nestedPrelude(ts.isForInStatement(statement));
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
-                    !!statement.finallyBlock && nestedPreludeSafe(statement);
+                    !!statement.finallyBlock && nestedPreludeSafe(statement) && !nestedVarPreludeEscapes(statement, index);
                 return (ts.isExpressionStatement(statement) || initializedLocals || assignedUninitializedVars || nestedIfPrelude ||
                     nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude || nestedForPrelude ||
                     nestedForOfPrelude || nestedForInPrelude || nestedTryPrelude) &&

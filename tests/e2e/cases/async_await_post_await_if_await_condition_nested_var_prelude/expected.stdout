@@ -1,0 +1,5 @@
+condition-reject nested-var-condition-rejected
+selector-reject nested-var-selector-thrown
+return nested-var-first-true-return
+throw nested-var-first-false-throw
+trace selector:nested-var-selector-first|nested-var-first-true|nested-var-first-false|
