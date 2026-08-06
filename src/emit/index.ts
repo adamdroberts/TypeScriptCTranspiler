@@ -54052,6 +54052,17 @@ class Emitter {
                     };
                 }
             }
+            if (allowSideEffecting && allowYieldedOperand &&
+                (ts.isTemplateExpression(unwrappedOperand) || ts.isTaggedTemplateExpression(unwrappedOperand))) {
+                const yieldedTemplateArguments = this.simpleLazyMultiYieldTemplateLogicalArguments(unwrappedOperand);
+                if (yieldedTemplateArguments) {
+                    return {
+                        expression: unwrappedOperand,
+                        yields: yieldedTemplateArguments,
+                        logicalYieldedOperand: true,
+                    };
+                }
+            }
             if (allowSideEffecting && this.isSimpleLazyMultiYieldLogicalStagedOperand(unwrappedOperand)) {
                 stagedOperands.push(unwrappedOperand);
                 return unwrappedOperand;
@@ -55364,6 +55375,30 @@ class Emitter {
                 }
                 yields.push(unwrapped);
             }
+        }
+        return yields.length > 0 ? yields : null;
+    }
+
+    private simpleLazyMultiYieldTemplateLogicalArguments(expr: ts.Expression): ts.YieldExpression[] | null {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        let template: ts.TemplateExpression | undefined;
+        if (ts.isTemplateExpression(unwrapped)) {
+            template = unwrapped;
+        } else if (ts.isTaggedTemplateExpression(unwrapped)) {
+            const tag = this.unwrapTransparentExpression(unwrapped.tag);
+            if (!ts.isIdentifier(tag) && !this.isStringRawTag(tag)) return null;
+            template = ts.isTemplateExpression(unwrapped.template) ? unwrapped.template : undefined;
+        }
+        if (!template) return null;
+        const yields: ts.YieldExpression[] = [];
+        for (const span of template.templateSpans) {
+            const expression = this.unwrapTransparentExpression(span.expression);
+            const directYield = this.directLazyYieldCondition(expression);
+            if (directYield) {
+                yields.push(directYield);
+                continue;
+            }
+            if (!this.isSimpleLazyMultiYieldLiteral(expression)) return null;
         }
         return yields.length > 0 ? yields : null;
     }

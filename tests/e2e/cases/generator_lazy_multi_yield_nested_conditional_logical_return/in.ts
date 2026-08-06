@@ -138,6 +138,11 @@ function logicalTaggedTemplateValue(_strings: TemplateStringsArray): string {
     return "tagged-" + logicalTaggedTemplateCount;
 }
 
+function logicalYieldedTaggedTemplateValue(_strings: TemplateStringsArray, ..._values: any[]): string {
+    logicalTaggedTemplateCount++;
+    return "tagged-yielded-" + logicalTaggedTemplateCount;
+}
+
 function* stagedTaggedTemplateOperandReturn(): Generator<string, any, any> {
     return (yield "tagged-left") && logicalTaggedTemplateValue`tagged`;
 }
@@ -238,6 +243,14 @@ function* stagedYieldedArgumentCallLogicalOperandReturn(): Generator<string, any
 
 function* stagedYieldedArgumentNewLogicalOperandReturn(): Generator<string, any, any> {
     return (yield "yielded-new-left") && new StagedLogicalBox(yield "yielded-new-argument");
+}
+
+function* stagedYieldedTemplateLogicalOperandReturn(): Generator<string, any, any> {
+    return (yield "yielded-template-left") && `template-${yield "yielded-template-first"}-${yield "yielded-template-second"}`;
+}
+
+function* stagedYieldedTaggedTemplateLogicalOperandReturn(): Generator<string, any, any> {
+    return (yield "yielded-tagged-template-left") && logicalYieldedTaggedTemplateValue`tagged-${yield "yielded-tagged-template-first"}`;
 }
 
 const andSkipped = nestedConditionalLogicalAndReturn();
@@ -777,3 +790,35 @@ const yieldedArgumentNewSelectedSecond: any = yieldedArgumentNewSelected.next(tr
 console.log("yielded-argument-new-selected-second", yieldedArgumentNewSelectedSecond.done, yieldedArgumentNewSelectedSecond.value, logicalNewCount);
 const yieldedArgumentNewSelectedDone: any = yieldedArgumentNewSelected.next("new-argument");
 console.log("yielded-argument-new-selected-done", yieldedArgumentNewSelectedDone.done, yieldedArgumentNewSelectedDone.value.value, logicalNewCount);
+
+const yieldedTemplateSkipped = stagedYieldedTemplateLogicalOperandReturn();
+const yieldedTemplateSkippedFirst: any = yieldedTemplateSkipped.next();
+console.log("yielded-template-skipped-first", yieldedTemplateSkippedFirst.done, yieldedTemplateSkippedFirst.value);
+const yieldedTemplateSkippedDone: any = yieldedTemplateSkipped.next(false);
+console.log("yielded-template-skipped-done", yieldedTemplateSkippedDone.done, yieldedTemplateSkippedDone.value);
+
+const yieldedTemplateSelected = stagedYieldedTemplateLogicalOperandReturn();
+const yieldedTemplateSelectedFirst: any = yieldedTemplateSelected.next();
+console.log("yielded-template-selected-first", yieldedTemplateSelectedFirst.done, yieldedTemplateSelectedFirst.value);
+const yieldedTemplateSelectedSecond: any = yieldedTemplateSelected.next(true);
+console.log("yielded-template-selected-second", yieldedTemplateSelectedSecond.done, yieldedTemplateSelectedSecond.value);
+const yieldedTemplateSelectedThird: any = yieldedTemplateSelected.next("template-first");
+console.log("yielded-template-selected-third", yieldedTemplateSelectedThird.done, yieldedTemplateSelectedThird.value);
+const yieldedTemplateSelectedDone: any = yieldedTemplateSelected.next("template-second");
+console.log("yielded-template-selected-done", yieldedTemplateSelectedDone.done, yieldedTemplateSelectedDone.value);
+
+logicalTaggedTemplateCount = 0;
+const yieldedTaggedTemplateSkipped = stagedYieldedTaggedTemplateLogicalOperandReturn();
+const yieldedTaggedTemplateSkippedFirst: any = yieldedTaggedTemplateSkipped.next();
+console.log("yielded-tagged-template-skipped-first", yieldedTaggedTemplateSkippedFirst.done, yieldedTaggedTemplateSkippedFirst.value, logicalTaggedTemplateCount);
+const yieldedTaggedTemplateSkippedDone: any = yieldedTaggedTemplateSkipped.next(false);
+console.log("yielded-tagged-template-skipped-done", yieldedTaggedTemplateSkippedDone.done, yieldedTaggedTemplateSkippedDone.value, logicalTaggedTemplateCount);
+
+logicalTaggedTemplateCount = 0;
+const yieldedTaggedTemplateSelected = stagedYieldedTaggedTemplateLogicalOperandReturn();
+const yieldedTaggedTemplateSelectedFirst: any = yieldedTaggedTemplateSelected.next();
+console.log("yielded-tagged-template-selected-first", yieldedTaggedTemplateSelectedFirst.done, yieldedTaggedTemplateSelectedFirst.value, logicalTaggedTemplateCount);
+const yieldedTaggedTemplateSelectedSecond: any = yieldedTaggedTemplateSelected.next(true);
+console.log("yielded-tagged-template-selected-second", yieldedTaggedTemplateSelectedSecond.done, yieldedTaggedTemplateSelectedSecond.value, logicalTaggedTemplateCount);
+const yieldedTaggedTemplateSelectedDone: any = yieldedTaggedTemplateSelected.next("tagged-first");
+console.log("yielded-tagged-template-selected-done", yieldedTaggedTemplateSelectedDone.done, yieldedTaggedTemplateSelectedDone.value, logicalTaggedTemplateCount);
