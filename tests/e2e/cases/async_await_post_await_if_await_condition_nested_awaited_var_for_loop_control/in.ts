@@ -79,6 +79,7 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             }
             conditionLabel: for (const value of ["condition-label"]) {
                 mark(value);
+                continue conditionLabel;
             }
             try {
                 throw "condition-caught";
@@ -146,6 +147,7 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
             }
             incrementorLabel: for (const value of ["incrementor-label"]) {
                 mark(value);
+                continue incrementorLabel;
             }
             try {
                 throw "incrementor-caught";
@@ -215,6 +217,7 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             }
             continueLabel: for (const value of ["continue-label"]) {
                 mark(value);
+                continue continueLabel;
             }
             try {
                 throw "continue-caught";
@@ -284,6 +287,7 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
             }
             breakLabel: for (const value of ["break-label"]) {
                 mark(value);
+                break breakLabel;
             }
             try {
                 throw "break-caught";

@@ -51357,6 +51357,19 @@ class Emitter {
                     }
                     return false;
                 };
+                const hasEnclosingLabel = (node: ts.Node, label: ts.Identifier, loopOnly: boolean): boolean => {
+                    let parent = node.parent;
+                    while (parent) {
+                        if (ts.isLabeledStatement(parent) && parent.label.text === label.text) {
+                            return !loopOnly || ts.isWhileStatement(parent.statement) ||
+                                ts.isDoStatement(parent.statement) || ts.isForStatement(parent.statement) ||
+                                ts.isForOfStatement(parent.statement) || ts.isForInStatement(parent.statement);
+                        }
+                        if (parent === statement || ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
+                        parent = parent.parent;
+                    }
+                    return false;
+                };
                 const hasEnclosingCatch = (node: ts.Node): boolean => {
                     let child: ts.Node = node;
                     let parent = node.parent;
@@ -51372,11 +51385,13 @@ class Emitter {
                     if (!safe) return;
                     if (node === allowedTerminalControl) return;
                     if (ts.isBreakStatement(node)) {
-                        if (node.label || !hasEnclosingBreakable(node)) safe = false;
+                        if ((node.label && !hasEnclosingLabel(node, node.label, false)) ||
+                            (!node.label && !hasEnclosingBreakable(node))) safe = false;
                         return;
                     }
                     if (ts.isContinueStatement(node)) {
-                        if (node.label || !hasEnclosingLoop(node)) safe = false;
+                        if ((node.label && !hasEnclosingLabel(node, node.label, true)) ||
+                            (!node.label && !hasEnclosingLoop(node))) safe = false;
                         return;
                     }
                     if (ts.isVariableStatement(node)) {
