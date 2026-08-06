@@ -54016,7 +54016,7 @@ class Emitter {
     private simpleLazyMultiYieldLogicalPlan(
         expression: ts.Expression,
         allowSideEffecting = false,
-        allowYieldedLogicalLeft = false,
+        allowYieldedLogicalOperands = false,
     ): LazyMultiYieldLogicalPlan | null {
         const unwrapped = this.unwrapTransparentExpression(expression);
         if (!ts.isBinaryExpression(unwrapped) || !this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) return null;
@@ -54057,8 +54057,8 @@ class Emitter {
             }
             return this.isSimpleLazyMultiYieldLogicalOperand(unwrappedOperand) ? unwrappedOperand : null;
         };
-        const left = buildOperand(unwrapped.left, allowYieldedLogicalLeft);
-        const right = buildOperand(unwrapped.right, false);
+        const left = buildOperand(unwrapped.left, allowYieldedLogicalOperands);
+        const right = buildOperand(unwrapped.right, allowYieldedLogicalOperands);
         if (!left || !right) return null;
         const yieldsForOperand = (operand: LazyMultiYieldLogicalOperand): ts.YieldExpression[] => {
             if (isLazyMultiYieldLogicalPlan(operand) || isLazyMultiYieldLogicalYieldedOperand(operand)) {
