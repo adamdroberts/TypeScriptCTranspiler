@@ -50478,14 +50478,17 @@ class Emitter {
             identifier: ts.Identifier;
         };
         type AwaitedIfForInitializer = {
+            kind: "for";
             forStatement: ts.ForStatement;
             awaitExpr: ts.AwaitExpression;
         };
         type AwaitedIfForInitializerSelector = {
+            kind: "selector";
             condition: ts.Expression;
-            thenBranch: AwaitedIfForInitializer;
-            elseBranch: AwaitedIfForInitializer;
+            thenBranch: AwaitedIfForInitializerBranch;
+            elseBranch: AwaitedIfForInitializerBranch;
         };
+        type AwaitedIfForInitializerBranch = AwaitedIfForInitializer | AwaitedIfForInitializerSelector;
         type AwaitedIfBranch =
             | {
                 kind: "terminal";
@@ -50923,19 +50926,48 @@ class Emitter {
                 ));
                 if (initializerPromiseType.kind !== "promise" ||
                     initializerAwaitedType.kind === "void" || initializerAwaitedType.kind === "never") return null;
-                return { forStatement: statement, awaitExpr: firstInitializer };
+                return { kind: "for", forStatement: statement, awaitExpr: firstInitializer };
+            };
+            const awaitedForInitializerBranch = (
+                statement: ts.Statement,
+                selectorDepth = 0,
+            ): AwaitedIfForInitializerBranch | null => {
+                const statements = ts.isBlock(statement) ? statement.statements : [statement];
+                if (statements.length !== 1) return null;
+                const candidate = statements[0]!;
+                const direct = awaitedForInitializer(candidate);
+                if (direct) return direct;
+                if (!ts.isIfStatement(candidate) || !candidate.elseStatement ||
+                    selectorDepth >= 2 || containsAwait(candidate.expression) || !nestedPreludeSafe(candidate)) return null;
+                const thenBranch = awaitedForInitializerBranch(candidate.thenStatement, selectorDepth + 1);
+                const elseBranch = awaitedForInitializerBranch(candidate.elseStatement, selectorDepth + 1);
+                return thenBranch && elseBranch
+                    ? { kind: "selector", condition: candidate.expression, thenBranch, elseBranch }
+                    : null;
             };
             const awaitedForInitializerSelector = (statement: ts.Statement): AwaitedIfForInitializerSelector | null => {
-                if (!ts.isIfStatement(statement) || !statement.elseStatement ||
-                    containsAwait(statement.expression) || !nestedPreludeSafe(statement)) return null;
-                const branchFor = (branch: ts.Statement): AwaitedIfForInitializer | null => {
-                    const statements = ts.isBlock(branch) ? branch.statements : [branch];
-                    return statements.length === 1 ? awaitedForInitializer(statements[0]!) : null;
-                };
-                const thenBranch = branchFor(statement.thenStatement);
-                const elseBranch = branchFor(statement.elseStatement);
+                const branch = awaitedForInitializerBranch(statement);
+                return branch && branch.kind === "selector" ? branch : null;
+            };
+            const terminalBranchForInitializerBranch = (
+                initializerBranch: AwaitedIfForInitializerBranch,
+                terminal: ts.Statement,
+            ): AwaitedIfBranch | null => {
+                if (initializerBranch.kind === "for") {
+                    return terminalBranch(ts.factory.createBlock([
+                        initializerBranch.forStatement,
+                        terminal,
+                    ], true));
+                }
+                const thenBranch = terminalBranchForInitializerBranch(initializerBranch.thenBranch, terminal);
+                const elseBranch = terminalBranchForInitializerBranch(initializerBranch.elseBranch, terminal);
                 return thenBranch && elseBranch
-                    ? { condition: statement.expression, thenBranch, elseBranch }
+                    ? {
+                        kind: "selector",
+                        condition: initializerBranch.condition,
+                        thenBranch,
+                        elseBranch,
+                    }
                     : null;
             };
             const nestedVarPreludeEscapes = (statement: ts.Statement, index: number): readonly ts.Identifier[] => {
@@ -51055,14 +51087,8 @@ class Emitter {
                 ? awaitedForInitializerSelector(preludeStatements[0]!)
                 : null;
             if (ts.isAwaitExpression(returned) && awaitedForSelector) {
-                const thenBranch = terminalBranch(ts.factory.createBlock([
-                    awaitedForSelector.thenBranch.forStatement,
-                    terminal,
-                ], true));
-                const elseBranch = terminalBranch(ts.factory.createBlock([
-                    awaitedForSelector.elseBranch.forStatement,
-                    terminal,
-                ], true));
+                const thenBranch = terminalBranchForInitializerBranch(awaitedForSelector.thenBranch, terminal);
+                const elseBranch = terminalBranchForInitializerBranch(awaitedForSelector.elseBranch, terminal);
                 return thenBranch && elseBranch
                     ? {
                         kind: "selector",

@@ -1,0 +1,8 @@
+condition-reject nested-selector-chain-condition-rejected
+selector-reject nested-selector-chain-thrown
+condition-false nested-selector-chain-first-condition-false
+return nested-selector-chain-first-return-first-return
+return nested-selector-chain-first-return-fourth-return
+throw nested-selector-chain-throw-first-throw-first-throw
+throw nested-selector-chain-throw-first-throw-third-throw
+trace selector:nested-selector-chain-selector-first|nested-selector-chain-first-return-first-label|nested-selector-chain-first-return-fourth-label|nested-selector-chain-throw-first-throw-first-label|nested-selector-chain-throw-first-throw-third-label|
