@@ -50314,12 +50314,49 @@ class Emitter {
             const carriedAliases: AwaitedIfCarriedAlias[] = [];
             const nestedPreludeSafe = (statement: ts.Statement): boolean => {
                 let safe = true;
+                const hasEnclosingLoop = (node: ts.Node): boolean => {
+                    let parent = node.parent;
+                    while (parent) {
+                        if (ts.isWhileStatement(parent) || ts.isDoStatement(parent) ||
+                            ts.isForStatement(parent) || ts.isForOfStatement(parent) ||
+                            ts.isForInStatement(parent)) {
+                            return true;
+                        }
+                        if (parent === statement || ts.isFunctionLike(parent) || ts.isClassLike(parent)) {
+                            return false;
+                        }
+                        parent = parent.parent;
+                    }
+                    return false;
+                };
+                const hasEnclosingBreakable = (node: ts.Node): boolean => {
+                    let parent = node.parent;
+                    while (parent) {
+                        if (ts.isSwitchStatement(parent) || ts.isWhileStatement(parent) ||
+                            ts.isDoStatement(parent) || ts.isForStatement(parent) ||
+                            ts.isForOfStatement(parent) || ts.isForInStatement(parent)) {
+                            return true;
+                        }
+                        if (parent === statement || ts.isFunctionLike(parent) || ts.isClassLike(parent)) {
+                            return false;
+                        }
+                        parent = parent.parent;
+                    }
+                    return false;
+                };
                 const visit = (node: ts.Node): void => {
                     if (!safe) return;
+                    if (ts.isBreakStatement(node)) {
+                        if (node.label || !hasEnclosingBreakable(node)) safe = false;
+                        return;
+                    }
+                    if (ts.isContinueStatement(node)) {
+                        if (node.label || !hasEnclosingLoop(node)) safe = false;
+                        return;
+                    }
                     if (ts.isFunctionLike(node) || ts.isClassLike(node) ||
                         ts.isVariableStatement(node) || ts.isReturnStatement(node) ||
-                        ts.isThrowStatement(node) || ts.isBreakStatement(node) ||
-                        ts.isContinueStatement(node)) {
+                        ts.isThrowStatement(node)) {
                         safe = false;
                         return;
                     }

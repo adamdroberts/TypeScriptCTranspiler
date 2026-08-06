@@ -1,0 +1,4 @@
+condition-reject nested-loop-condition-rejected
+return loop-control-first-true-return
+throw loop-control-first-false-throw
+trace true:body:loop-control-first:0|true:continue:loop-control-first:1|true:body:loop-control-first:2|false:while:loop-control-first:2|false:while:loop-control-first:1|
