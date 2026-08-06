@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Async continuations now preserve an explicit `else` branch when an awaited `if` condition follows an earlier awaited local, including the alternate `return await` settlement path. Regression: `async_await_post_await_if_await_condition_else`.
 - Async declarations, class methods, and lifted async function values now resume a bounded awaited `if` condition after an earlier awaited local, preserving the captured value and rejection routing across both `return await` branches. Regression: `async_await_post_await_if_await_condition`.
 - Counted-`for` declaration initializers in lazy generators now preserve `??` short-circuiting through recursively nested conditional side-effecting logical operands, including selected yielded call arguments and nullish left values without duplicate calls. Regression: `generator_lazy_for_multi_yield_nested_conditional_logical_operand_declaration_initializer`.
 - Counted-`for` declaration initializers in lazy generators now recursively register nested conditional operands in side-effecting logical plans, preserving short-circuit suspension and single evaluation for selected yielded call arguments inside nested conditional arms. Regression: `generator_lazy_for_multi_yield_nested_conditional_logical_operand_declaration_initializer`.

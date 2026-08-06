@@ -50258,25 +50258,38 @@ class Emitter {
         parameters: readonly ts.ParameterDeclaration[],
         thisValue: EmitResult | null,
     ): boolean {
-        if (body.statements.length !== 3) return false;
+        if (body.statements.length !== 2 && body.statements.length !== 3) return false;
         const firstStatement = body.statements[0]!;
         const conditional = body.statements[1]!;
-        const result = body.statements[2]!;
-        if (!ts.isIfStatement(conditional) || conditional.elseStatement ||
-            !ts.isReturnStatement(result) || !result.expression) return false;
+        const result = body.statements[2];
+        if (!ts.isIfStatement(conditional)) return false;
+        if (conditional.elseStatement
+            ? body.statements.length !== 2
+            : body.statements.length !== 3 || !result || !ts.isReturnStatement(result) || !result.expression) {
+            return false;
+        }
         const first = this.awaitedContinuationStep(firstStatement);
         if (!first || !first.variable) return false;
         const conditionAwait = this.unwrapTransparentExpression(conditional.expression);
         if (!ts.isAwaitExpression(conditionAwait)) return false;
-        const trueStatements = ts.isBlock(conditional.thenStatement)
-            ? conditional.thenStatement.statements
-            : [conditional.thenStatement];
-        if (trueStatements.length !== 1 || !ts.isReturnStatement(trueStatements[0]!) || !trueStatements[0]!.expression) {
-            return false;
-        }
-        const trueReturnAwait = this.unwrapTransparentExpression(trueStatements[0]!.expression);
-        const falseReturnAwait = this.unwrapTransparentExpression(result.expression);
-        if (!ts.isAwaitExpression(trueReturnAwait) || !ts.isAwaitExpression(falseReturnAwait)) return false;
+        const branchReturnAwait = (branch: ts.Statement): ts.AwaitExpression | null => {
+            const statements = ts.isBlock(branch) ? branch.statements : [branch];
+            if (statements.length !== 1 || !ts.isReturnStatement(statements[0]!) || !statements[0]!.expression) {
+                return null;
+            }
+            const returned = this.unwrapTransparentExpression(statements[0]!.expression);
+            return ts.isAwaitExpression(returned) ? returned : null;
+        };
+        const trueReturnAwait = branchReturnAwait(conditional.thenStatement);
+        const falseReturnAwait = conditional.elseStatement
+            ? branchReturnAwait(conditional.elseStatement)
+            : result && ts.isReturnStatement(result) && result.expression
+                ? (() => {
+                    const returned = this.unwrapTransparentExpression(result.expression);
+                    return ts.isAwaitExpression(returned) ? returned : null;
+                })()
+                : null;
+        if (!trueReturnAwait || !falseReturnAwait) return false;
 
         const firstSource = this.emitExpr(first.awaitExpr.expression);
         const firstPromiseType = this.prepareType(firstSource.ty);
