@@ -1,0 +1,5 @@
+condition-reject nested-assigned-condition-rejected
+selector-reject nested-assigned-selector-thrown
+return nested-assigned-first-true-return
+throw nested-assigned-first-false-throw
+trace selector:nested-assigned-selector-first|nested-assigned-first-true|nested-assigned-first-false|

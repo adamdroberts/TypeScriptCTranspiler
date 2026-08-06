@@ -50329,6 +50329,61 @@ class Emitter {
             const terminal = statements[statements.length - 1];
             const preludeStatements = statements.slice(0, -1);
             const carriedAliases: AwaitedIfCarriedAlias[] = [];
+            const nestedVariableStatementSupported = (variableStatement: ts.VariableStatement): boolean => {
+                const declarations = variableStatement.declarationList.declarations;
+                const uninitialized = declarations.filter((declaration) => !declaration.initializer);
+                if (uninitialized.length === 0) return true;
+                if ((variableStatement.declarationList.flags & ts.NodeFlags.Const) !== 0 ||
+                    !uninitialized.every((declaration) => ts.isIdentifier(declaration.name))) {
+                    return false;
+                }
+                const parent = variableStatement.parent;
+                const siblings = ts.isBlock(parent) || ts.isCaseClause(parent)
+                    ? parent.statements
+                    : null;
+                if (!siblings) return false;
+                const declarationIndex = siblings.indexOf(variableStatement);
+                if (declarationIndex < 0) return false;
+                const uninitializedSymbols = new Set<ts.Symbol>();
+                for (const declaration of uninitialized) {
+                    const name = declaration.name;
+                    if (!ts.isIdentifier(name)) return false;
+                    const symbol = this.symbolForIdentifier(name);
+                    if (!symbol) return false;
+                    uninitializedSymbols.add(symbol);
+                }
+                const referencesUninitialized = (node: ts.Node): boolean => {
+                    if (ts.isIdentifier(node)) {
+                        const symbol = this.symbolForIdentifier(node);
+                        if (symbol && uninitializedSymbols.has(symbol)) return true;
+                    }
+                    let found = false;
+                    ts.forEachChild(node, (child) => {
+                        if (!found && referencesUninitialized(child)) found = true;
+                    });
+                    return found;
+                };
+                for (const declaration of declarations) {
+                    if (declaration.initializer && referencesUninitialized(declaration.initializer)) return false;
+                }
+                let assignmentIndex = declarationIndex + 1;
+                for (const declaration of uninitialized) {
+                    const assignmentStatement = siblings[assignmentIndex++];
+                    if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return false;
+                    const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                    const name = declaration.name;
+                    if (!ts.isBinaryExpression(assignment) ||
+                        assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+                        !ts.isIdentifier(assignment.left) ||
+                        !ts.isIdentifier(name) ||
+                        this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(name) ||
+                        referencesUninitialized(assignment.right) ||
+                        !this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
             const nestedPreludeSafe = (statement: ts.Statement): boolean => {
                 let safe = true;
                 const hasEnclosingLoop = (node: ts.Node): boolean => {
@@ -50374,12 +50429,18 @@ class Emitter {
                     if (ts.isVariableStatement(node)) {
                         const declarations = node.declarationList.declarations;
                         if (declarations.length === 0 ||
-                            !declarations.every((declaration) =>
-                                ts.isIdentifier(declaration.name) && !!declaration.initializer)) {
+                            !declarations.every((declaration) => ts.isIdentifier(declaration.name)) ||
+                            !nestedVariableStatementSupported(node)) {
                             safe = false;
                             return;
                         }
                         ts.forEachChild(node, visit);
+                        return;
+                    }
+                    if (ts.isVariableDeclarationList(node) &&
+                        ts.isForStatement(node.parent) &&
+                        node.declarations.some((declaration) => !declaration.initializer)) {
+                        safe = false;
                         return;
                     }
                     if (ts.isFunctionLike(node) || ts.isClassLike(node) ||
@@ -50464,10 +50525,27 @@ class Emitter {
                 const nestedForInPrelude = nestedPrelude(ts.isForInStatement(statement));
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
                     !!statement.finallyBlock && nestedPreludeSafe(statement);
+                let nestedHasAssignedVariables = false;
+                const visitNestedVariables = (node: ts.Node): void => {
+                    if (nestedHasAssignedVariables) return;
+                    if (ts.isVariableStatement(node) &&
+                        node.declarationList.declarations.some((declaration) => !declaration.initializer)) {
+                        nestedHasAssignedVariables = true;
+                        return;
+                    }
+                    ts.forEachChild(node, visitNestedVariables);
+                };
+                if (nestedIfPrelude || nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude ||
+                    nestedForPrelude || nestedForOfPrelude || nestedForInPrelude || nestedTryPrelude) {
+                    visitNestedVariables(statement);
+                }
                 return (ts.isExpressionStatement(statement) || initializedLocals || assignedUninitializedVars || nestedIfPrelude ||
                     nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude || nestedForPrelude ||
                     nestedForOfPrelude || nestedForInPrelude || nestedTryPrelude) &&
-                    this.asyncAwaitInterstitialControlFlowSupported(statement, assignedUninitializedVars);
+                    this.asyncAwaitInterstitialControlFlowSupported(
+                        statement,
+                        assignedUninitializedVars || nestedHasAssignedVariables,
+                    );
             };
             if (!terminal ||
                 (!ts.isReturnStatement(terminal) && !ts.isThrowStatement(terminal)) ||
