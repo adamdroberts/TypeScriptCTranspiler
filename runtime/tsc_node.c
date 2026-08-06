@@ -2705,6 +2705,508 @@ tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input) {
     return tsc_value_object(obj);
 }
 
+/* ---------------- net TCP sockets and servers ---------------- */
+
+typedef struct tsc_net_socket {
+    tsc_child_event_target_t event;
+    int fd;
+    bool connecting;
+    bool destroyed;
+    bool encoding_utf8;
+    bool writable_ended;
+    bool readable_ended;
+    bool connect_emitted;
+    bool close_emitted;
+    double poll_timer;
+} tsc_net_socket_t;
+
+typedef struct tsc_net_server {
+    tsc_child_event_target_t event;
+    int fd;
+    bool listening;
+    bool close_requested;
+    bool close_emitted;
+    bool listening_emitted;
+    double poll_timer;
+} tsc_net_server_t;
+
+static void tsc_net_socket_poll(void* env);
+static void tsc_net_server_poll(void* env);
+
+static void tsc_net_register_listener(tsc_child_event_target_t* target, const char* event_name, tsc_value_t fn, bool once) {
+    if (!target || !target->emitter || !tsc_value_is_callable(fn)) return;
+    tsc_child_listener_env_t* listener = (tsc_child_listener_env_t*)TSC_GC_MALLOC(sizeof(tsc_child_listener_env_t));
+    listener->fn = fn;
+    listener->receiver = target->value;
+    tsc_event_emitter_on(target->emitter, tsc_str_from_cstr(event_name), tsc_child_dynamic_listener, listener, (void*)(uintptr_t)fn, once, false);
+}
+
+static bool tsc_net_set_nonblocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    return flags >= 0 && fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
+}
+
+static bool tsc_net_resolve_ipv4(const tsc_str_t* host, struct in_addr* out) {
+    if (!out) return false;
+    const tsc_str_t* value = host ? host : tsc_str_from_lit("127.0.0.1", 9);
+    char* cstr = cstr_dup(value);
+    bool ok = inet_pton(AF_INET, cstr, out) == 1;
+    if (!ok) {
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        struct addrinfo* result = NULL;
+        if (getaddrinfo(cstr, NULL, &hints, &result) == 0 && result) {
+            *out = ((struct sockaddr_in*)result->ai_addr)->sin_addr;
+            ok = true;
+            freeaddrinfo(result);
+        }
+    }
+    free(cstr);
+    return ok;
+}
+
+static tsc_value_t tsc_net_endpoint_value(const struct sockaddr_in* address) {
+    char text[INET_ADDRSTRLEN] = { 0 };
+    const char* rendered = inet_ntop(AF_INET, &address->sin_addr, text, sizeof(text));
+    tsc_object_t* obj = tsc_object_new();
+    tsc_object_set(obj, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
+    tsc_object_set(obj, tsc_str_from_lit("family", 6), tsc_value_string(tsc_str_from_lit("ipv4", 4)));
+    tsc_object_set(obj, tsc_str_from_lit("port", 4), tsc_value_num((double)ntohs(address->sin_port)));
+    tsc_object_set(obj, tsc_str_from_lit("flowlabel", 9), tsc_value_num(0.0));
+    return tsc_value_object(obj);
+}
+
+static void tsc_net_socket_refresh_endpoint_props(tsc_net_socket_t* socket) {
+    if (!socket || socket->fd < 0) return;
+    struct sockaddr_in local;
+    struct sockaddr_in remote;
+    socklen_t local_len = sizeof(local);
+    socklen_t remote_len = sizeof(remote);
+    memset(&local, 0, sizeof(local));
+    memset(&remote, 0, sizeof(remote));
+    if (getsockname(socket->fd, (struct sockaddr*)&local, &local_len) == 0) {
+        char text[INET_ADDRSTRLEN] = { 0 };
+        const char* rendered = inet_ntop(AF_INET, &local.sin_addr, text, sizeof(text));
+        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localAddress", 12), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
+        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localPort", 9), tsc_value_num((double)ntohs(local.sin_port)));
+    }
+    if (getpeername(socket->fd, (struct sockaddr*)&remote, &remote_len) == 0) {
+        char text[INET_ADDRSTRLEN] = { 0 };
+        const char* rendered = inet_ntop(AF_INET, &remote.sin_addr, text, sizeof(text));
+        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteAddress", 13), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
+        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remotePort", 10), tsc_value_num((double)ntohs(remote.sin_port)));
+    }
+}
+
+static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number) {
+    if (!socket || !socket->event.emitter) return;
+    const char* message = strerror(error_number > 0 ? error_number : EIO);
+    tsc_child_emit_one_value(socket->event.emitter, "error", tsc_value_string(tsc_str_from_cstr(message)));
+}
+
+static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
+    if (!socket || socket->close_emitted) return;
+    if (socket->fd >= 0) {
+        close(socket->fd);
+        socket->fd = -1;
+    }
+    socket->destroyed = true;
+    socket->connecting = false;
+    socket->readable_ended = true;
+    socket->writable_ended = true;
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("destroyed", 9), tsc_value_bool(true));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("connecting", 10), tsc_value_bool(false));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit("closed", 6)));
+    if (socket->poll_timer != 0.0) {
+        tsc_clear_timeout(socket->poll_timer);
+        socket->poll_timer = 0.0;
+    }
+    socket->close_emitted = true;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("close", 5), empty);
+}
+
+static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* data, size_t len) {
+    if (!socket || socket->fd < 0 || socket->destroyed || socket->connecting || socket->writable_ended) return false;
+    const uint8_t* bytes = (const uint8_t*)data;
+    size_t written = 0;
+    while (written < len) {
+        ssize_t n = send(socket->fd, bytes + written, len - written, MSG_NOSIGNAL);
+        if (n > 0) {
+            written += (size_t)n;
+            continue;
+        }
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return false;
+        tsc_net_socket_emit_error(socket, errno);
+        tsc_net_socket_close_internal(socket);
+        return false;
+    }
+    return true;
+}
+
+static tsc_value_t tsc_net_socket_set_encoding(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (args && args->len > 0) {
+        tsc_str_t* encoding = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+        if (!encoding || (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8"))) {
+            tsc_throw_str(tsc_str_from_cstr("net.Socket.setEncoding only supports utf8 encoding"));
+        }
+        if (socket) socket->encoding_utf8 = true;
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (!socket || !args || args->len < 1) return tsc_value_bool(false);
+    tsc_value_t value = TSC_ARR(tsc_value_t, args, 0);
+    tsc_str_t* text = tsc_value_as_string(value);
+    if (text) return tsc_value_bool(tsc_net_socket_write_bytes(socket, text->data, text->len));
+    tsc_buffer_t* buffer = tsc_value_as_buffer(value);
+    if (buffer) return tsc_value_bool(tsc_net_socket_write_bytes(socket, buffer->data, buffer->len));
+    tsc_throw_str(tsc_str_from_cstr("net.Socket.write expects string or Buffer"));
+}
+
+static tsc_value_t tsc_net_socket_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+        (void)tsc_net_socket_write(env, this_arg, args);
+    }
+    if (socket && socket->fd >= 0 && !socket->writable_ended) {
+        (void)shutdown(socket->fd, SHUT_WR);
+        socket->writable_ended = true;
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_net_socket_close_internal((tsc_net_socket_t*)env);
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_address(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (!socket || socket->fd < 0) return tsc_value_null();
+    struct sockaddr_in local;
+    socklen_t len = sizeof(local);
+    memset(&local, 0, sizeof(local));
+    if (getsockname(socket->fd, (struct sockaddr*)&local, &len) != 0) return tsc_value_null();
+    return tsc_net_endpoint_value(&local);
+}
+
+static tsc_value_t tsc_net_ref_noop(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)env;
+    (void)args;
+    return this_arg;
+}
+
+static void tsc_net_socket_add_methods(tsc_object_t* object, tsc_net_socket_t* socket) {
+    tsc_child_add_event_methods(object, &socket->event);
+    tsc_object_set(object, tsc_str_from_lit("setEncoding", 11), tsc_value_function_generic_named(tsc_net_socket_set_encoding, socket, 1.0, tsc_str_from_lit("setEncoding", 11)));
+    tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_net_socket_write, socket, 1.0, tsc_str_from_lit("write", 5)));
+    tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_net_socket_end, socket, 0.0, tsc_str_from_lit("end", 3)));
+    tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_net_socket_destroy, socket, 0.0, tsc_str_from_lit("destroy", 7)));
+    tsc_object_set(object, tsc_str_from_lit("address", 7), tsc_value_function_generic_named(tsc_net_socket_address, socket, 0.0, tsc_str_from_lit("address", 7)));
+    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_ref_noop, socket, 0.0, tsc_str_from_lit("ref", 3)));
+    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_ref_noop, socket, 0.0, tsc_str_from_lit("unref", 5)));
+}
+
+static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socket, tsc_net_socket_t** out_socket) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)TSC_GC_MALLOC(sizeof(tsc_net_socket_t));
+    memset(socket, 0, sizeof(*socket));
+    socket->fd = fd;
+    socket->connecting = connecting;
+    socket->connect_emitted = !client_socket;
+    socket->poll_timer = 0.0;
+    socket->event.emitter = tsc_event_emitter_new();
+    tsc_object_t* object = tsc_object_new();
+    socket->event.value = tsc_value_object(object);
+    tsc_net_socket_add_methods(object, socket);
+    tsc_object_set(object, tsc_str_from_lit("connecting", 10), tsc_value_bool(connecting));
+    tsc_object_set(object, tsc_str_from_lit("destroyed", 9), tsc_value_bool(false));
+    tsc_object_set(object, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit(connecting ? "opening" : "open", connecting ? 7 : 4)));
+    tsc_object_set(object, tsc_str_from_lit("localAddress", 12), tsc_value_null());
+    tsc_object_set(object, tsc_str_from_lit("localPort", 9), tsc_value_null());
+    tsc_object_set(object, tsc_str_from_lit("remoteAddress", 13), tsc_value_null());
+    tsc_object_set(object, tsc_str_from_lit("remotePort", 10), tsc_value_null());
+    if (!connecting) tsc_net_socket_refresh_endpoint_props(socket);
+    socket->poll_timer = tsc_set_interval(tsc_net_socket_poll, socket, 1.0);
+    if (out_socket) *out_socket = socket;
+    return socket->event.value;
+}
+
+static void tsc_net_socket_emit_connect(tsc_net_socket_t* socket) {
+    if (!socket || socket->connect_emitted) return;
+    socket->connect_emitted = true;
+    socket->connecting = false;
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("connecting", 10), tsc_value_bool(false));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit("open", 4)));
+    tsc_net_socket_refresh_endpoint_props(socket);
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("connect", 7), empty);
+}
+
+static void tsc_net_socket_read(tsc_net_socket_t* socket) {
+    if (!socket || socket->fd < 0 || socket->readable_ended) return;
+    for (;;) {
+        uint8_t chunk[4096];
+        ssize_t n = recv(socket->fd, chunk, sizeof(chunk), 0);
+        if (n > 0) {
+            tsc_value_t value;
+            if (socket->encoding_utf8) {
+                value = tsc_value_string(child_capture_string(chunk, (size_t)n));
+            } else {
+                tsc_buffer_t* buffer = tsc_buffer_alloc((double)n, 0);
+                memcpy(buffer->data, chunk, (size_t)n);
+                value = tsc_value_buffer(buffer);
+            }
+            tsc_child_emit_one_value(socket->event.emitter, "data", value);
+            continue;
+        }
+        if (n == 0) {
+            socket->readable_ended = true;
+            tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+            (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("end", 3), empty);
+            if (socket->writable_ended) tsc_net_socket_close_internal(socket);
+            return;
+        }
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+        tsc_net_socket_emit_error(socket, errno);
+        tsc_net_socket_close_internal(socket);
+        return;
+    }
+}
+
+static void tsc_net_socket_poll(void* env) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (!socket || socket->destroyed || socket->fd < 0) return;
+    struct pollfd descriptor;
+    descriptor.fd = socket->fd;
+    descriptor.events = POLLIN | POLLHUP | POLLERR;
+    descriptor.revents = 0;
+    if (socket->connecting) descriptor.events |= POLLOUT;
+    int ready = poll(&descriptor, 1, 0);
+    if (ready < 0) {
+        if (errno == EINTR) return;
+        tsc_net_socket_emit_error(socket, errno);
+        tsc_net_socket_close_internal(socket);
+        return;
+    }
+    if (socket->connecting && ready > 0 && (descriptor.revents & (POLLOUT | POLLERR | POLLHUP))) {
+        int error = 0;
+        socklen_t error_len = sizeof(error);
+        if (getsockopt(socket->fd, SOL_SOCKET, SO_ERROR, &error, &error_len) != 0 || error != 0) {
+            tsc_net_socket_emit_error(socket, error != 0 ? error : errno);
+            tsc_net_socket_close_internal(socket);
+            return;
+        }
+        tsc_net_socket_emit_connect(socket);
+    }
+    if (!socket->connecting && !socket->connect_emitted) {
+        tsc_net_socket_emit_connect(socket);
+    }
+    if (!socket->connecting && ready > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR))) {
+        tsc_net_socket_read(socket);
+    }
+}
+
+static tsc_value_t tsc_net_server_address(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (!server || server->fd < 0 || !server->listening) return tsc_value_null();
+    struct sockaddr_in address;
+    socklen_t len = sizeof(address);
+    memset(&address, 0, sizeof(address));
+    if (getsockname(server->fd, (struct sockaddr*)&address, &len) != 0) return tsc_value_null();
+    return tsc_net_endpoint_value(&address);
+}
+
+static void tsc_net_server_close_internal(tsc_net_server_t* server) {
+    if (!server || server->close_emitted) return;
+    if (server->fd >= 0) {
+        close(server->fd);
+        server->fd = -1;
+    }
+    server->listening = false;
+    server->close_emitted = true;
+    if (server->poll_timer != 0.0) {
+        tsc_clear_timeout(server->poll_timer);
+        server->poll_timer = 0.0;
+    }
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("close", 5), empty);
+}
+
+static tsc_value_t tsc_net_server_close(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (args && args->len > 0 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 0))) {
+        tsc_net_register_listener(&server->event, "close", TSC_ARR(tsc_value_t, args, 0), true);
+    }
+    tsc_net_server_close_internal(server);
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (!server || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("net.Server.listen expects a port"));
+    }
+    tsc_value_t port_value = TSC_ARR(tsc_value_t, args, 0);
+    double port = tsc_value_as_num(port_value);
+    if (!tsc_value_number_is_finite(port) || !tsc_value_number_is_integer(port) || port < 0.0 || port > 65535.0) {
+        tsc_throw_str(tsc_str_from_cstr("net.Server.listen port must be an integer from 0 to 65535"));
+    }
+    tsc_str_t* host = NULL;
+    tsc_value_t callback = tsc_value_undefined();
+    if (args->len > 1) {
+        tsc_value_t second = TSC_ARR(tsc_value_t, args, 1);
+        if (tsc_value_is_callable(second)) callback = second;
+        else if (!tsc_value_is_undefined(second) && !tsc_value_is_nullish(second)) host = tsc_value_as_string(second);
+    }
+    if (args->len > 2 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 2))) callback = TSC_ARR(tsc_value_t, args, 2);
+    if (!host && args->len > 1 && !tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 1)) && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
+        tsc_throw_str(tsc_str_from_cstr("net.Server.listen host must be a string"));
+    }
+    if (!tsc_value_is_undefined(callback) && tsc_value_is_callable(callback)) {
+        tsc_net_register_listener(&server->event, "listening", callback, true);
+    }
+    if (server->fd >= 0) return this_arg;
+    struct in_addr address;
+    if (!tsc_net_resolve_ipv4(host, &address)) {
+        tsc_throw_str(tsc_str_from_cstr("net.Server.listen host could not be resolved"));
+    }
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0 || !tsc_net_set_nonblocking(fd)) {
+        int error = errno;
+        if (fd >= 0) close(fd);
+        char message[128];
+        snprintf(message, sizeof(message), "net.Server.listen socket initialization failed: %s", strerror(error));
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+    int reuse = 1;
+    (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    struct sockaddr_in endpoint;
+    memset(&endpoint, 0, sizeof(endpoint));
+    endpoint.sin_family = AF_INET;
+    endpoint.sin_addr = address;
+    endpoint.sin_port = htons((uint16_t)port);
+    if (bind(fd, (struct sockaddr*)&endpoint, sizeof(endpoint)) != 0 || listen(fd, 16) != 0) {
+        int error = errno;
+        close(fd);
+        tsc_throw_str(tsc_str_from_cstr(strerror(error)));
+    }
+    server->fd = fd;
+    server->listening = true;
+    server->close_requested = false;
+    server->close_emitted = false;
+    server->listening_emitted = false;
+    server->poll_timer = tsc_set_interval(tsc_net_server_poll, server, 1.0);
+    return this_arg;
+}
+
+static void tsc_net_server_add_methods(tsc_object_t* object, tsc_net_server_t* server) {
+    tsc_child_add_event_methods(object, &server->event);
+    tsc_object_set(object, tsc_str_from_lit("listen", 6), tsc_value_function_generic_named(tsc_net_server_listen, server, 1.0, tsc_str_from_lit("listen", 6)));
+    tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_generic_named(tsc_net_server_close, server, 0.0, tsc_str_from_lit("close", 5)));
+    tsc_object_set(object, tsc_str_from_lit("address", 7), tsc_value_function_generic_named(tsc_net_server_address, server, 0.0, tsc_str_from_lit("address", 7)));
+    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_ref_noop, server, 0.0, tsc_str_from_lit("ref", 3)));
+    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_ref_noop, server, 0.0, tsc_str_from_lit("unref", 5)));
+}
+
+static void tsc_net_server_poll(void* env) {
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (!server || server->fd < 0 || !server->listening) return;
+    if (!server->listening_emitted) {
+        server->listening_emitted = true;
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("listening", 9), empty);
+    }
+    for (;;) {
+        struct sockaddr_in address;
+        socklen_t address_len = sizeof(address);
+        int accepted = accept(server->fd, (struct sockaddr*)&address, &address_len);
+        if (accepted < 0) {
+            if (errno == EINTR) continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+            tsc_child_emit_one_value(server->event.emitter, "error", tsc_value_string(tsc_str_from_cstr(strerror(errno))));
+            return;
+        }
+        if (!tsc_net_set_nonblocking(accepted)) {
+            close(accepted);
+            continue;
+        }
+        tsc_value_t socket_value = tsc_net_socket_new(accepted, false, false, NULL);
+        tsc_array_t* connection_args = tsc_array_new(sizeof(tsc_value_t), 1);
+        tsc_array_push_value(connection_args, socket_value);
+        (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("connection", 10), connection_args);
+    }
+}
+
+tsc_value_t tsc_net_create_server(tsc_value_t connection_listener) {
+    if (!tsc_value_is_undefined(connection_listener) && !tsc_value_is_nullish(connection_listener) && !tsc_value_is_callable(connection_listener)) {
+        tsc_throw_str(tsc_str_from_cstr("net.createServer connection listener must be a function"));
+    }
+    tsc_net_server_t* server = (tsc_net_server_t*)TSC_GC_MALLOC(sizeof(tsc_net_server_t));
+    memset(server, 0, sizeof(*server));
+    server->fd = -1;
+    server->event.emitter = tsc_event_emitter_new();
+    tsc_object_t* object = tsc_object_new();
+    server->event.value = tsc_value_object(object);
+    tsc_net_server_add_methods(object, server);
+    if (tsc_value_is_callable(connection_listener)) {
+        tsc_net_register_listener(&server->event, "connection", connection_listener, false);
+    }
+    return server->event.value;
+}
+
+tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
+    if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
+        tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
+    }
+    if (!tsc_value_is_undefined(connect_listener) && !tsc_value_is_nullish(connect_listener) && !tsc_value_is_callable(connect_listener)) {
+        tsc_throw_str(tsc_str_from_cstr("net.connect connect listener must be a function"));
+    }
+    struct in_addr address;
+    if (!tsc_net_resolve_ipv4(host, &address)) {
+        tsc_throw_str(tsc_str_from_cstr("net.connect host could not be resolved"));
+    }
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0 || !tsc_net_set_nonblocking(fd)) {
+        int error = errno;
+        if (fd >= 0) close(fd);
+        char message[128];
+        snprintf(message, sizeof(message), "net.connect socket initialization failed: %s", strerror(error));
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+    struct sockaddr_in endpoint;
+    memset(&endpoint, 0, sizeof(endpoint));
+    endpoint.sin_family = AF_INET;
+    endpoint.sin_addr = address;
+    endpoint.sin_port = htons((uint16_t)port);
+    int result = connect(fd, (struct sockaddr*)&endpoint, sizeof(endpoint));
+    bool connecting = result != 0;
+    if (result != 0 && errno != EINPROGRESS) {
+        int error = errno;
+        close(fd);
+        tsc_throw_str(tsc_str_from_cstr(strerror(error)));
+    }
+    tsc_net_socket_t* socket = NULL;
+    tsc_value_t socket_value = tsc_net_socket_new(fd, connecting, true, &socket);
+    if (tsc_value_is_callable(connect_listener)) {
+        tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
+    }
+    return socket_value;
+}
+
 double tsc_event_emitter_get_default_max_listeners(void) {
     return g_event_emitter_default_max_listeners;
 }

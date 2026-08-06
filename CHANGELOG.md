@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- `net.createServer(...)`, `net.connect(...)`, and `net.createConnection(...)` now provide timer-polled POSIX IPv4 TCP servers and sockets with `listen` / `close`, `connection` / `listening` / `connect` / `data` / `end` / `close` lifecycle events, UTF-8 opt-in, string/Buffer writes, half-close, address metadata, and loopback lifecycle coverage across namespace imports. Test: `net_tcp_server_client`.
 - `child_process.spawn(file, args?, options?)` now creates real asynchronous POSIX child handles with pipe-backed stdin/stdout/stderr, dynamic EventEmitter-compatible listeners, `data` / `end` stream events, `spawn` / `exit` / `close` lifecycle events, UTF-8 stream encoding, stdin `write` / `end`, and `kill` / exit-signal state. Tests: `child_process_spawn`, `child_process_spawn_streams`, `child_process_spawn_kill`.
 
 ### Fixed

@@ -71351,7 +71351,7 @@ class Emitter {
         if (processNamed) {
             return this.emitProcessModuleCall(call, processNamed);
         }
-        const netNamed = ["isIP", "isIPv4", "isIPv6"]
+        const netNamed = ["isIP", "isIPv4", "isIPv6", "createServer", "connect", "createConnection"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["net", "node:net"], exported));
         if (netNamed) {
             return this.emitNetCall(call, netNamed);
@@ -79600,6 +79600,49 @@ class Emitter {
     }
 
     private emitNetCall(call: ts.CallExpression, method: string): EmitResult {
+        if (method === "createServer") {
+            const listenerNode = call.arguments[0];
+            const listener = listenerNode ? this.emitExpr(listenerNode) : { c: "tsc_value_undefined()", ty: T_VALUE };
+            if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+                unsupported(listenerNode, "net.createServer connection listener must be a function");
+            }
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: listener, target: T_VALUE, node: listenerNode },
+                ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 1 : 0),
+            ], ([listenerC]) => `tsc_net_create_server(${listenerC})`);
+        }
+        if (method === "connect" || method === "createConnection") {
+            if (call.arguments.length < 1) unsupported(call, `net.${method} expects a port`);
+            const portNode = call.arguments[0]!;
+            const port = this.emitExpr(portNode);
+            let hostNode: ts.Expression | undefined;
+            let listenerNode: ts.Expression | undefined;
+            let secondValue: EmitResult | undefined;
+            if (call.arguments[1]) {
+                secondValue = this.emitExpr(call.arguments[1]!);
+                if (this.prepareType(secondValue.ty).kind === "function") {
+                    listenerNode = call.arguments[1]!;
+                } else {
+                    hostNode = call.arguments[1]!;
+                    listenerNode = call.arguments[2];
+                }
+            }
+            const host = hostNode && secondValue ? secondValue : { c: "NULL", ty: T_STRING };
+            const listener = listenerNode
+                ? listenerNode === call.arguments[1] && secondValue
+                    ? secondValue
+                    : this.emitExpr(listenerNode)
+                : { c: "tsc_value_undefined()", ty: T_VALUE };
+            if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+                unsupported(listenerNode, `net.${method} connect listener must be a function`);
+            }
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: port, target: T_NUMBER, node: portNode },
+                { value: host, target: T_STRING, node: hostNode },
+                { value: listener, target: T_VALUE, node: listenerNode },
+                ...this.ignoredArgumentSpecs(call.arguments, hostNode ? (listenerNode ? 3 : 2) : (listenerNode ? 2 : 1)),
+            ], ([portC, hostC, listenerC]) => `tsc_net_connect(${portC}, ${hostC}, ${listenerC})`);
+        }
         if (call.arguments.length < 1) unsupported(call, `net.${method} expects one input`);
         const inputNode = call.arguments[0]!;
         const input = this.emitExpr(inputNode);

@@ -2393,11 +2393,48 @@ declare module "node:http" {
     export default defaultHttp;
 }
 
+interface NetSocket {
+    readonly connecting: boolean;
+    readonly destroyed: boolean;
+    readonly readyState: string;
+    readonly localAddress?: string;
+    readonly localPort?: number;
+    readonly remoteAddress?: string;
+    readonly remotePort?: number;
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    setEncoding(encoding: "utf8" | "utf-8", ...ignored: any[]): this;
+    write(data: string | Buffer, ...ignored: any[]): boolean;
+    end(data?: string | Buffer, ...ignored: any[]): this;
+    destroy(...ignored: any[]): this;
+    address(...ignored: any[]): SocketAddress | null;
+    ref(...ignored: any[]): this;
+    unref(...ignored: any[]): this;
+}
+interface NetServer {
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    listen(port: number, callback?: () => void, ...ignored: any[]): this;
+    listen(port: number, host: string, callback?: () => void, ...ignored: any[]): this;
+    close(callback?: () => void, ...ignored: any[]): this;
+    address(...ignored: any[]): SocketAddress | null;
+    ref(...ignored: any[]): this;
+    unref(...ignored: any[]): this;
+}
 interface Net {
     isIP(input: string, ...ignored: any[]): number;
     isIPv4(input: string, ...ignored: any[]): boolean;
     isIPv6(input: string, ...ignored: any[]): boolean;
     SocketAddress: SocketAddressConstructor;
+    createServer(connectionListener?: (socket: NetSocket) => void, ...ignored: any[]): NetServer;
+    connect(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
+    connect(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
+    createConnection(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
+    createConnection(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
 }
 declare const net: Net;
 declare module "net" {
@@ -2405,6 +2442,11 @@ declare module "net" {
     export function isIPv4(input: string, ...ignored: any[]): boolean;
     export function isIPv6(input: string, ...ignored: any[]): boolean;
     export const SocketAddress: SocketAddressConstructor;
+    export function createServer(connectionListener?: (socket: NetSocket) => void, ...ignored: any[]): NetServer;
+    export function connect(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function connect(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function createConnection(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function createConnection(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
     const defaultNet: Net;
     export default defaultNet;
 }
@@ -2413,6 +2455,11 @@ declare module "node:net" {
     export function isIPv4(input: string, ...ignored: any[]): boolean;
     export function isIPv6(input: string, ...ignored: any[]): boolean;
     export const SocketAddress: SocketAddressConstructor;
+    export function createServer(connectionListener?: (socket: NetSocket) => void, ...ignored: any[]): NetServer;
+    export function connect(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function connect(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function createConnection(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function createConnection(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
     const defaultNet: Net;
     export default defaultNet;
 }

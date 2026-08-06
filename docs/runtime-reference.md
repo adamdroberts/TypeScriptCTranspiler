@@ -418,6 +418,13 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 |--------|-----------|---------|
 | `tsc_child_process_spawn` | `(file, args, cwd, env, shell, argv0, pipeStdin, ignoreStdin, pipeStdout, ignoreStdout, inheritStdout, pipeStderr, ignoreStderr, inheritStderr, detached, uid, gid, killSignal) -> tsc_value_t` | Creates a POSIX child handle, polls nonblocking stdio through the runtime loop, emits stream and lifecycle events, and exposes dynamic `kill` / `ref` / `unref` methods. This bounded subset supports compiler-selected stdio modes, UTF-8 stream opt-in, and string/Buffer stdin writes; broader child-process options and `fork` remain deferred. |
 
+## net (bounded IPv4 TCP subset)
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_net_create_server(connection_listener)` | `tsc_value_t` | `net.createServer(connectionListener?)` — creates a timer-polled POSIX IPv4 server with dynamic EventEmitter-compatible lifecycle methods, `listen`, `close`, and `address` |
+| `tsc_net_connect(port, host, connect_listener)` | `tsc_value_t` | `net.connect` / `net.createConnection` — creates a nonblocking POSIX IPv4 socket, emits `connect` / `data` / `end` / `close` / `error`, and exposes UTF-8, string/Buffer write, half-close, destroy, and endpoint metadata methods |
+
 ## http (bounded validation subset)
 
 | Symbol | Signature | JS equivalent |
