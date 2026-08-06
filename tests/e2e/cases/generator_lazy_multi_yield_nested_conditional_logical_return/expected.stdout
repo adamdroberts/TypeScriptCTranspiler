@@ -128,3 +128,15 @@ comma-skipped-first false comma-left 0
 comma-skipped-done true false 0
 comma-selected-first false comma-left 0
 comma-selected-done true comma-result 1
+array-literal-skipped-first false array-left 0
+array-literal-skipped-done true false 0
+array-literal-selected-first false array-left 0
+array-literal-selected-done true array-1 1
+object-literal-skipped-first false object-left 0
+object-literal-skipped-done true false 0
+object-literal-selected-first false object-left 0
+object-literal-selected-done true object-1 1
+regexp-literal-skipped-first false regexp-left
+regexp-literal-skipped-done true false
+regexp-literal-selected-first false regexp-left
+regexp-literal-selected-done true object

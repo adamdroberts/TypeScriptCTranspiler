@@ -192,6 +192,30 @@ function* stagedCommaOperandReturn(): Generator<string, any, any> {
     return (yield "comma-left") && (logicalCommaFirst(), "comma-result");
 }
 
+let logicalArrayCount = 0;
+function logicalArrayValue(): string {
+    logicalArrayCount++;
+    return "array-" + logicalArrayCount;
+}
+
+function* stagedArrayLiteralOperandReturn(): Generator<string, any, any> {
+    return (yield "array-left") && [logicalArrayValue()];
+}
+
+let logicalObjectCount = 0;
+function logicalObjectValue(): string {
+    logicalObjectCount++;
+    return "object-" + logicalObjectCount;
+}
+
+function* stagedObjectLiteralOperandReturn(): Generator<string, any, any> {
+    return (yield "object-left") && ({ value: logicalObjectValue() });
+}
+
+function* stagedRegexpLiteralOperandReturn(): Generator<string, any, any> {
+    return (yield "regexp-left") && /ab/;
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -591,3 +615,43 @@ logicalCommaCount = 0;
 console.log("comma-selected-first", commaSelectedFirst.done, commaSelectedFirst.value, logicalCommaCount);
 const commaSelectedDone: any = commaSelected.next(true);
 console.log("comma-selected-done", commaSelectedDone.done, commaSelectedDone.value, logicalCommaCount);
+
+logicalArrayCount = 0;
+const arrayLiteralSkipped = stagedArrayLiteralOperandReturn();
+const arrayLiteralSkippedFirst: any = arrayLiteralSkipped.next();
+console.log("array-literal-skipped-first", arrayLiteralSkippedFirst.done, arrayLiteralSkippedFirst.value, logicalArrayCount);
+const arrayLiteralSkippedDone: any = arrayLiteralSkipped.next(false);
+console.log("array-literal-skipped-done", arrayLiteralSkippedDone.done, arrayLiteralSkippedDone.value, logicalArrayCount);
+
+logicalArrayCount = 0;
+const arrayLiteralSelected = stagedArrayLiteralOperandReturn();
+const arrayLiteralSelectedFirst: any = arrayLiteralSelected.next();
+console.log("array-literal-selected-first", arrayLiteralSelectedFirst.done, arrayLiteralSelectedFirst.value, logicalArrayCount);
+const arrayLiteralSelectedDone: any = arrayLiteralSelected.next(true);
+console.log("array-literal-selected-done", arrayLiteralSelectedDone.done, (arrayLiteralSelectedDone.value as any[]).join("|"), logicalArrayCount);
+
+logicalObjectCount = 0;
+const objectLiteralSkipped = stagedObjectLiteralOperandReturn();
+const objectLiteralSkippedFirst: any = objectLiteralSkipped.next();
+console.log("object-literal-skipped-first", objectLiteralSkippedFirst.done, objectLiteralSkippedFirst.value, logicalObjectCount);
+const objectLiteralSkippedDone: any = objectLiteralSkipped.next(false);
+console.log("object-literal-skipped-done", objectLiteralSkippedDone.done, objectLiteralSkippedDone.value, logicalObjectCount);
+
+logicalObjectCount = 0;
+const objectLiteralSelected = stagedObjectLiteralOperandReturn();
+const objectLiteralSelectedFirst: any = objectLiteralSelected.next();
+console.log("object-literal-selected-first", objectLiteralSelectedFirst.done, objectLiteralSelectedFirst.value, logicalObjectCount);
+const objectLiteralSelectedDone: any = objectLiteralSelected.next(true);
+console.log("object-literal-selected-done", objectLiteralSelectedDone.done, (objectLiteralSelectedDone.value as any).value, logicalObjectCount);
+
+const regexpLiteralSkipped = stagedRegexpLiteralOperandReturn();
+const regexpLiteralSkippedFirst: any = regexpLiteralSkipped.next();
+console.log("regexp-literal-skipped-first", regexpLiteralSkippedFirst.done, regexpLiteralSkippedFirst.value);
+const regexpLiteralSkippedDone: any = regexpLiteralSkipped.next(false);
+console.log("regexp-literal-skipped-done", regexpLiteralSkippedDone.done, regexpLiteralSkippedDone.value);
+
+const regexpLiteralSelected = stagedRegexpLiteralOperandReturn();
+const regexpLiteralSelectedFirst: any = regexpLiteralSelected.next();
+console.log("regexp-literal-selected-first", regexpLiteralSelectedFirst.done, regexpLiteralSelectedFirst.value);
+const regexpLiteralSelectedDone: any = regexpLiteralSelected.next(true);
+console.log("regexp-literal-selected-done", regexpLiteralSelectedDone.done, typeof regexpLiteralSelectedDone.value);

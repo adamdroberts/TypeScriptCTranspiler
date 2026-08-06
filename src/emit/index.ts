@@ -55293,6 +55293,11 @@ class Emitter {
         if (ts.isDeleteExpression(unwrapped)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.expression));
         }
+        if (ts.isRegularExpressionLiteral(unwrapped) ||
+            ts.isArrayLiteralExpression(unwrapped) ||
+            ts.isObjectLiteralExpression(unwrapped)) {
+            return this.isSimpleLazyMultiYieldCallArgument(unwrapped);
+        }
         if (ts.isBinaryExpression(unwrapped) &&
             unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.left)) &&
