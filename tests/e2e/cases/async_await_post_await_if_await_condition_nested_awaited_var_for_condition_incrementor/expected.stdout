@@ -1,0 +1,4 @@
+return mixed-first-init-return
+condition-reject mixed-loop-condition-rejected
+incrementor-reject mixed-incrementor-rejected
+trace mixed-first-label0|mixed-first-label1|mixed-first-label0|mixed-first-label0|

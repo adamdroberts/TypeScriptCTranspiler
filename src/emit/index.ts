@@ -50347,6 +50347,7 @@ class Emitter {
         awaitExpr: ts.AwaitExpression,
         forStatement: ts.ForStatement,
         awaitedCondition: ts.AwaitExpression,
+        awaitedIncrementor: ts.AwaitExpression | undefined,
         terminalAdapter: string,
         terminalPromiseType: CType,
         terminalAwaitExpr: ts.AwaitExpression,
@@ -50355,7 +50356,9 @@ class Emitter {
         carriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[],
         hoistedAliases: readonly (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[],
     ): string {
-        const name = `tsc_async_await_nested_for_condition_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const name = awaitedIncrementor
+            ? `tsc_async_await_nested_for_condition_incrementor_${this.asyncAwaitReturnContinuationAdapters++}`
+            : `tsc_async_await_nested_for_condition_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
         const loopAliases = carriedAliases.filter((alias, index, aliases) =>
             !params.some((param) => param.symbol === alias.symbol) &&
@@ -50382,6 +50385,20 @@ class Emitter {
         this.structDecls.line();
         this.protos.line(`void ${conditionName}(void* env);`);
 
+        const incrementorName = awaitedIncrementor ? `${name}_incrementor` : undefined;
+        const incrementorEnvType = incrementorName ? `${incrementorName}_env_t` : undefined;
+        if (incrementorName && incrementorEnvType) {
+            this.structDecls.open(`typedef struct ${incrementorEnvType}`);
+            this.structDecls.line("tsc_promise_t* receiver;");
+            this.structDecls.line("tsc_promise_t* result_promise;");
+            for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+            if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+            for (const alias of loopAliases) this.structDecls.line(`${alias.type.c} ${alias.field};`);
+            this.structDecls.close(` ${incrementorEnvType};`);
+            this.structDecls.line();
+            this.protos.line(`void ${incrementorName}(void* env);`);
+        }
+
         const conditionPromiseType = this.prepareType(mapTsType(
             awaitedCondition.expression,
             this.checker.getTypeAtLocation(awaitedCondition.expression),
@@ -50392,6 +50409,13 @@ class Emitter {
             this.checker.getTypeAtLocation(awaitedCondition),
             this.checker,
         ));
+        const incrementorPromiseType = awaitedIncrementor
+            ? this.prepareType(mapTsType(
+                awaitedIncrementor.expression,
+                this.checker.getTypeAtLocation(awaitedIncrementor.expression),
+                this.checker,
+            ))
+            : null;
         const initializerValueVar = this.freshTemp("_await_nested_for_value");
         const conditionValueVar = this.freshTemp("_await_nested_for_condition_value");
         const awaitedValue = this.coerce(
@@ -50461,21 +50485,53 @@ class Emitter {
             out.line(`${conditionName}(${conditionEnvVar});`);
             out.close();
         };
+        const emitIncrementor = (out: CBuf): void => {
+            if (!awaitedIncrementor || !incrementorPromiseType || !incrementorName || !incrementorEnvType) {
+                throw new Error("nested awaited condition incrementor adapter is missing its incrementor state");
+            }
+            const incrementorSource = this.emitExpr(awaitedIncrementor.expression);
+            const incrementorSourceVar = this.freshTemp("_await_nested_for_incrementor_source");
+            const incrementorEnvVar = this.freshTemp("_await_nested_for_incrementor_env");
+            out.line(`tsc_promise_t* const ${incrementorSourceVar} = ${this.coerce(incrementorSource, incrementorPromiseType, awaitedIncrementor.expression)};`);
+            out.line(`${incrementorEnvType}* const ${incrementorEnvVar} = (${incrementorEnvType}*)TSC_GC_MALLOC(sizeof(${incrementorEnvType}));`);
+            out.line(`${incrementorEnvVar}->receiver = ${incrementorSourceVar};`);
+            out.line(`${incrementorEnvVar}->result_promise = _ret;`);
+            for (const param of params) out.line(`${incrementorEnvVar}->${param.field} = state->${param.field};`);
+            if (thisValue) out.line(`${incrementorEnvVar}->this_arg = state->this_arg;`);
+            for (const alias of loopAliases) {
+                out.line(`${incrementorEnvVar}->${alias.field} = ${this.identifierRead(alias.identifier)};`);
+            }
+            out.open(`if (tsc_promise_is_pending(${incrementorSourceVar}))`);
+            out.line(`tsc_promise_add_callback(${incrementorSourceVar}, ${incrementorName}, ${incrementorEnvVar});`);
+            out.close();
+            out.open("else");
+            out.line(`${incrementorName}(${incrementorEnvVar});`);
+            out.close();
+        };
         const emitLoopBody = (out: CBuf): void => {
             this.emitStmt(out, forStatement.statement);
-            if (forStatement.incrementor) {
+            if (awaitedIncrementor) {
+                emitIncrementor(out);
+            } else if (forStatement.incrementor) {
                 const incrementor = this.emitExpr(forStatement.incrementor);
                 out.line(`${incrementor.c};`);
+                emitCondition(out);
+            } else {
+                emitCondition(out);
             }
-            emitCondition(out);
         };
         const emitCallbackBody = (
             out: CBuf,
             callbackName: string,
             loadState: boolean,
             initial: boolean,
+            incrementor: boolean,
         ): void => {
-            const callbackEnv = initial ? envType : conditionEnvType;
+            const callbackEnv = initial
+                ? envType
+                : incrementor
+                ? incrementorEnvType!
+                : conditionEnvType;
             const eh = this.freshTemp("_await_nested_for_condition_eh");
             out.open(`void ${callbackName}(void* env)`);
             out.line(`${callbackEnv}* state = (${callbackEnv}*)env;`);
@@ -50488,8 +50544,11 @@ class Emitter {
             out.open("if (!tsc_promise_is_fulfilled(_p))");
             out.line("return;");
             out.close();
-            if (initial) out.line(`${awaitedType.c} ${initializerValueVar} = ${awaitedValue};`);
-            else out.line(`${conditionAwaitedType.c} ${conditionValueVar} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, awaitedCondition)};`);
+            if (initial) {
+                out.line(`${awaitedType.c} ${initializerValueVar} = ${awaitedValue};`);
+            } else if (!incrementor) {
+                out.line(`${conditionAwaitedType.c} ${conditionValueVar} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, awaitedCondition)};`);
+            }
             out.line(`tsc_try_frame_t ${eh};`);
             out.line(`tsc_try_push(&${eh});`);
             out.open(`if (setjmp(${eh}.jb) == 0)`);
@@ -50510,6 +50569,8 @@ class Emitter {
             try {
                 if (initial) {
                     this.emitStmt(out, initializerStatement);
+                    emitCondition(out);
+                } else if (incrementor) {
                     emitCondition(out);
                 } else {
                     const truth = this.truthyC({ c: conditionValueVar, ty: conditionAwaitedType }, awaitedCondition);
@@ -50539,8 +50600,9 @@ class Emitter {
             out.line();
         };
         const buf = new CBuf();
-        emitCallbackBody(buf, name, false, true);
-        emitCallbackBody(buf, conditionName, true, false);
+        emitCallbackBody(buf, name, false, true, false);
+        emitCallbackBody(buf, conditionName, true, false, false);
+        if (incrementorName) emitCallbackBody(buf, incrementorName, true, false, true);
         this.closureDefs.write(buf.toString());
         return name;
     }
@@ -51333,7 +51395,6 @@ class Emitter {
                     : undefined;
                 if ((statement.condition && containsAwait(statement.condition) && !awaitedCondition) ||
                     (statement.incrementor && containsAwait(statement.incrementor) && !awaitedIncrementor) ||
-                    (awaitedCondition && awaitedIncrementor) ||
                     (awaitedIncrementor && !statement.condition) ||
                     containsAwait(statement.statement) || !nestedPreludeSafe(statement)) return null;
                 if (awaitedCondition || awaitedIncrementor) {
@@ -51803,6 +51864,7 @@ class Emitter {
                             branch.awaitedForInitializer.awaitExpr,
                             branch.awaitedForInitializer.forStatement,
                             branch.awaitedForInitializer.awaitedCondition,
+                            branch.awaitedForInitializer.awaitedIncrementor,
                             terminalAdapter,
                             typeInfo.promiseType,
                             branch.awaitExpr,
