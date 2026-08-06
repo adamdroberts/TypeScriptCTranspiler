@@ -1,0 +1,6 @@
+condition-reject try-condition-rejected
+body-reject try-prelude-thrown
+cleanup-reject try-cleanup-thrown
+return try-prelude-first-true-return
+throw try-prelude-first-false-throw
+trace true:try:try-prelude-first|true:finally|false:try:try-prelude-first|false:finally|throw:try:try-throw-first|throw:finally|cleanup:try:try-cleanup-first|cleanup:finally:try-cleanup-first|

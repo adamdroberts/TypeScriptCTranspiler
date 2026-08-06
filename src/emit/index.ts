@@ -50312,7 +50312,7 @@ class Emitter {
             const terminal = statements[statements.length - 1];
             const preludeStatements = statements.slice(0, -1);
             const carriedAliases: AwaitedIfCarriedAlias[] = [];
-            const nestedIfPreludeSafe = (statement: ts.IfStatement): boolean => {
+            const nestedPreludeSafe = (statement: ts.Statement): boolean => {
                 let safe = true;
                 const visit = (node: ts.Node): void => {
                     if (!safe) return;
@@ -50334,8 +50334,10 @@ class Emitter {
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 &&
                     ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
                     !!statement.declarationList.declarations[0]!.initializer;
-                const nestedIfPrelude = ts.isIfStatement(statement) && nestedIfPreludeSafe(statement);
-                return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude) &&
+                const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
+                const nestedTryPrelude = ts.isTryStatement(statement) &&
+                    !statement.catchClause && !!statement.finallyBlock && nestedPreludeSafe(statement);
+                return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude || nestedTryPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement);
             };
             if (!terminal ||
@@ -66164,6 +66166,39 @@ class Emitter {
     }
 
     private emitTry(buf: CBuf, ts0: ts.TryStatement): void {
+        if (!ts0.catchClause && ts0.finallyBlock) {
+            const ehVar = this.freshTemp("_eh");
+            const finallyEhVar = this.freshTemp("_finally_eh");
+            const errorVar = this.freshTemp("_try_error");
+            buf.open("");
+            buf.line(`tsc_try_frame_t ${ehVar};`);
+            buf.line(`tsc_try_push(&${ehVar});`);
+            buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
+            this.tryDepth++;
+            try {
+                for (const s of ts0.tryBlock.statements) this.emitStmt(buf, s);
+            } finally {
+                this.tryDepth--;
+            }
+            buf.line(`tsc_try_pop();`);
+            buf.close();
+            buf.open("else");
+            buf.line(`tsc_str_t* const ${errorVar} = tsc_current_error();`);
+            buf.line(`tsc_try_frame_t ${finallyEhVar};`);
+            buf.line(`tsc_try_push(&${finallyEhVar});`);
+            buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
+            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
+            buf.line(`tsc_try_pop();`);
+            buf.line(`tsc_throw_str(${errorVar});`);
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_rethrow();");
+            buf.close();
+            buf.close();
+            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
+            buf.close();
+            return;
+        }
         const ehVar = this.freshTemp("_eh");
         buf.open("");
         buf.line(`tsc_try_frame_t ${ehVar};`);
