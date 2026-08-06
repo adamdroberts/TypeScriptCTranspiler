@@ -48,6 +48,11 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             if (repeats === 0) {
                 mark("condition-if");
             }
+            var nestedWhile = repeats;
+            while (nestedWhile === 0) {
+                mark("condition-while");
+                nestedWhile++;
+            }
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -75,6 +80,11 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
         ) {
             if (incrementorCount === 0) {
                 mark("incrementor-if");
+            }
+            var nestedWhile = incrementorCount;
+            while (nestedWhile === 0) {
+                mark("incrementor-while");
+                nestedWhile++;
             }
             switch (incrementorCount) {
                 case 0:
@@ -106,6 +116,11 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             if (continueCount === 0) {
                 mark("continue-if");
             }
+            var nestedWhile = continueCount;
+            while (nestedWhile === 0) {
+                mark("continue-while");
+                nestedWhile++;
+            }
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -135,6 +150,11 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
         ) {
             if (breakCount === 0) {
                 mark("break-if");
+            }
+            var nestedWhile = breakCount;
+            while (nestedWhile === 0) {
+                mark("break-while");
+                nestedWhile++;
             }
             switch (breakCount) {
                 case 0:
