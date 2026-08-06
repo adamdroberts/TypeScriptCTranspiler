@@ -50405,6 +50405,12 @@ class Emitter {
                             for (const assignedSymbol of nestedSwitchAssigned) assigned.add(assignedSymbol);
                             continue;
                         }
+                        const nestedDoAssigned = nestedDoAssignedSymbols(statement, pending);
+                        if (nestedDoAssigned) {
+                            for (const assignedSymbol of nestedDoAssigned) pending.delete(assignedSymbol);
+                            for (const assignedSymbol of nestedDoAssigned) assigned.add(assignedSymbol);
+                            continue;
+                        }
                         if (referencesUninitialized(statement, pending) ||
                             !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
                             return new Set();
@@ -50436,6 +50442,34 @@ class Emitter {
                         if (elseAssigned.has(symbol)) assigned.add(symbol);
                     }
                     return assigned;
+                }
+                function nestedDoAssignedSymbols(
+                    statement: ts.Statement,
+                    symbols: ReadonlySet<ts.Symbol>,
+                ): Set<ts.Symbol> | null {
+                    if (!ts.isDoStatement(statement) ||
+                        !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                        return null;
+                    }
+                    let hasLoopControl = false;
+                    const visitLoopControl = (node: ts.Node): void => {
+                        if (hasLoopControl || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
+                        if (ts.isBreakStatement(node) || ts.isContinueStatement(node)) {
+                            hasLoopControl = true;
+                            return;
+                        }
+                        ts.forEachChild(node, visitLoopControl);
+                    };
+                    visitLoopControl(statement.statement);
+                    if (hasLoopControl) return null;
+                    const bodyStatements = ts.isBlock(statement.statement)
+                        ? statement.statement.statements
+                        : [statement.statement];
+                    const bodyAssigned = consumeAssignmentSequence(bodyStatements, symbols);
+                    const remaining = new Set<ts.Symbol>(symbols);
+                    for (const symbol of bodyAssigned) remaining.delete(symbol);
+                    if (referencesUninitialized(statement.expression, remaining)) return null;
+                    return bodyAssigned;
                 }
                 function nestedSwitchAssignedSymbols(
                     statement: ts.Statement,
@@ -50493,6 +50527,12 @@ class Emitter {
                         const nestedSwitchAssigned = nestedSwitchAssignedSymbols(assignmentStatement, pendingSymbols);
                         if (nestedSwitchAssigned && nestedSwitchAssigned.has(symbol)) {
                             for (const assignedSymbol of nestedSwitchAssigned) pendingSymbols.delete(assignedSymbol);
+                            assigned = true;
+                            break;
+                        }
+                        const nestedDoAssigned = nestedDoAssignedSymbols(assignmentStatement, pendingSymbols);
+                        if (nestedDoAssigned && nestedDoAssigned.has(symbol)) {
+                            for (const assignedSymbol of nestedDoAssigned) pendingSymbols.delete(assignedSymbol);
                             assigned = true;
                             break;
                         }

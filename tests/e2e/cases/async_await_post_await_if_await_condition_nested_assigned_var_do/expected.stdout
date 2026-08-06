@@ -1,0 +1,6 @@
+condition-reject nested-do-condition-rejected
+selector-reject nested-do-selector-thrown
+return nested-do-first-true-return
+throw nested-do-first-false-throw
+return nested-do-first-alternate-return
+trace selector:nested-do-selector-first|nested-do-first-true-label|nested-do-first-true-label|nested-do-first-false-label|nested-do-first-false-label|nested-do-first-alternate-label|nested-do-first-alternate-label|
