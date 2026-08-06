@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Async continuations now preserve await-free expression-statement preludes inside awaited-condition return/throw branches, including side effects that read the earlier awaited value. Regression: `async_await_post_await_if_await_condition_branch_prelude`.
 - Async continuations now propagate implicit terminal fallthrough through nested awaited `else if` chains, preserving deeper branch selection and rejection routing. Regression: `async_await_post_await_if_await_condition_nested_chain_fallthrough`.
 - Async continuations now preserve an implicit terminal fallthrough after a nested awaited condition, including nested rejection routing after an earlier awaited local. Regression: `async_await_post_await_if_await_condition_nested_fallthrough`.
 - Async continuations now compose a nested direct awaited `if` inside an awaited outer condition, preserving the captured value and nested fulfillment/rejection routing. Regression: `async_await_post_await_if_await_condition_nested_branch`.

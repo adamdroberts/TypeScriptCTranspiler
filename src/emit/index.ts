@@ -50274,19 +50274,22 @@ class Emitter {
         const conditionAwait = this.unwrapTransparentExpression(conditional.expression);
         if (!ts.isAwaitExpression(conditionAwait)) return false;
         type AwaitedIfBranch =
-            | { kind: "terminal"; awaitExpr: ts.AwaitExpression; rejectResult: boolean }
+            | { kind: "terminal"; awaitExpr: ts.AwaitExpression; rejectResult: boolean; preludeStatements: readonly ts.Statement[] }
             | { kind: "condition"; awaitExpr: ts.AwaitExpression; thenBranch: AwaitedIfBranch; elseBranch: AwaitedIfBranch };
         const terminalBranch = (branch: ts.Statement): AwaitedIfBranch | null => {
             const statements = ts.isBlock(branch) ? branch.statements : [branch];
-            const completion = statements[0];
-            if (statements.length !== 1 ||
-                (!ts.isReturnStatement(completion) && !ts.isThrowStatement(completion)) ||
-                !completion.expression) {
+            const terminal = statements[statements.length - 1];
+            const preludeStatements = statements.slice(0, -1);
+            if (!terminal ||
+                (!ts.isReturnStatement(terminal) && !ts.isThrowStatement(terminal)) ||
+                !terminal.expression ||
+                !preludeStatements.every((statement) =>
+                    ts.isExpressionStatement(statement) && this.asyncAwaitInterstitialControlFlowSupported(statement))) {
                 return null;
             }
-            const returned = this.unwrapTransparentExpression(completion.expression);
+            const returned = this.unwrapTransparentExpression(terminal.expression);
             return ts.isAwaitExpression(returned)
-                ? { kind: "terminal", awaitExpr: returned, rejectResult: ts.isThrowStatement(completion) }
+                ? { kind: "terminal", awaitExpr: returned, rejectResult: ts.isThrowStatement(terminal), preludeStatements }
                 : null;
         };
         const parseBranch = (branch: ts.Statement, inheritedElse: ts.Statement | null = null): AwaitedIfBranch | null => {
@@ -50410,6 +50413,8 @@ class Emitter {
                         continuationParams,
                         callbackThis,
                         branch.rejectResult,
+                        [],
+                        branch.preludeStatements,
                     ),
                     promiseType: typeInfo.promiseType,
                     awaitExpr: branch.awaitExpr,
