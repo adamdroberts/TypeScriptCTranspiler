@@ -54041,6 +54041,17 @@ class Emitter {
                 conditionalOperands.push(conditionalPlan);
                 return unwrappedOperand;
             }
+            if (allowSideEffecting && allowYieldedOperand &&
+                (ts.isCallExpression(unwrappedOperand) || ts.isNewExpression(unwrappedOperand))) {
+                const yieldedArguments = this.simpleLazyMultiYieldCallLikeArguments(unwrappedOperand);
+                if (yieldedArguments) {
+                    return {
+                        expression: unwrappedOperand,
+                        yields: yieldedArguments,
+                        logicalYieldedOperand: true,
+                    };
+                }
+            }
             if (allowSideEffecting && this.isSimpleLazyMultiYieldLogicalStagedOperand(unwrappedOperand)) {
                 stagedOperands.push(unwrappedOperand);
                 return unwrappedOperand;
@@ -55338,6 +55349,23 @@ class Emitter {
             }
             return !this.nodeContainsYield(argument);
         });
+    }
+
+    private simpleLazyMultiYieldCallLikeArguments(
+        expr: ts.CallExpression | ts.NewExpression,
+    ): ts.YieldExpression[] | null {
+        if (!this.nodeContainsYield(expr) || !this.isSimpleLazyMultiYieldCallLike(expr)) return null;
+        const yields: ts.YieldExpression[] = [];
+        for (const argument of expr.arguments ?? []) {
+            const unwrapped = this.unwrapTransparentExpression(argument as ts.Expression);
+            if (ts.isYieldExpression(unwrapped)) {
+                if (unwrapped.asteriskToken || (unwrapped.expression && this.nodeContainsYield(unwrapped.expression))) {
+                    return null;
+                }
+                yields.push(unwrapped);
+            }
+        }
+        return yields.length > 0 ? yields : null;
     }
 
     private isSimpleLazyMultiYieldLogicalStagedOperand(expr: ts.Expression): boolean {

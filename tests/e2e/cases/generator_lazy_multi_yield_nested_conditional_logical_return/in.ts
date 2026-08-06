@@ -232,6 +232,14 @@ function* stagedArithmeticLogicalRightNullishReturn(): Generator<string, any, an
     return (yield "arithmetic-nullish-left") ?? ((yield "arithmetic-nullish-right-first") + (yield "arithmetic-nullish-right-second"));
 }
 
+function* stagedYieldedArgumentCallLogicalOperandReturn(): Generator<string, any, any> {
+    return (yield "yielded-call-left") && sideEffectingLogicalCall(yield "yielded-call-argument");
+}
+
+function* stagedYieldedArgumentNewLogicalOperandReturn(): Generator<string, any, any> {
+    return (yield "yielded-new-left") && new StagedLogicalBox(yield "yielded-new-argument");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -737,3 +745,35 @@ const arithmeticLogicalRightNullishSelectedThird: any = arithmeticLogicalRightNu
 console.log("arithmetic-logical-right-nullish-selected-third", arithmeticLogicalRightNullishSelectedThird.done, arithmeticLogicalRightNullishSelectedThird.value);
 const arithmeticLogicalRightNullishSelectedDone: any = arithmeticLogicalRightNullishSelected.next(2);
 console.log("arithmetic-logical-right-nullish-selected-done", arithmeticLogicalRightNullishSelectedDone.done, arithmeticLogicalRightNullishSelectedDone.value);
+
+logicalCallCount = 0;
+const yieldedArgumentCallSkipped = stagedYieldedArgumentCallLogicalOperandReturn();
+const yieldedArgumentCallSkippedFirst: any = yieldedArgumentCallSkipped.next();
+console.log("yielded-argument-call-skipped-first", yieldedArgumentCallSkippedFirst.done, yieldedArgumentCallSkippedFirst.value, logicalCallCount);
+const yieldedArgumentCallSkippedDone: any = yieldedArgumentCallSkipped.next(false);
+console.log("yielded-argument-call-skipped-done", yieldedArgumentCallSkippedDone.done, yieldedArgumentCallSkippedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const yieldedArgumentCallSelected = stagedYieldedArgumentCallLogicalOperandReturn();
+const yieldedArgumentCallSelectedFirst: any = yieldedArgumentCallSelected.next();
+console.log("yielded-argument-call-selected-first", yieldedArgumentCallSelectedFirst.done, yieldedArgumentCallSelectedFirst.value, logicalCallCount);
+const yieldedArgumentCallSelectedSecond: any = yieldedArgumentCallSelected.next(true);
+console.log("yielded-argument-call-selected-second", yieldedArgumentCallSelectedSecond.done, yieldedArgumentCallSelectedSecond.value, logicalCallCount);
+const yieldedArgumentCallSelectedDone: any = yieldedArgumentCallSelected.next("call-argument");
+console.log("yielded-argument-call-selected-done", yieldedArgumentCallSelectedDone.done, yieldedArgumentCallSelectedDone.value, logicalCallCount);
+
+logicalNewCount = 0;
+const yieldedArgumentNewSkipped = stagedYieldedArgumentNewLogicalOperandReturn();
+const yieldedArgumentNewSkippedFirst: any = yieldedArgumentNewSkipped.next();
+console.log("yielded-argument-new-skipped-first", yieldedArgumentNewSkippedFirst.done, yieldedArgumentNewSkippedFirst.value, logicalNewCount);
+const yieldedArgumentNewSkippedDone: any = yieldedArgumentNewSkipped.next(false);
+console.log("yielded-argument-new-skipped-done", yieldedArgumentNewSkippedDone.done, yieldedArgumentNewSkippedDone.value, logicalNewCount);
+
+logicalNewCount = 0;
+const yieldedArgumentNewSelected = stagedYieldedArgumentNewLogicalOperandReturn();
+const yieldedArgumentNewSelectedFirst: any = yieldedArgumentNewSelected.next();
+console.log("yielded-argument-new-selected-first", yieldedArgumentNewSelectedFirst.done, yieldedArgumentNewSelectedFirst.value, logicalNewCount);
+const yieldedArgumentNewSelectedSecond: any = yieldedArgumentNewSelected.next(true);
+console.log("yielded-argument-new-selected-second", yieldedArgumentNewSelectedSecond.done, yieldedArgumentNewSelectedSecond.value, logicalNewCount);
+const yieldedArgumentNewSelectedDone: any = yieldedArgumentNewSelected.next("new-argument");
+console.log("yielded-argument-new-selected-done", yieldedArgumentNewSelectedDone.done, yieldedArgumentNewSelectedDone.value.value, logicalNewCount);

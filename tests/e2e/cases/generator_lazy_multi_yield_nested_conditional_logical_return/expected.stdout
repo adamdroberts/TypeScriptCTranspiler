@@ -165,3 +165,13 @@ arithmetic-logical-right-nullish-selected-first false arithmetic-nullish-left
 arithmetic-logical-right-nullish-selected-second false arithmetic-nullish-right-first
 arithmetic-logical-right-nullish-selected-third false arithmetic-nullish-right-second
 arithmetic-logical-right-nullish-selected-done true 3
+yielded-argument-call-skipped-first false yielded-call-left 0
+yielded-argument-call-skipped-done true false 0
+yielded-argument-call-selected-first false yielded-call-left 0
+yielded-argument-call-selected-second false yielded-call-argument 0
+yielded-argument-call-selected-done true call-argument1 1
+yielded-argument-new-skipped-first false yielded-new-left 0
+yielded-argument-new-skipped-done true false 0
+yielded-argument-new-selected-first false yielded-new-left 0
+yielded-argument-new-selected-second false yielded-new-argument 0
+yielded-argument-new-selected-done true new-argument1 1
