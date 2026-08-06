@@ -39,7 +39,7 @@ function laterIncrementorOnly(): Promise<string> {
 async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> {
     const first = await laterString("control");
     if (await laterBoolean(true)) {
-        for (
+        conditionLoop: for (
             var escaped = await laterString(first + "-condition-init"),
                 repeats = 0;
             await laterBoolean(repeats < 2);
@@ -47,7 +47,7 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
         ) {
             var prefix = "condition";
             mark(prefix);
-            continue;
+            continue conditionLoop;
         }
         return await laterString(escaped + "-" + String(repeats));
     } else {
@@ -97,7 +97,7 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
 async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
     const first = await laterString("control");
     if (await laterBoolean(true)) {
-        for (
+        breakLoop: for (
             var escaped = await laterString(first + "-break-init"),
                 label = first + "-break-label";
             await laterBoolean(breakCount < 2);
@@ -105,7 +105,7 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
         ) {
             let prefix = "break";
             mark(prefix);
-            break;
+            break breakLoop;
         }
         return await laterString(escaped + "-" + String(breakCount));
     } else {

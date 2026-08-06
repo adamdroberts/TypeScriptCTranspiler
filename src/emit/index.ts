@@ -51322,7 +51322,10 @@ class Emitter {
                 }
                 return true;
             };
-            const nestedPreludeSafe = (statement: ts.Statement): boolean => {
+            const nestedPreludeSafe = (
+                statement: ts.Statement,
+                allowedTerminalControl?: ts.BreakStatement | ts.ContinueStatement,
+            ): boolean => {
                 let safe = true;
                 const hasEnclosingLoop = (node: ts.Node): boolean => {
                     let parent = node.parent;
@@ -51356,6 +51359,7 @@ class Emitter {
                 };
                 const visit = (node: ts.Node): void => {
                     if (!safe) return;
+                    if (node === allowedTerminalControl) return;
                     if (ts.isBreakStatement(node)) {
                         if (node.label || !hasEnclosingBreakable(node)) safe = false;
                         return;
@@ -51401,8 +51405,19 @@ class Emitter {
                 return found;
             };
             const awaitedForInitializer = (statement: ts.Statement): AwaitedIfForInitializer | null => {
-                if (!ts.isForStatement(statement)) return null;
-                const initializer = statement.initializer;
+                const labeledForStatement = ts.isLabeledStatement(statement) &&
+                    ts.isForStatement(statement.statement)
+                    ? statement.statement as ts.ForStatement
+                    : undefined;
+                const forStatement: ts.ForStatement | undefined = labeledForStatement ??
+                    (ts.isForStatement(statement) ? statement : undefined);
+                if (!forStatement) return null;
+                const loopLabel = labeledForStatement && ts.isLabeledStatement(statement)
+                    ? statement.label
+                    : ts.isLabeledStatement(forStatement.parent) && forStatement.parent.statement === forStatement
+                        ? forStatement.parent.label
+                        : undefined;
+                const initializer = forStatement.initializer;
                 if (!initializer || !ts.isVariableDeclarationList(initializer) ||
                     (initializer.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 ||
                     initializer.declarations.length === 0) return null;
@@ -51414,11 +51429,11 @@ class Emitter {
                     if (!ts.isIdentifier(declaration.name) || !declaration.initializer ||
                         containsAwait(declaration.initializer)) return null;
                 }
-                const incrementorExpression = statement.incrementor
-                    ? this.unwrapTransparentExpression(statement.incrementor)
+                const incrementorExpression = forStatement.incrementor
+                    ? this.unwrapTransparentExpression(forStatement.incrementor)
                     : null;
-                const conditionExpression = statement.condition
-                    ? this.unwrapTransparentExpression(statement.condition)
+                const conditionExpression = forStatement.condition
+                    ? this.unwrapTransparentExpression(forStatement.condition)
                     : null;
                 const awaitedCondition = conditionExpression && ts.isAwaitExpression(conditionExpression) &&
                     !containsAwait(conditionExpression.expression)
@@ -51428,16 +51443,21 @@ class Emitter {
                     !containsAwait(incrementorExpression.expression)
                     ? incrementorExpression
                     : undefined;
-                const loopBodyStatements = ts.isBlock(statement.statement)
-                    ? statement.statement.statements
-                    : [statement.statement];
+                const loopBodyStatements = ts.isBlock(forStatement.statement)
+                    ? forStatement.statement.statements
+                    : [forStatement.statement];
                 const loopControlStatement = loopBodyStatements[loopBodyStatements.length - 1];
-                const loopControl = loopControlStatement
-                    ? ts.isBreakStatement(loopControlStatement) && !loopControlStatement.label
+                const terminalControl: ts.BreakStatement | ts.ContinueStatement | undefined =
+                    loopControlStatement &&
+                    (ts.isBreakStatement(loopControlStatement) || ts.isContinueStatement(loopControlStatement))
+                        ? loopControlStatement
+                        : undefined;
+                const loopControl = terminalControl &&
+                    (!terminalControl.label ||
+                        (!!loopLabel && terminalControl.label.text === loopLabel.text))
+                    ? ts.isBreakStatement(terminalControl)
                         ? "break" as const
-                        : ts.isContinueStatement(loopControlStatement) && !loopControlStatement.label
-                            ? "continue" as const
-                            : undefined
+                        : "continue" as const
                     : undefined;
                 const loopControlPrelude = loopControl ? loopBodyStatements.slice(0, -1) : [];
                 if (loopControl && !loopControlPrelude.every((prefixStatement) =>
@@ -51446,10 +51466,11 @@ class Emitter {
                         (ts.isVariableStatement(prefixStatement) &&
                             this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
                             nestedVariableStatementSupported(prefixStatement))))) return null;
-                if ((statement.condition && containsAwait(statement.condition) && !awaitedCondition) ||
-                    (statement.incrementor && containsAwait(statement.incrementor) && !awaitedIncrementor) ||
-                    (awaitedIncrementor && !statement.condition) ||
-                    containsAwait(statement.statement) || !nestedPreludeSafe(statement)) return null;
+                if ((forStatement.condition && containsAwait(forStatement.condition) && !awaitedCondition) ||
+                    (forStatement.incrementor && containsAwait(forStatement.incrementor) && !awaitedIncrementor) ||
+                    (awaitedIncrementor && !forStatement.condition) ||
+                    containsAwait(forStatement.statement) ||
+                    !nestedPreludeSafe(forStatement, loopControl ? terminalControl : undefined)) return null;
                 if (awaitedCondition || awaitedIncrementor) {
                     let hasLoopControl = false;
                     const visitLoopControl = (node: ts.Node): void => {
@@ -51506,7 +51527,7 @@ class Emitter {
                 }
                 return {
                     kind: "for",
-                    forStatement: statement,
+                    forStatement,
                     awaitExpr: firstInitializer,
                     awaitedCondition,
                     awaitedIncrementor,
