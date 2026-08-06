@@ -5,3 +5,5 @@ fourth false j-b
 fifth false k-a
 sixth false body-2:3:0
 seventh true done
+side-effecting-false false side-effecting-left true side-effecting-false-0
+side-effecting-true false side-effecting-left false side-effecting-argument true side-effecting-true-1-value

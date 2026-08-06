@@ -11,6 +11,22 @@ function* multiYieldLogicalDeclarationInitializer(): Generator<string, string, n
     return "done";
 }
 
+let sideEffectingLogicalInitializerCallCount = 0;
+function sideEffectingLogicalInitializerCall(value: any): any {
+    sideEffectingLogicalInitializerCallCount++;
+    return value;
+}
+
+function* sideEffectingLogicalDeclarationInitializer(): Generator<string, string, any> {
+    for (
+        let value: any = (yield "side-effecting-left") && sideEffectingLogicalInitializerCall(yield "side-effecting-argument");
+        value;
+    ) {
+        return "side-effecting-true-" + sideEffectingLogicalInitializerCallCount + "-" + value;
+    }
+    return "side-effecting-false-" + sideEffectingLogicalInitializerCallCount;
+}
+
 const iterator = multiYieldLogicalDeclarationInitializer();
 const first: any = iterator.next();
 console.log("first", first.done, first.value);
@@ -26,3 +42,28 @@ const sixth: any = iterator.next(0);
 console.log("sixth", sixth.done, sixth.value);
 const seventh: any = iterator.next();
 console.log("seventh", seventh.done, seventh.value);
+
+const sideEffectingFalse = sideEffectingLogicalDeclarationInitializer();
+const sideEffectingFalseFirst: any = sideEffectingFalse.next();
+const sideEffectingFalseDone: any = sideEffectingFalse.next(0);
+console.log(
+    "side-effecting-false",
+    sideEffectingFalseFirst.done,
+    sideEffectingFalseFirst.value,
+    sideEffectingFalseDone.done,
+    sideEffectingFalseDone.value,
+);
+
+const sideEffectingTrue = sideEffectingLogicalDeclarationInitializer();
+const sideEffectingTrueFirst: any = sideEffectingTrue.next();
+const sideEffectingTrueSecond: any = sideEffectingTrue.next(1);
+const sideEffectingTrueDone: any = sideEffectingTrue.next("value");
+console.log(
+    "side-effecting-true",
+    sideEffectingTrueFirst.done,
+    sideEffectingTrueFirst.value,
+    sideEffectingTrueSecond.done,
+    sideEffectingTrueSecond.value,
+    sideEffectingTrueDone.done,
+    sideEffectingTrueDone.value,
+);
