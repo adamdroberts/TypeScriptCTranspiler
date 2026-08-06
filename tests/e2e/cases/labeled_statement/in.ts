@@ -20,5 +20,15 @@ function nestedLabeledBlock(): string {
     return events;
 }
 
+function labeledContinueLoop(): string {
+    let events = "";
+    outer: for (let index = 0; index < 2; index++) {
+        events += index;
+        continue outer;
+    }
+    return events;
+}
+
 console.log(labeledBlock());
 console.log(nestedLabeledBlock());
+console.log(labeledContinueLoop());
