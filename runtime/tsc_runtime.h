@@ -911,6 +911,7 @@ tsc_value_t tsc_net_socket_address_new(tsc_value_t options);
 tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input);
 tsc_value_t tsc_net_create_server(tsc_value_t connection_listener);
 tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener);
+tsc_value_t tsc_http_create_server(tsc_value_t request_listener);
 void tsc_http_validate_header_name(const tsc_str_t* name);
 void tsc_http_validate_header_value(const tsc_str_t* name, const tsc_str_t* value);
 

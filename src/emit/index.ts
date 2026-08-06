@@ -71356,7 +71356,7 @@ class Emitter {
         if (netNamed) {
             return this.emitNetCall(call, netNamed);
         }
-        const httpNamed = ["validateHeaderName", "validateHeaderValue"]
+        const httpNamed = ["validateHeaderName", "validateHeaderValue", "createServer"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["http", "node:http"], exported));
         if (httpNamed) {
             return this.emitHttpCall(call, httpNamed);
@@ -79662,6 +79662,17 @@ class Emitter {
     }
 
     private emitHttpCall(call: ts.CallExpression, method: string): EmitResult {
+        if (method === "createServer") {
+            const listenerNode = call.arguments[0];
+            const listener = listenerNode ? this.emitExpr(listenerNode) : { c: "tsc_value_undefined()", ty: T_VALUE };
+            if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+                unsupported(listenerNode, "http.createServer request listener must be a function");
+            }
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: listener, target: T_VALUE, node: listenerNode },
+                ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 1 : 0),
+            ], ([listenerC]) => `tsc_http_create_server(${listenerC})`);
+        }
         if (method === "validateHeaderName") {
             if (call.arguments.length < 1) unsupported(call, "http.validateHeaderName expects a name");
             const nameNode = call.arguments[0]!;

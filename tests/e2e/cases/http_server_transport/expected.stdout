@@ -1,0 +1,3 @@
+request: GET /hello 1.1 example.test 
+response: true true true
+server close

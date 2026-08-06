@@ -2366,12 +2366,36 @@ interface SocketAddressConstructor {
 }
 declare var SocketAddress: SocketAddressConstructor;
 
+interface HttpIncomingMessage {
+    readonly method: string;
+    readonly url: string;
+    readonly httpVersion: string;
+    readonly headers: any;
+    readonly body: string;
+}
+interface HttpServerResponse {
+    statusCode: number;
+    setHeader(name: string, value: string, ...ignored: any[]): this;
+    writeHead(statusCode: number, headers?: any, ...ignored: any[]): this;
+    write(data: string | Buffer, ...ignored: any[]): boolean;
+    end(data?: string | Buffer, ...ignored: any[]): this;
+}
+interface HttpServer {
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    listen(port: number, callback?: () => void, ...ignored: any[]): this;
+    listen(port: number, host: string, callback?: () => void, ...ignored: any[]): this;
+    close(callback?: () => void, ...ignored: any[]): this;
+    address(...ignored: any[]): SocketAddress | null;
+}
 interface HttpModule {
     readonly METHODS: string[];
     readonly STATUS_CODES: any;
     readonly maxHeaderSize: number;
     validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
     validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
+    createServer(requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
 }
 declare const http: HttpModule;
 declare module "http" {
@@ -2380,6 +2404,7 @@ declare module "http" {
     export const maxHeaderSize: number;
     export function validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
     export function validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
+    export function createServer(requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
     const defaultHttp: HttpModule;
     export default defaultHttp;
 }
@@ -2389,6 +2414,7 @@ declare module "node:http" {
     export const maxHeaderSize: number;
     export function validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
     export function validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
+    export function createServer(requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
     const defaultHttp: HttpModule;
     export default defaultHttp;
 }
