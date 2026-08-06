@@ -1,5 +1,6 @@
 # Implemented features
 
+- Custom iterator `for...of` lowering now destructures exactly `[key, value]` identifier bindings from either typed `ObjectEntry` values or dynamic value pairs; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `custom_iterator_dynamic_destructure`.
 - Lazy generators now preserve bounded `for...of` destructuring for identifier-only `[first, second]` bindings over typed entry elements such as `Map` pairs and dynamic value elements; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `generator_lazy_for_of_destructuring`.
 - Collection constructors now accept omitted generic arguments for `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry`, using dynamic value storage for unresolved type parameters; the intrinsic TypeScript `object` type now maps to the same dynamic representation. Test: `inferred_collection_constructors`.
 - Lazy generators now preserve bounded labeled `break` and `continue` routing across labeled blocks and supported `while`, `do...while`, counted `for`, `for...of`, and `for...in` loops, including cross-loop continuation anchors; broader suspended label/control-flow graphs remain deferred. Test: `generator_lazy_labeled_control`.
@@ -3201,6 +3202,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `crypto_random_fill_sync` | crypto.randomFillSync Buffer mutating random fill with offset/size validation |
 | `custom_iterable` | typed custom iterable class whose Symbol.iterator returns an array-backed IterableIterator |
 | `custom_iterator_entry_destructure` | custom iterator yielding ObjectEntry values with `[key, value]` destructuring |
+| `custom_iterator_dynamic_destructure` | custom iterator yielding dynamic value pairs with `[key, value]` destructuring |
 | `custom_iterator_object` | class `[Symbol.iterator]()` returning an iterator object with `next()` |
 | `custom_iterator_inherited_next` | custom iterator object whose `next()` method is inherited from a base class |
 | `custom_iterator_self` | direct self-iterable custom iterator object with `next()` |

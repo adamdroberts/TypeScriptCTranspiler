@@ -66420,19 +66420,23 @@ class Emitter {
             ? fos.initializer.declarations[0]
             : null;
         if (entryBindingDecl && ts.isArrayBindingPattern(entryBindingDecl.name)) {
-            if (valueType.kind !== "entry") {
-                unsupported(fos.initializer, "custom iterator destructuring currently supports ObjectEntry values only");
-            }
             const [keyEl, valueEl] = entryBindingDecl.name.elements;
             if (
+                entryBindingDecl.name.elements.length !== 2 ||
                 !keyEl ||
                 !valueEl ||
                 !ts.isBindingElement(keyEl) ||
                 !ts.isBindingElement(valueEl) ||
                 !ts.isIdentifier(keyEl.name) ||
-                !ts.isIdentifier(valueEl.name)
+                !ts.isIdentifier(valueEl.name) ||
+                keyEl.propertyName ||
+                valueEl.propertyName ||
+                keyEl.initializer ||
+                valueEl.initializer ||
+                keyEl.dotDotDotToken ||
+                valueEl.dotDotDotToken
             ) {
-                unsupported(entryBindingDecl.name, "custom iterator entry binding must be [keyIdentifier, valueIdentifier]");
+                unsupported(entryBindingDecl.name, "custom iterator destructuring must be [keyIdentifier, valueIdentifier]");
             }
             const iterVar = this.freshTemp("_it");
             const stepVar = this.freshTemp("_step");
@@ -66442,7 +66446,6 @@ class Emitter {
             const recv = this.freshTemp("_recv");
             const keyName = mangleIdent(keyEl.name.text);
             const valueName = mangleIdent(valueEl.name.text);
-            const entryValueType = valueType.elem ?? T_VOID;
             buf.open("");
             buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
             const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
@@ -66454,9 +66457,28 @@ class Emitter {
             buf.open("while (true)");
             buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
             buf.line(`if (${stepVar}->done) break;`);
-            buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
-            buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
-            buf.line(`${entryValueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, entryValueType)};`);
+            if (valueType.kind === "entry") {
+                const entryValueType = valueType.elem ?? T_VOID;
+                buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
+                buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
+                buf.line(`${entryValueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, entryValueType)};`);
+            } else if (valueType.kind === "value") {
+                const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
+                const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
+                const keyValue: EmitResult = {
+                    c: `tsc_value_get_index(${entryVar}, 0.0)`,
+                    ty: T_VALUE,
+                };
+                const elementValue: EmitResult = {
+                    c: `tsc_value_get_index(${entryVar}, 1.0)`,
+                    ty: T_VALUE,
+                };
+                buf.line(`tsc_value_t const ${entryVar} = ${stepVar}->value;`);
+                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(keyValue, keyType, keyEl.name)};`);
+                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(elementValue, elementValueType, valueEl.name)};`);
+            } else {
+                unsupported(fos.initializer, "custom iterator destructuring requires ObjectEntry or dynamic values");
+            }
             const labeledContinueTarget = this.directLabeledLoopName(fos)
                 ? this.freshTemp("_custom_for_of_labeled_continue")
                 : null;
