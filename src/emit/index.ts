@@ -50366,10 +50366,10 @@ class Emitter {
                 return safe;
             };
             const branchPreludeSupported = (statement: ts.Statement, index: number): boolean => {
-                const initializedLocal = ts.isVariableStatement(statement) &&
-                    statement.declarationList.declarations.length === 1 &&
-                    ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
-                    !!statement.declarationList.declarations[0]!.initializer;
+                const initializedLocals = ts.isVariableStatement(statement) &&
+                    statement.declarationList.declarations.length > 0 &&
+                    statement.declarationList.declarations.every((declaration) =>
+                        ts.isIdentifier(declaration.name) && !!declaration.initializer);
                 const uninitializedVar = ts.isVariableStatement(statement) &&
                     statement.declarationList.declarations.length === 1 &&
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
@@ -50396,7 +50396,7 @@ class Emitter {
                 const nestedForInPrelude = ts.isForInStatement(statement) && nestedPreludeSafe(statement);
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
                     !!statement.finallyBlock && nestedPreludeSafe(statement);
-                return (ts.isExpressionStatement(statement) || initializedLocal || assignedUninitializedVar || nestedIfPrelude ||
+                return (ts.isExpressionStatement(statement) || initializedLocals || assignedUninitializedVar || nestedIfPrelude ||
                     nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude || nestedForPrelude ||
                     nestedForOfPrelude || nestedForInPrelude || nestedTryPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement, assignedUninitializedVar);
@@ -50409,23 +50409,24 @@ class Emitter {
             }
             for (const statement of preludeStatements) {
                 if (!ts.isVariableStatement(statement)) continue;
-                const declaration = statement.declarationList.declarations[0]!;
-                if (!ts.isIdentifier(declaration.name)) return null;
-                const identifier = declaration.name;
-                const symbol = this.symbolForIdentifier(identifier);
-                if (!symbol) return null;
-                const type = this.variableStorageType(this.prepareType(mapTsType(
-                    declaration,
-                    this.checker.getTypeAtLocation(declaration),
-                    this.checker,
-                )));
-                if (type.kind === "void" || type.kind === "never") return null;
-                carriedAliases.push({
-                    symbol,
-                    type,
-                    field: `branch_prelude_${mangleIdent(identifier.text)}`,
-                    identifier,
-                });
+                for (const declaration of statement.declarationList.declarations) {
+                    if (!ts.isIdentifier(declaration.name)) return null;
+                    const identifier = declaration.name;
+                    const symbol = this.symbolForIdentifier(identifier);
+                    if (!symbol) return null;
+                    const type = this.variableStorageType(this.prepareType(mapTsType(
+                        declaration,
+                        this.checker.getTypeAtLocation(declaration),
+                        this.checker,
+                    )));
+                    if (type.kind === "void" || type.kind === "never") return null;
+                    carriedAliases.push({
+                        symbol,
+                        type,
+                        field: `branch_prelude_${mangleIdent(identifier.text)}`,
+                        identifier,
+                    });
+                }
             }
             const returned = this.unwrapTransparentExpression(terminal.expression);
             return ts.isAwaitExpression(returned)

@@ -1,0 +1,5 @@
+condition-reject multi-local-condition-rejected
+selector-reject multi-local-selector-thrown
+return multi-local-first-true-return
+throw multi-local-first-false-throw
+trace selector:multi-local-selector-first|multi-local-first-true:return|multi-local-first-false:throw|
