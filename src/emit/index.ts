@@ -827,6 +827,7 @@ class Emitter {
     private activeBreakTargets: Array<string | null> = [];
     private activeContinueTargets: Array<string | null> = [];
     private activeLabeledBreakTargets: Array<Map<string, string>> = [];
+    private activeLabeledContinueTargets: Array<Map<string, string | null>> = [];
     private syncUsingScopes: string[][] = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
@@ -64301,9 +64302,11 @@ class Emitter {
         const endLabel = this.freshTemp(`_${mangleIdent(statement.label.text)}_end`);
         buf.open("");
         this.activeLabeledBreakTargets.push(new Map([[statement.label.text, endLabel]]));
+        this.activeLabeledContinueTargets.push(new Map([[statement.label.text, null]]));
         try {
             this.emitStmtInBlock(buf, statement.statement);
         } finally {
+            this.activeLabeledContinueTargets.pop();
             this.activeLabeledBreakTargets.pop();
         }
         buf.line(`${endLabel}:;`);
@@ -64328,6 +64331,40 @@ class Emitter {
             parent = parent.parent;
         }
         return false;
+    }
+
+    private labeledContinueTargetsLabeledLoop(statement: ts.ContinueStatement): boolean {
+        if (!statement.label) return false;
+        let parent = statement.parent;
+        while (parent) {
+            if (ts.isLabeledStatement(parent) && parent.label.text === statement.label.text) {
+                return ts.isWhileStatement(parent.statement) || ts.isDoStatement(parent.statement) ||
+                    ts.isForStatement(parent.statement) || ts.isForOfStatement(parent.statement) ||
+                    ts.isForInStatement(parent.statement);
+            }
+            if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
+            parent = parent.parent;
+        }
+        return false;
+    }
+
+    private directLabeledLoopName(statement: ts.Statement): string | null {
+        const parent = statement.parent;
+        return ts.isLabeledStatement(parent) && parent.statement === statement
+            ? parent.label.text
+            : null;
+    }
+
+    private registerLabeledContinueTarget(statement: ts.Statement, target: string | null): void {
+        const label = this.directLabeledLoopName(statement);
+        if (!label) return;
+        for (let index = this.activeLabeledContinueTargets.length - 1; index >= 0; index--) {
+            const targets = this.activeLabeledContinueTargets[index]!;
+            if (targets.has(label)) {
+                targets.set(label, target);
+                return;
+            }
+        }
     }
 
     private labeledBreakTargetsCurrentLoop(statement: ts.BreakStatement): boolean {
@@ -64399,10 +64436,24 @@ class Emitter {
             return;
         }
         if (ts.isContinueStatement(stmt)) {
-            if (!this.labeledContinueTargetsCurrentLoop(stmt)) {
+            let labeledTargetFound = false;
+            let labeledTarget: string | null = null;
+            if (stmt.label) {
+                for (let index = this.activeLabeledContinueTargets.length - 1; index >= 0; index--) {
+                    const targets = this.activeLabeledContinueTargets[index]!;
+                    if (targets.has(stmt.label.text)) {
+                        labeledTargetFound = true;
+                        labeledTarget = targets.get(stmt.label.text)!;
+                        break;
+                    }
+                }
+            }
+            if (!this.labeledContinueTargetsCurrentLoop(stmt) &&
+                (!labeledTargetFound || !this.labeledContinueTargetsLabeledLoop(stmt))) {
                 unsupported(stmt, "labeled continue must target the current loop");
             }
-            const target = this.activeContinueTargets[this.activeContinueTargets.length - 1];
+            let target = this.activeContinueTargets[this.activeContinueTargets.length - 1];
+            if (labeledTargetFound) target = labeledTarget;
             buf.line(target ? `goto ${target};` : "continue;");
             return;
         }
@@ -65627,14 +65678,24 @@ class Emitter {
 
     private emitWhile(buf: CBuf, ws: ts.WhileStatement): void {
         if (this.staticBooleanValue(ws.expression) === false) return;
+        const labeledContinueTarget = this.directLabeledLoopName(ws)
+            ? this.freshTemp("_while_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(ws, labeledContinueTarget);
         buf.open(`while (${this.emitBoolExpr(ws.expression)})`);
         this.emitLoopStmtInBlock(buf, ws.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
     }
 
     private emitDoWhile(buf: CBuf, ds: ts.DoStatement): void {
+        const labeledContinueTarget = this.directLabeledLoopName(ds)
+            ? this.freshTemp("_do_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(ds, labeledContinueTarget);
         buf.open("do");
         this.emitLoopStmtInBlock(buf, ds.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close(` while (${this.emitBoolExpr(ds.expression)});`);
     }
 
@@ -65696,8 +65757,13 @@ class Emitter {
         const cond = fs.condition ? this.emitBoolExpr(fs.condition) : "1";
         const upd = fs.incrementor ? this.emitExpr(fs.incrementor).c : "";
         const continueLabel = upd ? this.freshTemp("_for_continue") : null;
+        const labeledContinueTarget = this.directLabeledLoopName(fs)
+            ? continueLabel ?? this.freshTemp("_for_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fs, labeledContinueTarget);
         buf.open(`while (${cond})`);
         this.emitLoopStmtInBlock(buf, fs.statement, continueLabel);
+        if (!continueLabel && labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         if (continueLabel) buf.line(`${continueLabel}:;`);
         if (upd) buf.line(`(void)(${upd});`);
         buf.close();
@@ -65788,7 +65854,12 @@ class Emitter {
         buf.line(
             `tsc_str_t*${qual} ${bindingName} = TSC_ARR(tsc_str_t*, ${keysVar}, ${idxVar});`,
         );
+        const labeledContinueTarget = this.directLabeledLoopName(fis)
+            ? this.freshTemp("_for_in_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fis, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fis.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
     }
 
@@ -65915,7 +65986,12 @@ class Emitter {
         buf.line(
             `${elemType.c}${qual} ${bindingName} = ${element};`,
         );
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
         buf.close();
     }
