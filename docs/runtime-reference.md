@@ -412,6 +412,13 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_set_immediate(fn, env)` / `tsc_clear_immediate(id)` / `tsc_drain_immediates()` | `double` / `void` | Bounded before-exit `setImmediate(callback, ...args)` queue drained after next ticks, microtasks, and zero-delay timeouts, with numeric handles cancellable before drain |
 | `tsc_abort_signal_add_callback(signal, fn, env)` | `void` | Registers a runtime cancellation callback invoked when the bounded AbortSignal aborts; libuv-backed requests use it to reject and cancel pending work |
 
+## http (bounded validation subset)
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_http_validate_header_name(name)` | `void` | `http.validateHeaderName(name)` — validates an HTTP token name and throws through the runtime error path on invalid input |
+| `tsc_http_validate_header_value(name, value)` | `void` | `http.validateHeaderValue(name, value)` — validates header content and throws through the runtime error path on invalid control characters |
+
 ## fs (sync and bounded async subset)
 
 | Symbol | Signature | JS equivalent |

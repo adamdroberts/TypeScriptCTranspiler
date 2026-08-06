@@ -71356,6 +71356,11 @@ class Emitter {
         if (netNamed) {
             return this.emitNetCall(call, netNamed);
         }
+        const httpNamed = ["validateHeaderName", "validateHeaderValue"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["http", "node:http"], exported));
+        if (httpNamed) {
+            return this.emitHttpCall(call, httpNamed);
+        }
         const childProcessNamed = ["exec", "execFile", "execSync", "execFileSync", "spawnSync", "spawn", "fork"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["child_process", "node:child_process"], exported));
         if (childProcessNamed) {
@@ -73731,6 +73736,10 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isNetModuleIdentifier(recvExpr)) {
             return this.emitNetCall(call, memberName);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isHttpModuleIdentifier(recvExpr)) {
+            return this.emitHttpCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isChildProcessModuleIdentifier(recvExpr)) {
@@ -79607,6 +79616,37 @@ class Emitter {
                 return this.emitSequencedExpr(T_BOOLEAN, specs, ([value]) => `tsc_net_is_ipv6(${value!})`);
         }
         unsupported(call, `net.${method}`);
+    }
+
+    private emitHttpCall(call: ts.CallExpression, method: string): EmitResult {
+        if (method === "validateHeaderName") {
+            if (call.arguments.length < 1) unsupported(call, "http.validateHeaderName expects a name");
+            const nameNode = call.arguments[0]!;
+            const name = this.emitExpr(nameNode);
+            const specs: SequencedCallArg[] = [{ value: name, target: T_STRING, node: nameNode }];
+            if (call.arguments[1]) {
+                specs.push({ value: this.emitExpr(call.arguments[1]!), target: T_VOID, node: call.arguments[1]! });
+            }
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, call.arguments.length > 1 ? 2 : 1));
+            return this.emitSequencedExpr(T_VOID, specs, ([nameC]) => `tsc_http_validate_header_name(${nameC})`);
+        }
+        if (method === "validateHeaderValue") {
+            if (call.arguments.length < 2) unsupported(call, "http.validateHeaderValue expects a name and value");
+            const nameNode = call.arguments[0]!;
+            const valueNode = call.arguments[1]!;
+            const name = this.emitExpr(nameNode);
+            const value = this.emitExpr(valueNode);
+            return this.emitSequencedExpr(
+                T_VOID,
+                [
+                    { value: name, target: T_STRING, node: nameNode },
+                    { value, target: T_STRING, node: valueNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, 2),
+                ],
+                ([nameC, valueC]) => `tsc_http_validate_header_value(${nameC}, ${valueC})`,
+            );
+        }
+        unsupported(call, `http.${method}`);
     }
 
     private emitHttpMetadataProperty(name: string): EmitResult | null {

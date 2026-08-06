@@ -1,0 +1,4 @@
+valid: undefined undefined undefined undefined
+name error: http.validateHeaderName: invalid HTTP token
+value error: http.validateHeaderValue: invalid character in header content
+side effects: labelextra-nameextra-value

@@ -2370,12 +2370,16 @@ interface HttpModule {
     readonly METHODS: string[];
     readonly STATUS_CODES: any;
     readonly maxHeaderSize: number;
+    validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
+    validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
 }
 declare const http: HttpModule;
 declare module "http" {
     export const METHODS: string[];
     export const STATUS_CODES: any;
     export const maxHeaderSize: number;
+    export function validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
+    export function validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
     const defaultHttp: HttpModule;
     export default defaultHttp;
 }
@@ -2383,6 +2387,8 @@ declare module "node:http" {
     export const METHODS: string[];
     export const STATUS_CODES: any;
     export const maxHeaderSize: number;
+    export function validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
+    export function validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
     const defaultHttp: HttpModule;
     export default defaultHttp;
 }

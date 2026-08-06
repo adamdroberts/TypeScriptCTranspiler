@@ -1964,6 +1964,43 @@ double tsc_net_is_ip(tsc_str_t* input) {
     return 0.0;
 }
 
+static bool tsc_http_is_token_char(unsigned char c) {
+    if (c <= 0x20 || c >= 0x7f) return false;
+    switch (c) {
+        case '(': case ')': case '<': case '>': case '@': case ',': case ';':
+        case ':': case '\\': case '"': case '/': case '[': case ']': case '?':
+        case '=': case '{': case '}':
+            return false;
+        default:
+            return true;
+    }
+}
+
+void tsc_http_validate_header_name(const tsc_str_t* name) {
+    if (!name || name->len == 0) {
+        tsc_throw_str(tsc_str_from_cstr("http.validateHeaderName: invalid HTTP token"));
+        return;
+    }
+    for (size_t i = 0; i < name->len; i++) {
+        if (!tsc_http_is_token_char((unsigned char)name->data[i])) {
+            tsc_throw_str(tsc_str_from_cstr("http.validateHeaderName: invalid HTTP token"));
+            return;
+        }
+    }
+}
+
+void tsc_http_validate_header_value(const tsc_str_t* name, const tsc_str_t* value) {
+    (void)name;
+    if (!value) return;
+    for (size_t i = 0; i < value->len; i++) {
+        unsigned char c = (unsigned char)value->data[i];
+        if ((c <= 0x1f && c != '\t') || c == 0x7f) {
+            tsc_throw_str(tsc_str_from_cstr("http.validateHeaderValue: invalid character in header content"));
+            return;
+        }
+    }
+}
+
 tsc_value_t tsc_net_socket_address_new(tsc_value_t options) {
     tsc_object_t* obj = tsc_object_new();
 
