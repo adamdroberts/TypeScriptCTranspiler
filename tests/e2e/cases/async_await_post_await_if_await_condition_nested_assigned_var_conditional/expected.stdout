@@ -1,0 +1,6 @@
+condition-reject nested-conditional-condition-rejected
+selector-reject nested-conditional-selector-thrown
+return nested-conditional-first-true-return
+throw nested-conditional-first-false-throw
+return nested-conditional-first-alternate-return
+trace selector:nested-conditional-selector-first|nested-conditional-first-true-label|nested-conditional-first-false-label|nested-conditional-first-alternate-label|

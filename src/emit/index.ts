@@ -50369,6 +50369,61 @@ class Emitter {
                 for (const declaration of declarations) {
                     if (declaration.initializer && referencesUninitialized(declaration.initializer, uninitializedSymbols)) return false;
                 }
+                const consumeAssignmentSequence = (
+                    statements: readonly ts.Statement[],
+                    symbols: ReadonlySet<ts.Symbol>,
+                ): Set<ts.Symbol> => {
+                    const pending = new Set(symbols);
+                    const assigned = new Set<ts.Symbol>();
+                    for (const statement of statements) {
+                        const current = pending.values().next().value as ts.Symbol | undefined;
+                        const assignment = ts.isExpressionStatement(statement)
+                            ? this.unwrapTransparentExpression(statement.expression)
+                            : null;
+                        if (current && assignment && ts.isBinaryExpression(assignment) &&
+                            assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                            ts.isIdentifier(assignment.left) &&
+                            this.symbolForIdentifier(assignment.left) === current) {
+                            if (referencesUninitialized(assignment.right, pending) ||
+                                !this.asyncAwaitInterstitialControlFlowSupported(statement)) {
+                                return new Set();
+                            }
+                            pending.delete(current);
+                            assigned.add(current);
+                            continue;
+                        }
+                        if (referencesUninitialized(statement, pending) ||
+                            !this.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                            return new Set();
+                        }
+                    }
+                    return assigned;
+                };
+                const nestedConditionalAssignedSymbols = (
+                    statement: ts.Statement,
+                    symbols: ReadonlySet<ts.Symbol>,
+                ): Set<ts.Symbol> | null => {
+                    if (!ts.isIfStatement(statement) || !statement.elseStatement ||
+                        referencesUninitialized(statement.expression, symbols) ||
+                        !this.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                        return null;
+                    }
+                    const branchStatements = (branch: ts.Statement): readonly ts.Statement[] =>
+                        ts.isBlock(branch) ? branch.statements : [branch];
+                    const thenAssigned = consumeAssignmentSequence(
+                        branchStatements(statement.thenStatement),
+                        symbols,
+                    );
+                    const elseAssigned = consumeAssignmentSequence(
+                        branchStatements(statement.elseStatement),
+                        symbols,
+                    );
+                    const assigned = new Set<ts.Symbol>();
+                    for (const symbol of thenAssigned) {
+                        if (elseAssigned.has(symbol)) assigned.add(symbol);
+                    }
+                    return assigned;
+                };
                 const pendingSymbols = new Set(uninitializedSymbols);
                 let assignmentIndex = declarationIndex + 1;
                 for (const declaration of uninitialized) {
@@ -50382,6 +50437,12 @@ class Emitter {
                         const assignment = ts.isExpressionStatement(assignmentStatement)
                             ? this.unwrapTransparentExpression(assignmentStatement.expression)
                             : null;
+                        const nestedAssigned = nestedConditionalAssignedSymbols(assignmentStatement, pendingSymbols);
+                        if (nestedAssigned && nestedAssigned.has(symbol)) {
+                            for (const assignedSymbol of nestedAssigned) pendingSymbols.delete(assignedSymbol);
+                            assigned = true;
+                            break;
+                        }
                         if (assignment && ts.isBinaryExpression(assignment) &&
                             assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
                             ts.isIdentifier(assignment.left) &&
