@@ -1,0 +1,6 @@
+condition-reject nested-try-condition-rejected
+selector-reject nested-try-selector-thrown
+return nested-try-first-true-return
+throw nested-try-first-false-throw
+return nested-try-first-alternate-return
+trace selector:nested-try-selector-first|caught-true|nested-try-first-true-label|caught-false|nested-try-first-false-label|try-alternate|nested-try-first-alternate-label|

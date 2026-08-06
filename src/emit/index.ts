@@ -50411,6 +50411,12 @@ class Emitter {
                             for (const assignedSymbol of nestedDoAssigned) assigned.add(assignedSymbol);
                             continue;
                         }
+                        const nestedTryAssigned = nestedTryAssignedSymbols(statement, pending);
+                        if (nestedTryAssigned) {
+                            for (const assignedSymbol of nestedTryAssigned) pending.delete(assignedSymbol);
+                            for (const assignedSymbol of nestedTryAssigned) assigned.add(assignedSymbol);
+                            continue;
+                        }
                         if (referencesUninitialized(statement, pending) ||
                             !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
                             return new Set();
@@ -50470,6 +50476,18 @@ class Emitter {
                     for (const symbol of bodyAssigned) remaining.delete(symbol);
                     if (referencesUninitialized(statement.expression, remaining)) return null;
                     return bodyAssigned;
+                }
+                function nestedTryAssignedSymbols(
+                    statement: ts.Statement,
+                    symbols: ReadonlySet<ts.Symbol>,
+                ): Set<ts.Symbol> | null {
+                    if (!ts.isTryStatement(statement) || !statement.finallyBlock ||
+                        referencesUninitialized(statement.tryBlock, symbols) ||
+                        (statement.catchClause && referencesUninitialized(statement.catchClause.block, symbols)) ||
+                        !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                        return null;
+                    }
+                    return consumeAssignmentSequence(statement.finallyBlock.statements, symbols);
                 }
                 function nestedSwitchAssignedSymbols(
                     statement: ts.Statement,
@@ -50533,6 +50551,12 @@ class Emitter {
                         const nestedDoAssigned = nestedDoAssignedSymbols(assignmentStatement, pendingSymbols);
                         if (nestedDoAssigned && nestedDoAssigned.has(symbol)) {
                             for (const assignedSymbol of nestedDoAssigned) pendingSymbols.delete(assignedSymbol);
+                            assigned = true;
+                            break;
+                        }
+                        const nestedTryAssigned = nestedTryAssignedSymbols(assignmentStatement, pendingSymbols);
+                        if (nestedTryAssigned && nestedTryAssigned.has(symbol)) {
+                            for (const assignedSymbol of nestedTryAssigned) pendingSymbols.delete(assignedSymbol);
                             assigned = true;
                             break;
                         }
