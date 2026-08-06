@@ -50,3 +50,22 @@ pure-nullish-skipped-first false pure-nullish-left
 pure-nullish-skipped-done true left
 pure-nullish-selected-first false pure-nullish-left
 pure-nullish-selected-done true prefix-nullish
+call-skipped-first false call-left 0
+call-skipped-done true false 0
+call-selected-first false call-left 0
+call-selected-done true call-rhs-1 1
+call-left-first false call-right 1
+call-left-done true call-result 1
+call-array-skipped-first false array-call-left 0
+call-array-skipped-second false array-after 0
+call-array-skipped-done true false|array-after 0
+call-array-selected-first false array-call-left 0
+call-array-selected-second false array-after 1
+call-array-selected-done true array-call-rhs-1|array-after 1
+call-left-array-first false array-right 1
+call-left-array-second false array-after 1
+call-left-array-done true array-right|array-after 1
+new-skipped-first false new-left-1 0
+new-skipped-done true null 0
+new-selected-first false new-left-1 0
+new-selected-done true new-rhs-1 1

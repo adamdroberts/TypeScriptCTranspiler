@@ -37,13 +37,13 @@ literal-leaf 61 62
 literal-leaf-done true 11
 regexp-leaf 63 64
 regexp-leaf-done true 7
-logical-leaf-before left right 0
+logical-leaf-before left right 1
 logical-leaf true AmidB 1
-nullish-leaf-before left right 0
+nullish-leaf-before left right 1
 nullish-leaf true AmidB 1
-dynamic-logical-leaf-before left right 0
+dynamic-logical-leaf-before left right 1
 dynamic-logical-leaf true AmidB 1
-numeric-logical-leaf-before 81 82 0
+numeric-logical-leaf-before 81 82 1
 numeric-logical-leaf true 9 1
 numeric-logical-false-before 85 86 1
 numeric-logical-false true 5 1
@@ -51,7 +51,7 @@ boolean-logical-leaf-before 83 84 0
 boolean-logical-leaf true 6 1
 boolean-logical-false-before 87 88 1
 boolean-logical-false true 5 1
-pointer-nullish-leaf-before 89 90 0
+pointer-nullish-leaf-before 89 90 1
 pointer-nullish-leaf true 7 1
 pointer-nullish-present-before 91 92 1
 pointer-nullish-present true 7 1

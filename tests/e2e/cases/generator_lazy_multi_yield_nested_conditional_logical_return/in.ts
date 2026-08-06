@@ -34,6 +34,48 @@ function* pureNullishOperandReturn(prefix: string): Generator<string, string, an
     return (yield "pure-nullish-left") ?? (prefix + "-nullish");
 }
 
+let logicalCallCount = 0;
+function sideEffectingLogicalCall(prefix: string): string {
+    logicalCallCount++;
+    return prefix + logicalCallCount;
+}
+
+function* stagedCallOperandReturn(): Generator<string, string, any> {
+    return (yield "call-left") && sideEffectingLogicalCall("call-rhs-");
+}
+
+function* stagedCallLeftReturn(): Generator<string, string, any> {
+    return sideEffectingLogicalCall("call-left-") && (yield "call-right");
+}
+
+function* stagedCallArrayReturn(): Generator<string, string[], any> {
+    return [
+        (yield "array-call-left") && sideEffectingLogicalCall("array-call-rhs-"),
+        yield "array-after",
+    ];
+}
+
+function* stagedCallLeftArrayReturn(): Generator<string, string[], any> {
+    return [
+        sideEffectingLogicalCall("array-left-") && (yield "array-right"),
+        yield "array-after",
+    ];
+}
+
+let logicalNewCount = 0;
+class StagedLogicalBox {
+    value: string;
+
+    constructor(prefix: string) {
+        logicalNewCount++;
+        this.value = prefix + logicalNewCount;
+    }
+}
+
+function* stagedNewOperandReturn(): Generator<StagedLogicalBox, StagedLogicalBox, any> {
+    return (yield new StagedLogicalBox("new-left-")) && new StagedLogicalBox("new-rhs-");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -173,3 +215,67 @@ const pureNullishSelectedFirst: any = pureNullishSelected.next();
 console.log("pure-nullish-selected-first", pureNullishSelectedFirst.done, pureNullishSelectedFirst.value);
 const pureNullishSelectedDone: any = pureNullishSelected.next(null);
 console.log("pure-nullish-selected-done", pureNullishSelectedDone.done, pureNullishSelectedDone.value);
+
+logicalCallCount = 0;
+const callSkipped = stagedCallOperandReturn();
+const callSkippedFirst: any = callSkipped.next();
+console.log("call-skipped-first", callSkippedFirst.done, callSkippedFirst.value, logicalCallCount);
+const callSkippedDone: any = callSkipped.next(false);
+console.log("call-skipped-done", callSkippedDone.done, callSkippedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const callSelected = stagedCallOperandReturn();
+const callSelectedFirst: any = callSelected.next();
+console.log("call-selected-first", callSelectedFirst.done, callSelectedFirst.value, logicalCallCount);
+const callSelectedDone: any = callSelected.next(true);
+console.log("call-selected-done", callSelectedDone.done, callSelectedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const callLeft = stagedCallLeftReturn();
+const callLeftFirst: any = callLeft.next();
+console.log("call-left-first", callLeftFirst.done, callLeftFirst.value, logicalCallCount);
+const callLeftDone: any = callLeft.next("call-result");
+console.log("call-left-done", callLeftDone.done, callLeftDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const callArraySkipped = stagedCallArrayReturn();
+const callArraySkippedFirst: any = callArraySkipped.next();
+console.log("call-array-skipped-first", callArraySkippedFirst.done, callArraySkippedFirst.value, logicalCallCount);
+const callArraySkippedSecond: any = callArraySkipped.next(false);
+console.log("call-array-skipped-second", callArraySkippedSecond.done, callArraySkippedSecond.value, logicalCallCount);
+const callArraySkippedDone: any = callArraySkipped.next("array-after");
+console.log("call-array-skipped-done", callArraySkippedDone.done, (callArraySkippedDone.value as any[]).join("|"), logicalCallCount);
+
+logicalCallCount = 0;
+const callArraySelected = stagedCallArrayReturn();
+const callArraySelectedFirst: any = callArraySelected.next();
+console.log("call-array-selected-first", callArraySelectedFirst.done, callArraySelectedFirst.value, logicalCallCount);
+const callArraySelectedSecond: any = callArraySelected.next(true);
+console.log("call-array-selected-second", callArraySelectedSecond.done, callArraySelectedSecond.value, logicalCallCount);
+const callArraySelectedDone: any = callArraySelected.next("array-after");
+console.log("call-array-selected-done", callArraySelectedDone.done, (callArraySelectedDone.value as any[]).join("|"), logicalCallCount);
+
+logicalCallCount = 0;
+const callLeftArray = stagedCallLeftArrayReturn();
+const callLeftArrayFirst: any = callLeftArray.next();
+console.log("call-left-array-first", callLeftArrayFirst.done, callLeftArrayFirst.value, logicalCallCount);
+const callLeftArraySecond: any = callLeftArray.next("array-right");
+console.log("call-left-array-second", callLeftArraySecond.done, callLeftArraySecond.value, logicalCallCount);
+const callLeftArrayDone: any = callLeftArray.next("array-after");
+console.log("call-left-array-done", callLeftArrayDone.done, (callLeftArrayDone.value as any[]).join("|"), logicalCallCount);
+
+logicalNewCount = 0;
+const newSkipped = stagedNewOperandReturn();
+const newSkippedFirst: any = newSkipped.next();
+logicalNewCount = 0;
+console.log("new-skipped-first", newSkippedFirst.done, newSkippedFirst.value.value, logicalNewCount);
+const newSkippedDone: any = newSkipped.next(null);
+console.log("new-skipped-done", newSkippedDone.done, newSkippedDone.value, logicalNewCount);
+
+logicalNewCount = 0;
+const newSelected = stagedNewOperandReturn();
+const newSelectedFirst: any = newSelected.next();
+logicalNewCount = 0;
+console.log("new-selected-first", newSelectedFirst.done, newSelectedFirst.value.value, logicalNewCount);
+const newSelectedDone: any = newSelected.next(true);
+console.log("new-selected-done", newSelectedDone.done, newSelectedDone.value.value, logicalNewCount);
