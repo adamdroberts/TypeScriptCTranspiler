@@ -1,3 +1,4 @@
 default callback: true default-callback 0
 default sync: true default-sync
 default spawn: 0 default-spawn 0
+default async: 0 null default-async

@@ -4,6 +4,9 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ## Unreleased
 
+### Added
+- `child_process.spawn(file, args?, options?)` now creates real asynchronous POSIX child handles with pipe-backed stdin/stdout/stderr, dynamic EventEmitter-compatible listeners, `data` / `end` stream events, `spawn` / `exit` / `close` lifecycle events, UTF-8 stream encoding, stdin `write` / `end`, and `kill` / exit-signal state. Tests: `child_process_spawn`, `child_process_spawn_streams`, `child_process_spawn_kill`.
+
 ### Fixed
 - Async continuations now preserve await-free empty-statement prefixes before direct unlabelled or same-loop labelled nested-loop `break`/`continue`, retaining surrounding statement ordering before outer incrementor/condition re-entry or terminal-await fallthrough; suspended prefixes, escaping controls, and broader nested control-flow graphs remain deferred. Regression: `async_await_post_await_if_await_condition_nested_awaited_var_for_loop_control`.
 - Async continuations now preserve await-free standalone block prefixes before direct unlabelled or same-loop labelled nested-loop `break`/`continue`, retaining block-local statement ordering before outer incrementor/condition re-entry or terminal-await fallthrough; suspended blocks, escaping controls, and broader nested control-flow graphs remain deferred. Regression: `async_await_post_await_if_await_condition_nested_awaited_var_for_loop_control`.
@@ -2279,7 +2282,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 - Empty `Array.prototype.reduce(...)` and `reduceRight(...)` calls without an initial value now throw catchable runtime exceptions instead of aborting through `tsc_panic`, including typed arrays, dynamic arrays, and detached prototype calls on array-like receivers. Test: `array_reduce_empty_errors`.
 - Dynamic `Promise.all(...)`, `Promise.any(...)`, and `Promise.allSettled(...)` over `any[]` / `Set<any>` now subscribe to pending thenable assimilation jobs instead of leaving the outer combinator pending forever after callable `then` methods are microtask-scheduled. Test: `promise_combinators_dynamic`.
 - Dynamic Promise thenable assimilation now reads the `then` property synchronously but invokes callable `then` methods through the microtask queue, preserving FIFO ordering with `queueMicrotask(...)`. Test: `promise_thenable_microtask_order`.
-- Named `child_process` / `node:child_process` imports of unsupported `spawn` and `fork` now produce precise compile-time diagnostics instead of falling through less specific call handling. Tests: `child_process_named_spawn_reject`, `child_process_named_fork_reject`.
+- Named `child_process` / `node:child_process` imports of unsupported `fork` now produce precise compile-time diagnostics instead of falling through less specific call handling. Test: `child_process_named_fork_reject`.
 - Typed and dynamic array `length` descriptors now preserve non-writable length state independently from `Object.freeze(...)`, blocking later appends and length changes while accepting compatible same-length redefinitions. Test: `array_length_writable_descriptor`.
 - Detached `Array.prototype` helpers now reject `null` and `undefined` receivers before generic array-like or primitive fallback handling. Test: `array_prototype_nullish_receivers`.
 - Default imports from unmarked CommonJS `module.exports = Object.fromEntries(Object.entries(require(...)))` packages now bind to the finite AOT `default` export member instead of an un-emitted whole-`module.exports` fallback. Test: `node_modules_commonjs_module_exports_object_from_entries_require_object_entries`.

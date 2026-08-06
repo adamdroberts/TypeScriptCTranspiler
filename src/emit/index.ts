@@ -80147,6 +80147,65 @@ class Emitter {
                 `tsc_child_process_spawn_sync(${fileC}, ${argsC}, ${cwdC}, ${inputC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${captureStdoutC}, ${captureStderrC}, ${inheritStdoutC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${maxBufferC}, ${timeoutC}, (int)${killSignalC}, ${returnUtf8C})`,
             );
         }
+        if (method === "spawn") {
+            if (call.arguments.length < 1) {
+                unsupported(call, "child_process.spawn expects file, optional args, and options");
+            }
+            const file = this.emitExpr(call.arguments[0]!);
+            const optionsAsSecondArg = this.isStaticObjectLiteralExpression(call.arguments[1]) || (!!call.arguments[1] && this.isUndefinedLikeExpression(call.arguments[1]!));
+            const argsNode = optionsAsSecondArg ? undefined : call.arguments[1];
+            const args = argsNode ? this.emitExpr(argsNode) : { c: "NULL", ty: arrayType(T_STRING) };
+            if (argsNode && (args.ty.kind !== "array" || args.ty.elem?.kind !== "string")) {
+                unsupported(argsNode, "child_process.spawn args must be string[]");
+            }
+            const optionsNode = optionsAsSecondArg ? call.arguments[1] : call.arguments[2];
+            const consumedArgCount = optionsNode ? (optionsAsSecondArg ? 2 : 3) : (argsNode ? 2 : 1);
+            const options = this.childProcessObjectOptions(optionsNode, "spawn");
+            const cwd = options ? this.childProcessOptionString(options, "cwd") : null;
+            const env = options ? this.childProcessEnvOption(options) : null;
+            const shell = options ? this.childProcessShellOption(options) : null;
+            const argv0 = options ? this.childProcessOptionString(options, "argv0") : null;
+            const uid = options ? this.childProcessNumberOption(options, "uid") : null;
+            const gid = options ? this.childProcessNumberOption(options, "gid") : null;
+            const killSignal = options ? this.childProcessKillSignalOption(options) : "15.0";
+            const stdio = options ? this.childProcessSpawnSyncStdioOption(options) : this.childProcessDefaultSpawnSyncStdio();
+            const detached = options ? this.childProcessBooleanOption(options, "detached") : "false";
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: file, target: T_STRING, node: call.arguments[0]! },
+                { value: args, target: arrayType(T_STRING), node: argsNode },
+                cwd
+                    ? { value: cwd, target: T_STRING, node: cwd.node }
+                    : { value: { c: "NULL", ty: T_STRING } },
+                env
+                    ? { value: env, target: arrayType(T_STRING), node: env.node }
+                    : { value: { c: "NULL", ty: arrayType(T_STRING) } },
+                shell
+                    ? { value: shell, target: T_STRING, node: shell.node }
+                    : { value: { c: "NULL", ty: T_STRING } },
+                argv0
+                    ? { value: argv0, target: T_STRING, node: argv0.node }
+                    : { value: { c: "NULL", ty: T_STRING } },
+                { value: { c: stdio.pipeStdin, ty: T_BOOLEAN } },
+                { value: { c: stdio.ignoreStdin, ty: T_BOOLEAN } },
+                { value: { c: stdio.captureStdout, ty: T_BOOLEAN } },
+                { value: { c: stdio.captureStdout ? "false" : stdio.inheritStdout ? "false" : "true", ty: T_BOOLEAN } },
+                { value: { c: stdio.inheritStdout, ty: T_BOOLEAN } },
+                { value: { c: stdio.captureStderr, ty: T_BOOLEAN } },
+                { value: { c: stdio.captureStderr ? "false" : stdio.inheritStderr ? "false" : "true", ty: T_BOOLEAN } },
+                { value: { c: stdio.inheritStderr, ty: T_BOOLEAN } },
+                { value: { c: detached, ty: T_BOOLEAN } },
+                uid
+                    ? { value: uid, target: T_NUMBER, node: uid.node }
+                    : { value: { c: "-1.0", ty: T_NUMBER } },
+                gid
+                    ? { value: gid, target: T_NUMBER, node: gid.node }
+                    : { value: { c: "-1.0", ty: T_NUMBER } },
+                { value: { c: killSignal, ty: T_NUMBER } },
+                ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
+            ], ([fileC, argsC, cwdC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, pipeStdoutC, ignoreStdoutC, inheritStdoutC, pipeStderrC, ignoreStderrC, inheritStderrC, detachedC, uidC, gidC, killSignalC]) =>
+                `tsc_child_process_spawn(${fileC}, ${argsC}, ${cwdC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${pipeStdoutC}, ${ignoreStdoutC}, ${inheritStdoutC}, ${pipeStderrC}, ${ignoreStderrC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, (int)${killSignalC})`,
+            );
+        }
         unsupported(call, `child_process.${method}`);
     }
 

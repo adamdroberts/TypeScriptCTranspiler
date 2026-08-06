@@ -1,3 +1,4 @@
 import { spawn } from "child_process";
 
-spawn("/bin/true");
+const child: any = spawn("/bin/true");
+child.on("close", (code: any, signal: any) => console.log(`named:${code}:${signal}`));

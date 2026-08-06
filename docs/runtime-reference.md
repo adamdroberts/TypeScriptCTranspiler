@@ -412,6 +412,12 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_set_immediate(fn, env)` / `tsc_clear_immediate(id)` / `tsc_drain_immediates()` | `double` / `void` | Bounded before-exit `setImmediate(callback, ...args)` queue drained after next ticks, microtasks, and zero-delay timeouts, with numeric handles cancellable before drain |
 | `tsc_abort_signal_add_callback(signal, fn, env)` | `void` | Registers a runtime cancellation callback invoked when the bounded AbortSignal aborts; libuv-backed requests use it to reject and cancel pending work |
 
+## child_process (bounded asynchronous spawn subset)
+
+| Symbol | Signature | Purpose |
+|--------|-----------|---------|
+| `tsc_child_process_spawn` | `(file, args, cwd, env, shell, argv0, pipeStdin, ignoreStdin, pipeStdout, ignoreStdout, inheritStdout, pipeStderr, ignoreStderr, inheritStderr, detached, uid, gid, killSignal) -> tsc_value_t` | Creates a POSIX child handle, polls nonblocking stdio through the runtime loop, emits stream and lifecycle events, and exposes dynamic `kill` / `ref` / `unref` methods. This bounded subset supports compiler-selected stdio modes, UTF-8 stream opt-in, and string/Buffer stdin writes; broader child-process options and `fork` remain deferred. |
+
 ## http (bounded validation subset)
 
 | Symbol | Signature | JS equivalent |

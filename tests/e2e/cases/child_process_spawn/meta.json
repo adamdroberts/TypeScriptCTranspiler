@@ -1,0 +1,1 @@
+{"description":"child_process.spawn creates pipe-backed streams and emits spawn, data, end, exit, and close lifecycle events"}

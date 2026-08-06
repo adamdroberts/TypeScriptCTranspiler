@@ -1,1 +1,1 @@
-{"description":"named child_process spawn imports produce a precise unsupported diagnostic"}
+{"description":"named child_process spawn imports route to the asynchronous lifecycle subset"}

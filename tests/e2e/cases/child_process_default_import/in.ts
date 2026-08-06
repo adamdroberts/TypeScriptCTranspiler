@@ -10,3 +10,8 @@ childProcess.exec("printf default-callback", (err: any, stdout: string, stderr: 
 
 console.log("default sync:", Buffer.isBuffer(sync), sync.toString());
 console.log("default spawn:", spawn.status, spawn.stdout, spawn.stderr.length);
+const asyncSpawn: any = childProcess.spawn("/bin/printf", ["default-async"]);
+asyncSpawn.stdout.setEncoding("utf8");
+let asyncOutput = "";
+asyncSpawn.stdout.on("data", (chunk: any) => asyncOutput += chunk);
+asyncSpawn.on("close", (code: any, signal: any) => console.log("default async:", code, signal, asyncOutput));
