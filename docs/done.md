@@ -1,6 +1,7 @@
 # Implemented features
 
 - `timers/promises.setInterval` now returns a bounded async iterator that yields its configured value through direct `next()` calls and dynamic `for await...of`, closes its runtime interval on iterator return/break, and rejects one pending/next request on AbortSignal cancellation before reporting completion; broader timer option and async-iterator semantics remain deferred. Test: `timers_promises_set_interval`.
+- `fs.promises.open` FileHandles now accept string `write(data, position?, encoding?)` calls through the existing asynchronous byte-write path and preserve the original string in the `{ bytesWritten, buffer }` result; broader FileHandle overload/options remain deferred. Test: `fs_promises_file_handle_string_write`.
 - Custom iterator `for...of` lowering now destructures exactly `[key, value]` identifier bindings from typed `ObjectEntry` values, dynamic values, or array-backed value pairs with sparse-element handling; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `custom_iterator_dynamic_destructure`.
 - Lazy generators now preserve bounded `for...of` destructuring for identifier-only `[first, second]` bindings over typed entry elements such as `Map` pairs and dynamic value elements; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `generator_lazy_for_of_destructuring`.
 - Collection constructors now accept omitted generic arguments for `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry`, using dynamic value storage for unresolved type parameters; the intrinsic TypeScript `object` type now maps to the same dynamic representation. Test: `inferred_collection_constructors`.
@@ -3497,6 +3498,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `timers_promises_delay` | timers/promises setTimeout supports nonzero and dynamic delays before promise fulfillment |
 | `timers_promises_set_interval` | timers/promises setInterval yields async-iterator values, closes on break, and rejects once on AbortSignal cancellation |
 | `timers_promises_scheduler` | timers/promises scheduler.wait and scheduler.yield immediate subset with ignored extras |
+| `fs_promises_file_handle_string_write` | FileHandle string write supports position/encoding and preserves the string result buffer |
 | `promise_race_empty_pending` | empty Promise.race over arrays or Sets returns a pending Promise record |
 | `promise_resolve_adopt` | Promise.resolve adopts existing native Promise records |
 | `promise_returned_thenable_throw_after_settle` | returned dynamic thenables that throw after settlement preserve the first settlement |

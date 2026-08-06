@@ -3006,6 +3006,7 @@ typedef struct tsc_fs_file_handle_io_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
     tsc_value_t buffer_value;
+    tsc_value_t result_value;
     tsc_buffer_t* buffer;
     tsc_uv_buf_t io_buf;
     int fd;
@@ -3178,7 +3179,7 @@ static tsc_value_t tsc_fs_file_handle_io_result(const tsc_fs_file_handle_io_asyn
         tsc_str_from_lit(task->is_read ? "bytesRead" : "bytesWritten", task->is_read ? 9 : 12),
         tsc_value_num((double)result)
     );
-    tsc_object_set(object, tsc_str_from_lit("buffer", 6), task->buffer_value);
+    tsc_object_set(object, tsc_str_from_lit("buffer", 6), task->result_value);
     return tsc_value_object(object);
 }
 
@@ -3829,7 +3830,7 @@ static size_t tsc_fs_file_handle_io_index(tsc_value_t value) {
     return (size_t)number;
 }
 
-static tsc_promise_t* tsc_fs_file_handle_io_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, bool is_read) {
+static tsc_promise_t* tsc_fs_file_handle_io_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, bool is_read, tsc_value_t result_value) {
     if (!args || args->len < 1) {
         tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle I/O needs a Buffer"));
         return NULL;
@@ -3880,6 +3881,7 @@ static tsc_promise_t* tsc_fs_file_handle_io_start(tsc_fs_file_handle_t* handle, 
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->buffer_value = buffer_value;
+    task->result_value = tsc_value_is_undefined(result_value) ? buffer_value : result_value;
     task->buffer = buffer;
     task->fd = handle->fd;
     task->offset = offset;
@@ -4003,12 +4005,37 @@ static tsc_promise_t* tsc_fs_file_handle_vector_io_start(tsc_fs_file_handle_t* h
 
 static tsc_value_t tsc_fs_file_handle_read_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, true));
+    return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, true, tsc_value_undefined()));
 }
 
 static tsc_value_t tsc_fs_file_handle_write_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, false));
+    if (args && args->len > 0) {
+        tsc_value_t data = TSC_ARR(tsc_value_t, args, 0);
+        if (value_is_box(data) && value_tag(data) == TSC_VALUE_TAG_STRING) {
+            tsc_str_t* encoding = NULL;
+            if (args->len > 2 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 2))) {
+                tsc_value_t encoding_value = TSC_ARR(tsc_value_t, args, 2);
+                if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
+                    tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.write encoding must be a string"));
+                    return tsc_value_undefined();
+                }
+                encoding = tsc_value_as_string(encoding_value);
+            }
+            tsc_buffer_t* buffer = tsc_buffer_from_str(tsc_value_as_string(data), encoding);
+            tsc_value_t buffer_value = tsc_value_buffer(buffer);
+            tsc_array_t* io_args = tsc_array_new(sizeof(tsc_value_t), 4);
+            tsc_value_t offset = tsc_value_num(0.0);
+            tsc_value_t length = tsc_value_num((double)buffer->len);
+            tsc_value_t position = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_null();
+            tsc_array_push_raw(io_args, &buffer_value);
+            tsc_array_push_raw(io_args, &offset);
+            tsc_array_push_raw(io_args, &length);
+            tsc_array_push_raw(io_args, &position);
+            return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, io_args, false, data));
+        }
+    }
+    return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, false, tsc_value_undefined()));
 }
 
 static tsc_value_t tsc_fs_file_handle_readv_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {

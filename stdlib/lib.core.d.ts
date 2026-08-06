@@ -1615,6 +1615,10 @@ interface FSFileWriteResult {
     readonly bytesWritten: number;
     readonly buffer: Buffer;
 }
+interface FSFileStringWriteResult {
+    readonly bytesWritten: number;
+    readonly buffer: string;
+}
 interface FSFileReadvResult {
     readonly bytesRead: number;
     readonly buffers: Buffer[];
@@ -1633,6 +1637,7 @@ interface FSFileHandle {
     readonly fd: number;
     read(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileReadResult>;
     write(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileWriteResult>;
+    write(string: string, position?: number | null, encoding?: BufferEncoding, ...ignored: any[]): Promise<FSFileStringWriteResult>;
     readv(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileReadvResult>;
     writev(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileWritevResult>;
     appendFile(data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
