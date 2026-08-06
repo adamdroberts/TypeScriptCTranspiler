@@ -53,6 +53,13 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
                 mark("condition-while");
                 nestedWhile++;
             }
+            var nestedDo = repeats;
+            do {
+                if (nestedDo === 0) {
+                    mark("condition-do");
+                }
+                nestedDo++;
+            } while (nestedDo === 0);
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -86,6 +93,13 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
                 mark("incrementor-while");
                 nestedWhile++;
             }
+            var nestedDo = incrementorCount;
+            do {
+                if (nestedDo === 0) {
+                    mark("incrementor-do");
+                }
+                nestedDo++;
+            } while (nestedDo === 0);
             switch (incrementorCount) {
                 case 0:
                     mark("incrementor-switch");
@@ -121,6 +135,13 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
                 mark("continue-while");
                 nestedWhile++;
             }
+            var nestedDo = continueCount;
+            do {
+                if (nestedDo === 0) {
+                    mark("continue-do");
+                }
+                nestedDo++;
+            } while (nestedDo === 0);
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -156,6 +177,13 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
                 mark("break-while");
                 nestedWhile++;
             }
+            var nestedDo = breakCount;
+            do {
+                if (nestedDo === 0) {
+                    mark("break-do");
+                }
+                nestedDo++;
+            } while (nestedDo === 0);
             switch (breakCount) {
                 case 0:
                     mark("break-switch");
