@@ -20,6 +20,19 @@ function* nestedCondition(): Generator<string, string, any> {
     return "nested-false";
 }
 
+let sideEffectingIfCallCount = 0;
+function sideEffectingIfCall(value: any): any {
+    sideEffectingIfCallCount++;
+    return value;
+}
+
+function* sideEffectingIfCondition(): Generator<string, string, any> {
+    if ((yield "side-effecting-if-left") && sideEffectingIfCall(yield "side-effecting-if-argument")) {
+        return "side-effecting-if-true-" + sideEffectingIfCallCount;
+    }
+    return "side-effecting-if-false-" + sideEffectingIfCallCount;
+}
+
 const andFalse = andCondition();
 const andFalseFirst: any = andFalse.next();
 const andFalseDone: any = andFalse.next(0);
@@ -123,4 +136,29 @@ console.log(
     nestedMiddleFalseThird.value,
     nestedMiddleFalseDone.done,
     nestedMiddleFalseDone.value,
+);
+
+const sideEffectingIfFalse = sideEffectingIfCondition();
+const sideEffectingIfFalseFirst: any = sideEffectingIfFalse.next();
+const sideEffectingIfFalseDone: any = sideEffectingIfFalse.next(0);
+console.log(
+    "side-effecting-if-false",
+    sideEffectingIfFalseFirst.done,
+    sideEffectingIfFalseFirst.value,
+    sideEffectingIfFalseDone.done,
+    sideEffectingIfFalseDone.value,
+);
+
+const sideEffectingIfTrue = sideEffectingIfCondition();
+const sideEffectingIfTrueFirst: any = sideEffectingIfTrue.next();
+const sideEffectingIfTrueSecond: any = sideEffectingIfTrue.next(1);
+const sideEffectingIfTrueDone: any = sideEffectingIfTrue.next(1);
+console.log(
+    "side-effecting-if-true",
+    sideEffectingIfTrueFirst.done,
+    sideEffectingIfTrueFirst.value,
+    sideEffectingIfTrueSecond.done,
+    sideEffectingIfTrueSecond.value,
+    sideEffectingIfTrueDone.done,
+    sideEffectingIfTrueDone.value,
 );

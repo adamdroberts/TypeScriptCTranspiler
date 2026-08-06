@@ -7,3 +7,5 @@ nullish-null false nullish-left false nullish-right true nullish-true
 nested-left-false false nested-left true nested-false
 nested-middle-true false nested-left false nested-middle true nested-true
 nested-middle-false false nested-left false nested-middle false nested-right true nested-true
+side-effecting-if-false false side-effecting-if-left true side-effecting-if-false-0
+side-effecting-if-true false side-effecting-if-left false side-effecting-if-argument true side-effecting-if-true-1
