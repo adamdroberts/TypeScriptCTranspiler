@@ -50488,7 +50488,16 @@ class Emitter {
             thenBranch: AwaitedIfForInitializerBranch;
             elseBranch: AwaitedIfForInitializerBranch;
         };
-        type AwaitedIfForInitializerBranch = AwaitedIfForInitializer | AwaitedIfForInitializerSelector;
+        type AwaitedIfForInitializerCondition = {
+            kind: "condition";
+            awaitExpr: ts.AwaitExpression;
+            thenBranch: AwaitedIfForInitializerBranch;
+            elseBranch: AwaitedIfForInitializerBranch;
+        };
+        type AwaitedIfForInitializerBranch =
+            | AwaitedIfForInitializer
+            | AwaitedIfForInitializerSelector
+            | AwaitedIfForInitializerCondition;
         type AwaitedIfBranch =
             | {
                 kind: "terminal";
@@ -50931,16 +50940,34 @@ class Emitter {
             const awaitedForInitializerBranch = (
                 statement: ts.Statement,
                 selectorDepth = 0,
+                conditionDepth = 0,
             ): AwaitedIfForInitializerBranch | null => {
                 const statements = ts.isBlock(statement) ? statement.statements : [statement];
                 if (statements.length !== 1) return null;
                 const candidate = statements[0]!;
                 const direct = awaitedForInitializer(candidate);
                 if (direct) return direct;
-                if (!ts.isIfStatement(candidate) || !candidate.elseStatement ||
-                    selectorDepth >= 2 || containsAwait(candidate.expression) || !nestedPreludeSafe(candidate)) return null;
-                const thenBranch = awaitedForInitializerBranch(candidate.thenStatement, selectorDepth + 1);
-                const elseBranch = awaitedForInitializerBranch(candidate.elseStatement, selectorDepth + 1);
+                if (!ts.isIfStatement(candidate) || !candidate.elseStatement || !nestedPreludeSafe(candidate)) return null;
+                const candidateAwait = this.unwrapTransparentExpression(candidate.expression);
+                if (ts.isAwaitExpression(candidateAwait)) {
+                    if (conditionDepth >= 1 || containsAwait(candidateAwait.expression)) return null;
+                    const thenBranch = awaitedForInitializerBranch(
+                        candidate.thenStatement,
+                        selectorDepth,
+                        conditionDepth + 1,
+                    );
+                    const elseBranch = awaitedForInitializerBranch(
+                        candidate.elseStatement,
+                        selectorDepth,
+                        conditionDepth + 1,
+                    );
+                    return thenBranch && elseBranch
+                        ? { kind: "condition", awaitExpr: candidateAwait, thenBranch, elseBranch }
+                        : null;
+                }
+                if (selectorDepth >= 2 || containsAwait(candidate.expression)) return null;
+                const thenBranch = awaitedForInitializerBranch(candidate.thenStatement, selectorDepth + 1, conditionDepth);
+                const elseBranch = awaitedForInitializerBranch(candidate.elseStatement, selectorDepth + 1, conditionDepth);
                 return thenBranch && elseBranch
                     ? { kind: "selector", condition: candidate.expression, thenBranch, elseBranch }
                     : null;
@@ -50961,14 +50988,20 @@ class Emitter {
                 }
                 const thenBranch = terminalBranchForInitializerBranch(initializerBranch.thenBranch, terminal);
                 const elseBranch = terminalBranchForInitializerBranch(initializerBranch.elseBranch, terminal);
-                return thenBranch && elseBranch
+                if (!thenBranch || !elseBranch) return null;
+                return initializerBranch.kind === "condition"
                     ? {
+                        kind: "condition",
+                        awaitExpr: initializerBranch.awaitExpr,
+                        thenBranch,
+                        elseBranch,
+                    }
+                    : {
                         kind: "selector",
                         condition: initializerBranch.condition,
                         thenBranch,
                         elseBranch,
-                    }
-                    : null;
+                    };
             };
             const nestedVarPreludeEscapes = (statement: ts.Statement, index: number): readonly ts.Identifier[] => {
                 const declared = new Map<ts.Symbol, ts.Identifier>();
