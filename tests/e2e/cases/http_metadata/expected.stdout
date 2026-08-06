@@ -1,0 +1,3 @@
+named: 35 63 ACL UNSUBSCRIBE OK I'm a Teapot 16384
+namespace: 35 GET Not Found 16384
+default: 35 Internal Server Error 16384

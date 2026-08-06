@@ -1,5 +1,6 @@
 # Implemented features
 
+- `http` / `node:http` metadata imports now expose the complete `METHODS` array, the complete `STATUS_CODES` map, and `maxHeaderSize` across named, namespace, and default import forms; HTTP request/server transport and `https`/`http2` remain deferred. Test: `http_metadata`.
 - `timers/promises.setInterval` now returns a bounded async iterator that yields its configured value through direct `next()` calls and dynamic `for await...of`, closes its runtime interval on iterator return/break, and rejects one pending/next request on AbortSignal cancellation before reporting completion; broader timer option and async-iterator semantics remain deferred. Test: `timers_promises_set_interval`.
 - `fs.promises.open` FileHandles now accept string `write(data, position?, encoding?)` calls through the existing asynchronous byte-write path and preserve the original string in the `{ bytesWritten, buffer }` result; broader FileHandle overload/options remain deferred. Test: `fs_promises_file_handle_string_write`.
 - Custom iterator `for...of` lowering now destructures exactly `[key, value]` identifier bindings from typed `ObjectEntry` values, dynamic values, or array-backed value pairs with sparse-element handling; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `custom_iterator_dynamic_destructure`.
@@ -3498,6 +3499,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `timers_promises_delay` | timers/promises setTimeout supports nonzero and dynamic delays before promise fulfillment |
 | `timers_promises_set_interval` | timers/promises setInterval yields async-iterator values, closes on break, and rejects once on AbortSignal cancellation |
 | `timers_promises_scheduler` | timers/promises scheduler.wait and scheduler.yield immediate subset with ignored extras |
+| `http_metadata` | http/node:http metadata exports expose METHODS, STATUS_CODES, and maxHeaderSize across import forms |
 | `fs_promises_file_handle_string_write` | FileHandle string write supports position/encoding and preserves the string result buffer |
 | `promise_race_empty_pending` | empty Promise.race over arrays or Sets returns a pending Promise record |
 | `promise_resolve_adopt` | Promise.resolve adopts existing native Promise records |

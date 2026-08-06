@@ -2366,6 +2366,27 @@ interface SocketAddressConstructor {
 }
 declare var SocketAddress: SocketAddressConstructor;
 
+interface HttpModule {
+    readonly METHODS: string[];
+    readonly STATUS_CODES: any;
+    readonly maxHeaderSize: number;
+}
+declare const http: HttpModule;
+declare module "http" {
+    export const METHODS: string[];
+    export const STATUS_CODES: any;
+    export const maxHeaderSize: number;
+    const defaultHttp: HttpModule;
+    export default defaultHttp;
+}
+declare module "node:http" {
+    export const METHODS: string[];
+    export const STATUS_CODES: any;
+    export const maxHeaderSize: number;
+    const defaultHttp: HttpModule;
+    export default defaultHttp;
+}
+
 interface Net {
     isIP(input: string, ...ignored: any[]): number;
     isIPv4(input: string, ...ignored: any[]): boolean;
