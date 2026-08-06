@@ -42,6 +42,22 @@ function* nestedConditionalLogicalSideEffectingOperand(): Generator<string, stri
     return "side-done";
 }
 
+function* nestedConditionalLogicalNestedOperand(): Generator<string, string, any> {
+    for (
+        let value: any = (yield "deep-left") && ((yield "deep-selector")
+            ? ((yield "deep-arm-left") && ((yield "deep-inner-selector")
+                ? sideEffectingConditionalCall(yield "deep-call-arg")
+                : sideEffectingConditionalCall(yield "deep-fallback-arg")))
+            : "deep-fallback"),
+        count = 0;
+        count < 1;
+        count++
+    ) {
+        yield "deep-body-" + String(value);
+    }
+    return "deep-done";
+}
+
 const iterator = nestedConditionalLogicalOperand();
 const first: any = iterator.next();
 console.log("first", first.done, first.value);
@@ -105,3 +121,28 @@ const sideSelectedSixth: any = sideSelectedIterator.next();
 console.log("side-selected-sixth", sideSelectedSixth.done, sideSelectedSixth.value, sideEffectingCallCount);
 const sideSelectedDone: any = sideSelectedIterator.next();
 console.log("side-selected-done", sideSelectedDone.done, sideSelectedDone.value, sideEffectingCallCount);
+
+sideEffectingCallCount = 0;
+const deepSkippedIterator = nestedConditionalLogicalNestedOperand();
+const deepSkippedFirst: any = deepSkippedIterator.next();
+console.log("deep-skipped-first", deepSkippedFirst.done, deepSkippedFirst.value, sideEffectingCallCount);
+const deepSkippedSecond: any = deepSkippedIterator.next(false);
+console.log("deep-skipped-second", deepSkippedSecond.done, deepSkippedSecond.value, sideEffectingCallCount);
+const deepSkippedDone: any = deepSkippedIterator.next();
+console.log("deep-skipped-done", deepSkippedDone.done, deepSkippedDone.value, sideEffectingCallCount);
+
+const deepSelectedIterator = nestedConditionalLogicalNestedOperand();
+const deepSelectedFirst: any = deepSelectedIterator.next();
+console.log("deep-selected-first", deepSelectedFirst.done, deepSelectedFirst.value, sideEffectingCallCount);
+const deepSelectedSecond: any = deepSelectedIterator.next(true);
+console.log("deep-selected-second", deepSelectedSecond.done, deepSelectedSecond.value, sideEffectingCallCount);
+const deepSelectedThird: any = deepSelectedIterator.next(true);
+console.log("deep-selected-third", deepSelectedThird.done, deepSelectedThird.value, sideEffectingCallCount);
+const deepSelectedFourth: any = deepSelectedIterator.next(true);
+console.log("deep-selected-fourth", deepSelectedFourth.done, deepSelectedFourth.value, sideEffectingCallCount);
+const deepSelectedFifth: any = deepSelectedIterator.next(true);
+console.log("deep-selected-fifth", deepSelectedFifth.done, deepSelectedFifth.value, sideEffectingCallCount);
+const deepSelectedSixth: any = deepSelectedIterator.next("deep-value");
+console.log("deep-selected-sixth", deepSelectedSixth.done, deepSelectedSixth.value, sideEffectingCallCount);
+const deepSelectedDone: any = deepSelectedIterator.next();
+console.log("deep-selected-done", deepSelectedDone.done, deepSelectedDone.value, sideEffectingCallCount);

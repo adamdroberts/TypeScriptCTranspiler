@@ -58368,10 +58368,25 @@ class Emitter {
                 const resumeBlocks: Array<() => void> = [];
                 const isLogicalPlan = isLazyMultiYieldLogicalPlan;
                 const isYieldedLogicalOperand = isLazyMultiYieldLogicalYieldedOperand;
-                const conditionalPlans = new Map(
-                    logicalPlans.flatMap((plan) => plan.conditionalOperands ?? [])
-                        .map((conditional) => [conditional.expression, conditional] as const),
-                );
+                const conditionalPlans = new Map<ts.ConditionalExpression, LazyMultiYieldConditionalBranch>();
+                function registerConditionalPlan(current: LazyMultiYieldConditionalBranch): void {
+                    if (conditionalPlans.has(current.expression)) return;
+                    conditionalPlans.set(current.expression, current);
+                    if (isLogicalPlan(current.condition)) registerLogicalPlan(current.condition);
+                    for (const arm of [current.whenTrue, current.whenFalse]) {
+                        for (const event of arm.events) {
+                            if (event.kind === "logical") registerLogicalPlan(event.logicalPlan);
+                            if (event.kind === "conditional") registerConditionalPlan(event.conditionalBranch);
+                        }
+                    }
+                }
+                function registerLogicalPlan(current: LazyMultiYieldLogicalPlan): void {
+                    for (const operand of [current.left, current.right]) {
+                        if (isLogicalPlan(operand)) registerLogicalPlan(operand);
+                    }
+                    for (const conditional of current.conditionalOperands ?? []) registerConditionalPlan(conditional);
+                }
+                for (const plan of logicalPlans) registerLogicalPlan(plan);
                 const conditionalPlanFor = (operand: LazyMultiYieldLogicalOperand): LazyMultiYieldConditionalBranch | undefined =>
                     !isLogicalPlan(operand) && !isYieldedLogicalOperand(operand) && ts.isConditionalExpression(operand)
                         ? conditionalPlans.get(operand)

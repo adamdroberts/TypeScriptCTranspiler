@@ -25,3 +25,13 @@ side-selected-fourth false side-call-arg 0
 side-selected-fifth false side-body-call-argument 1
 side-selected-sixth true side-done 1
 side-selected-done true undefined 1
+deep-skipped-first false deep-left 0
+deep-skipped-second false deep-body-false 0
+deep-skipped-done true deep-done 0
+deep-selected-first false deep-left 0
+deep-selected-second false deep-selector 0
+deep-selected-third false deep-arm-left 0
+deep-selected-fourth false deep-inner-selector 0
+deep-selected-fifth false deep-call-arg 0
+deep-selected-sixth false deep-body-call-deep-value 1
+deep-selected-done true deep-done 1
