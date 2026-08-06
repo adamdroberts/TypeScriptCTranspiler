@@ -1,0 +1,5 @@
+condition-reject nested-condition-rejected
+return nested-prelude-first-true-return
+throw nested-prelude-first-false-throw
+empty-throw -false-throw
+trace true:nested-prelude-first|false:nested-prelude-first|false:empty|

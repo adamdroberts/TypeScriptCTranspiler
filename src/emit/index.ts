@@ -50312,13 +50312,30 @@ class Emitter {
             const terminal = statements[statements.length - 1];
             const preludeStatements = statements.slice(0, -1);
             const carriedAliases: AwaitedIfCarriedAlias[] = [];
+            const nestedIfPreludeSafe = (statement: ts.IfStatement): boolean => {
+                let safe = true;
+                const visit = (node: ts.Node): void => {
+                    if (!safe) return;
+                    if (ts.isFunctionLike(node) || ts.isClassLike(node) ||
+                        ts.isVariableStatement(node) || ts.isReturnStatement(node) ||
+                        ts.isThrowStatement(node) || ts.isBreakStatement(node) ||
+                        ts.isContinueStatement(node)) {
+                        safe = false;
+                        return;
+                    }
+                    ts.forEachChild(node, visit);
+                };
+                visit(statement);
+                return safe;
+            };
             const branchPreludeSupported = (statement: ts.Statement): boolean => {
                 const initializedLocal = ts.isVariableStatement(statement) &&
                     statement.declarationList.declarations.length === 1 &&
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 &&
                     ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
                     !!statement.declarationList.declarations[0]!.initializer;
-                return (ts.isExpressionStatement(statement) || initializedLocal) &&
+                const nestedIfPrelude = ts.isIfStatement(statement) && nestedIfPreludeSafe(statement);
+                return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement);
             };
             if (!terminal ||
