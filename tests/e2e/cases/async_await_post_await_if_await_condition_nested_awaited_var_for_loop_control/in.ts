@@ -60,6 +60,10 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
                 }
                 nestedDo++;
             } while (nestedDo === 0);
+            var nestedFor = repeats;
+            for (; nestedFor === 0; nestedFor++) {
+                mark("condition-for");
+            }
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -100,6 +104,10 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
                 }
                 nestedDo++;
             } while (nestedDo === 0);
+            var nestedFor = incrementorCount;
+            for (; nestedFor === 0; nestedFor++) {
+                mark("incrementor-for");
+            }
             switch (incrementorCount) {
                 case 0:
                     mark("incrementor-switch");
@@ -142,6 +150,10 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
                 }
                 nestedDo++;
             } while (nestedDo === 0);
+            var nestedFor = continueCount;
+            for (; nestedFor === 0; nestedFor++) {
+                mark("continue-for");
+            }
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -184,6 +196,10 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
                 }
                 nestedDo++;
             } while (nestedDo === 0);
+            var nestedFor = breakCount;
+            for (; nestedFor === 0; nestedFor++) {
+                mark("break-for");
+            }
             switch (breakCount) {
                 case 0:
                     mark("break-switch");

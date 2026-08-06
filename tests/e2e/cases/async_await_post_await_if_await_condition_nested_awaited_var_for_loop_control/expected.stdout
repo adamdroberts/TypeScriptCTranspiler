@@ -2,4 +2,4 @@ condition control-condition-init-2
 incrementor control-incrementor-init-4
 continue control-continue-init-2
 break control-break-init-0
-trace condition-if|condition-while|condition-do|condition-switch|condition|condition|incrementor-if|incrementor-while|incrementor-do|incrementor-switch|incrementor|incrementor|incrementor|incrementor|continue-if|continue-while|continue-do|continue-switch|continue|continue|break-if|break-while|break-do|break-switch|break|
+trace condition-if|condition-while|condition-do|condition-for|condition-switch|condition|condition|incrementor-if|incrementor-while|incrementor-do|incrementor-for|incrementor-switch|incrementor|incrementor|incrementor|incrementor|continue-if|continue-while|continue-do|continue-for|continue-switch|continue|continue|break-if|break-while|break-do|break-for|break-switch|break|
