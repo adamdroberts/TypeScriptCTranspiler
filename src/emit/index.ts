@@ -51357,6 +51357,17 @@ class Emitter {
                     }
                     return false;
                 };
+                const hasEnclosingCatch = (node: ts.Node): boolean => {
+                    let child: ts.Node = node;
+                    let parent = node.parent;
+                    while (parent) {
+                        if (ts.isTryStatement(parent) && parent.tryBlock === child && parent.catchClause) return true;
+                        if (parent === statement || ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
+                        child = parent;
+                        parent = parent.parent;
+                    }
+                    return false;
+                };
                 const visit = (node: ts.Node): void => {
                     if (!safe) return;
                     if (node === allowedTerminalControl) return;
@@ -51386,7 +51397,8 @@ class Emitter {
                         return;
                     }
                     if (ts.isFunctionLike(node) || ts.isClassLike(node) ||
-                        ts.isReturnStatement(node) || ts.isThrowStatement(node)) {
+                        ts.isReturnStatement(node) ||
+                        (ts.isThrowStatement(node) && !hasEnclosingCatch(node))) {
                         safe = false;
                         return;
                     }

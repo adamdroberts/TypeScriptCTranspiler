@@ -80,6 +80,13 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             conditionLabel: for (const value of ["condition-label"]) {
                 mark(value);
             }
+            try {
+                throw "condition-caught";
+            } catch {
+                mark("condition-catch");
+            } finally {
+                mark("condition-catch-finally");
+            }
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -139,6 +146,13 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
             }
             incrementorLabel: for (const value of ["incrementor-label"]) {
                 mark(value);
+            }
+            try {
+                throw "incrementor-caught";
+            } catch {
+                mark("incrementor-catch");
+            } finally {
+                mark("incrementor-catch-finally");
             }
             switch (incrementorCount) {
                 case 0:
@@ -202,6 +216,13 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             continueLabel: for (const value of ["continue-label"]) {
                 mark(value);
             }
+            try {
+                throw "continue-caught";
+            } catch {
+                mark("continue-catch");
+            } finally {
+                mark("continue-catch-finally");
+            }
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -263,6 +284,13 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
             }
             breakLabel: for (const value of ["break-label"]) {
                 mark(value);
+            }
+            try {
+                throw "break-caught";
+            } catch {
+                mark("break-catch");
+            } finally {
+                mark("break-catch-finally");
             }
             switch (breakCount) {
                 case 0:
