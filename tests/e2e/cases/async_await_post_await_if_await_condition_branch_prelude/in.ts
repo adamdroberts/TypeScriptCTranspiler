@@ -15,11 +15,13 @@ function mark(value: string): void {
 async function awaitedIfBranchPrelude(route: number): Promise<string> {
     const first = await laterString("branch-prelude-first");
     if (await laterBoolean(route === 1)) {
-        mark(first + "-true");
-        return await laterString(first + "-return");
+        const label = first + "-true";
+        mark(label);
+        return await laterString(label + "-return");
     } else {
-        mark(first + "-false");
-        throw await laterString(first + "-throw");
+        let label = first + "-false";
+        mark(label);
+        throw await laterString(label + "-throw");
     }
 }
 

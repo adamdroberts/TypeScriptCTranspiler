@@ -38799,6 +38799,8 @@ class Emitter {
         elseRejectResult: boolean,
         params: readonly AsyncAwaitContinuationParam[],
         thisValue: EmitResult | null,
+        thenCarriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[] = [],
+        elseCarriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[] = [],
     ): string {
         const name = `tsc_async_await_loop_body_terminal_condition_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -38824,42 +38826,59 @@ class Emitter {
             preludeStatements: readonly ts.Statement[],
             promiseType: CType | null,
             rejectResult: boolean,
+            carriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[],
         ): void => {
-            if (!awaitExpr || !adapter || !promiseType) {
-                if (!synchronousExpr) throw new Error("missing terminal branch expression");
-                for (const statement of preludeStatements) this.emitStmt(out, statement);
-                const returned = this.emitExpr(synchronousExpr);
-                if (rejectResult) {
-                    const rejected = this.coerceToString(returned, synchronousExpr);
-                    out.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
-                } else {
-                    const returnedType = this.prepareType(returned.ty);
-                    if (returnedType.kind === "void" || returnedType.kind === "never") {
-                        out.line(`tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));`);
-                    } else {
-                        const resolved = this.promiseResolveResult(returned, synchronousExpr);
-                        out.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
-                    }
+            const addedReferencedDeclarations: ts.VariableDeclaration[] = [];
+            for (const statement of preludeStatements) {
+                if (!ts.isVariableStatement(statement)) continue;
+                for (const declaration of statement.declarationList.declarations) {
+                    if (this.referencedVariables.has(declaration)) continue;
+                    this.referencedVariables.add(declaration);
+                    addedReferencedDeclarations.push(declaration);
                 }
-                return;
             }
-            for (const statement of preludeStatements) this.emitStmt(out, statement);
-            const source = this.emitExpr(awaitExpr.expression);
-            const sourceVar = this.freshTemp("_await_terminal_branch_source");
-            const envVar = this.freshTemp("_await_terminal_branch_env");
-            const adapterEnvType = `${adapter}_env_t`;
-            out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, awaitExpr.expression)};`);
-            out.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
-            out.line(`${envVar}->receiver = ${sourceVar};`);
-            out.line(`${envVar}->result_promise = _ret;`);
-            for (const param of params) out.line(`${envVar}->${param.field} = state->${param.field};`);
-            if (thisValue) out.line(`${envVar}->this_arg = state->this_arg;`);
-            out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
-            out.line(`tsc_promise_add_callback(${sourceVar}, ${adapter}, ${envVar});`);
-            out.close();
-            out.open("else");
-            out.line(`${adapter}(${envVar});`);
-            out.close();
+            try {
+                if (!awaitExpr || !adapter || !promiseType) {
+                    if (!synchronousExpr) throw new Error("missing terminal branch expression");
+                    for (const statement of preludeStatements) this.emitStmt(out, statement);
+                    const returned = this.emitExpr(synchronousExpr);
+                    if (rejectResult) {
+                        const rejected = this.coerceToString(returned, synchronousExpr);
+                        out.line(`tsc_promise_reject_in_place(_ret, tsc_value_string(${rejected}));`);
+                    } else {
+                        const returnedType = this.prepareType(returned.ty);
+                        if (returnedType.kind === "void" || returnedType.kind === "never") {
+                            out.line(`tsc_promise_adopt_into(_ret, tsc_promise_resolve(tsc_value_undefined()));`);
+                        } else {
+                            const resolved = this.promiseResolveResult(returned, synchronousExpr);
+                            out.line(`tsc_promise_adopt_into(_ret, ${resolved});`);
+                        }
+                    }
+                    return;
+                }
+                for (const statement of preludeStatements) this.emitStmt(out, statement);
+                const source = this.emitExpr(awaitExpr.expression);
+                const sourceVar = this.freshTemp("_await_terminal_branch_source");
+                const envVar = this.freshTemp("_await_terminal_branch_env");
+                const adapterEnvType = `${adapter}_env_t`;
+                out.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, promiseType, awaitExpr.expression)};`);
+                out.line(`${adapterEnvType}* const ${envVar} = (${adapterEnvType}*)TSC_GC_MALLOC(sizeof(${adapterEnvType}));`);
+                out.line(`${envVar}->receiver = ${sourceVar};`);
+                out.line(`${envVar}->result_promise = _ret;`);
+                for (const param of params) out.line(`${envVar}->${param.field} = state->${param.field};`);
+                if (thisValue) out.line(`${envVar}->this_arg = state->this_arg;`);
+                for (const alias of carriedAliases) {
+                    out.line(`${envVar}->${alias.field} = ${this.identifierRead(alias.identifier)};`);
+                }
+                out.open(`if (tsc_promise_is_pending(${sourceVar}))`);
+                out.line(`tsc_promise_add_callback(${sourceVar}, ${adapter}, ${envVar});`);
+                out.close();
+                out.open("else");
+                out.line(`${adapter}(${envVar});`);
+                out.close();
+            } finally {
+                for (const declaration of addedReferencedDeclarations) this.referencedVariables.delete(declaration);
+            }
         };
         const buf = new CBuf();
         buf.open(`void ${name}(void* env)`);
@@ -38884,10 +38903,10 @@ class Emitter {
         try {
             const truth = this.truthyC({ c: valueVar, ty: conditionAwaitedType }, conditionAwaitExpr);
             buf.open(`if (${truth})`);
-            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPreludeStatements, thenPromiseType, thenRejectResult);
+            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPreludeStatements, thenPromiseType, thenRejectResult, thenCarriedAliases);
             buf.close();
             buf.open("else");
-            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePreludeStatements, elsePromiseType, elseRejectResult);
+            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePreludeStatements, elsePromiseType, elseRejectResult, elseCarriedAliases);
             buf.close();
             buf.line("tsc_try_pop();");
             buf.line("return;");
@@ -50273,23 +50292,70 @@ class Emitter {
         if (!first || !first.variable) return false;
         const conditionAwait = this.unwrapTransparentExpression(conditional.expression);
         if (!ts.isAwaitExpression(conditionAwait)) return false;
+        type AwaitedIfCarriedAlias = {
+            symbol: ts.Symbol;
+            type: CType;
+            field: string;
+            identifier: ts.Identifier;
+        };
         type AwaitedIfBranch =
-            | { kind: "terminal"; awaitExpr: ts.AwaitExpression; rejectResult: boolean; preludeStatements: readonly ts.Statement[] }
+            | {
+                kind: "terminal";
+                awaitExpr: ts.AwaitExpression;
+                rejectResult: boolean;
+                preludeStatements: readonly ts.Statement[];
+                carriedAliases: readonly AwaitedIfCarriedAlias[];
+            }
             | { kind: "condition"; awaitExpr: ts.AwaitExpression; thenBranch: AwaitedIfBranch; elseBranch: AwaitedIfBranch };
         const terminalBranch = (branch: ts.Statement): AwaitedIfBranch | null => {
             const statements = ts.isBlock(branch) ? branch.statements : [branch];
             const terminal = statements[statements.length - 1];
             const preludeStatements = statements.slice(0, -1);
+            const carriedAliases: AwaitedIfCarriedAlias[] = [];
+            const branchPreludeSupported = (statement: ts.Statement): boolean => {
+                const initializedLocal = ts.isVariableStatement(statement) &&
+                    statement.declarationList.declarations.length === 1 &&
+                    (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 &&
+                    ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
+                    !!statement.declarationList.declarations[0]!.initializer;
+                return (ts.isExpressionStatement(statement) || initializedLocal) &&
+                    this.asyncAwaitInterstitialControlFlowSupported(statement);
+            };
             if (!terminal ||
                 (!ts.isReturnStatement(terminal) && !ts.isThrowStatement(terminal)) ||
                 !terminal.expression ||
-                !preludeStatements.every((statement) =>
-                    ts.isExpressionStatement(statement) && this.asyncAwaitInterstitialControlFlowSupported(statement))) {
+                !preludeStatements.every(branchPreludeSupported)) {
                 return null;
+            }
+            for (const statement of preludeStatements) {
+                if (!ts.isVariableStatement(statement)) continue;
+                const declaration = statement.declarationList.declarations[0]!;
+                if (!ts.isIdentifier(declaration.name)) return null;
+                const identifier = declaration.name;
+                const symbol = this.symbolForIdentifier(identifier);
+                if (!symbol) return null;
+                const type = this.variableStorageType(this.prepareType(mapTsType(
+                    declaration,
+                    this.checker.getTypeAtLocation(declaration),
+                    this.checker,
+                )));
+                if (type.kind === "void" || type.kind === "never") return null;
+                carriedAliases.push({
+                    symbol,
+                    type,
+                    field: `branch_prelude_${mangleIdent(identifier.text)}`,
+                    identifier,
+                });
             }
             const returned = this.unwrapTransparentExpression(terminal.expression);
             return ts.isAwaitExpression(returned)
-                ? { kind: "terminal", awaitExpr: returned, rejectResult: ts.isThrowStatement(terminal), preludeStatements }
+                ? {
+                    kind: "terminal",
+                    awaitExpr: returned,
+                    rejectResult: ts.isThrowStatement(terminal),
+                    preludeStatements,
+                    carriedAliases,
+                }
                 : null;
         };
         const parseBranch = (branch: ts.Statement, inheritedElse: ts.Statement | null = null): AwaitedIfBranch | null => {
@@ -50401,6 +50467,8 @@ class Emitter {
             promiseType: CType;
             awaitExpr: ts.AwaitExpression;
             rejectResult: boolean;
+            preludeStatements: readonly ts.Statement[];
+            carriedAliases: readonly AwaitedIfCarriedAlias[];
         } => {
             if (branch.kind === "terminal") {
                 const typeInfo = terminalTypes.get(branch)!;
@@ -50414,11 +50482,14 @@ class Emitter {
                         callbackThis,
                         branch.rejectResult,
                         [],
-                        branch.preludeStatements,
+                        [],
+                        branch.carriedAliases,
                     ),
                     promiseType: typeInfo.promiseType,
                     awaitExpr: branch.awaitExpr,
                     rejectResult: branch.rejectResult,
+                    preludeStatements: branch.preludeStatements,
+                    carriedAliases: branch.carriedAliases,
                 };
             }
             const thenBranch = makeBranchAdapter(branch.thenBranch);
@@ -50433,20 +50504,24 @@ class Emitter {
                     thenBranch.adapter,
                     thenBranch.awaitExpr,
                     null,
-                    [],
+                    thenBranch.preludeStatements,
                     elseBranch.promiseType,
                     elseBranch.adapter,
                     elseBranch.awaitExpr,
                     null,
-                    [],
+                    elseBranch.preludeStatements,
                     thenBranch.rejectResult,
                     elseBranch.rejectResult,
                     continuationParams,
                     callbackThis,
+                    thenBranch.carriedAliases,
+                    elseBranch.carriedAliases,
                 ),
                 promiseType: typeInfo.promiseType,
                 awaitExpr: branch.awaitExpr,
                 rejectResult: false,
+                preludeStatements: [],
+                carriedAliases: [],
             };
         };
         const conditionAdapter = makeBranchAdapter(rootBranch).adapter;
