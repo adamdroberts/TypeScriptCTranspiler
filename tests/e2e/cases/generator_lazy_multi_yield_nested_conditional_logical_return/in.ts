@@ -106,6 +106,54 @@ function* stagedDeleteOperandReturn(): Generator<string, boolean, any> {
     return (yield "delete-left") && delete logicalDeleteBox.value;
 }
 
+let logicalAssignmentValue = "assignment-initial";
+
+function* stagedAssignmentOperandReturn(): Generator<string, any, any> {
+    return (yield "assignment-left") && (logicalAssignmentValue = "assignment-result");
+}
+
+let logicalConditionalCount = 0;
+function logicalConditionalValue(): string {
+    logicalConditionalCount++;
+    return "conditional-" + logicalConditionalCount;
+}
+
+function* stagedConditionalOperandReturn(): Generator<string, any, any> {
+    return (yield "conditional-left") && (true ? logicalConditionalValue() : "conditional-fallback");
+}
+
+let logicalTemplateCount = 0;
+function logicalTemplateValue(): string {
+    logicalTemplateCount++;
+    return "template-" + logicalTemplateCount;
+}
+
+function* stagedTemplateOperandReturn(): Generator<string, any, any> {
+    return (yield "template-left") && `${logicalTemplateValue()}`;
+}
+
+let logicalTaggedTemplateCount = 0;
+function logicalTaggedTemplateValue(_strings: TemplateStringsArray): string {
+    logicalTaggedTemplateCount++;
+    return "tagged-" + logicalTaggedTemplateCount;
+}
+
+function* stagedTaggedTemplateOperandReturn(): Generator<string, any, any> {
+    return (yield "tagged-left") && logicalTaggedTemplateValue`tagged`;
+}
+
+let logicalPostfixValue = 10;
+
+function* stagedPostfixOperandReturn(): Generator<string, any, any> {
+    return (yield "postfix-left") && logicalPostfixValue++;
+}
+
+let logicalPrefixValue = 20;
+
+function* stagedPrefixOperandReturn(): Generator<string, any, any> {
+    return (yield "prefix-left") && ++logicalPrefixValue;
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -351,3 +399,87 @@ const deleteSelectedFirst: any = deleteSelected.next();
 console.log("delete-selected-first", deleteSelectedFirst.done, deleteSelectedFirst.value, "value" in logicalDeleteBox);
 const deleteSelectedDone: any = deleteSelected.next(true);
 console.log("delete-selected-done", deleteSelectedDone.done, deleteSelectedDone.value, "value" in logicalDeleteBox);
+
+logicalAssignmentValue = "assignment-initial";
+const assignmentSkipped = stagedAssignmentOperandReturn();
+const assignmentSkippedFirst: any = assignmentSkipped.next();
+console.log("assignment-skipped-first", assignmentSkippedFirst.done, assignmentSkippedFirst.value, logicalAssignmentValue);
+const assignmentSkippedDone: any = assignmentSkipped.next(false);
+console.log("assignment-skipped-done", assignmentSkippedDone.done, assignmentSkippedDone.value, logicalAssignmentValue);
+
+logicalAssignmentValue = "assignment-initial";
+const assignmentSelected = stagedAssignmentOperandReturn();
+const assignmentSelectedFirst: any = assignmentSelected.next();
+console.log("assignment-selected-first", assignmentSelectedFirst.done, assignmentSelectedFirst.value, logicalAssignmentValue);
+const assignmentSelectedDone: any = assignmentSelected.next(true);
+console.log("assignment-selected-done", assignmentSelectedDone.done, assignmentSelectedDone.value, logicalAssignmentValue);
+
+logicalConditionalCount = 0;
+const conditionalSkipped = stagedConditionalOperandReturn();
+const conditionalSkippedFirst: any = conditionalSkipped.next();
+console.log("conditional-skipped-first", conditionalSkippedFirst.done, conditionalSkippedFirst.value, logicalConditionalCount);
+const conditionalSkippedDone: any = conditionalSkipped.next(false);
+console.log("conditional-skipped-done", conditionalSkippedDone.done, conditionalSkippedDone.value, logicalConditionalCount);
+
+logicalConditionalCount = 0;
+const conditionalSelected = stagedConditionalOperandReturn();
+const conditionalSelectedFirst: any = conditionalSelected.next();
+console.log("conditional-selected-first", conditionalSelectedFirst.done, conditionalSelectedFirst.value, logicalConditionalCount);
+const conditionalSelectedDone: any = conditionalSelected.next(true);
+console.log("conditional-selected-done", conditionalSelectedDone.done, conditionalSelectedDone.value, logicalConditionalCount);
+
+logicalTemplateCount = 0;
+const templateSkipped = stagedTemplateOperandReturn();
+const templateSkippedFirst: any = templateSkipped.next();
+console.log("template-skipped-first", templateSkippedFirst.done, templateSkippedFirst.value, logicalTemplateCount);
+const templateSkippedDone: any = templateSkipped.next(false);
+console.log("template-skipped-done", templateSkippedDone.done, templateSkippedDone.value, logicalTemplateCount);
+
+logicalTemplateCount = 0;
+const templateSelected = stagedTemplateOperandReturn();
+const templateSelectedFirst: any = templateSelected.next();
+console.log("template-selected-first", templateSelectedFirst.done, templateSelectedFirst.value, logicalTemplateCount);
+const templateSelectedDone: any = templateSelected.next(true);
+console.log("template-selected-done", templateSelectedDone.done, templateSelectedDone.value, logicalTemplateCount);
+
+logicalTaggedTemplateCount = 0;
+const taggedTemplateSkipped = stagedTaggedTemplateOperandReturn();
+const taggedTemplateSkippedFirst: any = taggedTemplateSkipped.next();
+console.log("tagged-template-skipped-first", taggedTemplateSkippedFirst.done, taggedTemplateSkippedFirst.value, logicalTaggedTemplateCount);
+const taggedTemplateSkippedDone: any = taggedTemplateSkipped.next(false);
+console.log("tagged-template-skipped-done", taggedTemplateSkippedDone.done, taggedTemplateSkippedDone.value, logicalTaggedTemplateCount);
+
+logicalTaggedTemplateCount = 0;
+const taggedTemplateSelected = stagedTaggedTemplateOperandReturn();
+const taggedTemplateSelectedFirst: any = taggedTemplateSelected.next();
+console.log("tagged-template-selected-first", taggedTemplateSelectedFirst.done, taggedTemplateSelectedFirst.value, logicalTaggedTemplateCount);
+const taggedTemplateSelectedDone: any = taggedTemplateSelected.next(true);
+console.log("tagged-template-selected-done", taggedTemplateSelectedDone.done, taggedTemplateSelectedDone.value, logicalTaggedTemplateCount);
+
+logicalPostfixValue = 10;
+const postfixSkipped = stagedPostfixOperandReturn();
+const postfixSkippedFirst: any = postfixSkipped.next();
+console.log("postfix-skipped-first", postfixSkippedFirst.done, postfixSkippedFirst.value, logicalPostfixValue);
+const postfixSkippedDone: any = postfixSkipped.next(false);
+console.log("postfix-skipped-done", postfixSkippedDone.done, postfixSkippedDone.value, logicalPostfixValue);
+
+logicalPostfixValue = 10;
+const postfixSelected = stagedPostfixOperandReturn();
+const postfixSelectedFirst: any = postfixSelected.next();
+console.log("postfix-selected-first", postfixSelectedFirst.done, postfixSelectedFirst.value, logicalPostfixValue);
+const postfixSelectedDone: any = postfixSelected.next(true);
+console.log("postfix-selected-done", postfixSelectedDone.done, postfixSelectedDone.value, logicalPostfixValue);
+
+logicalPrefixValue = 20;
+const prefixSkipped = stagedPrefixOperandReturn();
+const prefixSkippedFirst: any = prefixSkipped.next();
+console.log("prefix-skipped-first", prefixSkippedFirst.done, prefixSkippedFirst.value, logicalPrefixValue);
+const prefixSkippedDone: any = prefixSkipped.next(false);
+console.log("prefix-skipped-done", prefixSkippedDone.done, prefixSkippedDone.value, logicalPrefixValue);
+
+logicalPrefixValue = 20;
+const prefixSelected = stagedPrefixOperandReturn();
+const prefixSelectedFirst: any = prefixSelected.next();
+console.log("prefix-selected-first", prefixSelectedFirst.done, prefixSelectedFirst.value, logicalPrefixValue);
+const prefixSelectedDone: any = prefixSelected.next(true);
+console.log("prefix-selected-done", prefixSelectedDone.done, prefixSelectedDone.value, logicalPrefixValue);

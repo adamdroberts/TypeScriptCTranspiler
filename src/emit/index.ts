@@ -55287,7 +55287,28 @@ class Emitter {
         if (ts.isDeleteExpression(unwrapped)) {
             return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.expression));
         }
+        if (ts.isBinaryExpression(unwrapped) && this.isAssignmentOperatorKind(unwrapped.operatorToken.kind)) {
+            return this.isSimpleLazyMultiYieldLogicalMutationTarget(unwrapped.left) &&
+                this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.right));
+        }
+        if (ts.isConditionalExpression(unwrapped) ||
+            ts.isTemplateExpression(unwrapped) ||
+            ts.isTaggedTemplateExpression(unwrapped)) {
+            return this.isSimpleLazyMultiYieldCallArgument(unwrapped);
+        }
+        if (ts.isPostfixUnaryExpression(unwrapped) ||
+            (ts.isPrefixUnaryExpression(unwrapped) &&
+                (unwrapped.operator === ts.SyntaxKind.PlusPlusToken || unwrapped.operator === ts.SyntaxKind.MinusMinusToken))) {
+            return this.isSimpleLazyMultiYieldLogicalMutationTarget(unwrapped.operand);
+        }
         return false;
+    }
+
+    private isSimpleLazyMultiYieldLogicalMutationTarget(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (ts.isIdentifier(unwrapped)) return true;
+        return (ts.isPropertyAccessExpression(unwrapped) || ts.isElementAccessExpression(unwrapped)) &&
+            this.isSimpleLazyMultiYieldCallArgument(unwrapped);
     }
 
     private simpleLazyMultiYieldMutationReceiver(
