@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Async continuations now preserve bounded unlabeled nested `switch` `break` control inside await-free post-await branch preludes, preventing unintended fallthrough while retaining selector rejection routing. Regression: `async_await_post_await_if_await_condition_nested_switch_control_prelude`.
 - Async continuations now preserve bounded nested loop `break` / `continue` control inside await-free post-await branch preludes, while rejecting labeled or prelude-escaping exits. Regression: `async_await_post_await_if_await_condition_nested_loop_control_prelude`.
 - Async continuations now preserve bounded await-free `for...in` preludes inside awaited-condition return/throw branches, including typed array-key ordering, scoped bindings, skipped rejected-condition paths, and synchronous source rejection. Regression: `async_await_post_await_if_await_condition_for_in_prelude`.
 - Async continuations now preserve bounded await-free `for...of` preludes inside awaited-condition return/throw branches, including typed iterable ordering, scoped bindings, skipped rejected-condition paths, and synchronous source rejection. Regression: `async_await_post_await_if_await_condition_for_of_prelude`.
