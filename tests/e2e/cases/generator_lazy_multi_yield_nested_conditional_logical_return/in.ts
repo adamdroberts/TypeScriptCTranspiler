@@ -216,6 +216,10 @@ function* stagedRegexpLiteralOperandReturn(): Generator<string, any, any> {
     return (yield "regexp-left") && /ab/;
 }
 
+function* stagedArithmeticLogicalLeftOperandReturn(): Generator<string, any, any> {
+    return ((yield "arithmetic-left-first") + (yield "arithmetic-left-second")) && (yield "arithmetic-right");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -655,3 +659,21 @@ const regexpLiteralSelectedFirst: any = regexpLiteralSelected.next();
 console.log("regexp-literal-selected-first", regexpLiteralSelectedFirst.done, regexpLiteralSelectedFirst.value);
 const regexpLiteralSelectedDone: any = regexpLiteralSelected.next(true);
 console.log("regexp-literal-selected-done", regexpLiteralSelectedDone.done, typeof regexpLiteralSelectedDone.value);
+
+const arithmeticLogicalLeftSkipped = stagedArithmeticLogicalLeftOperandReturn();
+const arithmeticLogicalLeftSkippedFirst: any = arithmeticLogicalLeftSkipped.next();
+console.log("arithmetic-logical-left-skipped-first", arithmeticLogicalLeftSkippedFirst.done, arithmeticLogicalLeftSkippedFirst.value);
+const arithmeticLogicalLeftSkippedSecond: any = arithmeticLogicalLeftSkipped.next(0);
+console.log("arithmetic-logical-left-skipped-second", arithmeticLogicalLeftSkippedSecond.done, arithmeticLogicalLeftSkippedSecond.value);
+const arithmeticLogicalLeftSkippedDone: any = arithmeticLogicalLeftSkipped.next(0);
+console.log("arithmetic-logical-left-skipped-done", arithmeticLogicalLeftSkippedDone.done, arithmeticLogicalLeftSkippedDone.value);
+
+const arithmeticLogicalLeftSelected = stagedArithmeticLogicalLeftOperandReturn();
+const arithmeticLogicalLeftSelectedFirst: any = arithmeticLogicalLeftSelected.next();
+console.log("arithmetic-logical-left-selected-first", arithmeticLogicalLeftSelectedFirst.done, arithmeticLogicalLeftSelectedFirst.value);
+const arithmeticLogicalLeftSelectedSecond: any = arithmeticLogicalLeftSelected.next(1);
+console.log("arithmetic-logical-left-selected-second", arithmeticLogicalLeftSelectedSecond.done, arithmeticLogicalLeftSelectedSecond.value);
+const arithmeticLogicalLeftSelectedThird: any = arithmeticLogicalLeftSelected.next(2);
+console.log("arithmetic-logical-left-selected-third", arithmeticLogicalLeftSelectedThird.done, arithmeticLogicalLeftSelectedThird.value);
+const arithmeticLogicalLeftSelectedDone: any = arithmeticLogicalLeftSelected.next(true);
+console.log("arithmetic-logical-left-selected-done", arithmeticLogicalLeftSelectedDone.done, arithmeticLogicalLeftSelectedDone.value);

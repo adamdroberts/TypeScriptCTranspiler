@@ -137,7 +137,10 @@ interface LazyMultiYieldConditionalArm {
     yields: ts.YieldExpression[];
 }
 
-type LazyMultiYieldLogicalOperand = ts.Expression | LazyMultiYieldLogicalPlan;
+type LazyMultiYieldLogicalOperand =
+    | ts.Expression
+    | LazyMultiYieldLogicalPlan
+    | LazyMultiYieldLogicalYieldedOperand;
 
 interface LazyMultiYieldLogicalPlan {
     expression: ts.BinaryExpression;
@@ -146,6 +149,32 @@ interface LazyMultiYieldLogicalPlan {
     yields: ts.YieldExpression[];
     conditionalOperands?: LazyMultiYieldConditionalBranch[];
     stagedOperands?: ts.Expression[];
+}
+
+interface LazyMultiYieldLogicalYieldedOperand {
+    expression: ts.Expression;
+    yields: ts.YieldExpression[];
+    logicalYieldedOperand: true;
+}
+
+function isLazyMultiYieldLogicalYieldedOperand(
+    operand: LazyMultiYieldLogicalOperand,
+): operand is LazyMultiYieldLogicalYieldedOperand {
+    return typeof operand === "object" &&
+        operand !== null &&
+        "logicalYieldedOperand" in operand;
+}
+
+function isLazyMultiYieldLogicalPlan(
+    operand: LazyMultiYieldLogicalOperand,
+): operand is LazyMultiYieldLogicalPlan {
+    return !isLazyMultiYieldLogicalYieldedOperand(operand) && "yields" in operand;
+}
+
+function isLazyMultiYieldLogicalExpression(
+    operand: LazyMultiYieldLogicalOperand,
+): operand is ts.Expression {
+    return !isLazyMultiYieldLogicalPlan(operand) && !isLazyMultiYieldLogicalYieldedOperand(operand);
 }
 
 interface LazyMultiYieldTerminalInfo {
@@ -53687,12 +53716,11 @@ class Emitter {
         const conditionalPlans = new Map(
             (plan.conditionalOperands ?? []).map((conditional) => [conditional.expression, conditional]),
         );
-        const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
-            "yields" in operand;
+        const isLogicalPlan = isLazyMultiYieldLogicalPlan;
         const conditionalPlanFor = (operand: LazyMultiYieldLogicalOperand): LazyMultiYieldConditionalBranch | undefined =>
-            !isLogicalPlan(operand) && ts.isConditionalExpression(operand) ? conditionalPlans.get(operand) : undefined;
+            isLazyMultiYieldLogicalExpression(operand) && ts.isConditionalExpression(operand) ? conditionalPlans.get(operand) : undefined;
         const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
-            !isLogicalPlan(operand) && ts.isYieldExpression(operand);
+            isLazyMultiYieldLogicalExpression(operand) && ts.isYieldExpression(operand);
         const slotForYield = (yieldExpr: ts.YieldExpression): number => {
             const slot = this.lazyGeneratorLogicalConditionSlots.get(yieldExpr);
             if (slot === undefined) unsupported(yieldExpr, "lazy generator logical condition contains an unknown yield");
@@ -53729,11 +53757,14 @@ class Emitter {
         );
         const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
             if (isYieldOperand(operand)) return this.truthyExprFromEmitResult(resumedYield(operand), operand);
+            if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                unsupported(operand.expression, "lazy generator logical condition does not support yielded arithmetic operands");
+            }
             const conditionalPlan = conditionalPlanFor(operand);
             if (conditionalPlan) {
                 return this.truthyExprFromEmitResult(this.emitExpr(conditionalPlan.expression), conditionalPlan.expression);
             }
-            if (!isLogicalPlan(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
+            if (isLazyMultiYieldLogicalExpression(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
             const left = truthyOperand(operand.left);
             const right = truthyOperand(operand.right);
             switch (operand.expression.operatorToken.kind) {
@@ -53747,11 +53778,14 @@ class Emitter {
         };
         const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
             if (isYieldOperand(operand)) return this.nullishExprFromEmitResult(resumedYield(operand), operand);
+            if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                unsupported(operand.expression, "lazy generator logical condition does not support yielded arithmetic operands");
+            }
             const conditionalPlan = conditionalPlanFor(operand);
             if (conditionalPlan) {
                 return this.nullishExprFromEmitResult(this.emitExpr(conditionalPlan.expression), conditionalPlan.expression);
             }
-            if (!isLogicalPlan(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
+            if (isLazyMultiYieldLogicalExpression(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
             const leftTruthy = truthyOperand(operand.left);
             const leftNullish = nullishOperand(operand.left);
             const rightNullish = nullishOperand(operand.right);
@@ -53766,9 +53800,12 @@ class Emitter {
         };
         const logicalOperand = (operand: LazyMultiYieldLogicalOperand): EmitResult => {
             if (isYieldOperand(operand)) return resumedYield(operand);
+            if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                unsupported(operand.expression, "lazy generator logical condition does not support yielded arithmetic operands");
+            }
             const conditionalPlan = conditionalPlanFor(operand);
             if (conditionalPlan) return this.emitExpr(conditionalPlan.expression);
-            if (!isLogicalPlan(operand)) return this.emitExpr(operand);
+            if (isLazyMultiYieldLogicalExpression(operand)) return this.emitExpr(operand);
             return this.emitSimpleLazyResumeBinary(
                 operand.expression,
                 logicalOperand(operand.left),
@@ -53979,15 +54016,23 @@ class Emitter {
     private simpleLazyMultiYieldLogicalPlan(
         expression: ts.Expression,
         allowSideEffecting = false,
+        allowYieldedLogicalLeft = false,
     ): LazyMultiYieldLogicalPlan | null {
         const unwrapped = this.unwrapTransparentExpression(expression);
         if (!ts.isBinaryExpression(unwrapped) || !this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) return null;
         const conditionalOperands: LazyMultiYieldConditionalBranch[] = [];
         const stagedOperands: ts.Expression[] = [];
-        const buildOperand = (operand: ts.Expression): LazyMultiYieldLogicalOperand | null => {
+        const buildOperand = (
+            operand: ts.Expression,
+            allowYieldedOperand: boolean,
+        ): LazyMultiYieldLogicalOperand | null => {
             const directYield = this.directLazyYieldCondition(operand);
             if (directYield) return directYield;
-            const nestedPlan = this.simpleLazyMultiYieldLogicalPlan(operand, allowSideEffecting);
+            const nestedPlan = this.simpleLazyMultiYieldLogicalPlan(
+                operand,
+                allowSideEffecting,
+                allowYieldedOperand,
+            );
             if (nestedPlan) return nestedPlan;
             const unwrappedOperand = this.unwrapTransparentExpression(operand);
             const conditionalPlans = this.simpleLazyMultiYieldConditionalBranches(unwrappedOperand);
@@ -54000,13 +54045,25 @@ class Emitter {
                 stagedOperands.push(unwrappedOperand);
                 return unwrappedOperand;
             }
+            if (allowSideEffecting && allowYieldedOperand) {
+                const yieldedArithmetic = this.simpleLazyMultiYieldArithmeticExpression(unwrappedOperand, 1);
+                if (yieldedArithmetic) {
+                    return {
+                        expression: unwrappedOperand,
+                        yields: yieldedArithmetic,
+                        logicalYieldedOperand: true,
+                    };
+                }
+            }
             return this.isSimpleLazyMultiYieldLogicalOperand(unwrappedOperand) ? unwrappedOperand : null;
         };
-        const left = buildOperand(unwrapped.left);
-        const right = buildOperand(unwrapped.right);
+        const left = buildOperand(unwrapped.left, allowYieldedLogicalLeft);
+        const right = buildOperand(unwrapped.right, false);
         if (!left || !right) return null;
         const yieldsForOperand = (operand: LazyMultiYieldLogicalOperand): ts.YieldExpression[] => {
-            if ("yields" in operand) return operand.yields;
+            if (isLazyMultiYieldLogicalPlan(operand) || isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                return operand.yields;
+            }
             const conditionalPlan = conditionalOperands.find((plan) => plan.expression === operand);
             if (conditionalPlan) return conditionalPlan.yields;
             const directYield = this.directLazyYieldCondition(operand);
@@ -54031,7 +54088,7 @@ class Emitter {
         const staged = new Set<ts.Expression>();
         const visitConditional = (conditional: LazyMultiYieldConditionalBranch): void => {
             const condition = conditional.condition;
-            if ("yields" in condition) visitPlan(condition);
+            if (isLazyMultiYieldLogicalPlan(condition)) visitPlan(condition);
             for (const arm of [conditional.whenTrue, conditional.whenFalse]) {
                 for (const event of arm.events) {
                     if (event.kind === "logical") visitPlan(event.logicalPlan);
@@ -54042,7 +54099,8 @@ class Emitter {
         const visitPlan = (current: LazyMultiYieldLogicalPlan): void => {
             for (const operand of current.stagedOperands ?? []) staged.add(operand);
             for (const operand of [current.left, current.right]) {
-                if ("yields" in operand) visitPlan(operand);
+                if (isLazyMultiYieldLogicalPlan(operand)) visitPlan(operand);
+                if (isLazyMultiYieldLogicalYieldedOperand(operand)) staged.add(operand.expression);
             }
             for (const conditional of current.conditionalOperands ?? []) visitConditional(conditional);
         };
@@ -54214,7 +54272,7 @@ class Emitter {
                 whenTrue,
                 whenFalse,
                 yields: [
-                    ...( "yields" in condition
+                    ...(isLazyMultiYieldLogicalPlan(condition)
                         ? condition.yields
                         : [condition]),
                     ...whenTrue.yields,
@@ -54270,7 +54328,7 @@ class Emitter {
         if (!expression) return null;
         const yields: ts.YieldExpression[] = [];
         const stagedExpressions: LazyMultiYieldMutationStage[] = [];
-        const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(expression, true);
+        const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(expression, true, true);
         if (logicalPlan && (
             logicalPlan.yields.length >= 2 ||
             (logicalPlan.yields.length > 0 && (logicalPlan.stagedOperands?.length ?? 0) > 0)
@@ -54289,7 +54347,7 @@ class Emitter {
         const conditionalLogicalPlanRoots = new Set<ts.BinaryExpression>();
         const registerConditionalPlan = (plan: LazyMultiYieldConditionalBranch): void => {
             conditionalPlans.set(plan.expression, plan);
-            if ("yields" in plan.condition) conditionalLogicalPlanRoots.add(plan.condition.expression);
+            if (isLazyMultiYieldLogicalPlan(plan.condition)) conditionalLogicalPlanRoots.add(plan.condition.expression);
             for (const arm of [plan.whenTrue, plan.whenFalse]) {
                 for (const event of arm.events) {
                     if (event.kind === "conditional") registerConditionalPlan(event.conditionalBranch);
@@ -54300,7 +54358,9 @@ class Emitter {
         for (const conditionalBranch of conditionalBranches ?? []) registerConditionalPlan(conditionalBranch);
         let visit: (node: ts.Expression) => boolean;
         const visitLogicalOperand = (operand: LazyMultiYieldLogicalOperand): boolean =>
-            "yields" in operand ? visit(operand.expression) : visit(operand);
+            isLazyMultiYieldLogicalPlan(operand) || isLazyMultiYieldLogicalYieldedOperand(operand)
+                ? visit(operand.expression)
+                : visit(operand);
         const visitConditionalArm = (arm: LazyMultiYieldConditionalArm): boolean =>
             visit(arm.expression);
         const literalYieldOrder = (
@@ -57744,13 +57804,15 @@ class Emitter {
                         ty: type,
                     };
                 };
-                const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
-                    "yields" in operand;
+                const isLogicalPlan = isLazyMultiYieldLogicalPlan;
                 const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
-                    !isLogicalPlan(operand) && ts.isYieldExpression(operand);
+                    isLazyMultiYieldLogicalExpression(operand) && ts.isYieldExpression(operand);
                 const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                     if (isYieldOperand(operand)) return this.truthyExprFromEmitResult(resumedYield(operand), operand);
-                    if (!isLogicalPlan(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
+                    if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                        unsupported(operand.expression, "lazy multi-yield conditional does not support yielded arithmetic operands");
+                    }
+                    if (isLazyMultiYieldLogicalExpression(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
                     const left = truthyOperand(operand.left);
                     const right = truthyOperand(operand.right);
                     switch (operand.expression.operatorToken.kind) {
@@ -57764,7 +57826,10 @@ class Emitter {
                 };
                 const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                     if (isYieldOperand(operand)) return this.nullishExprFromEmitResult(resumedYield(operand), operand);
-                    if (!isLogicalPlan(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
+                    if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                        unsupported(operand.expression, "lazy multi-yield conditional does not support yielded arithmetic operands");
+                    }
+                    if (isLazyMultiYieldLogicalExpression(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
                     const leftTruthy = truthyOperand(operand.left);
                     const leftNullish = nullishOperand(operand.left);
                     const rightNullish = nullishOperand(operand.right);
@@ -57979,10 +58044,9 @@ class Emitter {
                 const mergeLabel = this.freshTemp("_lazy_multi_yield_merge");
                 const entryBlocks: Array<() => void> = [];
                 const resumeBlocks: Array<() => void> = [];
-                const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
-                    "yields" in operand;
+                const isLogicalPlan = isLazyMultiYieldLogicalPlan;
                 const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
-                    !isLogicalPlan(operand) && ts.isYieldExpression(operand);
+                    isLazyMultiYieldLogicalExpression(operand) && ts.isYieldExpression(operand);
                 const slotForYield = (yieldExpr: ts.YieldExpression): number => {
                     const slot = slots.get(yieldExpr);
                     if (slot === undefined) unsupported(yieldExpr, "lazy multi-yield logical plan contains an unknown yield");
@@ -58015,7 +58079,10 @@ class Emitter {
                 };
                 const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                     if (isYieldOperand(operand)) return this.truthyExprFromEmitResult(resumedYield(operand), operand);
-                    if (!isLogicalPlan(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
+                    if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                        unsupported(operand.expression, "lazy multi-yield conditional does not support yielded arithmetic operands");
+                    }
+                    if (isLazyMultiYieldLogicalExpression(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
                     const left = truthyOperand(operand.left);
                     const right = truthyOperand(operand.right);
                     switch (operand.expression.operatorToken.kind) {
@@ -58029,7 +58096,10 @@ class Emitter {
                 };
                 const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                     if (isYieldOperand(operand)) return this.nullishExprFromEmitResult(resumedYield(operand), operand);
-                    if (!isLogicalPlan(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
+                    if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                        unsupported(operand.expression, "lazy multi-yield conditional does not support yielded arithmetic operands");
+                    }
+                    if (isLazyMultiYieldLogicalExpression(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
                     const leftTruthy = truthyOperand(operand.left);
                     const leftNullish = nullishOperand(operand.left);
                     const rightNullish = nullishOperand(operand.right);
@@ -59192,14 +59262,14 @@ class Emitter {
                 plans.flatMap((plan) => plan.conditionalOperands ?? [])
                     .map((conditional) => [conditional.expression, conditional] as const),
             );
-            const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
-                "yields" in operand;
+            const isLogicalPlan = isLazyMultiYieldLogicalPlan;
+            const isYieldedLogicalOperand = isLazyMultiYieldLogicalYieldedOperand;
             const conditionalPlanFor = (operand: LazyMultiYieldLogicalOperand): LazyMultiYieldConditionalBranch | undefined =>
-                !isLogicalPlan(operand) && ts.isConditionalExpression(operand)
+                !isLogicalPlan(operand) && !isYieldedLogicalOperand(operand) && ts.isConditionalExpression(operand)
                     ? conditionalPlans.get(operand)
                     : undefined;
             const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
-                !isLogicalPlan(operand) && ts.isYieldExpression(operand);
+                !isLogicalPlan(operand) && !isYieldedLogicalOperand(operand) && ts.isYieldExpression(operand);
             const slotForYield = (yieldExpr: ts.YieldExpression): number => {
                 const slot = yieldSlots.get(yieldExpr);
                 if (slot === undefined) unsupported(yieldExpr, "lazy multi-yield logical plan contains an unknown yield");
@@ -59260,6 +59330,11 @@ class Emitter {
                     });
             };
 
+            const resumedLogicalStage = (operand: LazyMultiYieldLogicalYieldedOperand): EmitResult => ({
+                c: `${envLocalName}->multi_yield_values[${logicalStageSlotFor(operand.expression)}]`,
+                ty: T_VALUE,
+            });
+
             const previousResumeValues = this.lazyGeneratorMultiYieldResumeValues;
             const previousStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
             this.lazyGeneratorMultiYieldResumeValues = new Map(
@@ -59271,11 +59346,14 @@ class Emitter {
                 if (isYieldOperand(operand)) {
                     return this.truthyExprFromEmitResult(resumedYield(operand), operand);
                 }
+                if (isYieldedLogicalOperand(operand)) {
+                    return this.truthyExprFromEmitResult(resumedLogicalStage(operand), operand.expression);
+                }
                 const conditionalPlan = conditionalPlanFor(operand);
                 if (conditionalPlan) {
                     return this.truthyExprFromEmitResult(this.emitExpr(conditionalPlan.expression), conditionalPlan.expression);
                 }
-                if (!isLogicalPlan(operand)) {
+                if (isLazyMultiYieldLogicalExpression(operand)) {
                     return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
                 }
                 const left = truthyOperand(operand.left);
@@ -59293,11 +59371,14 @@ class Emitter {
                 if (isYieldOperand(operand)) {
                     return this.nullishExprFromEmitResult(resumedYield(operand), operand);
                 }
+                if (isYieldedLogicalOperand(operand)) {
+                    return this.nullishExprFromEmitResult(resumedLogicalStage(operand), operand.expression);
+                }
                 const conditionalPlan = conditionalPlanFor(operand);
                 if (conditionalPlan) {
                     return this.nullishExprFromEmitResult(this.emitExpr(conditionalPlan.expression), conditionalPlan.expression);
                 }
-                if (!isLogicalPlan(operand)) {
+                if (isLazyMultiYieldLogicalExpression(operand)) {
                     return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
                 }
                 const leftTruthy = truthyOperand(operand.left);
@@ -59328,6 +59409,34 @@ class Emitter {
                 entryLabel: string,
                 continuationLabel: string,
             ) => void;
+            const scheduleYieldedLogicalOperand = (
+                operand: LazyMultiYieldLogicalYieldedOperand,
+                entryLabel: string,
+                continuationLabel: string,
+            ): void => {
+                let currentEntryLabel = entryLabel;
+                for (const yieldExpr of operand.yields) {
+                    const state = nextStateId();
+                    const nextEntryLabel = this.freshTemp("_lazy_multi_yield_logical_stage");
+                    const yieldEntryLabel = currentEntryLabel;
+                    entryBlocks.push(() => {
+                        buf.line(`${yieldEntryLabel}:;`);
+                        emitYield(yieldExpr, state);
+                    });
+                    resumeBlocks.push(() => {
+                        buf.line(`case ${state}:;`);
+                        this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                        buf.line(`${envLocalName}->multi_yield_values[${slotForYield(yieldExpr)}] = next_arg;`);
+                        buf.line(`goto ${nextEntryLabel};`);
+                    });
+                    currentEntryLabel = nextEntryLabel;
+                }
+                entryBlocks.push(() => {
+                    buf.line(`${currentEntryLabel}:;`);
+                    emitLogicalStage(operand.expression);
+                    buf.line(`goto ${continuationLabel};`);
+                });
+            };
             const scheduleOperand = (
                 operand: LazyMultiYieldLogicalOperand,
                 operandEntryLabel: string,
@@ -59340,6 +59449,10 @@ class Emitter {
                 const conditionalPlan = conditionalPlanFor(operand);
                 if (conditionalPlan) {
                     scheduleConditionalPlan(conditionalPlan, operandEntryLabel, continuationLabel);
+                    return;
+                }
+                if (isYieldedLogicalOperand(operand)) {
+                    scheduleYieldedLogicalOperand(operand, operandEntryLabel, continuationLabel);
                     return;
                 }
                 if (!isYieldOperand(operand)) {
@@ -59544,10 +59657,9 @@ class Emitter {
                 if (slot === undefined) unsupported(yieldExpr, "lazy multi-yield conditional branch contains an unknown yield");
                 return slot;
             };
-            const isLogicalPlan = (operand: LazyMultiYieldLogicalOperand): operand is LazyMultiYieldLogicalPlan =>
-                "yields" in operand;
+            const isLogicalPlan = isLazyMultiYieldLogicalPlan;
             const isYieldOperand = (operand: LazyMultiYieldLogicalOperand): operand is ts.YieldExpression =>
-                !isLogicalPlan(operand) && ts.isYieldExpression(operand);
+                isLazyMultiYieldLogicalExpression(operand) && ts.isYieldExpression(operand);
             const resumedYield = (yieldExpr: ts.YieldExpression): EmitResult => {
                 const type = this.prepareType(mapTsType(
                     yieldExpr,
@@ -59565,7 +59677,10 @@ class Emitter {
             };
             const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) return this.truthyExprFromEmitResult(resumedYield(operand), operand);
-                if (!isLogicalPlan(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
+                if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                    unsupported(operand.expression, "lazy multi-yield logical plans do not support yielded arithmetic operands here");
+                }
+                if (isLazyMultiYieldLogicalExpression(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
                 const left = truthyOperand(operand.left);
                 const right = truthyOperand(operand.right);
                 switch (operand.expression.operatorToken.kind) {
@@ -59579,7 +59694,10 @@ class Emitter {
             };
             const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) return this.nullishExprFromEmitResult(resumedYield(operand), operand);
-                if (!isLogicalPlan(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
+                if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                    unsupported(operand.expression, "lazy multi-yield logical plans do not support yielded arithmetic operands here");
+                }
+                if (isLazyMultiYieldLogicalExpression(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
                 const leftTruthy = truthyOperand(operand.left);
                 const leftNullish = nullishOperand(operand.left);
                 const rightNullish = nullishOperand(operand.right);
@@ -59817,7 +59935,12 @@ class Emitter {
             });
         }
         const logicalOperand = (operand: LazyMultiYieldLogicalOperand): EmitResult => {
-            if (!("yields" in operand)) {
+            if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                const staged = logicalStageResults.get(operand.expression);
+                if (!staged) unsupported(operand.expression, "lazy multi-yield logical plan contains an unstaged yielded operand");
+                return staged;
+            }
+            if (!isLazyMultiYieldLogicalPlan(operand)) {
                 if (ts.isYieldExpression(operand)) {
                     const source = resumeSources.get(operand);
                     if (!source) unsupported(operand, "lazy multi-yield logical plan contains an untracked resumed yield");

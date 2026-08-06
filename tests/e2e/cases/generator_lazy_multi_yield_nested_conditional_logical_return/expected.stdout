@@ -140,3 +140,10 @@ regexp-literal-skipped-first false regexp-left
 regexp-literal-skipped-done true false
 regexp-literal-selected-first false regexp-left
 regexp-literal-selected-done true object
+arithmetic-logical-left-skipped-first false arithmetic-left-first
+arithmetic-logical-left-skipped-second false arithmetic-left-second
+arithmetic-logical-left-skipped-done true 0
+arithmetic-logical-left-selected-first false arithmetic-left-first
+arithmetic-logical-left-selected-second false arithmetic-left-second
+arithmetic-logical-left-selected-third false arithmetic-right
+arithmetic-logical-left-selected-done true true
