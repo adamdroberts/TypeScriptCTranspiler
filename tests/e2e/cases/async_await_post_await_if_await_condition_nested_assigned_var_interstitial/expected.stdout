@@ -1,0 +1,6 @@
+condition-reject nested-interstitial-condition-rejected
+selector-reject nested-interstitial-selector-thrown
+return nested-interstitial-first-true-prefix-final-return
+throw nested-interstitial-first-false-prefix-final-throw
+return nested-interstitial-first-other-prefix-final-return
+trace selector:nested-interstitial-selector-first|before-true|nested-interstitial-first-true-prefix|nested-interstitial-first-true-prefix-final|before-false|nested-interstitial-first-false-prefix|nested-interstitial-first-false-prefix-final|before-other|nested-interstitial-first-other-prefix|nested-interstitial-first-other-prefix-final|

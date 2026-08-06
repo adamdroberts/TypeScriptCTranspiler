@@ -50352,35 +50352,54 @@ class Emitter {
                     if (!symbol) return false;
                     uninitializedSymbols.add(symbol);
                 }
-                const referencesUninitialized = (node: ts.Node): boolean => {
+                const referencesUninitialized = (node: ts.Node, symbols: ReadonlySet<ts.Symbol>): boolean => {
+                    if (ts.isVariableDeclaration(node)) {
+                        return !!node.initializer && referencesUninitialized(node.initializer, symbols);
+                    }
                     if (ts.isIdentifier(node)) {
                         const symbol = this.symbolForIdentifier(node);
-                        if (symbol && uninitializedSymbols.has(symbol)) return true;
+                        if (symbol && symbols.has(symbol)) return true;
                     }
                     let found = false;
                     ts.forEachChild(node, (child) => {
-                        if (!found && referencesUninitialized(child)) found = true;
+                        if (!found && referencesUninitialized(child, symbols)) found = true;
                     });
                     return found;
                 };
                 for (const declaration of declarations) {
-                    if (declaration.initializer && referencesUninitialized(declaration.initializer)) return false;
+                    if (declaration.initializer && referencesUninitialized(declaration.initializer, uninitializedSymbols)) return false;
                 }
+                const pendingSymbols = new Set(uninitializedSymbols);
                 let assignmentIndex = declarationIndex + 1;
                 for (const declaration of uninitialized) {
-                    const assignmentStatement = siblings[assignmentIndex++];
-                    if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return false;
-                    const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
                     const name = declaration.name;
-                    if (!ts.isBinaryExpression(assignment) ||
-                        assignment.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
-                        !ts.isIdentifier(assignment.left) ||
-                        !ts.isIdentifier(name) ||
-                        this.symbolForIdentifier(assignment.left) !== this.symbolForIdentifier(name) ||
-                        referencesUninitialized(assignment.right) ||
-                        !this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement)) {
-                        return false;
+                    if (!ts.isIdentifier(name)) return false;
+                    const symbol = this.symbolForIdentifier(name);
+                    if (!symbol) return false;
+                    let assigned = false;
+                    while (assignmentIndex < siblings.length) {
+                        const assignmentStatement = siblings[assignmentIndex++]!;
+                        const assignment = ts.isExpressionStatement(assignmentStatement)
+                            ? this.unwrapTransparentExpression(assignmentStatement.expression)
+                            : null;
+                        if (assignment && ts.isBinaryExpression(assignment) &&
+                            assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                            ts.isIdentifier(assignment.left) &&
+                            this.symbolForIdentifier(assignment.left) === symbol) {
+                            if (referencesUninitialized(assignment.right, pendingSymbols) ||
+                                !this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement)) {
+                                return false;
+                            }
+                            pendingSymbols.delete(symbol);
+                            assigned = true;
+                            break;
+                        }
+                        if (referencesUninitialized(assignmentStatement, pendingSymbols) ||
+                            !this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement, true)) {
+                            return false;
+                        }
                     }
+                    if (!assigned) return false;
                 }
                 return true;
             };
