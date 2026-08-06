@@ -50368,7 +50368,6 @@ class Emitter {
             const branchPreludeSupported = (statement: ts.Statement): boolean => {
                 const initializedLocal = ts.isVariableStatement(statement) &&
                     statement.declarationList.declarations.length === 1 &&
-                    (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) !== 0 &&
                     ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
                     !!statement.declarationList.declarations[0]!.initializer;
                 const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);

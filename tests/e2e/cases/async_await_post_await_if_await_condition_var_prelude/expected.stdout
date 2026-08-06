@@ -1,0 +1,5 @@
+condition-reject var-condition-rejected
+selector-reject var-selector-thrown
+return var-first-true-return
+throw var-first-false-throw
+trace selector:var-selector-first|var-first-true|var-first-false|
