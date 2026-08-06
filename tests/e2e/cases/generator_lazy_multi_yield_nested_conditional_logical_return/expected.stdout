@@ -69,3 +69,11 @@ new-skipped-first false new-left-1 0
 new-skipped-done true null 0
 new-selected-first false new-left-1 0
 new-selected-done true new-rhs-1 1
+property-skipped-first false property-left 0
+property-skipped-done true false 0
+property-selected-first false property-left 0
+property-selected-done true property-1 1
+element-skipped-first false element-left 0
+element-skipped-done true false 0
+element-selected-first false element-left 0
+element-selected-done true element-result 1

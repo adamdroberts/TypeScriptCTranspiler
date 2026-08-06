@@ -76,6 +76,30 @@ function* stagedNewOperandReturn(): Generator<StagedLogicalBox, StagedLogicalBox
     return (yield new StagedLogicalBox("new-left-")) && new StagedLogicalBox("new-rhs-");
 }
 
+let logicalPropertyCount = 0;
+const logicalPropertyBox: any = {};
+Object.defineProperty(logicalPropertyBox, "value", {
+    get: () => {
+        logicalPropertyCount++;
+        return "property-" + logicalPropertyCount;
+    },
+});
+
+let logicalElementKeyCount = 0;
+const logicalElementBox: any = { "element-key": "element-result" };
+function logicalElementKey(): string {
+    logicalElementKeyCount++;
+    return "element-key";
+}
+
+function* stagedPropertyOperandReturn(): Generator<string, string, any> {
+    return (yield "property-left") && logicalPropertyBox.value;
+}
+
+function* stagedElementOperandReturn(): Generator<string, string, any> {
+    return (yield "element-left") && logicalElementBox[logicalElementKey()];
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -279,3 +303,31 @@ logicalNewCount = 0;
 console.log("new-selected-first", newSelectedFirst.done, newSelectedFirst.value.value, logicalNewCount);
 const newSelectedDone: any = newSelected.next(true);
 console.log("new-selected-done", newSelectedDone.done, newSelectedDone.value.value, logicalNewCount);
+
+logicalPropertyCount = 0;
+const propertySkipped = stagedPropertyOperandReturn();
+const propertySkippedFirst: any = propertySkipped.next();
+console.log("property-skipped-first", propertySkippedFirst.done, propertySkippedFirst.value, logicalPropertyCount);
+const propertySkippedDone: any = propertySkipped.next(false);
+console.log("property-skipped-done", propertySkippedDone.done, propertySkippedDone.value, logicalPropertyCount);
+
+logicalPropertyCount = 0;
+const propertySelected = stagedPropertyOperandReturn();
+const propertySelectedFirst: any = propertySelected.next();
+console.log("property-selected-first", propertySelectedFirst.done, propertySelectedFirst.value, logicalPropertyCount);
+const propertySelectedDone: any = propertySelected.next(true);
+console.log("property-selected-done", propertySelectedDone.done, propertySelectedDone.value, logicalPropertyCount);
+
+logicalElementKeyCount = 0;
+const elementSkipped = stagedElementOperandReturn();
+const elementSkippedFirst: any = elementSkipped.next();
+console.log("element-skipped-first", elementSkippedFirst.done, elementSkippedFirst.value, logicalElementKeyCount);
+const elementSkippedDone: any = elementSkipped.next(false);
+console.log("element-skipped-done", elementSkippedDone.done, elementSkippedDone.value, logicalElementKeyCount);
+
+logicalElementKeyCount = 0;
+const elementSelected = stagedElementOperandReturn();
+const elementSelectedFirst: any = elementSelected.next();
+console.log("element-selected-first", elementSelectedFirst.done, elementSelectedFirst.value, logicalElementKeyCount);
+const elementSelectedDone: any = elementSelected.next(true);
+console.log("element-selected-done", elementSelectedDone.done, elementSelectedDone.value, logicalElementKeyCount);

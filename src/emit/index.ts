@@ -53996,11 +53996,7 @@ class Emitter {
                 conditionalOperands.push(conditionalPlan);
                 return unwrappedOperand;
             }
-            if (allowSideEffecting &&
-                (ts.isCallExpression(unwrappedOperand) || ts.isNewExpression(unwrappedOperand)) &&
-                !this.nodeContainsYield(unwrappedOperand) &&
-                this.isSimpleLazyMultiYieldCallLike(unwrappedOperand) &&
-                !(this.checker.getTypeAtLocation(unwrappedOperand).flags & ts.TypeFlags.BigIntLike)) {
+            if (allowSideEffecting && this.isSimpleLazyMultiYieldLogicalStagedOperand(unwrappedOperand)) {
                 stagedOperands.push(unwrappedOperand);
                 return unwrappedOperand;
             }
@@ -55276,6 +55272,19 @@ class Emitter {
             }
             return !this.nodeContainsYield(argument);
         });
+    }
+
+    private isSimpleLazyMultiYieldLogicalStagedOperand(expr: ts.Expression): boolean {
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        if (this.nodeContainsYield(unwrapped) ||
+            (this.checker.getTypeAtLocation(unwrapped).flags & ts.TypeFlags.BigIntLike)) return false;
+        if (ts.isCallExpression(unwrapped) || ts.isNewExpression(unwrapped)) {
+            return this.isSimpleLazyMultiYieldCallLike(unwrapped);
+        }
+        if (ts.isPropertyAccessExpression(unwrapped) || ts.isElementAccessExpression(unwrapped)) {
+            return this.isSimpleLazyMultiYieldCallArgument(unwrapped);
+        }
+        return false;
     }
 
     private simpleLazyMultiYieldMutationReceiver(
