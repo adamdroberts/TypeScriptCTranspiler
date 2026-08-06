@@ -1,0 +1,5 @@
+condition-reject for-condition-rejected
+selector-reject for-condition-thrown
+return for-first-true-return
+throw for-first-false-throw
+trace true:for:for-first:0|false:for:for-first:0|false:for:for-first:1|throw:condition:for-throw-first|
