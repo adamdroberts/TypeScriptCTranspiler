@@ -1,0 +1,5 @@
+condition-reject switch-condition-rejected
+selector-reject switch-selector-thrown
+return switch-first-true-return
+throw switch-first-false-throw
+trace true:case:switch-first|true:default|false:case:switch-first|false:default|throw:selector:switch-throw-first|

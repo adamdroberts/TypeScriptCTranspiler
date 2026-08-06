@@ -50335,9 +50335,11 @@ class Emitter {
                     ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
                     !!statement.declarationList.declarations[0]!.initializer;
                 const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
+                const nestedSwitchPrelude = ts.isSwitchStatement(statement) && nestedPreludeSafe(statement);
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
                     !!statement.finallyBlock && nestedPreludeSafe(statement);
-                return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude || nestedTryPrelude) &&
+                return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude ||
+                    nestedSwitchPrelude || nestedTryPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement);
             };
             if (!terminal ||
