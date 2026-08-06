@@ -38801,6 +38801,8 @@ class Emitter {
         thisValue: EmitResult | null,
         thenCarriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[] = [],
         elseCarriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[] = [],
+        thenHoistedAliases: readonly AsyncAwaitContinuationParam[] = [],
+        elseHoistedAliases: readonly AsyncAwaitContinuationParam[] = [],
     ): string {
         const name = `tsc_async_await_loop_body_terminal_condition_${this.asyncAwaitReturnContinuationAdapters++}`;
         const envType = `${name}_env_t`;
@@ -38827,7 +38829,18 @@ class Emitter {
             promiseType: CType | null,
             rejectResult: boolean,
             carriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[],
+            hoistedAliases: readonly AsyncAwaitContinuationParam[],
         ): void => {
+            const addedHoistedSymbols: ts.Symbol[] = [];
+            for (const alias of hoistedAliases) {
+                if (!this.asyncAwaitHoistedPreludeSymbols.has(alias.symbol)) {
+                    this.asyncAwaitHoistedPreludeSymbols.add(alias.symbol);
+                    addedHoistedSymbols.push(alias.symbol);
+                }
+            }
+            const addedDeclaredSymbols = hoistedAliases
+                .map((alias) => alias.symbol)
+                .filter((symbol) => !this.asyncAwaitHoistedPreludeDeclaredSymbols.has(symbol));
             const addedReferencedDeclarations: ts.VariableDeclaration[] = [];
             for (const statement of preludeStatements) {
                 if (!ts.isVariableStatement(statement)) continue;
@@ -38838,6 +38851,7 @@ class Emitter {
                 }
             }
             try {
+                this.emitAsyncAwaitPreludeHoistedDeclarations(out, hoistedAliases);
                 if (!awaitExpr || !adapter || !promiseType) {
                     if (!synchronousExpr) throw new Error("missing terminal branch expression");
                     for (const statement of preludeStatements) this.emitStmt(out, statement);
@@ -38878,6 +38892,8 @@ class Emitter {
                 out.close();
             } finally {
                 for (const declaration of addedReferencedDeclarations) this.referencedVariables.delete(declaration);
+                for (const symbol of addedHoistedSymbols) this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+                for (const symbol of addedDeclaredSymbols) this.asyncAwaitHoistedPreludeDeclaredSymbols.delete(symbol);
             }
         };
         const buf = new CBuf();
@@ -38903,10 +38919,10 @@ class Emitter {
         try {
             const truth = this.truthyC({ c: valueVar, ty: conditionAwaitedType }, conditionAwaitExpr);
             buf.open(`if (${truth})`);
-            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPreludeStatements, thenPromiseType, thenRejectResult, thenCarriedAliases);
+            emitBranch(buf, thenAdapter, thenAwaitExpr, thenSynchronousExpr, thenPreludeStatements, thenPromiseType, thenRejectResult, thenCarriedAliases, thenHoistedAliases);
             buf.close();
             buf.open("else");
-            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePreludeStatements, elsePromiseType, elseRejectResult, elseCarriedAliases);
+            emitBranch(buf, elseAdapter, elseAwaitExpr, elseSynchronousExpr, elsePreludeStatements, elsePromiseType, elseRejectResult, elseCarriedAliases, elseHoistedAliases);
             buf.close();
             buf.line("tsc_try_pop();");
             buf.line("return;");
@@ -50305,6 +50321,7 @@ class Emitter {
                 rejectResult: boolean;
                 preludeStatements: readonly ts.Statement[];
                 carriedAliases: readonly AwaitedIfCarriedAlias[];
+                hoistedAliases: readonly AsyncAwaitContinuationParam[];
             }
             | { kind: "condition"; awaitExpr: ts.AwaitExpression; thenBranch: AwaitedIfBranch; elseBranch: AwaitedIfBranch };
         const terminalBranch = (branch: ts.Statement): AwaitedIfBranch | null => {
@@ -50375,22 +50392,22 @@ class Emitter {
                 visit(statement);
                 return safe;
             };
-            const nestedVarPreludeEscapes = (statement: ts.Statement, index: number): boolean => {
-                const declared = new Set<ts.Symbol>();
+            const nestedVarPreludeEscapes = (statement: ts.Statement, index: number): readonly ts.Identifier[] => {
+                const declared = new Map<ts.Symbol, ts.Identifier>();
                 const collect = (node: ts.Node): void => {
                     if (ts.isVariableStatement(node) &&
                         (node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
                         for (const declaration of node.declarationList.declarations) {
                             if (ts.isIdentifier(declaration.name)) {
                                 const symbol = this.symbolForIdentifier(declaration.name);
-                                if (symbol) declared.add(symbol);
+                                if (symbol) declared.set(symbol, declaration.name);
                             }
                         }
                     }
                     ts.forEachChild(node, collect);
                 };
                 collect(statement);
-                if (declared.size === 0) return false;
+                if (declared.size === 0) return [];
                 const referencesDeclared = (node: ts.Node): boolean => {
                     if (ts.isIdentifier(node)) {
                         const symbol = this.symbolForIdentifier(node);
@@ -50403,9 +50420,9 @@ class Emitter {
                     return found;
                 };
                 for (let laterIndex = index + 1; laterIndex < preludeStatements.length; laterIndex++) {
-                    if (referencesDeclared(preludeStatements[laterIndex]!)) return true;
+                    if (referencesDeclared(preludeStatements[laterIndex]!)) return [...declared.values()];
                 }
-                return referencesDeclared(terminal);
+                return referencesDeclared(terminal) ? [...declared.values()] : [];
             };
             const branchPreludeSupported = (statement: ts.Statement, index: number): boolean => {
                 const variableDeclarations = ts.isVariableStatement(statement)
@@ -50437,7 +50454,7 @@ class Emitter {
                     }) && hasUninitializedDeclaration;
                 })();
                 const nestedPrelude = (isNestedControlFlow: boolean): boolean =>
-                    isNestedControlFlow && nestedPreludeSafe(statement) && !nestedVarPreludeEscapes(statement, index);
+                    isNestedControlFlow && nestedPreludeSafe(statement);
                 const nestedIfPrelude = nestedPrelude(ts.isIfStatement(statement));
                 const nestedSwitchPrelude = nestedPrelude(ts.isSwitchStatement(statement));
                 const nestedWhilePrelude = nestedPrelude(ts.isWhileStatement(statement));
@@ -50446,7 +50463,7 @@ class Emitter {
                 const nestedForOfPrelude = nestedPrelude(ts.isForOfStatement(statement));
                 const nestedForInPrelude = nestedPrelude(ts.isForInStatement(statement));
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
-                    !!statement.finallyBlock && nestedPreludeSafe(statement) && !nestedVarPreludeEscapes(statement, index);
+                    !!statement.finallyBlock && nestedPreludeSafe(statement);
                 return (ts.isExpressionStatement(statement) || initializedLocals || assignedUninitializedVars || nestedIfPrelude ||
                     nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude || nestedForPrelude ||
                     nestedForOfPrelude || nestedForInPrelude || nestedTryPrelude) &&
@@ -50457,6 +50474,27 @@ class Emitter {
                 !terminal.expression ||
                 !preludeStatements.every(branchPreludeSupported)) {
                 return null;
+            }
+            const hoistedAliases: AsyncAwaitContinuationParam[] = [];
+            const hoistedSymbols = new Set<ts.Symbol>();
+            for (const [index, statement] of preludeStatements.entries()) {
+                for (const identifier of nestedVarPreludeEscapes(statement, index)) {
+                    const symbol = this.symbolForIdentifier(identifier);
+                    if (!symbol || hoistedSymbols.has(symbol)) continue;
+                    const type = this.variableStorageType(this.prepareType(mapTsType(
+                        identifier,
+                        this.checker.getTypeAtLocation(identifier),
+                        this.checker,
+                    )));
+                    if (type.kind === "void" || type.kind === "never") return null;
+                    hoistedSymbols.add(symbol);
+                    hoistedAliases.push({
+                        symbol,
+                        name: mangleIdent(identifier.text),
+                        type,
+                        field: `branch_nested_var_${mangleIdent(identifier.text)}`,
+                    });
+                }
             }
             for (const statement of preludeStatements) {
                 if (!ts.isVariableStatement(statement)) continue;
@@ -50487,6 +50525,7 @@ class Emitter {
                     rejectResult: ts.isThrowStatement(terminal),
                     preludeStatements,
                     carriedAliases,
+                    hoistedAliases,
                 }
                 : null;
         };
@@ -50601,6 +50640,7 @@ class Emitter {
             rejectResult: boolean;
             preludeStatements: readonly ts.Statement[];
             carriedAliases: readonly AwaitedIfCarriedAlias[];
+            hoistedAliases: readonly AsyncAwaitContinuationParam[];
         } => {
             if (branch.kind === "terminal") {
                 const typeInfo = terminalTypes.get(branch)!;
@@ -50622,6 +50662,7 @@ class Emitter {
                     rejectResult: branch.rejectResult,
                     preludeStatements: branch.preludeStatements,
                     carriedAliases: branch.carriedAliases,
+                    hoistedAliases: branch.hoistedAliases,
                 };
             }
             const thenBranch = makeBranchAdapter(branch.thenBranch);
@@ -50648,12 +50689,15 @@ class Emitter {
                     callbackThis,
                     thenBranch.carriedAliases,
                     elseBranch.carriedAliases,
+                    thenBranch.hoistedAliases,
+                    elseBranch.hoistedAliases,
                 ),
                 promiseType: typeInfo.promiseType,
                 awaitExpr: branch.awaitExpr,
                 rejectResult: false,
                 preludeStatements: [],
                 carriedAliases: [],
+                hoistedAliases: [],
             };
         };
         const conditionAdapter = makeBranchAdapter(rootBranch).adapter;

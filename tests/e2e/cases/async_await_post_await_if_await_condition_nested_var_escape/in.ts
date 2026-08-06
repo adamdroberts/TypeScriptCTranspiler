@@ -16,9 +16,17 @@ async function awaitedIfNestedVarEscape(route: number): Promise<string> {
         }
         return await laterString(escaped + "-return");
     } else {
-        return await laterString(first + "-false");
+        if (route === 2) {
+            var escapedThrow = first + "-false";
+        } else {
+            var escapedThrow = first + "-other-false";
+        }
+        throw await laterString(escapedThrow + "-throw");
     }
 }
 
 awaitedIfNestedVarEscape(1).then((value) => console.log("true", value));
-awaitedIfNestedVarEscape(2).then((value) => console.log("false", value));
+awaitedIfNestedVarEscape(2).then(
+    (value) => console.log("unexpected", value),
+    (reason) => console.log("throw", reason),
+);
