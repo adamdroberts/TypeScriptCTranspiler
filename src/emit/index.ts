@@ -51461,11 +51461,11 @@ class Emitter {
                     : undefined;
                 const loopControlPrelude = loopControl ? loopBodyStatements.slice(0, -1) : [];
                 if (loopControl && !loopControlPrelude.every((prefixStatement) =>
-                    (ts.isExpressionStatement(prefixStatement) || ts.isVariableStatement(prefixStatement)) &&
-                    (this.asyncAwaitInterstitialControlFlowSupported(prefixStatement) ||
-                        (ts.isVariableStatement(prefixStatement) &&
-                            this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
-                            nestedVariableStatementSupported(prefixStatement))))) return null;
+                    (ts.isExpressionStatement(prefixStatement) ||
+                        ts.isVariableStatement(prefixStatement) ||
+                        ts.isIfStatement(prefixStatement)) &&
+                    this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
+                    nestedPreludeSafe(prefixStatement))) return null;
                 if ((forStatement.condition && containsAwait(forStatement.condition) && !awaitedCondition) ||
                     (forStatement.incrementor && containsAwait(forStatement.incrementor) && !awaitedIncrementor) ||
                     (awaitedIncrementor && !forStatement.condition) ||
