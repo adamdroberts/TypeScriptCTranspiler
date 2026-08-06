@@ -1,0 +1,6 @@
+map1 false a:1
+map2 false b:2
+map3 true map-done
+dynamic1 false x:3
+dynamic2 false y:4
+dynamic3 true dynamic-done

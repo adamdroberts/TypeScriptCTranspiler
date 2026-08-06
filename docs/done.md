@@ -1,5 +1,6 @@
 # Implemented features
 
+- Lazy generators now preserve bounded `for...of` destructuring for identifier-only `[first, second]` bindings over typed entry elements such as `Map` pairs and dynamic value elements; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `generator_lazy_for_of_destructuring`.
 - Collection constructors now accept omitted generic arguments for `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry`, using dynamic value storage for unresolved type parameters; the intrinsic TypeScript `object` type now maps to the same dynamic representation. Test: `inferred_collection_constructors`.
 - Lazy generators now preserve bounded labeled `break` and `continue` routing across labeled blocks and supported `while`, `do...while`, counted `for`, `for...of`, and `for...in` loops, including cross-loop continuation anchors; broader suspended label/control-flow graphs remain deferred. Test: `generator_lazy_labeled_control`.
 - Ordinary labeled statements now emit bounded labeled blocks with `break label` routing, including nested labeled blocks, and preserve same-loop plus cross-loop labeled `continue` through `while`, `do...while`, counted `for`, `for...in`, ordinary `for...of`, typed `Map`, `URLSearchParams`, custom iterator objects, and dynamic/entry destructuring paths; broader label control-flow graphs remain deferred. Test: `labeled_statement`.
@@ -3751,6 +3752,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `generator_lazy_for_assignment_initializer_yield` | lazy generators suspend and resume a direct yielded assignment in a counted-for expression initializer |
 | `generator_lazy_for_multi_yield_assignment_initializer` | lazy generators preserve multiple yielded operands in counted-for assignment and compound initializers |
 | `generator_lazy_for_of_yield_source` | lazy generators suspend on a direct yielded dynamic `for...of` source before iterating the resumed value |
+| `generator_lazy_for_of_destructuring` | lazy generators preserve bounded typed-entry and dynamic-value `for...of` destructuring |
 | `generator_lazy_for_in_yield_source` | lazy generators suspend on a direct yielded dynamic `for...in` source before enumerating the resumed value |
 | `generator_lazy_for_in_class` | lazy generators suspend and resume across typed class and interface for-in loops, including inherited typed-class and interface fields plus multi-level derived class/interface field overrides; regular `for_in` covers the same multi-level inherited-field resolver, override path, and inherited interface path |
 | `generator_lazy_continue` | lazy generators support unlabeled continue inside while, do-while, and counted for loops |

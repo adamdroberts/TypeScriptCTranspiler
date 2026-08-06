@@ -8,6 +8,7 @@ Items are grouped by how soon they unblock the most user value. Within each grou
 
 ## 1. Next-up unblockers
 
+- Verified bounded lazy-generator `for...of` destructuring coverage: identifier-only `[first, second]` bindings now resume correctly for typed entry elements such as `Map` pairs and dynamic value elements, while defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `generator_lazy_for_of_destructuring`.
 - Verified inferred collection-constructor coverage: `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry` constructors now accept omitted generic arguments through dynamic value storage, and the intrinsic TypeScript `object` type maps to that representation. Test: `inferred_collection_constructors`.
 - Verified bounded lazy-generator labeled-control coverage: labeled blocks and supported `while`, `do...while`, counted `for`, `for...of`, and `for...in` loops now route labeled `break` and `continue`, including cross-loop continuation anchors; broader suspended label/control-flow graphs remain deferred. Test: `generator_lazy_labeled_control`.
 - Verified bounded labeled-statement coverage: ordinary labeled blocks now lower with nested `break label` routing and same-loop plus cross-loop labeled `continue` through `while`, `do...while`, counted `for`, `for...in`, ordinary `for...of`, typed `Map`, `URLSearchParams`, custom iterator objects, and dynamic/entry destructuring paths; broader label control-flow graphs remain deferred. Test: `labeled_statement`.

@@ -59535,15 +59535,67 @@ class Emitter {
         this.activeLazyGeneratorBreakTargets.push("loop");
         this.activeLazyGeneratorContinueTargets.push(continueLabel);
         try {
-            const symbol = this.symbolForIdentifier(decl.name as ts.Identifier);
-            const binding = this.closureEnvBindingForSymbol(symbol);
-            if (!binding) unsupported(decl.name, "lazy generator for-of binding is unavailable");
-            const targetType = binding.type;
             const present = `tsc_array_index_present(${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField})`;
             const current = sourceElemType.kind === "value"
                 ? `( ${present} ? TSC_ARR(${sourceElemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : tsc_value_undefined() )`
                 : `${present} ? TSC_ARR(${sourceElemType.c}, ${envLocalName}->${info.arrayField}, ${envLocalName}->${info.indexField}) : ${this.zeroValue(sourceElemType)}`;
-            buf.line(`*${binding.ptr} = ${this.coerce({ c: current, ty: sourceElemType }, targetType, stmt.expression)};`);
+            const assignBinding = (identifier: ts.Identifier, value: EmitResult): void => {
+                const symbol = this.symbolForIdentifier(identifier);
+                const binding = this.closureEnvBindingForSymbol(symbol);
+                if (!binding) unsupported(identifier, "lazy generator for-of binding is unavailable");
+                buf.line(`*${binding.ptr} = ${this.coerce(value, binding.type, identifier)};`);
+            };
+            if (ts.isIdentifier(decl.name)) {
+                assignBinding(decl.name, { c: current, ty: sourceElemType });
+            } else if (ts.isArrayBindingPattern(decl.name)) {
+                const [first, second] = decl.name.elements;
+                if (
+                    decl.name.elements.length !== 2 ||
+                    !first ||
+                    !second ||
+                    !ts.isBindingElement(first) ||
+                    !ts.isBindingElement(second) ||
+                    !ts.isIdentifier(first.name) ||
+                    !ts.isIdentifier(second.name) ||
+                    first.propertyName ||
+                    second.propertyName ||
+                    first.initializer ||
+                    second.initializer ||
+                    first.dotDotDotToken ||
+                    second.dotDotDotToken
+                ) {
+                    unsupported(decl.name, "lazy generator for-of destructuring supports only [first, second] identifier bindings");
+                }
+                if (sourceElemType.kind === "entry") {
+                    const entryVar = this.freshTemp("_lazy_entry");
+                    buf.line(`${sourceElemType.c} const ${entryVar} = ${current};`);
+                    const keyType = sourceElemType.key ?? T_STRING;
+                    const valueType = sourceElemType.elem ?? T_VOID;
+                    assignBinding(
+                        first.name,
+                        { c: this.objectEntryKeyValue(entryVar, keyType), ty: keyType },
+                    );
+                    assignBinding(
+                        second.name,
+                        { c: this.objectEntryValue(entryVar, valueType), ty: valueType },
+                    );
+                } else if (sourceElemType.kind === "value") {
+                    const entryValue = this.freshTemp("_lazy_value");
+                    buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                    assignBinding(
+                        first.name,
+                        { c: `tsc_value_get_index(${entryValue}, 0.0)`, ty: T_VALUE },
+                    );
+                    assignBinding(
+                        second.name,
+                        { c: `tsc_value_get_index(${entryValue}, 1.0)`, ty: T_VALUE },
+                    );
+                } else {
+                    unsupported(decl.name, "lazy generator for-of destructuring requires entry or dynamic value elements");
+                }
+            } else {
+                unsupported(decl.name, "lazy generator for-of binding form");
+            }
             this.emitLazyGeneratorStmt(buf, stmt.statement, nextStateId, nextYieldStarSlot, elemType, envLocalName);
             buf.line(`${continueLabel}:;`);
             buf.line(`${envLocalName}->${info.indexField}++;`);
@@ -62844,27 +62896,45 @@ class Emitter {
             field: string;
         }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
+            const bindingIdentifiers = (name: ts.BindingName): ts.Identifier[] => {
+                if (ts.isIdentifier(name)) return [name];
+                const identifiers: ts.Identifier[] = [];
+                for (const element of name.elements) {
+                    if (
+                        !ts.isBindingElement(element) ||
+                        !ts.isIdentifier(element.name) ||
+                        element.propertyName ||
+                        element.initializer ||
+                        element.dotDotDotToken
+                    ) {
+                        unsupported(name, "lazy generator locals support only identifier bindings in array patterns");
+                    }
+                    identifiers.push(element.name);
+                }
+                return identifiers;
+            };
             const collectVars = (node: ts.Node) => {
                 if (ts.isVariableDeclaration(node)) {
                     for (let parent: ts.Node | undefined = node.parent; parent; parent = parent.parent) {
                         if (ts.isCatchClause(parent)) return;
                         if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) break;
                     }
-                    if (!ts.isIdentifier(node.name)) unsupported(node, "lazy generator locals must be identifiers");
-                    const symbol = this.symbolForIdentifier(node.name);
-                    if (!symbol) unsupported(node.name, "could not resolve lazy generator local symbol");
-                    let type = this.variableStorageType(this.prepareType(mapType(node, this.checker)));
-                    if (type.c === "double" && this.intSymbols.has(symbol)) {
-                        type = T_NUMBER_INT;
+                    for (const identifier of bindingIdentifiers(node.name)) {
+                        const symbol = this.symbolForIdentifier(identifier);
+                        if (!symbol) unsupported(identifier, "could not resolve lazy generator local symbol");
+                        let type = this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
+                        if (type.c === "double" && this.intSymbols.has(symbol)) {
+                            type = T_NUMBER_INT;
+                        }
+                        const index = localVarInfos.length;
+                        localVarInfos.push({
+                            declaration: node,
+                            symbol,
+                            name: mangleIdent(identifier.text),
+                            field: `local_${index}_${mangleIdent(identifier.text)}`,
+                            type,
+                        });
                     }
-                    const index = localVarInfos.length;
-                    localVarInfos.push({
-                        declaration: node,
-                        symbol,
-                        name: mangleIdent(node.name.text),
-                        field: `local_${index}_${mangleIdent(node.name.text)}`,
-                        type,
-                    });
                 }
                 if (ts.isFunctionLike(node) || ts.isClassLike(node)) return;
                 ts.forEachChild(node, collectVars);
