@@ -55284,6 +55284,9 @@ class Emitter {
         if (ts.isPropertyAccessExpression(unwrapped) || ts.isElementAccessExpression(unwrapped)) {
             return this.isSimpleLazyMultiYieldCallArgument(unwrapped);
         }
+        if (ts.isDeleteExpression(unwrapped)) {
+            return this.isSimpleLazyMultiYieldCallArgument(this.unwrapTransparentExpression(unwrapped.expression));
+        }
         return false;
     }
 

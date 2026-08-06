@@ -77,3 +77,7 @@ element-skipped-first false element-left 0
 element-skipped-done true false 0
 element-selected-first false element-left 0
 element-selected-done true element-result 1
+delete-skipped-first false delete-left true
+delete-skipped-done true false true
+delete-selected-first false delete-left true
+delete-selected-done true true false

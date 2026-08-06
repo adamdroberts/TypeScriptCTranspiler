@@ -100,6 +100,12 @@ function* stagedElementOperandReturn(): Generator<string, string, any> {
     return (yield "element-left") && logicalElementBox[logicalElementKey()];
 }
 
+let logicalDeleteBox: any = {};
+
+function* stagedDeleteOperandReturn(): Generator<string, boolean, any> {
+    return (yield "delete-left") && delete logicalDeleteBox.value;
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -331,3 +337,17 @@ const elementSelectedFirst: any = elementSelected.next();
 console.log("element-selected-first", elementSelectedFirst.done, elementSelectedFirst.value, logicalElementKeyCount);
 const elementSelectedDone: any = elementSelected.next(true);
 console.log("element-selected-done", elementSelectedDone.done, elementSelectedDone.value, logicalElementKeyCount);
+
+logicalDeleteBox = { value: "delete-value" };
+const deleteSkipped = stagedDeleteOperandReturn();
+const deleteSkippedFirst: any = deleteSkipped.next();
+console.log("delete-skipped-first", deleteSkippedFirst.done, deleteSkippedFirst.value, "value" in logicalDeleteBox);
+const deleteSkippedDone: any = deleteSkipped.next(false);
+console.log("delete-skipped-done", deleteSkippedDone.done, deleteSkippedDone.value, "value" in logicalDeleteBox);
+
+logicalDeleteBox = { value: "delete-value" };
+const deleteSelected = stagedDeleteOperandReturn();
+const deleteSelectedFirst: any = deleteSelected.next();
+console.log("delete-selected-first", deleteSelectedFirst.done, deleteSelectedFirst.value, "value" in logicalDeleteBox);
+const deleteSelectedDone: any = deleteSelected.next(true);
+console.log("delete-selected-done", deleteSelectedDone.done, deleteSelectedDone.value, "value" in logicalDeleteBox);
