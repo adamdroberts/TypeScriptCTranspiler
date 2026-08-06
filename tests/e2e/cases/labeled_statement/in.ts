@@ -76,6 +76,86 @@ function crossLoopForOfContinue(): number {
     return count;
 }
 
+function crossLoopMapForOfContinue(): string {
+    const entries = new Map<string, number>();
+    entries.set("a", 1);
+    entries.set("b", 2);
+    let events = "";
+    outer: for (const [key, value] of entries) {
+        for (let index = 0; index < 1; index++) {
+            events += key + value;
+            continue outer;
+        }
+    }
+    return events;
+}
+
+function crossLoopUrlSearchParamsContinue(): string {
+    const params = new URLSearchParams("a=1&b=2");
+    let events = "";
+    outer: for (const [key, value] of params) {
+        for (let index = 0; index < 1; index++) {
+            events += key + value;
+            continue outer;
+        }
+    }
+    return events;
+}
+
+interface CounterStep {
+    done: boolean;
+    value: number;
+}
+
+class CounterIterator {
+    current = 0;
+
+    next(): CounterStep {
+        if (this.current >= 2) return { done: true, value: 0 };
+        const value = this.current;
+        this.current++;
+        return { done: false, value };
+    }
+
+    [Symbol.iterator](): CounterIterator {
+        return this;
+    }
+}
+
+function crossLoopCustomIteratorContinue(): string {
+    let events = "";
+    outer: for (const value of new CounterIterator()) {
+        for (let index = 0; index < 1; index++) {
+            events += value;
+            continue outer;
+        }
+    }
+    return events;
+}
+
+function crossLoopDynamicDestructuringContinue(): string {
+    const pairs: any = [["a", 1], ["b", 2]];
+    let events = "";
+    outer: for (const [key, value] of pairs) {
+        for (let index = 0; index < 1; index++) {
+            events += `${key}${value}`;
+            continue outer;
+        }
+    }
+    return events;
+}
+
+function crossLoopEntryDestructuringContinue(): string {
+    let events = "";
+    outer: for (const [key, value] of Object.entries({ a: 1, b: 2 })) {
+        for (let index = 0; index < 1; index++) {
+            events += `${key}${value}`;
+            continue outer;
+        }
+    }
+    return events;
+}
+
 console.log(labeledBlock());
 console.log(nestedLabeledBlock());
 console.log(labeledContinueLoop());
@@ -84,3 +164,8 @@ console.log(crossLoopWhileContinue());
 console.log(crossLoopDoContinue());
 console.log(crossLoopForInContinue());
 console.log(crossLoopForOfContinue());
+console.log(crossLoopMapForOfContinue());
+console.log(crossLoopUrlSearchParamsContinue());
+console.log(crossLoopCustomIteratorContinue());
+console.log(crossLoopDynamicDestructuringContinue());
+console.log(crossLoopEntryDestructuringContinue());

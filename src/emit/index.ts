@@ -66292,7 +66292,12 @@ class Emitter {
             buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
             buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
             buf.line(`${entryValueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, entryValueType)};`);
+            const labeledContinueTarget = this.directLabeledLoopName(fos)
+                ? this.freshTemp("_custom_for_of_labeled_continue")
+                : null;
+            this.registerLabeledContinueTarget(fos, labeledContinueTarget);
             this.emitLoopStmtInBlock(buf, fos.statement);
+            if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
             buf.close();
             buf.close();
             return true;
@@ -66329,7 +66334,12 @@ class Emitter {
         buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
         buf.line(`if (${stepVar}->done) break;`);
         buf.line(`${valueType.c}${qual} ${bindingName} = ${stepVar}->value;`);
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_custom_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
         buf.close();
         return true;
@@ -66507,7 +66517,12 @@ class Emitter {
                 : restArray;
             buf.line(`${restBinding.type.c}${qual} ${restBinding.name} = ${init};`);
         }
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_dynamic_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
         buf.close();
     }
@@ -66565,7 +66580,12 @@ class Emitter {
         buf.line(
             `${valueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, valueType)};`,
         );
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_entry_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
         buf.close();
     }
@@ -66623,7 +66643,12 @@ class Emitter {
         );
         buf.line(`tsc_str_t*${qual} ${keyName} = ${paramsVar}->items[${idxVar}].name;`);
         buf.line(`tsc_str_t*${qual} ${valueName} = ${paramsVar}->items[${idxVar}].value;`);
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_url_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
         buf.close();
     }
@@ -66685,7 +66710,12 @@ class Emitter {
         );
         buf.line(`${keyType.c}${qual} ${keyName} = ${keyAt};`);
         buf.line(`${valueType.c}${qual} ${valueName} = ${valueAt};`);
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_map_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
         buf.close();
         buf.close();
     }
