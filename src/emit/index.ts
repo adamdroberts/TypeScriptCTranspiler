@@ -51500,6 +51500,7 @@ class Emitter {
                         ts.isTryStatement(prefixStatement) ||
                         ts.isLabeledStatement(prefixStatement) ||
                         ts.isBlock(prefixStatement) ||
+                        ts.isDebuggerStatement(prefixStatement) ||
                         ts.isEmptyStatement(prefixStatement)) &&
                     this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
                     nestedPreludeSafe(prefixStatement))) return null;
@@ -54880,6 +54881,7 @@ class Emitter {
     }
 
     private isValidLazyGeneratorStatement(stmt: ts.Statement, loopDepth = 0): boolean {
+        if (ts.isDebuggerStatement(stmt)) return true;
         if (ts.isEmptyStatement(stmt)) return true;
         if (ts.isBreakStatement(stmt)) return !stmt.label;
         if (ts.isContinueStatement(stmt)) return !stmt.label && loopDepth > 0;
@@ -60674,6 +60676,7 @@ class Emitter {
         elemType: CType,
         envLocalName: string,
     ): void {
+        if (ts.isDebuggerStatement(stmt)) return;
         if (ts.isEmptyStatement(stmt)) return;
 
         if (ts.isBlock(stmt)) {
@@ -64316,6 +64319,7 @@ class Emitter {
         if (ts.isThrowStatement(stmt)) return this.emitThrow(buf, stmt);
         if (ts.isTryStatement(stmt)) return this.emitTry(buf, stmt);
         if (ts.isSwitchStatement(stmt)) return this.emitSwitch(buf, stmt);
+        if (ts.isDebuggerStatement(stmt)) return;
         if (stmt.kind === ts.SyntaxKind.BreakStatement) {
             const target = this.activeBreakTargets[this.activeBreakTargets.length - 1];
             buf.line(target ? `goto ${target};` : "break;");
