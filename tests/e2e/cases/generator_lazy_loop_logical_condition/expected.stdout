@@ -2,3 +2,9 @@ while-false false while-left true while-0
 while-true false while-left false while-right false while-body-1 false while-left true while-1
 do-false false do-body-1 false do-left false do-right true do-1
 for false for-left false for-body-0 false for-left false for-right false for-body-1 false for-left true for-2
+side-effecting-while-false false side-effecting-while-left true side-effecting-while-false-0
+side-effecting-while-true false side-effecting-while-left false side-effecting-while-argument true side-effecting-while-true-1
+side-effecting-do-false false side-effecting-do-body false side-effecting-do-left true side-effecting-do-false-0
+side-effecting-do-true false side-effecting-do-body false side-effecting-do-left false side-effecting-do-argument true side-effecting-do-true-1
+side-effecting-for-false false side-effecting-for-left true side-effecting-for-false-0
+side-effecting-for-true false side-effecting-for-left false side-effecting-for-argument true side-effecting-for-true-1-0

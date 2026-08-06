@@ -52986,7 +52986,7 @@ class Emitter {
 
         if (ts.isWhileStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
-            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             return (!this.nodeContainsYield(stmt.expression) || !!yieldedCondition ||
                 (!!logicalCondition && logicalCondition.yields.length > 0) || !!conditionalSelector) &&
@@ -52995,7 +52995,7 @@ class Emitter {
 
         if (ts.isDoStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
-            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             return (!this.nodeContainsYield(stmt.expression) || !!yieldedCondition ||
                 (!!logicalCondition && logicalCondition.yields.length > 0) ||
                 !!this.simpleLazyGeneratorConditionalSelector(stmt.expression)) &&
@@ -53024,7 +53024,7 @@ class Emitter {
                 : null;
             if (stmt.condition && this.nodeContainsYield(stmt.condition) &&
                 !this.directLazyYieldCondition(stmt.condition) && !conditionalSelector) {
-                const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.condition);
+                const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.condition, true, true);
                 if (!logicalCondition || logicalCondition.yields.length === 0) return false;
             }
             if (stmt.incrementor && this.nodeContainsYield(stmt.incrementor)) {
@@ -55408,12 +55408,10 @@ class Emitter {
         const visit = (current: ts.Node): void => {
             if (current !== node && (ts.isFunctionLike(current) || ts.isClassLike(current))) return;
             const conditions: ts.Expression[] = [];
-            if (ts.isIfStatement(current)) {
+            if (ts.isIfStatement(current) || ts.isWhileStatement(current) || ts.isDoStatement(current)) {
                 collectCondition(current.expression, true);
-            } else if (ts.isWhileStatement(current) || ts.isDoStatement(current)) {
-                conditions.push(current.expression);
             } else if (ts.isForStatement(current) && current.condition) {
-                conditions.push(current.condition);
+                collectCondition(current.condition, true);
             } else if (ts.isSwitchStatement(current)) {
                 conditions.push(current.expression);
                 for (const clause of current.caseBlock.clauses) {
@@ -55941,8 +55939,13 @@ class Emitter {
                     }
                 }
             }
-            if (ts.isIfStatement(current)) {
-                const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(current.expression, true, true);
+            const condition = ts.isIfStatement(current) || ts.isWhileStatement(current) || ts.isDoStatement(current)
+                ? current.expression
+                : ts.isForStatement(current)
+                    ? current.condition
+                    : undefined;
+            if (condition) {
+                const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(condition, true, true);
                 if (logicalCondition) {
                     for (const operand of this.simpleLazyMultiYieldLogicalStagedOperands(logicalCondition)) {
                         stages.add(operand);
@@ -58625,7 +58628,7 @@ class Emitter {
 
         if (ts.isWhileStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
-            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
@@ -58643,6 +58646,8 @@ class Emitter {
                             nextYieldStarSlot,
                             elemType,
                             envLocalName,
+                            true,
+                            true,
                         );
                     const conditionalResult = yieldedCondition || logicalResult
                         ? null
@@ -58693,7 +58698,7 @@ class Emitter {
 
         if (ts.isDoStatement(stmt)) {
             const yieldedCondition = this.directLazyYieldCondition(stmt.expression);
-            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalSelector = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             if (yieldedCondition || (logicalCondition && logicalCondition.yields.length > 0) || conditionalSelector) {
                 buf.open("while (true)");
@@ -58714,6 +58719,8 @@ class Emitter {
                             nextYieldStarSlot,
                             elemType,
                             envLocalName,
+                            true,
+                            true,
                         );
                     const conditionalResult = yieldedCondition || logicalResult
                         ? null
@@ -58774,7 +58781,7 @@ class Emitter {
                 ? this.directLazyYieldCondition(stmt.condition)
                 : null;
             const logicalCondition = stmt.condition
-                ? this.simpleLazyMultiYieldLogicalPlan(stmt.condition)
+                ? this.simpleLazyMultiYieldLogicalPlan(stmt.condition, true, true)
                 : null;
             const conditionalSelector = stmt.condition
                 ? this.simpleLazyGeneratorConditionalSelector(stmt.condition)
@@ -58793,6 +58800,8 @@ class Emitter {
                         nextYieldStarSlot,
                         elemType,
                         envLocalName,
+                        true,
+                        true,
                     );
                 const conditionalResult = yieldedCondition || logicalResult
                     ? null
