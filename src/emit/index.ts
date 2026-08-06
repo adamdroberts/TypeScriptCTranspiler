@@ -50376,7 +50376,7 @@ class Emitter {
                     variableDeclarations!.every((declaration) => !!declaration.initializer);
                 const assignedUninitializedVars = simpleVariableList &&
                     ts.isVariableStatement(statement) &&
-                    (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
+                    (statement.declarationList.flags & ts.NodeFlags.Const) === 0 &&
                     (() => {
                     let assignmentIndex = index + 1;
                     let hasUninitializedDeclaration = false;

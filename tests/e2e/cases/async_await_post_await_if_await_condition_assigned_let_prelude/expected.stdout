@@ -1,0 +1,5 @@
+condition-reject assigned-let-condition-rejected
+selector-reject assigned-let-selector-thrown
+return assigned-let-first-true-return
+throw assigned-let-first-false-throw
+trace selector:assigned-let-selector-first|assigned-let-first-true:return|assigned-let-first-false:throw|

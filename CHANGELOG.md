@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Async continuations now preserve bounded multi-declaration assigned-before-use `let` locals inside await-free post-await awaited-condition return/throw branch preludes, carrying ordered assignments through terminal suspension while retaining condition and selector rejection routing. Regression: `async_await_post_await_if_await_condition_assigned_let_prelude`.
 - Async continuations now preserve bounded mixed initialized and assigned-before-use `var` locals inside await-free post-await awaited-condition return/throw branch preludes, sequencing declarations and ordered assignments through terminal suspension while retaining condition and selector rejection routing. Regression: `async_await_post_await_if_await_condition_mixed_var_prelude`.
 - Async continuations now preserve bounded multi-declaration assigned-before-use `var` locals inside await-free post-await awaited-condition return/throw branch preludes, carrying ordered assignments through terminal suspension while retaining condition and selector rejection routing. Regression: `async_await_post_await_if_await_condition_multi_assigned_var_prelude`.
 - Async continuations now preserve bounded initialized multi-declaration locals inside await-free post-await awaited-condition return/throw branch preludes, carrying every branch value through terminal suspension while retaining condition and selector rejection routing. Regression: `async_await_post_await_if_await_condition_multi_local_prelude`.
