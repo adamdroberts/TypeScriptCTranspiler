@@ -20,6 +20,32 @@ function* logicalCase(): Generator<string, string, any> {
     }
 }
 
+let sideEffectingSwitchCallCount = 0;
+function sideEffectingSwitchCall(value: any): any {
+    sideEffectingSwitchCallCount++;
+    return value;
+}
+
+function* sideEffectingSwitchDiscriminant(): Generator<string, string, any> {
+    switch ((yield "side-effecting-disc-left") && sideEffectingSwitchCall(yield "side-effecting-disc-argument")) {
+        case "match":
+            return "side-effecting-disc-true-" + sideEffectingSwitchCallCount;
+        default:
+            return "side-effecting-disc-false-" + sideEffectingSwitchCallCount;
+    }
+}
+
+function* sideEffectingSwitchCase(): Generator<string, string, any> {
+    switch ("side-effecting-case-match") {
+        case ((yield "side-effecting-case-left") && sideEffectingSwitchCall(yield "side-effecting-case-argument")):
+            return "side-effecting-case-true-" + sideEffectingSwitchCallCount;
+        case "side-effecting-case-match":
+            return "side-effecting-case-static-" + sideEffectingSwitchCallCount;
+        default:
+            return "side-effecting-case-default-" + sideEffectingSwitchCallCount;
+    }
+}
+
 const leftFalse = logicalDiscriminant();
 const leftFalseFirst: any = leftFalse.next();
 const leftFalseSecond: any = leftFalse.next(0);
@@ -82,4 +108,56 @@ console.log(
     caseTrueSecond.value,
     caseTrueDone.done,
     caseTrueDone.value,
+);
+
+sideEffectingSwitchCallCount = 0;
+const sideEffectingDiscFalse = sideEffectingSwitchDiscriminant();
+const sideEffectingDiscFalseFirst: any = sideEffectingDiscFalse.next();
+const sideEffectingDiscFalseDone: any = sideEffectingDiscFalse.next(0);
+console.log(
+    "side-effecting-disc-false",
+    sideEffectingDiscFalseFirst.done,
+    sideEffectingDiscFalseFirst.value,
+    sideEffectingDiscFalseDone.done,
+    sideEffectingDiscFalseDone.value,
+);
+
+const sideEffectingDiscTrue = sideEffectingSwitchDiscriminant();
+const sideEffectingDiscTrueFirst: any = sideEffectingDiscTrue.next();
+const sideEffectingDiscTrueSecond: any = sideEffectingDiscTrue.next(1);
+const sideEffectingDiscTrueDone: any = sideEffectingDiscTrue.next("match");
+console.log(
+    "side-effecting-disc-true",
+    sideEffectingDiscTrueFirst.done,
+    sideEffectingDiscTrueFirst.value,
+    sideEffectingDiscTrueSecond.done,
+    sideEffectingDiscTrueSecond.value,
+    sideEffectingDiscTrueDone.done,
+    sideEffectingDiscTrueDone.value,
+);
+
+sideEffectingSwitchCallCount = 0;
+const sideEffectingCaseFalse = sideEffectingSwitchCase();
+const sideEffectingCaseFalseFirst: any = sideEffectingCaseFalse.next();
+const sideEffectingCaseFalseDone: any = sideEffectingCaseFalse.next(0);
+console.log(
+    "side-effecting-case-false",
+    sideEffectingCaseFalseFirst.done,
+    sideEffectingCaseFalseFirst.value,
+    sideEffectingCaseFalseDone.done,
+    sideEffectingCaseFalseDone.value,
+);
+
+const sideEffectingCaseTrue = sideEffectingSwitchCase();
+const sideEffectingCaseTrueFirst: any = sideEffectingCaseTrue.next();
+const sideEffectingCaseTrueSecond: any = sideEffectingCaseTrue.next(1);
+const sideEffectingCaseTrueDone: any = sideEffectingCaseTrue.next("side-effecting-case-match");
+console.log(
+    "side-effecting-case-true",
+    sideEffectingCaseTrueFirst.done,
+    sideEffectingCaseTrueFirst.value,
+    sideEffectingCaseTrueSecond.done,
+    sideEffectingCaseTrueSecond.value,
+    sideEffectingCaseTrueDone.done,
+    sideEffectingCaseTrueDone.value,
 );

@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Lazy-generator switch discriminants and case labels now stage bounded side-effecting logical leaves with yielded call/new arguments, preserving short-circuit suspension, single side-effect evaluation, dynamic comparison, and fallthrough ordering. Regression: `generator_lazy_switch_logical_condition`.
 - Lazy-generator `while`, `do...while`, and counted `for` conditions now stage bounded side-effecting logical leaves with yielded call/new arguments, preserving short-circuit suspension, single side-effect evaluation, and loop re-entry ordering. Regression: `generator_lazy_loop_logical_condition`.
 - Ordinary lazy-generator `if` conditions now stage bounded side-effecting logical leaves with yielded call/new arguments, preserving short-circuit suspension, single side-effect evaluation, and selected branch ordering. Regression: `generator_lazy_if_logical_condition`.
 - Counted-`for` declaration initializers in lazy generators now stage bounded side-effecting logical leaves with yielded call arguments, preserving short-circuit suspension, single call evaluation, initializer assignment, and loop ordering. Regression: `generator_lazy_for_multi_yield_logical_declaration_initializer`.

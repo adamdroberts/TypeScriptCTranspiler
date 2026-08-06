@@ -53087,14 +53087,14 @@ class Emitter {
 
         if (ts.isSwitchStatement(stmt)) {
             const yieldedDiscriminant = this.directLazyYieldCondition(stmt.expression);
-            const logicalDiscriminant = this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+            const logicalDiscriminant = this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalDiscriminant = this.simpleLazyGeneratorConditionalSelector(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedDiscriminant &&
                 (!logicalDiscriminant || logicalDiscriminant.yields.length === 0) && !conditionalDiscriminant) return false;
             for (const clause of stmt.caseBlock.clauses) {
                 const yieldedCase = ts.isCaseClause(clause) ? this.directLazyYieldCondition(clause.expression) : null;
                 const logicalCase = ts.isCaseClause(clause)
-                    ? this.simpleLazyMultiYieldLogicalPlan(clause.expression)
+                    ? this.simpleLazyMultiYieldLogicalPlan(clause.expression, true, true)
                     : null;
                 const conditionalCase = ts.isCaseClause(clause) && !yieldedCase &&
                     (!logicalCase || logicalCase.yields.length === 0)
@@ -53643,7 +53643,7 @@ class Emitter {
         return stmt.caseBlock.clauses.some((clause) =>
             ts.isCaseClause(clause) && (
                 !!this.directLazyYieldCondition(clause.expression) ||
-                !!this.simpleLazyMultiYieldLogicalPlan(clause.expression)?.yields.length ||
+                !!this.simpleLazyMultiYieldLogicalPlan(clause.expression, true, true)?.yields.length ||
                 !!this.simpleLazyGeneratorConditionalSelector(clause.expression)
             ));
     }
@@ -55413,9 +55413,9 @@ class Emitter {
             } else if (ts.isForStatement(current) && current.condition) {
                 collectCondition(current.condition, true);
             } else if (ts.isSwitchStatement(current)) {
-                conditions.push(current.expression);
+                collectCondition(current.expression, true);
                 for (const clause of current.caseBlock.clauses) {
-                    if (ts.isCaseClause(clause)) conditions.push(clause.expression);
+                    if (ts.isCaseClause(clause)) collectCondition(clause.expression, true);
                 }
             }
             for (const condition of conditions) collectCondition(condition);
@@ -55949,6 +55949,22 @@ class Emitter {
                 if (logicalCondition) {
                     for (const operand of this.simpleLazyMultiYieldLogicalStagedOperands(logicalCondition)) {
                         stages.add(operand);
+                    }
+                }
+            }
+            if (ts.isSwitchStatement(current)) {
+                const switchConditions = [
+                    current.expression,
+                    ...current.caseBlock.clauses
+                        .filter(ts.isCaseClause)
+                        .map((clause) => clause.expression),
+                ];
+                for (const switchCondition of switchConditions) {
+                    const logicalCondition = this.simpleLazyMultiYieldLogicalPlan(switchCondition, true, true);
+                    if (logicalCondition) {
+                        for (const operand of this.simpleLazyMultiYieldLogicalStagedOperands(logicalCondition)) {
+                            stages.add(operand);
+                        }
                     }
                 }
             }
@@ -57308,7 +57324,7 @@ class Emitter {
             const directDiscriminant = this.directLazyYieldCondition(stmt.expression);
             const logicalDiscriminant = directDiscriminant
                 ? null
-                : this.simpleLazyMultiYieldLogicalPlan(stmt.expression);
+                : this.simpleLazyMultiYieldLogicalPlan(stmt.expression, true, true);
             const conditionalDiscriminant = directDiscriminant || logicalDiscriminant
                 ? null
                 : this.simpleLazyGeneratorConditionalSelector(stmt.expression);
@@ -57329,6 +57345,8 @@ class Emitter {
                         nextYieldStarSlot,
                         elemType,
                         envLocalName,
+                        true,
+                        true,
                     )
                     : conditionalDiscriminant
                         ? this.emitLazyGeneratorConditionalSelector(
@@ -57368,7 +57386,7 @@ class Emitter {
                 const yieldedCase = this.directLazyYieldCondition(caseExpr);
                 const logicalCase = yieldedCase
                     ? null
-                    : this.simpleLazyMultiYieldLogicalPlan(caseExpr);
+                    : this.simpleLazyMultiYieldLogicalPlan(caseExpr, true, true);
                 const conditionalCase = yieldedCase || (logicalCase && logicalCase.yields.length > 0)
                     ? null
                     : this.simpleLazyGeneratorConditionalSelector(caseExpr);
@@ -57389,6 +57407,8 @@ class Emitter {
                             nextYieldStarSlot,
                             elemType,
                             envLocalName,
+                            true,
+                            true,
                         )!
                         : conditionalCase
                             ? this.emitLazyGeneratorConditionalSelector(

@@ -3,3 +3,7 @@ middle-match false disc-left false disc-middle true matched
 right-fallback false disc-left false disc-middle false disc-right true fallback
 case-false false case-left true static-case
 case-true false case-left false case-right true logical-case
+side-effecting-disc-false false side-effecting-disc-left true side-effecting-disc-false-0
+side-effecting-disc-true false side-effecting-disc-left false side-effecting-disc-argument true side-effecting-disc-true-1
+side-effecting-case-false false side-effecting-case-left true side-effecting-case-static-0
+side-effecting-case-true false side-effecting-case-left false side-effecting-case-argument true side-effecting-case-true-1
