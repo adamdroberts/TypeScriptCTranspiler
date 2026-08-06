@@ -1,0 +1,6 @@
+condition-reject nested-switch-condition-rejected
+selector-reject nested-switch-selector-thrown
+return nested-switch-first-true-return
+throw nested-switch-first-false-throw
+return nested-switch-first-alternate-return
+trace selector:nested-switch-selector-first|nested-switch-first-true-label|nested-switch-first-false-label|nested-switch-first-alternate-label|

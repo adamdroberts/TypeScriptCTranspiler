@@ -50399,6 +50399,12 @@ class Emitter {
                             for (const assignedSymbol of nestedAssigned) assigned.add(assignedSymbol);
                             continue;
                         }
+                        const nestedSwitchAssigned = nestedSwitchAssignedSymbols(statement, pending);
+                        if (nestedSwitchAssigned) {
+                            for (const assignedSymbol of nestedSwitchAssigned) pending.delete(assignedSymbol);
+                            for (const assignedSymbol of nestedSwitchAssigned) assigned.add(assignedSymbol);
+                            continue;
+                        }
                         if (referencesUninitialized(statement, pending) ||
                             !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
                             return new Set();
@@ -50431,6 +50437,40 @@ class Emitter {
                     }
                     return assigned;
                 }
+                function nestedSwitchAssignedSymbols(
+                    statement: ts.Statement,
+                    symbols: ReadonlySet<ts.Symbol>,
+                ): Set<ts.Symbol> | null {
+                    if (!ts.isSwitchStatement(statement) || statement.caseBlock.clauses.length === 0 ||
+                        !statement.caseBlock.clauses.some((clause) => ts.isDefaultClause(clause)) ||
+                        referencesUninitialized(statement.expression, symbols) ||
+                        !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                        return null;
+                    }
+                    const assigned = new Set(symbols);
+                    const clauses = statement.caseBlock.clauses;
+                    for (const [index, clause] of clauses.entries()) {
+                        if (ts.isCaseClause(clause) && referencesUninitialized(clause.expression, symbols)) return null;
+                        const statements = clause.statements;
+                        const lastStatement = statements[statements.length - 1];
+                        const directBreaks = statements.filter((nestedStatement) =>
+                            ts.isBreakStatement(nestedStatement));
+                        if (index < clauses.length - 1 &&
+                            (!lastStatement || !ts.isBreakStatement(lastStatement) || lastStatement.label ||
+                                directBreaks.length !== 1)) {
+                            return null;
+                        }
+                        if (index === clauses.length - 1 &&
+                            directBreaks.some((nestedStatement) => nestedStatement !== lastStatement)) {
+                            return null;
+                        }
+                        const clauseAssigned = consumeAssignmentSequence(statements, symbols);
+                        for (const symbol of assigned) {
+                            if (!clauseAssigned.has(symbol)) assigned.delete(symbol);
+                        }
+                    }
+                    return assigned;
+                }
                 const pendingSymbols = new Set(uninitializedSymbols);
                 let assignmentIndex = declarationIndex + 1;
                 for (const declaration of uninitialized) {
@@ -50447,6 +50487,12 @@ class Emitter {
                         const nestedAssigned = nestedConditionalAssignedSymbols(assignmentStatement, pendingSymbols);
                         if (nestedAssigned && nestedAssigned.has(symbol)) {
                             for (const assignedSymbol of nestedAssigned) pendingSymbols.delete(assignedSymbol);
+                            assigned = true;
+                            break;
+                        }
+                        const nestedSwitchAssigned = nestedSwitchAssignedSymbols(assignmentStatement, pendingSymbols);
+                        if (nestedSwitchAssigned && nestedSwitchAssigned.has(symbol)) {
+                            for (const assignedSymbol of nestedSwitchAssigned) pendingSymbols.delete(assignedSymbol);
                             assigned = true;
                             break;
                         }
