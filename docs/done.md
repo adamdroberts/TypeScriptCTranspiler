@@ -1,5 +1,6 @@
 # Implemented features
 
+- `timers/promises.setInterval` now returns a bounded async iterator that yields its configured value through direct `next()` calls and dynamic `for await...of`, closes its runtime interval on iterator return/break, and rejects one pending/next request on AbortSignal cancellation before reporting completion; broader timer option and async-iterator semantics remain deferred. Test: `timers_promises_set_interval`.
 - Custom iterator `for...of` lowering now destructures exactly `[key, value]` identifier bindings from typed `ObjectEntry` values, dynamic values, or array-backed value pairs with sparse-element handling; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `custom_iterator_dynamic_destructure`.
 - Lazy generators now preserve bounded `for...of` destructuring for identifier-only `[first, second]` bindings over typed entry elements such as `Map` pairs and dynamic value elements; defaults, rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `generator_lazy_for_of_destructuring`.
 - Collection constructors now accept omitted generic arguments for `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry`, using dynamic value storage for unresolved type parameters; the intrinsic TypeScript `object` type now maps to the same dynamic representation. Test: `inferred_collection_constructors`.
@@ -3494,6 +3495,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `timers_module_import` | timers/node:timers imports route to bounded timeout and immediate scheduler helpers |
 | `timers_promises_import` | timers/promises imports expose immediate settled timeout/immediate promises with ignored extras |
 | `timers_promises_delay` | timers/promises setTimeout supports nonzero and dynamic delays before promise fulfillment |
+| `timers_promises_set_interval` | timers/promises setInterval yields async-iterator values, closes on break, and rejects once on AbortSignal cancellation |
 | `timers_promises_scheduler` | timers/promises scheduler.wait and scheduler.yield immediate subset with ignored extras |
 | `promise_race_empty_pending` | empty Promise.race over arrays or Sets returns a pending Promise record |
 | `promise_resolve_adopt` | Promise.resolve adopts existing native Promise records |

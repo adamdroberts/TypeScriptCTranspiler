@@ -1045,12 +1045,13 @@ interface TimersModule {
 }
 interface TimersPromisesModule {
     setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
+    setInterval<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): any;
     setImmediate<T = void>(value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
     scheduler: TimersPromisesScheduler;
 }
 interface TimersPromisesOptions {
     ref?: boolean | undefined;
-    signal?: undefined;
+    signal?: any;
 }
 interface TimersPromisesScheduler {
     wait(delay?: number, options?: TimersPromisesOptions, ...ignored: any[]): Promise<void>;
@@ -1078,6 +1079,7 @@ declare module "node:timers" {
 }
 declare module "timers/promises" {
     export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
+    export function setInterval<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): any;
     export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
     export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;
@@ -1085,6 +1087,7 @@ declare module "timers/promises" {
 }
 declare module "node:timers/promises" {
     export function setTimeout<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
+    export function setInterval<T = void>(delay?: number, value?: T, options?: TimersPromisesOptions, ...ignored: any[]): any;
     export function setImmediate<T = void>(value?: T, options?: TimersPromisesOptions, ...ignored: any[]): Promise<T>;
     export const scheduler: TimersPromisesScheduler;
     const defaultTimersPromises: TimersPromisesModule;

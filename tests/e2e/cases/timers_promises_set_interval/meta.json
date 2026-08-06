@@ -1,0 +1,3 @@
+{
+  "description": "timers/promises.setInterval yields through an async iterator, closes on for-await break, and rejects once on AbortSignal cancellation"
+}

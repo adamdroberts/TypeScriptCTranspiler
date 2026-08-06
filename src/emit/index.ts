@@ -71166,7 +71166,7 @@ class Emitter {
                 return `({ ${envType}* ${env} = (${envType}*)TSC_GC_MALLOC(sizeof(${envType})); ${env}->fn = ${fn}; tsc_queue_microtask(${adapter}, ${env}); })`;
             });
         }
-        const timersPromisesNamed = ["setTimeout", "setImmediate"]
+        const timersPromisesNamed = ["setTimeout", "setInterval", "setImmediate"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["timers/promises", "node:timers/promises"], exported));
         if (timersPromisesNamed) {
             return this.emitTimersPromisesCall(call, timersPromisesNamed);
@@ -81003,6 +81003,42 @@ class Emitter {
     }
 
     private emitTimersPromisesCall(call: ts.CallExpression, name: string): EmitResult {
+        if (name === "setInterval") {
+            const delayNode = call.arguments[0];
+            const valueNode = call.arguments[1];
+            const options = call.arguments[2];
+            this.validateTimersPromisesOptions(options, "timers/promises.setInterval");
+            const delayIsDefault = !delayNode || this.isUndefinedLikeExpression(delayNode);
+            const signalValue = this.emitTimersPromisesSignal(options);
+            const specs: SequencedCallArg[] = [];
+            if (delayNode && (!delayIsDefault || this.shouldEvaluateSideEffectfulVoidDefault(delayNode))) {
+                specs.push({
+                    value: this.emitExpr(delayNode),
+                    target: delayIsDefault ? T_VOID : T_NUMBER,
+                    node: delayNode,
+                });
+            }
+            if (valueNode) {
+                const value = this.emitExpr(valueNode);
+                specs.push({ value, target: T_VALUE, node: valueNode });
+            }
+            if (signalValue) specs.push({ value: signalValue, target: T_VALUE, node: options });
+            if (options && this.shouldEvaluateSideEffectfulVoidDefault(options)) {
+                specs.push({ value: this.emitExpr(options), target: T_VOID, node: options });
+            }
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, 3));
+            return this.emitSequencedExpr(T_VALUE, specs, (values) => {
+                let offset = 0;
+                let delay = "1.0";
+                if (delayNode && (!delayIsDefault || this.shouldEvaluateSideEffectfulVoidDefault(delayNode))) {
+                    if (!delayIsDefault) delay = values[offset]!;
+                    offset++;
+                }
+                const value = valueNode ? values[offset++]! : "tsc_value_undefined()";
+                const signal = signalValue ? values[offset]! : "tsc_value_undefined()";
+                return `tsc_timers_promises_set_interval(${value}, ${delay}, ${signal})`;
+            });
+        }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `timers/promises.${name} result must be Promise<T>`);
         switch (name) {

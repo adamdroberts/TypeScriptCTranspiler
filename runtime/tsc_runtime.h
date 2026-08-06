@@ -1168,6 +1168,7 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay);
 void tsc_clear_timeout(double id);
 void tsc_drain_timeouts(void);
 void tsc_run_event_loop(void);
+tsc_value_t tsc_timers_promises_set_interval(tsc_value_t value, double delay, tsc_value_t signal);
 bool tsc_fs_libuv_pending(void);
 void tsc_fs_libuv_run_once(bool block);
 

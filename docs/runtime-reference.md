@@ -553,6 +553,7 @@ Supported fs path arguments use a bounded `PathLike` subset: strings pass throug
 | `tsc_event_emitter_remove_all(ee, event)` | `void` | `removeAllListeners(event?)` |
 | `tsc_event_emitter_emit(ee, event, args)` | `bool` | `emit(event, ...args)`; `args` is a boxed `tsc_value_t` array; unhandled `"error"` emits throw |
 | `tsc_event_emitter_once_promise(ee, event, signal)` | `tsc_promise_t*` | `events.once(ee, event, { signal })`; settles on the event/error or rejects on AbortSignal cancellation |
+| `tsc_timers_promises_set_interval(value, delay, signal)` | `tsc_value_t` | `timers/promises.setInterval(delay, value, { signal })`; returns a bounded async iterator with interval ticks, iterator close, and AbortSignal cancellation |
 | `tsc_event_emitter_on_async_iterator(ee, event, signal, close_events, high_water_mark, low_water_mark)` | `tsc_value_t` | `events.on(ee, event, { signal, close, highWaterMark, lowWaterMark })`; returns a dynamic queued/pending async iterator with bounded pause/resume backpressure |
 | `tsc_event_emitter_listener_count(ee, event)` | `double` | `listenerCount(event)` |
 | `tsc_event_emitter_listener_count_identity(ee, event, identity)` | `double` | `listenerCount(event, listener)` filtered by preserved listener identity |
