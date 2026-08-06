@@ -826,6 +826,7 @@ class Emitter {
     private generatorStack: GeneratorContext[] = [];
     private activeBreakTargets: Array<string | null> = [];
     private activeContinueTargets: Array<string | null> = [];
+    private activeLabeledBreakTargets: Array<Map<string, string>> = [];
     private syncUsingScopes: string[][] = [];
     private activeLazyGeneratorBreakTargets: Array<"loop" | "switch"> = [];
     private activeLazyGeneratorContinueTargets: Array<string | null> = [];
@@ -64296,6 +64297,60 @@ class Emitter {
         }
     }
 
+    private emitLabeledStatement(buf: CBuf, statement: ts.LabeledStatement): void {
+        const endLabel = this.freshTemp(`_${mangleIdent(statement.label.text)}_end`);
+        buf.open("");
+        this.activeLabeledBreakTargets.push(new Map([[statement.label.text, endLabel]]));
+        try {
+            this.emitStmtInBlock(buf, statement.statement);
+        } finally {
+            this.activeLabeledBreakTargets.pop();
+        }
+        buf.line(`${endLabel}:;`);
+        buf.close();
+    }
+
+    private labeledContinueTargetsCurrentLoop(statement: ts.ContinueStatement): boolean {
+        if (!statement.label) return true;
+        let currentLoop: ts.Statement | null = null;
+        let parent = statement.parent;
+        while (parent) {
+            if (ts.isWhileStatement(parent) || ts.isDoStatement(parent) ||
+                ts.isForStatement(parent) || ts.isForOfStatement(parent) ||
+                ts.isForInStatement(parent)) {
+                if (currentLoop) return false;
+                currentLoop = parent;
+            }
+            if (ts.isLabeledStatement(parent) && parent.label.text === statement.label.text) {
+                return !!currentLoop && parent.statement === currentLoop;
+            }
+            if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
+            parent = parent.parent;
+        }
+        return false;
+    }
+
+    private labeledBreakTargetsCurrentLoop(statement: ts.BreakStatement): boolean {
+        if (!statement.label) return true;
+        let currentLoop: ts.Statement | null = null;
+        let parent = statement.parent;
+        while (parent) {
+            if (ts.isSwitchStatement(parent)) return false;
+            if (ts.isWhileStatement(parent) || ts.isDoStatement(parent) ||
+                ts.isForStatement(parent) || ts.isForOfStatement(parent) ||
+                ts.isForInStatement(parent)) {
+                if (currentLoop) return false;
+                currentLoop = parent;
+            }
+            if (ts.isLabeledStatement(parent) && parent.label.text === statement.label.text) {
+                return !!currentLoop && parent.statement === currentLoop;
+            }
+            if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) return false;
+            parent = parent.parent;
+        }
+        return false;
+    }
+
     private emitStmt(buf: CBuf, stmt: ts.Statement): void {
         this.emitLineDirective(buf, stmt);
         if (ts.isExpressionStatement(stmt)) return this.emitExprStmt(buf, stmt);
@@ -64320,12 +64375,33 @@ class Emitter {
         if (ts.isTryStatement(stmt)) return this.emitTry(buf, stmt);
         if (ts.isSwitchStatement(stmt)) return this.emitSwitch(buf, stmt);
         if (ts.isDebuggerStatement(stmt)) return;
-        if (stmt.kind === ts.SyntaxKind.BreakStatement) {
-            const target = this.activeBreakTargets[this.activeBreakTargets.length - 1];
+        if (ts.isLabeledStatement(stmt)) return this.emitLabeledStatement(buf, stmt);
+        if (ts.isBreakStatement(stmt)) {
+            let target = this.activeBreakTargets[this.activeBreakTargets.length - 1];
+            if (stmt.label) {
+                let found = false;
+                target = null;
+                for (let index = this.activeLabeledBreakTargets.length - 1; index >= 0; index--) {
+                    const candidate = this.activeLabeledBreakTargets[index]!.get(stmt.label.text);
+                    if (candidate) {
+                        target = candidate;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found && this.labeledBreakTargetsCurrentLoop(stmt)) {
+                    target = this.activeBreakTargets[this.activeBreakTargets.length - 1];
+                    found = true;
+                }
+                if (!found) unsupported(stmt, "labeled break target must be a supported labeled block or current loop");
+            }
             buf.line(target ? `goto ${target};` : "break;");
             return;
         }
-        if (stmt.kind === ts.SyntaxKind.ContinueStatement) {
+        if (ts.isContinueStatement(stmt)) {
+            if (!this.labeledContinueTargetsCurrentLoop(stmt)) {
+                unsupported(stmt, "labeled continue must target the current loop");
+            }
             const target = this.activeContinueTargets[this.activeContinueTargets.length - 1];
             buf.line(target ? `goto ${target};` : "continue;");
             return;
