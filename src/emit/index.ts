@@ -50417,6 +50417,12 @@ class Emitter {
                             for (const assignedSymbol of nestedTryAssigned) assigned.add(assignedSymbol);
                             continue;
                         }
+                        const nestedForAssigned = nestedForAssignedSymbols(statement, pending);
+                        if (nestedForAssigned) {
+                            for (const assignedSymbol of nestedForAssigned) pending.delete(assignedSymbol);
+                            for (const assignedSymbol of nestedForAssigned) assigned.add(assignedSymbol);
+                            continue;
+                        }
                         if (referencesUninitialized(statement, pending) ||
                             !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
                             return new Set();
@@ -50489,6 +50495,55 @@ class Emitter {
                     }
                     return consumeAssignmentSequence(statement.finallyBlock.statements, symbols);
                 }
+                function nestedForAssignedSymbols(
+                    statement: ts.Statement,
+                    symbols: ReadonlySet<ts.Symbol>,
+                ): Set<ts.Symbol> | null {
+                    if (!ts.isForStatement(statement) || !statement.initializer ||
+                        !ts.isExpression(statement.initializer) ||
+                        !emitter.asyncAwaitInterstitialControlFlowSupported(statement, true)) {
+                        return null;
+                    }
+                    const flattenComma = (expression: ts.Expression): readonly ts.Expression[] => {
+                        const unwrapped = emitter.unwrapTransparentExpression(expression);
+                        return ts.isBinaryExpression(unwrapped) &&
+                            unwrapped.operatorToken.kind === ts.SyntaxKind.CommaToken
+                            ? [...flattenComma(unwrapped.left), ...flattenComma(unwrapped.right)]
+                            : [unwrapped];
+                    };
+                    const pending = new Set(symbols);
+                    const assigned = new Set<ts.Symbol>();
+                    for (const expression of flattenComma(statement.initializer)) {
+                        const current = pending.values().next().value as ts.Symbol | undefined;
+                        const assignment = ts.isBinaryExpression(expression) &&
+                            expression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                            ts.isIdentifier(expression.left)
+                            ? expression
+                            : null;
+                        const assignmentIdentifier = assignment && ts.isIdentifier(assignment.left)
+                            ? assignment.left
+                            : null;
+                        const expressionStatement = ts.factory.createExpressionStatement(expression);
+                        if (current && assignment && assignmentIdentifier && emitter.symbolForIdentifier(assignmentIdentifier) === current) {
+                            if (referencesUninitialized(assignment.right, pending) ||
+                                !emitter.asyncAwaitInterstitialControlFlowSupported(expressionStatement)) {
+                                return new Set();
+                            }
+                            pending.delete(current);
+                            assigned.add(current);
+                            continue;
+                        }
+                        if (referencesUninitialized(expression, pending) ||
+                            !emitter.asyncAwaitInterstitialControlFlowSupported(expressionStatement, true)) {
+                            return new Set();
+                        }
+                    }
+                    const remaining = new Set<ts.Symbol>(pending);
+                    if (statement.condition && referencesUninitialized(statement.condition, remaining)) return null;
+                    if (statement.incrementor && referencesUninitialized(statement.incrementor, remaining)) return null;
+                    if (referencesUninitialized(statement.statement, remaining)) return null;
+                    return assigned;
+                }
                 function nestedSwitchAssignedSymbols(
                     statement: ts.Statement,
                     symbols: ReadonlySet<ts.Symbol>,
@@ -50557,6 +50612,12 @@ class Emitter {
                         const nestedTryAssigned = nestedTryAssignedSymbols(assignmentStatement, pendingSymbols);
                         if (nestedTryAssigned && nestedTryAssigned.has(symbol)) {
                             for (const assignedSymbol of nestedTryAssigned) pendingSymbols.delete(assignedSymbol);
+                            assigned = true;
+                            break;
+                        }
+                        const nestedForAssigned = nestedForAssignedSymbols(assignmentStatement, pendingSymbols);
+                        if (nestedForAssigned && nestedForAssigned.has(symbol)) {
+                            for (const assignedSymbol of nestedForAssigned) pendingSymbols.delete(assignedSymbol);
                             assigned = true;
                             break;
                         }
