@@ -50940,7 +50940,6 @@ class Emitter {
             const awaitedForInitializerBranch = (
                 statement: ts.Statement,
                 selectorDepth = 0,
-                conditionDepth = 0,
             ): AwaitedIfForInitializerBranch | null => {
                 const statements = ts.isBlock(statement) ? statement.statements : [statement];
                 if (statements.length !== 1) return null;
@@ -50950,24 +50949,22 @@ class Emitter {
                 if (!ts.isIfStatement(candidate) || !candidate.elseStatement || !nestedPreludeSafe(candidate)) return null;
                 const candidateAwait = this.unwrapTransparentExpression(candidate.expression);
                 if (ts.isAwaitExpression(candidateAwait)) {
-                    if (conditionDepth >= 3 || containsAwait(candidateAwait.expression)) return null;
+                    if (containsAwait(candidateAwait.expression)) return null;
                     const thenBranch = awaitedForInitializerBranch(
                         candidate.thenStatement,
                         selectorDepth,
-                        conditionDepth + 1,
                     );
                     const elseBranch = awaitedForInitializerBranch(
                         candidate.elseStatement,
                         selectorDepth,
-                        conditionDepth + 1,
                     );
                     return thenBranch && elseBranch
                         ? { kind: "condition", awaitExpr: candidateAwait, thenBranch, elseBranch }
                         : null;
                 }
                 if (selectorDepth >= 2 || containsAwait(candidate.expression)) return null;
-                const thenBranch = awaitedForInitializerBranch(candidate.thenStatement, selectorDepth + 1, conditionDepth);
-                const elseBranch = awaitedForInitializerBranch(candidate.elseStatement, selectorDepth + 1, conditionDepth);
+                const thenBranch = awaitedForInitializerBranch(candidate.thenStatement, selectorDepth + 1);
+                const elseBranch = awaitedForInitializerBranch(candidate.elseStatement, selectorDepth + 1);
                 return thenBranch && elseBranch
                     ? { kind: "selector", condition: candidate.expression, thenBranch, elseBranch }
                     : null;

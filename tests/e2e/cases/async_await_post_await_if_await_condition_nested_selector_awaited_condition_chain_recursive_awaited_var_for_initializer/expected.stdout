@@ -1,0 +1,5 @@
+condition-false recursive-nested-selector-first-condition-false
+condition-reject recursive-nested-selector-condition-rejected
+return recursive-nested-selector-first-true-tttt-return
+return recursive-nested-selector-first-alternate-ffff-return
+trace recursive-nested-selector-first-true-tttt-label|recursive-nested-selector-first-alternate-ffff-label|
