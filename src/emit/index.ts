@@ -50336,10 +50336,11 @@ class Emitter {
                     !!statement.declarationList.declarations[0]!.initializer;
                 const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
                 const nestedSwitchPrelude = ts.isSwitchStatement(statement) && nestedPreludeSafe(statement);
+                const nestedWhilePrelude = ts.isWhileStatement(statement) && nestedPreludeSafe(statement);
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
                     !!statement.finallyBlock && nestedPreludeSafe(statement);
                 return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude ||
-                    nestedSwitchPrelude || nestedTryPrelude) &&
+                    nestedSwitchPrelude || nestedWhilePrelude || nestedTryPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement);
             };
             if (!terminal ||

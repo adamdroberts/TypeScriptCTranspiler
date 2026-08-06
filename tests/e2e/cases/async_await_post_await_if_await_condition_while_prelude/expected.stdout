@@ -1,0 +1,5 @@
+condition-reject while-condition-rejected
+selector-reject while-selector-thrown
+return while-first-true-return
+throw while-first-false-throw
+trace true:while:while-first:1|false:while:while-first:2|throw:selector:while-throw-first|
