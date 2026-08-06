@@ -22,6 +22,26 @@ function* nestedConditionalLogicalOrOperand(): Generator<string, string, any> {
     return "or-done";
 }
 
+let sideEffectingCallCount = 0;
+function sideEffectingConditionalCall(value: any): string {
+    sideEffectingCallCount++;
+    return "call-" + String(value);
+}
+
+function* nestedConditionalLogicalSideEffectingOperand(): Generator<string, string, any> {
+    for (
+        let value: any = (yield "side-left") && ((yield "side-selector")
+            ? ((yield "side-arm-left") && sideEffectingConditionalCall(yield "side-call-arg"))
+            : sideEffectingConditionalCall(yield "side-false-call")),
+        count = 0;
+        count < 1;
+        count++
+    ) {
+        yield "side-body-" + String(value);
+    }
+    return "side-done";
+}
+
 const iterator = nestedConditionalLogicalOperand();
 const first: any = iterator.next();
 console.log("first", first.done, first.value);
@@ -61,3 +81,27 @@ const orFifth: any = orIterator.next();
 console.log("or-fifth", orFifth.done, orFifth.value);
 const orSixth: any = orIterator.next();
 console.log("or-sixth", orSixth.done, orSixth.value);
+
+const sideSkippedIterator = nestedConditionalLogicalSideEffectingOperand();
+const sideSkippedFirst: any = sideSkippedIterator.next();
+console.log("side-skipped-first", sideSkippedFirst.done, sideSkippedFirst.value, sideEffectingCallCount);
+const sideSkippedSecond: any = sideSkippedIterator.next(false);
+console.log("side-skipped-second", sideSkippedSecond.done, sideSkippedSecond.value, sideEffectingCallCount);
+const sideSkippedDone: any = sideSkippedIterator.next();
+console.log("side-skipped-done", sideSkippedDone.done, sideSkippedDone.value, sideEffectingCallCount);
+
+const sideSelectedIterator = nestedConditionalLogicalSideEffectingOperand();
+const sideSelectedFirst: any = sideSelectedIterator.next();
+console.log("side-selected-first", sideSelectedFirst.done, sideSelectedFirst.value, sideEffectingCallCount);
+const sideSelectedSecond: any = sideSelectedIterator.next(true);
+console.log("side-selected-second", sideSelectedSecond.done, sideSelectedSecond.value, sideEffectingCallCount);
+const sideSelectedThird: any = sideSelectedIterator.next(true);
+console.log("side-selected-third", sideSelectedThird.done, sideSelectedThird.value, sideEffectingCallCount);
+const sideSelectedFourth: any = sideSelectedIterator.next(true);
+console.log("side-selected-fourth", sideSelectedFourth.done, sideSelectedFourth.value, sideEffectingCallCount);
+const sideSelectedFifth: any = sideSelectedIterator.next("argument");
+console.log("side-selected-fifth", sideSelectedFifth.done, sideSelectedFifth.value, sideEffectingCallCount);
+const sideSelectedSixth: any = sideSelectedIterator.next();
+console.log("side-selected-sixth", sideSelectedSixth.done, sideSelectedSixth.value, sideEffectingCallCount);
+const sideSelectedDone: any = sideSelectedIterator.next();
+console.log("side-selected-done", sideSelectedDone.done, sideSelectedDone.value, sideEffectingCallCount);

@@ -15,3 +15,13 @@ or-third false or-false-arm
 or-fourth false or-body-undefined
 or-fifth true or-done
 or-sixth true undefined
+side-skipped-first false side-left 0
+side-skipped-second false side-body-false 0
+side-skipped-done true side-done 0
+side-selected-first false side-left 0
+side-selected-second false side-selector 0
+side-selected-third false side-arm-left 0
+side-selected-fourth false side-call-arg 0
+side-selected-fifth false side-body-call-argument 1
+side-selected-sixth true side-done 1
+side-selected-done true undefined 1
