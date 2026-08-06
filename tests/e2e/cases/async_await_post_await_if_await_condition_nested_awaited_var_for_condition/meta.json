@@ -1,0 +1,5 @@
+{
+  "name": "async_await_post_await_if_await_condition_nested_awaited_var_for_condition",
+  "timeoutMs": 120000,
+  "description": "post-await async branches preserve a nested var counted-for awaited condition across re-entry and rejection"
+}

@@ -1,0 +1,3 @@
+condition-reject nested-loop-condition-rejected
+return condition-first-init-return
+trace condition-first-label0|condition-first-label0|condition-first-label1|

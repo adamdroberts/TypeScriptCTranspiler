@@ -50341,6 +50341,210 @@ class Emitter {
         return true;
     }
 
+    private ensureAsyncAwaitNestedForInitializerAwaitedConditionReturnContinuationAdapter(
+        promiseType: CType,
+        awaitedType: CType,
+        awaitExpr: ts.AwaitExpression,
+        forStatement: ts.ForStatement,
+        awaitedCondition: ts.AwaitExpression,
+        terminalAdapter: string,
+        terminalPromiseType: CType,
+        terminalAwaitExpr: ts.AwaitExpression,
+        params: readonly AsyncAwaitContinuationParam[],
+        thisValue: EmitResult | null,
+        carriedAliases: readonly { symbol: ts.Symbol; type: CType; field: string; identifier: ts.Identifier }[],
+        hoistedAliases: readonly (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[],
+    ): string {
+        const name = `tsc_async_await_nested_for_condition_${this.asyncAwaitReturnContinuationAdapters++}`;
+        const envType = `${name}_env_t`;
+        const loopAliases = carriedAliases.filter((alias, index, aliases) =>
+            !params.some((param) => param.symbol === alias.symbol) &&
+            aliases.findIndex((candidate) => candidate.symbol === alias.symbol) === index,
+        );
+        this.structDecls.open(`typedef struct ${envType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        this.structDecls.close(` ${envType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${name}(void* env);`);
+
+        const conditionName = `${name}_condition`;
+        const conditionEnvType = `${conditionName}_env_t`;
+        this.structDecls.open(`typedef struct ${conditionEnvType}`);
+        this.structDecls.line("tsc_promise_t* receiver;");
+        this.structDecls.line("tsc_promise_t* result_promise;");
+        for (const param of params) this.structDecls.line(`${param.type.c} ${param.field};`);
+        if (thisValue) this.structDecls.line(`${thisValue.ty.c} this_arg;`);
+        for (const alias of loopAliases) this.structDecls.line(`${alias.type.c} ${alias.field};`);
+        this.structDecls.close(` ${conditionEnvType};`);
+        this.structDecls.line();
+        this.protos.line(`void ${conditionName}(void* env);`);
+
+        const conditionPromiseType = this.prepareType(mapTsType(
+            awaitedCondition.expression,
+            this.checker.getTypeAtLocation(awaitedCondition.expression),
+            this.checker,
+        ));
+        const conditionAwaitedType = this.prepareType(mapTsType(
+            awaitedCondition,
+            this.checker.getTypeAtLocation(awaitedCondition),
+            this.checker,
+        ));
+        const initializerValueVar = this.freshTemp("_await_nested_for_value");
+        const conditionValueVar = this.freshTemp("_await_nested_for_condition_value");
+        const awaitedValue = this.coerce(
+            this.promiseFulfilledValue(promiseType.elem, "_p"),
+            awaitedType,
+            awaitExpr,
+        );
+        const scope = new Map<ts.Symbol, string>();
+        for (const param of params) scope.set(param.symbol, `state->${param.field}`);
+        const awaitScope = new Map<ts.AwaitExpression, EmitResult>();
+        awaitScope.set(awaitExpr, { c: initializerValueVar, ty: awaitedType });
+        if (!forStatement.initializer || !ts.isVariableDeclarationList(forStatement.initializer)) {
+            throw new Error("nested awaited condition adapter requires a variable initializer");
+        }
+        const initializerStatement = ts.factory.createVariableStatement(undefined, forStatement.initializer);
+        const addHoistedSymbols = (): ts.Symbol[] => {
+            const added: ts.Symbol[] = [];
+            for (const alias of hoistedAliases) {
+                if (!this.asyncAwaitHoistedPreludeSymbols.has(alias.symbol)) {
+                    this.asyncAwaitHoistedPreludeSymbols.add(alias.symbol);
+                    added.push(alias.symbol);
+                }
+            }
+            return added;
+        };
+        const removeHoistedSymbols = (added: readonly ts.Symbol[]): void => {
+            for (const symbol of added) this.asyncAwaitHoistedPreludeSymbols.delete(symbol);
+        };
+        const emitTerminal = (out: CBuf): void => {
+            const terminalSource = this.emitExpr(terminalAwaitExpr.expression);
+            const terminalSourceVar = this.freshTemp("_await_nested_for_terminal_source");
+            const terminalEnvVar = this.freshTemp("_await_nested_for_terminal_env");
+            const terminalEnvType = `${terminalAdapter}_env_t`;
+            out.line(`tsc_promise_t* const ${terminalSourceVar} = ${this.coerce(terminalSource, terminalPromiseType, terminalAwaitExpr.expression)};`);
+            out.line(`${terminalEnvType}* const ${terminalEnvVar} = (${terminalEnvType}*)TSC_GC_MALLOC(sizeof(${terminalEnvType}));`);
+            out.line(`${terminalEnvVar}->receiver = ${terminalSourceVar};`);
+            out.line(`${terminalEnvVar}->result_promise = _ret;`);
+            for (const param of params) out.line(`${terminalEnvVar}->${param.field} = state->${param.field};`);
+            if (thisValue) out.line(`${terminalEnvVar}->this_arg = state->this_arg;`);
+            for (const alias of carriedAliases) {
+                out.line(`${terminalEnvVar}->${alias.field} = ${this.identifierRead(alias.identifier)};`);
+            }
+            out.open(`if (tsc_promise_is_pending(${terminalSourceVar}))`);
+            out.line(`tsc_promise_add_callback(${terminalSourceVar}, ${terminalAdapter}, ${terminalEnvVar});`);
+            out.close();
+            out.open("else");
+            out.line(`${terminalAdapter}(${terminalEnvVar});`);
+            out.close();
+        };
+        const emitCondition = (out: CBuf): void => {
+            const conditionSource = this.emitExpr(awaitedCondition.expression);
+            const conditionSourceVar = this.freshTemp("_await_nested_for_condition_source");
+            const conditionEnvVar = this.freshTemp("_await_nested_for_condition_env");
+            out.line(`tsc_promise_t* const ${conditionSourceVar} = ${this.coerce(conditionSource, conditionPromiseType, awaitedCondition.expression)};`);
+            out.line(`${conditionEnvType}* const ${conditionEnvVar} = (${conditionEnvType}*)TSC_GC_MALLOC(sizeof(${conditionEnvType}));`);
+            out.line(`${conditionEnvVar}->receiver = ${conditionSourceVar};`);
+            out.line(`${conditionEnvVar}->result_promise = _ret;`);
+            for (const param of params) out.line(`${conditionEnvVar}->${param.field} = state->${param.field};`);
+            if (thisValue) out.line(`${conditionEnvVar}->this_arg = state->this_arg;`);
+            for (const alias of loopAliases) {
+                out.line(`${conditionEnvVar}->${alias.field} = ${this.identifierRead(alias.identifier)};`);
+            }
+            out.open(`if (tsc_promise_is_pending(${conditionSourceVar}))`);
+            out.line(`tsc_promise_add_callback(${conditionSourceVar}, ${conditionName}, ${conditionEnvVar});`);
+            out.close();
+            out.open("else");
+            out.line(`${conditionName}(${conditionEnvVar});`);
+            out.close();
+        };
+        const emitLoopBody = (out: CBuf): void => {
+            this.emitStmt(out, forStatement.statement);
+            if (forStatement.incrementor) {
+                const incrementor = this.emitExpr(forStatement.incrementor);
+                out.line(`${incrementor.c};`);
+            }
+            emitCondition(out);
+        };
+        const emitCallbackBody = (
+            out: CBuf,
+            callbackName: string,
+            loadState: boolean,
+            initial: boolean,
+        ): void => {
+            const callbackEnv = initial ? envType : conditionEnvType;
+            const eh = this.freshTemp("_await_nested_for_condition_eh");
+            out.open(`void ${callbackName}(void* env)`);
+            out.line(`${callbackEnv}* state = (${callbackEnv}*)env;`);
+            out.line("tsc_promise_t* _p = state->receiver;");
+            out.line("tsc_promise_t* _ret = state->result_promise;");
+            out.open("if (tsc_promise_is_rejected(_p))");
+            out.line("tsc_promise_reject_in_place(_ret, tsc_promise_reason(_p));");
+            out.line("return;");
+            out.close();
+            out.open("if (!tsc_promise_is_fulfilled(_p))");
+            out.line("return;");
+            out.close();
+            if (initial) out.line(`${awaitedType.c} ${initializerValueVar} = ${awaitedValue};`);
+            else out.line(`${conditionAwaitedType.c} ${conditionValueVar} = ${this.coerce(this.promiseFulfilledValue(conditionPromiseType.elem, "_p"), conditionAwaitedType, awaitedCondition)};`);
+            out.line(`tsc_try_frame_t ${eh};`);
+            out.line(`tsc_try_push(&${eh});`);
+            out.open(`if (setjmp(${eh}.jb) == 0)`);
+            const addedHoistedSymbols = addHoistedSymbols();
+            const addedDeclaredSymbols = hoistedAliases
+                .map((alias) => alias.symbol)
+                .filter((symbol) => !this.asyncAwaitHoistedPreludeDeclaredSymbols.has(symbol));
+            this.emitAsyncAwaitPreludeHoistedDeclarations(out, hoistedAliases);
+            if (loadState) {
+                for (const alias of loopAliases) {
+                    out.line(`${this.identifierName(alias.identifier)} = state->${alias.field};`);
+                }
+            }
+            this.argumentValueScopes.push(scope);
+            if (initial) this.awaitExpressionValueScopes.push(awaitScope);
+            if (thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                if (initial) {
+                    this.emitStmt(out, initializerStatement);
+                    emitCondition(out);
+                } else {
+                    const truth = this.truthyC({ c: conditionValueVar, ty: conditionAwaitedType }, awaitedCondition);
+                    out.open(`if (${truth})`);
+                    emitLoopBody(out);
+                    out.close();
+                    out.open("else");
+                    emitTerminal(out);
+                    out.close();
+                }
+                out.line("tsc_try_pop();");
+                out.line("return;");
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (thisValue) this.functionThisStack.pop();
+                if (initial) this.awaitExpressionValueScopes.pop();
+                this.argumentValueScopes.pop();
+                for (const symbol of addedDeclaredSymbols) this.asyncAwaitHoistedPreludeDeclaredSymbols.delete(symbol);
+                removeHoistedSymbols(addedHoistedSymbols);
+            }
+            out.close();
+            out.open("else");
+            out.line("tsc_try_pop();");
+            out.line("tsc_promise_reject_in_place(_ret, tsc_value_string(tsc_current_error()));");
+            out.close();
+            out.close();
+            out.line();
+        };
+        const buf = new CBuf();
+        emitCallbackBody(buf, name, false, true);
+        emitCallbackBody(buf, conditionName, true, false);
+        this.closureDefs.write(buf.toString());
+        return name;
+    }
+
     private ensureAsyncAwaitNestedForInitializerAwaitedIncrementorReturnContinuationAdapter(
         promiseType: CType,
         awaitedType: CType,
@@ -50672,6 +50876,7 @@ class Emitter {
             kind: "for";
             forStatement: ts.ForStatement;
             awaitExpr: ts.AwaitExpression;
+            awaitedCondition?: ts.AwaitExpression;
             awaitedIncrementor?: ts.AwaitExpression;
         };
         type AwaitedIfForInitializerSelector = {
@@ -51115,15 +51320,23 @@ class Emitter {
                 const incrementorExpression = statement.incrementor
                     ? this.unwrapTransparentExpression(statement.incrementor)
                     : null;
+                const conditionExpression = statement.condition
+                    ? this.unwrapTransparentExpression(statement.condition)
+                    : null;
+                const awaitedCondition = conditionExpression && ts.isAwaitExpression(conditionExpression) &&
+                    !containsAwait(conditionExpression.expression)
+                    ? conditionExpression
+                    : undefined;
                 const awaitedIncrementor = incrementorExpression && ts.isAwaitExpression(incrementorExpression) &&
                     !containsAwait(incrementorExpression.expression)
                     ? incrementorExpression
                     : undefined;
-                if ((statement.condition && containsAwait(statement.condition)) ||
+                if ((statement.condition && containsAwait(statement.condition) && !awaitedCondition) ||
                     (statement.incrementor && containsAwait(statement.incrementor) && !awaitedIncrementor) ||
+                    (awaitedCondition && awaitedIncrementor) ||
                     (awaitedIncrementor && !statement.condition) ||
                     containsAwait(statement.statement) || !nestedPreludeSafe(statement)) return null;
-                if (awaitedIncrementor) {
+                if (awaitedCondition || awaitedIncrementor) {
                     let hasLoopControl = false;
                     const visitLoopControl = (node: ts.Node): void => {
                         if (hasLoopControl || ts.isFunctionLike(node) || ts.isClassLike(node)) return;
@@ -51162,10 +51375,25 @@ class Emitter {
                     if (incrementorPromiseType.kind !== "promise" ||
                         incrementorAwaitedType.kind === "void" || incrementorAwaitedType.kind === "never") return null;
                 }
+                if (awaitedCondition) {
+                    const conditionPromiseType = this.prepareType(mapTsType(
+                        awaitedCondition.expression,
+                        this.checker.getTypeAtLocation(awaitedCondition.expression),
+                        this.checker,
+                    ));
+                    const conditionAwaitedType = this.prepareType(mapTsType(
+                        awaitedCondition,
+                        this.checker.getTypeAtLocation(awaitedCondition),
+                        this.checker,
+                    ));
+                    if (conditionPromiseType.kind !== "promise" ||
+                        conditionAwaitedType.kind === "void" || conditionAwaitedType.kind === "never") return null;
+                }
                 return {
                     kind: "for",
                     forStatement: statement,
                     awaitExpr: firstInitializer,
+                    awaitedCondition,
                     awaitedIncrementor,
                 };
             };
@@ -51568,7 +51796,22 @@ class Emitter {
                         this.checker.getTypeAtLocation(branch.awaitedForInitializer.awaitExpr),
                         this.checker,
                     ));
-                    const initializerAdapter = branch.awaitedForInitializer.awaitedIncrementor
+                    const initializerAdapter = branch.awaitedForInitializer.awaitedCondition
+                        ? this.ensureAsyncAwaitNestedForInitializerAwaitedConditionReturnContinuationAdapter(
+                            initializerPromiseType,
+                            initializerAwaitedType,
+                            branch.awaitedForInitializer.awaitExpr,
+                            branch.awaitedForInitializer.forStatement,
+                            branch.awaitedForInitializer.awaitedCondition,
+                            terminalAdapter,
+                            typeInfo.promiseType,
+                            branch.awaitExpr,
+                            continuationParams,
+                            callbackThis,
+                            carriedAliases,
+                            branch.hoistedAliases,
+                        )
+                        : branch.awaitedForInitializer.awaitedIncrementor
                         ? this.ensureAsyncAwaitNestedForInitializerAwaitedIncrementorReturnContinuationAdapter(
                             initializerPromiseType,
                             initializerAwaitedType,
