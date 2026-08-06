@@ -1,0 +1,6 @@
+selector-reject deep-nested-selector-thrown
+condition-false deep-nested-selector-first-condition-false
+condition-reject deep-nested-selector-condition-rejected
+return deep-nested-selector-first-true-return
+return deep-nested-selector-first-alternate-false-third-false-return
+trace selector:deep-nested-selector-selector-first|deep-nested-selector-first-true-label|deep-nested-selector-first-alternate-false-third-false-label|
