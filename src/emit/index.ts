@@ -50370,22 +50370,23 @@ class Emitter {
                     statement.declarationList.declarations.length > 0 &&
                     statement.declarationList.declarations.every((declaration) =>
                         ts.isIdentifier(declaration.name) && !!declaration.initializer);
-                const uninitializedVar = ts.isVariableStatement(statement) &&
-                    statement.declarationList.declarations.length === 1 &&
+                const uninitializedVars = ts.isVariableStatement(statement) &&
+                    statement.declarationList.declarations.length > 0 &&
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
-                    ts.isIdentifier(statement.declarationList.declarations[0]!.name) &&
-                    !statement.declarationList.declarations[0]!.initializer;
-                const assignedUninitializedVar = uninitializedVar && (() => {
-                    const declaration = statement.declarationList.declarations[0]!;
-                    if (!ts.isIdentifier(declaration.name)) return false;
-                    const assignmentStatement = preludeStatements[index + 1];
-                    if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return false;
-                    const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
-                    return ts.isBinaryExpression(assignment) &&
-                        assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-                        ts.isIdentifier(assignment.left) &&
-                        this.symbolForIdentifier(assignment.left) === this.symbolForIdentifier(declaration.name) &&
-                        this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement);
+                    statement.declarationList.declarations.every((declaration) =>
+                        ts.isIdentifier(declaration.name) && !declaration.initializer);
+                const assignedUninitializedVars = uninitializedVars && (() => {
+                    return statement.declarationList.declarations.every((declaration, declarationIndex) => {
+                        if (!ts.isIdentifier(declaration.name)) return false;
+                        const assignmentStatement = preludeStatements[index + declarationIndex + 1];
+                        if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return false;
+                        const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
+                        return ts.isBinaryExpression(assignment) &&
+                            assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+                            ts.isIdentifier(assignment.left) &&
+                            this.symbolForIdentifier(assignment.left) === this.symbolForIdentifier(declaration.name) &&
+                            this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement);
+                    });
                 })();
                 const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
                 const nestedSwitchPrelude = ts.isSwitchStatement(statement) && nestedPreludeSafe(statement);
@@ -50396,10 +50397,10 @@ class Emitter {
                 const nestedForInPrelude = ts.isForInStatement(statement) && nestedPreludeSafe(statement);
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
                     !!statement.finallyBlock && nestedPreludeSafe(statement);
-                return (ts.isExpressionStatement(statement) || initializedLocals || assignedUninitializedVar || nestedIfPrelude ||
+                return (ts.isExpressionStatement(statement) || initializedLocals || assignedUninitializedVars || nestedIfPrelude ||
                     nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude || nestedForPrelude ||
                     nestedForOfPrelude || nestedForInPrelude || nestedTryPrelude) &&
-                    this.asyncAwaitInterstitialControlFlowSupported(statement, assignedUninitializedVar);
+                    this.asyncAwaitInterstitialControlFlowSupported(statement, assignedUninitializedVars);
             };
             if (!terminal ||
                 (!ts.isReturnStatement(terminal) && !ts.isThrowStatement(terminal)) ||

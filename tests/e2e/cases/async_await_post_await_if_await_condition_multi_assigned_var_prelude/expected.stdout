@@ -1,0 +1,5 @@
+condition-reject multi-assigned-condition-rejected
+selector-reject multi-assigned-selector-thrown
+return multi-assigned-first-true-return
+throw multi-assigned-first-false-throw
+trace selector:multi-assigned-selector-first|multi-assigned-first-true:return|multi-assigned-first-false:throw|
