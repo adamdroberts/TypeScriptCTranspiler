@@ -1,0 +1,6 @@
+condition-reject try-catch-condition-rejected
+cleanup-reject try-catch-cleanup-thrown
+catch-reject try-catch-cleanup-thrown
+return try-catch-first-true-return
+throw try-catch-first-false-throw
+trace true:try:try-catch-first|true:catch:try-catch-prelude-thrown|true:finally|false:try:try-catch-first|false:finally|cleanup:try:try-catch-cleanup-first|cleanup:catch:try-catch-prelude-thrown|cleanup:finally:try-catch-cleanup-first|catch-throw:try:try-catch-catch-first|catch-throw:catch:try-catch-prelude-thrown|catch-throw:finally|

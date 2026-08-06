@@ -50336,7 +50336,7 @@ class Emitter {
                     !!statement.declarationList.declarations[0]!.initializer;
                 const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
-                    !statement.catchClause && !!statement.finallyBlock && nestedPreludeSafe(statement);
+                    !!statement.finallyBlock && nestedPreludeSafe(statement);
                 return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude || nestedTryPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement);
             };
@@ -66166,6 +66166,64 @@ class Emitter {
     }
 
     private emitTry(buf: CBuf, ts0: ts.TryStatement): void {
+        if (ts0.catchClause && ts0.finallyBlock) {
+            const ehVar = this.freshTemp("_eh");
+            const catchEhVar = this.freshTemp("_catch_eh");
+            const finallyEhVar = this.freshTemp("_finally_eh");
+            const catchErrorVar = this.freshTemp("_catch_error");
+            buf.open("");
+            buf.line(`tsc_try_frame_t ${ehVar};`);
+            buf.line(`tsc_try_push(&${ehVar});`);
+            buf.open(`if (setjmp(${ehVar}.jb) == 0)`);
+            this.tryDepth++;
+            try {
+                for (const s of ts0.tryBlock.statements) this.emitStmt(buf, s);
+            } finally {
+                this.tryDepth--;
+            }
+            buf.line(`tsc_try_pop();`);
+            buf.close();
+            buf.open("else");
+            buf.line(`tsc_try_frame_t ${catchEhVar};`);
+            buf.line(`tsc_try_push(&${catchEhVar});`);
+            buf.open(`if (setjmp(${catchEhVar}.jb) == 0)`);
+            let catchSym: ts.Symbol | undefined;
+            if (ts0.catchClause.variableDeclaration) {
+                const vd = ts0.catchClause.variableDeclaration;
+                if (!ts.isIdentifier(vd.name))
+                    unsupported(vd, "catch binding must be simple identifier");
+                catchSym = this.symbolForIdentifier(vd.name);
+                if (catchSym) this.catchStringSymbols.add(catchSym);
+                buf.line(
+                    `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`,
+                );
+            }
+            try {
+                for (const s of ts0.catchClause.block.statements)
+                    this.emitStmt(buf, s);
+            } finally {
+                if (catchSym) this.catchStringSymbols.delete(catchSym);
+            }
+            buf.line(`tsc_try_pop();`);
+            buf.close();
+            buf.open("else");
+            buf.line(`tsc_str_t* const ${catchErrorVar} = tsc_current_error();`);
+            buf.line(`tsc_try_frame_t ${finallyEhVar};`);
+            buf.line(`tsc_try_push(&${finallyEhVar});`);
+            buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
+            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
+            buf.line(`tsc_try_pop();`);
+            buf.line(`tsc_throw_str(${catchErrorVar});`);
+            buf.close();
+            buf.open("else");
+            buf.line("tsc_rethrow();");
+            buf.close();
+            buf.close();
+            buf.close();
+            for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
+            buf.close();
+            return;
+        }
         if (!ts0.catchClause && ts0.finallyBlock) {
             const ehVar = this.freshTemp("_eh");
             const finallyEhVar = this.freshTemp("_finally_eh");

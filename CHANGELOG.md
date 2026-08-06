@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Fixed
+- Async continuations now preserve bounded await-free `try`/`catch`/`finally` preludes inside awaited-condition return/throw branches, including synchronous catch recovery, finalization, skipped rejected-condition paths, and cleanup rejection precedence. Regression: `async_await_post_await_if_await_condition_try_catch_prelude`.
 - Async continuations now preserve bounded await-free no-catch `try`/`finally` preludes inside awaited-condition return/throw branches, running cleanup on prelude failure and allowing cleanup rejection to override the original failure. Regression: `async_await_post_await_if_await_condition_try_prelude`.
 - Async continuations now preserve bounded await-free nested `if` preludes inside awaited-condition return/throw branches, including both nested outcomes and skipped-prelude behavior when the awaited condition rejects. Regression: `async_await_post_await_if_await_condition_nested_prelude`.
 - Async continuations now preserve await-free expression-statement and initialized local preludes inside awaited-condition return/throw branches, including locals derived from the earlier awaited value. Regression: `async_await_post_await_if_await_condition_branch_prelude`.
