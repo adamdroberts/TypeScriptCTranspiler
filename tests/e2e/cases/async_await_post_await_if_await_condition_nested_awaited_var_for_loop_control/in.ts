@@ -64,6 +64,14 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             for (; nestedFor === 0; nestedFor++) {
                 mark("condition-for");
             }
+            for (const value of ["condition"]) {
+                mark(value + "-for-of");
+            }
+            for (const key in { condition: repeats }) {
+                if (key === "condition") {
+                    mark("condition-for-in");
+                }
+            }
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -107,6 +115,14 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
             var nestedFor = incrementorCount;
             for (; nestedFor === 0; nestedFor++) {
                 mark("incrementor-for");
+            }
+            for (const value of ["incrementor"]) {
+                mark(value + "-for-of");
+            }
+            for (const key in { incrementor: incrementorCount }) {
+                if (key === "incrementor") {
+                    mark("incrementor-for-in");
+                }
             }
             switch (incrementorCount) {
                 case 0:
@@ -154,6 +170,14 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             for (; nestedFor === 0; nestedFor++) {
                 mark("continue-for");
             }
+            for (const value of ["continue"]) {
+                mark(value + "-for-of");
+            }
+            for (const key in { continue: continueCount }) {
+                if (key === "continue") {
+                    mark("continue-for-in");
+                }
+            }
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -199,6 +223,14 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
             var nestedFor = breakCount;
             for (; nestedFor === 0; nestedFor++) {
                 mark("break-for");
+            }
+            for (const value of ["break"]) {
+                mark(value + "-for-of");
+            }
+            for (const key in { break: breakCount }) {
+                if (key === "break") {
+                    mark("break-for-in");
+                }
             }
             switch (breakCount) {
                 case 0:

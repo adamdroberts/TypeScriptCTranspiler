@@ -51467,7 +51467,9 @@ class Emitter {
                         ts.isSwitchStatement(prefixStatement) ||
                         ts.isWhileStatement(prefixStatement) ||
                         ts.isDoStatement(prefixStatement) ||
-                        ts.isForStatement(prefixStatement)) &&
+                        ts.isForStatement(prefixStatement) ||
+                        ts.isForOfStatement(prefixStatement) ||
+                        ts.isForInStatement(prefixStatement)) &&
                     this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
                     nestedPreludeSafe(prefixStatement))) return null;
                 if ((forStatement.condition && containsAwait(forStatement.condition) && !awaitedCondition) ||
