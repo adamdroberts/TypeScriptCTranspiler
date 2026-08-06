@@ -1,0 +1,5 @@
+tsc_async_await_awaited_if_condition_after_await
+tsc_str_t* escaped
+tsc_str_t* escapedThrow
+branch_nested_var_escaped
+branch_nested_var_escapedThrow

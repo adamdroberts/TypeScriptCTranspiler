@@ -50321,7 +50321,7 @@ class Emitter {
                 rejectResult: boolean;
                 preludeStatements: readonly ts.Statement[];
                 carriedAliases: readonly AwaitedIfCarriedAlias[];
-                hoistedAliases: readonly AsyncAwaitContinuationParam[];
+                hoistedAliases: readonly (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[];
             }
             | { kind: "condition"; awaitExpr: ts.AwaitExpression; thenBranch: AwaitedIfBranch; elseBranch: AwaitedIfBranch };
         const terminalBranch = (branch: ts.Statement): AwaitedIfBranch | null => {
@@ -50723,6 +50723,16 @@ class Emitter {
                             }
                         }
                     }
+                    if (ts.isVariableDeclarationList(node) &&
+                        ts.isForStatement(node.parent) &&
+                        (node.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0) {
+                        for (const declaration of node.declarations) {
+                            if (ts.isIdentifier(declaration.name)) {
+                                const symbol = this.symbolForIdentifier(declaration.name);
+                                if (symbol) declared.set(symbol, declaration.name);
+                            }
+                        }
+                    }
                     ts.forEachChild(node, collect);
                 };
                 collect(statement);
@@ -50811,7 +50821,7 @@ class Emitter {
                 !preludeStatements.every(branchPreludeSupported)) {
                 return null;
             }
-            const hoistedAliases: AsyncAwaitContinuationParam[] = [];
+            const hoistedAliases: (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[] = [];
             const hoistedSymbols = new Set<ts.Symbol>();
             for (const [index, statement] of preludeStatements.entries()) {
                 for (const identifier of nestedVarPreludeEscapes(statement, index)) {
@@ -50829,6 +50839,7 @@ class Emitter {
                         name: mangleIdent(identifier.text),
                         type,
                         field: `branch_nested_var_${mangleIdent(identifier.text)}`,
+                        identifier,
                     });
                 }
             }
@@ -50976,10 +50987,22 @@ class Emitter {
             rejectResult: boolean;
             preludeStatements: readonly ts.Statement[];
             carriedAliases: readonly AwaitedIfCarriedAlias[];
-            hoistedAliases: readonly AsyncAwaitContinuationParam[];
+            hoistedAliases: readonly (AsyncAwaitContinuationParam & { identifier: ts.Identifier })[];
         } => {
             if (branch.kind === "terminal") {
                 const typeInfo = terminalTypes.get(branch)!;
+                const carriedAliases = [...branch.carriedAliases];
+                const carriedSymbols = new Set(carriedAliases.map((alias) => alias.symbol));
+                for (const alias of branch.hoistedAliases) {
+                    if (carriedSymbols.has(alias.symbol)) continue;
+                    carriedSymbols.add(alias.symbol);
+                    carriedAliases.push({
+                        symbol: alias.symbol,
+                        type: alias.type,
+                        field: alias.field,
+                        identifier: alias.identifier,
+                    });
+                }
                 return {
                     adapter: this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
                         typeInfo.promiseType,
@@ -50991,13 +51014,13 @@ class Emitter {
                         branch.rejectResult,
                         [],
                         [],
-                        branch.carriedAliases,
+                        carriedAliases,
                     ),
                     promiseType: typeInfo.promiseType,
                     awaitExpr: branch.awaitExpr,
                     rejectResult: branch.rejectResult,
                     preludeStatements: branch.preludeStatements,
-                    carriedAliases: branch.carriedAliases,
+                    carriedAliases,
                     hoistedAliases: branch.hoistedAliases,
                 };
             }
@@ -64521,6 +64544,10 @@ class Emitter {
                     if (cell) {
                         buf.line(`${ct.c}* ${cell.cellName} = (${ct.c}*)TSC_GC_MALLOC(sizeof(${ct.c}));`);
                         buf.line(`*${cell.cellName} = ${init ? init.slice(3) : this.zeroValue(ct)};`);
+                        continue;
+                    }
+                    if (sym && this.asyncAwaitHoistedPreludeSymbols.has(sym)) {
+                        if (init) buf.line(`${name} = ${init.slice(3)};`);
                         continue;
                     }
                     const qual = isConst ? " const" : "";

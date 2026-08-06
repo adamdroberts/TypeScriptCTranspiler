@@ -1,0 +1,6 @@
+condition-reject var-for-condition-rejected
+selector-reject var-for-selector-thrown
+return var-for-first-true-return
+throw var-for-first-false-throw
+return var-for-first-alternate-return
+trace selector:var-for-selector-first|var-for-first-true-label|var-for-first-false-label|var-for-first-alternate-label|
