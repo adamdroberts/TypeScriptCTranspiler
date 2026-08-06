@@ -50950,7 +50950,7 @@ class Emitter {
                 if (!ts.isIfStatement(candidate) || !candidate.elseStatement || !nestedPreludeSafe(candidate)) return null;
                 const candidateAwait = this.unwrapTransparentExpression(candidate.expression);
                 if (ts.isAwaitExpression(candidateAwait)) {
-                    if (conditionDepth >= 1 || containsAwait(candidateAwait.expression)) return null;
+                    if (conditionDepth >= 2 || containsAwait(candidateAwait.expression)) return null;
                     const thenBranch = awaitedForInitializerBranch(
                         candidate.thenStatement,
                         selectorDepth,
