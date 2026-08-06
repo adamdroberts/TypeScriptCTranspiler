@@ -66476,8 +66476,23 @@ class Emitter {
                 buf.line(`tsc_value_t const ${entryVar} = ${stepVar}->value;`);
                 buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(keyValue, keyType, keyEl.name)};`);
                 buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(elementValue, elementValueType, valueEl.name)};`);
+            } else if (valueType.kind === "array" && valueType.elem) {
+                const elementType = valueType.elem;
+                const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
+                const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
+                const keyValue: EmitResult = {
+                    c: `tsc_array_index_present(${entryVar}, 0) ? TSC_ARR(${elementType.c}, ${entryVar}, 0) : ${this.zeroValue(elementType)}`,
+                    ty: elementType,
+                };
+                const elementValue: EmitResult = {
+                    c: `tsc_array_index_present(${entryVar}, 1) ? TSC_ARR(${elementType.c}, ${entryVar}, 1) : ${this.zeroValue(elementType)}`,
+                    ty: elementType,
+                };
+                buf.line(`tsc_array_t* const ${entryVar} = ${stepVar}->value;`);
+                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(keyValue, keyType, keyEl.name)};`);
+                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(elementValue, elementValueType, valueEl.name)};`);
             } else {
-                unsupported(fos.initializer, "custom iterator destructuring requires ObjectEntry or dynamic values");
+                unsupported(fos.initializer, "custom iterator destructuring requires ObjectEntry, dynamic, or array-backed values");
             }
             const labeledContinueTarget = this.directLabeledLoopName(fos)
                 ? this.freshTemp("_custom_for_of_labeled_continue")
