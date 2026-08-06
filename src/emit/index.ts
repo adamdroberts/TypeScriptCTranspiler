@@ -50339,11 +50339,12 @@ class Emitter {
                 const nestedWhilePrelude = ts.isWhileStatement(statement) && nestedPreludeSafe(statement);
                 const nestedDoPrelude = ts.isDoStatement(statement) && nestedPreludeSafe(statement);
                 const nestedForPrelude = ts.isForStatement(statement) && nestedPreludeSafe(statement);
+                const nestedForOfPrelude = ts.isForOfStatement(statement) && nestedPreludeSafe(statement);
                 const nestedTryPrelude = ts.isTryStatement(statement) &&
                     !!statement.finallyBlock && nestedPreludeSafe(statement);
                 return (ts.isExpressionStatement(statement) || initializedLocal || nestedIfPrelude ||
                     nestedSwitchPrelude || nestedWhilePrelude || nestedDoPrelude || nestedForPrelude ||
-                    nestedTryPrelude) &&
+                    nestedForOfPrelude || nestedTryPrelude) &&
                     this.asyncAwaitInterstitialControlFlowSupported(statement);
             };
             if (!terminal ||

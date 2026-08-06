@@ -1,0 +1,5 @@
+condition-reject for-of-condition-rejected
+source-reject for-of-source-thrown
+return for-of-first-true-return
+throw for-of-first-false-throw
+trace true:for-of:for-of-first:a|true:for-of:for-of-first:b|false:for-of:for-of-first:x|false:for-of:for-of-first:y|throw:source:for-of-throw-first|
