@@ -45,7 +45,8 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             await laterBoolean(repeats < 2);
             repeats++
         ) {
-            mark("condition");
+            var prefix = "condition";
+            mark(prefix);
             continue;
         }
         return await laterString(escaped + "-" + String(repeats));
@@ -62,7 +63,8 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
             incrementorCount < 4;
             await laterIncrementorOnly()
         ) {
-            mark("incrementor");
+            let prefix = "incrementor";
+            mark(prefix);
             continue;
         }
         return await laterString(escaped + "-" + String(incrementorCount));
@@ -80,7 +82,8 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             await laterBoolean(continueCount < 2);
             await laterContinueIncrement()
         ) {
-            mark("continue");
+            var prefix = "continue";
+            mark(prefix);
             continue;
         }
         return await laterString(escaped + "-" + String(continueCount));
@@ -98,7 +101,8 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
             await laterBoolean(breakCount < 2);
             await laterBreakIncrement()
         ) {
-            mark("break");
+            let prefix = "break";
+            mark(prefix);
             break;
         }
         return await laterString(escaped + "-" + String(breakCount));
