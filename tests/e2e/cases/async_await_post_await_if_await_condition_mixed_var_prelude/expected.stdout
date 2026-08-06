@@ -1,0 +1,5 @@
+condition-reject mixed-var-condition-rejected
+selector-reject mixed-var-selector-thrown
+return mixed-var-first-true-return
+throw mixed-var-first-false-throw
+trace selector:mixed-var-selector-first|mixed-var-first-true:return|mixed-var-first-false:throw|

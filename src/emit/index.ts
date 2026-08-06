@@ -50366,19 +50366,25 @@ class Emitter {
                 return safe;
             };
             const branchPreludeSupported = (statement: ts.Statement, index: number): boolean => {
-                const initializedLocals = ts.isVariableStatement(statement) &&
-                    statement.declarationList.declarations.length > 0 &&
-                    statement.declarationList.declarations.every((declaration) =>
-                        ts.isIdentifier(declaration.name) && !!declaration.initializer);
-                const uninitializedVars = ts.isVariableStatement(statement) &&
-                    statement.declarationList.declarations.length > 0 &&
+                const variableDeclarations = ts.isVariableStatement(statement)
+                    ? statement.declarationList.declarations
+                    : null;
+                const simpleVariableList = variableDeclarations !== null &&
+                    variableDeclarations.length > 0 &&
+                    variableDeclarations.every((declaration) => ts.isIdentifier(declaration.name));
+                const initializedLocals = simpleVariableList &&
+                    variableDeclarations!.every((declaration) => !!declaration.initializer);
+                const assignedUninitializedVars = simpleVariableList &&
+                    ts.isVariableStatement(statement) &&
                     (statement.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 &&
-                    statement.declarationList.declarations.every((declaration) =>
-                        ts.isIdentifier(declaration.name) && !declaration.initializer);
-                const assignedUninitializedVars = uninitializedVars && (() => {
-                    return statement.declarationList.declarations.every((declaration, declarationIndex) => {
+                    (() => {
+                    let assignmentIndex = index + 1;
+                    let hasUninitializedDeclaration = false;
+                    return variableDeclarations!.every((declaration) => {
+                        if (declaration.initializer) return true;
+                        hasUninitializedDeclaration = true;
                         if (!ts.isIdentifier(declaration.name)) return false;
-                        const assignmentStatement = preludeStatements[index + declarationIndex + 1];
+                        const assignmentStatement = preludeStatements[assignmentIndex++];
                         if (!assignmentStatement || !ts.isExpressionStatement(assignmentStatement)) return false;
                         const assignment = this.unwrapTransparentExpression(assignmentStatement.expression);
                         return ts.isBinaryExpression(assignment) &&
@@ -50386,7 +50392,7 @@ class Emitter {
                             ts.isIdentifier(assignment.left) &&
                             this.symbolForIdentifier(assignment.left) === this.symbolForIdentifier(declaration.name) &&
                             this.asyncAwaitInterstitialControlFlowSupported(assignmentStatement);
-                    });
+                    }) && hasUninitializedDeclaration;
                 })();
                 const nestedIfPrelude = ts.isIfStatement(statement) && nestedPreludeSafe(statement);
                 const nestedSwitchPrelude = ts.isSwitchStatement(statement) && nestedPreludeSafe(statement);
