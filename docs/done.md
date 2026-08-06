@@ -1,5 +1,6 @@
 # Implemented features
 
+- Collection constructors now accept omitted generic arguments for `Map`, `Set`, `WeakMap`, `WeakSet`, `WeakRef`, and `FinalizationRegistry`, using dynamic value storage for unresolved type parameters; the intrinsic TypeScript `object` type now maps to the same dynamic representation. Test: `inferred_collection_constructors`.
 - Lazy generators now preserve bounded labeled `break` and `continue` routing across labeled blocks and supported `while`, `do...while`, counted `for`, `for...of`, and `for...in` loops, including cross-loop continuation anchors; broader suspended label/control-flow graphs remain deferred. Test: `generator_lazy_labeled_control`.
 - Ordinary labeled statements now emit bounded labeled blocks with `break label` routing, including nested labeled blocks, and preserve same-loop plus cross-loop labeled `continue` through `while`, `do...while`, counted `for`, `for...in`, ordinary `for...of`, typed `Map`, `URLSearchParams`, custom iterator objects, and dynamic/entry destructuring paths; broader label control-flow graphs remain deferred. Test: `labeled_statement`.
 - `debugger;` statements now emit as semantics-preserving no-ops in ordinary functions, lazy generators, and await-free nested loop-control prefixes. Test: `debugger_statement`.
@@ -3114,6 +3115,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `class_modifiers` | abstract/access/readonly modifiers accepted as TS-only |
 | `class_static_blocks` | class static initialization blocks execute in member order with static fields |
 | `closure_optional_parameters` | first-class closures accept omitted optional pointer and function parameters |
+| `inferred_collection_constructors` | collection constructors accept omitted generic arguments through dynamic inferred representations |
 | `collection_constructor_ignored_arguments` | Map, Set, WeakMap, and WeakSet constructors evaluate and ignore trailing arguments |
 | `collection_object_methods` | Map/Set/WeakMap/WeakSet/WeakRef object and integrity helper behavior |
 | `comma_operator` | comma operator side effects and right-hand value |

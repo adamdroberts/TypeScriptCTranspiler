@@ -382,6 +382,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                     mapTsType(node, ta[1]!, checker),
                 );
             }
+            return mapType_(T_VALUE, T_VALUE);
         }
         if (sym?.getName() === "Set") {
             const tr = t as ts.TypeReference;
@@ -389,6 +390,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             if (ta && ta.length >= 1) {
                 return setType(mapTsType(node, ta[0]!, checker));
             }
+            return setType(T_VALUE);
         }
         if (sym?.getName() === "WeakMap") {
             const tr = t as ts.TypeReference;
@@ -399,6 +401,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                     mapTsType(node, ta[1]!, checker),
                 );
             }
+            return weakMapType(T_VALUE, T_VALUE);
         }
         if (sym?.getName() === "WeakSet") {
             const tr = t as ts.TypeReference;
@@ -406,6 +409,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             if (ta && ta.length >= 1) {
                 return weakSetType(mapTsType(node, ta[0]!, checker));
             }
+            return weakSetType(T_VALUE);
         }
         if (sym?.getName() === "WeakRef") {
             const tr = t as ts.TypeReference;
@@ -413,6 +417,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             if (ta && ta.length >= 1) {
                 return weakRefType(mapTsType(node, ta[0]!, checker));
             }
+            return weakRefType(T_VALUE);
         }
         if (sym?.getName() === "FinalizationRegistry") {
             const tr = t as ts.TypeReference;
@@ -420,6 +425,7 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
             if (ta && ta.length >= 1) {
                 return finRegistryType(mapTsType(node, ta[0]!, checker));
             }
+            return finRegistryType(T_VALUE);
         }
         if (sym?.getName() === "Promise") {
             const tr = t as ts.TypeReference;
@@ -504,6 +510,9 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
         }
     }
     if (checker.typeToString(t).startsWith("typeof import(")) {
+        return T_VALUE;
+    }
+    if (t.flags & ts.TypeFlags.NonPrimitive) {
         return T_VALUE;
     }
     if (t.flags & ts.TypeFlags.Object) {

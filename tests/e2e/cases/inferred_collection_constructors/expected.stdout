@@ -1,0 +1,6 @@
+map: 1 beta 2 false
+set: true false 2
+weakmap: value true
+weakset: true true false
+weakref: true
+registry: true
