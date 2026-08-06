@@ -259,6 +259,12 @@ function* stagedConditionalYieldedCallLogicalOperandReturn(): Generator<string, 
         : "conditional-call-fallback");
 }
 
+function* stagedYieldedCallLogicalSelectorReturn(): Generator<string, any, any> {
+    return ((yield "conditional-selector-left") && sideEffectingLogicalCall(yield "conditional-selector-argument"))
+        ? (yield "conditional-selector-true")
+        : (yield "conditional-selector-false");
+}
+
 const andSkipped = nestedConditionalLogicalAndReturn();
 const andSkippedFirst: any = andSkipped.next();
 console.log("and-skipped-first", andSkippedFirst.done, andSkippedFirst.value);
@@ -866,3 +872,23 @@ const conditionalYieldedCallSelectedArgument: any = conditionalYieldedCallSelect
 console.log("conditional-yielded-call-selected-argument", conditionalYieldedCallSelectedArgument.done, conditionalYieldedCallSelectedArgument.value, logicalCallCount);
 const conditionalYieldedCallSelectedDone: any = conditionalYieldedCallSelected.next("conditional-call-argument");
 console.log("conditional-yielded-call-selected-done", conditionalYieldedCallSelectedDone.done, conditionalYieldedCallSelectedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const yieldedCallLogicalSelectorSkipped = stagedYieldedCallLogicalSelectorReturn();
+const yieldedCallLogicalSelectorSkippedFirst: any = yieldedCallLogicalSelectorSkipped.next();
+console.log("yielded-call-logical-selector-skipped-first", yieldedCallLogicalSelectorSkippedFirst.done, yieldedCallLogicalSelectorSkippedFirst.value, logicalCallCount);
+const yieldedCallLogicalSelectorSkippedSecond: any = yieldedCallLogicalSelectorSkipped.next(false);
+console.log("yielded-call-logical-selector-skipped-second", yieldedCallLogicalSelectorSkippedSecond.done, yieldedCallLogicalSelectorSkippedSecond.value, logicalCallCount);
+const yieldedCallLogicalSelectorSkippedDone: any = yieldedCallLogicalSelectorSkipped.next("conditional-selector-false");
+console.log("yielded-call-logical-selector-skipped-done", yieldedCallLogicalSelectorSkippedDone.done, yieldedCallLogicalSelectorSkippedDone.value, logicalCallCount);
+
+logicalCallCount = 0;
+const yieldedCallLogicalSelectorSelected = stagedYieldedCallLogicalSelectorReturn();
+const yieldedCallLogicalSelectorSelectedFirst: any = yieldedCallLogicalSelectorSelected.next();
+console.log("yielded-call-logical-selector-selected-first", yieldedCallLogicalSelectorSelectedFirst.done, yieldedCallLogicalSelectorSelectedFirst.value, logicalCallCount);
+const yieldedCallLogicalSelectorSelectedSecond: any = yieldedCallLogicalSelectorSelected.next(true);
+console.log("yielded-call-logical-selector-selected-second", yieldedCallLogicalSelectorSelectedSecond.done, yieldedCallLogicalSelectorSelectedSecond.value, logicalCallCount);
+const yieldedCallLogicalSelectorSelectedThird: any = yieldedCallLogicalSelectorSelected.next("conditional-selector-argument");
+console.log("yielded-call-logical-selector-selected-third", yieldedCallLogicalSelectorSelectedThird.done, yieldedCallLogicalSelectorSelectedThird.value, logicalCallCount);
+const yieldedCallLogicalSelectorSelectedDone: any = yieldedCallLogicalSelectorSelected.next("conditional-selector-true");
+console.log("yielded-call-logical-selector-selected-done", yieldedCallLogicalSelectorSelectedDone.done, yieldedCallLogicalSelectorSelectedDone.value, logicalCallCount);

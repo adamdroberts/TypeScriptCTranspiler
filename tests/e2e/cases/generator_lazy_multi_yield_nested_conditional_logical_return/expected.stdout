@@ -199,3 +199,10 @@ conditional-yielded-call-selected-second false conditional-call-selector 0
 conditional-yielded-call-selected-third false conditional-call-arm-left 0
 conditional-yielded-call-selected-argument false conditional-call-argument 0
 conditional-yielded-call-selected-done true conditional-call-argument1 1
+yielded-call-logical-selector-skipped-first false conditional-selector-left 0
+yielded-call-logical-selector-skipped-second false conditional-selector-false 0
+yielded-call-logical-selector-skipped-done true conditional-selector-false 0
+yielded-call-logical-selector-selected-first false conditional-selector-left 0
+yielded-call-logical-selector-selected-second false conditional-selector-argument 0
+yielded-call-logical-selector-selected-third false conditional-selector-true 1
+yielded-call-logical-selector-selected-done true conditional-selector-true 1

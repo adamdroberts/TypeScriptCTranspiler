@@ -54134,6 +54134,25 @@ class Emitter {
         return Array.from(staged).sort((left, right) => left.getStart() - right.getStart());
     }
 
+    private simpleLazyMultiYieldConditionalStagedOperands(
+        conditional: LazyMultiYieldConditionalBranch,
+    ): ts.Expression[] {
+        const plans: LazyMultiYieldLogicalPlan[] = [];
+        const visit = (current: LazyMultiYieldConditionalBranch): void => {
+            if (isLazyMultiYieldLogicalPlan(current.condition)) plans.push(current.condition);
+            for (const arm of [current.whenTrue, current.whenFalse]) {
+                for (const event of arm.events) {
+                    if (event.kind === "logical") plans.push(event.logicalPlan);
+                    if (event.kind === "conditional") visit(event.conditionalBranch);
+                }
+            }
+        };
+        visit(conditional);
+        return Array.from(new Set(
+            plans.flatMap((plan) => this.simpleLazyMultiYieldLogicalStagedOperands(plan)),
+        )).sort((left, right) => left.getStart() - right.getStart());
+    }
+
     private simpleLazyMultiYieldConditionalBranches(
         expression: ts.Expression,
         allowSideEffecting = false,
@@ -54376,7 +54395,12 @@ class Emitter {
                 logicalStagedOperands: this.simpleLazyMultiYieldLogicalStagedOperands(logicalPlan),
             };
         }
-        const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(expression);
+        const allowConditionalSelectorSideEffecting = ts.isConditionalExpression(this.unwrapTransparentExpression(expression));
+        const conditionalBranches = this.simpleLazyMultiYieldConditionalBranches(
+            expression,
+            allowConditionalSelectorSideEffecting,
+            allowConditionalSelectorSideEffecting,
+        );
         const conditionalPlans = new Map<ts.ConditionalExpression, LazyMultiYieldConditionalBranch>();
         const logicalPlans: LazyMultiYieldLogicalPlan[] = [];
         const logicalPlanRoots = new Set<ts.BinaryExpression>();
@@ -54575,7 +54599,11 @@ class Emitter {
                 return validLeft && validRight;
             }
             if (this.isSimpleLazyMultiYieldStringLogicalLeaf(unwrapped)) {
-                const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(unwrapped, true);
+                const logicalPlan = this.simpleLazyMultiYieldLogicalPlan(
+                    unwrapped,
+                    true,
+                    allowConditionalSelectorSideEffecting,
+                );
                 if (logicalPlan) {
                     if (!conditionalLogicalPlanRoots.has(logicalPlan.expression) && !logicalPlanRoots.has(logicalPlan.expression)) {
                         logicalPlanRoots.add(logicalPlan.expression);
@@ -54611,6 +54639,9 @@ class Emitter {
                 expression,
                 yields,
                 conditionalBranches,
+                logicalStagedOperands: Array.from(new Set(
+                    conditionalBranches.flatMap((conditional) => this.simpleLazyMultiYieldConditionalStagedOperands(conditional)),
+                )).sort((left, right) => left.getStart() - right.getStart()),
             };
         }
         if (!visit(expression) || yields.length < 2) return null;
@@ -59278,6 +59309,8 @@ class Emitter {
         terminal: "return" | "throw" = "return",
     ): void {
         const resumeSources = new Map<ts.YieldExpression, string>();
+        const enclosingResumeValues = this.lazyGeneratorMultiYieldResumeValues;
+        const enclosingStageValues = this.lazyGeneratorMultiYieldMutationStageValues;
         const stagedExpressions = info.stagedExpressions ?? [];
         const stageSlots = new Map(stagedExpressions.map((stage, index) => [
             stage.expression,
@@ -59752,10 +59785,52 @@ class Emitter {
                     ty: type,
                 };
             };
+            const logicalStageSlotFor = (operand: ts.Expression): number => {
+                const slot = logicalStageSlots.get(operand);
+                if (slot === undefined) unsupported(operand, "lazy multi-yield conditional contains an unknown staged logical operand");
+                return slot;
+            };
+            const emitLogicalStage = (operand: ts.Expression): void => {
+                const value = this.emitExpr(operand);
+                const slot = logicalStageSlotFor(operand);
+                const type = this.prepareType(mapTsType(
+                    operand,
+                    this.checker.getTypeAtLocation(operand),
+                    this.checker,
+                ));
+                const operandTsType = this.checker.getTypeAtLocation(operand);
+                const operandParts = operandTsType.isUnion() ? operandTsType.types : [operandTsType];
+                const canBeNullish = operandParts.some((part) =>
+                    (part.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)) !== 0,
+                );
+                const stagedValue = this.freshTemp("_logical_stage");
+                buf.line(`${value.ty.c} ${stagedValue} = ${value.c};`);
+                const stagedResult = this.coerce({ c: stagedValue, ty: value.ty }, T_VALUE, operand);
+                const stagedNullish = value.ty.kind === "value"
+                    ? `tsc_value_is_nullish(${stagedValue})`
+                    : `${stagedValue} == NULL`;
+                buf.line(`${envLocalName}->multi_yield_values[${slot}] = ${canBeNullish
+                    ? `(${stagedNullish} ? tsc_value_null() : ${stagedResult})`
+                    : stagedResult};`);
+                logicalStageResults.set(operand, canBeNullish
+                    ? { c: `${envLocalName}->multi_yield_values[${slot}]`, ty: T_VALUE }
+                    : {
+                        c: this.coerce(
+                            { c: `${envLocalName}->multi_yield_values[${slot}]`, ty: T_VALUE },
+                            type,
+                            operand,
+                        ),
+                        ty: type,
+                    });
+            };
+            const resumedLogicalStage = (operand: LazyMultiYieldLogicalYieldedOperand): EmitResult => ({
+                c: `${envLocalName}->multi_yield_values[${logicalStageSlotFor(operand.expression)}]`,
+                ty: T_VALUE,
+            });
             const truthyOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) return this.truthyExprFromEmitResult(resumedYield(operand), operand);
                 if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
-                    unsupported(operand.expression, "lazy multi-yield logical plans do not support yielded arithmetic operands here");
+                    return this.truthyExprFromEmitResult(resumedLogicalStage(operand), operand.expression);
                 }
                 if (isLazyMultiYieldLogicalExpression(operand)) return this.truthyExprFromEmitResult(this.emitExpr(operand), operand);
                 const left = truthyOperand(operand.left);
@@ -59772,7 +59847,7 @@ class Emitter {
             const nullishOperand = (operand: LazyMultiYieldLogicalOperand): string => {
                 if (isYieldOperand(operand)) return this.nullishExprFromEmitResult(resumedYield(operand), operand);
                 if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
-                    unsupported(operand.expression, "lazy multi-yield logical plans do not support yielded arithmetic operands here");
+                    return this.nullishExprFromEmitResult(resumedLogicalStage(operand), operand.expression);
                 }
                 if (isLazyMultiYieldLogicalExpression(operand)) return this.nullishExprFromEmitResult(this.emitExpr(operand), operand);
                 const leftTruthy = truthyOperand(operand.left);
@@ -59798,6 +59873,13 @@ class Emitter {
                         return nullishOperand(left);
                 }
             };
+            this.lazyGeneratorMultiYieldResumeValues = new Map(
+                info.yields.map((yieldExpr) => [yieldExpr, resumedYield(yieldExpr)]),
+            );
+            for (const [expression, value] of stagedValueResults) {
+                logicalStageResults.set(expression, value);
+            }
+            this.lazyGeneratorMultiYieldMutationStageValues = logicalStageResults;
             let scheduleLogicalPlan: (
                 current: LazyMultiYieldLogicalPlan,
                 entryLabel: string,
@@ -59812,9 +59894,37 @@ class Emitter {
                     scheduleLogicalPlan(operand, entryLabel, continuationLabel);
                     return;
                 }
+                if (isLazyMultiYieldLogicalYieldedOperand(operand)) {
+                    let currentEntryLabel = entryLabel;
+                    for (const yieldExpr of operand.yields) {
+                        const state = nextStateId();
+                        const nextEntryLabel = this.freshTemp("_lazy_multi_yield_logical_stage");
+                        const yieldEntryLabel = currentEntryLabel;
+                        entryBlocks.push(() => {
+                            buf.line(`${yieldEntryLabel}:;`);
+                            emitYield(yieldExpr, state);
+                        });
+                        resumeBlocks.push(() => {
+                            buf.line(`case ${state}:;`);
+                            this.emitLazyGeneratorCloseGuard(buf, envLocalName, elemType, nextStateId, nextYieldStarSlot);
+                            buf.line(`${envLocalName}->multi_yield_values[${slotForYield(yieldExpr)}] = next_arg;`);
+                            buf.line(`goto ${nextEntryLabel};`);
+                        });
+                        currentEntryLabel = nextEntryLabel;
+                    }
+                    entryBlocks.push(() => {
+                        buf.line(`${currentEntryLabel}:;`);
+                        emitLogicalStage(operand.expression);
+                        buf.line(`goto ${continuationLabel};`);
+                    });
+                    return;
+                }
                 if (!isYieldOperand(operand)) {
                     entryBlocks.push(() => {
                         buf.line(`${entryLabel}:;`);
+                        if (logicalStageSlots.has(operand as ts.Expression)) {
+                            emitLogicalStage(operand as ts.Expression);
+                        }
                         buf.line(`goto ${continuationLabel};`);
                     });
                     return;
@@ -59896,7 +60006,7 @@ class Emitter {
                 let conditionC: string;
                 if (isLogicalPlan(current.condition)) {
                     scheduleLogicalPlan(current.condition, entryLabel, conditionDecisionLabel);
-                    conditionC = truthyOperand(current.condition);
+                    conditionC = "";
                 } else {
                     if (!isYieldOperand(current.condition)) {
                         unsupported(current.expression, "lazy multi-yield conditional selectors require a direct yield or logical plan");
@@ -59927,7 +60037,10 @@ class Emitter {
                 }
                 resumeBlocks.push(() => {
                     buf.line(`${conditionDecisionLabel}:;`);
-                    buf.open(`if (${conditionC})`);
+                    const conditionExpression = isLogicalPlan(current.condition)
+                        ? truthyOperand(current.condition)
+                        : conditionC;
+                    buf.open(`if (${conditionExpression})`);
                     buf.line(`goto ${trueLabel};`);
                     buf.close();
                     buf.line(`goto ${falseLabel};`);
@@ -59998,6 +60111,10 @@ class Emitter {
                 this.lazyGeneratorMultiYieldResumeValues = previousResumeValues;
                 this.lazyGeneratorMultiYieldMutationStageValues = previousStageValues;
             }
+        }
+        if (info.conditionalBranches && info.conditionalBranches.length > 0) {
+            this.lazyGeneratorMultiYieldResumeValues = enclosingResumeValues;
+            this.lazyGeneratorMultiYieldMutationStageValues = enclosingStageValues;
         }
         const yieldByNode = new Map(info.yields.map((yieldExpr, index) => [yieldExpr, index]));
         const resumeValues = new Map<ts.YieldExpression, EmitResult>();
