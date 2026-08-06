@@ -63,7 +63,8 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
             incrementorCount < 4;
             await laterIncrementorOnly()
         ) {
-            let prefix = "incrementor";
+            let prefix: string;
+            prefix = "incrementor";
             mark(prefix);
             continue;
         }
@@ -82,7 +83,8 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             await laterBoolean(continueCount < 2);
             await laterContinueIncrement()
         ) {
-            var prefix = "continue";
+            var prefix: string;
+            prefix = "continue";
             mark(prefix);
             continue;
         }
