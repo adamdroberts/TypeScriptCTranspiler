@@ -50348,6 +50348,7 @@ class Emitter {
         forStatement: ts.ForStatement,
         awaitedCondition: ts.AwaitExpression,
         awaitedIncrementor: ts.AwaitExpression | undefined,
+        loopControl: "break" | "continue" | undefined,
         terminalAdapter: string,
         terminalPromiseType: CType,
         terminalAwaitExpr: ts.AwaitExpression,
@@ -50509,6 +50510,22 @@ class Emitter {
             out.close();
         };
         const emitLoopBody = (out: CBuf): void => {
+            if (loopControl === "break") {
+                emitTerminal(out);
+                return;
+            }
+            if (loopControl === "continue") {
+                if (awaitedIncrementor) {
+                    emitIncrementor(out);
+                } else if (forStatement.incrementor) {
+                    const incrementor = this.emitExpr(forStatement.incrementor);
+                    out.line(`${incrementor.c};`);
+                    emitCondition(out);
+                } else {
+                    emitCondition(out);
+                }
+                return;
+            }
             this.emitStmt(out, forStatement.statement);
             if (awaitedIncrementor) {
                 emitIncrementor(out);
@@ -50613,6 +50630,7 @@ class Emitter {
         awaitExpr: ts.AwaitExpression,
         forStatement: ts.ForStatement,
         awaitedIncrementor: ts.AwaitExpression,
+        loopControl: "break" | "continue" | undefined,
         terminalAdapter: string,
         terminalPromiseType: CType,
         terminalAwaitExpr: ts.AwaitExpression,
@@ -50726,8 +50744,12 @@ class Emitter {
             const condition = this.emitExpr(forStatement.condition!);
             const truth = this.truthyC(condition, forStatement.condition!);
             out.open(`if (${truth})`);
-            this.emitStmt(out, forStatement.statement);
-            emitIncrementor(out);
+            if (loopControl === "break") {
+                emitTerminal(out);
+            } else {
+                if (loopControl !== "continue") this.emitStmt(out, forStatement.statement);
+                emitIncrementor(out);
+            }
             out.close();
             out.open("else");
             emitTerminal(out);
@@ -50940,6 +50962,7 @@ class Emitter {
             awaitExpr: ts.AwaitExpression;
             awaitedCondition?: ts.AwaitExpression;
             awaitedIncrementor?: ts.AwaitExpression;
+            loopControl?: "break" | "continue";
         };
         type AwaitedIfForInitializerSelector = {
             kind: "selector";
@@ -51393,6 +51416,16 @@ class Emitter {
                     !containsAwait(incrementorExpression.expression)
                     ? incrementorExpression
                     : undefined;
+                const loopBodyStatements = ts.isBlock(statement.statement)
+                    ? statement.statement.statements
+                    : [statement.statement];
+                const loopControl = loopBodyStatements.length === 1
+                    ? ts.isBreakStatement(loopBodyStatements[0]!) && !loopBodyStatements[0]!.label
+                        ? "break" as const
+                        : ts.isContinueStatement(loopBodyStatements[0]!) && !loopBodyStatements[0]!.label
+                            ? "continue" as const
+                            : undefined
+                    : undefined;
                 if ((statement.condition && containsAwait(statement.condition) && !awaitedCondition) ||
                     (statement.incrementor && containsAwait(statement.incrementor) && !awaitedIncrementor) ||
                     (awaitedIncrementor && !statement.condition) ||
@@ -51408,7 +51441,7 @@ class Emitter {
                         ts.forEachChild(node, visitLoopControl);
                     };
                     visitLoopControl(statement.statement);
-                    if (hasLoopControl) return null;
+                    if (hasLoopControl && !loopControl) return null;
                 }
                 const initializerPromiseType = this.prepareType(mapTsType(
                     firstInitializer.expression,
@@ -51456,6 +51489,7 @@ class Emitter {
                     awaitExpr: firstInitializer,
                     awaitedCondition,
                     awaitedIncrementor,
+                    loopControl,
                 };
             };
             const awaitedForInitializerBranch = (
@@ -51865,6 +51899,7 @@ class Emitter {
                             branch.awaitedForInitializer.forStatement,
                             branch.awaitedForInitializer.awaitedCondition,
                             branch.awaitedForInitializer.awaitedIncrementor,
+                            branch.awaitedForInitializer.loopControl,
                             terminalAdapter,
                             typeInfo.promiseType,
                             branch.awaitExpr,
@@ -51880,6 +51915,7 @@ class Emitter {
                             branch.awaitedForInitializer.awaitExpr,
                             branch.awaitedForInitializer.forStatement,
                             branch.awaitedForInitializer.awaitedIncrementor,
+                            branch.awaitedForInitializer.loopControl,
                             terminalAdapter,
                             typeInfo.promiseType,
                             branch.awaitExpr,
