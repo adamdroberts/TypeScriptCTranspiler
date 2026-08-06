@@ -50292,14 +50292,26 @@ class Emitter {
         const parseBranch = (branch: ts.Statement): AwaitedIfBranch | null => {
             const terminal = terminalBranch(branch);
             if (terminal) return terminal;
-            const nestedStatement = ts.isBlock(branch) && branch.statements.length === 1
-                ? branch.statements[0]!
-                : branch;
-            if (!ts.isIfStatement(nestedStatement) || !nestedStatement.elseStatement) return null;
+            let nestedStatement: ts.Statement = branch;
+            let implicitElse: ts.Statement | null = null;
+            if (ts.isBlock(branch)) {
+                if (branch.statements.length === 1) {
+                    nestedStatement = branch.statements[0]!;
+                } else if (branch.statements.length === 2 &&
+                    ts.isIfStatement(branch.statements[0]) && !branch.statements[0].elseStatement) {
+                    nestedStatement = branch.statements[0];
+                    implicitElse = branch.statements[1]!;
+                } else {
+                    return null;
+                }
+            }
+            if (!ts.isIfStatement(nestedStatement) || (!nestedStatement.elseStatement && !implicitElse)) return null;
             const nestedAwait = this.unwrapTransparentExpression(nestedStatement.expression);
             if (!ts.isAwaitExpression(nestedAwait)) return null;
             const thenBranch = parseBranch(nestedStatement.thenStatement);
-            const elseBranch = parseBranch(nestedStatement.elseStatement);
+            const elseBranch = nestedStatement.elseStatement
+                ? parseBranch(nestedStatement.elseStatement)
+                : implicitElse ? parseBranch(implicitElse) : null;
             if (!thenBranch || !elseBranch) return null;
             return {
                 kind: "condition",
