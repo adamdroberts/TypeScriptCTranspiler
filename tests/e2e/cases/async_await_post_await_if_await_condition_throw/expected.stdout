@@ -1,0 +1,2 @@
+throw throw-first-true-error
+return throw-first-false

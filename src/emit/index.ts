@@ -50272,24 +50272,38 @@ class Emitter {
         if (!first || !first.variable) return false;
         const conditionAwait = this.unwrapTransparentExpression(conditional.expression);
         if (!ts.isAwaitExpression(conditionAwait)) return false;
-        const branchReturnAwait = (branch: ts.Statement): ts.AwaitExpression | null => {
+        const branchAwait = (branch: ts.Statement): { awaitExpr: ts.AwaitExpression; rejectResult: boolean } | null => {
             const statements = ts.isBlock(branch) ? branch.statements : [branch];
-            if (statements.length !== 1 || !ts.isReturnStatement(statements[0]!) || !statements[0]!.expression) {
+            const completion = statements[0];
+            if (statements.length !== 1 ||
+                (!ts.isReturnStatement(completion) && !ts.isThrowStatement(completion)) ||
+                !completion.expression) {
                 return null;
             }
-            const returned = this.unwrapTransparentExpression(statements[0]!.expression);
-            return ts.isAwaitExpression(returned) ? returned : null;
+            const returned = this.unwrapTransparentExpression(completion.expression);
+            return ts.isAwaitExpression(returned)
+                ? { awaitExpr: returned, rejectResult: ts.isThrowStatement(completion) }
+                : null;
         };
-        const trueReturnAwait = branchReturnAwait(conditional.thenStatement);
-        const falseReturnAwait = conditional.elseStatement
-            ? branchReturnAwait(conditional.elseStatement)
+        const trueBranch = branchAwait(conditional.thenStatement);
+        const falseBranch = conditional.elseStatement
+            ? branchAwait(conditional.elseStatement)
             : result && ts.isReturnStatement(result) && result.expression
                 ? (() => {
                     const returned = this.unwrapTransparentExpression(result.expression);
-                    return ts.isAwaitExpression(returned) ? returned : null;
+                    return ts.isAwaitExpression(returned)
+                        ? { awaitExpr: returned, rejectResult: false }
+                        : null;
                 })()
+                : result && ts.isThrowStatement(result) && result.expression
+                    ? (() => {
+                        const returned = this.unwrapTransparentExpression(result.expression);
+                        return ts.isAwaitExpression(returned)
+                            ? { awaitExpr: returned, rejectResult: true }
+                            : null;
+                    })()
                 : null;
-        if (!trueReturnAwait || !falseReturnAwait) return false;
+        if (!trueBranch || !falseBranch) return false;
 
         const firstSource = this.emitExpr(first.awaitExpr.expression);
         const firstPromiseType = this.prepareType(firstSource.ty);
@@ -50309,23 +50323,23 @@ class Emitter {
             this.checker,
         ));
         const truePromiseType = this.prepareType(mapTsType(
-            trueReturnAwait.expression,
-            this.checker.getTypeAtLocation(trueReturnAwait.expression),
+            trueBranch.awaitExpr.expression,
+            this.checker.getTypeAtLocation(trueBranch.awaitExpr.expression),
             this.checker,
         ));
         const trueAwaitedType = this.prepareType(mapTsType(
-            trueReturnAwait,
-            this.checker.getTypeAtLocation(trueReturnAwait),
+            trueBranch.awaitExpr,
+            this.checker.getTypeAtLocation(trueBranch.awaitExpr),
             this.checker,
         ));
         const falsePromiseType = this.prepareType(mapTsType(
-            falseReturnAwait.expression,
-            this.checker.getTypeAtLocation(falseReturnAwait.expression),
+            falseBranch.awaitExpr.expression,
+            this.checker.getTypeAtLocation(falseBranch.awaitExpr.expression),
             this.checker,
         ));
         const falseAwaitedType = this.prepareType(mapTsType(
-            falseReturnAwait,
-            this.checker.getTypeAtLocation(falseReturnAwait),
+            falseBranch.awaitExpr,
+            this.checker.getTypeAtLocation(falseBranch.awaitExpr),
             this.checker,
         ));
         const conditionTruthySupported = conditionAwaitedType.kind === "boolean" ||
@@ -50361,18 +50375,20 @@ class Emitter {
         const trueAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
             truePromiseType,
             trueAwaitedType,
-            trueReturnAwait,
-            trueReturnAwait,
+            trueBranch.awaitExpr,
+            trueBranch.awaitExpr,
             continuationParams,
             callbackThis,
+            trueBranch.rejectResult,
         );
         const falseAdapter = this.ensureAsyncAwaitExpressionReturnContinuationAdapter(
             falsePromiseType,
             falseAwaitedType,
-            falseReturnAwait,
-            falseReturnAwait,
+            falseBranch.awaitExpr,
+            falseBranch.awaitExpr,
             continuationParams,
             callbackThis,
+            falseBranch.rejectResult,
         );
         const conditionAdapter = this.ensureAsyncAwaitLoopBodyConditionalTerminalAdapter(
             conditionPromiseType,
@@ -50380,16 +50396,16 @@ class Emitter {
             conditionAwait,
             truePromiseType,
             trueAdapter,
-            trueReturnAwait,
+            trueBranch.awaitExpr,
             null,
             [],
             falsePromiseType,
             falseAdapter,
-            falseReturnAwait,
+            falseBranch.awaitExpr,
             null,
             [],
-            false,
-            false,
+            trueBranch.rejectResult,
+            falseBranch.rejectResult,
             continuationParams,
             callbackThis,
         );
