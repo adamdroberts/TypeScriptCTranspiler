@@ -48,6 +48,13 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
             if (repeats === 0) {
                 mark("condition-if");
             }
+            switch (repeats) {
+                case 0:
+                    mark("condition-switch");
+                    break;
+                default:
+                    break;
+            }
             var prefix = "condition";
             mark(prefix);
             continue conditionLoop;
@@ -68,6 +75,13 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
         ) {
             if (incrementorCount === 0) {
                 mark("incrementor-if");
+            }
+            switch (incrementorCount) {
+                case 0:
+                    mark("incrementor-switch");
+                    break;
+                default:
+                    break;
             }
             let prefix: string;
             prefix = "incrementor";
@@ -92,6 +106,13 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
             if (continueCount === 0) {
                 mark("continue-if");
             }
+            switch (continueCount) {
+                case 0:
+                    mark("continue-switch");
+                    break;
+                default:
+                    break;
+            }
             var prefix: string;
             prefix = "continue";
             mark(prefix);
@@ -114,6 +135,13 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
         ) {
             if (breakCount === 0) {
                 mark("break-if");
+            }
+            switch (breakCount) {
+                case 0:
+                    mark("break-switch");
+                    break;
+                default:
+                    break;
             }
             let prefix = "break";
             mark(prefix);

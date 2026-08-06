@@ -51463,7 +51463,8 @@ class Emitter {
                 if (loopControl && !loopControlPrelude.every((prefixStatement) =>
                     (ts.isExpressionStatement(prefixStatement) ||
                         ts.isVariableStatement(prefixStatement) ||
-                        ts.isIfStatement(prefixStatement)) &&
+                        ts.isIfStatement(prefixStatement) ||
+                        ts.isSwitchStatement(prefixStatement)) &&
                     this.asyncAwaitInterstitialControlFlowSupported(prefixStatement, true) &&
                     nestedPreludeSafe(prefixStatement))) return null;
                 if ((forStatement.condition && containsAwait(forStatement.condition) && !awaitedCondition) ||
