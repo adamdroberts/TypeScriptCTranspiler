@@ -1,0 +1,5 @@
+condition-reject nested-local-condition-rejected
+selector-reject nested-local-selector-thrown
+return nested-local-first-true-return
+throw nested-local-first-false-throw
+trace selector:nested-local-selector-first|nested-local-first-true|nested-local-first-false|

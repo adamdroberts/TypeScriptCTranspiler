@@ -50354,9 +50354,20 @@ class Emitter {
                         if (node.label || !hasEnclosingLoop(node)) safe = false;
                         return;
                     }
+                    if (ts.isVariableStatement(node)) {
+                        const declarations = node.declarationList.declarations;
+                        if ((node.declarationList.flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) === 0 ||
+                            declarations.length === 0 ||
+                            !declarations.every((declaration) =>
+                                ts.isIdentifier(declaration.name) && !!declaration.initializer)) {
+                            safe = false;
+                            return;
+                        }
+                        ts.forEachChild(node, visit);
+                        return;
+                    }
                     if (ts.isFunctionLike(node) || ts.isClassLike(node) ||
-                        ts.isVariableStatement(node) || ts.isReturnStatement(node) ||
-                        ts.isThrowStatement(node)) {
+                        ts.isReturnStatement(node) || ts.isThrowStatement(node)) {
                         safe = false;
                         return;
                     }
