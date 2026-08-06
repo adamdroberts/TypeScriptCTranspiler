@@ -72,6 +72,11 @@ async function awaitedIfNestedAwaitedVarForConditionContinue(): Promise<string> 
                     mark("condition-for-in");
                 }
             }
+            try {
+                mark("condition-try");
+            } finally {
+                mark("condition-finally");
+            }
             switch (repeats) {
                 case 0:
                     mark("condition-switch");
@@ -123,6 +128,11 @@ async function awaitedIfNestedAwaitedVarForIncrementorContinue(): Promise<string
                 if (key === "incrementor") {
                     mark("incrementor-for-in");
                 }
+            }
+            try {
+                mark("incrementor-try");
+            } finally {
+                mark("incrementor-finally");
             }
             switch (incrementorCount) {
                 case 0:
@@ -178,6 +188,11 @@ async function awaitedIfNestedAwaitedVarForContinue(): Promise<string> {
                     mark("continue-for-in");
                 }
             }
+            try {
+                mark("continue-try");
+            } finally {
+                mark("continue-finally");
+            }
             switch (continueCount) {
                 case 0:
                     mark("continue-switch");
@@ -231,6 +246,11 @@ async function awaitedIfNestedAwaitedVarForBreak(): Promise<string> {
                 if (key === "break") {
                     mark("break-for-in");
                 }
+            }
+            try {
+                mark("break-try");
+            } finally {
+                mark("break-finally");
             }
             switch (breakCount) {
                 case 0:
