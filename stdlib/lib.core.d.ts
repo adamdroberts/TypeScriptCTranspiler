@@ -2370,8 +2370,18 @@ interface HttpIncomingMessage {
     readonly method: string;
     readonly url: string;
     readonly httpVersion: string;
+    readonly statusCode?: number;
+    readonly statusMessage?: string;
     readonly headers: any;
     readonly body: string;
+}
+interface HttpRequestOptions {
+    hostname?: string;
+    host?: string;
+    port?: number;
+    path?: string;
+    method?: string;
+    headers?: any;
 }
 interface HttpServerResponse {
     statusCode: number;
@@ -2379,6 +2389,14 @@ interface HttpServerResponse {
     writeHead(statusCode: number, headers?: any, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
+}
+interface HttpClientRequest {
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    write(data: string | Buffer, ...ignored: any[]): boolean;
+    end(data?: string | Buffer, ...ignored: any[]): this;
+    destroy(...ignored: any[]): this;
 }
 interface HttpServer {
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
@@ -2396,6 +2414,8 @@ interface HttpModule {
     validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
     validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
     createServer(requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
+    request(options: HttpRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    get(options: HttpRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
 }
 declare const http: HttpModule;
 declare module "http" {
@@ -2405,6 +2425,8 @@ declare module "http" {
     export function validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
     export function validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
     export function createServer(requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
+    export function request(options: HttpRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    export function get(options: HttpRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     const defaultHttp: HttpModule;
     export default defaultHttp;
 }
@@ -2415,6 +2437,8 @@ declare module "node:http" {
     export function validateHeaderName(name: string, label?: string, ...ignored: any[]): void;
     export function validateHeaderValue(name: string, value: string, ...ignored: any[]): void;
     export function createServer(requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
+    export function request(options: HttpRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    export function get(options: HttpRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     const defaultHttp: HttpModule;
     export default defaultHttp;
 }

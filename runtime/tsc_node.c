@@ -3229,6 +3229,7 @@ typedef struct tsc_http_server_state {
 typedef struct tsc_http_connection_state {
     tsc_value_t socket;
     tsc_value_t request_listener;
+    tsc_object_t* request_object;
     char* input;
     size_t input_len;
     bool handled;
@@ -3237,6 +3238,7 @@ typedef struct tsc_http_connection_state {
 typedef struct tsc_http_response_state {
     tsc_value_t socket;
     tsc_value_t value;
+    tsc_object_t* object;
     tsc_value_t headers;
     tsc_object_t* headers_object;
     char* body;
@@ -3416,6 +3418,7 @@ static tsc_value_t tsc_http_bad_request(tsc_value_t socket) {
 
 static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* connection, const char* method, const char* target, const char* version, tsc_value_t headers, const char* body, size_t body_len) {
     tsc_object_t* request_object = tsc_object_new();
+    connection->request_object = request_object;
     tsc_object_set(request_object, tsc_str_from_lit("method", 6), tsc_value_string(tsc_str_from_cstr(method)));
     tsc_object_set(request_object, tsc_str_from_lit("url", 3), tsc_value_string(tsc_str_from_cstr(target)));
     tsc_object_set(request_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
@@ -3429,6 +3432,7 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     response->headers = tsc_value_object(response->headers_object);
     response->body = (char*)TSC_GC_MALLOC(TSC_HTTP_MAX_RESPONSE);
     tsc_object_t* response_object = tsc_object_new();
+    response->object = response_object;
     response->value = tsc_value_object(response_object);
     tsc_object_set(response_object, tsc_str_from_lit("statusCode", 10), tsc_value_num(200.0));
     tsc_object_set(response_object, tsc_str_from_lit("setHeader", 9), tsc_value_function_generic_named(tsc_http_response_set_header, response, 2.0, tsc_str_from_lit("setHeader", 9)));
@@ -3531,6 +3535,314 @@ tsc_value_t tsc_http_create_server(tsc_value_t request_listener) {
     server->request_listener = request_listener;
     tsc_value_t connection_listener = tsc_value_function_generic_named(tsc_http_server_connection, server, 1.0, tsc_str_from_lit("httpServerConnection", 20));
     return tsc_net_create_server(connection_listener);
+}
+
+typedef struct tsc_http_client_state {
+    tsc_child_event_target_t event;
+    tsc_value_t socket;
+    tsc_object_t* socket_object;
+    tsc_object_t* options_object;
+    tsc_object_t* headers_object;
+    tsc_object_t* response_object;
+    void* response_listener_identity;
+    tsc_str_t* hostname;
+    tsc_str_t* path;
+    tsc_str_t* method;
+    double port;
+    char* body;
+    size_t body_len;
+    char* response_input;
+    size_t response_input_len;
+    bool request_ended;
+    bool request_sent;
+    bool response_handled;
+} tsc_http_client_state_t;
+
+static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_array_t* args);
+static tsc_value_t tsc_http_client_end(void* env, tsc_value_t this_arg, tsc_array_t* args);
+
+static tsc_value_t tsc_http_client_socket_value(const tsc_http_client_state_t* client) {
+    return client && client->socket_object ? tsc_value_object(client->socket_object) : client->socket;
+}
+
+static void tsc_http_client_emit_error(tsc_http_client_state_t* client, const char* message) {
+    if (!client || !client->event.emitter) return;
+    tsc_child_emit_one_value(client->event.emitter, "error", tsc_value_string(tsc_str_from_cstr(message)));
+}
+
+static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
+    if (!client || !client->request_ended || client->request_sent) return;
+    tsc_value_t socket = tsc_http_client_socket_value(client);
+    tsc_value_t connecting = tsc_value_get_prop(socket, tsc_str_from_lit("connecting", 10));
+    if (tsc_value_is_undefined(connecting) || tsc_value_as_bool(connecting)) return;
+
+    tsc_str_t* output = tsc_str_concat_n(5,
+        client->method,
+        tsc_str_from_lit(" ", 1),
+        client->path,
+        tsc_str_from_lit(" HTTP/1.1\r\n", 11),
+        tsc_str_from_lit("", 0));
+    if (!tsc_http_has_header(tsc_value_object(client->headers_object), "host")) {
+        if (client->port == 80.0) {
+            output = tsc_str_concat_n(4, output, tsc_str_from_lit("Host: ", 6), client->hostname, tsc_str_from_lit("\r\n", 2));
+        } else {
+            char host_line[128];
+            snprintf(host_line, sizeof(host_line), "Host: %s:%d\r\n", client->hostname->data, (int)client->port);
+            output = tsc_str_concat(output, tsc_str_from_cstr(host_line));
+        }
+    }
+    output = tsc_str_concat(output, tsc_http_header_block(tsc_value_object(client->headers_object)));
+    if (!tsc_http_has_header(tsc_value_object(client->headers_object), "content-length")) {
+        char length_line[64];
+        snprintf(length_line, sizeof(length_line), "Content-Length: %zu\r\n", client->body_len);
+        output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
+    }
+    if (!tsc_http_has_header(tsc_value_object(client->headers_object), "connection")) {
+        output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
+    }
+    output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
+    if (client->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(client->body, client->body_len));
+    client->request_sent = true;
+    tsc_http_socket_end(socket, output);
+}
+
+static tsc_value_t tsc_http_client_connect(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_http_client_try_send((tsc_http_client_state_t*)env);
+    return tsc_value_undefined();
+}
+
+static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !args || args->len < 1) return tsc_value_bool(false);
+    const char* data = NULL;
+    size_t len = 0;
+    if (!tsc_http_value_bytes(TSC_ARR(tsc_value_t, args, 0), &data, &len)) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.write expects string or Buffer"));
+    }
+    if (client->request_ended) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.write after end"));
+    }
+    if (client->body_len + len > TSC_HTTP_MAX_REQUEST) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest request body exceeds the bounded limit"));
+    }
+    memcpy(client->body + client->body_len, data, len);
+    client->body_len += len;
+    return tsc_value_bool(true);
+}
+
+static tsc_value_t tsc_http_client_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || client->request_ended) return this_arg;
+    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+        (void)tsc_http_client_write(env, this_arg, args);
+    }
+    client->request_ended = true;
+    tsc_http_client_try_send(client);
+    return this_arg;
+}
+
+static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (client) {
+        tsc_value_t socket = tsc_http_client_socket_value(client);
+        tsc_value_t destroy = tsc_value_get_prop(socket, tsc_str_from_lit("destroy", 7));
+        if (tsc_value_is_callable(destroy)) {
+            tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+            (void)tsc_value_apply_function(destroy, socket, tsc_value_array(empty));
+        }
+    }
+    return this_arg;
+}
+
+static bool tsc_http_client_parse_response(tsc_http_client_state_t* client, tsc_value_t* out_response) {
+    if (!client || !client->response_input || !out_response) return false;
+    size_t header_end = tsc_http_find_header_end(client->response_input, client->response_input_len);
+    if (header_end == SIZE_MAX) return false;
+    char* status_line_end = strstr(client->response_input, "\r\n");
+    if (!status_line_end || (size_t)(status_line_end - client->response_input) > header_end) return false;
+    char version[32] = { 0 };
+    char status_message[256] = { 0 };
+    int status = 0;
+    int scanned = sscanf(client->response_input, "HTTP/%31s %d %255[^\r\n]", version, &status, status_message);
+    if (scanned < 2 || status < 100 || status > 999) return false;
+
+    tsc_object_t* headers_object = tsc_object_new();
+    size_t content_length = 0;
+    bool has_content_length = false;
+    size_t cursor = (size_t)(status_line_end - client->response_input) + 2;
+    while (cursor < header_end) {
+        char* line_end = strstr(client->response_input + cursor, "\r\n");
+        if (!line_end || (size_t)(line_end - client->response_input) > header_end) return false;
+        char* colon = memchr(client->response_input + cursor, ':', (size_t)(line_end - (client->response_input + cursor)));
+        if (!colon) return false;
+        size_t name_len = (size_t)(colon - (client->response_input + cursor));
+        size_t line_len = (size_t)(line_end - (client->response_input + cursor));
+        size_t value_start = name_len + 1;
+        while (value_start < line_len && isspace((unsigned char)client->response_input[cursor + value_start])) value_start++;
+        size_t value_len = line_len - value_start;
+        char name[256] = { 0 };
+        if (name_len == 0 || name_len >= sizeof(name)) return false;
+        for (size_t i = 0; i < name_len; i++) name[i] = (char)tolower((unsigned char)client->response_input[cursor + i]);
+        tsc_object_set(headers_object, tsc_str_from_cstr(name), tsc_value_string(tsc_str_from_lit(client->response_input + cursor + value_start, value_len)));
+        if (strcmp(name, "content-length") == 0) {
+            char length_text[64] = { 0 };
+            size_t copy_len = value_len < sizeof(length_text) - 1 ? value_len : sizeof(length_text) - 1;
+            memcpy(length_text, client->response_input + cursor + value_start, copy_len);
+            char* end = NULL;
+            unsigned long long parsed = strtoull(length_text, &end, 10);
+            if (end == length_text || *end != '\0' || parsed > TSC_HTTP_MAX_RESPONSE) return false;
+            content_length = (size_t)parsed;
+            has_content_length = true;
+        }
+        cursor = (size_t)(line_end - client->response_input) + 2;
+    }
+    size_t body_offset = header_end + 4;
+    if (body_offset > client->response_input_len) return false;
+    size_t body_len = client->response_input_len - body_offset;
+    if (has_content_length) {
+        if (body_len < content_length) return false;
+        body_len = content_length;
+    }
+    tsc_object_t* response_object = tsc_object_new();
+    client->response_object = response_object;
+    tsc_object_set(response_object, tsc_str_from_lit("statusCode", 10), tsc_value_num((double)status));
+    tsc_object_set(response_object, tsc_str_from_lit("statusMessage", 13), tsc_value_string(tsc_str_from_cstr(scanned >= 3 ? status_message : "")));
+    tsc_object_set(response_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
+    tsc_value_t headers = tsc_value_object(headers_object);
+    tsc_object_set(response_object, tsc_str_from_lit("headers", 7), headers);
+    tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit(client->response_input + body_offset, body_len)));
+    *out_response = tsc_value_object(response_object);
+    return true;
+}
+
+static tsc_value_t tsc_http_client_data(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || client->response_handled || !args || args->len < 1) return tsc_value_undefined();
+    const char* data = NULL;
+    size_t len = 0;
+    if (!tsc_http_value_bytes(TSC_ARR(tsc_value_t, args, 0), &data, &len)) return tsc_value_undefined();
+    if (client->response_input_len + len > TSC_HTTP_MAX_RESPONSE) {
+        client->response_handled = true;
+        tsc_http_client_emit_error(client, "http.ClientRequest response exceeds the bounded limit");
+        return tsc_value_undefined();
+    }
+    memcpy(client->response_input + client->response_input_len, data, len);
+    client->response_input_len += len;
+    client->response_input[client->response_input_len] = '\0';
+    return tsc_value_undefined();
+}
+
+static tsc_value_t tsc_http_client_end_read(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || client->response_handled) return tsc_value_undefined();
+    client->response_handled = true;
+    tsc_value_t response = tsc_value_undefined();
+    if (!tsc_http_client_parse_response(client, &response)) {
+        tsc_http_client_emit_error(client, "http.ClientRequest received an invalid or incomplete HTTP response");
+        return tsc_value_undefined();
+    }
+    tsc_array_t* response_args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(response_args, response);
+    (void)tsc_event_emitter_emit(client->event.emitter, tsc_str_from_lit("response", 8), response_args);
+    return tsc_value_undefined();
+}
+
+static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_value_t options) {
+    client->headers_object = tsc_object_new();
+    tsc_value_t headers = tsc_value_get_prop(options, tsc_str_from_lit("headers", 7));
+    if (!tsc_value_is_object(headers)) return;
+    tsc_array_t* keys = tsc_value_object_keys(headers);
+    for (size_t i = 0; keys && i < keys->len; i++) {
+        tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
+        tsc_object_set(client->headers_object, key, tsc_value_get_prop(headers, key));
+    }
+}
+
+static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t response_listener, bool force_get) {
+    if (!tsc_value_is_object(options)) {
+        tsc_throw_str(tsc_str_from_cstr("http.request options must be an object"));
+    }
+    if (!tsc_value_is_undefined(response_listener) && !tsc_value_is_nullish(response_listener) && !tsc_value_is_callable(response_listener)) {
+        tsc_throw_str(tsc_str_from_cstr("http.request response listener must be a function"));
+    }
+    tsc_object_t* options_object = (value_is_box(options) && value_tag(options) == TSC_VALUE_TAG_OBJECT)
+        ? (tsc_object_t*)value_ptr(options)
+        : NULL;
+    if (!options_object) {
+        tsc_throw_str(tsc_str_from_cstr("http.request options must be a plain object"));
+    }
+    void* response_listener_identity = tsc_value_is_callable(response_listener) ? value_ptr(response_listener) : NULL;
+    tsc_value_t hostname_value = tsc_value_get_prop(options, tsc_str_from_lit("hostname", 8));
+    if (tsc_value_is_undefined(hostname_value) || tsc_value_is_nullish(hostname_value)) {
+        hostname_value = tsc_value_get_prop(options, tsc_str_from_lit("host", 4));
+    }
+    tsc_str_t* hostname = tsc_value_as_string(hostname_value);
+    if (!hostname) hostname = tsc_str_from_lit("127.0.0.1", 9);
+    tsc_value_t port_value = tsc_value_get_prop(options, tsc_str_from_lit("port", 4));
+    double port = tsc_value_is_undefined(port_value) || tsc_value_is_nullish(port_value) ? 80.0 : tsc_value_as_num(port_value);
+    if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
+        tsc_throw_str(tsc_str_from_cstr("http.request port must be an integer from 1 to 65535"));
+    }
+    tsc_value_t path_value = tsc_value_get_prop(options, tsc_str_from_lit("path", 4));
+    tsc_str_t* path = tsc_value_as_string(path_value);
+    if (!path) path = tsc_str_from_lit("/", 1);
+    tsc_value_t method_value = tsc_value_get_prop(options, tsc_str_from_lit("method", 6));
+    tsc_str_t* method = force_get ? tsc_str_from_lit("GET", 3) : tsc_value_as_string(method_value);
+    if (!method) method = tsc_str_from_lit("GET", 3);
+
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_client_state_t));
+    memset(client, 0, sizeof(*client));
+    client->options_object = options_object;
+    client->response_listener_identity = response_listener_identity;
+    client->event.emitter = tsc_event_emitter_new();
+    client->hostname = hostname;
+    client->path = path;
+    client->method = method;
+    client->port = port;
+    client->body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_REQUEST + 1);
+    client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
+    tsc_http_client_copy_headers(client, tsc_value_object(client->options_object));
+
+    tsc_object_t* object = tsc_object_new();
+    client->event.object = object;
+    client->event.value = tsc_value_object(object);
+    tsc_child_add_event_methods(object, &client->event);
+    tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_client_write, client, 1.0, tsc_str_from_lit("write", 5)));
+    tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_http_client_end, client, 0.0, tsc_str_from_lit("end", 3)));
+    tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_http_client_destroy, client, 0.0, tsc_str_from_lit("destroy", 7)));
+    if (client->response_listener_identity) {
+        tsc_value_t rooted_response_listener = value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)client->response_listener_identity);
+        tsc_object_set(object, tsc_str_from_lit("__httpResponseListener", 22), rooted_response_listener);
+        tsc_net_register_listener(&client->event, "response", rooted_response_listener, true);
+    }
+    tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
+    client->socket = tsc_net_connect(port, hostname, connect_listener);
+    client->socket_object = (value_is_box(client->socket) && value_tag(client->socket) == TSC_VALUE_TAG_OBJECT)
+        ? (tsc_object_t*)value_ptr(client->socket)
+        : NULL;
+    tsc_value_t socket = tsc_http_client_socket_value(client);
+    tsc_http_attach_socket_listener(socket, "data", tsc_http_client_data, client, 1.0, "httpClientData");
+    tsc_http_attach_socket_listener(socket, "end", tsc_http_client_end_read, client, 0.0, "httpClientEnd");
+    if (force_get) {
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_http_client_end(client, client->event.value, empty);
+    }
+    return client->event.value;
+}
+
+tsc_value_t tsc_http_request(tsc_value_t options, tsc_value_t response_listener) {
+    return tsc_http_request_internal(options, response_listener, false);
+}
+
+tsc_value_t tsc_http_get(tsc_value_t options, tsc_value_t response_listener) {
+    return tsc_http_request_internal(options, response_listener, true);
 }
 
 double tsc_event_emitter_get_default_max_listeners(void) {

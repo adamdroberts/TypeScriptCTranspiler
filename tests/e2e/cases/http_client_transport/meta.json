@@ -1,0 +1,3 @@
+{
+  "description": "http.request and http.get send bounded HTTP/1.1 requests and parse close-delimited responses"
+}

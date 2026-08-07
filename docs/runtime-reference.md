@@ -425,11 +425,13 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 | `tsc_net_create_server(connection_listener)` | `tsc_value_t` | `net.createServer(connectionListener?)` — creates a timer-polled POSIX IPv4 server with dynamic EventEmitter-compatible lifecycle methods, `listen`, `close`, and `address` |
 | `tsc_net_connect(port, host, connect_listener)` | `tsc_value_t` | `net.connect` / `net.createConnection` — creates a nonblocking POSIX IPv4 socket, emits `connect` / `data` / `end` / `close` / `error`, and exposes UTF-8, string/Buffer write, half-close, destroy, and endpoint metadata methods |
 
-## http (bounded HTTP/1.1 server and validation subset)
+## http (bounded HTTP/1.1 client/server and validation subset)
 
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
-| `tsc_http_create_server(request_listener)` | `tsc_value_t` | `http.createServer(requestListener?)` — creates an HTTP/1.1 server over the native TCP runtime, parsing one bounded request and exposing request metadata plus response status/header/body methods; chunked transfer, keep-alive, streaming, client request APIs, `https`, and `http2` remain deferred |
+| `tsc_http_request(options, response_listener)` | `tsc_value_t` | `http.request(options, callback?)` — opens a native TCP connection, buffers bounded string/Buffer request writes until `end`, and parses one close-delimited HTTP/1.1 response with status/version/headers/body metadata; chunked transfer, keep-alive, streaming, `https`, and `http2` remain deferred |
+| `tsc_http_get(options, response_listener)` | `tsc_value_t` | `http.get(options, callback?)` — creates the same bounded client request and automatically ends it |
+| `tsc_http_create_server(request_listener)` | `tsc_value_t` | `http.createServer(requestListener?)` — creates an HTTP/1.1 server over the native TCP runtime, parsing one bounded request and exposing request metadata plus response status/header/body methods; chunked transfer, keep-alive, streaming, `https`, and `http2` remain deferred |
 | `tsc_http_validate_header_name(name)` | `void` | `http.validateHeaderName(name)` — validates an HTTP token name and throws through the runtime error path on invalid input |
 | `tsc_http_validate_header_value(name, value)` | `void` | `http.validateHeaderValue(name, value)` — validates header content and throws through the runtime error path on invalid control characters |
 

@@ -71356,7 +71356,7 @@ class Emitter {
         if (netNamed) {
             return this.emitNetCall(call, netNamed);
         }
-        const httpNamed = ["validateHeaderName", "validateHeaderValue", "createServer"]
+        const httpNamed = ["validateHeaderName", "validateHeaderValue", "createServer", "request", "get"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["http", "node:http"], exported));
         if (httpNamed) {
             return this.emitHttpCall(call, httpNamed);
@@ -79672,6 +79672,25 @@ class Emitter {
                 { value: listener, target: T_VALUE, node: listenerNode },
                 ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 1 : 0),
             ], ([listenerC]) => `tsc_http_create_server(${listenerC})`);
+        }
+        if (method === "request" || method === "get") {
+            if (call.arguments.length < 1) unsupported(call, `http.${method} expects options`);
+            const optionsNode = call.arguments[0]!;
+            const options = this.emitExpr(optionsNode);
+            const listenerNode = call.arguments[1];
+            const listener = listenerNode
+                ? this.emitExpr(listenerNode)
+                : { c: "tsc_value_undefined()", ty: T_VALUE };
+            if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+                unsupported(listenerNode, `http.${method} response listener must be a function`);
+            }
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: options, target: T_VALUE, node: optionsNode },
+                { value: listener, target: T_VALUE, node: listenerNode },
+                ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 2 : 1),
+            ], ([optionsC, listenerC]) =>
+                `tsc_http_${method}(${optionsC}, ${listenerC})`,
+            );
         }
         if (method === "validateHeaderName") {
             if (call.arguments.length < 1) unsupported(call, "http.validateHeaderName expects a name");
