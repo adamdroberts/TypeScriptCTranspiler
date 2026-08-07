@@ -2374,6 +2374,9 @@ interface HttpIncomingMessage {
     readonly statusMessage?: string;
     readonly headers: any;
     readonly body: string;
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
 }
 interface HttpRequestOptions {
     hostname?: string;

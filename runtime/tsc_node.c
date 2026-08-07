@@ -3244,6 +3244,8 @@ typedef struct tsc_http_response_state {
     char* body;
     size_t body_len;
     bool ended;
+    bool headers_sent;
+    bool chunked_stream;
 } tsc_http_response_state_t;
 
 static bool tsc_http_equal_ci(const tsc_str_t* value, const char* literal) {
@@ -3431,6 +3433,34 @@ static void tsc_http_socket_end(tsc_value_t socket, tsc_str_t* data) {
     (void)tsc_value_apply_function(end, socket, tsc_value_array(args));
 }
 
+static void tsc_http_socket_write(tsc_value_t socket, tsc_str_t* data) {
+    tsc_value_t write = tsc_value_get_prop(socket, tsc_str_from_lit("write", 5));
+    if (!tsc_value_is_callable(write)) return;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, tsc_value_string(data ? data : tsc_str_from_lit("", 0)));
+    (void)tsc_value_apply_function(write, socket, tsc_value_array(args));
+}
+
+static void tsc_http_response_send_headers(tsc_http_response_state_t* response) {
+    if (!response || response->headers_sent) return;
+    int status = (int)tsc_value_as_num(tsc_value_get_prop(response->value, tsc_str_from_lit("statusCode", 10)));
+    if (status <= 0) status = 200;
+    char status_line[96];
+    snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\n", status, tsc_http_status_text(status));
+    tsc_str_t* output = tsc_str_concat(tsc_str_from_cstr(status_line), tsc_http_header_block(response->headers));
+    if (!response->chunked_stream && !tsc_http_has_header(response->headers, "content-length")) {
+        char length_line[64];
+        snprintf(length_line, sizeof(length_line), "Content-Length: %zu\r\n", response->body_len);
+        output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
+    }
+    if (!tsc_http_has_header(response->headers, "connection")) {
+        output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
+    }
+    output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
+    response->headers_sent = true;
+    tsc_http_socket_write(response->socket, output);
+}
+
 static tsc_value_t tsc_http_response_set_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
     if (!response || !args || args->len < 2) {
@@ -3467,6 +3497,20 @@ static tsc_value_t tsc_http_response_write(void* env, tsc_value_t this_arg, tsc_
     if (!tsc_http_value_bytes(TSC_ARR(tsc_value_t, args, 0), &data, &len)) {
         tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.write expects string or Buffer"));
     }
+    if (tsc_http_header_value_contains(response->headers, "transfer-encoding", "chunked")) {
+        response->chunked_stream = true;
+        tsc_http_response_send_headers(response);
+        char chunk_line[64];
+        snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", len);
+        tsc_str_t* chunk = tsc_str_concat_n(4,
+            tsc_str_from_cstr(chunk_line),
+            tsc_str_from_lit(data, len),
+            tsc_str_from_lit("\r\n", 2),
+            tsc_str_from_lit("", 0)
+        );
+        tsc_http_socket_write(response->socket, chunk);
+        return tsc_value_bool(true);
+    }
     if (response->body_len + len > TSC_HTTP_MAX_RESPONSE) {
         tsc_throw_str(tsc_str_from_cstr("http.ServerResponse response body exceeds the bounded limit"));
     }
@@ -3478,33 +3522,22 @@ static tsc_value_t tsc_http_response_write(void* env, tsc_value_t this_arg, tsc_
 static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
     if (!response || response->ended) return this_arg;
+    if (tsc_http_header_value_contains(response->headers, "transfer-encoding", "chunked")) {
+        response->chunked_stream = true;
+        if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+            (void)tsc_http_response_write(env, this_arg, args);
+        }
+        tsc_http_response_send_headers(response);
+        tsc_http_socket_write(response->socket, tsc_str_from_lit("0\r\n\r\n", 7));
+        response->ended = true;
+        tsc_http_socket_end(response->socket, NULL);
+        return this_arg;
+    }
     if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
         (void)tsc_http_response_write(env, this_arg, args);
     }
-    int status = (int)tsc_value_as_num(tsc_value_get_prop(response->value, tsc_str_from_lit("statusCode", 10)));
-    if (status <= 0) status = 200;
-    char status_line[96];
-    snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\n", status, tsc_http_status_text(status));
-    tsc_str_t* output = tsc_str_concat(tsc_str_from_cstr(status_line), tsc_http_header_block(response->headers));
-    bool chunked = tsc_http_header_value_contains(response->headers, "transfer-encoding", "chunked");
-    if (!chunked && !tsc_http_has_header(response->headers, "content-length")) {
-        char length_line[64];
-        snprintf(length_line, sizeof(length_line), "Content-Length: %zu\r\n", response->body_len);
-        output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
-    }
-    if (!tsc_http_has_header(response->headers, "connection")) {
-        output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
-    }
-    output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
-    if (chunked) {
-        char chunk_line[64];
-        snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", response->body_len);
-        output = tsc_str_concat(output, tsc_str_from_cstr(chunk_line));
-        if (response->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(response->body, response->body_len));
-        output = tsc_str_concat(output, tsc_str_from_lit("\r\n0\r\n\r\n", 7));
-    } else if (response->body_len > 0) {
-        output = tsc_str_concat(output, tsc_str_from_lit(response->body, response->body_len));
-    }
+    tsc_http_response_send_headers(response);
+    tsc_str_t* output = tsc_str_from_lit(response->body, response->body_len);
     response->ended = true;
     tsc_http_socket_end(response->socket, output);
     return this_arg;
@@ -3660,6 +3693,7 @@ typedef struct tsc_http_client_state {
     tsc_object_t* options_object;
     tsc_object_t* headers_object;
     tsc_object_t* response_object;
+    tsc_child_event_target_t response_event;
     void* response_listener_identity;
     tsc_str_t* hostname;
     tsc_str_t* path;
@@ -3669,9 +3703,22 @@ typedef struct tsc_http_client_state {
     size_t body_len;
     char* response_input;
     size_t response_input_len;
+    char* response_body;
+    size_t response_body_len;
+    size_t response_cursor;
+    size_t response_content_length;
+    size_t response_chunk_size;
+    tsc_array_t* response_pending_data;
     bool request_ended;
     bool request_sent;
     bool response_handled;
+    bool response_headers_parsed;
+    bool response_has_content_length;
+    bool response_chunked;
+    bool response_chunk_size_ready;
+    bool response_complete;
+    bool response_event_emitted;
+    bool response_end_pending;
 } tsc_http_client_state_t;
 
 static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_array_t* args);
@@ -3783,35 +3830,32 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
     return this_arg;
 }
 
-static bool tsc_http_client_parse_response(tsc_http_client_state_t* client, tsc_value_t* out_response) {
-    if (!client || !client->response_input || !out_response) return false;
+static int tsc_http_client_parse_response_headers(tsc_http_client_state_t* client) {
+    if (!client || !client->response_input) return -1;
     size_t header_end = tsc_http_find_header_end(client->response_input, client->response_input_len);
-    if (header_end == SIZE_MAX) return false;
+    if (header_end == SIZE_MAX) return 0;
     char* status_line_end = strstr(client->response_input, "\r\n");
-    if (!status_line_end || (size_t)(status_line_end - client->response_input) > header_end) return false;
+    if (!status_line_end || (size_t)(status_line_end - client->response_input) > header_end) return -1;
     char version[32] = { 0 };
     char status_message[256] = { 0 };
     int status = 0;
     int scanned = sscanf(client->response_input, "HTTP/%31s %d %255[^\r\n]", version, &status, status_message);
-    if (scanned < 2 || status < 100 || status > 999) return false;
+    if (scanned < 2 || status < 100 || status > 999) return -1;
 
     tsc_object_t* headers_object = tsc_object_new();
-    size_t content_length = 0;
-    bool has_content_length = false;
-    bool chunked = false;
     size_t cursor = (size_t)(status_line_end - client->response_input) + 2;
     while (cursor < header_end) {
         char* line_end = strstr(client->response_input + cursor, "\r\n");
-        if (!line_end || (size_t)(line_end - client->response_input) > header_end) return false;
+        if (!line_end || (size_t)(line_end - client->response_input) > header_end) return -1;
         char* colon = memchr(client->response_input + cursor, ':', (size_t)(line_end - (client->response_input + cursor)));
-        if (!colon) return false;
+        if (!colon) return -1;
         size_t name_len = (size_t)(colon - (client->response_input + cursor));
         size_t line_len = (size_t)(line_end - (client->response_input + cursor));
         size_t value_start = name_len + 1;
         while (value_start < line_len && isspace((unsigned char)client->response_input[cursor + value_start])) value_start++;
         size_t value_len = line_len - value_start;
         char name[256] = { 0 };
-        if (name_len == 0 || name_len >= sizeof(name)) return false;
+        if (name_len == 0 || name_len >= sizeof(name)) return -1;
         for (size_t i = 0; i < name_len; i++) name[i] = (char)tolower((unsigned char)client->response_input[cursor + i]);
         tsc_object_set(headers_object, tsc_str_from_cstr(name), tsc_value_string(tsc_str_from_lit(client->response_input + cursor + value_start, value_len)));
         if (strcmp(name, "content-length") == 0) {
@@ -3820,38 +3864,150 @@ static bool tsc_http_client_parse_response(tsc_http_client_state_t* client, tsc_
             memcpy(length_text, client->response_input + cursor + value_start, copy_len);
             char* end = NULL;
             unsigned long long parsed = strtoull(length_text, &end, 10);
-            if (end == length_text || *end != '\0' || parsed > TSC_HTTP_MAX_RESPONSE) return false;
-            content_length = (size_t)parsed;
-            has_content_length = true;
+            if (end == length_text || *end != '\0' || parsed > TSC_HTTP_MAX_RESPONSE) return -1;
+            client->response_content_length = (size_t)parsed;
+            client->response_has_content_length = true;
         }
         if (strcmp(name, "transfer-encoding") == 0) {
-            chunked = tsc_http_token_list_contains(client->response_input + cursor + value_start, value_len, "chunked");
+            client->response_chunked = tsc_http_token_list_contains(client->response_input + cursor + value_start, value_len, "chunked");
         }
         cursor = (size_t)(line_end - client->response_input) + 2;
     }
-    size_t body_offset = header_end + 4;
-    if (body_offset > client->response_input_len) return false;
-    const char* body = client->response_input + body_offset;
-    size_t body_len = client->response_input_len - body_offset;
-    char decoded_body[TSC_HTTP_MAX_RESPONSE + 1];
-    if (chunked) {
-        bool complete = false;
-        if (!tsc_http_decode_chunked(body, body_len, decoded_body, TSC_HTTP_MAX_RESPONSE, &body_len, &complete) || !complete) return false;
-        body = decoded_body;
-    } else if (has_content_length) {
-        if (body_len < content_length) return false;
-        body_len = content_length;
-    }
+
     tsc_object_t* response_object = tsc_object_new();
     client->response_object = response_object;
+    client->response_event.object = response_object;
+    client->response_event.value = tsc_value_object(response_object);
+    client->response_event.emitter = tsc_event_emitter_new();
+    tsc_child_add_event_methods(response_object, &client->response_event);
     tsc_object_set(response_object, tsc_str_from_lit("statusCode", 10), tsc_value_num((double)status));
     tsc_object_set(response_object, tsc_str_from_lit("statusMessage", 13), tsc_value_string(tsc_str_from_cstr(scanned >= 3 ? status_message : "")));
     tsc_object_set(response_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
-    tsc_value_t headers = tsc_value_object(headers_object);
-    tsc_object_set(response_object, tsc_str_from_lit("headers", 7), headers);
-    tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit(body, body_len)));
-    *out_response = tsc_value_object(response_object);
+    tsc_object_set(response_object, tsc_str_from_lit("headers", 7), tsc_value_object(headers_object));
+    tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit("", 0)));
+    client->response_body_len = 0;
+    client->response_cursor = header_end + 4;
+    client->response_chunk_size = 0;
+    client->response_chunk_size_ready = false;
+    client->response_headers_parsed = true;
+    return 1;
+}
+
+static bool tsc_http_client_append_response_body(tsc_http_client_state_t* client, const char* data, size_t len) {
+    if (!client || !client->response_body || len > TSC_HTTP_MAX_RESPONSE - client->response_body_len) return false;
+    if (len > 0) {
+        memcpy(client->response_body + client->response_body_len, data, len);
+        client->response_body_len += len;
+        client->response_body[client->response_body_len] = '\0';
+        tsc_object_set(client->response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit(client->response_body, client->response_body_len)));
+        tsc_str_t* chunk = tsc_str_from_lit(data, len);
+        if (client->response_event_emitted) {
+            tsc_child_emit_one_value(client->response_event.emitter, "data", tsc_value_string(chunk));
+        } else if (client->response_pending_data) {
+            tsc_array_push_raw(client->response_pending_data, &chunk);
+        }
+    }
     return true;
+}
+
+static void tsc_http_client_finish_response(tsc_http_client_state_t* client) {
+    if (!client || client->response_complete) return;
+    client->response_complete = true;
+    client->response_handled = true;
+    if (!client->response_event_emitted) {
+        client->response_end_pending = true;
+        return;
+    }
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(client->response_event.emitter, tsc_str_from_lit("end", 3), empty);
+}
+
+static bool tsc_http_client_process_response_body(tsc_http_client_state_t* client) {
+    if (!client || !client->response_headers_parsed) return true;
+    if (client->response_chunked) {
+        for (;;) {
+            if (!client->response_chunk_size_ready) {
+                size_t line_end = tsc_http_find_crlf(client->response_input, client->response_input_len, client->response_cursor);
+                if (line_end == SIZE_MAX) return true;
+                size_t line_len = line_end - client->response_cursor;
+                if (line_len == 0 || line_len >= 64) return false;
+                char size_text[64] = { 0 };
+                memcpy(size_text, client->response_input + client->response_cursor, line_len);
+                char* extension = strchr(size_text, ';');
+                if (extension) *extension = '\0';
+                char* size_start = size_text;
+                while (*size_start && isspace((unsigned char)*size_start)) size_start++;
+                char* size_end = size_start + strlen(size_start);
+                while (size_end > size_start && isspace((unsigned char)size_end[-1])) *--size_end = '\0';
+                char* parsed_end = NULL;
+                unsigned long long parsed = strtoull(size_start, &parsed_end, 16);
+                if (*size_start == '\0' || parsed_end == size_start || *parsed_end != '\0' || parsed > TSC_HTTP_MAX_RESPONSE) return false;
+                client->response_chunk_size = (size_t)parsed;
+                client->response_cursor = line_end + 2;
+                client->response_chunk_size_ready = true;
+                if (client->response_chunk_size == 0) {
+                    if (client->response_input_len - client->response_cursor >= 2 &&
+                        client->response_input[client->response_cursor] == '\r' &&
+                        client->response_input[client->response_cursor + 1] == '\n') {
+                        client->response_cursor += 2;
+                        tsc_http_client_finish_response(client);
+                        return true;
+                    }
+                    size_t trailer_end = tsc_http_find_header_end(
+                        client->response_input + client->response_cursor,
+                        client->response_input_len - client->response_cursor
+                    );
+                    if (trailer_end != SIZE_MAX) {
+                        client->response_cursor += trailer_end + 4;
+                        tsc_http_client_finish_response(client);
+                    }
+                    return true;
+                }
+            }
+            size_t available = client->response_input_len - client->response_cursor;
+            if (available < client->response_chunk_size) return true;
+            if (!tsc_http_client_append_response_body(client, client->response_input + client->response_cursor, client->response_chunk_size)) return false;
+            client->response_cursor += client->response_chunk_size;
+            client->response_chunk_size = 0;
+            if (client->response_input_len - client->response_cursor < 2) return true;
+            if (client->response_input[client->response_cursor] != '\r' || client->response_input[client->response_cursor + 1] != '\n') return false;
+            client->response_cursor += 2;
+            client->response_chunk_size_ready = false;
+        }
+    }
+    if (client->response_has_content_length) {
+        size_t remaining = client->response_content_length - client->response_body_len;
+        size_t available = client->response_input_len - client->response_cursor;
+        size_t take = available < remaining ? available : remaining;
+        if (take > 0 && !tsc_http_client_append_response_body(client, client->response_input + client->response_cursor, take)) return false;
+        client->response_cursor += take;
+        if (client->response_body_len == client->response_content_length) tsc_http_client_finish_response(client);
+        return true;
+    }
+    if (client->response_input_len > client->response_cursor) {
+        size_t available = client->response_input_len - client->response_cursor;
+        if (!tsc_http_client_append_response_body(client, client->response_input + client->response_cursor, available)) return false;
+        client->response_cursor += available;
+    }
+    return true;
+}
+
+static void tsc_http_client_emit_response(tsc_http_client_state_t* client) {
+    if (!client || !client->response_object) return;
+    tsc_array_t* response_args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(response_args, client->response_event.value);
+    (void)tsc_event_emitter_emit(client->event.emitter, tsc_str_from_lit("response", 8), response_args);
+    client->response_event_emitted = true;
+    for (size_t i = 0; client->response_pending_data && i < client->response_pending_data->len; i++) {
+        tsc_str_t* chunk = TSC_ARR(tsc_str_t*, client->response_pending_data, i);
+        if (chunk) tsc_child_emit_one_value(client->response_event.emitter, "data", tsc_value_string(chunk));
+    }
+    if (client->response_pending_data) client->response_pending_data->len = 0;
+    if (client->response_end_pending) {
+        client->response_end_pending = false;
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_event_emitter_emit(client->response_event.emitter, tsc_str_from_lit("end", 3), empty);
+    }
 }
 
 static tsc_value_t tsc_http_client_data(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -3869,6 +4025,19 @@ static tsc_value_t tsc_http_client_data(void* env, tsc_value_t this_arg, tsc_arr
     memcpy(client->response_input + client->response_input_len, data, len);
     client->response_input_len += len;
     client->response_input[client->response_input_len] = '\0';
+    bool had_response_headers = client->response_headers_parsed;
+    int parsed = had_response_headers ? 1 : tsc_http_client_parse_response_headers(client);
+    if (parsed < 0) {
+        client->response_handled = true;
+        tsc_http_client_emit_error(client, "http.ClientRequest received an invalid HTTP response");
+        return tsc_value_undefined();
+    }
+    if (client->response_headers_parsed && !tsc_http_client_process_response_body(client)) {
+        client->response_handled = true;
+        tsc_http_client_emit_error(client, "http.ClientRequest received an invalid HTTP response body");
+    } else if (parsed > 0 && !had_response_headers) {
+        tsc_http_client_emit_response(client);
+    }
     return tsc_value_undefined();
 }
 
@@ -3877,15 +4046,25 @@ static tsc_value_t tsc_http_client_end_read(void* env, tsc_value_t this_arg, tsc
     (void)args;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
     if (!client || client->response_handled) return tsc_value_undefined();
-    client->response_handled = true;
-    tsc_value_t response = tsc_value_undefined();
-    if (!tsc_http_client_parse_response(client, &response)) {
+    bool had_response_headers = client->response_headers_parsed;
+    int parsed = had_response_headers ? 1 : tsc_http_client_parse_response_headers(client);
+    if (parsed < 0 || (!client->response_headers_parsed && parsed == 0)) {
+        client->response_handled = true;
         tsc_http_client_emit_error(client, "http.ClientRequest received an invalid or incomplete HTTP response");
         return tsc_value_undefined();
     }
-    tsc_array_t* response_args = tsc_array_new(sizeof(tsc_value_t), 1);
-    tsc_array_push_value(response_args, response);
-    (void)tsc_event_emitter_emit(client->event.emitter, tsc_str_from_lit("response", 8), response_args);
+    if (!tsc_http_client_process_response_body(client)) {
+        client->response_handled = true;
+        tsc_http_client_emit_error(client, "http.ClientRequest received an invalid HTTP response body");
+        return tsc_value_undefined();
+    }
+    if (!client->response_complete && client->response_headers_parsed && !client->response_chunked && !client->response_has_content_length) {
+        tsc_http_client_finish_response(client);
+    } else if (!client->response_complete) {
+        client->response_handled = true;
+        tsc_http_client_emit_error(client, "http.ClientRequest received an invalid or incomplete HTTP response");
+    }
+    if (parsed > 0 && !had_response_headers) tsc_http_client_emit_response(client);
     return tsc_value_undefined();
 }
 
@@ -3943,6 +4122,8 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->port = port;
     client->body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_REQUEST + 1);
     client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
+    client->response_body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
+    client->response_pending_data = tsc_array_new(sizeof(tsc_str_t*), 4);
     tsc_http_client_copy_headers(client, tsc_value_object(client->options_object));
 
     tsc_object_t* object = tsc_object_new();
