@@ -3701,6 +3701,7 @@ typedef struct tsc_http_client_state {
     double port;
     char* body;
     size_t body_len;
+    tsc_array_t* request_chunks;
     char* response_input;
     size_t response_input_len;
     char* response_body;
@@ -3711,6 +3712,8 @@ typedef struct tsc_http_client_state {
     tsc_array_t* response_pending_data;
     bool request_ended;
     bool request_sent;
+    bool request_headers_sent;
+    bool request_end_sent;
     bool response_handled;
     bool response_headers_parsed;
     bool response_has_content_length;
@@ -3733,18 +3736,15 @@ static void tsc_http_client_emit_error(tsc_http_client_state_t* client, const ch
     tsc_child_emit_one_value(client->event.emitter, "error", tsc_value_string(tsc_str_from_cstr(message)));
 }
 
-static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
-    if (!client || !client->request_ended || client->request_sent) return;
-    tsc_value_t socket = tsc_http_client_socket_value(client);
-    tsc_value_t connecting = tsc_value_get_prop(socket, tsc_str_from_lit("connecting", 10));
-    if (tsc_value_is_undefined(connecting) || tsc_value_as_bool(connecting)) return;
-
+static tsc_str_t* tsc_http_client_request_headers(tsc_http_client_state_t* client, bool include_content_length) {
+    if (!client) return tsc_str_from_lit("", 0);
     tsc_str_t* output = tsc_str_concat_n(5,
         client->method,
         tsc_str_from_lit(" ", 1),
         client->path,
         tsc_str_from_lit(" HTTP/1.1\r\n", 11),
-        tsc_str_from_lit("", 0));
+        tsc_str_from_lit("", 0)
+    );
     if (!tsc_http_has_header(tsc_value_object(client->headers_object), "host")) {
         if (client->port == 80.0) {
             output = tsc_str_concat_n(4, output, tsc_str_from_lit("Host: ", 6), client->hostname, tsc_str_from_lit("\r\n", 2));
@@ -3755,8 +3755,7 @@ static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
         }
     }
     output = tsc_str_concat(output, tsc_http_header_block(tsc_value_object(client->headers_object)));
-    bool chunked = tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked");
-    if (!chunked && !tsc_http_has_header(tsc_value_object(client->headers_object), "content-length")) {
+    if (include_content_length && !tsc_http_has_header(tsc_value_object(client->headers_object), "content-length")) {
         char length_line[64];
         snprintf(length_line, sizeof(length_line), "Content-Length: %zu\r\n", client->body_len);
         output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
@@ -3764,16 +3763,48 @@ static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
     if (!tsc_http_has_header(tsc_value_object(client->headers_object), "connection")) {
         output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
     }
-    output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
+    return tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
+}
+
+static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
+    if (!client) return;
+    tsc_value_t socket = tsc_http_client_socket_value(client);
+    tsc_value_t connecting = tsc_value_get_prop(socket, tsc_str_from_lit("connecting", 10));
+    if (tsc_value_is_undefined(connecting) || tsc_value_as_bool(connecting)) return;
+
+    bool chunked = tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked");
     if (chunked) {
-        char chunk_line[64];
-        snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", client->body_len);
-        output = tsc_str_concat(output, tsc_str_from_cstr(chunk_line));
-        if (client->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(client->body, client->body_len));
-        output = tsc_str_concat(output, tsc_str_from_lit("\r\n0\r\n\r\n", 7));
-    } else if (client->body_len > 0) {
-        output = tsc_str_concat(output, tsc_str_from_lit(client->body, client->body_len));
+        if (!client->request_headers_sent) {
+            tsc_http_socket_write(socket, tsc_http_client_request_headers(client, false));
+            client->request_headers_sent = true;
+            client->request_sent = true;
+        }
+        for (size_t i = 0; client->request_chunks && i < client->request_chunks->len; i++) {
+            tsc_str_t* chunk_data = TSC_ARR(tsc_str_t*, client->request_chunks, i);
+            if (!chunk_data) continue;
+            char chunk_line[64];
+            snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", chunk_data->len);
+            tsc_str_t* chunk = tsc_str_concat_n(4,
+                tsc_str_from_cstr(chunk_line),
+                chunk_data,
+                tsc_str_from_lit("\r\n", 2),
+                tsc_str_from_lit("", 0)
+            );
+            tsc_http_socket_write(socket, chunk);
+        }
+        if (client->request_chunks) client->request_chunks->len = 0;
+        if (client->request_ended && !client->request_end_sent) {
+            tsc_http_socket_write(socket, tsc_str_from_lit("0\r\n\r\n", 7));
+            client->request_end_sent = true;
+            tsc_http_socket_end(socket, NULL);
+        }
+        return;
     }
+    if (!client->request_ended || client->request_sent) return;
+    tsc_str_t* output = tsc_str_concat(
+        tsc_http_client_request_headers(client, true),
+        tsc_str_from_lit(client->body, client->body_len)
+    );
     client->request_sent = true;
     tsc_http_socket_end(socket, output);
 }
@@ -3796,6 +3827,17 @@ static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_ar
     }
     if (client->request_ended) {
         tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.write after end"));
+    }
+    if (tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked")) {
+        if (client->body_len + len > TSC_HTTP_MAX_REQUEST) {
+            tsc_throw_str(tsc_str_from_cstr("http.ClientRequest request body exceeds the bounded limit"));
+        }
+        if (len == 0) return tsc_value_bool(true);
+        client->body_len += len;
+        tsc_str_t* chunk = tsc_str_from_lit(data, len);
+        if (client->request_chunks) tsc_array_push_raw(client->request_chunks, &chunk);
+        tsc_http_client_try_send(client);
+        return tsc_value_bool(true);
     }
     if (client->body_len + len > TSC_HTTP_MAX_REQUEST) {
         tsc_throw_str(tsc_str_from_cstr("http.ClientRequest request body exceeds the bounded limit"));
@@ -4121,6 +4163,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->method = method;
     client->port = port;
     client->body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_REQUEST + 1);
+    client->request_chunks = tsc_array_new(sizeof(tsc_str_t*), 4);
     client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_pending_data = tsc_array_new(sizeof(tsc_str_t*), 4);
