@@ -3306,6 +3306,96 @@ static tsc_str_t* tsc_http_header_block(tsc_value_t headers) {
     return result;
 }
 
+static bool tsc_http_token_list_contains(const char* data, size_t len, const char* token) {
+    if (!data || !token) return false;
+    size_t token_len = strlen(token);
+    size_t cursor = 0;
+    while (cursor < len) {
+        while (cursor < len && (data[cursor] == ',' || isspace((unsigned char)data[cursor]))) cursor++;
+        size_t start = cursor;
+        while (cursor < len && data[cursor] != ',') cursor++;
+        size_t end = cursor;
+        while (end > start && isspace((unsigned char)data[end - 1])) end--;
+        if (end - start == token_len) {
+            bool equal = true;
+            for (size_t i = 0; i < token_len; i++) {
+                if (tolower((unsigned char)data[start + i]) != tolower((unsigned char)token[i])) {
+                    equal = false;
+                    break;
+                }
+            }
+            if (equal) return true;
+        }
+        if (cursor < len) cursor++;
+    }
+    return false;
+}
+
+static bool tsc_http_header_value_contains(tsc_value_t headers, const char* name, const char* token) {
+    tsc_array_t* keys = tsc_value_object_keys(headers);
+    for (size_t i = 0; keys && i < keys->len; i++) {
+        tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
+        if (!tsc_http_equal_ci(key, name)) continue;
+        tsc_str_t* value = tsc_value_as_string(tsc_value_get_prop(headers, key));
+        if (value && tsc_http_token_list_contains(value->data, value->len, token)) return true;
+    }
+    return false;
+}
+
+static size_t tsc_http_find_crlf(const char* data, size_t len, size_t start) {
+    if (!data || start >= len) return SIZE_MAX;
+    for (size_t i = start; i + 1 < len; i++) {
+        if (data[i] == '\r' && data[i + 1] == '\n') return i;
+    }
+    return SIZE_MAX;
+}
+
+static bool tsc_http_decode_chunked(const char* data, size_t len, char* output, size_t max_body, size_t* out_len, bool* complete) {
+    if (!data || !output || !out_len || !complete) return false;
+    *out_len = 0;
+    *complete = false;
+    size_t cursor = 0;
+    while (cursor < len) {
+        size_t line_end = tsc_http_find_crlf(data, len, cursor);
+        if (line_end == SIZE_MAX) return true;
+        size_t line_len = line_end - cursor;
+        if (line_len == 0 || line_len >= 64) return false;
+        char size_text[64] = { 0 };
+        memcpy(size_text, data + cursor, line_len);
+        char* extension = strchr(size_text, ';');
+        if (extension) *extension = '\0';
+        char* size_start = size_text;
+        while (*size_start && isspace((unsigned char)*size_start)) size_start++;
+        char* size_end = size_start + strlen(size_start);
+        while (size_end > size_start && isspace((unsigned char)size_end[-1])) *--size_end = '\0';
+        if (*size_start == '\0') return false;
+        char* parsed_end = NULL;
+        unsigned long long chunk_size = strtoull(size_start, &parsed_end, 16);
+        if (parsed_end == size_start || *parsed_end != '\0' || chunk_size > max_body - *out_len) return false;
+        cursor = line_end + 2;
+        if (chunk_size == 0) {
+            if (len - cursor >= 2 && data[cursor] == '\r' && data[cursor + 1] == '\n') {
+                *complete = true;
+                return true;
+            }
+            size_t trailer_end = tsc_http_find_header_end(data + cursor, len - cursor);
+            if (trailer_end != SIZE_MAX) {
+                *complete = true;
+                return true;
+            }
+            return true;
+        }
+        if (chunk_size > len - cursor) return true;
+        if (len - cursor - (size_t)chunk_size < 2) return true;
+        memcpy(output + *out_len, data + cursor, (size_t)chunk_size);
+        *out_len += (size_t)chunk_size;
+        cursor += (size_t)chunk_size;
+        if (data[cursor] != '\r' || data[cursor + 1] != '\n') return false;
+        cursor += 2;
+    }
+    return true;
+}
+
 static void tsc_http_attach_socket_listener(tsc_value_t socket, const char* event_name, tsc_generic_function_t callback, void* env, double arity, const char* name) {
     tsc_value_t on = tsc_value_get_prop(socket, tsc_str_from_lit("on", 2));
     if (!tsc_value_is_callable(on)) return;
@@ -3396,7 +3486,8 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
     char status_line[96];
     snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\n", status, tsc_http_status_text(status));
     tsc_str_t* output = tsc_str_concat(tsc_str_from_cstr(status_line), tsc_http_header_block(response->headers));
-    if (!tsc_http_has_header(response->headers, "content-length")) {
+    bool chunked = tsc_http_header_value_contains(response->headers, "transfer-encoding", "chunked");
+    if (!chunked && !tsc_http_has_header(response->headers, "content-length")) {
         char length_line[64];
         snprintf(length_line, sizeof(length_line), "Content-Length: %zu\r\n", response->body_len);
         output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
@@ -3405,7 +3496,15 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
         output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
     }
     output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
-    if (response->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(response->body, response->body_len));
+    if (chunked) {
+        char chunk_line[64];
+        snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", response->body_len);
+        output = tsc_str_concat(output, tsc_str_from_cstr(chunk_line));
+        if (response->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(response->body, response->body_len));
+        output = tsc_str_concat(output, tsc_str_from_lit("\r\n0\r\n\r\n", 7));
+    } else if (response->body_len > 0) {
+        output = tsc_str_concat(output, tsc_str_from_lit(response->body, response->body_len));
+    }
     response->ended = true;
     tsc_http_socket_end(response->socket, output);
     return this_arg;
@@ -3482,6 +3581,7 @@ static tsc_value_t tsc_http_server_data(void* env, tsc_value_t this_arg, tsc_arr
     tsc_object_t* headers_object = tsc_object_new();
     tsc_value_t headers = tsc_value_object(headers_object);
     size_t content_length = 0;
+    bool chunked = false;
     size_t cursor = (size_t)(request_line_end - connection->input) + 2;
     while (cursor < header_end) {
         char* line_end = strstr(connection->input + cursor, "\r\n");
@@ -3505,12 +3605,28 @@ static tsc_value_t tsc_http_server_data(void* env, tsc_value_t this_arg, tsc_arr
         for (size_t i = 0; i < name_len; i++) name[i] = (char)tolower((unsigned char)connection->input[cursor + i]);
         tsc_object_set(headers_object, tsc_str_from_cstr(name), tsc_value_string(tsc_str_from_lit(connection->input + cursor + value_start, value_len)));
         if (strcmp(name, "content-length") == 0) content_length = (size_t)strtoull(connection->input + cursor + value_start, NULL, 10);
+        if (strcmp(name, "transfer-encoding") == 0) chunked = tsc_http_token_list_contains(connection->input + cursor + value_start, value_len, "chunked");
         cursor = (size_t)(line_end - connection->input) + 2;
     }
     size_t body_offset = header_end + 4;
-    if (connection->input_len < body_offset + content_length) return tsc_value_undefined();
+    if (body_offset > connection->input_len) return tsc_value_undefined();
+    const char* body = connection->input + body_offset;
+    size_t body_len = content_length;
+    char decoded_body[TSC_HTTP_MAX_REQUEST + 1];
+    if (chunked) {
+        bool complete = false;
+        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete)) {
+            (void)tsc_http_bad_request(connection->socket);
+            connection->handled = true;
+            return tsc_value_undefined();
+        }
+        if (!complete) return tsc_value_undefined();
+        body = decoded_body;
+    } else {
+        if (body_offset > connection->input_len || connection->input_len - body_offset < content_length) return tsc_value_undefined();
+    }
     connection->handled = true;
-    (void)tsc_http_make_request_response(connection, method, target, version, headers, connection->input + body_offset, content_length);
+    (void)tsc_http_make_request_response(connection, method, target, version, headers, body, body_len);
     return tsc_value_undefined();
 }
 
@@ -3592,7 +3708,8 @@ static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
         }
     }
     output = tsc_str_concat(output, tsc_http_header_block(tsc_value_object(client->headers_object)));
-    if (!tsc_http_has_header(tsc_value_object(client->headers_object), "content-length")) {
+    bool chunked = tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked");
+    if (!chunked && !tsc_http_has_header(tsc_value_object(client->headers_object), "content-length")) {
         char length_line[64];
         snprintf(length_line, sizeof(length_line), "Content-Length: %zu\r\n", client->body_len);
         output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
@@ -3601,7 +3718,15 @@ static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
         output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
     }
     output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
-    if (client->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(client->body, client->body_len));
+    if (chunked) {
+        char chunk_line[64];
+        snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", client->body_len);
+        output = tsc_str_concat(output, tsc_str_from_cstr(chunk_line));
+        if (client->body_len > 0) output = tsc_str_concat(output, tsc_str_from_lit(client->body, client->body_len));
+        output = tsc_str_concat(output, tsc_str_from_lit("\r\n0\r\n\r\n", 7));
+    } else if (client->body_len > 0) {
+        output = tsc_str_concat(output, tsc_str_from_lit(client->body, client->body_len));
+    }
     client->request_sent = true;
     tsc_http_socket_end(socket, output);
 }
@@ -3673,6 +3798,7 @@ static bool tsc_http_client_parse_response(tsc_http_client_state_t* client, tsc_
     tsc_object_t* headers_object = tsc_object_new();
     size_t content_length = 0;
     bool has_content_length = false;
+    bool chunked = false;
     size_t cursor = (size_t)(status_line_end - client->response_input) + 2;
     while (cursor < header_end) {
         char* line_end = strstr(client->response_input + cursor, "\r\n");
@@ -3698,12 +3824,21 @@ static bool tsc_http_client_parse_response(tsc_http_client_state_t* client, tsc_
             content_length = (size_t)parsed;
             has_content_length = true;
         }
+        if (strcmp(name, "transfer-encoding") == 0) {
+            chunked = tsc_http_token_list_contains(client->response_input + cursor + value_start, value_len, "chunked");
+        }
         cursor = (size_t)(line_end - client->response_input) + 2;
     }
     size_t body_offset = header_end + 4;
     if (body_offset > client->response_input_len) return false;
+    const char* body = client->response_input + body_offset;
     size_t body_len = client->response_input_len - body_offset;
-    if (has_content_length) {
+    char decoded_body[TSC_HTTP_MAX_RESPONSE + 1];
+    if (chunked) {
+        bool complete = false;
+        if (!tsc_http_decode_chunked(body, body_len, decoded_body, TSC_HTTP_MAX_RESPONSE, &body_len, &complete) || !complete) return false;
+        body = decoded_body;
+    } else if (has_content_length) {
         if (body_len < content_length) return false;
         body_len = content_length;
     }
@@ -3714,7 +3849,7 @@ static bool tsc_http_client_parse_response(tsc_http_client_state_t* client, tsc_
     tsc_object_set(response_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
     tsc_value_t headers = tsc_value_object(headers_object);
     tsc_object_set(response_object, tsc_str_from_lit("headers", 7), headers);
-    tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit(client->response_input + body_offset, body_len)));
+    tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit(body, body_len)));
     *out_response = tsc_value_object(response_object);
     return true;
 }
