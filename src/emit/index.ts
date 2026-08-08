@@ -20522,11 +20522,13 @@ class Emitter {
     private commonJsIifeParameterArgument(param: ts.ParameterDeclaration): ts.Expression | null {
         if (!ts.isIdentifier(param.name)) return null;
         const fn = param.parent;
-        if (!ts.isFunctionExpression(fn) && !ts.isArrowFunction(fn)) return null;
+        if (!ts.isFunctionDeclaration(fn) && !ts.isFunctionExpression(fn) && !ts.isArrowFunction(fn)) return null;
         const index = fn.parameters.indexOf(param);
         if (index < 0) return null;
-        const call = this.commonJsIifeCallForFunction(fn);
-        if (call && index < call.arguments.length) return call.arguments[index]!;
+        if (!ts.isFunctionDeclaration(fn)) {
+            const call = this.commonJsIifeCallForFunction(fn);
+            if (call && index < call.arguments.length) return call.arguments[index]!;
+        }
         const factory = this.commonJsFactoryWrapperInvocationForFunction(fn);
         if (factory && index < factory.args.length) return factory.args[index]!;
         const directFactoryInvocation = this.commonJsDirectFactoryInvocationForFunction(fn);
@@ -20601,7 +20603,9 @@ class Emitter {
         return null;
     }
 
-    private commonJsFactoryWrapperInvocationForFunction(fn: ts.FunctionExpression | ts.ArrowFunction): {
+    private commonJsFactoryWrapperInvocationForFunction(
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
+    ): {
         args: readonly ts.Expression[];
     } | null {
         let cur: ts.Node = fn;
