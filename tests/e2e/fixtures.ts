@@ -798,6 +798,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-destructure-binding-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-destructure-binding-class-base", {
         "index.js": 'module.exports = { Counter: class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-member-binding-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-member-binding-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-member-binding-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-member-binding-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-member-binding-class-helper", {
+        "index.js": 'const create = (req) => { const Counter = req("tsc2c-js-named-import-external-cjs-factory-member-binding-class-base").Counter; return { Counter }; };\nmodule.exports = create(require);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-member-binding-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-member-binding-class-base", {
+        "index.js": 'module.exports = { Counter: class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),

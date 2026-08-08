@@ -19175,7 +19175,11 @@ class Emitter {
         return stmt.declarationList.declarations.every((decl) =>
             (ts.isIdentifier(decl.name) || ts.isObjectBindingPattern(decl.name)) &&
             !!decl.initializer &&
-            this.requireCallSpecifier(decl.initializer) !== null,
+            (
+                this.requireCallSpecifier(decl.initializer) !== null ||
+                (ts.isPropertyAccessExpression(decl.initializer) &&
+                    this.requireModuleMemberDeclaration(decl.initializer) !== null)
+            ),
         );
     }
 
@@ -19834,7 +19838,7 @@ class Emitter {
         }
         for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(assignment.right)) {
             if (ts.isShorthandPropertyAssignment(prop)) {
-                const value = this.commonJsFactoryDestructureBindingValue(prop);
+                const value = this.commonJsFactoryLocalBindingValue(prop);
                 if (!value) continue;
                 const cName = this.commonJsObjectPropertyExportCName(prop);
                 if (!this.commonJsExportGlobals.has(cName)) {
@@ -19880,13 +19884,27 @@ class Emitter {
         }
     }
 
-    private commonJsFactoryDestructureBindingValue(prop: ts.ShorthandPropertyAssignment): EmitResult | null {
+    private commonJsFactoryLocalBindingValue(prop: ts.ShorthandPropertyAssignment): EmitResult | null {
         const valueDecl = this.commonJsObjectExportValueDeclaration(prop);
-        if (!valueDecl || !ts.isBindingElement(valueDecl) || !ts.isObjectBindingPattern(valueDecl.parent)) return null;
-        const variable = valueDecl.parent.parent;
-        if (!ts.isVariableDeclaration(variable) || variable.name !== valueDecl.parent || !variable.initializer) return null;
+        if (!valueDecl) return null;
+        const variable = ts.isVariableDeclaration(valueDecl)
+            ? valueDecl
+            : ts.isBindingElement(valueDecl) && ts.isObjectBindingPattern(valueDecl.parent) &&
+                ts.isVariableDeclaration(valueDecl.parent.parent) && valueDecl.parent.parent.name === valueDecl.parent
+                ? valueDecl.parent.parent
+                : null;
+        if (!variable?.initializer) return null;
+        const initializer = this.unwrapTransparentExpression(variable.initializer);
+        if (ts.isPropertyAccessExpression(initializer)) {
+            const memberDecl = this.requireModuleMemberDeclaration(initializer);
+            if (!memberDecl) return null;
+            const cName = this.requireModuleMemberCName(initializer);
+            if (!cName) unsupported(initializer, "unsupported CommonJS require member binding");
+            return { c: cName, ty: this.commonJsExportedCType(memberDecl) };
+        }
         const spec = this.requireCallSpecifier(variable.initializer);
         if (!spec) return null;
+        if (!ts.isBindingElement(valueDecl) || !ts.isObjectBindingPattern(valueDecl.parent)) return null;
         const exportName = this.requireDestructureExportName(valueDecl);
         const info = this.resolvedModuleInfoForSpecifier(spec, variable.getSourceFile().fileName, "require");
         if (!info) unsupported(variable.initializer, `unresolved require("${spec}")`);
