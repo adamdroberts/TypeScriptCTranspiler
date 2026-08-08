@@ -1529,6 +1529,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-iife-call-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-call-alias-object", {
         "index.js": 'function makeIifeCallAliasApi() {\n  return {\n    default: "factory-iife-call-alias-default",\n    label: "factory-iife-call-alias",\n    count: 143,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeIifeCallAliasApi;\nmodule.exports = (function () {\n  return Object.freeze(factory.call(null));\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-apply-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-apply-alias-object", {
+        "index.js": 'function makeIifeApplyAliasApi() {\n  return {\n    default: "factory-iife-apply-alias-default",\n    label: "factory-iife-apply-alias",\n    count: 144,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeIifeApplyAliasApi;\nmodule.exports = (function () {\n  return Object.freeze(factory.apply(null, []));\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-reflect-apply-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-reflect-apply-alias-object", {
+        "index.js": 'function makeIifeReflectApplyAliasApi() {\n  return {\n    default: "factory-iife-reflect-apply-alias-default",\n    label: "factory-iife-reflect-apply-alias",\n    count: 145,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeIifeReflectApplyAliasApi;\nmodule.exports = (function () {\n  return Object.freeze(Reflect.apply(factory, null, []));\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-bind-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-bind-alias-object", {
+        "index.js": 'function makeIifeBindAliasApi() {\n  return {\n    default: "factory-iife-bind-alias-default",\n    label: "factory-iife-bind-alias",\n    count: 146,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeIifeBindAliasApi;\nmodule.exports = (function () {\n  return Object.freeze(factory.bind(null)());\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {

@@ -21668,6 +21668,7 @@ class Emitter {
         if (!assignment) return null;
         const right = this.unwrapTransparentExpression(assignment.right);
         if (ts.isObjectLiteralExpression(right)) return null;
+        if (this.commonJsIifeReturnedObjectLiteral(right)) return null;
         if (this.commonJsLocalFactoryReturnedObjectLiteral(right)) return null;
         const entries = this.commonJsObjectAssignExportSourceEntries(right);
         if (!entries) return null;
