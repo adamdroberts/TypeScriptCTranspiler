@@ -18933,12 +18933,30 @@ class Emitter {
         if (!outer || !ts.isBlock(outer.body)) return null;
         for (const stmt of outer.body.statements) {
             const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
-            const right = assignment ? this.unwrapTransparentExpression(assignment.right) : null;
-            if (right && ts.isCallExpression(right) && right.arguments === factory.args) {
+            if (assignment && this.commonJsFactoryWrapperResultContainsInvocation(assignment.right, factory.args)) {
                 return outer.body.statements;
             }
         }
         return null;
+    }
+
+    private commonJsFactoryWrapperResultContainsInvocation(
+        expr: ts.Expression,
+        args: readonly ts.Expression[],
+    ): boolean {
+        const cur = this.unwrapTransparentExpression(expr);
+        if (!ts.isCallExpression(cur)) return false;
+        if (cur.arguments === args) return true;
+        const callName = this.objectStaticCallName(cur);
+        if (
+            callName !== "freeze" &&
+            callName !== "seal" &&
+            callName !== "preventExtensions" &&
+            callName !== "setPrototypeOf"
+        ) {
+            return false;
+        }
+        return cur.arguments.length >= 1 && this.commonJsFactoryWrapperResultContainsInvocation(cur.arguments[0]!, args);
     }
 
     private commonJsFactoryWrapperInvocationForNestedCall(call: ts.CallExpression): {
