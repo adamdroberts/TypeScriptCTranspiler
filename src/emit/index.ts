@@ -20023,17 +20023,22 @@ class Emitter {
         }
         for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(assignment.right)) {
             if (ts.isShorthandPropertyAssignment(prop)) {
-                const value = this.commonJsFactoryLocalBindingValue(prop);
-                if (!value) continue;
+                const boundValue = this.commonJsFactoryLocalBindingValue(prop);
+                const value = boundValue ?? this.emitExpr(prop.name);
+                const ty = boundValue?.ty ?? this.commonJsExportedCType(prop);
                 const cName = this.commonJsObjectPropertyExportCName(prop);
                 if (!this.commonJsExportGlobals.has(cName)) {
                     this.commonJsExportGlobals.add(cName);
-                    this.globalDecls.line(`static ${value.ty.c} ${cName};`);
+                    this.globalDecls.line(`static ${ty.c} ${cName};`);
                 }
-                buf.line(`${cName} = ${this.coerce(value, value.ty, prop)};`);
+                buf.line(`${cName} = ${this.coerce(value, ty, boundValue ? prop : prop.name)};`);
                 continue;
             }
-            if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop) && !ts.isGetAccessorDeclaration(prop)) continue;
+            if (
+                !ts.isPropertyAssignment(prop) &&
+                !ts.isMethodDeclaration(prop) &&
+                !ts.isGetAccessorDeclaration(prop)
+            ) continue;
             if (
                 ts.isPropertyAssignment(prop) &&
                 ts.isIdentifier(prop.initializer) &&
