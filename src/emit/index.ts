@@ -18920,12 +18920,84 @@ class Emitter {
             while (ts.isParenthesizedExpression(body)) body = body.expression;
             return this.commonJsReturnedObjectLiteral(body);
         }
+        const localFactoryObject = this.commonJsIifeLocalFactoryReturnedObjectLiteral(callee.body.statements);
+        if (localFactoryObject) return localFactoryObject;
         if (callee.body.statements.length !== 1) return null;
         const stmt = callee.body.statements[0]!;
         if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
         let returned = stmt.expression;
         while (ts.isParenthesizedExpression(returned)) returned = returned.expression;
         return this.commonJsReturnedObjectLiteral(returned);
+    }
+
+    private commonJsIifeLocalFactoryReturnedObjectLiteral(
+        statements: readonly ts.Statement[],
+    ): ts.ObjectLiteralExpression | null {
+        if (statements.length < 2) return null;
+        const functions = new Map<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>();
+        const aliases = new Map<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>();
+        let returned: ts.Expression | null = null;
+        for (let index = 0; index < statements.length; index++) {
+            const stmt = statements[index]!;
+            if (ts.isFunctionDeclaration(stmt)) {
+                if (!stmt.name || functions.has(stmt.name.text) || aliases.has(stmt.name.text)) return null;
+                functions.set(stmt.name.text, stmt);
+                continue;
+            }
+            if (ts.isVariableStatement(stmt)) {
+                if ((stmt.declarationList.flags & ts.NodeFlags.Const) === 0) return null;
+                for (const decl of stmt.declarationList.declarations) {
+                    if (!ts.isIdentifier(decl.name) || !decl.initializer || aliases.has(decl.name.text)) return null;
+                    let init = decl.initializer;
+                    while (ts.isParenthesizedExpression(init)) init = init.expression;
+                    const fn = ts.isFunctionExpression(init) || ts.isArrowFunction(init)
+                        ? init
+                        : ts.isIdentifier(init)
+                            ? functions.get(init.text) ?? aliases.get(init.text)
+                            : undefined;
+                    if (!fn) return null;
+                    aliases.set(decl.name.text, fn);
+                }
+                continue;
+            }
+            if (ts.isReturnStatement(stmt) && index === statements.length - 1 && stmt.expression && !returned) {
+                returned = stmt.expression;
+                continue;
+            }
+            return null;
+        }
+        if (!returned) return null;
+        let cur = returned;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur)) return null;
+        const callName = this.objectStaticCallName(cur);
+        if (
+            (callName === "freeze" ||
+                callName === "seal" ||
+                callName === "preventExtensions" ||
+                callName === "setPrototypeOf") &&
+            cur.arguments.length >= 1
+        ) {
+            return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!, functions, aliases);
+        }
+        return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur, functions, aliases);
+    }
+
+    private commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(
+        expr: ts.Expression,
+        functions: ReadonlyMap<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>,
+        aliases: ReadonlyMap<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>,
+    ): ts.ObjectLiteralExpression | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (!ts.isCallExpression(cur) || cur.arguments.length !== 0) return null;
+        let callee: ts.Expression = cur.expression;
+        while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+        if (!ts.isIdentifier(callee)) return null;
+        const fn = aliases.get(callee.text) ?? functions.get(callee.text);
+        return fn
+            ? this.commonJsLocalFactoryInvocationReturnedObjectLiteral(fn, cur.arguments, true)
+            : null;
     }
 
     private commonJsIifeWrapperStatements(stmt: ts.Statement): readonly ts.Statement[] | null {

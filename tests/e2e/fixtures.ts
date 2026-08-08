@@ -1538,6 +1538,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-iife-bind-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-bind-alias-object", {
         "index.js": 'function makeIifeBindAliasApi() {\n  return {\n    default: "factory-iife-bind-alias-default",\n    label: "factory-iife-bind-alias",\n    count: 146,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeIifeBindAliasApi;\nmodule.exports = (function () {\n  return Object.freeze(factory.bind(null)());\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-local-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalAliasApi() {\n    return {\n      default: "factory-iife-local-alias-default",\n      label: "factory-iife-local-alias",\n      count: 147,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalAliasApi;\n  return Object.freeze(factory());\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {

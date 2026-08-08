@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Zero-argument CommonJS IIFE object returns now support a bounded local factory declaration followed by `const` aliases and an object-preserving return, preserving finite named/default metadata and whole-value reads. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - Zero-argument IIFE return wrappers around bounded top-level local factory aliases now preserve the same finite named/default metadata and whole-value reads through `Function.apply`, `Reflect.apply`, and `Function.bind`; the static object path also avoids falling through to unsupported runtime `.bind` emission. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - The bounded zero-argument IIFE return-wrapper path also preserves finite named/default metadata and whole-value reads when the top-level local factory alias is invoked through `Function.call`. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS zero-argument IIFE returns now preserve finite named/default metadata and whole-value reads when the IIFE returns an object-preserving wrapper around a bounded top-level local factory alias. Test: `node_modules_commonjs_module_exports_local_factory_object`.
