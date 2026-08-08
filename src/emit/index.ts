@@ -16071,6 +16071,9 @@ class Emitter {
             }
         }
         if (ts.isShorthandPropertyAssignment(decl)) {
+            if (this.isCommonJsModuleExportsObjectExportEntry(decl)) {
+                return this.commonJsObjectPropertyExportCName(decl);
+            }
             const valueDecl = this.commonJsObjectExportValueDeclaration(decl);
             return valueDecl ? this.declarationCName(valueDecl) : this.declaredName(decl.name);
         }
@@ -19170,7 +19173,7 @@ class Emitter {
     private commonJsLocalFactoryStaticRequireBindingStatement(stmt: ts.Statement): boolean {
         if (!ts.isVariableStatement(stmt)) return false;
         return stmt.declarationList.declarations.every((decl) =>
-            ts.isIdentifier(decl.name) &&
+            (ts.isIdentifier(decl.name) || ts.isObjectBindingPattern(decl.name)) &&
             !!decl.initializer &&
             this.requireCallSpecifier(decl.initializer) !== null,
         );
@@ -19830,7 +19833,17 @@ class Emitter {
             }
         }
         for (const prop of this.commonJsModuleExportsObjectAssignmentEntries(assignment.right)) {
-            if (ts.isShorthandPropertyAssignment(prop)) continue;
+            if (ts.isShorthandPropertyAssignment(prop)) {
+                const value = this.commonJsFactoryDestructureBindingValue(prop);
+                if (!value) continue;
+                const cName = this.commonJsObjectPropertyExportCName(prop);
+                if (!this.commonJsExportGlobals.has(cName)) {
+                    this.commonJsExportGlobals.add(cName);
+                    this.globalDecls.line(`static ${value.ty.c} ${cName};`);
+                }
+                buf.line(`${cName} = ${this.coerce(value, value.ty, prop)};`);
+                continue;
+            }
             if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop) && !ts.isGetAccessorDeclaration(prop)) continue;
             if (
                 ts.isPropertyAssignment(prop) &&
@@ -19865,6 +19878,23 @@ class Emitter {
                 : unsupported(prop, "CommonJS module.exports object export requires a value");
             buf.line(`${cName} = ${this.coerce(value, ty, valueNode)};`);
         }
+    }
+
+    private commonJsFactoryDestructureBindingValue(prop: ts.ShorthandPropertyAssignment): EmitResult | null {
+        const valueDecl = this.commonJsObjectExportValueDeclaration(prop);
+        if (!valueDecl || !ts.isBindingElement(valueDecl) || !ts.isObjectBindingPattern(valueDecl.parent)) return null;
+        const variable = valueDecl.parent.parent;
+        if (!ts.isVariableDeclaration(variable) || variable.name !== valueDecl.parent || !variable.initializer) return null;
+        const spec = this.requireCallSpecifier(variable.initializer);
+        if (!spec) return null;
+        const exportName = this.requireDestructureExportName(valueDecl);
+        const info = this.resolvedModuleInfoForSpecifier(spec, variable.getSourceFile().fileName, "require");
+        if (!info) unsupported(variable.initializer, `unresolved require("${spec}")`);
+        const exportDecl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
+        if (!exportDecl) return this.emitCommonJsRequireModulePropertyValue(valueDecl, spec, exportName, "require");
+        const cName = this.commonJsExportedDeclarationCName(exportDecl, exportName);
+        if (!cName) unsupported(exportDecl, `unsupported CommonJS export "${exportName}"`);
+        return { c: cName, ty: this.commonJsExportedCType(exportDecl) };
     }
 
     private emitCommonJsModuleExportsObjectEntry(
@@ -20339,7 +20369,7 @@ class Emitter {
         return `${modId}_module_exports`;
     }
 
-    private commonJsObjectPropertyExportCName(prop: ts.PropertyAssignment | ts.MethodDeclaration | ts.GetAccessorDeclaration): string {
+    private commonJsObjectPropertyExportCName(prop: ts.PropertyAssignment | ts.ShorthandPropertyAssignment | ts.MethodDeclaration | ts.GetAccessorDeclaration): string {
         const name = this.staticPropertyName(prop.name);
         if (!name) unsupported(prop.name, "CommonJS module.exports object requires static property names");
         const modId = this.graph.fileToModuleId.get(prop.getSourceFile().fileName) ?? this.currentModuleId ?? "module";
@@ -67028,6 +67058,22 @@ class Emitter {
             return memberDecl
                 ? this.classExpressionForCommonJsDeclaration(memberDecl, seen)
                 : null;
+        }
+        if (ts.isBindingElement(decl) && ts.isObjectBindingPattern(decl.parent)) {
+            const variable = decl.parent.parent;
+            if (ts.isVariableDeclaration(variable) && variable.name === decl.parent && variable.initializer) {
+                const spec = this.requireCallSpecifier(variable.initializer);
+                if (spec) {
+                    const info = this.resolvedModuleInfoForSpecifier(spec, variable.getSourceFile().fileName, "require");
+                    if (info) {
+                        const exportName = this.requireDestructureExportName(decl);
+                        const memberDecl = this.commonJsExportedMemberDeclaration(info.sf, exportName);
+                        return memberDecl
+                            ? this.classExpressionForCommonJsDeclaration(memberDecl, seen)
+                            : null;
+                    }
+                }
+            }
         }
         if (
             ts.isPropertyAssignment(decl) ||
