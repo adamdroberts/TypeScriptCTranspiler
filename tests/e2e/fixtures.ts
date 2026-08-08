@@ -1523,6 +1523,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-set-prototype-of-object": cjsPackage("tsc2c-cjs-module-local-factory-set-prototype-of-object", {
         "index.js": 'function makeSetPrototypeOfApi() {\n  return {\n    default: "factory-set-prototype-of-default",\n    label: "factory-set-prototype-of",\n    count: 141,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeSetPrototypeOfApi;\nmodule.exports = Object.setPrototypeOf(factory(), null);\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-alias-object", {
+        "index.js": 'function makeIifeAliasApi() {\n  return {\n    default: "factory-iife-alias-default",\n    label: "factory-iife-alias",\n    count: 142,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeIifeAliasApi;\nmodule.exports = (function () {\n  return Object.freeze(factory());\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {

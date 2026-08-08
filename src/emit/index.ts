@@ -18879,7 +18879,8 @@ class Emitter {
         ) {
             return null;
         }
-        return this.commonJsReturnedObjectLiteral(cur.arguments[0]!);
+        return this.commonJsReturnedObjectLiteral(cur.arguments[0]!) ??
+            this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!);
     }
 
     private isTransparentExpressionNode(node: ts.Node): boolean {
