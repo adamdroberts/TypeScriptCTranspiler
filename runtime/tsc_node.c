@@ -2727,6 +2727,7 @@ typedef struct tsc_net_socket {
     bool close_emitted;
     bool tls;
     bool tls_server;
+    bool client_socket;
     bool tls_handshake_complete;
     bool tls_want_write;
     SSL_CTX* tls_ctx;
@@ -2962,6 +2963,7 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     memset(socket, 0, sizeof(*socket));
     socket->fd = fd;
     socket->connecting = connecting;
+    socket->client_socket = client_socket;
     socket->connect_emitted = !client_socket;
     socket->poll_timer = 0.0;
     socket->event.emitter = tsc_event_emitter_new();
@@ -3073,7 +3075,7 @@ static void tsc_net_socket_read(tsc_net_socket_t* socket) {
             socket->readable_ended = true;
             tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
             (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("end", 3), empty);
-            if (socket->writable_ended) tsc_net_socket_close_internal(socket);
+            if (socket->writable_ended || !socket->client_socket) tsc_net_socket_close_internal(socket);
             return;
         }
         if (errno == EINTR) continue;
@@ -3295,7 +3297,7 @@ tsc_value_t tsc_net_create_server_tls(tsc_value_t connection_listener, void* tls
     return tsc_net_create_server_with_tls(connection_listener, (SSL_CTX*)tls_ctx);
 }
 
-tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
+static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
     }
@@ -3331,10 +3333,15 @@ tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_li
     if (tsc_value_is_callable(connect_listener)) {
         tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
     }
+    if (out_socket) *out_socket = socket;
     return socket_value;
 }
 
-tsc_value_t tsc_net_tls_connect(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener) {
+tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
+    return tsc_net_connect_internal(port, host, connect_listener, NULL);
+}
+
+static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("https.request port must be an integer from 1 to 65535"));
     }
@@ -3409,7 +3416,12 @@ tsc_value_t tsc_net_tls_connect(double port, tsc_str_t* host, bool reject_unauth
     if (tsc_value_is_callable(connect_listener)) {
         tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
     }
+    if (out_socket) *out_socket = socket;
     return socket_value;
+}
+
+tsc_value_t tsc_net_tls_connect(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener) {
+    return tsc_net_tls_connect_internal(port, host, reject_unauthorized, servername, connect_listener, NULL);
 }
 
 static SSL_CTX* tsc_https_server_tls_context(tsc_value_t options) {
@@ -3642,15 +3654,26 @@ static bool tsc_http_decode_chunked(const char* data, size_t len, char* output, 
     return true;
 }
 
-static void tsc_http_attach_socket_listener(tsc_value_t socket, const char* event_name, tsc_generic_function_t callback, void* env, double arity, const char* name) {
+static tsc_value_t tsc_http_attach_socket_listener(tsc_value_t socket, const char* event_name, tsc_generic_function_t callback, void* env, double arity, const char* name) {
     tsc_value_t on = tsc_value_get_prop(socket, tsc_str_from_lit("on", 2));
-    if (!tsc_value_is_callable(on)) return;
+    if (!tsc_value_is_callable(on)) return tsc_value_undefined();
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
     tsc_value_t event = tsc_value_string(tsc_str_from_cstr(event_name));
     tsc_value_t listener = tsc_value_function_generic_named(callback, env, arity, tsc_str_from_cstr(name));
     tsc_array_push_value(args, event);
     tsc_array_push_value(args, listener);
     (void)tsc_value_apply_function(on, socket, tsc_value_array(args));
+    return listener;
+}
+
+static void tsc_http_detach_socket_listener(tsc_value_t socket, const char* event_name, tsc_value_t listener) {
+    if (tsc_value_is_undefined(listener)) return;
+    tsc_value_t off = tsc_value_get_prop(socket, tsc_str_from_lit("off", 3));
+    if (!tsc_value_is_callable(off)) return;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(args, tsc_value_string(tsc_str_from_cstr(event_name)));
+    tsc_array_push_value(args, listener);
+    (void)tsc_value_apply_function(off, socket, tsc_value_array(args));
 }
 
 static bool tsc_http_value_bytes(tsc_value_t value, const char** data, size_t* len) {
@@ -3992,7 +4015,27 @@ tsc_value_t tsc_https_create_server(tsc_value_t options, tsc_value_t request_lis
     return tsc_net_create_server_tls(connection_listener, ctx);
 }
 
-typedef struct tsc_http_client_state {
+typedef struct tsc_http_client_state tsc_http_client_state_t;
+typedef struct tsc_http_client_pool_entry tsc_http_client_pool_entry_t;
+
+struct tsc_http_client_pool_entry {
+    tsc_value_t socket;
+    tsc_object_t* socket_object;
+    tsc_net_socket_t* native_socket;
+    tsc_http_client_state_t* active;
+    tsc_str_t* hostname;
+    tsc_str_t* servername;
+    double port;
+    bool tls;
+    bool reject_unauthorized;
+    bool stale;
+    double idle_timer;
+    tsc_value_t end_listener;
+    tsc_value_t error_listener;
+    tsc_http_client_pool_entry_t* next;
+};
+
+struct tsc_http_client_state {
     tsc_child_event_target_t event;
     tsc_value_t socket;
     tsc_object_t* socket_object;
@@ -4028,14 +4071,178 @@ typedef struct tsc_http_client_state {
     bool response_complete;
     bool response_event_emitted;
     bool response_end_pending;
+    bool response_keep_alive;
+    bool poolable;
+    bool pool_release_scheduled;
     bool tls;
-} tsc_http_client_state_t;
+    tsc_http_client_pool_entry_t* pool_entry;
+    tsc_net_socket_t* native_socket;
+    tsc_value_t data_listener;
+    tsc_value_t end_listener;
+};
+
+static tsc_http_client_pool_entry_t* g_tsc_http_client_pool = NULL;
 
 static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_array_t* args);
 static tsc_value_t tsc_http_client_end(void* env, tsc_value_t this_arg, tsc_array_t* args);
+static void tsc_http_client_pool_expire(void* env);
+static void tsc_http_client_pool_release_deferred(void* env);
+static tsc_value_t tsc_http_client_pool_mark_stale(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
 static tsc_value_t tsc_http_client_socket_value(const tsc_http_client_state_t* client) {
     return client && client->socket_object ? tsc_value_object(client->socket_object) : client->socket;
+}
+
+static bool tsc_http_client_pool_key_matches(
+    const tsc_http_client_pool_entry_t* entry,
+    const tsc_str_t* hostname,
+    double port,
+    bool tls,
+    bool reject_unauthorized,
+    const tsc_str_t* servername
+) {
+    if (!entry || entry->stale || entry->active || !entry->hostname) return false;
+    if (!tsc_str_eq(entry->hostname, hostname) || entry->port != port || entry->tls != tls) return false;
+    if (entry->reject_unauthorized != reject_unauthorized) return false;
+    if (!entry->servername || !servername) return entry->servername == servername;
+    return tsc_str_eq(entry->servername, servername);
+}
+
+static void tsc_http_client_pool_unlink(tsc_http_client_pool_entry_t* entry) {
+    if (!entry) return;
+    tsc_http_client_pool_entry_t** cursor = &g_tsc_http_client_pool;
+    while (*cursor) {
+        if (*cursor == entry) {
+            *cursor = entry->next;
+            entry->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_http_client_pool_discard(tsc_http_client_pool_entry_t* entry) {
+    if (!entry) return;
+    if (entry->idle_timer != 0.0) {
+        tsc_clear_timeout(entry->idle_timer);
+        entry->idle_timer = 0.0;
+    }
+    tsc_http_detach_socket_listener(entry->socket, "end", entry->end_listener);
+    tsc_http_detach_socket_listener(entry->socket, "error", entry->error_listener);
+    entry->end_listener = tsc_value_undefined();
+    entry->error_listener = tsc_value_undefined();
+    tsc_http_client_pool_unlink(entry);
+    entry->stale = true;
+    tsc_value_t destroy = tsc_value_get_prop(entry->socket, tsc_str_from_lit("destroy", 7));
+    if (tsc_value_is_callable(destroy)) {
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_value_apply_function(destroy, entry->socket, tsc_value_array(empty));
+    }
+}
+
+static void tsc_http_client_pool_expire(void* env) {
+    tsc_http_client_pool_entry_t* entry = (tsc_http_client_pool_entry_t*)env;
+    if (!entry) return;
+    entry->idle_timer = 0.0;
+    if (!entry->active) tsc_http_client_pool_discard(entry);
+}
+
+static tsc_value_t tsc_http_client_pool_mark_stale(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_http_client_pool_entry_t* entry = (tsc_http_client_pool_entry_t*)env;
+    if (!entry) return this_arg;
+    entry->stale = true;
+    if (!entry->active) tsc_http_client_pool_discard(entry);
+    return this_arg;
+}
+
+static tsc_http_client_pool_entry_t* tsc_http_client_pool_acquire(
+    const tsc_str_t* hostname,
+    double port,
+    bool tls,
+    bool reject_unauthorized,
+    const tsc_str_t* servername
+) {
+    tsc_http_client_pool_entry_t* entry = g_tsc_http_client_pool;
+    while (entry) {
+        tsc_http_client_pool_entry_t* next = entry->next;
+        if (entry->stale) {
+            tsc_http_client_pool_discard(entry);
+        } else if (tsc_http_client_pool_key_matches(entry, hostname, port, tls, reject_unauthorized, servername)) {
+            if (entry->idle_timer != 0.0) {
+                tsc_clear_timeout(entry->idle_timer);
+                entry->idle_timer = 0.0;
+            }
+            tsc_http_detach_socket_listener(entry->socket, "end", entry->end_listener);
+            tsc_http_detach_socket_listener(entry->socket, "error", entry->error_listener);
+            entry->end_listener = tsc_value_undefined();
+            entry->error_listener = tsc_value_undefined();
+            return entry;
+        }
+        entry = next;
+    }
+    return NULL;
+}
+
+static tsc_http_client_pool_entry_t* tsc_http_client_pool_create(
+    tsc_http_client_state_t* client,
+    const tsc_str_t* hostname,
+    double port,
+    bool tls,
+    bool reject_unauthorized,
+    const tsc_str_t* servername
+) {
+    if (!client) return NULL;
+    tsc_http_client_pool_entry_t* entry = (tsc_http_client_pool_entry_t*)TSC_GC_MALLOC(sizeof(tsc_http_client_pool_entry_t));
+    memset(entry, 0, sizeof(*entry));
+    entry->socket = client->socket;
+    entry->socket_object = client->socket_object
+        ? client->socket_object
+        : ((value_is_box(client->socket) && value_tag(client->socket) == TSC_VALUE_TAG_OBJECT)
+            ? (tsc_object_t*)value_ptr(client->socket)
+            : NULL);
+    entry->native_socket = client->native_socket;
+    entry->active = client;
+    entry->hostname = (tsc_str_t*)hostname;
+    entry->servername = (tsc_str_t*)servername;
+    entry->port = port;
+    entry->tls = tls;
+    entry->reject_unauthorized = reject_unauthorized;
+    entry->end_listener = tsc_value_undefined();
+    entry->error_listener = tsc_value_undefined();
+    entry->next = g_tsc_http_client_pool;
+    g_tsc_http_client_pool = entry;
+    return entry;
+}
+
+static void tsc_http_client_pool_release(tsc_http_client_state_t* client) {
+    if (!client || !client->pool_entry || !client->poolable || !client->response_keep_alive ||
+        !client->response_has_content_length || client->response_chunked) return;
+    tsc_http_client_pool_entry_t* entry = client->pool_entry;
+    if (entry->active != client || entry->stale) return;
+    tsc_http_detach_socket_listener(client->socket, "data", client->data_listener);
+    tsc_http_detach_socket_listener(client->socket, "end", client->end_listener);
+    client->data_listener = tsc_value_undefined();
+    client->end_listener = tsc_value_undefined();
+    entry->active = NULL;
+    client->pool_entry = NULL;
+    entry->end_listener = tsc_http_attach_socket_listener(entry->socket, "end", tsc_http_client_pool_mark_stale, entry, 0.0, "httpClientPoolEnd");
+    entry->error_listener = tsc_http_attach_socket_listener(entry->socket, "error", tsc_http_client_pool_mark_stale, entry, 1.0, "httpClientPoolError");
+    entry->idle_timer = tsc_set_timeout(tsc_http_client_pool_expire, entry, 250.0);
+}
+
+static void tsc_http_client_pool_release_deferred(void* env) {
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !client->pool_release_scheduled) return;
+    client->pool_release_scheduled = false;
+    tsc_http_client_pool_release(client);
+}
+
+static void tsc_http_client_pool_schedule_release(tsc_http_client_state_t* client) {
+    if (!client || client->pool_release_scheduled || !client->pool_entry) return;
+    client->pool_release_scheduled = true;
+    (void)tsc_set_timeout(tsc_http_client_pool_release_deferred, client, 0.0);
 }
 
 static void tsc_http_client_emit_error(tsc_http_client_state_t* client, const char* message) {
@@ -4068,7 +4275,10 @@ static tsc_str_t* tsc_http_client_request_headers(tsc_http_client_state_t* clien
         output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
     }
     if (!tsc_http_has_header(tsc_value_object(client->headers_object), "connection")) {
-        output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
+        output = tsc_str_concat(output, tsc_str_from_lit(
+            client->poolable ? "Connection: keep-alive\r\n" : "Connection: close\r\n",
+            client->poolable ? 24 : 19
+        ));
     }
     return tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
 }
@@ -4113,7 +4323,12 @@ static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
         tsc_str_from_lit(client->body, client->body_len)
     );
     client->request_sent = true;
-    tsc_http_socket_end(socket, output);
+    if (client->poolable) {
+        tsc_http_socket_write(socket, output);
+        client->request_end_sent = true;
+    } else {
+        tsc_http_socket_end(socket, output);
+    }
 }
 
 static tsc_value_t tsc_http_client_connect(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -4169,6 +4384,17 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
     (void)args;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
     if (client) {
+        if (client->pool_entry && client->pool_entry->active == client) {
+            tsc_http_client_pool_entry_t* entry = client->pool_entry;
+            tsc_http_detach_socket_listener(client->socket, "data", client->data_listener);
+            tsc_http_detach_socket_listener(client->socket, "end", client->end_listener);
+            client->data_listener = tsc_value_undefined();
+            client->end_listener = tsc_value_undefined();
+            entry->active = NULL;
+            client->pool_entry = NULL;
+            tsc_http_client_pool_discard(entry);
+            return this_arg;
+        }
         tsc_value_t socket = tsc_http_client_socket_value(client);
         tsc_value_t destroy = tsc_value_get_prop(socket, tsc_str_from_lit("destroy", 7));
         if (tsc_value_is_callable(destroy)) {
@@ -4190,6 +4416,7 @@ static int tsc_http_client_parse_response_headers(tsc_http_client_state_t* clien
     int status = 0;
     int scanned = sscanf(client->response_input, "HTTP/%31s %d %255[^\r\n]", version, &status, status_message);
     if (scanned < 2 || status < 100 || status > 999) return -1;
+    client->response_keep_alive = strcmp(version, "1.1") == 0;
 
     tsc_object_t* headers_object = tsc_object_new();
     size_t cursor = (size_t)(status_line_end - client->response_input) + 2;
@@ -4219,6 +4446,13 @@ static int tsc_http_client_parse_response_headers(tsc_http_client_state_t* clien
         }
         if (strcmp(name, "transfer-encoding") == 0) {
             client->response_chunked = tsc_http_token_list_contains(client->response_input + cursor + value_start, value_len, "chunked");
+        }
+        if (strcmp(name, "connection") == 0) {
+            if (tsc_http_token_list_contains(client->response_input + cursor + value_start, value_len, "close")) {
+                client->response_keep_alive = false;
+            } else if (tsc_http_token_list_contains(client->response_input + cursor + value_start, value_len, "keep-alive")) {
+                client->response_keep_alive = true;
+            }
         }
         cursor = (size_t)(line_end - client->response_input) + 2;
     }
@@ -4269,6 +4503,7 @@ static void tsc_http_client_finish_response(tsc_http_client_state_t* client) {
     }
     tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
     (void)tsc_event_emitter_emit(client->response_event.emitter, tsc_str_from_lit("end", 3), empty);
+    tsc_http_client_pool_schedule_release(client);
 }
 
 static bool tsc_http_client_process_response_body(tsc_http_client_state_t* client) {
@@ -4357,6 +4592,7 @@ static void tsc_http_client_emit_response(tsc_http_client_state_t* client) {
         tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
         (void)tsc_event_emitter_emit(client->response_event.emitter, tsc_str_from_lit("end", 3), empty);
     }
+    if (client->response_complete) tsc_http_client_pool_schedule_release(client);
 }
 
 static tsc_value_t tsc_http_client_data(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -4480,6 +4716,9 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->response_body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_pending_data = tsc_array_new(sizeof(tsc_str_t*), 4);
     tsc_http_client_copy_headers(client, tsc_value_object(client->options_object));
+    client->poolable =
+        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "connection", "close") &&
+        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked");
 
     tsc_object_t* object = tsc_object_new();
     client->event.object = object;
@@ -4493,16 +4732,31 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_object_set(object, tsc_str_from_lit("__httpResponseListener", 22), rooted_response_listener);
         tsc_net_register_listener(&client->event, "response", rooted_response_listener, true);
     }
-    tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
-    client->socket = tls
-        ? tsc_net_tls_connect(port, hostname, reject_unauthorized, servername, connect_listener)
-        : tsc_net_connect(port, hostname, connect_listener);
+    tsc_http_client_pool_entry_t* pooled_entry =
+        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked")
+        ? tsc_http_client_pool_acquire(hostname, port, tls, reject_unauthorized, servername)
+        : NULL;
+    if (pooled_entry) {
+        pooled_entry->active = client;
+        client->pool_entry = pooled_entry;
+        client->socket = pooled_entry->socket;
+        client->socket_object = pooled_entry->socket_object;
+        client->native_socket = pooled_entry->native_socket;
+    } else {
+        tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
+        client->socket = tls
+            ? tsc_net_tls_connect_internal(port, hostname, reject_unauthorized, servername, connect_listener, &client->native_socket)
+            : tsc_net_connect_internal(port, hostname, connect_listener, &client->native_socket);
+        if (client->poolable) {
+            client->pool_entry = tsc_http_client_pool_create(client, hostname, port, tls, reject_unauthorized, servername);
+        }
+    }
     client->socket_object = (value_is_box(client->socket) && value_tag(client->socket) == TSC_VALUE_TAG_OBJECT)
         ? (tsc_object_t*)value_ptr(client->socket)
         : NULL;
     tsc_value_t socket = tsc_http_client_socket_value(client);
-    tsc_http_attach_socket_listener(socket, "data", tsc_http_client_data, client, 1.0, "httpClientData");
-    tsc_http_attach_socket_listener(socket, "end", tsc_http_client_end_read, client, 0.0, "httpClientEnd");
+    client->data_listener = tsc_http_attach_socket_listener(socket, "data", tsc_http_client_data, client, 1.0, "httpClientData");
+    client->end_listener = tsc_http_attach_socket_listener(socket, "end", tsc_http_client_end_read, client, 0.0, "httpClientEnd");
     if (force_get) {
         tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
         (void)tsc_http_client_end(client, client->event.value, empty);
