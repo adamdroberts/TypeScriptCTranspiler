@@ -18910,6 +18910,10 @@ class Emitter {
         if (!ts.isCallExpression(expr)) return null;
         const factory = this.commonJsFactoryWrapperInvocation(expr);
         if (factory?.fn.body && ts.isBlock(factory.fn.body)) return factory.fn.body.statements;
+        if (factory) {
+            const resultBody = this.commonJsFactoryWrapperResultExportBody(expr, factory);
+            if (resultBody) return resultBody;
+        }
         const fn = this.commonJsIifeCallee(expr.expression);
         if (!fn || !ts.isBlock(fn.body)) return null;
         if (expr.arguments.length !== fn.parameters.length) return null;
@@ -18919,6 +18923,37 @@ class Emitter {
             if (!this.isCommonJsWrapperArgumentExpression(expr.arguments[index]!)) return null;
         }
         return fn.body.statements;
+    }
+
+    private commonJsFactoryWrapperResultExportBody(
+        expr: ts.CallExpression,
+        factory: { fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction; args: readonly ts.Expression[] },
+    ): readonly ts.Statement[] | null {
+        const outer = this.commonJsIifeCallee(expr.expression);
+        if (!outer || !ts.isBlock(outer.body)) return null;
+        for (const stmt of outer.body.statements) {
+            const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+            const right = assignment ? this.unwrapTransparentExpression(assignment.right) : null;
+            if (right && ts.isCallExpression(right) && right.arguments === factory.args) {
+                return outer.body.statements;
+            }
+        }
+        return null;
+    }
+
+    private commonJsFactoryWrapperInvocationForNestedCall(call: ts.CallExpression): {
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+        args: readonly ts.Expression[];
+    } | null {
+        let parent: ts.Node | undefined = call.parent;
+        while (parent && !ts.isSourceFile(parent)) {
+            if (ts.isCallExpression(parent)) {
+                const factory = this.commonJsFactoryWrapperInvocation(parent);
+                if (factory?.args === call.arguments) return factory;
+            }
+            parent = parent.parent;
+        }
+        return null;
     }
 
     private commonJsIifeCallee(expr: ts.Expression): ts.FunctionExpression | ts.ArrowFunction | null {
@@ -19153,10 +19188,32 @@ class Emitter {
             }
         }
         if (!ts.isCallExpression(cur)) return null;
+        const wrapperInvocation = this.commonJsFactoryWrapperInvocation(cur);
+        if (wrapperInvocation) {
+            return this.commonJsLocalFactoryInvocationReturnedObjectLiteral(
+                wrapperInvocation.fn,
+                wrapperInvocation.args,
+            );
+        }
+        const nestedWrapperInvocation = this.commonJsFactoryWrapperInvocationForNestedCall(cur);
+        if (nestedWrapperInvocation) {
+            return this.commonJsLocalFactoryInvocationReturnedObjectLiteral(
+                nestedWrapperInvocation.fn,
+                nestedWrapperInvocation.args,
+            );
+        }
         const invocation = this.commonJsDirectFactoryInvocation(cur);
-        if (!invocation || invocation.args.length !== invocation.fn.parameters.length) return null;
-        const fn = invocation.fn;
-        if (!this.commonJsFactoryWrapperArguments(invocation.args)) return null;
+        return invocation
+            ? this.commonJsLocalFactoryInvocationReturnedObjectLiteral(invocation.fn, invocation.args)
+            : null;
+    }
+
+    private commonJsLocalFactoryInvocationReturnedObjectLiteral(
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
+        args: readonly ts.Expression[],
+    ): ts.ObjectLiteralExpression | null {
+        if (args.length !== fn.parameters.length) return null;
+        if (!this.commonJsFactoryWrapperArguments(args)) return null;
         if (!fn.body) return null;
         if (!ts.isBlock(fn.body)) return this.commonJsReturnedObjectLiteral(fn.body);
         let returned: ts.Expression | null = null;
