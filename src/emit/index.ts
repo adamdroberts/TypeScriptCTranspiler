@@ -18871,6 +18871,13 @@ class Emitter {
         if (ts.isObjectLiteralExpression(cur)) return cur;
         if (!ts.isCallExpression(cur) || cur.arguments.length < 1) return null;
         const callName = this.objectStaticCallName(cur);
+        if (callName === "assign" && cur.arguments.length === 2) {
+            const target = this.unwrapTransparentExpression(cur.arguments[0]!);
+            if (ts.isObjectLiteralExpression(target) && target.properties.length === 0) {
+                return this.commonJsReturnedObjectLiteral(cur.arguments[1]!) ??
+                    this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[1]!);
+            }
+        }
         if (
             callName !== "freeze" &&
             callName !== "seal" &&
@@ -18967,18 +18974,32 @@ class Emitter {
             return null;
         }
         if (!returned) return null;
-        let cur = returned;
+        return this.commonJsIifeLocalFactoryReturnedObjectExpression(returned, functions, aliases);
+    }
+
+    private commonJsIifeLocalFactoryReturnedObjectExpression(
+        expr: ts.Expression,
+        functions: ReadonlyMap<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>,
+        aliases: ReadonlyMap<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>,
+    ): ts.ObjectLiteralExpression | null {
+        let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
         if (!ts.isCallExpression(cur)) return null;
         const callName = this.objectStaticCallName(cur);
+        if (callName === "assign" && cur.arguments.length === 2) {
+            const target = this.unwrapTransparentExpression(cur.arguments[0]!);
+            if (ts.isObjectLiteralExpression(target) && target.properties.length === 0) {
+                return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[1]!, functions, aliases);
+            }
+        }
         if (
             (callName === "freeze" ||
                 callName === "seal" ||
                 callName === "preventExtensions" ||
                 callName === "setPrototypeOf") &&
-            cur.arguments.length >= 1
+                cur.arguments.length >= 1
         ) {
-            return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!, functions, aliases);
+            return this.commonJsIifeLocalFactoryReturnedObjectExpression(cur.arguments[0]!, functions, aliases);
         }
         return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur, functions, aliases);
     }

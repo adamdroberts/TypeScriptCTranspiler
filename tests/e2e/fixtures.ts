@@ -1562,6 +1562,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-iife-local-set-prototype-of-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-set-prototype-of-alias-object", {
         "index.js": 'module.exports = (function () {\n  function makeIifeLocalSetPrototypeOfAliasApi() {\n    return {\n      default: "factory-iife-local-set-prototype-of-alias-default",\n      label: "factory-iife-local-set-prototype-of-alias",\n      count: 154,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalSetPrototypeOfAliasApi;\n  return Object.setPrototypeOf(factory(), null);\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-local-assign-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-assign-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalAssignAliasApi() {\n    return {\n      default: "factory-iife-local-assign-alias-default",\n      label: "factory-iife-local-assign-alias",\n      count: 155,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalAssignAliasApi;\n  return Object.freeze(Object.assign({}, factory()));\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {
