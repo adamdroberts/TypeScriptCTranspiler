@@ -888,6 +888,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-assign-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-assign-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-base") });\nconst factory = create;\n(function (factory) {\n  module.exports = Object.defineProperty(factory(require), "label", { value: "wrapped-factory", enumerable: true });\n})(factory);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),
