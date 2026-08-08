@@ -17158,6 +17158,8 @@ class Emitter {
     private commonJsObjectAssignExportSourceEntries(source: ts.Expression): CommonJsObjectAssignExportEntry[] | null {
         const cur = this.unwrapTransparentExpression(source);
         if (ts.isObjectLiteralExpression(cur)) return this.commonJsObjectAssignExportObjectEntries(cur);
+        const factoryObject = this.commonJsLocalFactoryReturnedObjectLiteral(cur);
+        if (factoryObject) return this.commonJsObjectAssignExportObjectEntries(factoryObject);
         if (ts.isIdentifier(cur)) {
             const decl = this.staticObjectLiteralVariableDeclaration(cur);
             const init = decl?.initializer;
@@ -21215,6 +21217,7 @@ class Emitter {
         if (!assignment) return null;
         const right = this.unwrapTransparentExpression(assignment.right);
         if (ts.isObjectLiteralExpression(right)) return null;
+        if (this.commonJsLocalFactoryReturnedObjectLiteral(right)) return null;
         const entries = this.commonJsObjectAssignExportSourceEntries(right);
         if (!entries) return null;
         const out: CommonJsObjectAssignExportEntry[] = [];
