@@ -209,6 +209,19 @@ function staticRequireSpecifiers(
                 }
                 return;
             }
+            const directFactoryScoped = commonJsDirectFactoryScopedAliases(node, activeRequireAliases, activeModuleAliases);
+            if (directFactoryScoped) {
+                for (const arg of node.arguments) visit(arg, activeRequireAliases, activeModuleAliases);
+                if (!directFactoryScoped.fn.body) return;
+                if (ts.isBlock(directFactoryScoped.fn.body)) {
+                    for (const child of directFactoryScoped.fn.body.statements) {
+                        visit(child, directFactoryScoped.requireAliases, directFactoryScoped.moduleAliases);
+                    }
+                } else {
+                    visit(directFactoryScoped.fn.body, directFactoryScoped.requireAliases, directFactoryScoped.moduleAliases);
+                }
+                return;
+            }
             const scoped = commonJsIifeScopedAliases(node, activeRequireAliases, activeModuleAliases);
             if (scoped) {
                 for (const arg of node.arguments) visit(arg, activeRequireAliases, activeModuleAliases);
@@ -263,6 +276,58 @@ function commonJsFactoryWrapperScopedAliases(
         requireAliases: nextRequireAliases ?? requireAliases,
         moduleAliases: nextModuleAliases ?? moduleAliases,
     };
+}
+
+function commonJsDirectFactoryScopedAliases(
+    call: ts.CallExpression,
+    requireAliases: Set<string>,
+    moduleAliases: Set<string>,
+): {
+    fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+    requireAliases: Set<string>;
+    moduleAliases: Set<string>;
+} | null {
+    if (!ts.isIdentifier(call.expression)) return null;
+    const fn = commonJsDirectFactoryFunction(call);
+    if (!fn || call.arguments.length < fn.parameters.length) return null;
+    let nextRequireAliases: Set<string> | null = null;
+    let nextModuleAliases: Set<string> | null = null;
+    for (let index = 0; index < fn.parameters.length; index++) {
+        const param = fn.parameters[index]!;
+        if (!ts.isIdentifier(param.name)) continue;
+        const arg = call.arguments[index]!;
+        if (isCommonJsRequireCallee(arg, requireAliases, moduleAliases)) {
+            nextRequireAliases ??= new Set(requireAliases);
+            nextRequireAliases.add(param.name.text);
+        } else if (commonJsModuleArgument(arg, moduleAliases)) {
+            nextModuleAliases ??= new Set(moduleAliases);
+            nextModuleAliases.add(param.name.text);
+        }
+    }
+    if (!nextRequireAliases && !nextModuleAliases) return null;
+    return {
+        fn,
+        requireAliases: nextRequireAliases ?? requireAliases,
+        moduleAliases: nextModuleAliases ?? moduleAliases,
+    };
+}
+
+function commonJsDirectFactoryFunction(
+    call: ts.CallExpression,
+): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
+    if (!ts.isIdentifier(call.expression)) return null;
+    const name = call.expression.text;
+    for (const stmt of call.getSourceFile().statements) {
+        if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === name) return stmt;
+        if (!ts.isVariableStatement(stmt)) continue;
+        for (const decl of stmt.declarationList.declarations) {
+            if (!ts.isIdentifier(decl.name) || decl.name.text !== name || !decl.initializer) continue;
+            if (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer)) {
+                return decl.initializer;
+            }
+        }
+    }
+    return null;
 }
 
 function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
