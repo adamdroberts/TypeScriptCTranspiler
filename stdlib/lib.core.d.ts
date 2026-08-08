@@ -2446,6 +2446,27 @@ declare module "node:http" {
     export default defaultHttp;
 }
 
+interface HttpsRequestOptions extends HttpRequestOptions {
+    rejectUnauthorized?: boolean;
+    servername?: string;
+}
+interface HttpsModule {
+    request(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    get(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+}
+declare module "https" {
+    export function request(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    export function get(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    const defaultHttps: HttpsModule;
+    export default defaultHttps;
+}
+declare module "node:https" {
+    export function request(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    export function get(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
+    const defaultHttps: HttpsModule;
+    export default defaultHttps;
+}
+
 interface NetSocket {
     readonly connecting: boolean;
     readonly destroyed: boolean;

@@ -2725,6 +2725,11 @@ typedef struct tsc_net_socket {
     bool readable_ended;
     bool connect_emitted;
     bool close_emitted;
+    bool tls;
+    bool tls_handshake_complete;
+    bool tls_want_write;
+    SSL_CTX* tls_ctx;
+    SSL* tls_ssl;
     double poll_timer;
 } tsc_net_socket_t;
 
@@ -2820,6 +2825,14 @@ static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
         close(socket->fd);
         socket->fd = -1;
     }
+    if (socket->tls_ssl) {
+        SSL_free(socket->tls_ssl);
+        socket->tls_ssl = NULL;
+    }
+    if (socket->tls_ctx) {
+        SSL_CTX_free(socket->tls_ctx);
+        socket->tls_ctx = NULL;
+    }
     socket->destroyed = true;
     socket->connecting = false;
     socket->readable_ended = true;
@@ -2841,7 +2854,23 @@ static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* dat
     const uint8_t* bytes = (const uint8_t*)data;
     size_t written = 0;
     while (written < len) {
-        ssize_t n = send(socket->fd, bytes + written, len - written, MSG_NOSIGNAL);
+        ssize_t n;
+        if (socket->tls) {
+            int ssl_n = SSL_write(socket->tls_ssl, bytes + written, (int)(len - written));
+            if (ssl_n <= 0) {
+                int ssl_error = SSL_get_error(socket->tls_ssl, ssl_n);
+                if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+                    struct pollfd descriptor = { .fd = socket->fd, .events = (short)(ssl_error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN), .revents = 0 };
+                    if (poll(&descriptor, 1, 1000) >= 0) continue;
+                }
+                tsc_net_socket_emit_error(socket, EIO);
+                tsc_net_socket_close_internal(socket);
+                return false;
+            }
+            n = ssl_n;
+        } else {
+            n = send(socket->fd, bytes + written, len - written, MSG_NOSIGNAL);
+        }
         if (n > 0) {
             written += (size_t)n;
             continue;
@@ -2962,11 +2991,47 @@ static void tsc_net_socket_emit_connect(tsc_net_socket_t* socket) {
     (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("connect", 7), empty);
 }
 
+static bool tsc_net_socket_tls_handshake(tsc_net_socket_t* socket) {
+    if (!socket || !socket->tls || socket->tls_handshake_complete || !socket->tls_ssl) return true;
+    int result = SSL_connect(socket->tls_ssl);
+    if (result == 1) {
+        socket->tls_handshake_complete = true;
+        socket->tls_want_write = false;
+        return true;
+    }
+    int ssl_error = SSL_get_error(socket->tls_ssl, result);
+    if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
+        socket->tls_want_write = ssl_error == SSL_ERROR_WANT_WRITE;
+        return true;
+    }
+    tsc_net_socket_emit_error(socket, EIO);
+    tsc_net_socket_close_internal(socket);
+    return false;
+}
+
 static void tsc_net_socket_read(tsc_net_socket_t* socket) {
     if (!socket || socket->fd < 0 || socket->readable_ended) return;
     for (;;) {
         uint8_t chunk[4096];
-        ssize_t n = recv(socket->fd, chunk, sizeof(chunk), 0);
+        ssize_t n;
+        if (socket->tls) {
+            int ssl_n = SSL_read(socket->tls_ssl, chunk, sizeof(chunk));
+            if (ssl_n <= 0) {
+                int ssl_error = SSL_get_error(socket->tls_ssl, ssl_n);
+                if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) return;
+                if (ssl_error == SSL_ERROR_ZERO_RETURN) {
+                    n = 0;
+                } else {
+                    tsc_net_socket_emit_error(socket, EIO);
+                    tsc_net_socket_close_internal(socket);
+                    return;
+                }
+            } else {
+                n = ssl_n;
+            }
+        } else {
+            n = recv(socket->fd, chunk, sizeof(chunk), 0);
+        }
         if (n > 0) {
             tsc_value_t value;
             if (socket->encoding_utf8) {
@@ -3001,7 +3066,7 @@ static void tsc_net_socket_poll(void* env) {
     descriptor.fd = socket->fd;
     descriptor.events = POLLIN | POLLHUP | POLLERR;
     descriptor.revents = 0;
-    if (socket->connecting) descriptor.events |= POLLOUT;
+    if (socket->connecting || (socket->tls && !socket->tls_handshake_complete && socket->tls_want_write)) descriptor.events |= POLLOUT;
     int ready = poll(&descriptor, 1, 0);
     if (ready < 0) {
         if (errno == EINTR) return;
@@ -3017,12 +3082,21 @@ static void tsc_net_socket_poll(void* env) {
             tsc_net_socket_close_internal(socket);
             return;
         }
+        if (!socket->tls) {
+            tsc_net_socket_emit_connect(socket);
+        } else {
+            socket->connecting = false;
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("connecting", 10), tsc_value_bool(false));
+        }
+    }
+    if (!socket->connecting && socket->tls && !socket->tls_handshake_complete && ready > 0 &&
+        (descriptor.revents & (POLLIN | POLLOUT | POLLERR | POLLHUP))) {
+        if (!tsc_net_socket_tls_handshake(socket)) return;
+    }
+    if (!socket->connecting && (!socket->tls || socket->tls_handshake_complete) && !socket->connect_emitted) {
         tsc_net_socket_emit_connect(socket);
     }
-    if (!socket->connecting && !socket->connect_emitted) {
-        tsc_net_socket_emit_connect(socket);
-    }
-    if (!socket->connecting && ready > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR))) {
+    if (!socket->connecting && (!socket->tls || socket->tls_handshake_complete) && ready > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR))) {
         tsc_net_socket_read(socket);
     }
 }
@@ -3211,6 +3285,81 @@ tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_li
     }
     tsc_net_socket_t* socket = NULL;
     tsc_value_t socket_value = tsc_net_socket_new(fd, connecting, true, &socket);
+    if (tsc_value_is_callable(connect_listener)) {
+        tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
+    }
+    return socket_value;
+}
+
+tsc_value_t tsc_net_tls_connect(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener) {
+    if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
+        tsc_throw_str(tsc_str_from_cstr("https.request port must be an integer from 1 to 65535"));
+    }
+    if (!tsc_value_is_undefined(connect_listener) && !tsc_value_is_nullish(connect_listener) && !tsc_value_is_callable(connect_listener)) {
+        tsc_throw_str(tsc_str_from_cstr("https.request connect listener must be a function"));
+    }
+    struct in_addr address;
+    if (!tsc_net_resolve_ipv4(host, &address)) {
+        tsc_throw_str(tsc_str_from_cstr("https.request host could not be resolved"));
+    }
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0 || !tsc_net_set_nonblocking(fd)) {
+        int error = errno;
+        if (fd >= 0) close(fd);
+        char message[128];
+        snprintf(message, sizeof(message), "https.request socket initialization failed: %s", strerror(error));
+        tsc_throw_str(tsc_str_from_cstr(message));
+    }
+    struct sockaddr_in endpoint;
+    memset(&endpoint, 0, sizeof(endpoint));
+    endpoint.sin_family = AF_INET;
+    endpoint.sin_addr = address;
+    endpoint.sin_port = htons((uint16_t)port);
+    int result = connect(fd, (struct sockaddr*)&endpoint, sizeof(endpoint));
+    bool connecting = result != 0;
+    if (result != 0 && errno != EINPROGRESS) {
+        int error = errno;
+        close(fd);
+        tsc_throw_str(tsc_str_from_cstr(strerror(error)));
+    }
+
+    SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
+    if (!ctx) {
+        close(fd);
+        tsc_throw_str(tsc_str_from_cstr("https.request TLS context initialization failed"));
+    }
+    if (reject_unauthorized) {
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, NULL);
+        (void)SSL_CTX_set_default_verify_paths(ctx);
+    } else {
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+    }
+    SSL* ssl = SSL_new(ctx);
+    if (!ssl) {
+        SSL_CTX_free(ctx);
+        close(fd);
+        tsc_throw_str(tsc_str_from_cstr("https.request TLS session initialization failed"));
+    }
+    if (SSL_set_fd(ssl, fd) != 1) {
+        SSL_free(ssl);
+        SSL_CTX_free(ctx);
+        close(fd);
+        tsc_throw_str(tsc_str_from_cstr("https.request TLS socket initialization failed"));
+    }
+    const tsc_str_t* tls_servername = servername && servername->len > 0 ? servername : host;
+    char* servername_cstr = cstr_dup(tls_servername ? tls_servername : tsc_str_from_lit("localhost", 9));
+    (void)SSL_set_tlsext_host_name(ssl, servername_cstr);
+    if (reject_unauthorized) (void)SSL_set1_host(ssl, servername_cstr);
+    free(servername_cstr);
+    SSL_set_connect_state(ssl);
+
+    tsc_net_socket_t* socket = NULL;
+    tsc_value_t socket_value = tsc_net_socket_new(fd, connecting, true, &socket);
+    socket->tls = true;
+    socket->tls_handshake_complete = false;
+    socket->tls_want_write = true;
+    socket->tls_ctx = ctx;
+    socket->tls_ssl = ssl;
     if (tsc_value_is_callable(connect_listener)) {
         tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
     }
@@ -3779,6 +3928,7 @@ typedef struct tsc_http_client_state {
     bool response_complete;
     bool response_event_emitted;
     bool response_end_pending;
+    bool tls;
 } tsc_http_client_state_t;
 
 static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_array_t* args);
@@ -3803,7 +3953,7 @@ static tsc_str_t* tsc_http_client_request_headers(tsc_http_client_state_t* clien
         tsc_str_from_lit("", 0)
     );
     if (!tsc_http_has_header(tsc_value_object(client->headers_object), "host")) {
-        if (client->port == 80.0) {
+        if ((!client->tls && client->port == 80.0) || (client->tls && client->port == 443.0)) {
             output = tsc_str_concat_n(4, output, tsc_str_from_lit("Host: ", 6), client->hostname, tsc_str_from_lit("\r\n", 2));
         } else {
             char host_line[128];
@@ -4178,7 +4328,7 @@ static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_va
     }
 }
 
-static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t response_listener, bool force_get) {
+static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t response_listener, bool force_get, bool tls) {
     if (!tsc_value_is_object(options)) {
         tsc_throw_str(tsc_str_from_cstr("http.request options must be an object"));
     }
@@ -4199,7 +4349,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     tsc_str_t* hostname = tsc_value_as_string(hostname_value);
     if (!hostname) hostname = tsc_str_from_lit("127.0.0.1", 9);
     tsc_value_t port_value = tsc_value_get_prop(options, tsc_str_from_lit("port", 4));
-    double port = tsc_value_is_undefined(port_value) || tsc_value_is_nullish(port_value) ? 80.0 : tsc_value_as_num(port_value);
+    double port = tsc_value_is_undefined(port_value) || tsc_value_is_nullish(port_value) ? (tls ? 443.0 : 80.0) : tsc_value_as_num(port_value);
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("http.request port must be an integer from 1 to 65535"));
     }
@@ -4209,6 +4359,10 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     tsc_value_t method_value = tsc_value_get_prop(options, tsc_str_from_lit("method", 6));
     tsc_str_t* method = force_get ? tsc_str_from_lit("GET", 3) : tsc_value_as_string(method_value);
     if (!method) method = tsc_str_from_lit("GET", 3);
+    tsc_value_t reject_value = tsc_value_get_prop(options, tsc_str_from_lit("rejectUnauthorized", 18));
+    bool reject_unauthorized = !tls || tsc_value_is_undefined(reject_value) || tsc_value_as_bool(reject_value);
+    tsc_value_t servername_value = tsc_value_get_prop(options, tsc_str_from_lit("servername", 10));
+    tsc_str_t* servername = tsc_value_as_string(servername_value);
 
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_client_state_t));
     memset(client, 0, sizeof(*client));
@@ -4219,6 +4373,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->path = path;
     client->method = method;
     client->port = port;
+    client->tls = tls;
     client->body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_REQUEST + 1);
     client->request_chunks = tsc_array_new(sizeof(tsc_str_t*), 4);
     client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
@@ -4239,7 +4394,9 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_net_register_listener(&client->event, "response", rooted_response_listener, true);
     }
     tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
-    client->socket = tsc_net_connect(port, hostname, connect_listener);
+    client->socket = tls
+        ? tsc_net_tls_connect(port, hostname, reject_unauthorized, servername, connect_listener)
+        : tsc_net_connect(port, hostname, connect_listener);
     client->socket_object = (value_is_box(client->socket) && value_tag(client->socket) == TSC_VALUE_TAG_OBJECT)
         ? (tsc_object_t*)value_ptr(client->socket)
         : NULL;
@@ -4254,11 +4411,19 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
 }
 
 tsc_value_t tsc_http_request(tsc_value_t options, tsc_value_t response_listener) {
-    return tsc_http_request_internal(options, response_listener, false);
+    return tsc_http_request_internal(options, response_listener, false, false);
 }
 
 tsc_value_t tsc_http_get(tsc_value_t options, tsc_value_t response_listener) {
-    return tsc_http_request_internal(options, response_listener, true);
+    return tsc_http_request_internal(options, response_listener, true, false);
+}
+
+tsc_value_t tsc_https_request(tsc_value_t options, tsc_value_t response_listener) {
+    return tsc_http_request_internal(options, response_listener, false, true);
+}
+
+tsc_value_t tsc_https_get(tsc_value_t options, tsc_value_t response_listener) {
+    return tsc_http_request_internal(options, response_listener, true, true);
 }
 
 double tsc_event_emitter_get_default_max_listeners(void) {

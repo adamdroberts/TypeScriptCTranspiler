@@ -16,9 +16,11 @@
 #include <limits.h>
 #include <netdb.h>
 #include <openssl/evp.h>
+#include <openssl/err.h>
 #include <openssl/hmac.h>
 #include <openssl/opensslv.h>
 #include <openssl/rand.h>
+#include <openssl/ssl.h>
 #include <gmp.h>
 #include <poll.h>
 #include <pwd.h>

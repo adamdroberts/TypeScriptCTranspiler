@@ -424,16 +424,24 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 |--------|-----------|---------------|
 | `tsc_net_create_server(connection_listener)` | `tsc_value_t` | `net.createServer(connectionListener?)` — creates a timer-polled POSIX IPv4 server with dynamic EventEmitter-compatible lifecycle methods, `listen`, `close`, and `address` |
 | `tsc_net_connect(port, host, connect_listener)` | `tsc_value_t` | `net.connect` / `net.createConnection` — creates a nonblocking POSIX IPv4 socket, emits `connect` / `data` / `end` / `close` / `error`, and exposes UTF-8, string/Buffer write, half-close, destroy, and endpoint metadata methods |
+| `tsc_net_tls_connect(port, host, reject_unauthorized, servername, connect_listener)` | `tsc_value_t` | Internal HTTPS transport helper — creates a nonblocking POSIX IPv4 socket, negotiates an OpenSSL client session, and emits the underlying socket lifecycle after the TLS handshake |
 
 ## http (bounded HTTP/1.1 client/server and validation subset)
 
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
-| `tsc_http_request(options, response_listener)` | `tsc_value_t` | `http.request(options, callback?)` — opens a native TCP connection, buffers ordinary bounded string/Buffer request writes until `end`, preserves individual writes as framed chunks when `Transfer-Encoding: chunked` is selected, and parses one close-delimited HTTP/1.1 response with status/version/headers/body metadata including decoded chunks; explicit chunked responses also expose `data` / `end` events; client pooling, general streaming/backpressure, `https`, and `http2` remain deferred |
+| `tsc_http_request(options, response_listener)` | `tsc_value_t` | `http.request(options, callback?)` — opens a native TCP connection, buffers ordinary bounded string/Buffer request writes until `end`, preserves individual writes as framed chunks when `Transfer-Encoding: chunked` is selected, and parses one close-delimited HTTP/1.1 response with status/version/headers/body metadata including decoded chunks; explicit chunked responses also expose `data` / `end` events; client pooling, general streaming/backpressure, HTTPS servers, and `http2` remain deferred |
 | `tsc_http_get(options, response_listener)` | `tsc_value_t` | `http.get(options, callback?)` — creates the same bounded client request and automatically ends it |
-| `tsc_http_create_server(request_listener)` | `tsc_value_t` | `http.createServer(requestListener?)` — creates an HTTP/1.1 server over the native TCP runtime, parsing bounded requests including chunked bodies and exposing request metadata plus response status/header/body methods; explicit chunked response writes flush framed chunks, and explicit `Connection: keep-alive` requests with `Content-Length` bodies may be processed sequentially on one connection; client pooling, chunked keep-alive reuse, general streaming/backpressure, `https`, and `http2` remain deferred |
+| `tsc_http_create_server(request_listener)` | `tsc_value_t` | `http.createServer(requestListener?)` — creates an HTTP/1.1 server over the native TCP runtime, parsing bounded requests including chunked bodies and exposing request metadata plus response status/header/body methods; explicit chunked response writes flush framed chunks, and explicit `Connection: keep-alive` requests with `Content-Length` bodies may be processed sequentially on one connection; client pooling, chunked keep-alive reuse, general streaming/backpressure, HTTPS servers, and `http2` remain deferred |
 | `tsc_http_validate_header_name(name)` | `void` | `http.validateHeaderName(name)` — validates an HTTP token name and throws through the runtime error path on invalid input |
 | `tsc_http_validate_header_value(name, value)` | `void` | `http.validateHeaderValue(name, value)` — validates header content and throws through the runtime error path on invalid control characters |
+
+## https (bounded OpenSSL HTTP/1.1 client subset)
+
+| Symbol | Signature | JS equivalent |
+|--------|-----------|---------------|
+| `tsc_https_request(options, response_listener)` | `tsc_value_t` | `https.request(options, callback?)` — negotiates a TLS client session over the native nonblocking socket runtime, defaults to port 443, supports the bounded HTTP request options plus `rejectUnauthorized` and `servername`, and reuses the HTTP/1.1 request/response parser including bounded chunked request writes and response `data` / `end` events; HTTPS servers, client pooling, general streaming/backpressure, and `http2` remain deferred |
+| `tsc_https_get(options, response_listener)` | `tsc_value_t` | `https.get(options, callback?)` — creates the same bounded OpenSSL client request and automatically ends it |
 
 ## fs (sync and bounded async subset)
 

@@ -21761,6 +21761,7 @@ class Emitter {
             "fs",
             "fs/promises",
             "http",
+            "https",
             "net",
             "os",
             "path",
@@ -21783,6 +21784,11 @@ class Emitter {
         return id.text === "http" ||
             this.isNamespaceImportFrom(id, ["http", "node:http"]) ||
             this.isDefaultImportFrom(id, ["http", "node:http"]);
+    }
+
+    private isHttpsModuleIdentifier(id: ts.Identifier): boolean {
+        return this.isNamespaceImportFrom(id, ["https", "node:https"]) ||
+            this.isDefaultImportFrom(id, ["https", "node:https"]);
     }
 
     private isPathModuleIdentifier(id: ts.Identifier): boolean {
@@ -71361,6 +71367,11 @@ class Emitter {
         if (httpNamed) {
             return this.emitHttpCall(call, httpNamed);
         }
+        const httpsNamed = ["request", "get"]
+            .find((exported) => this.isNamedImportFrom(calleeId, ["https", "node:https"], exported));
+        if (httpsNamed) {
+            return this.emitHttpsCall(call, httpsNamed);
+        }
         const childProcessNamed = ["exec", "execFile", "execSync", "execFileSync", "spawnSync", "spawn", "fork"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["child_process", "node:child_process"], exported));
         if (childProcessNamed) {
@@ -73740,6 +73751,10 @@ class Emitter {
 
         if (ts.isIdentifier(recvExpr) && this.isHttpModuleIdentifier(recvExpr)) {
             return this.emitHttpCall(call, memberName);
+        }
+
+        if (ts.isIdentifier(recvExpr) && this.isHttpsModuleIdentifier(recvExpr)) {
+            return this.emitHttpsCall(call, memberName);
         }
 
         if (ts.isIdentifier(recvExpr) && this.isChildProcessModuleIdentifier(recvExpr)) {
@@ -79661,6 +79676,33 @@ class Emitter {
         unsupported(call, `net.${method}`);
     }
 
+    private emitHttpClientCall(call: ts.CallExpression, method: "request" | "get", tls: boolean): EmitResult {
+        if (call.arguments.length < 1) unsupported(call, `${tls ? "https" : "http"}.${method} expects options`);
+        const optionsNode = call.arguments[0]!;
+        const options = this.emitExpr(optionsNode);
+        const listenerNode = call.arguments[1];
+        const listener = listenerNode
+            ? this.emitExpr(listenerNode)
+            : { c: "tsc_value_undefined()", ty: T_VALUE };
+        if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+            unsupported(listenerNode, `${tls ? "https" : "http"}.${method} response listener must be a function`);
+        }
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: options, target: T_VALUE, node: optionsNode },
+            { value: listener, target: T_VALUE, node: listenerNode },
+            ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 2 : 1),
+        ], ([optionsC, listenerC]) =>
+            `${tls ? "tsc_https" : "tsc_http"}_${method}(${optionsC}, ${listenerC})`,
+        );
+    }
+
+    private emitHttpsCall(call: ts.CallExpression, method: string): EmitResult {
+        if (method === "request" || method === "get") {
+            return this.emitHttpClientCall(call, method, true);
+        }
+        unsupported(call, `https.${method}`);
+    }
+
     private emitHttpCall(call: ts.CallExpression, method: string): EmitResult {
         if (method === "createServer") {
             const listenerNode = call.arguments[0];
@@ -79674,23 +79716,7 @@ class Emitter {
             ], ([listenerC]) => `tsc_http_create_server(${listenerC})`);
         }
         if (method === "request" || method === "get") {
-            if (call.arguments.length < 1) unsupported(call, `http.${method} expects options`);
-            const optionsNode = call.arguments[0]!;
-            const options = this.emitExpr(optionsNode);
-            const listenerNode = call.arguments[1];
-            const listener = listenerNode
-                ? this.emitExpr(listenerNode)
-                : { c: "tsc_value_undefined()", ty: T_VALUE };
-            if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
-                unsupported(listenerNode, `http.${method} response listener must be a function`);
-            }
-            return this.emitSequencedExpr(T_VALUE, [
-                { value: options, target: T_VALUE, node: optionsNode },
-                { value: listener, target: T_VALUE, node: listenerNode },
-                ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 2 : 1),
-            ], ([optionsC, listenerC]) =>
-                `tsc_http_${method}(${optionsC}, ${listenerC})`,
-            );
+            return this.emitHttpClientCall(call, method, false);
         }
         if (method === "validateHeaderName") {
             if (call.arguments.length < 1) unsupported(call, "http.validateHeaderName expects a name");
