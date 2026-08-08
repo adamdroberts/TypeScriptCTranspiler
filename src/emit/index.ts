@@ -19154,11 +19154,26 @@ class Emitter {
         if (!this.commonJsFactoryWrapperArguments(invocation.args)) return null;
         if (!fn.body) return null;
         if (!ts.isBlock(fn.body)) return this.commonJsReturnedObjectLiteral(fn.body);
-        if (fn.body.statements.length !== 1) return null;
-        const stmt = fn.body.statements[0]!;
-        return ts.isReturnStatement(stmt) && stmt.expression
-            ? this.commonJsReturnedObjectLiteral(stmt.expression)
-            : null;
+        let returned: ts.Expression | null = null;
+        for (let index = 0; index < fn.body.statements.length; index++) {
+            const stmt = fn.body.statements[index]!;
+            if (ts.isReturnStatement(stmt)) {
+                if (returned || index !== fn.body.statements.length - 1 || !stmt.expression) return null;
+                returned = stmt.expression;
+                continue;
+            }
+            if (!this.commonJsLocalFactoryStaticRequireBindingStatement(stmt)) return null;
+        }
+        return returned ? this.commonJsReturnedObjectLiteral(returned) : null;
+    }
+
+    private commonJsLocalFactoryStaticRequireBindingStatement(stmt: ts.Statement): boolean {
+        if (!ts.isVariableStatement(stmt)) return false;
+        return stmt.declarationList.declarations.every((decl) =>
+            ts.isIdentifier(decl.name) &&
+            !!decl.initializer &&
+            this.requireCallSpecifier(decl.initializer) !== null,
+        );
     }
 
     private commonJsDirectFactoryInvocation(call: ts.CallExpression): {
