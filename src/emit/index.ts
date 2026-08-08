@@ -71367,7 +71367,7 @@ class Emitter {
         if (httpNamed) {
             return this.emitHttpCall(call, httpNamed);
         }
-        const httpsNamed = ["request", "get"]
+        const httpsNamed = ["createServer", "request", "get"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["https", "node:https"], exported));
         if (httpsNamed) {
             return this.emitHttpsCall(call, httpsNamed);
@@ -79697,6 +79697,23 @@ class Emitter {
     }
 
     private emitHttpsCall(call: ts.CallExpression, method: string): EmitResult {
+        if (method === "createServer") {
+            if (call.arguments.length < 1) unsupported(call, "https.createServer expects options");
+            const optionsNode = call.arguments[0]!;
+            const options = this.emitExpr(optionsNode);
+            const listenerNode = call.arguments[1];
+            const listener = listenerNode
+                ? this.emitExpr(listenerNode)
+                : { c: "tsc_value_undefined()", ty: T_VALUE };
+            if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+                unsupported(listenerNode, "https.createServer request listener must be a function");
+            }
+            return this.emitSequencedExpr(T_VALUE, [
+                { value: options, target: T_VALUE, node: optionsNode },
+                { value: listener, target: T_VALUE, node: listenerNode },
+                ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 2 : 1),
+            ], ([optionsC, listenerC]) => `tsc_https_create_server(${optionsC}, ${listenerC})`);
+        }
         if (method === "request" || method === "get") {
             return this.emitHttpClientCall(call, method, true);
         }

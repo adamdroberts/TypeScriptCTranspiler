@@ -2450,17 +2450,24 @@ interface HttpsRequestOptions extends HttpRequestOptions {
     rejectUnauthorized?: boolean;
     servername?: string;
 }
+interface HttpsServerOptions {
+    key: string;
+    cert: string;
+}
 interface HttpsModule {
+    createServer(options: HttpsServerOptions, requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
     request(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     get(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
 }
 declare module "https" {
+    export function createServer(options: HttpsServerOptions, requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
     export function request(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     export function get(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     const defaultHttps: HttpsModule;
     export default defaultHttps;
 }
 declare module "node:https" {
+    export function createServer(options: HttpsServerOptions, requestListener?: (request: HttpIncomingMessage, response: HttpServerResponse) => void, ...ignored: any[]): HttpServer;
     export function request(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     export function get(options: HttpsRequestOptions, callback?: (response: HttpIncomingMessage) => void, ...ignored: any[]): HttpClientRequest;
     const defaultHttps: HttpsModule;

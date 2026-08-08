@@ -19,6 +19,7 @@
 #include <openssl/err.h>
 #include <openssl/hmac.h>
 #include <openssl/opensslv.h>
+#include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
 #include <gmp.h>

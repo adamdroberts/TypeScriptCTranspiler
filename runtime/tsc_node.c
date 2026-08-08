@@ -2726,6 +2726,7 @@ typedef struct tsc_net_socket {
     bool connect_emitted;
     bool close_emitted;
     bool tls;
+    bool tls_server;
     bool tls_handshake_complete;
     bool tls_want_write;
     SSL_CTX* tls_ctx;
@@ -2740,6 +2741,7 @@ typedef struct tsc_net_server {
     bool close_requested;
     bool close_emitted;
     bool listening_emitted;
+    SSL_CTX* tls_ctx;
     double poll_timer;
 } tsc_net_server_t;
 
@@ -2980,6 +2982,27 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     return socket->event.value;
 }
 
+static bool tsc_net_socket_enable_tls_server(tsc_net_socket_t* socket, SSL_CTX* ctx) {
+    if (!socket || !ctx || socket->fd < 0) return false;
+    SSL* ssl = SSL_new(ctx);
+    if (!ssl || SSL_set_fd(ssl, socket->fd) != 1) {
+        if (ssl) SSL_free(ssl);
+        return false;
+    }
+    if (SSL_CTX_up_ref(ctx) != 1) {
+        SSL_free(ssl);
+        return false;
+    }
+    SSL_set_accept_state(ssl);
+    socket->tls = true;
+    socket->tls_server = true;
+    socket->tls_handshake_complete = false;
+    socket->tls_want_write = true;
+    socket->tls_ctx = ctx;
+    socket->tls_ssl = ssl;
+    return true;
+}
+
 static void tsc_net_socket_emit_connect(tsc_net_socket_t* socket) {
     if (!socket || socket->connect_emitted) return;
     socket->connect_emitted = true;
@@ -2993,7 +3016,7 @@ static void tsc_net_socket_emit_connect(tsc_net_socket_t* socket) {
 
 static bool tsc_net_socket_tls_handshake(tsc_net_socket_t* socket) {
     if (!socket || !socket->tls || socket->tls_handshake_complete || !socket->tls_ssl) return true;
-    int result = SSL_connect(socket->tls_ssl);
+    int result = socket->tls_server ? SSL_accept(socket->tls_ssl) : SSL_connect(socket->tls_ssl);
     if (result == 1) {
         socket->tls_handshake_complete = true;
         socket->tls_want_write = false;
@@ -3020,6 +3043,8 @@ static void tsc_net_socket_read(tsc_net_socket_t* socket) {
                 int ssl_error = SSL_get_error(socket->tls_ssl, ssl_n);
                 if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) return;
                 if (ssl_error == SSL_ERROR_ZERO_RETURN) {
+                    n = 0;
+                } else if (ssl_error == SSL_ERROR_SYSCALL && ssl_n == 0 && errno == 0) {
                     n = 0;
                 } else {
                     tsc_net_socket_emit_error(socket, EIO);
@@ -3118,6 +3143,10 @@ static void tsc_net_server_close_internal(tsc_net_server_t* server) {
     if (server->fd >= 0) {
         close(server->fd);
         server->fd = -1;
+    }
+    if (server->tls_ctx) {
+        SSL_CTX_free(server->tls_ctx);
+        server->tls_ctx = NULL;
     }
     server->listening = false;
     server->close_emitted = true;
@@ -3227,20 +3256,26 @@ static void tsc_net_server_poll(void* env) {
             close(accepted);
             continue;
         }
-        tsc_value_t socket_value = tsc_net_socket_new(accepted, false, false, NULL);
+        tsc_net_socket_t* socket = NULL;
+        tsc_value_t socket_value = tsc_net_socket_new(accepted, false, false, &socket);
+        if (server->tls_ctx && !tsc_net_socket_enable_tls_server(socket, server->tls_ctx)) {
+            tsc_net_socket_close_internal(socket);
+            continue;
+        }
         tsc_array_t* connection_args = tsc_array_new(sizeof(tsc_value_t), 1);
         tsc_array_push_value(connection_args, socket_value);
         (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("connection", 10), connection_args);
     }
 }
 
-tsc_value_t tsc_net_create_server(tsc_value_t connection_listener) {
+static tsc_value_t tsc_net_create_server_with_tls(tsc_value_t connection_listener, SSL_CTX* tls_ctx) {
     if (!tsc_value_is_undefined(connection_listener) && !tsc_value_is_nullish(connection_listener) && !tsc_value_is_callable(connection_listener)) {
         tsc_throw_str(tsc_str_from_cstr("net.createServer connection listener must be a function"));
     }
     tsc_net_server_t* server = (tsc_net_server_t*)TSC_GC_MALLOC(sizeof(tsc_net_server_t));
     memset(server, 0, sizeof(*server));
     server->fd = -1;
+    server->tls_ctx = tls_ctx;
     server->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();
     server->event.object = object;
@@ -3250,6 +3285,14 @@ tsc_value_t tsc_net_create_server(tsc_value_t connection_listener) {
         tsc_net_register_listener(&server->event, "connection", connection_listener, false);
     }
     return server->event.value;
+}
+
+tsc_value_t tsc_net_create_server(tsc_value_t connection_listener) {
+    return tsc_net_create_server_with_tls(connection_listener, NULL);
+}
+
+tsc_value_t tsc_net_create_server_tls(tsc_value_t connection_listener, void* tls_ctx) {
+    return tsc_net_create_server_with_tls(connection_listener, (SSL_CTX*)tls_ctx);
 }
 
 tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
@@ -3334,6 +3377,9 @@ tsc_value_t tsc_net_tls_connect(double port, tsc_str_t* host, bool reject_unauth
     } else {
         SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
     }
+#ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
+    SSL_CTX_set_options(ctx, SSL_OP_IGNORE_UNEXPECTED_EOF);
+#endif
     SSL* ssl = SSL_new(ctx);
     if (!ssl) {
         SSL_CTX_free(ctx);
@@ -3364,6 +3410,49 @@ tsc_value_t tsc_net_tls_connect(double port, tsc_str_t* host, bool reject_unauth
         tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
     }
     return socket_value;
+}
+
+static SSL_CTX* tsc_https_server_tls_context(tsc_value_t options) {
+    if (!tsc_value_is_object(options)) {
+        tsc_throw_str(tsc_str_from_cstr("https.createServer options must be an object"));
+    }
+    tsc_str_t* certificate_text = tsc_value_as_string(tsc_value_get_prop(options, tsc_str_from_lit("cert", 4)));
+    tsc_str_t* private_key_text = tsc_value_as_string(tsc_value_get_prop(options, tsc_str_from_lit("key", 3)));
+    if (!certificate_text || !private_key_text) {
+        tsc_throw_str(tsc_str_from_cstr("https.createServer options require string key and cert values"));
+    }
+
+    SSL_CTX* ctx = SSL_CTX_new(TLS_server_method());
+    if (!ctx) {
+        tsc_throw_str(tsc_str_from_cstr("https.createServer TLS context initialization failed"));
+    }
+    SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+#ifdef SSL_OP_IGNORE_UNEXPECTED_EOF
+    SSL_CTX_set_options(ctx, SSL_OP_IGNORE_UNEXPECTED_EOF);
+#endif
+
+    BIO* certificate_bio = BIO_new_mem_buf(certificate_text->data, (int)certificate_text->len);
+    X509* certificate = certificate_bio ? PEM_read_bio_X509(certificate_bio, NULL, 0, NULL) : NULL;
+    if (!certificate_bio || !certificate || SSL_CTX_use_certificate(ctx, certificate) != 1) {
+        if (certificate) X509_free(certificate);
+        if (certificate_bio) BIO_free(certificate_bio);
+        SSL_CTX_free(ctx);
+        tsc_throw_str(tsc_str_from_cstr("https.createServer certificate must be PEM encoded"));
+    }
+    X509_free(certificate);
+    BIO_free(certificate_bio);
+
+    BIO* private_key_bio = BIO_new_mem_buf(private_key_text->data, (int)private_key_text->len);
+    EVP_PKEY* private_key = private_key_bio ? PEM_read_bio_PrivateKey(private_key_bio, NULL, 0, NULL) : NULL;
+    if (!private_key_bio || !private_key || SSL_CTX_use_PrivateKey(ctx, private_key) != 1 || SSL_CTX_check_private_key(ctx) != 1) {
+        if (private_key) EVP_PKEY_free(private_key);
+        if (private_key_bio) BIO_free(private_key_bio);
+        SSL_CTX_free(ctx);
+        tsc_throw_str(tsc_str_from_cstr("https.createServer private key must be PEM encoded and match cert"));
+    }
+    EVP_PKEY_free(private_key);
+    BIO_free(private_key_bio);
+    return ctx;
 }
 
 /* ---------------- http/1.1 server transport ---------------- */
@@ -3890,6 +3979,17 @@ tsc_value_t tsc_http_create_server(tsc_value_t request_listener) {
     server->request_listener = request_listener;
     tsc_value_t connection_listener = tsc_value_function_generic_named(tsc_http_server_connection, server, 1.0, tsc_str_from_lit("httpServerConnection", 20));
     return tsc_net_create_server(connection_listener);
+}
+
+tsc_value_t tsc_https_create_server(tsc_value_t options, tsc_value_t request_listener) {
+    if (!tsc_value_is_undefined(request_listener) && !tsc_value_is_nullish(request_listener) && !tsc_value_is_callable(request_listener)) {
+        tsc_throw_str(tsc_str_from_cstr("https.createServer request listener must be a function"));
+    }
+    tsc_http_server_state_t* server = (tsc_http_server_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_server_state_t));
+    server->request_listener = request_listener;
+    tsc_value_t connection_listener = tsc_value_function_generic_named(tsc_http_server_connection, server, 1.0, tsc_str_from_lit("httpsServerConnection", 21));
+    SSL_CTX* ctx = tsc_https_server_tls_context(options);
+    return tsc_net_create_server_tls(connection_listener, ctx);
 }
 
 typedef struct tsc_http_client_state {

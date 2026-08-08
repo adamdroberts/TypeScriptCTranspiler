@@ -1,17 +1,15 @@
-import { execFileSync, spawn } from "node:child_process";
-import { unlinkSync } from "node:fs";
-import secureHttps from "node:https";
+import { execFileSync } from "node:child_process";
+import { readFileSync, unlinkSync } from "node:fs";
+import secureHttps, { createServer as createSecureServer } from "node:https";
 
 const prefix = `/tmp/tsc2c-https-${process.pid}`;
 const keyPath = `${prefix}.key`;
 const certPath = `${prefix}.crt`;
-const port = 42000 + (process.pid % 1000);
 let finished = false;
 
 function cleanup(server: any): void {
     if (finished) return;
     finished = true;
-    server.kill();
     try { unlinkSync(keyPath); } catch (_error) { /* best effort */ }
     try { unlinkSync(certPath); } catch (_error) { /* best effort */ }
 }
@@ -27,15 +25,22 @@ try {
     process.exit(1);
 }
 
-const server: any = spawn("openssl", [
-    "s_server", "-accept", String(port), "-cert", certPath, "-key", keyPath, "-www", "-quiet",
-], { stdio: "ignore" });
+const server: any = createSecureServer({
+    key: readFileSync(keyPath, "utf8"),
+    cert: readFileSync(certPath, "utf8"),
+}, (_request: any, response: any) => {
+    response.statusCode = 202;
+    response.setHeader("Content-Type", "text/plain");
+    response.end("secure-ok");
+});
 
-setTimeout(() => {
+server.listen(0, "127.0.0.1", () => {
+    const address = server.address();
+    if (!address) throw new Error("server address missing");
     const request: any = secureHttps.get({
         hostname: "127.0.0.1",
-        port,
-        path: "/",
+        port: address.port,
+        path: "/secure",
         rejectUnauthorized: false,
         servername: "localhost",
     }, (response: any) => {
@@ -43,13 +48,13 @@ setTimeout(() => {
         response.on("end", () => {
             console.log("status:", response.statusCode);
             console.log("version:", response.httpVersion);
-            console.log("body:", response.body.length > 0);
-            cleanup(server);
+            console.log("body:", response.body);
+            server.close(() => cleanup(server));
         });
     });
     request.on("error", (_error: any) => {
         console.log("request error");
-        cleanup(server);
+        server.close(() => cleanup(server));
         process.exit(1);
     });
-}, 200);
+});
