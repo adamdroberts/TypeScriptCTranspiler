@@ -1,5 +1,6 @@
 # Implemented features
 
+- Pure JavaScript ESM packages loaded through allowJs can named-import class values from external CommonJS object-literal exports through the AOT module graph, including constructor fields and instance methods. Test: node_modules_js_named_import_external_cjs_object_class.
 - Pure JavaScript ESM packages loaded through allowJs can named-import class values from direct external CommonJS exports.name = class Name { ... } assignments through the AOT module graph. Test: node_modules_js_named_import_external_cjs_class.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and call default function values from external CommonJS package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs_function`.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and construct named class defaults from external CommonJS package dependencies through the AOT module graph, including constructor fields and instance methods. Test: `node_modules_js_import_external_cjs_class`.
@@ -3014,6 +3015,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 | Test case | Demonstrates |
 |-----------|--------------|
+| node_modules_js_named_import_external_cjs_object_class | pure-JS package named-imports a class from an external CommonJS object-literal export |
 | node_modules_js_named_import_external_cjs_class | pure-JS package named-imports an external CommonJS class export |
 | `hello` | minimal pipeline |
 | `fizzbuzz` | loop + modulo + conditional + string concat |

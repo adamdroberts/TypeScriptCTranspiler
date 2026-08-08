@@ -18424,15 +18424,25 @@ class Emitter {
 
     private commonJsClassExpressionsForStatement(stmt: ts.Statement): ts.ClassExpression[] {
         const expressions: ts.ClassExpression[] = [];
+        const seen = new Set<ts.ClassExpression>();
+        const collect = (node: ts.Node): void => {
+            if (ts.isClassExpression(node)) {
+                if (node.name && !seen.has(node)) {
+                    seen.add(node);
+                    expressions.push(node);
+                }
+                return;
+            }
+            if (ts.isFunctionLike(node)) return;
+            ts.forEachChild(node, collect);
+        };
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
         if (assignment) {
-            const right = this.unwrapTransparentExpression(assignment.right);
-            if (ts.isClassExpression(right)) expressions.push(right);
+            collect(this.unwrapTransparentExpression(assignment.right));
         }
         const exportAssignment = this.commonJsExportAssignmentChain(stmt);
         if (exportAssignment) {
-            const right = this.unwrapTransparentExpression(exportAssignment.right);
-            if (ts.isClassExpression(right)) expressions.push(right);
+            collect(this.unwrapTransparentExpression(exportAssignment.right));
         }
         return expressions;
     }
@@ -18610,7 +18620,7 @@ class Emitter {
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
         if (ts.isClassExpression(cur)) {
-            return !!cur.name && this.isDirectCommonJsClassExpression(cur);
+            return !!cur.name;
         }
         if (this.isUnshadowedUndefinedExpression(cur)) return true;
         if (ts.isPrefixUnaryExpression(cur)) {
@@ -18814,7 +18824,7 @@ class Emitter {
             if (ts.isPropertyAssignment(prop) && this.isCommonJsModuleExportsDefaultInitializerValue(prop.initializer)) continue;
             if (ts.isMethodDeclaration(prop)) continue;
             if (ts.isGetAccessorDeclaration(prop) && this.commonJsObjectAssignGetterReturnExpression(prop)) continue;
-            unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, static require values, static literal-value exports, and bounded runtime-computed default initializers only");
+            unsupported(prop, "CommonJS module.exports object currently supports declared identifier, function-valued, arrow-function-valued, class-valued, static require values, static literal-value exports, and bounded runtime-computed default initializers only");
         }
         return { left: assignment.left, right, sourceRight: assignment.right, exportLefts: assignment.exportLefts };
     }
@@ -66665,6 +66675,11 @@ class Emitter {
     ): ts.ClassExpression | null {
         const imported = this.importAliasTargetDeclaration(id);
         if (imported && ts.isClassExpression(imported)) return imported;
+        const namedImport = this.commonJsNamedImportDeclaration(id);
+        if (namedImport && ts.isPropertyAssignment(namedImport)) {
+            const initializer = this.unwrapTransparentExpression(namedImport.initializer);
+            if (ts.isClassExpression(initializer)) return initializer;
+        }
 
         const sym = this.symbolForIdentifier(id);
         if (sym && seen.has(sym)) return null;
