@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- A bounded empty-descriptor `Object.defineProperties(factory(), {})` composition inside an IIFE-local zero-argument factory alias now preserves finite named/default metadata and whole-value reads through an optional `Object.freeze(...)` return wrapper. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - A bounded empty-target `Object.assign({}, factory())` composition inside an IIFE-local zero-argument factory alias now preserves finite named/default metadata and whole-value reads through an optional `Object.freeze(...)` return wrapper. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - IIFE-local zero-argument factory aliases now preserve the same finite named/default metadata and whole-value reads through `Object.seal(...)`, `Object.preventExtensions(...)`, and `Object.setPrototypeOf(...)` object-preserving returns. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - IIFE-local zero-argument factory declarations and `const` aliases now preserve finite named/default metadata and whole-value reads through direct invocation, `Function.call`, `Function.apply`, `Reflect.apply`, and `Function.bind` when returned through object-preserving wrappers. Test: `node_modules_commonjs_module_exports_local_factory_object`.
