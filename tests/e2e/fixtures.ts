@@ -744,6 +744,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-seal-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-seal-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-helper", {
+        "index.js": 'const create = () => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-base") });\nconst factory = create;\nmodule.exports = Object.freeze(factory());\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-freeze-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-inline-argument-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-inline-argument-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-inline-argument-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),
