@@ -804,6 +804,18 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-define-property-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-define-property-class-helper", {
         "index.js": 'const createDefineProperty = () => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-compositions-class-base") });\nconst factoryDefineProperty = createDefineProperty;\nmodule.exports = Object.freeze(Object.defineProperty(factoryDefineProperty(), "Counter", {}));\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-package", {
+        "index.js": 'import { Counter as ArrowCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-class-helper";\nimport { Counter as FunctionCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-class-helper";\nexport function computeArrow(value) { const counter = new ArrowCounter(9); return counter.add(value); }\nexport function computeFunction(value) { const counter = new FunctionCounter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-class-helper", {
+        "index.js": 'module.exports = Object.freeze((() => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-base") }))());\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-class-helper", {
+        "index.js": 'module.exports = Object.freeze((function () { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-base") }; })());\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-function-invocations-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-function-invocations-class-package", {
         "index.js": 'import { Counter as CallCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-function-call-class-helper";\nimport { Counter as ApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-function-apply-class-helper";\nimport { Counter as ReflectApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-function-reflect-apply-class-helper";\nimport { Counter as BindCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-function-bind-class-helper";\nexport function computeCall(value) { const counter = new CallCounter(9); return counter.add(value); }\nexport function computeApply(value) { const counter = new ApplyCounter(9); return counter.add(value); }\nexport function computeReflectApply(value) { const counter = new ReflectApplyCounter(9); return counter.add(value); }\nexport function computeBind(value) { const counter = new BindCounter(9); return counter.add(value); }\n',
     }),
