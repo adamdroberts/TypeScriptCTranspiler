@@ -18931,9 +18931,10 @@ class Emitter {
     ): readonly ts.Statement[] | null {
         const outer = this.commonJsIifeCallee(expr.expression);
         if (!outer || !ts.isBlock(outer.body)) return null;
+        const factoryParameterNames = this.commonJsFactoryWrapperParameterNames(expr, factory);
         for (const stmt of outer.body.statements) {
             const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
-            if (assignment && this.commonJsFactoryWrapperResultContainsInvocation(assignment.right, factory)) {
+            if (assignment && this.commonJsFactoryWrapperResultContainsInvocation(assignment.right, factory, factoryParameterNames)) {
                 return outer.body.statements;
             }
         }
@@ -18943,17 +18944,18 @@ class Emitter {
     private commonJsFactoryWrapperResultContainsInvocation(
         expr: ts.Expression,
         factory: { fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction; args: readonly ts.Expression[] },
+        factoryParameterNames: ReadonlySet<string>,
     ): boolean {
         const cur = this.unwrapTransparentExpression(expr);
         if (!ts.isCallExpression(cur)) return false;
-        if (this.commonJsFactoryInvocationMatchesCall(cur, factory)) return true;
+        if (this.commonJsFactoryInvocationMatchesCall(cur, factory, factoryParameterNames)) return true;
         const callName = this.objectStaticCallName(cur);
         if (callName === "assign") {
-            return cur.arguments.some((arg) => this.commonJsFactoryWrapperResultContainsInvocation(arg, factory));
+            return cur.arguments.some((arg) => this.commonJsFactoryWrapperResultContainsInvocation(arg, factory, factoryParameterNames));
         }
         if (callName === "defineProperty" || callName === "defineProperties") {
             return cur.arguments.length >= 1 &&
-                this.commonJsFactoryWrapperResultContainsInvocation(cur.arguments[0]!, factory);
+                this.commonJsFactoryWrapperResultContainsInvocation(cur.arguments[0]!, factory, factoryParameterNames);
         }
         if (
             callName !== "freeze" &&
@@ -18963,17 +18965,21 @@ class Emitter {
         ) {
             return false;
         }
-        return cur.arguments.length >= 1 && this.commonJsFactoryWrapperResultContainsInvocation(cur.arguments[0]!, factory);
+        return cur.arguments.length >= 1 && this.commonJsFactoryWrapperResultContainsInvocation(cur.arguments[0]!, factory, factoryParameterNames);
     }
 
     private commonJsFactoryInvocationMatchesCall(
         call: ts.CallExpression,
         factory: { fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction; args: readonly ts.Expression[] },
+        factoryParameterNames: ReadonlySet<string>,
     ): boolean {
         let callee: ts.Expression = call.expression;
         while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
         if (ts.isIdentifier(callee) || ts.isFunctionExpression(callee) || ts.isArrowFunction(callee)) {
-            return this.commonJsDirectFactoryFunctionForExpression(callee, call.getSourceFile()) === factory.fn &&
+            return (
+                this.commonJsDirectFactoryFunctionForExpression(callee, call.getSourceFile()) === factory.fn ||
+                (ts.isIdentifier(callee) && factoryParameterNames.has(callee.text))
+            ) &&
                 call.arguments === factory.args;
         }
         if (ts.isPropertyAccessExpression(callee)) {
@@ -18984,11 +18990,12 @@ class Emitter {
                 const fn = this.commonJsDirectFactoryFunctionForExpression(call.arguments[0]!, call.getSourceFile());
                 let argArray: ts.Expression = call.arguments[2]!;
                 while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
-                return fn === factory.fn && ts.isArrayLiteralExpression(argArray) &&
+                return (fn === factory.fn || (ts.isIdentifier(call.arguments[0]!) && factoryParameterNames.has(call.arguments[0]!.text))) &&
+                    ts.isArrayLiteralExpression(argArray) &&
                     this.commonJsFactoryInvocationArgumentsMatch(argArray.elements, factory.args);
             }
             const fn = this.commonJsDirectFactoryFunctionForExpression(target, call.getSourceFile());
-            if (fn !== factory.fn) return false;
+            if (fn !== factory.fn && !(ts.isIdentifier(target) && factoryParameterNames.has(target.text))) return false;
             if (callee.name.text === "call") {
                 return call.arguments.length >= 1 &&
                     this.commonJsFactoryInvocationArgumentsMatch(call.arguments.slice(1), factory.args);
@@ -19007,7 +19014,10 @@ class Emitter {
         if (!ts.isPropertyAccessExpression(bindCallee) || bindCallee.name.text !== "bind") return false;
         let bindTarget: ts.Expression = bindCallee.expression;
         while (ts.isParenthesizedExpression(bindTarget)) bindTarget = bindTarget.expression;
-        return this.commonJsDirectFactoryFunctionForExpression(bindTarget, call.getSourceFile()) === factory.fn &&
+        return (
+            this.commonJsDirectFactoryFunctionForExpression(bindTarget, call.getSourceFile()) === factory.fn ||
+            (ts.isIdentifier(bindTarget) && factoryParameterNames.has(bindTarget.text))
+        ) &&
             this.commonJsFactoryInvocationArgumentsMatch(call.arguments, factory.args);
     }
 
@@ -19026,11 +19036,43 @@ class Emitter {
         while (parent && !ts.isSourceFile(parent)) {
             if (ts.isCallExpression(parent)) {
                 const factory = this.commonJsFactoryWrapperInvocation(parent);
-                if (factory?.args === call.arguments) return factory;
+                if (
+                    factory &&
+                    (
+                        factory.args === call.arguments ||
+                        this.commonJsFactoryInvocationMatchesCall(
+                            call,
+                            factory,
+                            this.commonJsFactoryWrapperParameterNames(parent, factory),
+                        )
+                    )
+                ) {
+                    return factory;
+                }
             }
             parent = parent.parent;
         }
         return null;
+    }
+
+    private commonJsFactoryWrapperParameterNames(
+        call: ts.CallExpression,
+        factory: { fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction },
+    ): Set<string> {
+        const outer = this.commonJsIifeCallee(call.expression);
+        const names = new Set<string>();
+        if (!outer) return names;
+        for (let index = 0; index < outer.parameters.length; index++) {
+            const param = outer.parameters[index]!;
+            if (
+                ts.isIdentifier(param.name) &&
+                index < call.arguments.length &&
+                this.commonJsDirectFactoryFunctionForExpression(call.arguments[index]!, call.getSourceFile()) === factory.fn
+            ) {
+                names.add(param.name.text);
+            }
+        }
+        return names;
     }
 
     private commonJsIifeCallee(expr: ts.Expression): ts.FunctionExpression | ts.ArrowFunction | null {

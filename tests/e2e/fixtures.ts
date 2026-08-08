@@ -915,6 +915,33 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-define-property-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-freeze-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-freeze-class-package", {
+        "index.js": 'import { CounterApply } from "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-apply-freeze-class-helper";\nexport function compute(value) { const counter = new CounterApply(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-package", {
+        "index.js": 'import { CounterReflect } from "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-helper";\nexport function compute(value) { const counter = new CounterReflect(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-package", {
+        "index.js": 'import { CounterBind } from "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-helper";\nexport function compute(value) { const counter = new CounterBind(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-apply-freeze-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-apply-freeze-class-helper", {
+        "index.js": 'const createApply = (req) => ({ CounterApply: req("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-apply-freeze-class-base") });\nconst factoryApply = createApply;\n(function (factory) {\n  module.exports = Object.freeze(factory.apply(null, [require]));\n})(factoryApply);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-apply-freeze-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-apply-freeze-class-base", {
+        "index.js": 'module.exports = class CounterApply { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-helper", {
+        "index.js": 'const createReflect = (req) => ({ CounterReflect: req("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-base") });\nconst factoryReflect = createReflect;\n(function (factory) {\n  module.exports = Object.freeze(Reflect.apply(factory, null, [require]));\n})(factoryReflect);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-reflect-apply-freeze-class-base", {
+        "index.js": 'module.exports = class CounterReflect { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-helper", {
+        "index.js": 'const createBind = (req) => ({ CounterBind: req("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-base") });\nconst factoryBind = createBind;\n(function (factory) {\n  module.exports = Object.freeze(factory.bind(null)(require));\n})(factoryBind);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-wrapper-return-alias-bound-bind-freeze-class-base", {
+        "index.js": 'module.exports = class CounterBind { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),
