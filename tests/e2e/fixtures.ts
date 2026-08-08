@@ -1514,6 +1514,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-bind-object": cjsPackage("tsc2c-cjs-module-local-factory-bind-object", {
         "index.js": 'function makeBindApi() {\n  return {\n    default: "factory-bind-default",\n    label: "factory-bind",\n    count: 138,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeBindApi;\nmodule.exports = Object.freeze(factory.bind(null)());\n',
     }),
+    "tsc2c-cjs-module-local-factory-seal-object": cjsPackage("tsc2c-cjs-module-local-factory-seal-object", {
+        "index.js": 'function makeSealApi() {\n  return {\n    default: "factory-seal-default",\n    label: "factory-seal",\n    count: 139,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeSealApi;\nmodule.exports = Object.seal(factory());\n',
+    }),
+    "tsc2c-cjs-module-local-factory-prevent-extensions-object": cjsPackage("tsc2c-cjs-module-local-factory-prevent-extensions-object", {
+        "index.js": 'function makePreventExtensionsApi() {\n  return {\n    default: "factory-prevent-extensions-default",\n    label: "factory-prevent-extensions",\n    count: 140,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makePreventExtensionsApi;\nmodule.exports = Object.preventExtensions(factory());\n',
+    }),
+    "tsc2c-cjs-module-local-factory-set-prototype-of-object": cjsPackage("tsc2c-cjs-module-local-factory-set-prototype-of-object", {
+        "index.js": 'function makeSetPrototypeOfApi() {\n  return {\n    default: "factory-set-prototype-of-default",\n    label: "factory-set-prototype-of",\n    count: 141,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeSetPrototypeOfApi;\nmodule.exports = Object.setPrototypeOf(factory(), null);\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {
