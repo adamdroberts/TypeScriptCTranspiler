@@ -25275,8 +25275,9 @@ class Emitter {
 
     private classValueBoxExpression(r: EmitResult, node: ts.Node): string {
         if (r.ty.kind !== "class" || !r.ty.className) return `tsc_value_class(${r.c})`;
-        const cd = this.findClassDecl(r.ty.className);
-        if (!cd) return `tsc_value_class(${r.c})`;
+        const classLike = this.findClassLikeDecl(r.ty.className);
+        if (!classLike) return `tsc_value_class(${r.c})`;
+        const cd = classLike as unknown as ts.ClassDeclaration;
         const obj = this.freshTemp("_class_box");
         const pieces = [`tsc_object_t* ${obj} = tsc_object_new_class(${r.c})`];
         for (const { publicName, owner, method } of this.classInstanceMethodsForValueBox(cd)) {
@@ -66676,6 +66677,12 @@ class Emitter {
         if (seen.has(decl)) return null;
         seen.add(decl);
         if (ts.isClassExpression(decl)) return decl.name ? decl : null;
+        if (ts.isSourceFile(decl)) {
+            const valueDecl = this.commonJsModuleExportsValueDeclaration(decl);
+            return valueDecl
+                ? this.classExpressionForCommonJsDeclaration(valueDecl, seen)
+                : null;
+        }
         if (ts.isVariableDeclaration(decl) && decl.initializer) {
             return this.classExpressionForCommonJsDeclaration(decl.initializer, seen);
         }
@@ -66723,6 +66730,89 @@ class Emitter {
         return null;
     }
 
+    private classExpressionForEsmImportIdentifier(
+        id: ts.Identifier,
+        seen = new Set<string>(),
+    ): ts.ClassExpression | null {
+        const raw = this.checker.getSymbolAtLocation(id);
+        const importNode = (raw?.declarations ?? []).find((decl) =>
+            (ts.isImportSpecifier(decl) && decl.name.text === id.text) ||
+            (ts.isImportClause(decl) && decl.name?.text === id.text),
+        );
+        if (!importNode) return null;
+        const importDecl = ts.isImportSpecifier(importNode)
+            ? importNode.parent.parent.parent
+            : importNode.parent;
+        if (!ts.isImportDeclaration(importDecl) || !ts.isStringLiteralLike(importDecl.moduleSpecifier)) {
+            return null;
+        }
+        const importedName = ts.isImportSpecifier(importNode)
+            ? importNode.propertyName?.text ?? importNode.name.text
+            : "default";
+        const info = this.resolvedModuleInfoForSpecifier(
+            importDecl.moduleSpecifier.text,
+            id.getSourceFile().fileName,
+        );
+        return info
+            ? this.classExpressionForEsmExport(info.sf, importedName, seen)
+            : null;
+    }
+
+    private classExpressionForEsmExport(
+        sf: ts.SourceFile,
+        exportName: string,
+        seen: Set<string>,
+    ): ts.ClassExpression | null {
+        if (seen.has(sf.fileName)) return null;
+        seen.add(sf.fileName);
+
+        const commonJsDecl = this.commonJsExportedMemberDeclaration(sf, exportName);
+        if (commonJsDecl) {
+            const commonJsClass = this.classExpressionForCommonJsDeclaration(commonJsDecl);
+            if (commonJsClass) return commonJsClass;
+        }
+        if (exportName === "default") {
+            const commonJsValue = this.commonJsModuleExportsValueDeclaration(sf);
+            if (commonJsValue) {
+                const commonJsClass = this.classExpressionForCommonJsDeclaration(commonJsValue);
+                if (commonJsClass) return commonJsClass;
+            }
+        }
+
+        for (const stmt of sf.statements) {
+            if (
+                !ts.isExportDeclaration(stmt) ||
+                !stmt.moduleSpecifier ||
+                !ts.isStringLiteralLike(stmt.moduleSpecifier) ||
+                !stmt.exportClause ||
+                !ts.isNamedExports(stmt.exportClause)
+            ) {
+                continue;
+            }
+            const element = stmt.exportClause.elements.find((candidate) =>
+                candidate.name.text === exportName,
+            );
+            if (!element) continue;
+            const target = this.resolvedModuleInfoForSpecifier(stmt.moduleSpecifier.text, sf.fileName);
+            if (!target) continue;
+            const importedName = element.propertyName?.text ?? element.name.text;
+            const targetClass = this.classExpressionForEsmExport(target.sf, importedName, seen);
+            if (targetClass) return targetClass;
+        }
+
+        if (exportName === "default") {
+            const exportAssignment = sf.statements.find(ts.isExportAssignment);
+            if (exportAssignment) {
+                const exportClass = this.classExpressionForCommonJsDeclaration(exportAssignment);
+                if (exportClass) return exportClass;
+            }
+        }
+        const esmDecl = this.esmExportedMemberDeclaration(sf, exportName);
+        return esmDecl
+            ? this.classExpressionForCommonJsDeclaration(esmDecl)
+            : null;
+    }
+
     private classExpressionForConstructorIdentifier(
         id: ts.Identifier,
         seen = new Set<ts.Symbol>(),
@@ -66738,6 +66828,8 @@ class Emitter {
             const namedImportClass = this.classExpressionForCommonJsDeclaration(namedImport);
             if (namedImportClass) return namedImportClass;
         }
+        const esmImportClass = this.classExpressionForEsmImportIdentifier(id);
+        if (esmImportClass) return esmImportClass;
 
         const sym = this.symbolForIdentifier(id);
         if (sym && seen.has(sym)) return null;
@@ -69870,6 +69962,19 @@ class Emitter {
                 ) {
                     return inner;
                 }
+            }
+        }
+        return null;
+    }
+
+    private findClassLikeDecl(name: string): ts.ClassDeclaration | ts.ClassExpression | null {
+        const declaration = this.findClassDecl(name);
+        if (declaration) return declaration;
+        for (const info of this.graph.modules.values()) {
+            for (const stmt of info.sf.statements) {
+                const expression = this.commonJsClassExpressionsForStatement(stmt)
+                    .find((candidate) => candidate.name?.text === name);
+                if (expression) return expression;
             }
         }
         return null;
@@ -95368,7 +95473,7 @@ class Emitter {
             }
         }
         const ctorDecl = classLike?.members.find(ts.isConstructorDeclaration);
-        if (classLike?.typeParameters?.length && ctorDecl) {
+        if ((classLike?.typeParameters?.length || targetClassExpression) && ctorDecl) {
             const paramTypes = ctorDecl.parameters.map((param) =>
                 this.prepareType(mapType(param, this.checker)),
             );
