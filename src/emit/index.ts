@@ -17539,13 +17539,22 @@ class Emitter {
         }
         const exports: CommonJsDefinePropertiesExport[] = [];
         for (const entry of targetEntries) {
-            if (!ts.isPropertyAssignment(entry)) {
-                unsupported(entry, "CommonJS Object.defineProperties target metadata requires static data properties");
+            if (
+                !ts.isPropertyAssignment(entry) &&
+                !ts.isMethodDeclaration(entry) &&
+                !ts.isGetAccessorDeclaration(entry)
+            ) {
+                unsupported(entry, "CommonJS Object.defineProperties target metadata requires static data, method, or getter properties");
             }
             const name = this.commonJsObjectAssignExportName(entry);
             if (!name || name === "__esModule") continue;
             this.validateCommonJsObjectAssignExportEntry(entry);
-            exports.push({ call, name, right: entry.initializer, entry });
+            exports.push({
+                call,
+                name,
+                right: ts.isPropertyAssignment(entry) ? entry.initializer : undefined,
+                entry,
+            });
         }
         return exports;
     }
