@@ -18558,6 +18558,22 @@ class Emitter {
         return true;
     }
 
+    private commonJsObjectLiteralWholeValue(expr: ts.ObjectLiteralExpression): boolean {
+        for (const prop of expr.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                if (!this.isCommonJsModuleExportsSpreadValue(prop.expression)) return false;
+                continue;
+            }
+            if (ts.isMethodDeclaration(prop)) continue;
+            if (!ts.isPropertyAssignment(prop)) return false;
+            if (this.staticPropertyName(prop.name) == null ||
+                !this.isCommonJsModuleExportsDefaultInitializerValue(prop.initializer)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private isCommonJsModuleExportsDefaultInitializerValue(expr: ts.Expression): boolean {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
@@ -18819,6 +18835,7 @@ class Emitter {
             this.commonJsIifeReturnedObjectLiteral(assignment.right) ??
                 this.commonJsZeroArgFunctionReturnedObjectLiteral(assignment.right) ??
                 this.commonJsZeroArgLocalFactoryReturnedObjectLiteral(assignment.right) ??
+                this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(assignment.right) ??
                 this.commonJsLocalFactoryReturnedObjectLiteral(assignment.right);
         if (!right) return null;
         for (const prop of right.properties) {
@@ -19325,6 +19342,28 @@ class Emitter {
             this.commonJsZeroArgLocalFactoryReturnedObjectLiteral(cur);
     }
 
+    private commonJsZeroArgFactoryInvocationReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isCallExpression(cur)) {
+            const callName = this.objectStaticCallName(cur);
+            if (
+                (callName === "freeze" ||
+                    callName === "seal" ||
+                    callName === "preventExtensions" ||
+                    callName === "setPrototypeOf") &&
+                cur.arguments.length >= 1
+            ) {
+                return this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!);
+            }
+            const invocation = this.commonJsDirectFactoryInvocation(cur);
+            if (invocation && invocation.args.length === 0) {
+                return this.commonJsLocalFactoryInvocationReturnedObjectLiteral(invocation.fn, invocation.args, true);
+            }
+        }
+        return null;
+    }
+
     private commonJsLocalFactoryReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
@@ -19364,9 +19403,10 @@ class Emitter {
     private commonJsLocalFactoryInvocationReturnedObjectLiteral(
         fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
         args: readonly ts.Expression[],
+        allowZeroArguments = false,
     ): ts.ObjectLiteralExpression | null {
         if (args.length !== fn.parameters.length) return null;
-        if (!this.commonJsFactoryWrapperArguments(args)) return null;
+        if ((!allowZeroArguments || args.length !== 0) && !this.commonJsFactoryWrapperArguments(args)) return null;
         if (!fn.body) return null;
         if (!ts.isBlock(fn.body)) return this.commonJsReturnedObjectLiteral(fn.body);
         let returned: ts.Expression | null = null;
@@ -20019,7 +20059,10 @@ class Emitter {
             exportLefts?: CommonJsExportAccess[];
         },
     ): void {
-        if (this.isCommonJsObjectLiteralDefaultValue(assignment.right)) {
+        if (
+            this.isCommonJsObjectLiteralDefaultValue(assignment.right) ||
+            this.commonJsObjectLiteralWholeValue(assignment.right)
+        ) {
             const cName = this.commonJsModuleExportsCName(assignment.left);
             if (!this.commonJsExportGlobals.has(cName)) {
                 this.commonJsExportGlobals.add(cName);
@@ -20030,7 +20073,9 @@ class Emitter {
             if (ts.isCallExpression(sourceRight)) {
                 value = this.emitCommonJsModuleExportsObjectWrapperDefaultValue(sourceRight);
             }
-            value ??= this.emitCommonJsObjectLiteralDefaultValue(assignment.right);
+            value ??= this.commonJsObjectLiteralWholeValue(assignment.right)
+                ? this.emitCommonJsObjectLiteralWholeValue(assignment.right)
+                : this.emitCommonJsObjectLiteralDefaultValue(assignment.right);
             if (assignment.exportLefts?.length) {
                 const tmp = this.freshTemp("_cjsobj");
                 buf.line(`${T_VALUE.c} ${tmp} = ${value.c};`);
@@ -21814,6 +21859,46 @@ class Emitter {
         return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
+    private emitCommonJsObjectLiteralWholeValue(ol: ts.ObjectLiteralExpression): EmitResult {
+        const obj = this.freshTemp("_cjsobj");
+        const pieces: string[] = [`tsc_object_t* ${obj} = tsc_object_new()`];
+        for (const prop of ol.properties) {
+            if (ts.isSpreadAssignment(prop)) {
+                if (!this.isCommonJsModuleExportsSpreadValue(prop.expression)) {
+                    unsupported(prop.expression, "CommonJS module.exports object spread requires a static dynamic-object value");
+                }
+                const value = this.emitExpr(prop.expression);
+                pieces.push(`tsc_value_object_assign(tsc_value_object(${obj}), ${this.coerce(value, T_VALUE, prop.expression)})`);
+                continue;
+            }
+            const fieldName = this.staticPropertyName(prop.name);
+            if (fieldName == null) {
+                unsupported(prop.name, "CommonJS module.exports object default requires static property names");
+            }
+            let value: EmitResult;
+            if (ts.isMethodDeclaration(prop)) {
+                value = this.emitClosureExpression(prop);
+            } else if (ts.isPropertyAssignment(prop)) {
+                value = this.isCommonJsModuleExportsDefaultValue(prop.initializer)
+                    ? this.emitCommonJsModuleExportsDefaultValue(prop.initializer)
+                    : this.emitExpr(prop.initializer);
+            } else {
+                const getterReturn = ts.isGetAccessorDeclaration(prop)
+                    ? this.commonJsObjectAssignGetterReturnExpression(prop)
+                    : null;
+                if (!getterReturn) {
+                    unsupported(prop, "CommonJS module.exports object default requires a value");
+                }
+                value = this.emitExpr(getterReturn);
+            }
+            pieces.push(
+                `tsc_object_set(${obj}, tsc_str_from_lit("${escapeCString(fieldName)}", ${utf8ByteLen(fieldName)}), ${this.coerce(value, T_VALUE, prop)})`,
+            );
+        }
+        pieces.push(`tsc_value_object(${obj})`);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
+    }
+
     private emitCommonJsModuleExportsComputedDefaultValue(expr: ts.Expression): EmitResult | null {
         const cur = this.unwrapTransparentExpression(expr);
         if (ts.isConditionalExpression(cur)) {
@@ -21996,9 +22081,10 @@ class Emitter {
         }
 
         const targetArg = call.arguments[0]!;
-        const staticObject = this.commonJsLocalFactoryReturnedObjectLiteral(targetArg);
+        const staticObject = this.commonJsLocalFactoryReturnedObjectLiteral(targetArg) ??
+            this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(targetArg);
         const target = staticObject
-            ? this.emitCommonJsObjectLiteralDefaultValue(staticObject)
+            ? this.emitCommonJsObjectLiteralWholeValue(staticObject)
             : this.isCommonJsModuleExportsDefaultInitializerValue(targetArg)
                 ? this.emitCommonJsModuleExportsDefaultValue(targetArg)
                 : this.emitExpr(targetArg);

@@ -1502,6 +1502,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-alias-object", {
         "index.js": 'function makeAliasedApi() {\n  return {\n    default: "factory-alias-default",\n    label: "factory-alias",\n    count: 134,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeAliasedApi;\nmodule.exports = Object.freeze(factory());\n',
     }),
+    "tsc2c-cjs-module-local-factory-call-object": cjsPackage("tsc2c-cjs-module-local-factory-call-object", {
+        "index.js": 'function makeCallApi() {\n  return {\n    default: "factory-call-default",\n    label: "factory-call",\n    count: 135,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeCallApi;\nmodule.exports = Object.freeze(factory.call(null));\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {
