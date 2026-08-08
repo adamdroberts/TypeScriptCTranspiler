@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Pure JavaScript ESM packages loaded through allowJs can named-import class values from direct external CommonJS exports.name = class Name { ... } assignments through the AOT module graph. Test: node_modules_js_named_import_external_cjs_class.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and call default function values from external CommonJS package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs_function`.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and construct named class defaults from external CommonJS package dependencies through the AOT module graph, including constructor fields and instance methods. Test: `node_modules_js_import_external_cjs_class`.
 - Bounded sequential same-origin HTTP/1.1 client keep-alive pooling now reuses idle native TCP/TLS sockets for ordinary non-chunked `http.request` / `http.get` calls, resets response-parser/listener state between requests, and evicts stale/idle sockets; concurrent pooling, chunked keep-alive reuse, and general backpressure remain deferred. Test: `http_client_keep_alive_pool`.

@@ -1,5 +1,6 @@
 # Implemented features
 
+- Pure JavaScript ESM packages loaded through allowJs can named-import class values from direct external CommonJS exports.name = class Name { ... } assignments through the AOT module graph. Test: node_modules_js_named_import_external_cjs_class.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and call default function values from external CommonJS package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs_function`.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and construct named class defaults from external CommonJS package dependencies through the AOT module graph, including constructor fields and instance methods. Test: `node_modules_js_import_external_cjs_class`.
 - Bounded sequential same-origin HTTP/1.1 client keep-alive pooling now reuses idle native TCP/TLS sockets for ordinary non-chunked `http.request` / `http.get` calls, keys entries by endpoint and TLS options, resets response-parser/listener state between requests, evicts stale/idle sockets, and drains server-side EOF for closed accepted sockets; concurrent pooling, chunked keep-alive reuse, and general backpressure remain deferred. Test: `http_client_keep_alive_pool`.
@@ -3013,6 +3014,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 
 | Test case | Demonstrates |
 |-----------|--------------|
+| node_modules_js_named_import_external_cjs_class | pure-JS package named-imports an external CommonJS class export |
 | `hello` | minimal pipeline |
 | `fizzbuzz` | loop + modulo + conditional + string concat |
 | `arith` | all arithmetic operators + JS number formatting |

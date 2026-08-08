@@ -15414,9 +15414,9 @@ class Emitter {
 
         try {
             const statements = this.flattenModuleStatements(sf.statements);
-            const commonJsClassExpressions = statements
-                .map((stmt) => stmt ? this.commonJsModuleExportsClassExpression(stmt) : null)
-                .filter((expr): expr is ts.ClassExpression => !!expr);
+            const commonJsClassExpressions = statements.flatMap((stmt) =>
+                stmt ? this.commonJsClassExpressionsForStatement(stmt) : [],
+            );
             this.analyzeIntegerSymbols(sf);
             this.analyzeStrbufSymbols(sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
@@ -15497,8 +15497,7 @@ class Emitter {
             // top-level functions (including lifted arrows) can reference them.
             for (const inner of statements) {
                 if (!inner) continue;
-                const commonJsClassExpression = this.commonJsModuleExportsClassExpression(inner);
-                if (commonJsClassExpression) {
+                for (const commonJsClassExpression of this.commonJsClassExpressionsForStatement(inner)) {
                     this.emitClassStaticInitializers(
                         initBuf,
                         commonJsClassExpression as unknown as ts.ClassDeclaration,
@@ -18423,14 +18422,22 @@ class Emitter {
         return assignment;
     }
 
-    private commonJsModuleExportsClassExpression(stmt: ts.Statement): ts.ClassExpression | null {
+    private commonJsClassExpressionsForStatement(stmt: ts.Statement): ts.ClassExpression[] {
+        const expressions: ts.ClassExpression[] = [];
         const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
-        if (!assignment) return null;
-        const right = this.unwrapTransparentExpression(assignment.right);
-        return ts.isClassExpression(right) ? right : null;
+        if (assignment) {
+            const right = this.unwrapTransparentExpression(assignment.right);
+            if (ts.isClassExpression(right)) expressions.push(right);
+        }
+        const exportAssignment = this.commonJsExportAssignmentChain(stmt);
+        if (exportAssignment) {
+            const right = this.unwrapTransparentExpression(exportAssignment.right);
+            if (ts.isClassExpression(right)) expressions.push(right);
+        }
+        return expressions;
     }
 
-    private isDirectCommonJsModuleExportsClassExpression(expr: ts.ClassExpression): boolean {
+    private isDirectCommonJsClassExpression(expr: ts.ClassExpression): boolean {
         let current: ts.Expression = expr;
         while (this.isTransparentExpressionNode(current.parent) && ts.isExpression(current.parent)) {
             current = current.parent;
@@ -18440,7 +18447,7 @@ class Emitter {
             parent.right === current &&
             parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
             ts.isPropertyAccessExpression(parent.left) &&
-            this.isModuleExportsAccess(parent.left);
+            (this.isModuleExportsAccess(parent.left) || this.isCommonJsExportAccess(parent.left));
     }
 
     private commonJsModuleExportsValueAssignmentChain(
@@ -18495,7 +18502,7 @@ class Emitter {
         if (
             !ts.isFunctionExpression(cur) &&
             !ts.isArrowFunction(cur) &&
-            !(ts.isClassExpression(cur) && this.isDirectCommonJsModuleExportsClassExpression(cur)) &&
+            !(ts.isClassExpression(cur) && this.isDirectCommonJsClassExpression(cur)) &&
             !ts.isIdentifier(cur) &&
             !ts.isArrayLiteralExpression(cur) &&
             !ts.isObjectLiteralExpression(cur) &&
@@ -18527,7 +18534,7 @@ class Emitter {
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
         if (ts.isClassExpression(cur)) {
-            return !!cur.name && this.isDirectCommonJsModuleExportsClassExpression(cur);
+            return !!cur.name && this.isDirectCommonJsClassExpression(cur);
         }
         if (this.isCommonJsRuntimeComputedModuleExportsValue(cur)) return true;
         if (ts.isIdentifier(cur)) {
@@ -18603,7 +18610,7 @@ class Emitter {
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
         if (ts.isClassExpression(cur)) {
-            return !!cur.name && this.isDirectCommonJsModuleExportsClassExpression(cur);
+            return !!cur.name && this.isDirectCommonJsClassExpression(cur);
         }
         if (this.isUnshadowedUndefinedExpression(cur)) return true;
         if (ts.isPrefixUnaryExpression(cur)) {
@@ -19527,7 +19534,10 @@ class Emitter {
             (names.length > 1 || this.commonJsExportUsesManifestKey(assignment.left))
             ? this.emitCommonJsExportKey(buf, assignment.left)
             : null;
-        const value = this.emitExpr(assignment.right);
+        const right = this.unwrapTransparentExpression(assignment.right);
+        const value = ts.isClassExpression(right) && this.isDirectCommonJsClassExpression(right)
+            ? this.emitCommonJsModuleExportsDefaultValue(assignment.right)
+            : this.emitExpr(assignment.right);
         const valueTmp = this.freshTemp("_cjsexp");
         buf.line(`${ty.c} ${valueTmp} = ${this.coerce(value, ty, assignment.right)};`);
         this.emitCommonJsExportStores(buf, assignment.left, names, valueTmp, keyTmp);
@@ -19554,7 +19564,10 @@ class Emitter {
                 : null;
             return { left, names, keyTmp };
         });
-        const value = this.emitExpr(assignment.right);
+        const right = this.unwrapTransparentExpression(assignment.right);
+        const value = ts.isClassExpression(right) && this.isDirectCommonJsClassExpression(right)
+            ? this.emitCommonJsModuleExportsDefaultValue(assignment.right)
+            : this.emitExpr(assignment.right);
         const tmp = this.freshTemp("_cjsexp");
         buf.line(`${ty.c} ${tmp} = ${this.coerce(value, ty, assignment.right)};`);
         for (const store of stores) {
