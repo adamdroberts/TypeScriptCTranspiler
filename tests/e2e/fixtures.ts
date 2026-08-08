@@ -804,6 +804,36 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-define-property-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-define-property-class-helper", {
         "index.js": 'const createDefineProperty = () => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-alias-compositions-class-base") });\nconst factoryDefineProperty = createDefineProperty;\nmodule.exports = Object.freeze(Object.defineProperty(factoryDefineProperty(), "Counter", {}));\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-package", {
+        "index.js": 'import { Counter as ArrowCallCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-call-class-helper";\nimport { Counter as ArrowApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-apply-class-helper";\nimport { Counter as ArrowReflectApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-reflect-apply-class-helper";\nimport { Counter as ArrowBindCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-bind-class-helper";\nimport { Counter as FunctionCallCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-call-class-helper";\nimport { Counter as FunctionApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-apply-class-helper";\nimport { Counter as FunctionReflectApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-reflect-apply-class-helper";\nimport { Counter as FunctionBindCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-bind-class-helper";\nexport function computeArrowCall(value) { const counter = new ArrowCallCounter(9); return counter.add(value); }\nexport function computeArrowApply(value) { const counter = new ArrowApplyCounter(9); return counter.add(value); }\nexport function computeArrowReflectApply(value) { const counter = new ArrowReflectApplyCounter(9); return counter.add(value); }\nexport function computeArrowBind(value) { const counter = new ArrowBindCounter(9); return counter.add(value); }\nexport function computeFunctionCall(value) { const counter = new FunctionCallCounter(9); return counter.add(value); }\nexport function computeFunctionApply(value) { const counter = new FunctionApplyCounter(9); return counter.add(value); }\nexport function computeFunctionReflectApply(value) { const counter = new FunctionReflectApplyCounter(9); return counter.add(value); }\nexport function computeFunctionBind(value) { const counter = new FunctionBindCounter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-call-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-call-class-helper", {
+        "index.js": 'module.exports = Object.freeze((() => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") })).call(null));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-apply-class-helper", {
+        "index.js": 'module.exports = Object.freeze((() => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") })).apply(null, []));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-reflect-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-reflect-apply-class-helper", {
+        "index.js": 'module.exports = Object.freeze(Reflect.apply(() => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") }), null, []));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-bind-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-bind-class-helper", {
+        "index.js": 'module.exports = Object.freeze((() => ({ Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") })).bind(null)());\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-call-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-call-class-helper", {
+        "index.js": 'module.exports = Object.freeze((function () { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") }; }).call(null));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-apply-class-helper", {
+        "index.js": 'module.exports = Object.freeze((function () { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") }; }).apply(null, []));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-reflect-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-reflect-apply-class-helper", {
+        "index.js": 'module.exports = Object.freeze(Reflect.apply(function () { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") }; }, null, []));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-bind-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-bind-class-helper", {
+        "index.js": 'module.exports = Object.freeze((function () { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-invocations-class-base") }; }).bind(null)());\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-class-package", {
         "index.js": 'import { Counter as ArrowCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-arrow-class-helper";\nimport { Counter as FunctionCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-inline-function-class-helper";\nexport function computeArrow(value) { const counter = new ArrowCounter(9); return counter.add(value); }\nexport function computeFunction(value) { const counter = new FunctionCounter(9); return counter.add(value); }\n',
     }),
