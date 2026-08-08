@@ -1,0 +1,4 @@
+request: /one keep-alive 
+request: /two close 
+responses: true true true true
+server close

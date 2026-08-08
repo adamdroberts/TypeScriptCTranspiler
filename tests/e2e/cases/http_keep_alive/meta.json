@@ -1,0 +1,3 @@
+{
+  "description": "http.createServer keeps an explicit HTTP/1.1 connection alive for sequential Content-Length requests before closing on a final request"
+}

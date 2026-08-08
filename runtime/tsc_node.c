@@ -3232,11 +3232,16 @@ typedef struct tsc_http_connection_state {
     tsc_object_t* request_object;
     char* input;
     size_t input_len;
+    size_t request_consumed;
+    bool request_active;
+    bool request_keep_alive;
     bool handled;
 } tsc_http_connection_state_t;
 
 typedef struct tsc_http_response_state {
     tsc_value_t socket;
+    tsc_http_connection_state_t* connection;
+    size_t request_consumed;
     tsc_value_t value;
     tsc_object_t* object;
     tsc_value_t headers;
@@ -3246,6 +3251,7 @@ typedef struct tsc_http_response_state {
     bool ended;
     bool headers_sent;
     bool chunked_stream;
+    bool keep_alive;
 } tsc_http_response_state_t;
 
 static bool tsc_http_equal_ci(const tsc_str_t* value, const char* literal) {
@@ -3441,6 +3447,31 @@ static void tsc_http_socket_write(tsc_value_t socket, tsc_str_t* data) {
     (void)tsc_value_apply_function(write, socket, tsc_value_array(args));
 }
 
+static void tsc_http_server_process_input(tsc_http_connection_state_t* connection);
+
+static bool tsc_http_response_should_keep_alive(const tsc_http_response_state_t* response) {
+    return response && response->keep_alive && !tsc_http_header_value_contains(response->headers, "connection", "close");
+}
+
+static void tsc_http_connection_finish_response(tsc_http_response_state_t* response) {
+    tsc_http_connection_state_t* connection = response ? response->connection : NULL;
+    if (!connection || !tsc_http_response_should_keep_alive(response)) return;
+    if (response->request_consumed > connection->input_len) {
+        connection->request_active = false;
+        connection->handled = false;
+        return;
+    }
+    size_t remaining = connection->input_len - response->request_consumed;
+    if (remaining > 0) memmove(connection->input, connection->input + response->request_consumed, remaining);
+    connection->input_len = remaining;
+    connection->input[connection->input_len] = '\0';
+    connection->request_consumed = 0;
+    connection->request_active = false;
+    connection->request_keep_alive = false;
+    connection->handled = false;
+    tsc_http_server_process_input(connection);
+}
+
 static void tsc_http_response_send_headers(tsc_http_response_state_t* response) {
     if (!response || response->headers_sent) return;
     int status = (int)tsc_value_as_num(tsc_value_get_prop(response->value, tsc_str_from_lit("statusCode", 10)));
@@ -3454,7 +3485,9 @@ static void tsc_http_response_send_headers(tsc_http_response_state_t* response) 
         output = tsc_str_concat(output, tsc_str_from_cstr(length_line));
     }
     if (!tsc_http_has_header(response->headers, "connection")) {
-        output = tsc_str_concat(output, tsc_str_from_lit("Connection: close\r\n", 19));
+        output = tsc_str_concat(output, response->keep_alive
+            ? tsc_str_from_lit("Connection: keep-alive\r\n", 24)
+            : tsc_str_from_lit("Connection: close\r\n", 19));
     }
     output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
     response->headers_sent = true;
@@ -3530,7 +3563,11 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
         tsc_http_response_send_headers(response);
         tsc_http_socket_write(response->socket, tsc_str_from_lit("0\r\n\r\n", 7));
         response->ended = true;
-        tsc_http_socket_end(response->socket, NULL);
+        if (tsc_http_response_should_keep_alive(response)) {
+            tsc_http_connection_finish_response(response);
+        } else {
+            tsc_http_socket_end(response->socket, NULL);
+        }
         return this_arg;
     }
     if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
@@ -3539,7 +3576,12 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
     tsc_http_response_send_headers(response);
     tsc_str_t* output = tsc_str_from_lit(response->body, response->body_len);
     response->ended = true;
-    tsc_http_socket_end(response->socket, output);
+    if (tsc_http_response_should_keep_alive(response)) {
+        tsc_http_socket_write(response->socket, output);
+        tsc_http_connection_finish_response(response);
+    } else {
+        tsc_http_socket_end(response->socket, output);
+    }
     return this_arg;
 }
 
@@ -3548,7 +3590,7 @@ static tsc_value_t tsc_http_bad_request(tsc_value_t socket) {
     return tsc_value_undefined();
 }
 
-static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* connection, const char* method, const char* target, const char* version, tsc_value_t headers, const char* body, size_t body_len) {
+static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* connection, const char* method, const char* target, const char* version, tsc_value_t headers, const char* body, size_t body_len, size_t request_consumed, bool keep_alive) {
     tsc_object_t* request_object = tsc_object_new();
     connection->request_object = request_object;
     tsc_object_set(request_object, tsc_str_from_lit("method", 6), tsc_value_string(tsc_str_from_cstr(method)));
@@ -3560,6 +3602,9 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     tsc_http_response_state_t* response = (tsc_http_response_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_response_state_t));
     memset(response, 0, sizeof(*response));
     response->socket = connection->socket;
+    response->connection = connection;
+    response->request_consumed = request_consumed;
+    response->keep_alive = keep_alive;
     response->headers_object = tsc_object_new();
     response->headers = tsc_value_object(response->headers_object);
     response->body = (char*)TSC_GC_MALLOC(TSC_HTTP_MAX_RESPONSE);
@@ -3579,10 +3624,87 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     return response->value;
 }
 
+static void tsc_http_server_process_input(tsc_http_connection_state_t* connection) {
+    if (!connection || connection->request_active) return;
+    size_t header_end = tsc_http_find_header_end(connection->input, connection->input_len);
+    if (header_end == SIZE_MAX) return;
+    char* request_line_end = strstr(connection->input, "\r\n");
+    if (!request_line_end || request_line_end > connection->input + header_end) {
+        (void)tsc_http_bad_request(connection->socket);
+        connection->handled = true;
+        return;
+    }
+    char method[32] = { 0 };
+    char target[4096] = { 0 };
+    char version[32] = { 0 };
+    int scanned = sscanf(connection->input, "%31s %4095s HTTP/%31s", method, target, version);
+    if (scanned != 3) {
+        (void)tsc_http_bad_request(connection->socket);
+        connection->handled = true;
+        return;
+    }
+    tsc_object_t* headers_object = tsc_object_new();
+    tsc_value_t headers = tsc_value_object(headers_object);
+    size_t content_length = 0;
+    bool chunked = false;
+    bool request_keep_alive = false;
+    size_t cursor = (size_t)(request_line_end - connection->input) + 2;
+    while (cursor < header_end) {
+        char* line_end = strstr(connection->input + cursor, "\r\n");
+        if (!line_end || (size_t)(line_end - connection->input) > header_end) break;
+        char* colon = memchr(connection->input + cursor, ':', (size_t)(line_end - (connection->input + cursor)));
+        if (!colon) {
+            (void)tsc_http_bad_request(connection->socket);
+            connection->handled = true;
+            return;
+        }
+        size_t name_len = (size_t)(colon - (connection->input + cursor));
+        size_t value_start = name_len + 1;
+        while (value_start < (size_t)(line_end - (connection->input + cursor)) && isspace((unsigned char)connection->input[cursor + value_start])) value_start++;
+        size_t value_len = (size_t)(line_end - (connection->input + cursor)) - value_start;
+        char name[256] = { 0 };
+        if (name_len == 0 || name_len >= sizeof(name)) {
+            (void)tsc_http_bad_request(connection->socket);
+            connection->handled = true;
+            return;
+        }
+        for (size_t i = 0; i < name_len; i++) name[i] = (char)tolower((unsigned char)connection->input[cursor + i]);
+        tsc_object_set(headers_object, tsc_str_from_cstr(name), tsc_value_string(tsc_str_from_lit(connection->input + cursor + value_start, value_len)));
+        if (strcmp(name, "content-length") == 0) content_length = (size_t)strtoull(connection->input + cursor + value_start, NULL, 10);
+        if (strcmp(name, "transfer-encoding") == 0) chunked = tsc_http_token_list_contains(connection->input + cursor + value_start, value_len, "chunked");
+        if (strcmp(name, "connection") == 0) request_keep_alive = tsc_http_token_list_contains(connection->input + cursor + value_start, value_len, "keep-alive");
+        cursor = (size_t)(line_end - connection->input) + 2;
+    }
+    size_t body_offset = header_end + 4;
+    if (body_offset > connection->input_len) return;
+    const char* body = connection->input + body_offset;
+    size_t body_len = content_length;
+    size_t request_consumed = body_offset + content_length;
+    char decoded_body[TSC_HTTP_MAX_REQUEST + 1];
+    if (chunked) {
+        bool complete = false;
+        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete)) {
+            (void)tsc_http_bad_request(connection->socket);
+            connection->handled = true;
+            return;
+        }
+        if (!complete) return;
+        body = decoded_body;
+        request_keep_alive = false;
+    } else {
+        if (connection->input_len - body_offset < content_length) return;
+    }
+    connection->request_consumed = request_consumed;
+    connection->request_keep_alive = request_keep_alive;
+    connection->request_active = true;
+    connection->handled = true;
+    (void)tsc_http_make_request_response(connection, method, target, version, headers, body, body_len, request_consumed, request_keep_alive);
+}
+
 static tsc_value_t tsc_http_server_data(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_http_connection_state_t* connection = (tsc_http_connection_state_t*)env;
-    if (!connection || connection->handled || !args || args->len < 1) return tsc_value_undefined();
+    if (!connection || !args || args->len < 1) return tsc_value_undefined();
     const char* data = NULL;
     size_t len = 0;
     if (!tsc_http_value_bytes(TSC_ARR(tsc_value_t, args, 0), &data, &len)) return tsc_value_undefined();
@@ -3594,72 +3716,7 @@ static tsc_value_t tsc_http_server_data(void* env, tsc_value_t this_arg, tsc_arr
     memcpy(connection->input + connection->input_len, data, len);
     connection->input_len += len;
     connection->input[connection->input_len] = '\0';
-    size_t header_end = tsc_http_find_header_end(connection->input, connection->input_len);
-    if (header_end == SIZE_MAX) return tsc_value_undefined();
-    char* request_line_end = strstr(connection->input, "\r\n");
-    if (!request_line_end || request_line_end > connection->input + header_end) {
-        (void)tsc_http_bad_request(connection->socket);
-        connection->handled = true;
-        return tsc_value_undefined();
-    }
-    char method[32] = { 0 };
-    char target[4096] = { 0 };
-    char version[32] = { 0 };
-    int scanned = sscanf(connection->input, "%31s %4095s HTTP/%31s", method, target, version);
-    if (scanned != 3) {
-        (void)tsc_http_bad_request(connection->socket);
-        connection->handled = true;
-        return tsc_value_undefined();
-    }
-    tsc_object_t* headers_object = tsc_object_new();
-    tsc_value_t headers = tsc_value_object(headers_object);
-    size_t content_length = 0;
-    bool chunked = false;
-    size_t cursor = (size_t)(request_line_end - connection->input) + 2;
-    while (cursor < header_end) {
-        char* line_end = strstr(connection->input + cursor, "\r\n");
-        if (!line_end || (size_t)(line_end - connection->input) > header_end) break;
-        char* colon = memchr(connection->input + cursor, ':', (size_t)(line_end - (connection->input + cursor)));
-        if (!colon) {
-            (void)tsc_http_bad_request(connection->socket);
-            connection->handled = true;
-            return tsc_value_undefined();
-        }
-        size_t name_len = (size_t)(colon - (connection->input + cursor));
-        size_t value_start = name_len + 1;
-        while (value_start < (size_t)(line_end - (connection->input + cursor)) && isspace((unsigned char)connection->input[cursor + value_start])) value_start++;
-        size_t value_len = (size_t)(line_end - (connection->input + cursor)) - value_start;
-        char name[256] = { 0 };
-        if (name_len == 0 || name_len >= sizeof(name)) {
-            (void)tsc_http_bad_request(connection->socket);
-            connection->handled = true;
-            return tsc_value_undefined();
-        }
-        for (size_t i = 0; i < name_len; i++) name[i] = (char)tolower((unsigned char)connection->input[cursor + i]);
-        tsc_object_set(headers_object, tsc_str_from_cstr(name), tsc_value_string(tsc_str_from_lit(connection->input + cursor + value_start, value_len)));
-        if (strcmp(name, "content-length") == 0) content_length = (size_t)strtoull(connection->input + cursor + value_start, NULL, 10);
-        if (strcmp(name, "transfer-encoding") == 0) chunked = tsc_http_token_list_contains(connection->input + cursor + value_start, value_len, "chunked");
-        cursor = (size_t)(line_end - connection->input) + 2;
-    }
-    size_t body_offset = header_end + 4;
-    if (body_offset > connection->input_len) return tsc_value_undefined();
-    const char* body = connection->input + body_offset;
-    size_t body_len = content_length;
-    char decoded_body[TSC_HTTP_MAX_REQUEST + 1];
-    if (chunked) {
-        bool complete = false;
-        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete)) {
-            (void)tsc_http_bad_request(connection->socket);
-            connection->handled = true;
-            return tsc_value_undefined();
-        }
-        if (!complete) return tsc_value_undefined();
-        body = decoded_body;
-    } else {
-        if (body_offset > connection->input_len || connection->input_len - body_offset < content_length) return tsc_value_undefined();
-    }
-    connection->handled = true;
-    (void)tsc_http_make_request_response(connection, method, target, version, headers, body, body_len);
+    tsc_http_server_process_input(connection);
     return tsc_value_undefined();
 }
 
