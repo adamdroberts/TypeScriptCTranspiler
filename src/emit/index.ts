@@ -16494,6 +16494,7 @@ class Emitter {
             if (i === 0 && this.isCommonJsObjectAssignNonExportingTarget(source)) continue;
             if (this.requireCallSpecifier(source)) return false;
             if (this.canEmitCommonJsObjectAssignInlineSourceWholeValue(source)) continue;
+            if (this.commonJsZeroArgFactoryReturnedObjectLiteral(source)) continue;
             const entries = this.commonJsObjectAssignExportSourceEntries(source);
             if (!entries) return false;
             for (const entry of entries) {
@@ -17164,7 +17165,8 @@ class Emitter {
     private commonJsObjectAssignExportSourceEntries(source: ts.Expression): CommonJsObjectAssignExportEntry[] | null {
         const cur = this.unwrapTransparentExpression(source);
         if (ts.isObjectLiteralExpression(cur)) return this.commonJsObjectAssignExportObjectEntries(cur);
-        const factoryObject = this.commonJsLocalFactoryReturnedObjectLiteral(cur);
+        const factoryObject = this.commonJsLocalFactoryReturnedObjectLiteral(cur) ??
+            this.commonJsZeroArgFactoryReturnedObjectLiteral(cur);
         if (factoryObject) return this.commonJsObjectAssignExportObjectEntries(factoryObject);
         if (ts.isIdentifier(cur)) {
             const decl = this.staticObjectLiteralVariableDeclaration(cur);
@@ -19291,6 +19293,26 @@ class Emitter {
         return this.commonJsZeroArgLocalFactoryDeclarationReturnedObjectLiteral(decl);
     }
 
+    private commonJsZeroArgFactoryReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isCallExpression(cur)) {
+            const callName = this.objectStaticCallName(cur);
+            if (
+                (callName === "freeze" ||
+                    callName === "seal" ||
+                    callName === "preventExtensions" ||
+                    callName === "setPrototypeOf") &&
+                cur.arguments.length >= 1
+            ) {
+                return this.commonJsZeroArgFactoryReturnedObjectLiteral(cur.arguments[0]!);
+            }
+        }
+        return this.commonJsIifeReturnedObjectLiteral(cur) ??
+            this.commonJsZeroArgFunctionReturnedObjectLiteral(cur) ??
+            this.commonJsZeroArgLocalFactoryReturnedObjectLiteral(cur);
+    }
+
     private commonJsLocalFactoryReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
@@ -20109,7 +20131,18 @@ class Emitter {
         buf: CBuf,
         prop: CommonJsObjectAssignExportEntry,
     ): void {
-        if (ts.isShorthandPropertyAssignment(prop)) return;
+        if (ts.isShorthandPropertyAssignment(prop)) {
+            const boundValue = this.commonJsFactoryLocalBindingValue(prop);
+            const value = boundValue ?? this.emitExpr(prop.name);
+            const ty = boundValue?.ty ?? this.commonJsExportedCType(prop);
+            const cName = this.commonJsObjectPropertyExportCName(prop);
+            if (!this.commonJsExportGlobals.has(cName)) {
+                this.commonJsExportGlobals.add(cName);
+                this.globalDecls.line(`static ${ty.c} ${cName};`);
+            }
+            buf.line(`${cName} = ${this.coerce(value, ty, boundValue ? prop : prop.name)};`);
+            return;
+        }
         if (!ts.isPropertyAssignment(prop) && !ts.isMethodDeclaration(prop) && !ts.isGetAccessorDeclaration(prop)) return;
         if (
             ts.isPropertyAssignment(prop) &&
@@ -22081,8 +22114,10 @@ class Emitter {
             const cur = this.unwrapTransparentExpression(source);
             const object = ts.isObjectLiteralExpression(cur)
                 ? cur
-                : this.commonJsLocalFactoryReturnedObjectLiteral(cur);
+                : this.commonJsLocalFactoryReturnedObjectLiteral(cur) ??
+                    this.commonJsZeroArgFactoryReturnedObjectLiteral(cur);
             if (!object) return null;
+            if (object.properties.some((prop) => !ts.isPropertyAssignment(prop))) return null;
             sources.push(object);
         }
         const targetValue = this.emitCommonJsObjectLiteralDefaultValue(target);
