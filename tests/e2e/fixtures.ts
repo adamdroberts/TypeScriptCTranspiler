@@ -1505,6 +1505,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-call-object": cjsPackage("tsc2c-cjs-module-local-factory-call-object", {
         "index.js": 'function makeCallApi() {\n  return {\n    default: "factory-call-default",\n    label: "factory-call",\n    count: 135,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeCallApi;\nmodule.exports = Object.freeze(factory.call(null));\n',
     }),
+    "tsc2c-cjs-module-local-factory-apply-object": cjsPackage("tsc2c-cjs-module-local-factory-apply-object", {
+        "index.js": 'function makeApplyApi() {\n  return {\n    default: "factory-apply-default",\n    label: "factory-apply",\n    count: 136,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeApplyApi;\nmodule.exports = Object.freeze(factory.apply(null, []));\n',
+    }),
+    "tsc2c-cjs-module-local-factory-reflect-apply-object": cjsPackage("tsc2c-cjs-module-local-factory-reflect-apply-object", {
+        "index.js": 'function makeReflectApplyApi() {\n  return {\n    default: "factory-reflect-apply-default",\n    label: "factory-reflect-apply",\n    count: 137,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeReflectApplyApi;\nmodule.exports = Object.freeze(Reflect.apply(factory, null, []));\n',
+    }),
+    "tsc2c-cjs-module-local-factory-bind-object": cjsPackage("tsc2c-cjs-module-local-factory-bind-object", {
+        "index.js": 'function makeBindApi() {\n  return {\n    default: "factory-bind-default",\n    label: "factory-bind",\n    count: 138,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeBindApi;\nmodule.exports = Object.freeze(factory.bind(null)());\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {
