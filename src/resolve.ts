@@ -346,6 +346,9 @@ function commonJsDirectFactoryInvocation(call: ts.CallExpression): {
         const fn = commonJsDirectFactoryFunction(call);
         return fn ? { fn, args: call.arguments } : null;
     }
+    if (ts.isFunctionExpression(callee) || ts.isArrowFunction(callee)) {
+        return { fn: callee, args: call.arguments };
+    }
     if (ts.isPropertyAccessExpression(callee)) {
         let target: ts.Expression = callee.expression;
         while (ts.isParenthesizedExpression(target)) target = target.expression;
