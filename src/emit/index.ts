@@ -21503,6 +21503,78 @@ class Emitter {
         });
     }
 
+    private emitCommonJsModuleExportsObjectDefinePropertiesDefaultValue(call: ts.CallExpression): EmitResult | null {
+        if (this.objectStaticCallName(call) !== "defineProperties" || call.arguments.length < 2) return null;
+        const targetObject = this.commonJsLocalFactoryReturnedObjectLiteral(call.arguments[0]!);
+        const descriptorsObject = this.commonJsDefinePropertyExportDescriptor(call.arguments[1]!);
+        if (!targetObject || !descriptorsObject) return null;
+        const target = this.emitCommonJsObjectLiteralDefaultValue(targetObject);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 2);
+        const specs: SequencedCallArg[] = [
+            { value: target, target: T_VALUE, node: call.arguments[0]! },
+        ];
+        const entries: {
+            key: string;
+            desc: DescriptorData;
+            valuePos?: number;
+            getterEnvPos?: number;
+            setterEnvPos?: number;
+        }[] = [];
+        for (const prop of descriptorsObject.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, "CommonJS Object.defineProperties descriptor map only supports property assignments");
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key == null) unsupported(prop.name, "CommonJS Object.defineProperties keys must be static");
+            const desc = this.descriptorData(prop.initializer);
+            const entry = { key, desc } as {
+                key: string;
+                desc: DescriptorData;
+                valuePos?: number;
+                getterEnvPos?: number;
+                setterEnvPos?: number;
+            };
+            if (desc.kind === "data") {
+                entry.valuePos = specs.length;
+                const value = desc.value
+                    ? this.emitCommonJsModuleExportsDefaultValue(desc.value)
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+                specs.push({ value, target: T_VALUE, node: desc.value ?? prop.initializer });
+            } else {
+                if (desc.getter?.env) {
+                    entry.getterEnvPos = specs.length;
+                    specs.push({ value: desc.getter.env, node: desc.getter.node, pass: (tmp) => `(void*)${tmp}` });
+                }
+                if (desc.setter?.env) {
+                    entry.setterEnvPos = specs.length;
+                    specs.push({ value: desc.setter.env, node: desc.setter.node, pass: (tmp) => `(void*)${tmp}` });
+                }
+            }
+            entries.push(entry);
+        }
+        specs.push(...ignored);
+        return this.emitSequencedExpr(T_VALUE, specs, (values) => {
+            const object = values[0]!;
+            const pieces: string[] = [];
+            for (const entry of entries) {
+                const key = `tsc_str_from_lit("${escapeCString(entry.key)}", ${utf8ByteLen(entry.key)})`;
+                if (entry.desc.kind === "data") {
+                    const value = values[entry.valuePos!]!;
+                    pieces.push(
+                        `if (!tsc_value_define_property_desc(${object}, ${key}, ${value}, ${entry.desc.hasValue}, ${entry.desc.writable}, ${entry.desc.hasWritable}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
+                    );
+                } else {
+                    const getterEnv = entry.getterEnvPos != null ? values[entry.getterEnvPos!]! : "NULL";
+                    const setterEnv = entry.setterEnvPos != null ? values[entry.setterEnvPos!]! : "NULL";
+                    pieces.push(
+                        `if (!tsc_value_define_accessor_desc(${object}, ${key}, ${entry.desc.getter?.adapter ?? "NULL"}, ${getterEnv}, ${entry.desc.hasGetter}, ${entry.desc.setter?.adapter ?? "NULL"}, ${setterEnv}, ${entry.desc.hasSetter}, ${entry.desc.enumerable}, ${entry.desc.hasEnumerable}, ${entry.desc.configurable}, ${entry.desc.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperties failed"))`,
+                    );
+                }
+            }
+            return `({ ${pieces.join("; ")}; ${object}; })`;
+        });
+    }
+
     private emitCommonJsModuleExportsObjectWrapperDefaultValue(call: ts.CallExpression): EmitResult | null {
         const callName = this.objectStaticCallName(call);
         const wrapperArity =
@@ -21564,6 +21636,8 @@ class Emitter {
         const computed = this.emitCommonJsModuleExportsComputedDefaultValue(cur);
         if (computed) return computed;
         if (ts.isCallExpression(cur)) {
+            const defineProperties = this.emitCommonJsModuleExportsObjectDefinePropertiesDefaultValue(cur);
+            if (defineProperties) return defineProperties;
             const defineProperty = this.emitCommonJsModuleExportsObjectDefinePropertyDefaultValue(cur);
             if (defineProperty) return defineProperty;
             const wrapper = this.emitCommonJsModuleExportsObjectWrapperDefaultValue(cur);

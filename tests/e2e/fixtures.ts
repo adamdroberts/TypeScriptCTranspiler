@@ -744,6 +744,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-argument-assign-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-assign-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-base") });\nmodule.exports = Object.defineProperties(create(require), { label: { value: "factory-define-properties", enumerable: true } });\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-argument-define-property-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-define-property-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-define-property-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),
