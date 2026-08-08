@@ -1,12 +1,12 @@
-[tsc shape] Obj #1 created (empty)
-[tsc shape] Obj #1 transition: shape_version 1 -> 2 | old: {} -> new: {a} | via add 'a'
-[tsc shape] Obj #1 transition: shape_version 2 -> 3 | old: {a} -> new: {a, b} | via add 'b'
-[tsc shape] Obj #1 transition: shape_version 3 -> 4 | old: {a, b} -> new: {a} | via delete 'b'
-[tsc shape] Obj #1 transition: shape_version 4 -> 5 | old: {a} -> new: {a} | via preventExtensions
-[tsc shape] Obj #2 created (empty)
-[tsc shape] Obj #2 transition: shape_version 1 -> 2 | old: {} -> new: {x} | via add 'x'
-[tsc shape] Obj #2 transition: shape_version 2 -> 3 | old: {x} -> new: {x} | via seal
-[tsc shape] Obj #3 created (empty)
-[tsc shape] Obj #3 transition: shape_version 1 -> 2 | old: {} -> new: {y} | via add 'y'
-[tsc shape] Obj #3 transition: shape_version 2 -> 3 | old: {y} -> new: {y} | via seal
-[tsc shape] Obj #3 transition: shape_version 3 -> 4 | old: {y} -> new: {y} | via freeze
+[tsc shape] Obj #9 created (empty)
+[tsc shape] Obj #9 transition: shape_version 1 -> 2 | old: {} -> new: {a} | via add 'a'
+[tsc shape] Obj #9 transition: shape_version 2 -> 3 | old: {a} -> new: {a, b} | via add 'b'
+[tsc shape] Obj #9 transition: shape_version 3 -> 4 | old: {a, b} -> new: {a} | via delete 'b'
+[tsc shape] Obj #9 transition: shape_version 4 -> 5 | old: {a} -> new: {a} | via preventExtensions
+[tsc shape] Obj #10 created (empty)
+[tsc shape] Obj #10 transition: shape_version 1 -> 2 | old: {} -> new: {x} | via add 'x'
+[tsc shape] Obj #10 transition: shape_version 2 -> 3 | old: {x} -> new: {x} | via seal
+[tsc shape] Obj #11 created (empty)
+[tsc shape] Obj #11 transition: shape_version 1 -> 2 | old: {} -> new: {y} | via add 'y'
+[tsc shape] Obj #11 transition: shape_version 2 -> 3 | old: {y} -> new: {y} | via seal
+[tsc shape] Obj #11 transition: shape_version 3 -> 4 | old: {y} -> new: {y} | via freeze
