@@ -18948,6 +18948,13 @@ class Emitter {
         if (!ts.isCallExpression(cur)) return false;
         if (this.commonJsFactoryInvocationMatchesCall(cur, factory)) return true;
         const callName = this.objectStaticCallName(cur);
+        if (callName === "assign") {
+            return cur.arguments.some((arg) => this.commonJsFactoryWrapperResultContainsInvocation(arg, factory));
+        }
+        if (callName === "defineProperty" || callName === "defineProperties") {
+            return cur.arguments.length >= 1 &&
+                this.commonJsFactoryWrapperResultContainsInvocation(cur.arguments[0]!, factory);
+        }
         if (
             callName !== "freeze" &&
             callName !== "seal" &&
@@ -21946,6 +21953,8 @@ class Emitter {
             if (defineProperties) return defineProperties;
             const defineProperty = this.emitCommonJsModuleExportsObjectDefinePropertyDefaultValue(cur);
             if (defineProperty) return defineProperty;
+            const objectAssign = this.emitCommonJsModuleExportsObjectAssignDefaultValue(cur);
+            if (objectAssign) return objectAssign;
             const wrapper = this.emitCommonJsModuleExportsObjectWrapperDefaultValue(cur);
             if (wrapper) return wrapper;
         }
@@ -22014,6 +22023,30 @@ class Emitter {
             }
         }
         unsupported(expr, "CommonJS module.exports default only supports static literal values");
+    }
+
+    private emitCommonJsModuleExportsObjectAssignDefaultValue(call: ts.CallExpression): EmitResult | null {
+        if (this.objectStaticCallName(call) !== "assign" || call.arguments.length < 1) return null;
+        let target: ts.Expression = this.unwrapTransparentExpression(call.arguments[0]!);
+        if (!ts.isObjectLiteralExpression(target)) return null;
+        const sources: ts.ObjectLiteralExpression[] = [];
+        for (const source of call.arguments.slice(1)) {
+            const cur = this.unwrapTransparentExpression(source);
+            const object = ts.isObjectLiteralExpression(cur)
+                ? cur
+                : this.commonJsLocalFactoryReturnedObjectLiteral(cur);
+            if (!object) return null;
+            sources.push(object);
+        }
+        const targetValue = this.emitCommonJsObjectLiteralDefaultValue(target);
+        const targetTemp = this.freshTemp("_assign_target");
+        const pieces = [`tsc_value_t ${targetTemp} = ${targetValue.c}`];
+        for (const source of sources) {
+            const sourceValue = this.emitCommonJsObjectLiteralDefaultValue(source);
+            pieces.push(`tsc_value_object_assign(${targetTemp}, ${sourceValue.c})`);
+        }
+        pieces.push(targetTemp);
+        return { c: `({ ${pieces.join("; ")}; })`, ty: T_VALUE };
     }
 
     private symbolForIdentifier(id: ts.Identifier): ts.Symbol | undefined {
