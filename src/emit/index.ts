@@ -19186,18 +19186,19 @@ class Emitter {
         if (ts.isPropertyAccessExpression(callee)) {
             let target: ts.Expression = callee.expression;
             while (ts.isParenthesizedExpression(target)) target = target.expression;
-            if (!ts.isIdentifier(target)) return null;
-            const fn = target.text === "Reflect" && callee.name.text === "apply"
+            if (!ts.isIdentifier(target) && !ts.isFunctionExpression(target) && !ts.isArrowFunction(target)) return null;
+            const reflectApply = ts.isIdentifier(target) && target.text === "Reflect" && callee.name.text === "apply";
+            const fn = reflectApply
                 ? (() => {
                     let factoryArg = call.arguments[0];
                     while (factoryArg && ts.isParenthesizedExpression(factoryArg)) factoryArg = factoryArg.expression;
-                    return factoryArg && ts.isIdentifier(factoryArg)
-                        ? this.commonJsDirectFactoryFunctionForName(factoryArg.text, call.getSourceFile())
+                    return factoryArg
+                        ? this.commonJsDirectFactoryFunctionForExpression(factoryArg, call.getSourceFile())
                         : null;
                 })()
-                : this.commonJsDirectFactoryFunctionForName(target.text, call.getSourceFile());
+                : this.commonJsDirectFactoryFunctionForExpression(target, call.getSourceFile());
             if (!fn) return null;
-            if (target.text === "Reflect" && callee.name.text === "apply") {
+            if (reflectApply) {
                 let argArray = call.arguments[2];
                 while (argArray && ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
                 return argArray && ts.isArrayLiteralExpression(argArray)
@@ -19218,11 +19219,23 @@ class Emitter {
             if (!ts.isPropertyAccessExpression(bindCallee)) return null;
             let bindTarget: ts.Expression = bindCallee.expression;
             while (ts.isParenthesizedExpression(bindTarget)) bindTarget = bindTarget.expression;
-            if (!ts.isIdentifier(bindTarget) || bindCallee.name.text !== "bind") return null;
-            const fn = this.commonJsDirectFactoryFunctionForName(bindTarget.text, call.getSourceFile());
+            if (bindCallee.name.text !== "bind") return null;
+            const fn = this.commonJsDirectFactoryFunctionForExpression(bindTarget, call.getSourceFile());
             return fn ? { fn, args: call.arguments } : null;
         }
         return null;
+    }
+
+    private commonJsDirectFactoryFunctionForExpression(
+        expr: ts.Expression,
+        sourceFile: ts.SourceFile,
+    ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
+        let cur = expr;
+        while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) return cur;
+        return ts.isIdentifier(cur)
+            ? this.commonJsDirectFactoryFunctionForName(cur.text, sourceFile)
+            : null;
     }
 
     private commonJsDirectFactoryFunctionForName(
@@ -20453,18 +20466,6 @@ class Emitter {
     private commonJsDirectFactoryInvocationForFunction(
         fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction,
     ): { args: readonly ts.Expression[] } | null {
-        let factoryName: ts.Identifier | null = null;
-        if (ts.isFunctionDeclaration(fn) && fn.name) {
-            factoryName = fn.name;
-        } else if (
-            (ts.isFunctionExpression(fn) || ts.isArrowFunction(fn)) &&
-            ts.isVariableDeclaration(fn.parent) &&
-            fn.parent.initializer === fn &&
-            ts.isIdentifier(fn.parent.name)
-        ) {
-            factoryName = fn.parent.name;
-        }
-        if (!factoryName) return null;
         const invocations: { args: readonly ts.Expression[] }[] = [];
         const visit = (node: ts.Node): void => {
             if (

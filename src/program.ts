@@ -331,6 +331,16 @@ function commonJsDirectFactoryFunctionForName(
     return null;
 }
 
+function commonJsDirectFactoryFunctionForExpression(
+    sourceFile: ts.SourceFile,
+    expr: ts.Expression,
+): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
+    let cur = expr;
+    while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+    if (ts.isFunctionExpression(cur) || ts.isArrowFunction(cur)) return cur;
+    return ts.isIdentifier(cur) ? commonJsDirectFactoryFunctionForName(sourceFile, cur.text) : null;
+}
+
 function commonJsDirectFactoryInvocation(call: ts.CallExpression): {
     fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
     args: readonly ts.Expression[];
@@ -347,18 +357,17 @@ function commonJsDirectFactoryInvocation(call: ts.CallExpression): {
     if (ts.isPropertyAccessExpression(callee)) {
         let target: ts.Expression = callee.expression;
         while (ts.isParenthesizedExpression(target)) target = target.expression;
-        if (!ts.isIdentifier(target)) return null;
-        const fn = target.text === "Reflect" && callee.name.text === "apply"
+        if (!ts.isIdentifier(target) && !ts.isFunctionExpression(target) && !ts.isArrowFunction(target)) return null;
+        const reflectApply = ts.isIdentifier(target) && target.text === "Reflect" && callee.name.text === "apply";
+        const fn = reflectApply
             ? (() => {
                 let factoryArg = call.arguments[0];
                 while (factoryArg && ts.isParenthesizedExpression(factoryArg)) factoryArg = factoryArg.expression;
-                return factoryArg && ts.isIdentifier(factoryArg)
-                    ? commonJsDirectFactoryFunctionForName(call.getSourceFile(), factoryArg.text)
-                    : null;
+                return factoryArg ? commonJsDirectFactoryFunctionForExpression(call.getSourceFile(), factoryArg) : null;
             })()
-            : commonJsDirectFactoryFunctionForName(call.getSourceFile(), target.text);
+            : commonJsDirectFactoryFunctionForExpression(call.getSourceFile(), target);
         if (!fn) return null;
-        if (target.text === "Reflect" && callee.name.text === "apply") {
+        if (reflectApply) {
             let argArray = call.arguments[2];
             while (argArray && ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
             return argArray && ts.isArrayLiteralExpression(argArray)
@@ -379,8 +388,8 @@ function commonJsDirectFactoryInvocation(call: ts.CallExpression): {
         if (!ts.isPropertyAccessExpression(bindCallee)) return null;
         let bindTarget: ts.Expression = bindCallee.expression;
         while (ts.isParenthesizedExpression(bindTarget)) bindTarget = bindTarget.expression;
-        if (!ts.isIdentifier(bindTarget) || bindCallee.name.text !== "bind") return null;
-        const fn = commonJsDirectFactoryFunctionForName(call.getSourceFile(), bindTarget.text);
+        if (bindCallee.name.text !== "bind") return null;
+        const fn = commonJsDirectFactoryFunctionForExpression(call.getSourceFile(), bindTarget);
         return fn ? { fn, args: call.arguments } : null;
     }
     return null;

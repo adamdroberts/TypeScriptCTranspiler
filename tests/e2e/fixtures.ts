@@ -744,6 +744,42 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-inline-argument-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-argument-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-call-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-inline-call-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-inline-call-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-call-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-call-class-helper", {
+        "index.js": 'module.exports = ((req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-inline-call-class-base") })).call(null, require);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-call-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-call-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-apply-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-inline-apply-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-inline-apply-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-apply-class-helper", {
+        "index.js": 'module.exports = ((req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-inline-apply-class-base") })).apply(null, [require]);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-apply-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-apply-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-helper", {
+        "index.js": 'module.exports = Reflect.apply((req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-base") }), null, [require]);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-reflect-apply-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-bind-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-inline-bind-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-inline-bind-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-bind-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-bind-class-helper", {
+        "index.js": 'module.exports = ((req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-inline-bind-class-base") })).bind(null)(require);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-inline-bind-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-inline-bind-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),
