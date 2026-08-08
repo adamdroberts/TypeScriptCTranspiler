@@ -753,6 +753,51 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-define-properties-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-base") });\nmodule.exports = Object.freeze(Object.defineProperties(create(require), { label: { value: "factory-wrapped-define-properties", enumerable: true } }));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapped-define-properties-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-call-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-call-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-call-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-call-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-call-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-call-class-base") });\nmodule.exports = create.call(null, require);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-call-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-call-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-apply-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-apply-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-apply-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-apply-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-apply-class-base") });\nmodule.exports = create.apply(null, [require]);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-apply-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-apply-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-base") });\nmodule.exports = Reflect.apply(create, null, [require]);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-reflect-apply-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-bind-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-bind-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-bind-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-bind-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-bind-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-bind-class-base") });\nmodule.exports = create.bind(null)(require);\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-bind-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-bind-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-factory-argument-define-property-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-define-property-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-define-property-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
     }),

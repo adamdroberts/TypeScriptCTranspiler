@@ -282,15 +282,15 @@ function commonJsDirectFactoryScopedAliases(
     requireAliases: Set<string>;
     moduleAliases: Set<string>;
 } | null {
-    if (!ts.isIdentifier(call.expression)) return null;
-    const fn = commonJsDirectFactoryFunction(call);
-    if (!fn || call.arguments.length < fn.parameters.length) return null;
+    const invocation = commonJsDirectFactoryInvocation(call);
+    if (!invocation || invocation.args.length < invocation.fn.parameters.length) return null;
+    const fn = invocation.fn;
     let nextRequireAliases: Set<string> | null = null;
     let nextModuleAliases: Set<string> | null = null;
     for (let index = 0; index < fn.parameters.length; index++) {
         const param = fn.parameters[index]!;
         if (!ts.isIdentifier(param.name)) continue;
-        const arg = call.arguments[index]!;
+        const arg = invocation.args[index]!;
         if (isCommonJsRequireCallee(arg, requireAliases, moduleAliases)) {
             nextRequireAliases ??= new Set(requireAliases);
             nextRequireAliases.add(param.name.text);
@@ -311,8 +311,14 @@ function commonJsDirectFactoryFunction(
     call: ts.CallExpression,
 ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
     if (!ts.isIdentifier(call.expression)) return null;
-    const name = call.expression.text;
-    for (const stmt of call.getSourceFile().statements) {
+    return commonJsDirectFactoryFunctionForName(call.getSourceFile(), call.expression.text);
+}
+
+function commonJsDirectFactoryFunctionForName(
+    sourceFile: ts.SourceFile,
+    name: string,
+): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
+    for (const stmt of sourceFile.statements) {
         if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === name) return stmt;
         if (!ts.isVariableStatement(stmt)) continue;
         for (const decl of stmt.declarationList.declarations) {
@@ -321,6 +327,58 @@ function commonJsDirectFactoryFunction(
                 return decl.initializer;
             }
         }
+    }
+    return null;
+}
+
+function commonJsDirectFactoryInvocation(call: ts.CallExpression): {
+    fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+    args: readonly ts.Expression[];
+} | null {
+    let callee: ts.Expression = call.expression;
+    while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+    if (ts.isIdentifier(callee)) {
+        const fn = commonJsDirectFactoryFunction(call);
+        return fn ? { fn, args: call.arguments } : null;
+    }
+    if (ts.isPropertyAccessExpression(callee)) {
+        let target: ts.Expression = callee.expression;
+        while (ts.isParenthesizedExpression(target)) target = target.expression;
+        if (!ts.isIdentifier(target)) return null;
+        const fn = target.text === "Reflect" && callee.name.text === "apply"
+            ? (() => {
+                let factoryArg = call.arguments[0];
+                while (factoryArg && ts.isParenthesizedExpression(factoryArg)) factoryArg = factoryArg.expression;
+                return factoryArg && ts.isIdentifier(factoryArg)
+                    ? commonJsDirectFactoryFunctionForName(call.getSourceFile(), factoryArg.text)
+                    : null;
+            })()
+            : commonJsDirectFactoryFunctionForName(call.getSourceFile(), target.text);
+        if (!fn) return null;
+        if (target.text === "Reflect" && callee.name.text === "apply") {
+            let argArray = call.arguments[2];
+            while (argArray && ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+            return argArray && ts.isArrayLiteralExpression(argArray)
+                ? { fn, args: argArray.elements }
+                : null;
+        }
+        if (callee.name.text === "call") return { fn, args: call.arguments.slice(1) };
+        if (callee.name.text === "apply" && call.arguments.length >= 2) {
+            let argArray = call.arguments[1]!;
+            while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+            return ts.isArrayLiteralExpression(argArray) ? { fn, args: argArray.elements } : null;
+        }
+        return null;
+    }
+    if (ts.isCallExpression(callee)) {
+        let bindCallee: ts.Expression = callee.expression;
+        while (ts.isParenthesizedExpression(bindCallee)) bindCallee = bindCallee.expression;
+        if (!ts.isPropertyAccessExpression(bindCallee)) return null;
+        let bindTarget: ts.Expression = bindCallee.expression;
+        while (ts.isParenthesizedExpression(bindTarget)) bindTarget = bindTarget.expression;
+        if (!ts.isIdentifier(bindTarget) || bindCallee.name.text !== "bind") return null;
+        const fn = commonJsDirectFactoryFunctionForName(call.getSourceFile(), bindTarget.text);
+        return fn ? { fn, args: call.arguments } : null;
     }
     return null;
 }
