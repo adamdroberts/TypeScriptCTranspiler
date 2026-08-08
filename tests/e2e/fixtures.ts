@@ -772,13 +772,25 @@ const packages: Record<string, PackageFixture> = {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-package", {
-        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-helper";\nimport { Counter as CallCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-call-alias-class-helper";\nimport { Counter as ApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-apply-alias-class-helper";\nimport { Counter as ReflectApplyCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-reflect-apply-alias-class-helper";\nimport { Counter as BindCounter } from "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-bind-alias-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\nexport function computeCall(value) { const counter = new CallCounter(9); return counter.add(value); }\nexport function computeApply(value) { const counter = new ApplyCounter(9); return counter.add(value); }\nexport function computeReflectApply(value) { const counter = new ReflectApplyCounter(9); return counter.add(value); }\nexport function computeBind(value) { const counter = new BindCounter(9); return counter.add(value); }\n',
     }),
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-helper", {
         "index.js": 'module.exports = (function () {\n  function create() { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base") }; }\n  const factory = create;\n  return Object.freeze(factory());\n})();\n',
     }),
     "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-call-alias-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-call-alias-class-helper", {
+        "index.js": 'module.exports = (function () {\n  function create() { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base") }; }\n  const factory = create;\n  return Object.freeze(factory.call(null));\n})();\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-apply-alias-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-apply-alias-class-helper", {
+        "index.js": 'module.exports = (function () {\n  function create() { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base") }; }\n  const factory = create;\n  return Object.freeze(factory.apply(null, []));\n})();\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-reflect-apply-alias-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-reflect-apply-alias-class-helper", {
+        "index.js": 'module.exports = (function () {\n  function create() { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base") }; }\n  const factory = create;\n  return Object.freeze(Reflect.apply(factory, null, []));\n})();\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-bind-alias-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-bind-alias-class-helper", {
+        "index.js": 'module.exports = (function () {\n  function create() { return { Counter: require("tsc2c-js-named-import-external-cjs-factory-zero-argument-iife-local-alias-class-base") }; }\n  const factory = create;\n  return Object.freeze(factory.bind(null)());\n})();\n',
     }),
     "tsc2c-js-named-import-external-cjs-factory-inline-argument-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-inline-argument-class-package", {
         "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-inline-argument-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
