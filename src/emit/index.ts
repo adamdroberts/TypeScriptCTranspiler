@@ -18909,7 +18909,7 @@ class Emitter {
         }
         if (!ts.isCallExpression(expr)) return null;
         const factory = this.commonJsFactoryWrapperInvocation(expr);
-        if (factory && ts.isBlock(factory.fn.body)) return factory.fn.body.statements;
+        if (factory?.fn.body && ts.isBlock(factory.fn.body)) return factory.fn.body.statements;
         const fn = this.commonJsIifeCallee(expr.expression);
         if (!fn || !ts.isBlock(fn.body)) return null;
         if (expr.arguments.length !== fn.parameters.length) return null;
@@ -18928,22 +18928,24 @@ class Emitter {
     }
 
     private commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
-        fn: ts.FunctionExpression | ts.ArrowFunction;
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
         args: readonly ts.Expression[];
     } | null {
         const outer = this.commonJsIifeCallee(call.expression);
         if (!outer || !ts.isBlock(outer.body) || call.arguments.length < outer.parameters.length) return null;
-        const factories = new Map<string, ts.FunctionExpression | ts.ArrowFunction>();
+        const factories = new Map<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>();
         for (let index = 0; index < outer.parameters.length; index++) {
             const param = outer.parameters[index]!;
             if (!ts.isIdentifier(param.name)) continue;
             const arg = this.unwrapTransparentExpression(call.arguments[index]!);
-            if (ts.isFunctionExpression(arg) || ts.isArrowFunction(arg)) {
-                factories.set(param.name.text, arg);
-            }
+            const fn = this.commonJsDirectFactoryFunctionForExpression(arg, call.getSourceFile());
+            if (fn) factories.set(param.name.text, fn);
         }
         if (factories.size === 0) return null;
-        const invocations: { fn: ts.FunctionExpression | ts.ArrowFunction; args: readonly ts.Expression[] }[] = [];
+        const invocations: {
+            fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+            args: readonly ts.Expression[];
+        }[] = [];
         const visit = (node: ts.Node): void => {
             if (
                 node !== outer &&
@@ -20609,10 +20611,30 @@ class Emitter {
                 const factory = this.commonJsFactoryWrapperInvocation(parent);
                 if (factory?.fn === fn) return { args: factory.args };
             }
-            if (ts.isSourceFile(parent)) return null;
+            if (ts.isSourceFile(parent)) break;
             cur = parent;
         }
-        return null;
+        const invocations: { args: readonly ts.Expression[] }[] = [];
+        const visit = (node: ts.Node): void => {
+            if (
+                node !== fn &&
+                (ts.isFunctionExpression(node) ||
+                    ts.isFunctionDeclaration(node) ||
+                    ts.isArrowFunction(node) ||
+                    ts.isMethodDeclaration(node) ||
+                    ts.isGetAccessorDeclaration(node) ||
+                    ts.isSetAccessorDeclaration(node))
+            ) {
+                return;
+            }
+            if (ts.isCallExpression(node)) {
+                const factory = this.commonJsFactoryWrapperInvocation(node);
+                if (factory?.fn === fn) invocations.push({ args: factory.args });
+            }
+            ts.forEachChild(node, visit);
+        };
+        visit(fn.getSourceFile());
+        return invocations.length === 1 ? invocations[0]! : null;
     }
 
     private isCommonJsIifeModuleParameterIdentifier(id: ts.Identifier): boolean {
@@ -67080,9 +67102,11 @@ class Emitter {
         }
         if (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) {
             const memberDecl = this.requireModuleMemberDeclaration(decl);
-            return memberDecl
-                ? this.classExpressionForCommonJsDeclaration(memberDecl, seen)
-                : null;
+            if (memberDecl) return this.classExpressionForCommonJsDeclaration(memberDecl, seen);
+            const valueNode = this.commonJsExportValueNode(decl);
+            return valueNode === decl
+                ? null
+                : this.classExpressionForCommonJsDeclaration(valueNode, seen);
         }
         if (ts.isBindingElement(decl) && ts.isObjectBindingPattern(decl.parent)) {
             const variable = decl.parent.parent;

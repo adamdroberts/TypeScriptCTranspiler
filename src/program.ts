@@ -195,12 +195,14 @@ function staticRequireSpecifiers(
                 for (const arg of node.arguments) {
                     if (arg !== factoryScoped.factoryArgument) visit(arg, activeRequireAliases, activeModuleAliases);
                 }
-                if (ts.isBlock(factoryScoped.fn.body)) {
-                    for (const child of factoryScoped.fn.body.statements) {
+                const body = factoryScoped.fn.body;
+                if (!body) return;
+                if (ts.isBlock(body)) {
+                    for (const child of body.statements) {
                         visit(child, factoryScoped.requireAliases, factoryScoped.moduleAliases);
                     }
                 } else {
-                    visit(factoryScoped.fn.body, factoryScoped.requireAliases, factoryScoped.moduleAliases);
+                    visit(body, factoryScoped.requireAliases, factoryScoped.moduleAliases);
                 }
                 return;
             }
@@ -241,7 +243,7 @@ function commonJsFactoryWrapperScopedAliases(
     requireAliases: Set<string>,
     moduleAliases: Set<string>,
 ): {
-    fn: ts.FunctionExpression | ts.ArrowFunction;
+    fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
     factoryArgument: ts.Expression;
     requireAliases: Set<string>;
     moduleAliases: Set<string>;
@@ -404,25 +406,27 @@ function commonJsDirectFactoryInvocation(call: ts.CallExpression): {
 }
 
 function commonJsFactoryWrapperInvocation(call: ts.CallExpression): {
-    fn: ts.FunctionExpression | ts.ArrowFunction;
+    fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
     factoryArgument: ts.Expression;
     args: readonly ts.Expression[];
 } | null {
     const outer = commonJsIifeCallee(call.expression);
     if (!outer || !ts.isBlock(outer.body) || call.arguments.length < outer.parameters.length) return null;
-    const factories = new Map<string, { fn: ts.FunctionExpression | ts.ArrowFunction; argument: ts.Expression }>();
+    const factories = new Map<string, {
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+        argument: ts.Expression;
+    }>();
     for (let index = 0; index < outer.parameters.length; index++) {
         const param = outer.parameters[index]!;
         if (!ts.isIdentifier(param.name)) continue;
         let arg: ts.Expression = call.arguments[index]!;
         while (ts.isParenthesizedExpression(arg)) arg = arg.expression;
-        if (ts.isFunctionExpression(arg) || ts.isArrowFunction(arg)) {
-            factories.set(param.name.text, { fn: arg, argument: call.arguments[index]! });
-        }
+        const fn = commonJsDirectFactoryFunctionForExpression(call.getSourceFile(), arg);
+        if (fn) factories.set(param.name.text, { fn, argument: call.arguments[index]! });
     }
     if (factories.size === 0) return null;
     const invocations: {
-        fn: ts.FunctionExpression | ts.ArrowFunction;
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
         factoryArgument: ts.Expression;
         args: readonly ts.Expression[];
     }[] = [];
