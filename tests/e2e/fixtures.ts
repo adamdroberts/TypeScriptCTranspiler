@@ -1568,6 +1568,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-iife-local-define-properties-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-define-properties-alias-object", {
         "index.js": 'module.exports = (function () {\n  function makeIifeLocalDefinePropertiesAliasApi() {\n    return {\n      default: "factory-iife-local-define-properties-alias-default",\n      label: "factory-iife-local-define-properties-alias",\n      count: 156,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalDefinePropertiesAliasApi;\n  return Object.freeze(Object.defineProperties(factory(), {}));\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-local-define-property-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-define-property-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalDefinePropertyAliasApi() {\n    return {\n      default: "factory-iife-local-define-property-alias-default",\n      label: "factory-iife-local-define-property-alias",\n      count: 157,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalDefinePropertyAliasApi;\n  return Object.freeze(Object.defineProperty(factory(), "label", {}));\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {

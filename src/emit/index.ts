@@ -18885,6 +18885,13 @@ class Emitter {
                     this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!);
             }
         }
+        if (callName === "defineProperty" && cur.arguments.length === 3) {
+            const descriptor = this.unwrapTransparentExpression(cur.arguments[2]!);
+            if (ts.isObjectLiteralExpression(descriptor) && descriptor.properties.length === 0) {
+                return this.commonJsReturnedObjectLiteral(cur.arguments[0]!) ??
+                    this.commonJsZeroArgFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!);
+            }
+        }
         if (
             callName !== "freeze" &&
             callName !== "seal" &&
@@ -19002,6 +19009,12 @@ class Emitter {
         if (callName === "defineProperties" && cur.arguments.length === 2) {
             const descriptors = this.unwrapTransparentExpression(cur.arguments[1]!);
             if (ts.isObjectLiteralExpression(descriptors) && descriptors.properties.length === 0) {
+                return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!, functions, aliases);
+            }
+        }
+        if (callName === "defineProperty" && cur.arguments.length === 3) {
+            const descriptor = this.unwrapTransparentExpression(cur.arguments[2]!);
+            if (ts.isObjectLiteralExpression(descriptor) && descriptor.properties.length === 0) {
                 return this.commonJsIifeLocalFactoryInvocationReturnedObjectLiteral(cur.arguments[0]!, functions, aliases);
             }
         }
