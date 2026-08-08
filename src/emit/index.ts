@@ -66727,6 +66727,12 @@ class Emitter {
                 ? null
                 : this.classExpressionForCommonJsDeclaration(valueNode, seen);
         }
+        if (ts.isArrayLiteralExpression(decl)) {
+            const valueNode = this.commonJsExportValueNode(decl);
+            return valueNode === decl
+                ? null
+                : this.classExpressionForCommonJsDeclaration(valueNode, seen);
+        }
         return null;
     }
 
