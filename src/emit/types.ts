@@ -496,6 +496,9 @@ export function mapTsType(node: ts.Node, t: ts.Type, checker: ts.TypeChecker): C
                 if (ts.isClassDeclaration(d) && d.name) {
                     return classType(d.name.text);
                 }
+                if (ts.isClassExpression(d) && d.name) {
+                    return classType(d.name.text);
+                }
                 if (ts.isInterfaceDeclaration(d) && d.name) {
                     // Skip declarations from .d.ts (lib shims) - those are
                     // handled by runtime intercepts, not user-defined structs.

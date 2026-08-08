@@ -15414,6 +15414,9 @@ class Emitter {
 
         try {
             const statements = this.flattenModuleStatements(sf.statements);
+            const commonJsClassExpressions = statements
+                .map((stmt) => stmt ? this.commonJsModuleExportsClassExpression(stmt) : null)
+                .filter((expr): expr is ts.ClassExpression => !!expr);
             this.analyzeIntegerSymbols(sf);
             this.analyzeStrbufSymbols(sf);
             // Pass A: struct forward-decls + typedefs for classes & interfaces.
@@ -15429,6 +15432,10 @@ class Emitter {
                     );
                 }
             }
+            for (const classExpr of commonJsClassExpressions) {
+                if (!classExpr.name) unsupported(classExpr, "CommonJS module.exports class default requires a named class expression");
+                this.structDecls.line(`typedef struct ${classExpr.name.text}_t ${classExpr.name.text}_t;`);
+            }
             // Pass B: struct bodies.
             for (const inner of statements) {
                 if (inner && ts.isClassDeclaration(inner) && this.shouldEmitClassDeclaration(inner)) {
@@ -15436,6 +15443,9 @@ class Emitter {
                 }
                 if (inner && ts.isInterfaceDeclaration(inner))
                     this.emitInterfaceStruct(inner);
+            }
+            for (const classExpr of commonJsClassExpressions) {
+                this.emitClassStruct(classExpr as unknown as ts.ClassDeclaration);
             }
             // Pass C: function + class-method + lifted-arrow prototypes.
             for (const inner of statements) {
@@ -15455,6 +15465,9 @@ class Emitter {
                     const lift = this.getLiftableArrow(inner);
                     if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowPrototype(lift);
                 }
+            }
+            for (const classExpr of commonJsClassExpressions) {
+                this.emitClassPrototypes(classExpr as unknown as ts.ClassDeclaration);
             }
             // Pass D: function + class-method + lifted-arrow bodies.
             for (const inner of statements) {
@@ -15476,11 +15489,21 @@ class Emitter {
                     if (lift && this.shouldEmitLiftedArrow(lift)) this.emitLiftedArrowBody(lift);
                 }
             }
+            for (const classExpr of commonJsClassExpressions) {
+                this.emitClassBodies(classExpr as unknown as ts.ClassDeclaration);
+            }
             // Pass E: top-level statements. VariableStatements are split into
             // file-scope declarations + in-mod_init assignments so that other
             // top-level functions (including lifted arrows) can reference them.
             for (const inner of statements) {
                 if (!inner) continue;
+                const commonJsClassExpression = this.commonJsModuleExportsClassExpression(inner);
+                if (commonJsClassExpression) {
+                    this.emitClassStaticInitializers(
+                        initBuf,
+                        commonJsClassExpression as unknown as ts.ClassDeclaration,
+                    );
+                }
                 if (ts.isFunctionDeclaration(inner)) continue;
                 if (ts.isClassDeclaration(inner)) {
                     if (!this.shouldEmitClassDeclaration(inner)) continue;
@@ -18400,6 +18423,26 @@ class Emitter {
         return assignment;
     }
 
+    private commonJsModuleExportsClassExpression(stmt: ts.Statement): ts.ClassExpression | null {
+        const assignment = this.commonJsModuleExportsValueAssignmentChain(stmt);
+        if (!assignment) return null;
+        const right = this.unwrapTransparentExpression(assignment.right);
+        return ts.isClassExpression(right) ? right : null;
+    }
+
+    private isDirectCommonJsModuleExportsClassExpression(expr: ts.ClassExpression): boolean {
+        let current: ts.Expression = expr;
+        while (this.isTransparentExpressionNode(current.parent) && ts.isExpression(current.parent)) {
+            current = current.parent;
+        }
+        const parent = current.parent;
+        return ts.isBinaryExpression(parent) &&
+            parent.right === current &&
+            parent.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+            ts.isPropertyAccessExpression(parent.left) &&
+            this.isModuleExportsAccess(parent.left);
+    }
+
     private commonJsModuleExportsValueAssignmentChain(
         stmt: ts.Statement,
     ): {
@@ -18452,6 +18495,7 @@ class Emitter {
         if (
             !ts.isFunctionExpression(cur) &&
             !ts.isArrowFunction(cur) &&
+            !(ts.isClassExpression(cur) && this.isDirectCommonJsModuleExportsClassExpression(cur)) &&
             !ts.isIdentifier(cur) &&
             !ts.isArrayLiteralExpression(cur) &&
             !ts.isObjectLiteralExpression(cur) &&
@@ -18461,7 +18505,7 @@ class Emitter {
             !this.isCommonJsRuntimeComputedModuleExportsValue(cur) &&
             !this.isCommonJsModuleExportsDefaultValue(cur)
         ) {
-            unsupported(expr, "CommonJS module.exports value assignment currently supports functions, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, primitive/static default values, and bounded binary/prefix-unary static defaults only");
+            unsupported(expr, "CommonJS module.exports value assignment currently supports functions, named class defaults, arrays, declared identifiers, literal require re-exports, literal require member re-exports, runtime-computed dynamic objects, primitive/static default values, and bounded binary/prefix-unary static defaults only");
         }
     }
 
@@ -18482,6 +18526,9 @@ class Emitter {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsModuleExportsDefaultValue(cur)) return true;
+        if (ts.isClassExpression(cur)) {
+            return !!cur.name && this.isDirectCommonJsModuleExportsClassExpression(cur);
+        }
         if (this.isCommonJsRuntimeComputedModuleExportsValue(cur)) return true;
         if (ts.isIdentifier(cur)) {
             return this.isSideEffectFreeTopLevelConstInitializer(cur);
@@ -18555,6 +18602,9 @@ class Emitter {
         const cur = this.unwrapTransparentExpression(expr);
         if (this.isTopLevelCommonJsThisExpression(cur)) return true;
         if (this.isCommonJsObjectLiteralExportValue(cur)) return true;
+        if (ts.isClassExpression(cur)) {
+            return !!cur.name && this.isDirectCommonJsModuleExportsClassExpression(cur);
+        }
         if (this.isUnshadowedUndefinedExpression(cur)) return true;
         if (ts.isPrefixUnaryExpression(cur)) {
             return this.isCommonJsModuleExportsDefaultPrefixOperator(cur.operator) &&
@@ -19379,6 +19429,9 @@ class Emitter {
         if (ts.isExpression(valueNode)) valueNode = this.unwrapTransparentExpression(valueNode);
         if (ts.isFunctionExpression(valueNode) || ts.isArrowFunction(valueNode) || ts.isMethodDeclaration(valueNode)) {
             return this.closureDeclarationCType(valueNode);
+        }
+        if (ts.isClassExpression(valueNode)) {
+            return T_VALUE;
         }
         if (valueNode.kind === ts.SyntaxKind.NullKeyword) {
             return T_VALUE;
@@ -21355,6 +21408,10 @@ class Emitter {
         }
         if (this.isCommonJsObjectLiteralExportValue(cur)) {
             return this.emitCommonJsModuleExportsScalarDefaultValue(cur);
+        }
+        if (ts.isClassExpression(cur)) {
+            if (!cur.name) unsupported(cur, "CommonJS module.exports class default requires a named class expression");
+            return this.classConstructorValue(cur as unknown as ts.ClassDeclaration);
         }
         if (ts.isObjectLiteralExpression(cur) && this.isCommonJsObjectLiteralDefaultValue(cur)) {
             return this.emitCommonJsObjectLiteralDefaultValue(cur);
@@ -66589,6 +66646,29 @@ class Emitter {
         return this.findClassDecl(id.text);
     }
 
+    private classExpressionForConstructorIdentifier(
+        id: ts.Identifier,
+        seen = new Set<ts.Symbol>(),
+    ): ts.ClassExpression | null {
+        const imported = this.importAliasTargetDeclaration(id);
+        if (imported && ts.isClassExpression(imported)) return imported;
+
+        const sym = this.symbolForIdentifier(id);
+        if (sym && seen.has(sym)) return null;
+        if (sym) seen.add(sym);
+        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+        if (decl && ts.isClassExpression(decl)) return decl;
+        if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
+            const declared = this.checker.getTypeAtLocation(decl.name);
+            if (declared.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return null;
+            const init = this.unwrapTransparentExpression(decl.initializer);
+            if (ts.isIdentifier(init)) {
+                return this.classExpressionForConstructorIdentifier(init, seen);
+            }
+        }
+        return null;
+    }
+
     private decoratedClassConstructorAliasTarget(decl: ts.VariableDeclaration): ts.ClassDeclaration | null {
         if (!decl.initializer) return null;
         const declared = this.checker.getTypeAtLocation(decl.name);
@@ -94690,7 +94770,8 @@ class Emitter {
             return this.emitDynamicValueConstruct(n, { c: "tsc_array_constructor_value()", ty: T_VALUE });
         }
         const targetClassDecl = this.classDeclForConstructorIdentifier(ctorExpr);
-        const cls = targetClassDecl?.name?.text ?? this.identifierName(ctorExpr);
+        const targetClassExpression = this.classExpressionForConstructorIdentifier(ctorExpr);
+        const cls = targetClassDecl?.name?.text ?? targetClassExpression?.name?.text ?? this.identifierName(ctorExpr);
         if (cls === "Function") {
             return this.emitUnsafeFunctionConstructor(n);
         }
@@ -95193,14 +95274,15 @@ class Emitter {
         if (cls === "URL") return this.emitUrlConstructor(n);
         if (cls === "URLSearchParams") return this.emitUrlSearchParamsConstructor(n);
         const classDecl = targetClassDecl ?? this.findClassDecl(cls);
-        if (!classDecl) {
+        const classLike = classDecl ?? targetClassExpression;
+        if (!classLike) {
             const ctor = this.emitExpr(n.expression);
             if (ctor.ty.kind === "value") {
                 return this.emitDynamicValueConstruct(n, ctor);
             }
         }
-        const ctorDecl = classDecl?.members.find(ts.isConstructorDeclaration);
-        if (classDecl?.typeParameters?.length && ctorDecl) {
+        const ctorDecl = classLike?.members.find(ts.isConstructorDeclaration);
+        if (classLike?.typeParameters?.length && ctorDecl) {
             const paramTypes = ctorDecl.parameters.map((param) =>
                 this.prepareType(mapType(param, this.checker)),
             );
@@ -95209,7 +95291,7 @@ class Emitter {
                 if (ctorDecl.parameters.some((param) => !!param.dotDotDotToken)) {
                     unsupported(n, "spread call into generic class rest constructor");
                 }
-                if (ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
+                if (classDecl && ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
                     return this.emitDecoratedClassSpreadNew(n, classDecl, cls, paramTypes);
                 }
                 return this.emitSpreadCallWithParamTypes(n, `${cls}_new`, classType(cls), paramTypes);
@@ -95238,7 +95320,7 @@ class Emitter {
                     paramSymbol,
                 });
             }
-            if (ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
+            if (classDecl && ts.canHaveDecorators(classDecl) && (ts.getDecorators(classDecl) ?? []).length > 0) {
                 return this.emitDecoratedClassNew(n, classDecl, cls, specs);
             }
             return this.emitSequencedCall(`${cls}_new`, classType(cls), specs);
