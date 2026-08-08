@@ -79,7 +79,7 @@ For the current package-source subset, untyped JavaScript object and array liter
 
 Cycles: the DFS in `src/resolve.ts` stops at the back edge, then continues — producing a best-effort topological order. Circular imports are compiled but not runtime-reordered; if module A's init reads from module B's uninitialized globals, the reader sees the zero value (since all file-scope statics are zero-initialized by the C ABI).
 
-The current JavaScript package interop subset also carries direct named class exports and named class values from external CommonJS object-literal modules through the AOT class layout and constructor/method lowering, crossing the CommonJS dynamic-value boundary at the import surface. Broader class-valued wrapper/re-export shapes remain part of the Phase 14 TODO.
+The current JavaScript package interop subset also carries direct named class exports and named class values from external CommonJS object-literal modules through the AOT class layout and constructor/method lowering, crossing the CommonJS dynamic-value boundary at the import surface. It also follows class-valued ESM named/default re-exports and static `require(...)`-backed CommonJS object properties through that same AOT class graph. Broader class-valued wrapper/re-export shapes remain part of the Phase 14 TODO.
 
 ## Multi-file output model
 

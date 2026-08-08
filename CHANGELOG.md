@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Pure JavaScript ESM package barrels loaded through `allowJs` can re-export and construct external CommonJS class values through named and default forwarding, including class values reached through static `require(...)` properties on CommonJS object-literal dependencies. Tests: `node_modules_js_reexport_external_cjs_class`, `node_modules_js_default_forward_external_cjs_class`, `node_modules_js_named_import_external_cjs_property_wrapper_class`.
+- Pure JavaScript ESM packages loaded through `allowJs` can preserve class construction through CommonJS `require`-bound object wrappers. Test: `node_modules_js_named_import_external_cjs_wrapper_class`.
 - Pure JavaScript ESM packages loaded through allowJs can named-import class values from external CommonJS object-literal exports through the AOT module graph, including constructor fields and instance methods. Test: node_modules_js_named_import_external_cjs_object_class.
 - Pure JavaScript ESM packages loaded through allowJs can named-import class values from direct external CommonJS exports.name = class Name { ... } assignments through the AOT module graph. Test: node_modules_js_named_import_external_cjs_class.
 - Pure JavaScript ESM packages loaded through `allowJs` can import and call default function values from external CommonJS package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs_function`.

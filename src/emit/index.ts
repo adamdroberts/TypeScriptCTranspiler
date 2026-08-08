@@ -66669,16 +66669,74 @@ class Emitter {
         return this.findClassDecl(id.text);
     }
 
+    private classExpressionForCommonJsDeclaration(
+        decl: ts.Node,
+        seen = new Set<ts.Node>(),
+    ): ts.ClassExpression | null {
+        if (seen.has(decl)) return null;
+        seen.add(decl);
+        if (ts.isClassExpression(decl)) return decl.name ? decl : null;
+        if (ts.isVariableDeclaration(decl) && decl.initializer) {
+            return this.classExpressionForCommonJsDeclaration(decl.initializer, seen);
+        }
+        if (ts.isExportAssignment(decl)) {
+            return this.classExpressionForCommonJsDeclaration(decl.expression, seen);
+        }
+        if (ts.isIdentifier(decl)) {
+            const requireDecl = this.requireBindingModuleExportsDeclaration(decl);
+            if (requireDecl) {
+                return this.classExpressionForCommonJsDeclaration(requireDecl, seen);
+            }
+            const sym = this.symbolForIdentifier(decl);
+            const valueDecl = sym?.valueDeclaration ?? sym?.declarations?.[0];
+            return valueDecl && valueDecl !== decl
+                ? this.classExpressionForCommonJsDeclaration(valueDecl, seen)
+                : null;
+        }
+        if (ts.isCallExpression(decl)) {
+            const requireDecl = this.requireCallModuleExportsDeclaration(decl);
+            if (requireDecl) {
+                return this.classExpressionForCommonJsDeclaration(requireDecl, seen);
+            }
+            const defineExport = this.commonJsDefinePropertyExportForCallDeclaration(decl);
+            if (defineExport) {
+                return this.classExpressionForCommonJsDeclaration(defineExport.right, seen);
+            }
+            return null;
+        }
+        if (ts.isPropertyAccessExpression(decl) || ts.isElementAccessExpression(decl)) {
+            const memberDecl = this.requireModuleMemberDeclaration(decl);
+            return memberDecl
+                ? this.classExpressionForCommonJsDeclaration(memberDecl, seen)
+                : null;
+        }
+        if (
+            ts.isPropertyAssignment(decl) ||
+            ts.isShorthandPropertyAssignment(decl) ||
+            (ts.isBinaryExpression(decl) && decl.operatorToken.kind === ts.SyntaxKind.EqualsToken)
+        ) {
+            const valueNode = this.commonJsExportValueNode(decl);
+            return valueNode === decl
+                ? null
+                : this.classExpressionForCommonJsDeclaration(valueNode, seen);
+        }
+        return null;
+    }
+
     private classExpressionForConstructorIdentifier(
         id: ts.Identifier,
         seen = new Set<ts.Symbol>(),
     ): ts.ClassExpression | null {
         const imported = this.importAliasTargetDeclaration(id);
         if (imported && ts.isClassExpression(imported)) return imported;
+        if (imported) {
+            const importedClass = this.classExpressionForCommonJsDeclaration(imported);
+            if (importedClass) return importedClass;
+        }
         const namedImport = this.commonJsNamedImportDeclaration(id);
-        if (namedImport && ts.isPropertyAssignment(namedImport)) {
-            const initializer = this.unwrapTransparentExpression(namedImport.initializer);
-            if (ts.isClassExpression(initializer)) return initializer;
+        if (namedImport) {
+            const namedImportClass = this.classExpressionForCommonJsDeclaration(namedImport);
+            if (namedImportClass) return namedImportClass;
         }
 
         const sym = this.symbolForIdentifier(id);

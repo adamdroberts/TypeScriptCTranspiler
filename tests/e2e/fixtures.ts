@@ -651,6 +651,36 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-object-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-object-class-helper", {
         "index.js": 'module.exports = { Counter: class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } } };\n',
     }),
+    "tsc2c-js-reexport-external-cjs-class-package": esmPackage("tsc2c-js-reexport-external-cjs-class-package", {
+        "index.js": 'export { Counter } from "tsc2c-js-reexport-external-cjs-class-helper";\n',
+    }),
+    "tsc2c-js-reexport-external-cjs-class-helper": cjsPackage("tsc2c-js-reexport-external-cjs-class-helper", {
+        "index.js": 'exports.Counter = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-default-forward-external-cjs-class-package": esmPackage("tsc2c-js-default-forward-external-cjs-class-package", {
+        "index.js": 'export { default } from "tsc2c-js-default-forward-external-cjs-class-helper";\n',
+    }),
+    "tsc2c-js-default-forward-external-cjs-class-helper": cjsPackage("tsc2c-js-default-forward-external-cjs-class-helper", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-wrapper-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-wrapper-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-wrapper-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-wrapper-class-helper", {
+        "index.js": 'const Counter = require("tsc2c-js-named-import-external-cjs-wrapper-class-base");\nmodule.exports = { Counter };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-wrapper-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-wrapper-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-property-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-property-wrapper-class-package", {
+        "index.js": 'export { Counter } from "tsc2c-js-named-import-external-cjs-property-wrapper-class-helper";\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-property-wrapper-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-property-wrapper-class-helper", {
+        "index.js": 'module.exports = { Counter: require("tsc2c-js-named-import-external-cjs-property-wrapper-class-base") };\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-property-wrapper-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-property-wrapper-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-package": esmPackage("tsc2c-js-named-import-external-cjs-package", {
         "index.js": 'import { compute, label } from "tsc2c-js-named-import-external-cjs-helper";\nexport const message = label + ":" + compute(4);\nexport function wrap(value) { return label + ":" + compute(value); }\n',
     }),
