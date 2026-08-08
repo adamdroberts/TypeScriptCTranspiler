@@ -19194,9 +19194,8 @@ class Emitter {
             const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
             const fn = decl && ts.isFunctionDeclaration(decl)
                 ? decl
-                : decl && ts.isVariableDeclaration(decl) && decl.initializer &&
-                    (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer))
-                    ? decl.initializer
+                : decl && ts.isVariableDeclaration(decl) && decl.initializer
+                    ? this.commonJsDirectFactoryFunctionForExpression(decl.initializer, call.getSourceFile())
                     : null;
             return fn && fn.getSourceFile() === call.getSourceFile()
                 ? { fn, args: call.arguments }
@@ -19263,7 +19262,10 @@ class Emitter {
     private commonJsDirectFactoryFunctionForName(
         name: string,
         sourceFile: ts.SourceFile,
+        seen: Set<string> = new Set(),
     ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
+        if (seen.has(name)) return null;
+        seen.add(name);
         for (const stmt of sourceFile.statements) {
             if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === name) return stmt;
             if (!ts.isVariableStatement(stmt)) continue;
@@ -19271,6 +19273,11 @@ class Emitter {
                 if (!ts.isIdentifier(decl.name) || decl.name.text !== name || !decl.initializer) continue;
                 if (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer)) {
                     return decl.initializer;
+                }
+                let init = decl.initializer;
+                while (ts.isParenthesizedExpression(init)) init = init.expression;
+                if (ts.isIdentifier(init)) {
+                    return this.commonJsDirectFactoryFunctionForName(init.text, sourceFile, seen);
                 }
             }
         }

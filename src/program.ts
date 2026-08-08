@@ -317,7 +317,10 @@ function commonJsDirectFactoryFunction(
 function commonJsDirectFactoryFunctionForName(
     sourceFile: ts.SourceFile,
     name: string,
+    seen: Set<string> = new Set(),
 ): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null {
+    if (seen.has(name)) return null;
+    seen.add(name);
     for (const stmt of sourceFile.statements) {
         if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === name) return stmt;
         if (!ts.isVariableStatement(stmt)) continue;
@@ -325,6 +328,11 @@ function commonJsDirectFactoryFunctionForName(
             if (!ts.isIdentifier(decl.name) || decl.name.text !== name || !decl.initializer) continue;
             if (ts.isFunctionExpression(decl.initializer) || ts.isArrowFunction(decl.initializer)) {
                 return decl.initializer;
+            }
+            let init = decl.initializer;
+            while (ts.isParenthesizedExpression(init)) init = init.expression;
+            if (ts.isIdentifier(init)) {
+                return commonJsDirectFactoryFunctionForName(sourceFile, init.text, seen);
             }
         }
     }
