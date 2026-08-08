@@ -21457,6 +21457,52 @@ class Emitter {
         return null;
     }
 
+    private emitCommonJsModuleExportsObjectDefinePropertyDefaultValue(call: ts.CallExpression): EmitResult | null {
+        if (this.objectStaticCallName(call) !== "defineProperty" || call.arguments.length < 3) return null;
+        const targetObject = this.commonJsLocalFactoryReturnedObjectLiteral(call.arguments[0]!);
+        if (!targetObject) return null;
+        const target = this.emitCommonJsObjectLiteralDefaultValue(targetObject);
+        const key = this.emitExpr(call.arguments[1]!);
+        const descriptor = this.descriptorData(call.arguments[2]!);
+        const ignored = this.ignoredArgumentSpecs(call.arguments, 3);
+        const dynamicObjectArg = (value: string): string => value;
+        if (descriptor.kind === "accessor") {
+            if (key.ty.kind === "symbol") unsupported(call.arguments[1]!, "Object.defineProperty symbol accessor keys are not supported yet");
+            const specs: SequencedCallArg[] = [
+                { value: target, target: T_VALUE, node: call.arguments[0]! },
+                { value: key, target: T_STRING, node: call.arguments[1]! },
+            ];
+            const getterEnvPos = descriptor.getter?.env ? specs.length : -1;
+            if (descriptor.getter?.env) {
+                specs.push({ value: descriptor.getter.env, node: descriptor.getter.node, pass: (tmp) => `(void*)${tmp}` });
+            }
+            const setterEnvPos = descriptor.setter?.env ? specs.length : -1;
+            if (descriptor.setter?.env) {
+                specs.push({ value: descriptor.setter.env, node: descriptor.setter.node, pass: (tmp) => `(void*)${tmp}` });
+            }
+            specs.push(...ignored);
+            return this.emitSequencedExpr(T_VALUE, specs, (values) => {
+                const object = values[0]!;
+                const property = values[1]!;
+                const getterEnv = getterEnvPos >= 0 ? values[getterEnvPos]! : "NULL";
+                const setterEnv = setterEnvPos >= 0 ? values[setterEnvPos]! : "NULL";
+                return `({ if (!tsc_value_define_accessor_desc(${dynamicObjectArg(object)}, ${property}, ${descriptor.getter?.adapter ?? "NULL"}, ${getterEnv}, ${descriptor.hasGetter}, ${descriptor.setter?.adapter ?? "NULL"}, ${setterEnv}, ${descriptor.hasSetter}, ${descriptor.enumerable}, ${descriptor.hasEnumerable}, ${descriptor.configurable}, ${descriptor.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(object)}; })`;
+            });
+        }
+        const value = descriptor.value
+            ? this.emitExpr(descriptor.value)
+            : { c: "tsc_value_undefined()", ty: T_VALUE };
+        return this.emitSequencedExpr(T_VALUE, [
+            { value: target, target: T_VALUE, node: call.arguments[0]! },
+            { value: key, target: key.ty.kind === "symbol" ? T_SYMBOL : T_STRING, node: call.arguments[1]! },
+            { value, target: T_VALUE, node: descriptor.value ?? call.arguments[2]! },
+            ...ignored,
+        ], ([object, property, descriptorValue]) => {
+            const fn = key.ty.kind === "symbol" ? "tsc_value_define_symbol_property_desc" : "tsc_value_define_property_desc";
+            return `({ if (!${fn}(${dynamicObjectArg(object!)}, ${property}, ${descriptorValue}, ${descriptor.hasValue}, ${descriptor.writable}, ${descriptor.hasWritable}, ${descriptor.enumerable}, ${descriptor.hasEnumerable}, ${descriptor.configurable}, ${descriptor.hasConfigurable})) tsc_throw_str(tsc_str_from_cstr("Object.defineProperty failed")); ${dynamicObjectArg(object!)}; })`;
+        });
+    }
+
     private emitCommonJsModuleExportsObjectWrapperDefaultValue(call: ts.CallExpression): EmitResult | null {
         const callName = this.objectStaticCallName(call);
         const wrapperArity =
@@ -21518,6 +21564,8 @@ class Emitter {
         const computed = this.emitCommonJsModuleExportsComputedDefaultValue(cur);
         if (computed) return computed;
         if (ts.isCallExpression(cur)) {
+            const defineProperty = this.emitCommonJsModuleExportsObjectDefinePropertyDefaultValue(cur);
+            if (defineProperty) return defineProperty;
             const wrapper = this.emitCommonJsModuleExportsObjectWrapperDefaultValue(cur);
             if (wrapper) return wrapper;
         }
