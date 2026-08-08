@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- The bounded zero-argument IIFE return-wrapper path also preserves finite named/default metadata and whole-value reads when the top-level local factory alias is invoked through `Function.call`. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS zero-argument IIFE returns now preserve finite named/default metadata and whole-value reads when the IIFE returns an object-preserving wrapper around a bounded top-level local factory alias. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS zero-argument local factory aliases now preserve finite named/default metadata and whole-value reads through bounded object-preserving returns. Test: `node_modules_commonjs_module_exports_local_factory_object`.
 - CommonJS zero-argument local factory aliases invoked through bounded `Function.call` now preserve finite named/default metadata and whole-value reads through object-preserving wrappers. Test: `node_modules_commonjs_module_exports_local_factory_object`.
