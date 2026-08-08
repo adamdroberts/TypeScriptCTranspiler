@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Pure JavaScript ESM packages loaded through `allowJs` can import and call default function values from external CommonJS package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs_function`.
 - Bounded sequential same-origin HTTP/1.1 client keep-alive pooling now reuses idle native TCP/TLS sockets for ordinary non-chunked `http.request` / `http.get` calls, resets response-parser/listener state between requests, and evicts stale/idle sockets; concurrent pooling, chunked keep-alive reuse, and general backpressure remain deferred. Test: `http_client_keep_alive_pool`.
 - Bounded `https` / `node:https` server transport now accepts PEM `key` / `cert` options through `createServer`, negotiates OpenSSL TLS over the native nonblocking socket runtime, and reuses the existing bounded HTTP/1.1 request/response parser and server lifecycle. General backpressure and `http2` remain deferred. Test: `https_client_transport`.
 - Bounded `https` / `node:https` client transport now performs OpenSSL TLS negotiation over the native nonblocking socket runtime, supports `request` / `get` with `hostname` / `host` / `port` / `path` / `method` / `headers` plus `rejectUnauthorized` and `servername`, and reuses the existing bounded HTTP/1.1 response parser and request streaming surface. Concurrent pooling, chunked keep-alive reuse, general backpressure, and `http2` remain deferred. Test: `https_client_transport`.

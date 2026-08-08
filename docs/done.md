@@ -1,5 +1,6 @@
 # Implemented features
 
+- Pure JavaScript ESM packages loaded through `allowJs` can import and call default function values from external CommonJS package dependencies through the AOT module graph. Test: `node_modules_js_import_external_cjs_function`.
 - Bounded sequential same-origin HTTP/1.1 client keep-alive pooling now reuses idle native TCP/TLS sockets for ordinary non-chunked `http.request` / `http.get` calls, keys entries by endpoint and TLS options, resets response-parser/listener state between requests, evicts stale/idle sockets, and drains server-side EOF for closed accepted sockets; concurrent pooling, chunked keep-alive reuse, and general backpressure remain deferred. Test: `http_client_keep_alive_pool`.
 - Bounded `https` / `node:https` server transport now accepts PEM `key` / `cert` options through `createServer`, negotiates OpenSSL TLS over the native nonblocking socket runtime, and reuses the existing bounded HTTP/1.1 request/response parser and server lifecycle. General backpressure and `http2` remain deferred. Test: `https_client_transport`.
 - Bounded `https` / `node:https` client transport now performs OpenSSL TLS negotiation over the native nonblocking socket runtime, supports `request` / `get` with `hostname` / `host` / `port` / `path` / `method` / `headers` plus `rejectUnauthorized` and `servername`, and reuses the existing bounded HTTP/1.1 response parser and request streaming surface. Concurrent pooling, chunked keep-alive reuse, general backpressure, and `http2` remain deferred. Test: `https_client_transport`.
@@ -4121,6 +4122,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `node_modules_js_named_function_expression` | pure-JS package named function-expression imports through allowJs |
 | `node_modules_js_package_relative_import` | pure-JS package entry importing a package-local JS module |
 | `node_modules_js_package_re_exports` | pure-JS package re-export barrel with named, default-alias, and export-star bindings |
+| `node_modules_js_import_external_cjs_function` | pure-JS package imports and calls an external CommonJS function default |
 | `node_modules_package_exports` | TypeScript package source imports through package exports |
 | `node_modules_package_conditional_exports` | TypeScript package source imports through package exports/imports condition maps selecting import branches |
 | `node_modules_package_import_node_addons_conditions` | TypeScript package source imports through package exports/imports node-addons condition maps before node/import/default fallbacks |
