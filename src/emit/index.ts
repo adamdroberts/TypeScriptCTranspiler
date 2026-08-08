@@ -19130,6 +19130,18 @@ class Emitter {
     private commonJsLocalFactoryReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+        if (ts.isCallExpression(cur)) {
+            const callName = this.objectStaticCallName(cur);
+            if (
+                (callName === "freeze" ||
+                    callName === "seal" ||
+                    callName === "preventExtensions" ||
+                    callName === "setPrototypeOf") &&
+                cur.arguments.length >= 1
+            ) {
+                return this.commonJsLocalFactoryReturnedObjectLiteral(cur.arguments[0]!);
+            }
+        }
         if (!ts.isCallExpression(cur) || !ts.isIdentifier(cur.expression)) return null;
         const sym = this.symbolForIdentifier(cur.expression);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
@@ -21458,9 +21470,12 @@ class Emitter {
         }
 
         const targetArg = call.arguments[0]!;
-        const target = this.isCommonJsModuleExportsDefaultInitializerValue(targetArg)
-            ? this.emitCommonJsModuleExportsDefaultValue(targetArg)
-            : this.emitExpr(targetArg);
+        const staticObject = this.commonJsLocalFactoryReturnedObjectLiteral(targetArg);
+        const target = staticObject
+            ? this.emitCommonJsObjectLiteralDefaultValue(staticObject)
+            : this.isCommonJsModuleExportsDefaultInitializerValue(targetArg)
+                ? this.emitCommonJsModuleExportsDefaultValue(targetArg)
+                : this.emitExpr(targetArg);
         const specs: SequencedCallArg[] = [{ value: target, target: T_VALUE, node: targetArg }];
 
         if (callName === "setPrototypeOf") {

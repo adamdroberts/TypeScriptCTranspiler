@@ -726,6 +726,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-js-named-import-external-cjs-factory-argument-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-class-base", {
         "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
     }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package": esmPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-package", {
+        "index.js": 'import { Counter } from "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper";\nexport function compute(value) { const counter = new Counter(9); return counter.add(value); }\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-helper", {
+        "index.js": 'const create = (req) => ({ Counter: req("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-base") });\nmodule.exports = Object.freeze(create(require));\n',
+    }),
+    "tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-base": cjsPackage("tsc2c-js-named-import-external-cjs-factory-argument-wrapper-class-base", {
+        "index.js": 'module.exports = class Counter { constructor(seed) { this.seed = seed; } add(value) { return this.seed + value; } };\n',
+    }),
     "tsc2c-js-named-import-external-cjs-package": esmPackage("tsc2c-js-named-import-external-cjs-package", {
         "index.js": 'import { compute, label } from "tsc2c-js-named-import-external-cjs-helper";\nexport const message = label + ":" + compute(4);\nexport function wrap(value) { return label + ":" + compute(value); }\n',
     }),
