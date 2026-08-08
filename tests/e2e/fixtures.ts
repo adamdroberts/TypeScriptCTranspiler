@@ -1541,6 +1541,18 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-iife-local-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-alias-object", {
         "index.js": 'module.exports = (function () {\n  function makeIifeLocalAliasApi() {\n    return {\n      default: "factory-iife-local-alias-default",\n      label: "factory-iife-local-alias",\n      count: 147,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalAliasApi;\n  return Object.freeze(factory());\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-local-call-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-call-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalCallAliasApi() {\n    return {\n      default: "factory-iife-local-call-alias-default",\n      label: "factory-iife-local-call-alias",\n      count: 148,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalCallAliasApi;\n  return Object.freeze(factory.call(null));\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-local-apply-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-apply-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalApplyAliasApi() {\n    return {\n      default: "factory-iife-local-apply-alias-default",\n      label: "factory-iife-local-apply-alias",\n      count: 149,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalApplyAliasApi;\n  return Object.freeze(factory.apply(null, []));\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-local-reflect-apply-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-reflect-apply-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalReflectApplyAliasApi() {\n    return {\n      default: "factory-iife-local-reflect-apply-alias-default",\n      label: "factory-iife-local-reflect-apply-alias",\n      count: 150,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalReflectApplyAliasApi;\n  return Object.freeze(Reflect.apply(factory, null, []));\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-local-bind-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-bind-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalBindAliasApi() {\n    return {\n      default: "factory-iife-local-bind-alias-default",\n      label: "factory-iife-local-bind-alias",\n      count: 151,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalBindAliasApi;\n  return Object.freeze(factory.bind(null)());\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {

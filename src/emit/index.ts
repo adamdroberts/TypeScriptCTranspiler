@@ -18990,14 +18990,68 @@ class Emitter {
     ): ts.ObjectLiteralExpression | null {
         let cur = expr;
         while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
-        if (!ts.isCallExpression(cur) || cur.arguments.length !== 0) return null;
-        let callee: ts.Expression = cur.expression;
-        while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
-        if (!ts.isIdentifier(callee)) return null;
-        const fn = aliases.get(callee.text) ?? functions.get(callee.text);
-        return fn
-            ? this.commonJsLocalFactoryInvocationReturnedObjectLiteral(fn, cur.arguments, true)
+        const invocation = this.commonJsIifeLocalFactoryInvocation(cur, functions, aliases);
+        return invocation
+            ? this.commonJsLocalFactoryInvocationReturnedObjectLiteral(invocation.fn, invocation.args, true)
             : null;
+    }
+
+    private commonJsIifeLocalFactoryInvocation(
+        expr: ts.Expression,
+        functions: ReadonlyMap<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>,
+        aliases: ReadonlyMap<string, ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction>,
+    ): {
+        fn: ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+        args: readonly ts.Expression[];
+    } | null {
+        if (!ts.isCallExpression(expr)) return null;
+        const resolve = (node: ts.Expression): ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | null => {
+            let cur = node;
+            while (ts.isParenthesizedExpression(cur)) cur = cur.expression;
+            return ts.isIdentifier(cur) ? aliases.get(cur.text) ?? functions.get(cur.text) ?? null : null;
+        };
+        let callee: ts.Expression = expr.expression;
+        while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
+        if (ts.isIdentifier(callee)) {
+            const fn = resolve(callee);
+            return fn ? { fn, args: expr.arguments } : null;
+        }
+        if (ts.isPropertyAccessExpression(callee)) {
+            let target: ts.Expression = callee.expression;
+            while (ts.isParenthesizedExpression(target)) target = target.expression;
+            if (ts.isIdentifier(target) && target.text === "Reflect" && callee.name.text === "apply") {
+                if (expr.arguments.length < 3) return null;
+                let argArray = expr.arguments[2]!;
+                while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                const fn = resolve(expr.arguments[0]!);
+                return fn && ts.isArrayLiteralExpression(argArray)
+                    ? { fn, args: argArray.elements }
+                    : null;
+            }
+            const fn = resolve(target);
+            if (!fn) return null;
+            if (callee.name.text === "call") {
+                return expr.arguments.length >= 1
+                    ? { fn, args: expr.arguments.slice(1) }
+                    : null;
+            }
+            if (callee.name.text === "apply" && expr.arguments.length >= 2) {
+                let argArray = expr.arguments[1]!;
+                while (ts.isParenthesizedExpression(argArray)) argArray = argArray.expression;
+                return ts.isArrayLiteralExpression(argArray)
+                    ? { fn, args: argArray.elements }
+                    : null;
+            }
+            return null;
+        }
+        if (ts.isCallExpression(callee)) {
+            let bindCallee: ts.Expression = callee.expression;
+            while (ts.isParenthesizedExpression(bindCallee)) bindCallee = bindCallee.expression;
+            if (!ts.isPropertyAccessExpression(bindCallee) || bindCallee.name.text !== "bind") return null;
+            const fn = resolve(bindCallee.expression);
+            return fn ? { fn, args: expr.arguments } : null;
+        }
+        return null;
     }
 
     private commonJsIifeWrapperStatements(stmt: ts.Statement): readonly ts.Statement[] | null {
