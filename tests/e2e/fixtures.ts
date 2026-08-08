@@ -1553,6 +1553,15 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-iife-local-bind-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-bind-alias-object", {
         "index.js": 'module.exports = (function () {\n  function makeIifeLocalBindAliasApi() {\n    return {\n      default: "factory-iife-local-bind-alias-default",\n      label: "factory-iife-local-bind-alias",\n      count: 151,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalBindAliasApi;\n  return Object.freeze(factory.bind(null)());\n})();\n',
     }),
+    "tsc2c-cjs-module-local-factory-iife-local-seal-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-seal-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalSealAliasApi() {\n    return {\n      default: "factory-iife-local-seal-alias-default",\n      label: "factory-iife-local-seal-alias",\n      count: 152,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalSealAliasApi;\n  return Object.seal(factory());\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-local-prevent-extensions-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-prevent-extensions-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalPreventExtensionsAliasApi() {\n    return {\n      default: "factory-iife-local-prevent-extensions-alias-default",\n      label: "factory-iife-local-prevent-extensions-alias",\n      count: 153,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalPreventExtensionsAliasApi;\n  return Object.preventExtensions(factory());\n})();\n',
+    }),
+    "tsc2c-cjs-module-local-factory-iife-local-set-prototype-of-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-iife-local-set-prototype-of-alias-object", {
+        "index.js": 'module.exports = (function () {\n  function makeIifeLocalSetPrototypeOfAliasApi() {\n    return {\n      default: "factory-iife-local-set-prototype-of-alias-default",\n      label: "factory-iife-local-set-prototype-of-alias",\n      count: 154,\n      double(value) { return value * 2; }\n    };\n  }\n  const factory = makeIifeLocalSetPrototypeOfAliasApi;\n  return Object.setPrototypeOf(factory(), null);\n})();\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {
