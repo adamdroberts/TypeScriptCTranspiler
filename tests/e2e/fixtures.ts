@@ -1499,6 +1499,9 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-define-property-object": cjsPackage("tsc2c-cjs-module-local-factory-define-property-object", {
         "index.js": 'function makeDefinedPropertyApi() {\n  return {\n    default: "factory-define-property-default",\n    label: "factory-define-property",\n    count: 133,\n    double(value) { return value * 2; }\n  };\n}\nmodule.exports = Object.defineProperty(makeDefinedPropertyApi(), "extra", { value: "factory-define-property-extra", enumerable: true });\n',
     }),
+    "tsc2c-cjs-module-local-factory-alias-object": cjsPackage("tsc2c-cjs-module-local-factory-alias-object", {
+        "index.js": 'function makeAliasedApi() {\n  return {\n    default: "factory-alias-default",\n    label: "factory-alias",\n    count: 134,\n    double(value) { return value * 2; }\n  };\n}\nconst factory = makeAliasedApi;\nmodule.exports = Object.freeze(factory());\n',
+    }),
     "tsc2c-cjs-module-asserted-object": {
         packageJson: { name: "tsc2c-cjs-module-asserted-object", version: "1.0.0", main: "index.ts" },
         files: {

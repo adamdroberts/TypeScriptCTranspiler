@@ -19271,11 +19271,14 @@ class Emitter {
         let callee: ts.Expression = cur.expression;
         while (ts.isParenthesizedExpression(callee)) callee = callee.expression;
         if (!ts.isIdentifier(callee)) return null;
-        const sym = this.symbolForIdentifier(callee);
-        const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
-        if (!decl || !ts.isFunctionDeclaration(decl)) return null;
-        if (decl.getSourceFile() !== cur.getSourceFile()) return null;
-        return this.commonJsZeroArgFunctionDeclarationReturnedObjectLiteral(decl);
+        const fn = this.commonJsDirectFactoryFunctionForExpression(callee, cur.getSourceFile());
+        if (!fn || fn.parameters.length !== 0 || !fn.body) return null;
+        if (ts.isFunctionDeclaration(fn)) return this.commonJsZeroArgFunctionDeclarationReturnedObjectLiteral(fn);
+        if (!ts.isBlock(fn.body)) return this.commonJsReturnedObjectLiteral(fn.body);
+        if (fn.body.statements.length !== 1) return null;
+        const stmt = fn.body.statements[0]!;
+        if (!ts.isReturnStatement(stmt) || !stmt.expression) return null;
+        return this.commonJsReturnedObjectLiteral(stmt.expression);
     }
 
     private commonJsZeroArgLocalFactoryReturnedObjectLiteral(expr: ts.Expression): ts.ObjectLiteralExpression | null {
