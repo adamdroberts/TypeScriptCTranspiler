@@ -56033,7 +56033,6 @@ class Emitter {
                             if (!element || !ts.isBindingElement(element)) return false;
                             if (element.dotDotDotToken) {
                                 if (
-                                    nested ||
                                     objectRestSeen ||
                                     computedPropertySeen ||
                                     index !== pattern.elements.length - 1 ||
@@ -64163,7 +64162,6 @@ class Emitter {
                 name: ts.BindingName,
                 allowForOfPattern: boolean,
                 nestedObjectPattern = false,
-                nestedArrayPattern = false,
             ): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
                 const objectPattern = ts.isObjectBindingPattern(name);
@@ -64182,7 +64180,7 @@ class Emitter {
                         (computedProperty &&
                             (!allowForOfPattern || nestedObjectPattern || this.nodeContainsYield(element.propertyName!.expression))) ||
                         (element.initializer && !allowForOfPattern) ||
-                        (element.dotDotDotToken && (!allowForOfPattern || nestedObjectPattern && !nestedArrayPattern))
+                        (element.dotDotDotToken && !allowForOfPattern)
                     ) {
                         unsupported(name, "lazy generator locals support only bounded identifier binding patterns");
                     }
@@ -64203,7 +64201,6 @@ class Emitter {
                             element.name,
                             true,
                             ts.isObjectBindingPattern(element.name),
-                            ts.isArrayBindingPattern(element.name),
                         ));
                         continue;
                     }
@@ -68375,7 +68372,6 @@ class Emitter {
                 }
                 if (element.dotDotDotToken) {
                     if (
-                        nested ||
                         restSeen ||
                         descriptors.some((descriptor) => descriptor.computedKey !== null) ||
                         index !== current.elements.length - 1 ||
@@ -68489,7 +68485,7 @@ class Emitter {
 
     private emitDynamicObjectRestForOf(
         buf: CBuf,
-        sourceVar: string,
+        sourceC: string,
         descriptors: readonly {
             property: string | null;
             computedKey: string | null;
@@ -68498,15 +68494,21 @@ class Emitter {
             path: readonly string[];
             arrayIndex: number | null;
         }[],
+        restPath: readonly string[],
     ): EmitResult {
+        const sourceVar = this.freshTemp("_for_of_object_rest_source");
         const restObject = this.freshTemp("_for_of_object_rest");
         const restKeys = this.freshTemp("_for_of_object_rest_keys");
         const restIndex = this.freshTemp("_for_of_object_rest_i");
         const restKey = this.freshTemp("_for_of_object_rest_key");
+        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         const excluded = Array.from(new Set(
             descriptors
-                .filter((descriptor) => !descriptor.rest && descriptor.path.length > 0)
-                .map((descriptor) => descriptor.path[0]!),
+                .filter((descriptor) =>
+                    descriptor.path.length > restPath.length &&
+                    restPath.every((property, index) => descriptor.path[index] === property)
+                )
+                .map((descriptor) => descriptor.path[restPath.length]!),
         ));
         const skip = excluded
             .map((property) =>
@@ -68578,7 +68580,7 @@ class Emitter {
                 ? objectValueC
                 : `tsc_value_get_index(${objectValueC}, ${descriptor.arrayIndex}.0)`;
             const value = descriptor.rest
-                ? this.emitDynamicObjectRestForOf(buf, sourceVar, descriptors)
+                ? this.emitDynamicObjectRestForOf(buf, objectValueC, descriptors, descriptor.path)
                 : descriptor.arrayRest
                     ? this.emitDynamicArrayRestForOf(buf, objectValueC, descriptor.arrayIndex!)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
