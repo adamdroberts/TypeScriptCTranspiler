@@ -1,0 +1,6 @@
+direct direct-a:undefined:keep-a:1;direct-b:undefined:keep-b:2; 2
+custom custom-a:undefined:keep-c:3;custom-b:undefined:keep-d:4; 4
+one false lazy-a:undefined:keep-e:5
+two false lazy-b:undefined:keep-f:6
+three true computed-rest-done
+keyReads 6

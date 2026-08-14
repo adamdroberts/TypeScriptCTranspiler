@@ -56063,14 +56063,12 @@ class Emitter {
                     const validObjectPattern = (pattern: ts.ObjectBindingPattern, nested = false): boolean => {
                         if (pattern.elements.length === 0) return false;
                         let objectRestSeen = false;
-                        let computedPropertySeen = false;
                         for (let index = 0; index < pattern.elements.length; index++) {
                             const element = pattern.elements[index];
                             if (!element || !ts.isBindingElement(element)) return false;
                             if (element.dotDotDotToken) {
                                 if (
                                     objectRestSeen ||
-                                    computedPropertySeen ||
                                     index !== pattern.elements.length - 1 ||
                                     !ts.isIdentifier(element.name) ||
                                     element.initializer
@@ -56088,7 +56086,6 @@ class Emitter {
                                     computedProperty &&
                                     (nested || this.nodeContainsYield(element.propertyName.expression)))
                             ) return false;
-                            if (computedProperty) computedPropertySeen = true;
                             if (ts.isObjectBindingPattern(element.name)) {
                                 if (
                                     element.initializer ||
@@ -68428,7 +68425,6 @@ class Emitter {
                 if (element.dotDotDotToken) {
                     if (
                         restSeen ||
-                        descriptors.some((descriptor) => descriptor.computedKey !== null) ||
                         index !== current.elements.length - 1 ||
                         !ts.isIdentifier(element.name) ||
                         element.initializer
@@ -68557,15 +68553,6 @@ class Emitter {
             }
         };
         collect(pattern, [], false);
-        if (
-            descriptors.some((descriptor) => descriptor.computedKey !== null) &&
-            descriptors.some((descriptor) => descriptor.rest)
-        ) {
-            unsupported(
-                pattern,
-                "for-of object rest destructuring cannot be combined with computed object keys",
-            );
-        }
         return descriptors;
     }
 
@@ -68574,6 +68561,7 @@ class Emitter {
         sourceC: string,
         descriptors: readonly ForOfObjectBindingDescriptor[],
         restPath: readonly ForOfObjectAccessSegment[],
+        computedKeyTemps: ReadonlyMap<number, string>,
     ): EmitResult {
         const sourceVar = this.freshTemp("_for_of_object_rest_source");
         const restObject = this.freshTemp("_for_of_object_rest");
@@ -68587,18 +68575,27 @@ class Emitter {
                     descriptor.accessPath.length > restPath.length &&
                     restPath.every((segment, index) => {
                         const candidate = descriptor.accessPath[index];
-                        return candidate?.kind === segment.kind && candidate.value === segment.value;
+                        if (!candidate || candidate.kind !== segment.kind || candidate.value !== segment.value) {
+                            return false;
+                        }
+                        return candidate.kind !== "computed" || segment.kind !== "computed" || candidate.id === segment.id;
                     })
                 )
                 .flatMap((descriptor) => {
                     const segment = descriptor.accessPath[restPath.length];
-                    return segment?.kind === "property" ? [segment.value] : [];
+                    if (segment?.kind === "property") {
+                        return [
+                            `tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)})`,
+                        ];
+                    }
+                    if (segment?.kind === "computed") {
+                        return [computedKeyTemps.get(segment.id) ?? segment.value];
+                    }
+                    return [];
                 }),
         ));
         const skip = excluded
-            .map((property) =>
-                `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
-            )
+            .map((property) => `tsc_str_eq(${restKey}, ${property})`)
             .join(" || ");
         buf.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
         buf.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${sourceVar});`);
@@ -68666,7 +68663,13 @@ class Emitter {
         for (const descriptor of descriptors) {
             const objectValueC = accessValue(descriptor.accessPath);
             const value = descriptor.rest
-                ? this.emitDynamicObjectRestForOf(buf, objectValueC, descriptors, descriptor.accessPath)
+                ? this.emitDynamicObjectRestForOf(
+                    buf,
+                    objectValueC,
+                    descriptors,
+                    descriptor.accessPath,
+                    computedKeyTemps,
+                )
                 : descriptor.arrayRest
                     ? this.emitDynamicArrayRestForOf(buf, objectValueC, descriptor.arrayRestIndex!)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
