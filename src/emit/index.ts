@@ -55989,23 +55989,45 @@ class Emitter {
             if (stmt.awaitModifier || !ts.isVariableDeclarationList(stmt.initializer)) return false;
             if (stmt.initializer.declarations.length !== 1) return false;
             const decl = stmt.initializer.declarations[0]!;
+            const bindingPattern = ts.isArrayBindingPattern(decl.name) ? decl.name : null;
+            const restIndex = bindingPattern
+                ? bindingPattern.elements.findIndex(
+                    (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
+                )
+                : -1;
             if (!ts.isIdentifier(decl.name)) {
-                if (!ts.isArrayBindingPattern(decl.name) || decl.name.elements.length !== 2) return false;
-                const [first, second] = decl.name.elements;
-                if (
-                    !first ||
-                    !second ||
-                    !ts.isBindingElement(first) ||
-                    !ts.isBindingElement(second) ||
-                    !ts.isIdentifier(first.name) ||
-                    !ts.isIdentifier(second.name) ||
-                    first.propertyName ||
-                    second.propertyName ||
-                    first.dotDotDotToken ||
-                    second.dotDotDotToken ||
-                    (first.initializer && this.nodeContainsYield(first.initializer)) ||
-                    (second.initializer && this.nodeContainsYield(second.initializer))
-                ) return false;
+                if (!bindingPattern) return false;
+                if (restIndex >= 0) {
+                    if (restIndex !== bindingPattern.elements.length - 1) return false;
+                    for (let index = 0; index < bindingPattern.elements.length; index++) {
+                        const element = bindingPattern.elements[index];
+                        if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                        if (
+                            !ts.isBindingElement(element) ||
+                            !ts.isIdentifier(element.name) ||
+                            element.propertyName ||
+                            element.initializer ||
+                            (element.dotDotDotToken && index !== restIndex)
+                        ) return false;
+                    }
+                } else {
+                    if (bindingPattern.elements.length !== 2) return false;
+                    const [first, second] = bindingPattern.elements;
+                    if (
+                        !first ||
+                        !second ||
+                        !ts.isBindingElement(first) ||
+                        !ts.isBindingElement(second) ||
+                        !ts.isIdentifier(first.name) ||
+                        !ts.isIdentifier(second.name) ||
+                        first.propertyName ||
+                        second.propertyName ||
+                        first.dotDotDotToken ||
+                        second.dotDotDotToken ||
+                        (first.initializer && this.nodeContainsYield(first.initializer)) ||
+                        (second.initializer && this.nodeContainsYield(second.initializer))
+                    ) return false;
+                }
             }
             const yieldedSource = this.directLazyYieldCondition(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedSource) return false;
@@ -56034,8 +56056,9 @@ class Emitter {
                             ? T_VALUE
                         : null;
             if (!elemType) return false;
-            if (ts.isArrayBindingPattern(decl.name) &&
-                decl.name.elements.some((element) => ts.isBindingElement(element) && element.initializer) &&
+            if (restIndex >= 0 && (elemType.kind !== "value" || sourceType.kind === "class")) return false;
+            if (restIndex < 0 && bindingPattern &&
+                bindingPattern.elements.some((element) => ts.isBindingElement(element) && element.initializer) &&
                 (elemType.kind !== "value" || sourceType.kind === "class")) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -60570,60 +60593,124 @@ class Emitter {
             if (ts.isIdentifier(decl.name)) {
                 assignBinding(decl.name, { c: current, ty: sourceElemType });
             } else if (ts.isArrayBindingPattern(decl.name)) {
-                const [first, second] = decl.name.elements;
-                if (
-                    decl.name.elements.length !== 2 ||
-                    !first ||
-                    !second ||
-                    !ts.isBindingElement(first) ||
-                    !ts.isBindingElement(second) ||
-                    !ts.isIdentifier(first.name) ||
-                    !ts.isIdentifier(second.name) ||
-                    first.propertyName ||
-                    second.propertyName ||
-                    first.dotDotDotToken ||
-                    second.dotDotDotToken
-                ) {
-                    unsupported(decl.name, "lazy generator for-of destructuring supports only [first, second] identifier bindings");
-                }
-                if (sourceElemType.kind === "entry") {
-                    const entryVar = this.freshTemp("_lazy_entry");
-                    buf.line(`${sourceElemType.c} const ${entryVar} = ${current};`);
-                    const keyType = sourceElemType.key ?? T_STRING;
-                    const valueType = sourceElemType.elem ?? T_VOID;
-                    assignBinding(
-                        first.name,
-                        this.forOfBindingValueWithDefault(first, {
-                            c: this.objectEntryKeyValue(entryVar, keyType),
-                            ty: keyType,
-                        }),
-                    );
-                    assignBinding(
-                        second.name,
-                        this.forOfBindingValueWithDefault(second, {
-                            c: this.objectEntryValue(entryVar, valueType),
-                            ty: valueType,
-                        }),
-                    );
-                } else if (sourceElemType.kind === "value") {
+                const restIndex = decl.name.elements.findIndex(
+                    (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
+                );
+                if (restIndex >= 0) {
+                    const restElement = decl.name.elements[restIndex];
+                    if (
+                        restIndex !== decl.name.elements.length - 1 ||
+                        !restElement ||
+                        !ts.isBindingElement(restElement) ||
+                        !ts.isIdentifier(restElement.name) ||
+                        restElement.propertyName ||
+                        restElement.initializer ||
+                        sourceElemType.kind !== "value"
+                    ) {
+                        unsupported(
+                            decl.name,
+                            "lazy generator rest destructuring supports only a trailing identifier over dynamic values",
+                        );
+                    }
+                    for (const element of decl.name.elements) {
+                        if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                        if (
+                            !ts.isBindingElement(element) ||
+                            !ts.isIdentifier(element.name) ||
+                            element.propertyName ||
+                            element.initializer
+                        ) {
+                            unsupported(
+                                decl.name,
+                                "lazy generator rest destructuring supports identifier bindings without defaults",
+                            );
+                        }
+                    }
                     const entryValue = this.freshTemp("_lazy_value");
                     buf.line(`tsc_value_t const ${entryValue} = ${current};`);
-                    assignBinding(
-                        first.name,
-                        this.forOfBindingValueWithDefault(first, {
-                            c: `tsc_value_get_index(${entryValue}, 0.0)`,
-                            ty: T_VALUE,
-                        }),
-                    );
-                    assignBinding(
-                        second.name,
-                        this.forOfBindingValueWithDefault(second, {
-                            c: `tsc_value_get_index(${entryValue}, 1.0)`,
-                            ty: T_VALUE,
-                        }),
-                    );
+                    for (let index = 0; index < decl.name.elements.length; index++) {
+                        const element = decl.name.elements[index];
+                        if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                        if (!ts.isBindingElement(element) || !ts.isIdentifier(element.name)) {
+                            unsupported(decl.name, "lazy generator rest destructuring binding form");
+                        }
+                        if (element.dotDotDotToken) {
+                            const restArray = this.freshTemp("_lazy_rest");
+                            const restElementIndex = this.freshTemp("_lazy_rest_i");
+                            const restValue = this.freshTemp("_lazy_rest_v");
+                            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+                            buf.open(
+                                `for (size_t ${restElementIndex} = ${index}; ${restElementIndex} < (size_t)tsc_value_length(${entryValue}); ${restElementIndex}++)`,
+                            );
+                            buf.line(
+                                `tsc_value_t ${restValue} = tsc_value_get_index(${entryValue}, (double)${restElementIndex});`,
+                            );
+                            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                            buf.close();
+                            assignBinding(element.name, { c: restArray, ty: arrayType(T_VALUE) });
+                        } else {
+                            assignBinding(element.name, {
+                                c: `tsc_value_get_index(${entryValue}, ${index}.0)`,
+                                ty: T_VALUE,
+                            });
+                        }
+                    }
                 } else {
-                    unsupported(decl.name, "lazy generator for-of destructuring requires entry or dynamic value elements");
+                    const [first, second] = decl.name.elements;
+                    if (
+                        decl.name.elements.length !== 2 ||
+                        !first ||
+                        !second ||
+                        !ts.isBindingElement(first) ||
+                        !ts.isBindingElement(second) ||
+                        !ts.isIdentifier(first.name) ||
+                        !ts.isIdentifier(second.name) ||
+                        first.propertyName ||
+                        second.propertyName ||
+                        first.dotDotDotToken ||
+                        second.dotDotDotToken
+                    ) {
+                        unsupported(decl.name, "lazy generator for-of destructuring supports only [first, second] identifier bindings");
+                    }
+                    if (sourceElemType.kind === "entry") {
+                        const entryVar = this.freshTemp("_lazy_entry");
+                        buf.line(`${sourceElemType.c} const ${entryVar} = ${current};`);
+                        const keyType = sourceElemType.key ?? T_STRING;
+                        const valueType = sourceElemType.elem ?? T_VOID;
+                        assignBinding(
+                            first.name,
+                            this.forOfBindingValueWithDefault(first, {
+                                c: this.objectEntryKeyValue(entryVar, keyType),
+                                ty: keyType,
+                            }),
+                        );
+                        assignBinding(
+                            second.name,
+                            this.forOfBindingValueWithDefault(second, {
+                                c: this.objectEntryValue(entryVar, valueType),
+                                ty: valueType,
+                            }),
+                        );
+                    } else if (sourceElemType.kind === "value") {
+                        const entryValue = this.freshTemp("_lazy_value");
+                        buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                        assignBinding(
+                            first.name,
+                            this.forOfBindingValueWithDefault(first, {
+                                c: `tsc_value_get_index(${entryValue}, 0.0)`,
+                                ty: T_VALUE,
+                            }),
+                        );
+                        assignBinding(
+                            second.name,
+                            this.forOfBindingValueWithDefault(second, {
+                                c: `tsc_value_get_index(${entryValue}, 1.0)`,
+                                ty: T_VALUE,
+                            }),
+                        );
+                    } else {
+                        unsupported(decl.name, "lazy generator for-of destructuring requires entry or dynamic value elements");
+                    }
                 }
             } else {
                 unsupported(decl.name, "lazy generator for-of binding form");
@@ -63928,16 +64015,17 @@ class Emitter {
             field: string;
         }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
-            const bindingIdentifiers = (name: ts.BindingName, allowForOfDefaults: boolean): ts.Identifier[] => {
+            const bindingIdentifiers = (name: ts.BindingName, allowForOfPattern: boolean): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
                 const identifiers: ts.Identifier[] = [];
                 for (const element of name.elements) {
+                    if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
                     if (
                         !ts.isBindingElement(element) ||
                         !ts.isIdentifier(element.name) ||
                         element.propertyName ||
-                        (element.initializer && !allowForOfDefaults) ||
-                        element.dotDotDotToken
+                        (element.initializer && !allowForOfPattern) ||
+                        (element.dotDotDotToken && !allowForOfPattern)
                     ) {
                         unsupported(name, "lazy generator locals support only identifier bindings in array patterns");
                     }
@@ -63952,8 +64040,8 @@ class Emitter {
                         if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) break;
                     }
                     const declarationList = ts.isVariableDeclarationList(node.parent) ? node.parent : null;
-                    const allowForOfDefaults = !!declarationList && ts.isForOfStatement(declarationList.parent);
-                    for (const identifier of bindingIdentifiers(node.name, allowForOfDefaults)) {
+                    const allowForOfPattern = !!declarationList && ts.isForOfStatement(declarationList.parent);
+                    for (const identifier of bindingIdentifiers(node.name, allowForOfPattern)) {
                         const symbol = this.symbolForIdentifier(identifier);
                         if (!symbol) unsupported(identifier, "could not resolve lazy generator local symbol");
                         let type = this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
