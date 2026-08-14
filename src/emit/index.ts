@@ -111,11 +111,9 @@ interface ForOfTypedObjectBindingDescriptor {
     type: CType;
 }
 
-interface ForOfTypedObjectAccessSegment {
-    kind: "property";
-    value: string;
-    type: CType;
-}
+type ForOfTypedObjectAccessSegment =
+    | { kind: "property"; value: string; type: CType }
+    | { kind: "index"; value: number; type: CType };
 
 interface SequencedCallArg {
     value: EmitResult;
@@ -68691,93 +68689,203 @@ class Emitter {
         return this.objectFieldTsType(nextSig.getReturnType(), "value", foundNext.method.name);
     }
 
+    private forOfTypedArrayElementTsType(arrayType: ts.Type): ts.Type | null {
+        const candidates = arrayType.isUnion() ? arrayType.types : [arrayType];
+        for (const candidate of candidates) {
+            if (
+                candidate.flags &
+                (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)
+            ) {
+                continue;
+            }
+            const elementType = getArrayElementType(candidate);
+            if (elementType) return elementType;
+        }
+        return null;
+    }
+
     private forOfTypedObjectBindingDescriptors(
         pattern: ts.ObjectBindingPattern,
         objectType: ts.Type,
         prefix: readonly ForOfTypedObjectAccessSegment[] = [],
     ): ForOfTypedObjectBindingDescriptor[] {
-        if (pattern.elements.length === 0) {
-            unsupported(pattern, "typed for-of object destructuring requires at least one binding");
-        }
         const descriptors: ForOfTypedObjectBindingDescriptor[] = [];
-        for (const element of pattern.elements) {
-            if (
-                !ts.isBindingElement(element) ||
-                element.dotDotDotToken ||
-                !ts.isIdentifier(element.name) &&
-                !ts.isObjectBindingPattern(element.name)
-            ) {
-                unsupported(
-                    element,
-                    "typed for-of object destructuring supports nested static object bindings without rest",
-                );
+        const collectArray = (
+            current: ts.ArrayBindingPattern,
+            arrayType: CType,
+            arrayTsType: ts.Type,
+            arrayPrefix: readonly ForOfTypedObjectAccessSegment[],
+        ): void => {
+            if (current.elements.length === 0) {
+                unsupported(current, "nested typed for-of array destructuring requires at least one binding");
             }
-            if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) {
-                unsupported(
-                    element,
-                    "typed for-of object destructuring supports static property names only",
-                );
+            if (arrayType.kind !== "array" || !arrayType.elem) {
+                unsupported(current, "nested typed for-of array bindings require a typed array field");
             }
-            if (element.initializer && this.nodeContainsYield(element.initializer)) {
-                unsupported(
-                    element,
-                    "typed for-of object destructuring supports await-free defaults only",
-                );
+            const elementType = arrayType.elem;
+            const elementTsType = this.forOfTypedArrayElementTsType(arrayTsType);
+            if (!elementTsType) {
+                unsupported(current, "nested typed for-of array bindings could not resolve the element type");
             }
-            const property = element.propertyName
-                ? this.staticPropertyName(element.propertyName)
-                : ts.isIdentifier(element.name)
-                    ? element.name.text
-                    : null;
-            if (property === null) {
-                unsupported(element, "typed for-of object destructuring requires static property names");
-            }
-            const fieldType = this.prepareType(this.objectFieldType(
-                element,
-                objectType,
-                property,
-                element.propertyName ?? element.name,
-            ));
-            const fieldTsType = this.objectFieldTsType(
-                objectType,
-                property,
-                element.propertyName ?? element.name,
-            );
-            if (!fieldTsType) {
-                unsupported(element, `unknown typed for-of object field ${property}`);
-            }
-            const accessPath = [
-                ...prefix,
-                { kind: "property" as const, value: property, type: fieldType },
-            ];
-            if (ts.isObjectBindingPattern(element.name)) {
-                if (element.initializer) {
+            for (let index = 0; index < current.elements.length; index++) {
+                const element = current.elements[index];
+                if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                if (
+                    !ts.isBindingElement(element) ||
+                    element.dotDotDotToken ||
+                    element.propertyName
+                ) {
                     unsupported(
                         element,
-                        "nested typed for-of object bindings do not support a default for the nested object",
+                        "nested typed for-of array bindings support fixed identifier/object elements without rest",
                     );
                 }
-                if (fieldType.kind !== "class") {
+                if (element.initializer && this.nodeContainsYield(element.initializer)) {
                     unsupported(
-                        element.name,
-                        "nested typed for-of object bindings require a typed object field",
+                        element,
+                        "nested typed for-of array bindings support await-free defaults only",
                     );
                 }
-                descriptors.push(...this.forOfTypedObjectBindingDescriptors(
-                    element.name,
-                    fieldTsType,
+                const accessPath = [
+                    ...arrayPrefix,
+                    { kind: "index" as const, value: index, type: elementType },
+                ];
+                if (ts.isObjectBindingPattern(element.name)) {
+                    if (element.initializer) {
+                        unsupported(
+                            element,
+                            "nested typed for-of array object bindings do not support a default",
+                        );
+                    }
+                    if (elementType.kind !== "class") {
+                        unsupported(
+                            element.name,
+                            "nested typed for-of array object bindings require typed object elements",
+                        );
+                    }
+                    collectObject(element.name, elementTsType, accessPath);
+                    continue;
+                }
+                if (ts.isArrayBindingPattern(element.name)) {
+                    if (element.initializer) {
+                        unsupported(
+                            element,
+                            "nested typed for-of arrays do not support a default for the nested array",
+                        );
+                    }
+                    collectArray(element.name, elementType, elementTsType, accessPath);
+                    continue;
+                }
+                if (!ts.isIdentifier(element.name)) {
+                    unsupported(
+                        element,
+                        "nested typed for-of array bindings support identifier elements without rest",
+                    );
+                }
+                descriptors.push({
+                    element,
+                    identifier: element.name,
                     accessPath,
-                ));
-                continue;
+                    fieldType: elementType,
+                    type: this.prepareType(mapType(element.name, this.checker)),
+                });
             }
-            descriptors.push({
-                element,
-                identifier: element.name,
-                accessPath,
-                fieldType,
-                type: this.prepareType(mapType(element.name, this.checker)),
-            });
-        }
+        };
+        const collectObject = (
+            current: ts.ObjectBindingPattern,
+            currentType: ts.Type,
+            objectPrefix: readonly ForOfTypedObjectAccessSegment[],
+        ): void => {
+            if (current.elements.length === 0) {
+                unsupported(current, "typed for-of object destructuring requires at least one binding");
+            }
+            for (const element of current.elements) {
+                if (
+                    !ts.isBindingElement(element) ||
+                    element.dotDotDotToken ||
+                    !ts.isIdentifier(element.name) &&
+                    !ts.isObjectBindingPattern(element.name) &&
+                    !ts.isArrayBindingPattern(element.name)
+                ) {
+                    unsupported(
+                        element,
+                        "typed for-of object destructuring supports nested static object/array bindings without rest",
+                    );
+                }
+                if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) {
+                    unsupported(
+                        element,
+                        "typed for-of object destructuring supports static property names only",
+                    );
+                }
+                if (element.initializer && this.nodeContainsYield(element.initializer)) {
+                    unsupported(
+                        element,
+                        "typed for-of object destructuring supports await-free defaults only",
+                    );
+                }
+                const property = element.propertyName
+                    ? this.staticPropertyName(element.propertyName)
+                    : ts.isIdentifier(element.name)
+                        ? element.name.text
+                        : null;
+                if (property === null) {
+                    unsupported(element, "typed for-of object destructuring requires static property names");
+                }
+                const fieldType = this.prepareType(this.objectFieldType(
+                    element,
+                    currentType,
+                    property,
+                    element.propertyName ?? element.name,
+                ));
+                const fieldTsType = this.objectFieldTsType(
+                    currentType,
+                    property,
+                    element.propertyName ?? element.name,
+                );
+                if (!fieldTsType) {
+                    unsupported(element, `unknown typed for-of object field ${property}`);
+                }
+                const accessPath = [
+                    ...objectPrefix,
+                    { kind: "property" as const, value: property, type: fieldType },
+                ];
+                if (ts.isObjectBindingPattern(element.name)) {
+                    if (element.initializer) {
+                        unsupported(
+                            element,
+                            "nested typed for-of object bindings do not support a default for the nested object",
+                        );
+                    }
+                    if (fieldType.kind !== "class") {
+                        unsupported(
+                            element.name,
+                            "nested typed for-of object bindings require a typed object field",
+                        );
+                    }
+                    collectObject(element.name, fieldTsType, accessPath);
+                    continue;
+                }
+                if (ts.isArrayBindingPattern(element.name)) {
+                    if (element.initializer) {
+                        unsupported(
+                            element,
+                            "nested typed for-of array bindings do not support a default for the nested array",
+                        );
+                    }
+                    collectArray(element.name, fieldType, fieldTsType, accessPath);
+                    continue;
+                }
+                descriptors.push({
+                    element,
+                    identifier: element.name,
+                    accessPath,
+                    fieldType,
+                    type: this.prepareType(mapType(element.name, this.checker)),
+                });
+            }
+        };
+        collectObject(pattern, objectType, prefix);
         return descriptors;
     }
 
@@ -68785,10 +68893,13 @@ class Emitter {
         sourceC: string,
         accessPath: readonly ForOfTypedObjectAccessSegment[],
     ): string {
-        return accessPath.reduce(
-            (source, segment) => `(${source})->${mangleIdent(segment.value)}`,
-            sourceC,
-        );
+        return accessPath.reduce((source, segment) => {
+            if (segment.kind === "property") {
+                return `(${source})->${mangleIdent(segment.value)}`;
+            }
+            return `(${source} != NULL && tsc_array_index_present(${source}, ${segment.value}) ? ` +
+                `TSC_ARR(${segment.type.c}, ${source}, ${segment.value}) : ${this.zeroValue(segment.type)})`;
+        }, sourceC);
     }
 
     private emitTypedObjectBindingsForOf(

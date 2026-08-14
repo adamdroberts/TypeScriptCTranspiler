@@ -1,0 +1,5 @@
+direct direct-a:10:2:x:30;direct-b:3:4:y:5;
+custom custom-a:20:6:p:40;custom-b:7:8:q:9;
+lazy1 false lazy-a:30:10:r:50
+lazy2 false lazy-b:11:12:s:13
+lazy3 true typed-nested-array-done
