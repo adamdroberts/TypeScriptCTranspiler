@@ -1,0 +1,3 @@
+{
+  "description": "nested static-key object destructuring across direct, custom-iterator, and lazy-generator for-of values"
+}

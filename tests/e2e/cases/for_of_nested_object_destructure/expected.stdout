@@ -1,0 +1,5 @@
+direct direct-a:x:1:keep-a:undefined;direct-b:y:0:keep-b:undefined;
+custom custom-a:p:2;custom-b:q:0;
+one false lazy-a:r:3
+two false lazy-b:s:0
+three true nested-done

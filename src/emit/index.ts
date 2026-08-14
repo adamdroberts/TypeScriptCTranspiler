@@ -55998,28 +55998,41 @@ class Emitter {
                 : -1;
             if (!ts.isIdentifier(decl.name)) {
                 if (objectBindingPattern) {
-                    if (objectBindingPattern.elements.length === 0) return false;
-                    let objectRestSeen = false;
-                    for (let index = 0; index < objectBindingPattern.elements.length; index++) {
-                        const element = objectBindingPattern.elements[index];
-                        if (!element || !ts.isBindingElement(element)) return false;
-                        if (element.dotDotDotToken) {
-                            if (
-                                objectRestSeen ||
-                                index !== objectBindingPattern.elements.length - 1 ||
-                                !ts.isIdentifier(element.name) ||
-                                element.initializer
-                            ) return false;
-                            objectRestSeen = true;
-                            continue;
+                    const validObjectPattern = (pattern: ts.ObjectBindingPattern, nested = false): boolean => {
+                        if (pattern.elements.length === 0) return false;
+                        let objectRestSeen = false;
+                        for (let index = 0; index < pattern.elements.length; index++) {
+                            const element = pattern.elements[index];
+                            if (!element || !ts.isBindingElement(element)) return false;
+                            if (element.dotDotDotToken) {
+                                if (
+                                    nested ||
+                                    objectRestSeen ||
+                                    index !== pattern.elements.length - 1 ||
+                                    !ts.isIdentifier(element.name) ||
+                                    element.initializer
+                                ) return false;
+                                objectRestSeen = true;
+                                continue;
+                            }
+                            if (objectRestSeen || (element.initializer && this.nodeContainsYield(element.initializer))) {
+                                return false;
+                            }
+                            if (element.propertyName && !this.staticPropertyName(element.propertyName)) return false;
+                            if (ts.isObjectBindingPattern(element.name)) {
+                                if (
+                                    element.initializer ||
+                                    !element.propertyName ||
+                                    !this.staticPropertyName(element.propertyName) ||
+                                    !validObjectPattern(element.name, true)
+                                ) return false;
+                                continue;
+                            }
+                            if (!ts.isIdentifier(element.name)) return false;
                         }
-                        if (
-                            objectRestSeen ||
-                            !ts.isIdentifier(element.name) ||
-                            (element.propertyName && !this.staticPropertyName(element.propertyName)) ||
-                            (element.initializer && this.nodeContainsYield(element.initializer))
-                        ) return false;
-                    }
+                        return true;
+                    };
+                    if (!validObjectPattern(objectBindingPattern)) return false;
                 } else {
                     if (!arrayBindingPattern) return false;
                     if (restIndex >= 0) {
@@ -64100,7 +64113,11 @@ class Emitter {
             field: string;
         }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
-            const bindingIdentifiers = (name: ts.BindingName, allowForOfPattern: boolean): ts.Identifier[] => {
+            const bindingIdentifiers = (
+                name: ts.BindingName,
+                allowForOfPattern: boolean,
+                nestedObjectPattern = false,
+            ): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
                 const objectPattern = ts.isObjectBindingPattern(name);
                 if (!objectPattern && !ts.isArrayBindingPattern(name)) {
@@ -64111,15 +64128,30 @@ class Emitter {
                     if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
                     if (
                         !ts.isBindingElement(element) ||
-                        !ts.isIdentifier(element.name) ||
                         (!objectPattern && !!element.propertyName) ||
                         (objectPattern && !!element.propertyName && !this.staticPropertyName(element.propertyName)) ||
                         (element.initializer && !allowForOfPattern) ||
-                        (element.dotDotDotToken && !allowForOfPattern)
+                        (element.dotDotDotToken && (nestedObjectPattern || !allowForOfPattern))
                     ) {
                         unsupported(name, "lazy generator locals support only bounded identifier binding patterns");
                     }
-                    identifiers.push(element.name);
+                    if (ts.isIdentifier(element.name)) {
+                        identifiers.push(element.name);
+                        continue;
+                    }
+                    if (
+                        allowForOfPattern &&
+                        objectPattern &&
+                        ts.isObjectBindingPattern(element.name) &&
+                        !element.initializer &&
+                        !element.dotDotDotToken &&
+                        !!element.propertyName &&
+                        !!this.staticPropertyName(element.propertyName)
+                    ) {
+                        identifiers.push(...bindingIdentifiers(element.name, true, true));
+                        continue;
+                    }
+                    unsupported(name, "lazy generator locals support only bounded identifier binding patterns");
                 }
                 return identifiers;
             };
@@ -68186,6 +68218,7 @@ class Emitter {
         property: string | null;
         rest: boolean;
         type: CType;
+        path: string[];
     }[] {
         if (pattern.elements.length === 0) {
             unsupported(pattern, "for-of object destructuring requires at least one binding");
@@ -68196,62 +68229,97 @@ class Emitter {
             property: string | null;
             rest: boolean;
             type: CType;
+            path: string[];
         }[] = [];
-        let restSeen = false;
-        for (let index = 0; index < pattern.elements.length; index++) {
-            const element = pattern.elements[index];
-            if (!element || !ts.isBindingElement(element)) {
-                unsupported(pattern, "for-of object destructuring requires simple static binding elements");
+        const collect = (
+            current: ts.ObjectBindingPattern,
+            prefix: readonly string[],
+            nested: boolean,
+        ): void => {
+            if (current.elements.length === 0) {
+                unsupported(current, "for-of object destructuring requires at least one binding");
             }
-            if (element.dotDotDotToken) {
+            let restSeen = false;
+            for (let index = 0; index < current.elements.length; index++) {
+                const element = current.elements[index];
+                if (!element || !ts.isBindingElement(element)) {
+                    unsupported(current, "for-of object destructuring requires simple static binding elements");
+                }
+                if (element.dotDotDotToken) {
+                    if (
+                        nested ||
+                        restSeen ||
+                        index !== current.elements.length - 1 ||
+                        !ts.isIdentifier(element.name) ||
+                        element.initializer
+                    ) {
+                        unsupported(
+                            element,
+                            "for-of object rest destructuring supports one terminal top-level identifier without a default",
+                        );
+                    }
+                    const type = this.prepareType(mapType(element.name, this.checker));
+                    if (type.kind !== "value") {
+                        unsupported(
+                            element.name,
+                            "for-of object rest destructuring requires a dynamic object type",
+                        );
+                    }
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        property: null,
+                        rest: true,
+                        type,
+                        path: [...prefix],
+                    });
+                    restSeen = true;
+                    continue;
+                }
+                if (restSeen) {
+                    unsupported(
+                        element,
+                        "for-of object destructuring cannot bind after an object rest element",
+                    );
+                }
+                const property = element.propertyName
+                    ? this.staticPropertyName(element.propertyName)
+                    : ts.isIdentifier(element.name)
+                        ? element.name.text
+                        : null;
+                if (property === null) {
+                    unsupported(element, "for-of object destructuring requires static property names");
+                }
+                if (ts.isObjectBindingPattern(element.name)) {
+                    if (element.initializer) {
+                        unsupported(
+                            element,
+                            "nested for-of object destructuring does not support a default for the nested object",
+                        );
+                    }
+                    collect(element.name, [...prefix, property], true);
+                    continue;
+                }
                 if (
-                    restSeen ||
-                    index !== pattern.elements.length - 1 ||
                     !ts.isIdentifier(element.name) ||
-                    element.initializer
+                    element.initializer && this.nodeContainsYield(element.initializer)
                 ) {
                     unsupported(
                         element,
-                        "for-of object rest destructuring supports one terminal identifier without a default",
-                    );
-                }
-                const type = this.prepareType(mapType(element.name, this.checker));
-                if (type.kind !== "value") {
-                    unsupported(
-                        element.name,
-                        "for-of object rest destructuring requires a dynamic object type",
+                        "for-of object destructuring supports identifier bindings with await-free defaults",
                     );
                 }
                 descriptors.push({
                     element,
                     identifier: element.name,
-                    property: null,
-                    rest: true,
-                    type,
+                    property,
+                    rest: false,
+                    type: this.prepareType(mapType(element.name, this.checker)),
+                    path: [...prefix, property],
                 });
-                restSeen = true;
-                continue;
             }
-            if (restSeen || !ts.isIdentifier(element.name) || element.initializer && this.nodeContainsYield(element.initializer)) {
-                unsupported(
-                    element,
-                    "for-of object destructuring supports identifier bindings with await-free defaults",
-                );
-            }
-            const property = element.propertyName
-                ? this.staticPropertyName(element.propertyName)
-                : element.name.text;
-            if (property === null) {
-                unsupported(element, "for-of object destructuring requires static property names");
-            }
-            descriptors.push({
-                element,
-                identifier: element.name,
-                property,
-                rest: false,
-                type: this.prepareType(mapType(element.name, this.checker)),
-            });
-        }
+        };
+        collect(pattern, [], false);
         return descriptors;
     }
 
@@ -68261,15 +68329,18 @@ class Emitter {
         descriptors: readonly {
             property: string | null;
             rest: boolean;
+            path: readonly string[];
         }[],
     ): EmitResult {
         const restObject = this.freshTemp("_for_of_object_rest");
         const restKeys = this.freshTemp("_for_of_object_rest_keys");
         const restIndex = this.freshTemp("_for_of_object_rest_i");
         const restKey = this.freshTemp("_for_of_object_rest_key");
-        const excluded = descriptors
-            .filter((descriptor) => !descriptor.rest && descriptor.property !== null)
-            .map((descriptor) => descriptor.property!);
+        const excluded = Array.from(new Set(
+            descriptors
+                .filter((descriptor) => !descriptor.rest && descriptor.path.length > 0)
+                .map((descriptor) => descriptor.path[0]!),
+        ));
         const skip = excluded
             .map((property) =>
                 `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
@@ -68296,6 +68367,7 @@ class Emitter {
                 property: string | null;
                 rest: boolean;
                 type: CType;
+                path: readonly string[];
             },
             value: EmitResult,
         ) => void,
@@ -68304,10 +68376,15 @@ class Emitter {
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         for (const descriptor of descriptors) {
+            const valueC = descriptor.path.reduce(
+                (source, property) =>
+                    `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
+                sourceVar,
+            );
             const value = descriptor.rest
                 ? this.emitDynamicObjectRestForOf(buf, sourceVar, descriptors)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
-                    c: `tsc_value_get_prop(${sourceVar}, tsc_str_from_lit("${escapeCString(descriptor.property!)}", ${utf8ByteLen(descriptor.property!)}))`,
+                    c: valueC,
                     ty: T_VALUE,
                 });
             assign(descriptor, value);
