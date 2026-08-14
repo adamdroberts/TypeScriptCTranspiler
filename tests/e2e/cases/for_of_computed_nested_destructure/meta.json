@@ -1,0 +1,3 @@
+{
+  "description": "yield-free computed top-level object keys selecting nested object and array bindings across direct, custom-iterator, and lazy-generator for-of values"
+}

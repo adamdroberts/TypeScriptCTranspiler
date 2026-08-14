@@ -86,13 +86,15 @@ interface EmitResult {
 
 type ForOfObjectAccessSegment =
     | { kind: "property"; value: string }
-    | { kind: "index"; value: number };
+    | { kind: "index"; value: number }
+    | { kind: "computed"; value: string; id: number };
 
 interface ForOfObjectBindingDescriptor {
     element: ts.BindingElement;
     identifier: ts.Identifier;
     property: string | null;
     computedKey: string | null;
+    computedKeyId: number | null;
     rest: boolean;
     arrayRest: boolean;
     type: CType;
@@ -56090,9 +56092,8 @@ class Emitter {
                             if (ts.isObjectBindingPattern(element.name)) {
                                 if (
                                     element.initializer ||
-                                    computedProperty ||
-                                    !element.propertyName ||
-                                    !this.staticPropertyName(element.propertyName) ||
+                                    !computedProperty &&
+                                    (!element.propertyName || !this.staticPropertyName(element.propertyName)) ||
                                     !validObjectPattern(element.name, true)
                                 ) return false;
                                 continue;
@@ -56100,9 +56101,8 @@ class Emitter {
                             if (ts.isArrayBindingPattern(element.name)) {
                                 if (
                                     element.initializer ||
-                                    computedProperty ||
-                                    !element.propertyName ||
-                                    !this.staticPropertyName(element.propertyName) ||
+                                    !computedProperty &&
+                                    (!element.propertyName || !this.staticPropertyName(element.propertyName)) ||
                                     !validArrayPattern(element.name)
                                 ) return false;
                                 continue;
@@ -64229,7 +64229,8 @@ class Emitter {
                         !element.dotDotDotToken &&
                         (
                             objectPattern
-                                ? !!element.propertyName && !!this.staticPropertyName(element.propertyName)
+                                ? !!element.propertyName &&
+                                    (computedProperty || !!this.staticPropertyName(element.propertyName))
                                 : !element.propertyName
                         )
                     ) {
@@ -68306,9 +68307,12 @@ class Emitter {
             unsupported(pattern, "for-of object destructuring requires at least one binding");
         }
         const descriptors: ForOfObjectBindingDescriptor[] = [];
+        let nextComputedKeyId = 0;
         const collectArray = (
             current: ts.ArrayBindingPattern,
             prefix: readonly ForOfObjectAccessSegment[],
+            inheritedComputedKey: string | null = null,
+            inheritedComputedKeyId: number | null = null,
         ): void => {
             if (current.elements.length === 0) {
                 unsupported(current, "nested for-of array destructuring requires at least one binding");
@@ -68339,7 +68343,8 @@ class Emitter {
                         element,
                         identifier: element.name,
                         property: null,
-                        computedKey: null,
+                        computedKey: inheritedComputedKey,
+                        computedKeyId: inheritedComputedKeyId,
                         rest: false,
                         arrayRest: true,
                         type,
@@ -68355,7 +68360,13 @@ class Emitter {
                             "nested for-of array object bindings require a plain object pattern without a default",
                         );
                     }
-                    collect(element.name, [...prefix, { kind: "index", value: index }], true);
+                    collect(
+                        element.name,
+                        [...prefix, { kind: "index", value: index }],
+                        true,
+                        inheritedComputedKey,
+                        inheritedComputedKeyId,
+                    );
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
@@ -68365,7 +68376,12 @@ class Emitter {
                             "nested for-of array bindings require a plain nested array pattern without a default",
                         );
                     }
-                    collectArray(element.name, [...prefix, { kind: "index", value: index }]);
+                    collectArray(
+                        element.name,
+                        [...prefix, { kind: "index", value: index }],
+                        inheritedComputedKey,
+                        inheritedComputedKeyId,
+                    );
                     continue;
                 }
                 if (
@@ -68383,7 +68399,8 @@ class Emitter {
                     element,
                     identifier: element.name,
                     property: null,
-                    computedKey: null,
+                    computedKey: inheritedComputedKey,
+                    computedKeyId: inheritedComputedKeyId,
                     rest: false,
                     arrayRest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
@@ -68396,6 +68413,8 @@ class Emitter {
             current: ts.ObjectBindingPattern,
             prefix: readonly ForOfObjectAccessSegment[],
             nested: boolean,
+            inheritedComputedKey: string | null = null,
+            inheritedComputedKeyId: number | null = null,
         ): void => {
             if (current.elements.length === 0) {
                 unsupported(current, "for-of object destructuring requires at least one binding");
@@ -68430,7 +68449,8 @@ class Emitter {
                         element,
                         identifier: element.name,
                         property: null,
-                        computedKey: null,
+                        computedKey: inheritedComputedKey,
+                        computedKeyId: inheritedComputedKeyId,
                         rest: true,
                         arrayRest: false,
                         type,
@@ -68453,15 +68473,18 @@ class Emitter {
                         ? element.name.text
                         : null;
                 let computedKey: string | null = null;
+                let computedKeyId = inheritedComputedKeyId;
                 if (computedProperty) {
                     if (
                         nested ||
-                        !ts.isIdentifier(element.name) ||
+                        !ts.isIdentifier(element.name) &&
+                        !ts.isObjectBindingPattern(element.name) &&
+                        !ts.isArrayBindingPattern(element.name) ||
                         this.nodeContainsYield((element.propertyName as ts.ComputedPropertyName).expression)
                     ) {
                         unsupported(
                             element,
-                            "for-of computed object keys require a yield-free top-level identifier binding",
+                            "for-of computed object keys require a yield-free top-level key with an identifier or bounded nested binding",
                         );
                     }
                     const propertyExpression = (element.propertyName as ts.ComputedPropertyName).expression;
@@ -68470,9 +68493,15 @@ class Emitter {
                         T_STRING,
                         propertyExpression,
                     );
+                    computedKeyId = nextComputedKeyId++;
                 } else if (property === null) {
                     unsupported(element, "for-of object destructuring requires static property names");
                 }
+                const bindingComputedKey = computedKey ?? inheritedComputedKey;
+                const bindingComputedKeyId = computedKeyId;
+                const bindingPrefix: ForOfObjectAccessSegment[] = computedProperty
+                    ? [...prefix, { kind: "computed", value: computedKey!, id: computedKeyId! }]
+                    : [...prefix, { kind: "property", value: property! }];
                 if (ts.isObjectBindingPattern(element.name)) {
                     if (element.initializer) {
                         unsupported(
@@ -68480,17 +68509,28 @@ class Emitter {
                             "nested for-of object destructuring does not support a default for the nested object",
                         );
                     }
-                    collect(element.name, [...prefix, { kind: "property", value: property! }], true);
+                    collect(
+                        element.name,
+                        bindingPrefix,
+                        true,
+                        bindingComputedKey,
+                        bindingComputedKeyId,
+                    );
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
-                    if (element.initializer || computedProperty) {
+                    if (element.initializer) {
                         unsupported(
                             element,
                             "nested for-of array destructuring requires a static property without a default",
                         );
                     }
-                    collectArray(element.name, [...prefix, { kind: "property", value: property! }]);
+                    collectArray(
+                        element.name,
+                        bindingPrefix,
+                        bindingComputedKey,
+                        bindingComputedKeyId,
+                    );
                     continue;
                 }
                 if (
@@ -68506,18 +68546,26 @@ class Emitter {
                     element,
                     identifier: element.name,
                     property,
-                    computedKey,
+                    computedKey: bindingComputedKey,
+                    computedKeyId: bindingComputedKeyId,
                     rest: false,
                     arrayRest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
-                    accessPath: computedKey === null
-                        ? [...prefix, { kind: "property", value: property! }]
-                        : [],
+                    accessPath: bindingPrefix,
                     arrayRestIndex: null,
                 });
             }
         };
         collect(pattern, [], false);
+        if (
+            descriptors.some((descriptor) => descriptor.computedKey !== null) &&
+            descriptors.some((descriptor) => descriptor.rest)
+        ) {
+            unsupported(
+                pattern,
+                "for-of object rest destructuring cannot be combined with computed object keys",
+            );
+        }
         return descriptors;
     }
 
@@ -68592,17 +68640,31 @@ class Emitter {
         const descriptors = this.forOfObjectBindingDescriptors(pattern);
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
+        const computedKeyTemps = new Map<number, string>();
+        for (const descriptor of descriptors) {
+            if (descriptor.computedKey === null || descriptor.computedKeyId === null) continue;
+            if (!computedKeyTemps.has(descriptor.computedKeyId)) {
+                const keyTemp = this.freshTemp("_for_of_computed_key");
+                computedKeyTemps.set(descriptor.computedKeyId, keyTemp);
+                buf.line(`tsc_str_t* const ${keyTemp} = ${descriptor.computedKey};`);
+            }
+        }
         const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string =>
             accessPath.reduce(
-                (source, segment) => segment.kind === "property"
-                    ? `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`
-                    : `tsc_value_get_index(${source}, ${segment.value}.0)`,
+                (source, segment) => {
+                    if (segment.kind === "property") {
+                        return `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`;
+                    }
+                    if (segment.kind === "computed") {
+                        const key = computedKeyTemps.get(segment.id) ?? segment.value;
+                        return `tsc_value_get_prop(${source}, ${key})`;
+                    }
+                    return `tsc_value_get_index(${source}, ${segment.value}.0)`;
+                },
                 sourceVar,
             );
         for (const descriptor of descriptors) {
-            const objectValueC = descriptor.computedKey !== null
-                ? `tsc_value_get_prop(${sourceVar}, ${descriptor.computedKey})`
-                : accessValue(descriptor.accessPath);
+            const objectValueC = accessValue(descriptor.accessPath);
             const value = descriptor.rest
                 ? this.emitDynamicObjectRestForOf(buf, objectValueC, descriptors, descriptor.accessPath)
                 : descriptor.arrayRest
