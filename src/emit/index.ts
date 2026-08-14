@@ -106,8 +106,14 @@ interface ForOfObjectBindingDescriptor {
 interface ForOfTypedObjectBindingDescriptor {
     element: ts.BindingElement;
     identifier: ts.Identifier;
-    property: string;
+    accessPath: ForOfTypedObjectAccessSegment[];
     fieldType: CType;
+    type: CType;
+}
+
+interface ForOfTypedObjectAccessSegment {
+    kind: "property";
+    value: string;
     type: CType;
 }
 
@@ -68688,6 +68694,7 @@ class Emitter {
     private forOfTypedObjectBindingDescriptors(
         pattern: ts.ObjectBindingPattern,
         objectType: ts.Type,
+        prefix: readonly ForOfTypedObjectAccessSegment[] = [],
     ): ForOfTypedObjectBindingDescriptor[] {
         if (pattern.elements.length === 0) {
             unsupported(pattern, "typed for-of object destructuring requires at least one binding");
@@ -68697,11 +68704,12 @@ class Emitter {
             if (
                 !ts.isBindingElement(element) ||
                 element.dotDotDotToken ||
-                !ts.isIdentifier(element.name)
+                !ts.isIdentifier(element.name) &&
+                !ts.isObjectBindingPattern(element.name)
             ) {
                 unsupported(
                     element,
-                    "typed for-of object destructuring supports flat identifier bindings only",
+                    "typed for-of object destructuring supports nested static object bindings without rest",
                 );
             }
             if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) {
@@ -68718,7 +68726,9 @@ class Emitter {
             }
             const property = element.propertyName
                 ? this.staticPropertyName(element.propertyName)
-                : element.name.text;
+                : ts.isIdentifier(element.name)
+                    ? element.name.text
+                    : null;
             if (property === null) {
                 unsupported(element, "typed for-of object destructuring requires static property names");
             }
@@ -68728,15 +68738,57 @@ class Emitter {
                 property,
                 element.propertyName ?? element.name,
             ));
+            const fieldTsType = this.objectFieldTsType(
+                objectType,
+                property,
+                element.propertyName ?? element.name,
+            );
+            if (!fieldTsType) {
+                unsupported(element, `unknown typed for-of object field ${property}`);
+            }
+            const accessPath = [
+                ...prefix,
+                { kind: "property" as const, value: property, type: fieldType },
+            ];
+            if (ts.isObjectBindingPattern(element.name)) {
+                if (element.initializer) {
+                    unsupported(
+                        element,
+                        "nested typed for-of object bindings do not support a default for the nested object",
+                    );
+                }
+                if (fieldType.kind !== "class") {
+                    unsupported(
+                        element.name,
+                        "nested typed for-of object bindings require a typed object field",
+                    );
+                }
+                descriptors.push(...this.forOfTypedObjectBindingDescriptors(
+                    element.name,
+                    fieldTsType,
+                    accessPath,
+                ));
+                continue;
+            }
             descriptors.push({
                 element,
                 identifier: element.name,
-                property,
+                accessPath,
                 fieldType,
                 type: this.prepareType(mapType(element.name, this.checker)),
             });
         }
         return descriptors;
+    }
+
+    private typedObjectBindingAccess(
+        sourceC: string,
+        accessPath: readonly ForOfTypedObjectAccessSegment[],
+    ): string {
+        return accessPath.reduce(
+            (source, segment) => `(${source})->${mangleIdent(segment.value)}`,
+            sourceC,
+        );
     }
 
     private emitTypedObjectBindingsForOf(
@@ -68753,7 +68805,7 @@ class Emitter {
         const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType);
         for (const descriptor of descriptors) {
             const value = this.forOfBindingValueWithDefault(descriptor.element, {
-                c: `(${sourceC})->${mangleIdent(descriptor.property)}`,
+                c: this.typedObjectBindingAccess(sourceC, descriptor.accessPath),
                 ty: descriptor.fieldType,
             });
             assign(descriptor, value);
