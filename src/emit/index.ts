@@ -56001,6 +56001,7 @@ class Emitter {
                     const validObjectPattern = (pattern: ts.ObjectBindingPattern, nested = false): boolean => {
                         if (pattern.elements.length === 0) return false;
                         let objectRestSeen = false;
+                        let computedPropertySeen = false;
                         for (let index = 0; index < pattern.elements.length; index++) {
                             const element = pattern.elements[index];
                             if (!element || !ts.isBindingElement(element)) return false;
@@ -56008,6 +56009,7 @@ class Emitter {
                                 if (
                                     nested ||
                                     objectRestSeen ||
+                                    computedPropertySeen ||
                                     index !== pattern.elements.length - 1 ||
                                     !ts.isIdentifier(element.name) ||
                                     element.initializer
@@ -56018,10 +56020,18 @@ class Emitter {
                             if (objectRestSeen || (element.initializer && this.nodeContainsYield(element.initializer))) {
                                 return false;
                             }
-                            if (element.propertyName && !this.staticPropertyName(element.propertyName)) return false;
+                            const computedProperty = !!element.propertyName && ts.isComputedPropertyName(element.propertyName);
+                            if (
+                                element.propertyName &&
+                                (!computedProperty && !this.staticPropertyName(element.propertyName) ||
+                                    computedProperty &&
+                                    (nested || this.nodeContainsYield(element.propertyName.expression)))
+                            ) return false;
+                            if (computedProperty) computedPropertySeen = true;
                             if (ts.isObjectBindingPattern(element.name)) {
                                 if (
                                     element.initializer ||
+                                    computedProperty ||
                                     !element.propertyName ||
                                     !this.staticPropertyName(element.propertyName) ||
                                     !validObjectPattern(element.name, true)
@@ -64126,10 +64136,14 @@ class Emitter {
                 const identifiers: ts.Identifier[] = [];
                 for (const element of name.elements) {
                     if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                    const computedProperty =
+                        objectPattern && !!element.propertyName && ts.isComputedPropertyName(element.propertyName);
                     if (
                         !ts.isBindingElement(element) ||
                         (!objectPattern && !!element.propertyName) ||
-                        (objectPattern && !!element.propertyName && !this.staticPropertyName(element.propertyName)) ||
+                        (objectPattern && !!element.propertyName && !computedProperty && !this.staticPropertyName(element.propertyName)) ||
+                        (computedProperty &&
+                            (!allowForOfPattern || nestedObjectPattern || this.nodeContainsYield(element.propertyName!.expression))) ||
                         (element.initializer && !allowForOfPattern) ||
                         (element.dotDotDotToken && (nestedObjectPattern || !allowForOfPattern))
                     ) {
@@ -68216,6 +68230,7 @@ class Emitter {
         element: ts.BindingElement;
         identifier: ts.Identifier;
         property: string | null;
+        computedKey: string | null;
         rest: boolean;
         type: CType;
         path: string[];
@@ -68227,6 +68242,7 @@ class Emitter {
             element: ts.BindingElement;
             identifier: ts.Identifier;
             property: string | null;
+            computedKey: string | null;
             rest: boolean;
             type: CType;
             path: string[];
@@ -68249,6 +68265,7 @@ class Emitter {
                     if (
                         nested ||
                         restSeen ||
+                        descriptors.some((descriptor) => descriptor.computedKey !== null) ||
                         index !== current.elements.length - 1 ||
                         !ts.isIdentifier(element.name) ||
                         element.initializer
@@ -68269,6 +68286,7 @@ class Emitter {
                         element,
                         identifier: element.name,
                         property: null,
+                        computedKey: null,
                         rest: true,
                         type,
                         path: [...prefix],
@@ -68282,12 +68300,31 @@ class Emitter {
                         "for-of object destructuring cannot bind after an object rest element",
                     );
                 }
+                const computedProperty = !!element.propertyName && ts.isComputedPropertyName(element.propertyName);
                 const property = element.propertyName
                     ? this.staticPropertyName(element.propertyName)
                     : ts.isIdentifier(element.name)
                         ? element.name.text
                         : null;
-                if (property === null) {
+                let computedKey: string | null = null;
+                if (computedProperty) {
+                    if (
+                        nested ||
+                        !ts.isIdentifier(element.name) ||
+                        this.nodeContainsYield((element.propertyName as ts.ComputedPropertyName).expression)
+                    ) {
+                        unsupported(
+                            element,
+                            "for-of computed object keys require a yield-free top-level identifier binding",
+                        );
+                    }
+                    const propertyExpression = (element.propertyName as ts.ComputedPropertyName).expression;
+                    computedKey = this.coerce(
+                        this.emitExpr(propertyExpression),
+                        T_STRING,
+                        propertyExpression,
+                    );
+                } else if (property === null) {
                     unsupported(element, "for-of object destructuring requires static property names");
                 }
                 if (ts.isObjectBindingPattern(element.name)) {
@@ -68297,7 +68334,7 @@ class Emitter {
                             "nested for-of object destructuring does not support a default for the nested object",
                         );
                     }
-                    collect(element.name, [...prefix, property], true);
+                    collect(element.name, [...prefix, property!], true);
                     continue;
                 }
                 if (
@@ -68313,9 +68350,10 @@ class Emitter {
                     element,
                     identifier: element.name,
                     property,
+                    computedKey,
                     rest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
-                    path: [...prefix, property],
+                    path: computedKey === null ? [...prefix, property!] : [],
                 });
             }
         };
@@ -68328,6 +68366,7 @@ class Emitter {
         sourceVar: string,
         descriptors: readonly {
             property: string | null;
+            computedKey: string | null;
             rest: boolean;
             path: readonly string[];
         }[],
@@ -68365,6 +68404,7 @@ class Emitter {
                 element: ts.BindingElement;
                 identifier: ts.Identifier;
                 property: string | null;
+                computedKey: string | null;
                 rest: boolean;
                 type: CType;
                 path: readonly string[];
@@ -68376,11 +68416,13 @@ class Emitter {
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         for (const descriptor of descriptors) {
-            const valueC = descriptor.path.reduce(
-                (source, property) =>
-                    `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
-                sourceVar,
-            );
+            const valueC = descriptor.computedKey !== null
+                ? `tsc_value_get_prop(${sourceVar}, ${descriptor.computedKey})`
+                : descriptor.path.reduce(
+                    (source, property) =>
+                        `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
+                    sourceVar,
+                );
             const value = descriptor.rest
                 ? this.emitDynamicObjectRestForOf(buf, sourceVar, descriptors)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
