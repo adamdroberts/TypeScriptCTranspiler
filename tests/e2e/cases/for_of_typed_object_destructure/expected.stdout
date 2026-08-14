@@ -1,0 +1,5 @@
+direct direct-a:40;direct-b:2;
+custom custom-a:30;custom-b:4;
+lazy1 false lazy-a:20
+lazy2 false lazy-b:6
+lazy3 true typed-object-done

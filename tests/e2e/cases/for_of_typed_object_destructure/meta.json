@@ -1,0 +1,3 @@
+{
+  "description": "typed for-of object destructuring supports flat interface fields with aliases and await-free defaults across direct arrays, custom iterators, and lazy generators"
+}

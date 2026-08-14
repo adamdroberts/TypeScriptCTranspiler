@@ -7,6 +7,7 @@ import {
     classType,
     entryType,
     functionType,
+    getArrayElementType,
     keyKindOf,
     mapType,
     mapTsType,
@@ -100,6 +101,14 @@ interface ForOfObjectBindingDescriptor {
     type: CType;
     accessPath: ForOfObjectAccessSegment[];
     arrayRestIndex: number | null;
+}
+
+interface ForOfTypedObjectBindingDescriptor {
+    element: ts.BindingElement;
+    identifier: ts.Identifier;
+    property: string;
+    fieldType: CType;
+    type: CType;
 }
 
 interface SequencedCallArg {
@@ -56173,10 +56182,10 @@ class Emitter {
             if (!elemType) return false;
             const supportsRest = elemType.kind === "value" || (elemType.kind === "array" && !!elemType.elem);
             if (restIndex >= 0 && (sourceType.kind === "class" || !supportsRest)) return false;
-            if (objectBindingPattern && elemType.kind !== "value") return false;
+            if (objectBindingPattern && elemType.kind !== "value" && elemType.kind !== "class") return false;
             const bindingElements = arrayBindingPattern?.elements ?? objectBindingPattern?.elements ?? [];
             if (restIndex < 0 && bindingElements.some((element) => ts.isBindingElement(element) && element.initializer) &&
-                ((elemType.kind !== "value" && elemType.kind !== "entry") || sourceType.kind === "class")) return false;
+                ((elemType.kind !== "value" && elemType.kind !== "entry" && elemType.kind !== "class") || sourceType.kind === "class")) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -60875,17 +60884,37 @@ class Emitter {
                     }
                 }
             } else if (ts.isObjectBindingPattern(decl.name)) {
-                if (sourceElemType.kind !== "value") {
+                if (sourceElemType.kind !== "value" && sourceElemType.kind !== "class") {
                     unsupported(
                         decl.name,
-                        "lazy generator object destructuring requires dynamically boxed source elements",
+                        "lazy generator object destructuring requires dynamically boxed or typed object source elements",
                     );
                 }
-                const entryValue = this.freshTemp("_lazy_object_value");
-                buf.line(`tsc_value_t const ${entryValue} = ${current};`);
-                this.emitDynamicObjectBindingsForOf(buf, decl.name, entryValue, (descriptor, value) => {
-                    assignBinding(descriptor.identifier, value);
-                });
+                if (sourceElemType.kind === "value") {
+                    const entryValue = this.freshTemp("_lazy_object_value");
+                    buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                    this.emitDynamicObjectBindingsForOf(buf, decl.name, entryValue, (descriptor, value) => {
+                        assignBinding(descriptor.identifier, value);
+                    });
+                } else {
+                    const objectTsType = this.forOfElementTsType(stmt.expression);
+                    if (!objectTsType) {
+                        unsupported(
+                            decl.name,
+                            "lazy generator typed object destructuring could not resolve the element object type",
+                        );
+                    }
+                    this.emitTypedObjectBindingsForOf(
+                        buf,
+                        decl.name,
+                        current,
+                        sourceElemType,
+                        objectTsType,
+                        (descriptor, value) => {
+                            assignBinding(descriptor.identifier, value);
+                        },
+                    );
+                }
             } else {
                 unsupported(decl.name, "lazy generator for-of binding form");
             }
@@ -67455,6 +67484,28 @@ class Emitter {
                 return;
             }
         }
+        if (elemType.kind === "class" && ts.isVariableDeclarationList(fos.initializer)) {
+            const d = fos.initializer.declarations[0];
+            if (d && ts.isObjectBindingPattern(d.name)) {
+                const objectTsType = this.forOfElementTsType(fos.expression);
+                if (!objectTsType) {
+                    unsupported(
+                        d.name,
+                        "typed for-of object destructuring could not resolve the element object type",
+                    );
+                }
+                this.emitTypedObjectArrayBindingForOf(
+                    buf,
+                    fos,
+                    arrayExpr,
+                    arrVar,
+                    idxVar,
+                    elemType,
+                    objectTsType,
+                );
+                return;
+            }
+        }
 
         let bindingName: string;
         let bindingIsConst = false;
@@ -67753,10 +67804,10 @@ class Emitter {
             ? fos.initializer.declarations[0]
             : null;
         if (entryBindingDecl && ts.isObjectBindingPattern(entryBindingDecl.name)) {
-            if (valueType.kind !== "value") {
+            if (valueType.kind !== "value" && valueType.kind !== "class") {
                 unsupported(
                     entryBindingDecl.name,
-                    "custom iterator object destructuring requires dynamically boxed iterator values",
+                    "custom iterator object destructuring requires dynamically boxed or typed object iterator values",
                 );
             }
             const iterVar = this.freshTemp("_it");
@@ -67775,11 +67826,33 @@ class Emitter {
             buf.open("while (true)");
             buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
             buf.line(`if (${stepVar}->done) break;`);
-            this.emitDynamicObjectBindingsForOf(buf, entryBindingDecl.name, `${stepVar}->value`, (descriptor, value) => {
-                buf.line(
-                    `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
+            if (valueType.kind === "value") {
+                this.emitDynamicObjectBindingsForOf(buf, entryBindingDecl.name, `${stepVar}->value`, (descriptor, value) => {
+                    buf.line(
+                        `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
+                    );
+                });
+            } else {
+                const valueTsType = this.objectFieldTsType(stepTsType, "value", next.name);
+                if (!valueTsType) {
+                    unsupported(
+                        entryBindingDecl.name,
+                        "typed custom iterator object destructuring could not resolve the value object type",
+                    );
+                }
+                this.emitTypedObjectBindingsForOf(
+                    buf,
+                    entryBindingDecl.name,
+                    `${stepVar}->value`,
+                    valueType,
+                    valueTsType,
+                    (descriptor, value) => {
+                        buf.line(
+                            `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
+                        );
+                    },
                 );
-            });
+            }
             const labeledContinueTarget = this.directLabeledLoopName(fos)
                 ? this.freshTemp("_custom_object_for_of_labeled_continue")
                 : null;
@@ -68548,6 +68621,189 @@ class Emitter {
         };
         collect(pattern, []);
         return descriptors;
+    }
+
+    private objectFieldTsType(
+        objectType: ts.Type,
+        fieldName: string,
+        fieldNode: ts.Node,
+    ): ts.Type | null {
+        const candidates = objectType.isUnion() ? objectType.types : [objectType];
+        for (const candidate of candidates) {
+            if (
+                candidate.flags &
+                (ts.TypeFlags.Null | ts.TypeFlags.Undefined | ts.TypeFlags.Void)
+            ) {
+                continue;
+            }
+            const sym = candidate.getProperty(fieldName);
+            if (!sym) continue;
+            const decl = sym.valueDeclaration ?? sym.getDeclarations()?.[0] ?? fieldNode;
+            return this.checker.getTypeOfSymbolAtLocation(sym, decl);
+        }
+        return null;
+    }
+
+    private forOfTypeArgument(type: ts.Type): ts.Type | null {
+        const arrayElement = getArrayElementType(type);
+        if (arrayElement) return arrayElement;
+        const reference = type as ts.TypeReference;
+        const args = reference.typeArguments ?? this.checker.getTypeArguments(reference);
+        return args?.[0] ?? null;
+    }
+
+    private forOfElementTsType(expr: ts.Expression): ts.Type | null {
+        const sourceType = this.prepareType(mapTsType(
+            expr,
+            this.checker.getTypeAtLocation(expr),
+            this.checker,
+        ));
+        const sourceTsType = this.checker.getTypeAtLocation(expr);
+        if (sourceType.kind === "array") {
+            return this.forOfTypeArgument(sourceTsType);
+        }
+        if (sourceType.kind !== "class") return null;
+
+        const cd = this.classDeclForExpression(expr);
+        if (!cd) return null;
+        const found = this.findSymbolIteratorMethod(cd);
+        if (!found) return null;
+        const sig = this.checker.getSignatureFromDeclaration(found.method);
+        if (!sig) return null;
+        const iteratorTsType = sig.getReturnType();
+        const iteratorType = this.prepareType(mapTsType(found.method, iteratorTsType, this.checker));
+        if (iteratorType.kind === "array") {
+            return this.forOfTypeArgument(iteratorTsType);
+        }
+        if (iteratorType.kind !== "class" || !iteratorType.className) return null;
+        const iteratorDecl = this.findClassDecl(iteratorType.className);
+        if (!iteratorDecl) return null;
+        const foundNext = this.findNamedClassMethod(iteratorDecl, "next");
+        if (!foundNext) return null;
+        const nextSig = this.checker.getSignatureFromDeclaration(foundNext.method);
+        if (!nextSig) return null;
+        return this.objectFieldTsType(nextSig.getReturnType(), "value", foundNext.method.name);
+    }
+
+    private forOfTypedObjectBindingDescriptors(
+        pattern: ts.ObjectBindingPattern,
+        objectType: ts.Type,
+    ): ForOfTypedObjectBindingDescriptor[] {
+        if (pattern.elements.length === 0) {
+            unsupported(pattern, "typed for-of object destructuring requires at least one binding");
+        }
+        const descriptors: ForOfTypedObjectBindingDescriptor[] = [];
+        for (const element of pattern.elements) {
+            if (
+                !ts.isBindingElement(element) ||
+                element.dotDotDotToken ||
+                !ts.isIdentifier(element.name)
+            ) {
+                unsupported(
+                    element,
+                    "typed for-of object destructuring supports flat identifier bindings only",
+                );
+            }
+            if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) {
+                unsupported(
+                    element,
+                    "typed for-of object destructuring supports static property names only",
+                );
+            }
+            if (element.initializer && this.nodeContainsYield(element.initializer)) {
+                unsupported(
+                    element,
+                    "typed for-of object destructuring supports await-free defaults only",
+                );
+            }
+            const property = element.propertyName
+                ? this.staticPropertyName(element.propertyName)
+                : element.name.text;
+            if (property === null) {
+                unsupported(element, "typed for-of object destructuring requires static property names");
+            }
+            const fieldType = this.prepareType(this.objectFieldType(
+                element,
+                objectType,
+                property,
+                element.propertyName ?? element.name,
+            ));
+            descriptors.push({
+                element,
+                identifier: element.name,
+                property,
+                fieldType,
+                type: this.prepareType(mapType(element.name, this.checker)),
+            });
+        }
+        return descriptors;
+    }
+
+    private emitTypedObjectBindingsForOf(
+        buf: CBuf,
+        pattern: ts.ObjectBindingPattern,
+        sourceC: string,
+        sourceType: CType,
+        objectType: ts.Type,
+        assign: (descriptor: ForOfTypedObjectBindingDescriptor, value: EmitResult) => void,
+    ): void {
+        if (sourceType.kind !== "class") {
+            unsupported(pattern, "typed for-of object destructuring requires a typed object element");
+        }
+        const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType);
+        for (const descriptor of descriptors) {
+            const value = this.forOfBindingValueWithDefault(descriptor.element, {
+                c: `(${sourceC})->${mangleIdent(descriptor.property)}`,
+                ty: descriptor.fieldType,
+            });
+            assign(descriptor, value);
+        }
+    }
+
+    private emitTypedObjectArrayBindingForOf(
+        buf: CBuf,
+        fos: ts.ForOfStatement,
+        arrayExpr: string,
+        arrVar: string,
+        idxVar: string,
+        elemType: CType,
+        objectType: ts.Type,
+    ): void {
+        if (!ts.isVariableDeclarationList(fos.initializer)) {
+            unsupported(fos.initializer, "typed for-of object destructuring needs const/let {value}");
+        }
+        const d = fos.initializer.declarations[0];
+        if (!d || !ts.isObjectBindingPattern(d.name)) {
+            unsupported(fos.initializer, "typed for-of binding must use an object binding pattern");
+        }
+        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+        const qual = bindingIsConst ? " const" : "";
+        const entryVar = this.freshTemp("_typed_object_entry");
+        buf.open("");
+        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.line(`tsc_array_materialize_all(${arrVar});`);
+        buf.open(`for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`);
+        buf.line(`${elemType.c} const ${entryVar} = TSC_ARR(${elemType.c}, ${arrVar}, ${idxVar});`);
+        this.emitTypedObjectBindingsForOf(
+            buf,
+            d.name,
+            entryVar,
+            elemType,
+            objectType,
+            (descriptor, value) => {
+                buf.line(
+                    `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
+                );
+            },
+        );
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_typed_object_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
+        this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+        buf.close();
+        buf.close();
     }
 
     private emitDynamicObjectRestForOf(
