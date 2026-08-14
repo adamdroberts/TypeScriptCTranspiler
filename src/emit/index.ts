@@ -67454,6 +67454,51 @@ class Emitter {
             ? fos.initializer.declarations[0]
             : null;
         if (entryBindingDecl && ts.isArrayBindingPattern(entryBindingDecl.name)) {
+            const restIndex = entryBindingDecl.name.elements.findIndex(
+                (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
+            );
+            if (restIndex >= 0) {
+                const restElement = entryBindingDecl.name.elements[restIndex];
+                if (
+                    restIndex !== entryBindingDecl.name.elements.length - 1 ||
+                    !restElement ||
+                    !ts.isBindingElement(restElement) ||
+                    !ts.isIdentifier(restElement.name) ||
+                    restElement.propertyName ||
+                    restElement.initializer ||
+                    valueType.kind !== "value"
+                ) {
+                    unsupported(
+                        entryBindingDecl.name,
+                        "custom iterator rest destructuring supports only a trailing identifier over dynamic values",
+                    );
+                }
+                for (const element of entryBindingDecl.name.elements) {
+                    if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                    if (
+                        !ts.isBindingElement(element) ||
+                        !ts.isIdentifier(element.name) ||
+                        element.propertyName ||
+                        element.initializer
+                    ) {
+                        unsupported(
+                            entryBindingDecl.name,
+                            "custom iterator rest destructuring supports identifier bindings without defaults",
+                        );
+                    }
+                }
+                const custom = this.emitCustomIteratorArray(fos.expression, iter);
+                if (!custom || custom.ty.kind !== "array" || custom.ty.elem?.kind !== "value") {
+                    unsupported(
+                        fos.expression,
+                        "custom iterator rest destructuring requires dynamically boxed iterator values",
+                    );
+                }
+                const arrVar = this.freshTemp("_custom_rest_a");
+                const idxVar = this.freshTemp("_custom_rest_i");
+                this.emitDynamicArrayBindingForOf(buf, fos, custom.c, arrVar, idxVar);
+                return true;
+            }
             const [keyEl, valueEl] = entryBindingDecl.name.elements;
             if (
                 entryBindingDecl.name.elements.length !== 2 ||
