@@ -55989,44 +55989,70 @@ class Emitter {
             if (stmt.awaitModifier || !ts.isVariableDeclarationList(stmt.initializer)) return false;
             if (stmt.initializer.declarations.length !== 1) return false;
             const decl = stmt.initializer.declarations[0]!;
-            const bindingPattern = ts.isArrayBindingPattern(decl.name) ? decl.name : null;
-            const restIndex = bindingPattern
-                ? bindingPattern.elements.findIndex(
+            const arrayBindingPattern = ts.isArrayBindingPattern(decl.name) ? decl.name : null;
+            const objectBindingPattern = ts.isObjectBindingPattern(decl.name) ? decl.name : null;
+            const restIndex = arrayBindingPattern
+                ? arrayBindingPattern.elements.findIndex(
                     (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
                 )
                 : -1;
             if (!ts.isIdentifier(decl.name)) {
-                if (!bindingPattern) return false;
-                if (restIndex >= 0) {
-                    if (restIndex !== bindingPattern.elements.length - 1) return false;
-                    for (let index = 0; index < bindingPattern.elements.length; index++) {
-                        const element = bindingPattern.elements[index];
-                        if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                if (objectBindingPattern) {
+                    if (objectBindingPattern.elements.length === 0) return false;
+                    let objectRestSeen = false;
+                    for (let index = 0; index < objectBindingPattern.elements.length; index++) {
+                        const element = objectBindingPattern.elements[index];
+                        if (!element || !ts.isBindingElement(element)) return false;
+                        if (element.dotDotDotToken) {
+                            if (
+                                objectRestSeen ||
+                                index !== objectBindingPattern.elements.length - 1 ||
+                                !ts.isIdentifier(element.name) ||
+                                element.initializer
+                            ) return false;
+                            objectRestSeen = true;
+                            continue;
+                        }
                         if (
-                            !ts.isBindingElement(element) ||
+                            objectRestSeen ||
                             !ts.isIdentifier(element.name) ||
-                            element.propertyName ||
-                            element.initializer ||
-                            (element.dotDotDotToken && index !== restIndex)
+                            (element.propertyName && !this.staticPropertyName(element.propertyName)) ||
+                            (element.initializer && this.nodeContainsYield(element.initializer))
                         ) return false;
                     }
                 } else {
-                    if (bindingPattern.elements.length !== 2) return false;
-                    const [first, second] = bindingPattern.elements;
-                    if (
-                        !first ||
-                        !second ||
-                        !ts.isBindingElement(first) ||
-                        !ts.isBindingElement(second) ||
-                        !ts.isIdentifier(first.name) ||
-                        !ts.isIdentifier(second.name) ||
-                        first.propertyName ||
-                        second.propertyName ||
-                        first.dotDotDotToken ||
-                        second.dotDotDotToken ||
-                        (first.initializer && this.nodeContainsYield(first.initializer)) ||
-                        (second.initializer && this.nodeContainsYield(second.initializer))
-                    ) return false;
+                    if (!arrayBindingPattern) return false;
+                    if (restIndex >= 0) {
+                        if (restIndex !== arrayBindingPattern.elements.length - 1) return false;
+                        for (let index = 0; index < arrayBindingPattern.elements.length; index++) {
+                            const element = arrayBindingPattern.elements[index];
+                            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                            if (
+                                !ts.isBindingElement(element) ||
+                                !ts.isIdentifier(element.name) ||
+                                element.propertyName ||
+                                element.initializer ||
+                                (element.dotDotDotToken && index !== restIndex)
+                            ) return false;
+                        }
+                    } else {
+                        if (arrayBindingPattern.elements.length !== 2) return false;
+                        const [first, second] = arrayBindingPattern.elements;
+                        if (
+                            !first ||
+                            !second ||
+                            !ts.isBindingElement(first) ||
+                            !ts.isBindingElement(second) ||
+                            !ts.isIdentifier(first.name) ||
+                            !ts.isIdentifier(second.name) ||
+                            first.propertyName ||
+                            second.propertyName ||
+                            first.dotDotDotToken ||
+                            second.dotDotDotToken ||
+                            (first.initializer && this.nodeContainsYield(first.initializer)) ||
+                            (second.initializer && this.nodeContainsYield(second.initializer))
+                        ) return false;
+                    }
                 }
             }
             const yieldedSource = this.directLazyYieldCondition(stmt.expression);
@@ -56058,8 +56084,9 @@ class Emitter {
             if (!elemType) return false;
             const supportsRest = elemType.kind === "value" || (elemType.kind === "array" && !!elemType.elem);
             if (restIndex >= 0 && (sourceType.kind === "class" || !supportsRest)) return false;
-            if (restIndex < 0 && bindingPattern &&
-                bindingPattern.elements.some((element) => ts.isBindingElement(element) && element.initializer) &&
+            if (objectBindingPattern && elemType.kind !== "value") return false;
+            const bindingElements = arrayBindingPattern?.elements ?? objectBindingPattern?.elements ?? [];
+            if (restIndex < 0 && bindingElements.some((element) => ts.isBindingElement(element) && element.initializer) &&
                 (elemType.kind !== "value" || sourceType.kind === "class")) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
@@ -60758,6 +60785,18 @@ class Emitter {
                         unsupported(decl.name, "lazy generator for-of destructuring requires entry or dynamic value elements");
                     }
                 }
+            } else if (ts.isObjectBindingPattern(decl.name)) {
+                if (sourceElemType.kind !== "value") {
+                    unsupported(
+                        decl.name,
+                        "lazy generator object destructuring requires dynamically boxed source elements",
+                    );
+                }
+                const entryValue = this.freshTemp("_lazy_object_value");
+                buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                this.emitDynamicObjectBindingsForOf(buf, decl.name, entryValue, (descriptor, value) => {
+                    assignBinding(descriptor.identifier, value);
+                });
             } else {
                 unsupported(decl.name, "lazy generator for-of binding form");
             }
@@ -64063,17 +64102,22 @@ class Emitter {
         if (fn.body && ts.isBlock(fn.body)) {
             const bindingIdentifiers = (name: ts.BindingName, allowForOfPattern: boolean): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
+                const objectPattern = ts.isObjectBindingPattern(name);
+                if (!objectPattern && !ts.isArrayBindingPattern(name)) {
+                    unsupported(name, "lazy generator locals require supported binding patterns");
+                }
                 const identifiers: ts.Identifier[] = [];
                 for (const element of name.elements) {
                     if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
                     if (
                         !ts.isBindingElement(element) ||
                         !ts.isIdentifier(element.name) ||
-                        element.propertyName ||
+                        (!objectPattern && !!element.propertyName) ||
+                        (objectPattern && !!element.propertyName && !this.staticPropertyName(element.propertyName)) ||
                         (element.initializer && !allowForOfPattern) ||
                         (element.dotDotDotToken && !allowForOfPattern)
                     ) {
-                        unsupported(name, "lazy generator locals support only identifier bindings in array patterns");
+                        unsupported(name, "lazy generator locals support only bounded identifier binding patterns");
                     }
                     identifiers.push(element.name);
                 }
@@ -67285,6 +67329,10 @@ class Emitter {
         }
         if (elemType.kind === "value" && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
+            if (d && ts.isObjectBindingPattern(d.name)) {
+                this.emitDynamicObjectArrayBindingForOf(buf, fos, arrayExpr, arrVar, idxVar);
+                return;
+            }
             if (d && ts.isArrayBindingPattern(d.name)) {
                 this.emitDynamicArrayBindingForOf(buf, fos, arrayExpr, arrVar, idxVar);
                 return;
@@ -67587,6 +67635,44 @@ class Emitter {
         const entryBindingDecl = ts.isVariableDeclarationList(fos.initializer)
             ? fos.initializer.declarations[0]
             : null;
+        if (entryBindingDecl && ts.isObjectBindingPattern(entryBindingDecl.name)) {
+            if (valueType.kind !== "value") {
+                unsupported(
+                    entryBindingDecl.name,
+                    "custom iterator object destructuring requires dynamically boxed iterator values",
+                );
+            }
+            const iterVar = this.freshTemp("_it");
+            const stepVar = this.freshTemp("_step");
+            const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+            const qual = bindingIsConst ? " const" : "";
+            const recv = this.freshTemp("_recv");
+            buf.open("");
+            buf.line(`${iter.ty.c} ${recv} = ${iter.c};`);
+            const selfArg = owner.name!.text === iter.ty.className ? recv : `((${owner.name!.text}_t*)${recv})`;
+            buf.line(`${iteratorType.c} const ${iterVar} = ${owner.name!.text}___tsc_iterator(${selfArg});`);
+            const nextOwnerName = nextOwner.name!.text;
+            const nextSelfArg = nextOwnerName === iteratorType.className
+                ? iterVar
+                : `((${nextOwnerName}_t*)${iterVar})`;
+            buf.open("while (true)");
+            buf.line(`${stepType.c} const ${stepVar} = ${nextOwnerName}_next(${nextSelfArg});`);
+            buf.line(`if (${stepVar}->done) break;`);
+            this.emitDynamicObjectBindingsForOf(buf, entryBindingDecl.name, `${stepVar}->value`, (descriptor, value) => {
+                buf.line(
+                    `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
+                );
+            });
+            const labeledContinueTarget = this.directLabeledLoopName(fos)
+                ? this.freshTemp("_custom_object_for_of_labeled_continue")
+                : null;
+            this.registerLabeledContinueTarget(fos, labeledContinueTarget);
+            this.emitLoopStmtInBlock(buf, fos.statement);
+            if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+            buf.close();
+            buf.close();
+            return true;
+        }
         if (entryBindingDecl && ts.isArrayBindingPattern(entryBindingDecl.name)) {
             const restIndex = entryBindingDecl.name.elements.findIndex(
                 (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
@@ -68090,6 +68176,182 @@ class Emitter {
             c: `({ tsc_value_t ${valueTemp} = ${value.c}; tsc_value_is_undefined(${valueTemp}) ? ${fallbackValue} : ${valueTemp}; })`,
             ty: T_VALUE,
         };
+    }
+
+    private forOfObjectBindingDescriptors(
+        pattern: ts.ObjectBindingPattern,
+    ): {
+        element: ts.BindingElement;
+        identifier: ts.Identifier;
+        property: string | null;
+        rest: boolean;
+        type: CType;
+    }[] {
+        if (pattern.elements.length === 0) {
+            unsupported(pattern, "for-of object destructuring requires at least one binding");
+        }
+        const descriptors: {
+            element: ts.BindingElement;
+            identifier: ts.Identifier;
+            property: string | null;
+            rest: boolean;
+            type: CType;
+        }[] = [];
+        let restSeen = false;
+        for (let index = 0; index < pattern.elements.length; index++) {
+            const element = pattern.elements[index];
+            if (!element || !ts.isBindingElement(element)) {
+                unsupported(pattern, "for-of object destructuring requires simple static binding elements");
+            }
+            if (element.dotDotDotToken) {
+                if (
+                    restSeen ||
+                    index !== pattern.elements.length - 1 ||
+                    !ts.isIdentifier(element.name) ||
+                    element.initializer
+                ) {
+                    unsupported(
+                        element,
+                        "for-of object rest destructuring supports one terminal identifier without a default",
+                    );
+                }
+                const type = this.prepareType(mapType(element.name, this.checker));
+                if (type.kind !== "value") {
+                    unsupported(
+                        element.name,
+                        "for-of object rest destructuring requires a dynamic object type",
+                    );
+                }
+                descriptors.push({
+                    element,
+                    identifier: element.name,
+                    property: null,
+                    rest: true,
+                    type,
+                });
+                restSeen = true;
+                continue;
+            }
+            if (restSeen || !ts.isIdentifier(element.name) || element.initializer && this.nodeContainsYield(element.initializer)) {
+                unsupported(
+                    element,
+                    "for-of object destructuring supports identifier bindings with await-free defaults",
+                );
+            }
+            const property = element.propertyName
+                ? this.staticPropertyName(element.propertyName)
+                : element.name.text;
+            if (property === null) {
+                unsupported(element, "for-of object destructuring requires static property names");
+            }
+            descriptors.push({
+                element,
+                identifier: element.name,
+                property,
+                rest: false,
+                type: this.prepareType(mapType(element.name, this.checker)),
+            });
+        }
+        return descriptors;
+    }
+
+    private emitDynamicObjectRestForOf(
+        buf: CBuf,
+        sourceVar: string,
+        descriptors: readonly {
+            property: string | null;
+            rest: boolean;
+        }[],
+    ): EmitResult {
+        const restObject = this.freshTemp("_for_of_object_rest");
+        const restKeys = this.freshTemp("_for_of_object_rest_keys");
+        const restIndex = this.freshTemp("_for_of_object_rest_i");
+        const restKey = this.freshTemp("_for_of_object_rest_key");
+        const excluded = descriptors
+            .filter((descriptor) => !descriptor.rest && descriptor.property !== null)
+            .map((descriptor) => descriptor.property!);
+        const skip = excluded
+            .map((property) =>
+                `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
+            )
+            .join(" || ");
+        buf.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
+        buf.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${sourceVar});`);
+        buf.open(`for (size_t ${restIndex} = 0; ${restIndex} < ${restKeys}->len; ${restIndex}++)`);
+        buf.line(`tsc_str_t* ${restKey} = TSC_ARR(tsc_str_t*, ${restKeys}, ${restIndex});`);
+        if (skip) buf.line(`if (${skip}) continue;`);
+        buf.line(`tsc_object_set(${restObject}, ${restKey}, tsc_value_get_prop(${sourceVar}, ${restKey}));`);
+        buf.close();
+        return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
+    }
+
+    private emitDynamicObjectBindingsForOf(
+        buf: CBuf,
+        pattern: ts.ObjectBindingPattern,
+        sourceC: string,
+        assign: (
+            descriptor: {
+                element: ts.BindingElement;
+                identifier: ts.Identifier;
+                property: string | null;
+                rest: boolean;
+                type: CType;
+            },
+            value: EmitResult,
+        ) => void,
+    ): void {
+        const descriptors = this.forOfObjectBindingDescriptors(pattern);
+        const sourceVar = this.freshTemp("_for_of_object_value");
+        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
+        for (const descriptor of descriptors) {
+            const value = descriptor.rest
+                ? this.emitDynamicObjectRestForOf(buf, sourceVar, descriptors)
+                : this.forOfBindingValueWithDefault(descriptor.element, {
+                    c: `tsc_value_get_prop(${sourceVar}, tsc_str_from_lit("${escapeCString(descriptor.property!)}", ${utf8ByteLen(descriptor.property!)}))`,
+                    ty: T_VALUE,
+                });
+            assign(descriptor, value);
+        }
+    }
+
+    private emitDynamicObjectArrayBindingForOf(
+        buf: CBuf,
+        fos: ts.ForOfStatement,
+        arrayExpr: string,
+        arrVar: string,
+        idxVar: string,
+    ): void {
+        if (!ts.isVariableDeclarationList(fos.initializer)) {
+            unsupported(fos.initializer, "dynamic for-of object destructuring needs const/let {value}");
+        }
+        const d = fos.initializer.declarations[0];
+        if (!d || !ts.isObjectBindingPattern(d.name)) {
+            unsupported(fos.initializer, "dynamic for-of binding must use an object binding pattern");
+        }
+        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+        const qual = bindingIsConst ? " const" : "";
+        const entryVar = this.freshTemp("_dyn_object_entry");
+        buf.open("");
+        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.line(`tsc_array_materialize_all(${arrVar});`);
+        buf.open(`for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`);
+        buf.line(
+            `tsc_value_t const ${entryVar} = tsc_array_index_present(${arrVar}, ${idxVar}) ` +
+            `? TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar}) : tsc_value_undefined();`,
+        );
+        this.emitDynamicObjectBindingsForOf(buf, d.name, entryVar, (descriptor, value) => {
+            buf.line(
+                `${descriptor.type.c}${qual} ${mangleIdent(descriptor.identifier.text)} = ${this.coerce(value, descriptor.type, descriptor.identifier)};`,
+            );
+        });
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_dynamic_object_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
+        this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+        buf.close();
+        buf.close();
     }
 
     private emitDynamicArrayBindingForOf(
