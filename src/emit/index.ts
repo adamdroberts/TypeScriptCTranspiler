@@ -84,6 +84,22 @@ interface EmitResult {
     lazyGeneratorFactory?: boolean;
 }
 
+type ForOfObjectAccessSegment =
+    | { kind: "property"; value: string }
+    | { kind: "index"; value: number };
+
+interface ForOfObjectBindingDescriptor {
+    element: ts.BindingElement;
+    identifier: ts.Identifier;
+    property: string | null;
+    computedKey: string | null;
+    rest: boolean;
+    arrayRest: boolean;
+    type: CType;
+    accessPath: ForOfObjectAccessSegment[];
+    arrayRestIndex: number | null;
+}
+
 interface SequencedCallArg {
     value: EmitResult;
     lazyValue?: () => EmitResult;
@@ -56014,6 +56030,15 @@ class Emitter {
                                 restSeen = true;
                                 continue;
                             }
+                            if (ts.isBindingElement(element) && ts.isObjectBindingPattern(element.name)) {
+                                if (
+                                    restSeen ||
+                                    element.propertyName ||
+                                    element.initializer ||
+                                    !validObjectPattern(element.name, true)
+                                ) return false;
+                                continue;
+                            }
                             if (
                                 restSeen ||
                                 !ts.isBindingElement(element) ||
@@ -64190,12 +64215,14 @@ class Emitter {
                     }
                     if (
                         allowForOfPattern &&
-                        objectPattern &&
                         (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
                         !element.initializer &&
                         !element.dotDotDotToken &&
-                        !!element.propertyName &&
-                        !!this.staticPropertyName(element.propertyName)
+                        (
+                            objectPattern
+                                ? !!element.propertyName && !!this.staticPropertyName(element.propertyName)
+                                : !element.propertyName
+                        )
                     ) {
                         identifiers.push(...bindingIdentifiers(
                             element.name,
@@ -68265,34 +68292,14 @@ class Emitter {
 
     private forOfObjectBindingDescriptors(
         pattern: ts.ObjectBindingPattern,
-    ): {
-        element: ts.BindingElement;
-        identifier: ts.Identifier;
-        property: string | null;
-        computedKey: string | null;
-        rest: boolean;
-        arrayRest: boolean;
-        type: CType;
-        path: string[];
-        arrayIndex: number | null;
-    }[] {
+    ): ForOfObjectBindingDescriptor[] {
         if (pattern.elements.length === 0) {
             unsupported(pattern, "for-of object destructuring requires at least one binding");
         }
-        const descriptors: {
-            element: ts.BindingElement;
-            identifier: ts.Identifier;
-            property: string | null;
-            computedKey: string | null;
-            rest: boolean;
-            arrayRest: boolean;
-            type: CType;
-            path: string[];
-            arrayIndex: number | null;
-        }[] = [];
+        const descriptors: ForOfObjectBindingDescriptor[] = [];
         const collectArray = (
             current: ts.ArrayBindingPattern,
-            prefix: readonly string[],
+            prefix: readonly ForOfObjectAccessSegment[],
         ): void => {
             if (current.elements.length === 0) {
                 unsupported(current, "nested for-of array destructuring requires at least one binding");
@@ -68327,10 +68334,26 @@ class Emitter {
                         rest: false,
                         arrayRest: true,
                         type,
-                        path: [...prefix],
-                        arrayIndex: index,
+                        accessPath: [...prefix],
+                        arrayRestIndex: index,
                     });
                     continue;
+                }
+                if (ts.isObjectBindingPattern(element.name)) {
+                    if (element.propertyName || element.initializer) {
+                        unsupported(
+                            element,
+                            "nested for-of array object bindings require a plain object pattern without a default",
+                        );
+                    }
+                    collect(element.name, [...prefix, { kind: "index", value: index }], true);
+                    continue;
+                }
+                if (ts.isArrayBindingPattern(element.name)) {
+                    unsupported(
+                        element,
+                        "nested for-of array destructuring does not support deeper nested arrays",
+                    );
                 }
                 if (
                     !ts.isBindingElement(element) ||
@@ -68351,14 +68374,14 @@ class Emitter {
                     rest: false,
                     arrayRest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
-                    path: [...prefix],
-                    arrayIndex: index,
+                    accessPath: [...prefix, { kind: "index", value: index }],
+                    arrayRestIndex: null,
                 });
             }
         };
         const collect = (
             current: ts.ObjectBindingPattern,
-            prefix: readonly string[],
+            prefix: readonly ForOfObjectAccessSegment[],
             nested: boolean,
         ): void => {
             if (current.elements.length === 0) {
@@ -68398,8 +68421,8 @@ class Emitter {
                         rest: true,
                         arrayRest: false,
                         type,
-                        path: [...prefix],
-                        arrayIndex: null,
+                        accessPath: [...prefix],
+                        arrayRestIndex: null,
                     });
                     restSeen = true;
                     continue;
@@ -68444,7 +68467,7 @@ class Emitter {
                             "nested for-of object destructuring does not support a default for the nested object",
                         );
                     }
-                    collect(element.name, [...prefix, property!], true);
+                    collect(element.name, [...prefix, { kind: "property", value: property! }], true);
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
@@ -68454,7 +68477,7 @@ class Emitter {
                             "nested for-of array destructuring requires a static property without a default",
                         );
                     }
-                    collectArray(element.name, [...prefix, property!]);
+                    collectArray(element.name, [...prefix, { kind: "property", value: property! }]);
                     continue;
                 }
                 if (
@@ -68474,8 +68497,10 @@ class Emitter {
                     rest: false,
                     arrayRest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
-                    path: computedKey === null ? [...prefix, property!] : [],
-                    arrayIndex: null,
+                    accessPath: computedKey === null
+                        ? [...prefix, { kind: "property", value: property! }]
+                        : [],
+                    arrayRestIndex: null,
                 });
             }
         };
@@ -68486,15 +68511,8 @@ class Emitter {
     private emitDynamicObjectRestForOf(
         buf: CBuf,
         sourceC: string,
-        descriptors: readonly {
-            property: string | null;
-            computedKey: string | null;
-            rest: boolean;
-            arrayRest: boolean;
-            path: readonly string[];
-            arrayIndex: number | null;
-        }[],
-        restPath: readonly string[],
+        descriptors: readonly ForOfObjectBindingDescriptor[],
+        restPath: readonly ForOfObjectAccessSegment[],
     ): EmitResult {
         const sourceVar = this.freshTemp("_for_of_object_rest_source");
         const restObject = this.freshTemp("_for_of_object_rest");
@@ -68505,10 +68523,16 @@ class Emitter {
         const excluded = Array.from(new Set(
             descriptors
                 .filter((descriptor) =>
-                    descriptor.path.length > restPath.length &&
-                    restPath.every((property, index) => descriptor.path[index] === property)
+                    descriptor.accessPath.length > restPath.length &&
+                    restPath.every((segment, index) => {
+                        const candidate = descriptor.accessPath[index];
+                        return candidate?.kind === segment.kind && candidate.value === segment.value;
+                    })
                 )
-                .map((descriptor) => descriptor.path[restPath.length]!),
+                .flatMap((descriptor) => {
+                    const segment = descriptor.accessPath[restPath.length];
+                    return segment?.kind === "property" ? [segment.value] : [];
+                }),
         ));
         const skip = excluded
             .map((property) =>
@@ -68550,41 +68574,28 @@ class Emitter {
         buf: CBuf,
         pattern: ts.ObjectBindingPattern,
         sourceC: string,
-        assign: (
-            descriptor: {
-                element: ts.BindingElement;
-                identifier: ts.Identifier;
-                property: string | null;
-                computedKey: string | null;
-                rest: boolean;
-                arrayRest: boolean;
-                type: CType;
-                path: readonly string[];
-                arrayIndex: number | null;
-            },
-            value: EmitResult,
-        ) => void,
+        assign: (descriptor: ForOfObjectBindingDescriptor, value: EmitResult) => void,
     ): void {
         const descriptors = this.forOfObjectBindingDescriptors(pattern);
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
+        const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string =>
+            accessPath.reduce(
+                (source, segment) => segment.kind === "property"
+                    ? `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`
+                    : `tsc_value_get_index(${source}, ${segment.value}.0)`,
+                sourceVar,
+            );
         for (const descriptor of descriptors) {
             const objectValueC = descriptor.computedKey !== null
                 ? `tsc_value_get_prop(${sourceVar}, ${descriptor.computedKey})`
-                : descriptor.path.reduce(
-                    (source, property) =>
-                        `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
-                    sourceVar,
-                );
-            const valueC = descriptor.arrayIndex === null
-                ? objectValueC
-                : `tsc_value_get_index(${objectValueC}, ${descriptor.arrayIndex}.0)`;
+                : accessValue(descriptor.accessPath);
             const value = descriptor.rest
-                ? this.emitDynamicObjectRestForOf(buf, objectValueC, descriptors, descriptor.path)
+                ? this.emitDynamicObjectRestForOf(buf, objectValueC, descriptors, descriptor.accessPath)
                 : descriptor.arrayRest
-                    ? this.emitDynamicArrayRestForOf(buf, objectValueC, descriptor.arrayIndex!)
+                    ? this.emitDynamicArrayRestForOf(buf, objectValueC, descriptor.arrayRestIndex!)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
-                    c: valueC,
+                    c: objectValueC,
                     ty: T_VALUE,
                 });
             assign(descriptor, value);

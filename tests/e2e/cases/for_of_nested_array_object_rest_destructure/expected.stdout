@@ -1,0 +1,5 @@
+direct direct-a:a:alpha:undefined:undefined:entry-a:1:undefined:outer-a;direct-b:b:beta:undefined:undefined:undefined:0:undefined:outer-b;
+custom custom-a:p:one:undefined:undefined:entry-p:1:undefined:outer-p;custom-b:q:two:undefined:undefined:undefined:0:undefined:outer-q;
+one false lazy-a:r:red:entry-r:1:outer-r
+two false lazy-b:s:blue:undefined:0:outer-s
+three true nested-array-object-rest-done

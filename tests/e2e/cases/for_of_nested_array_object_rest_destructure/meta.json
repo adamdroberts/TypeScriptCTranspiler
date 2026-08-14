@@ -1,0 +1,3 @@
+{
+  "description": "object bindings and rest nested inside dynamic arrays under static object properties across direct, custom-iterator, and lazy-generator for-of values"
+}
