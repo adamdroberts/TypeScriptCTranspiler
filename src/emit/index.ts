@@ -67554,11 +67554,12 @@ class Emitter {
                     !ts.isIdentifier(restElement.name) ||
                     restElement.propertyName ||
                     restElement.initializer ||
-                    valueType.kind !== "value"
+                    valueType.kind !== "value" &&
+                    !(valueType.kind === "array" && !!valueType.elem)
                 ) {
                     unsupported(
                         entryBindingDecl.name,
-                        "custom iterator rest destructuring supports only a trailing identifier over dynamic values",
+                        "custom iterator rest destructuring supports only a trailing identifier over boxed or array-backed values",
                     );
                 }
                 for (const element of entryBindingDecl.name.elements) {
@@ -67576,15 +67577,37 @@ class Emitter {
                     }
                 }
                 const custom = this.emitCustomIteratorArray(fos.expression, iter);
-                if (!custom || custom.ty.kind !== "array" || custom.ty.elem?.kind !== "value") {
+                if (!custom || custom.ty.kind !== "array" || !custom.ty.elem) {
                     unsupported(
                         fos.expression,
-                        "custom iterator rest destructuring requires dynamically boxed iterator values",
+                        "custom iterator rest destructuring requires boxed or array-backed iterator values",
                     );
                 }
                 const arrVar = this.freshTemp("_custom_rest_a");
                 const idxVar = this.freshTemp("_custom_rest_i");
-                this.emitDynamicArrayBindingForOf(buf, fos, custom.c, arrVar, idxVar);
+                if (valueType.kind === "value") {
+                    if (custom.ty.elem.kind !== "value") {
+                        unsupported(
+                            fos.expression,
+                            "custom iterator dynamic rest destructuring requires dynamically boxed iterator values",
+                        );
+                    }
+                    this.emitDynamicArrayBindingForOf(buf, fos, custom.c, arrVar, idxVar);
+                } else if (valueType.kind === "array" && valueType.elem) {
+                    this.emitArrayBackedArrayBindingForOf(
+                        buf,
+                        fos,
+                        custom.c,
+                        valueType,
+                        arrVar,
+                        idxVar,
+                    );
+                } else {
+                    unsupported(
+                        fos.expression,
+                        "custom iterator rest destructuring requires boxed or array-backed iterator values",
+                    );
+                }
                 return true;
             }
             const [keyEl, valueEl] = entryBindingDecl.name.elements;
@@ -68115,6 +68138,112 @@ class Emitter {
         }
         const labeledContinueTarget = this.directLabeledLoopName(fos)
             ? this.freshTemp("_dynamic_for_of_labeled_continue")
+            : null;
+        this.registerLabeledContinueTarget(fos, labeledContinueTarget);
+        this.emitLoopStmtInBlock(buf, fos.statement);
+        if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+        buf.close();
+        buf.close();
+    }
+
+    private emitArrayBackedArrayBindingForOf(
+        buf: CBuf,
+        fos: ts.ForOfStatement,
+        arrayExpr: string,
+        valueType: CType,
+        arrVar: string,
+        idxVar: string,
+    ): void {
+        if (!valueType.elem) {
+            unsupported(fos.expression, "array-backed for-of rest destructuring needs an element type");
+        }
+        if (!ts.isVariableDeclarationList(fos.initializer)) {
+            unsupported(
+                fos.initializer,
+                "array-backed for-of destructuring needs const/let [value, ...]",
+            );
+        }
+        const d = fos.initializer.declarations[0];
+        if (!d || !ts.isArrayBindingPattern(d.name)) {
+            unsupported(
+                fos.initializer,
+                "array-backed for-of binding must use an array binding pattern",
+            );
+        }
+
+        const bindings: { name: string; index: number; type: CType; node: ts.Identifier }[] = [];
+        let restBinding: { name: string; index: number; type: CType; node: ts.Identifier } | null = null;
+        for (let i = 0; i < d.name.elements.length; i++) {
+            const el = d.name.elements[i];
+            if (!el || el.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name) || el.propertyName || el.initializer) {
+                unsupported(
+                    d.name,
+                    "array-backed for-of rest destructuring supports identifier bindings without defaults",
+                );
+            }
+            const type = this.prepareType(mapType(el.name, this.checker));
+            if (el.dotDotDotToken) {
+                if (restBinding) unsupported(el, "array-backed for-of destructuring supports only one rest binding");
+                restBinding = {
+                    name: mangleIdent(el.name.text),
+                    index: i,
+                    type,
+                    node: el.name,
+                };
+            } else {
+                bindings.push({
+                    name: mangleIdent(el.name.text),
+                    index: i,
+                    type,
+                    node: el.name,
+                });
+            }
+        }
+        if (!restBinding) {
+            unsupported(d.name, "array-backed for-of rest destructuring requires a trailing rest binding");
+        }
+
+        const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+        const qual = bindingIsConst ? " const" : "";
+        const entryVar = this.freshTemp("_array_entry");
+        const entryElementType = valueType.elem;
+
+        buf.open("");
+        buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+        buf.line(`tsc_array_materialize_all(${arrVar});`);
+        buf.open(
+            `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
+        );
+        buf.line(`${valueType.c} const ${entryVar} = TSC_ARR(${valueType.c}, ${arrVar}, ${idxVar});`);
+        for (const binding of bindings) {
+            const value: EmitResult = {
+                c: `tsc_array_index_present(${entryVar}, ${binding.index}) ? TSC_ARR(${entryElementType.c}, ${entryVar}, ${binding.index}) : ${this.zeroValue(entryElementType)}`,
+                ty: entryElementType,
+            };
+            buf.line(
+                `${binding.type.c}${qual} ${binding.name} = ${this.coerce(value, binding.type, binding.node)};`,
+            );
+        }
+        const restArray = this.freshTemp("_array_rest");
+        const restIdx = this.freshTemp("_array_rest_i");
+        const restValue = this.freshTemp("_array_rest_v");
+        const restPresent = this.freshTemp("_array_rest_present");
+        buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${entryElementType.c}), 1);`);
+        buf.open(`for (size_t ${restIdx} = ${restBinding.index}; ${restIdx} < ${entryVar}->len; ${restIdx}++)`);
+        buf.line(`bool ${restPresent} = tsc_array_index_present(${entryVar}, ${restIdx});`);
+        buf.line(`${entryElementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${entryElementType.c}, ${entryVar}, ${restIdx}) : ${this.zeroValue(entryElementType)};`);
+        buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+        buf.open(`if (!${restPresent})`);
+        buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
+        buf.close();
+        buf.close();
+        const restValueExpr: EmitResult = { c: restArray, ty: arrayType(entryElementType) };
+        buf.line(
+            `${restBinding.type.c}${qual} ${restBinding.name} = ${this.coerce(restValueExpr, restBinding.type, restBinding.node)};`,
+        );
+        const labeledContinueTarget = this.directLabeledLoopName(fos)
+            ? this.freshTemp("_array_for_of_labeled_continue")
             : null;
         this.registerLabeledContinueTarget(fos, labeledContinueTarget);
         this.emitLoopStmtInBlock(buf, fos.statement);

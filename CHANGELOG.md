@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Bounded custom-iterator `for...of` destructuring now supports one trailing rest identifier over array-backed iterator values, preserving typed element storage and sparse-array holes; typed defaults, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `custom_iterator_array_rest`.
 - Lazy generator `for...of` destructuring now supports one trailing rest identifier over dynamically boxed pair elements, materializing the remainder as a boxed value array while keeping typed defaults, array-backed rest, object patterns, and broader iterator/destructuring graphs deferred. Test: `generator_lazy_for_of_rest`.
 - Bounded custom-iterator `for...of` destructuring now supports one trailing rest identifier over dynamically boxed iterator values, reusing the existing dynamic rest-array lowering; typed defaults, array-backed rest, object patterns, and broader iterator/destructuring graphs remain deferred. Test: `custom_iterator_dynamic_rest`.
 - Bounded `for...of` destructuring defaults now apply await-free fallback initializers to two-identifier bindings over dynamically boxed pair elements in ordinary custom iterators, including array-backed pairs, and lazy generators; typed defaults, rest/object/nested patterns, and suspending defaults remain deferred. Test: `for_of_destructuring_defaults`.
