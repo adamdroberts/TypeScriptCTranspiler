@@ -56037,7 +56037,7 @@ class Emitter {
                                     restSeen ||
                                     element.propertyName ||
                                     element.initializer ||
-                                    !validObjectPattern(element.name, true)
+                                    !validObjectPattern(element.name)
                                 ) return false;
                                 continue;
                             }
@@ -56060,7 +56060,7 @@ class Emitter {
                         }
                         return true;
                     };
-                    const validObjectPattern = (pattern: ts.ObjectBindingPattern, nested = false): boolean => {
+                    const validObjectPattern = (pattern: ts.ObjectBindingPattern): boolean => {
                         if (pattern.elements.length === 0) return false;
                         let objectRestSeen = false;
                         for (let index = 0; index < pattern.elements.length; index++) {
@@ -56084,14 +56084,14 @@ class Emitter {
                                 element.propertyName &&
                                 (!computedProperty && !this.staticPropertyName(element.propertyName) ||
                                     computedProperty &&
-                                    (nested || this.nodeContainsYield(element.propertyName.expression)))
+                                    this.nodeContainsYield(element.propertyName.expression))
                             ) return false;
                             if (ts.isObjectBindingPattern(element.name)) {
                                 if (
                                     element.initializer ||
                                     !computedProperty &&
                                     (!element.propertyName || !this.staticPropertyName(element.propertyName)) ||
-                                    !validObjectPattern(element.name, true)
+                                    !validObjectPattern(element.name)
                                 ) return false;
                                 continue;
                             }
@@ -64192,7 +64192,6 @@ class Emitter {
             const bindingIdentifiers = (
                 name: ts.BindingName,
                 allowForOfPattern: boolean,
-                nestedObjectPattern = false,
             ): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
                 const objectPattern = ts.isObjectBindingPattern(name);
@@ -64209,7 +64208,7 @@ class Emitter {
                         (!objectPattern && !!element.propertyName) ||
                         (objectPattern && !!element.propertyName && !computedProperty && !this.staticPropertyName(element.propertyName)) ||
                         (computedProperty &&
-                            (!allowForOfPattern || nestedObjectPattern || this.nodeContainsYield(element.propertyName!.expression))) ||
+                            (!allowForOfPattern || this.nodeContainsYield(element.propertyName!.expression))) ||
                         (element.initializer && !allowForOfPattern) ||
                         (element.dotDotDotToken && !allowForOfPattern)
                     ) {
@@ -64234,7 +64233,6 @@ class Emitter {
                         identifiers.push(...bindingIdentifiers(
                             element.name,
                             true,
-                            ts.isObjectBindingPattern(element.name),
                         ));
                         continue;
                     }
@@ -68360,7 +68358,6 @@ class Emitter {
                     collect(
                         element.name,
                         [...prefix, { kind: "index", value: index }],
-                        true,
                         inheritedComputedKey,
                         inheritedComputedKeyId,
                     );
@@ -68409,7 +68406,6 @@ class Emitter {
         const collect = (
             current: ts.ObjectBindingPattern,
             prefix: readonly ForOfObjectAccessSegment[],
-            nested: boolean,
             inheritedComputedKey: string | null = null,
             inheritedComputedKeyId: number | null = null,
         ): void => {
@@ -68472,7 +68468,6 @@ class Emitter {
                 let computedKeyId = inheritedComputedKeyId;
                 if (computedProperty) {
                     if (
-                        nested ||
                         !ts.isIdentifier(element.name) &&
                         !ts.isObjectBindingPattern(element.name) &&
                         !ts.isArrayBindingPattern(element.name) ||
@@ -68480,7 +68475,7 @@ class Emitter {
                     ) {
                         unsupported(
                             element,
-                            "for-of computed object keys require a yield-free top-level key with an identifier or bounded nested binding",
+                            "for-of computed object keys require a yield-free key with an identifier or bounded nested binding",
                         );
                     }
                     const propertyExpression = (element.propertyName as ts.ComputedPropertyName).expression;
@@ -68508,7 +68503,6 @@ class Emitter {
                     collect(
                         element.name,
                         bindingPrefix,
-                        true,
                         bindingComputedKey,
                         bindingComputedKeyId,
                     );
@@ -68552,7 +68546,7 @@ class Emitter {
                 });
             }
         };
-        collect(pattern, [], false);
+        collect(pattern, []);
         return descriptors;
     }
 
@@ -68639,11 +68633,11 @@ class Emitter {
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         const computedKeyTemps = new Map<number, string>();
         for (const descriptor of descriptors) {
-            if (descriptor.computedKey === null || descriptor.computedKeyId === null) continue;
-            if (!computedKeyTemps.has(descriptor.computedKeyId)) {
+            for (const segment of descriptor.accessPath) {
+                if (segment.kind !== "computed" || computedKeyTemps.has(segment.id)) continue;
                 const keyTemp = this.freshTemp("_for_of_computed_key");
-                computedKeyTemps.set(descriptor.computedKeyId, keyTemp);
-                buf.line(`tsc_str_t* const ${keyTemp} = ${descriptor.computedKey};`);
+                computedKeyTemps.set(segment.id, keyTemp);
+                buf.line(`tsc_str_t* const ${keyTemp} = ${segment.value};`);
             }
         }
         const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string =>
