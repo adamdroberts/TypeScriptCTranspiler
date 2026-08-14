@@ -1,0 +1,5 @@
+direct direct-a:x:2:1:undefined:keep-a;direct-b:y:1:undefined:undefined:keep-b;
+custom custom-a:p:2:2:undefined:keep-c;custom-b:q:1:undefined:undefined:keep-d;
+one false lazy-a:r:2:3
+two false lazy-b:s:1:undefined
+three true nested-array-rest-done

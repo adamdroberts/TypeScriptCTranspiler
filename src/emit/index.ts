@@ -56000,13 +56000,25 @@ class Emitter {
                 if (objectBindingPattern) {
                     const validArrayPattern = (pattern: ts.ArrayBindingPattern): boolean => {
                         if (pattern.elements.length === 0) return false;
-                        for (const element of pattern.elements) {
+                        let restSeen = false;
+                        for (let index = 0; index < pattern.elements.length; index++) {
+                            const element = pattern.elements[index];
                             if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                            if (element.dotDotDotToken) {
+                                if (
+                                    restSeen ||
+                                    index !== pattern.elements.length - 1 ||
+                                    !ts.isIdentifier(element.name) ||
+                                    element.initializer
+                                ) return false;
+                                restSeen = true;
+                                continue;
+                            }
                             if (
+                                restSeen ||
                                 !ts.isBindingElement(element) ||
                                 !ts.isIdentifier(element.name) ||
                                 element.propertyName ||
-                                element.dotDotDotToken ||
                                 element.initializer && this.nodeContainsYield(element.initializer)
                             ) return false;
                         }
@@ -64151,6 +64163,7 @@ class Emitter {
                 name: ts.BindingName,
                 allowForOfPattern: boolean,
                 nestedObjectPattern = false,
+                nestedArrayPattern = false,
             ): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
                 const objectPattern = ts.isObjectBindingPattern(name);
@@ -64169,7 +64182,7 @@ class Emitter {
                         (computedProperty &&
                             (!allowForOfPattern || nestedObjectPattern || this.nodeContainsYield(element.propertyName!.expression))) ||
                         (element.initializer && !allowForOfPattern) ||
-                        (element.dotDotDotToken && (nestedObjectPattern || !allowForOfPattern))
+                        (element.dotDotDotToken && (!allowForOfPattern || nestedObjectPattern && !nestedArrayPattern))
                     ) {
                         unsupported(name, "lazy generator locals support only bounded identifier binding patterns");
                     }
@@ -64186,7 +64199,12 @@ class Emitter {
                         !!element.propertyName &&
                         !!this.staticPropertyName(element.propertyName)
                     ) {
-                        identifiers.push(...bindingIdentifiers(element.name, true, true));
+                        identifiers.push(...bindingIdentifiers(
+                            element.name,
+                            true,
+                            ts.isObjectBindingPattern(element.name),
+                            ts.isArrayBindingPattern(element.name),
+                        ));
                         continue;
                     }
                     unsupported(name, "lazy generator locals support only bounded identifier binding patterns");
@@ -68256,6 +68274,7 @@ class Emitter {
         property: string | null;
         computedKey: string | null;
         rest: boolean;
+        arrayRest: boolean;
         type: CType;
         path: string[];
         arrayIndex: number | null;
@@ -68269,6 +68288,7 @@ class Emitter {
             property: string | null;
             computedKey: string | null;
             rest: boolean;
+            arrayRest: boolean;
             type: CType;
             path: string[];
             arrayIndex: number | null;
@@ -68283,11 +68303,42 @@ class Emitter {
             for (let index = 0; index < current.elements.length; index++) {
                 const element = current.elements[index];
                 if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                if (element.dotDotDotToken) {
+                    if (
+                        !ts.isBindingElement(element) ||
+                        index !== current.elements.length - 1 ||
+                        !ts.isIdentifier(element.name) ||
+                        element.initializer
+                    ) {
+                        unsupported(
+                            element,
+                            "nested for-of array rest requires one terminal identifier without a default",
+                        );
+                    }
+                    const type = this.prepareType(mapType(element.name, this.checker));
+                    if (type.kind !== "value" && type.kind !== "array") {
+                        unsupported(
+                            element.name,
+                            "nested for-of array rest requires a dynamic array-compatible type",
+                        );
+                    }
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        property: null,
+                        computedKey: null,
+                        rest: false,
+                        arrayRest: true,
+                        type,
+                        path: [...prefix],
+                        arrayIndex: index,
+                    });
+                    continue;
+                }
                 if (
                     !ts.isBindingElement(element) ||
                     !ts.isIdentifier(element.name) ||
                     element.propertyName ||
-                    element.dotDotDotToken ||
                     element.initializer && this.nodeContainsYield(element.initializer)
                 ) {
                     unsupported(
@@ -68301,6 +68352,7 @@ class Emitter {
                     property: null,
                     computedKey: null,
                     rest: false,
+                    arrayRest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
                     path: [...prefix],
                     arrayIndex: index,
@@ -68348,6 +68400,7 @@ class Emitter {
                         property: null,
                         computedKey: null,
                         rest: true,
+                        arrayRest: false,
                         type,
                         path: [...prefix],
                         arrayIndex: null,
@@ -68423,6 +68476,7 @@ class Emitter {
                     property,
                     computedKey,
                     rest: false,
+                    arrayRest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
                     path: computedKey === null ? [...prefix, property!] : [],
                     arrayIndex: null,
@@ -68440,6 +68494,7 @@ class Emitter {
             property: string | null;
             computedKey: string | null;
             rest: boolean;
+            arrayRest: boolean;
             path: readonly string[];
             arrayIndex: number | null;
         }[],
@@ -68468,6 +68523,27 @@ class Emitter {
         return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
     }
 
+    private emitDynamicArrayRestForOf(
+        buf: CBuf,
+        sourceC: string,
+        startIndex: number,
+    ): EmitResult {
+        const sourceVar = this.freshTemp("_for_of_nested_array");
+        const restArray = this.freshTemp("_for_of_nested_array_rest");
+        const restIndex = this.freshTemp("_for_of_nested_array_rest_i");
+        const restValue = this.freshTemp("_for_of_nested_array_rest_v");
+        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
+        buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
+        buf.open(
+            `for (size_t ${restIndex} = ${startIndex}; ` +
+            `${restIndex} < (size_t)tsc_value_length(${sourceVar}); ${restIndex}++)`,
+        );
+        buf.line(`tsc_value_t ${restValue} = tsc_value_get_index(${sourceVar}, (double)${restIndex});`);
+        buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+        buf.close();
+        return { c: `tsc_value_array(${restArray})`, ty: T_VALUE };
+    }
+
     private emitDynamicObjectBindingsForOf(
         buf: CBuf,
         pattern: ts.ObjectBindingPattern,
@@ -68479,6 +68555,7 @@ class Emitter {
                 property: string | null;
                 computedKey: string | null;
                 rest: boolean;
+                arrayRest: boolean;
                 type: CType;
                 path: readonly string[];
                 arrayIndex: number | null;
@@ -68502,6 +68579,8 @@ class Emitter {
                 : `tsc_value_get_index(${objectValueC}, ${descriptor.arrayIndex}.0)`;
             const value = descriptor.rest
                 ? this.emitDynamicObjectRestForOf(buf, sourceVar, descriptors)
+                : descriptor.arrayRest
+                    ? this.emitDynamicArrayRestForOf(buf, objectValueC, descriptor.arrayIndex!)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
                     c: valueC,
                     ty: T_VALUE,
