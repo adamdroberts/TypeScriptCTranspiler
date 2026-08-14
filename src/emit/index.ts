@@ -56039,6 +56039,15 @@ class Emitter {
                                 ) return false;
                                 continue;
                             }
+                            if (ts.isBindingElement(element) && ts.isArrayBindingPattern(element.name)) {
+                                if (
+                                    restSeen ||
+                                    element.propertyName ||
+                                    element.initializer ||
+                                    !validArrayPattern(element.name)
+                                ) return false;
+                                continue;
+                            }
                             if (
                                 restSeen ||
                                 !ts.isBindingElement(element) ||
@@ -68350,10 +68359,14 @@ class Emitter {
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
-                    unsupported(
-                        element,
-                        "nested for-of array destructuring does not support deeper nested arrays",
-                    );
+                    if (element.propertyName || element.initializer) {
+                        unsupported(
+                            element,
+                            "nested for-of array bindings require a plain nested array pattern without a default",
+                        );
+                    }
+                    collectArray(element.name, [...prefix, { kind: "index", value: index }]);
+                    continue;
                 }
                 if (
                     !ts.isBindingElement(element) ||

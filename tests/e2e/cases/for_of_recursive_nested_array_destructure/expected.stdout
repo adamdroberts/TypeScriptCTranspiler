@@ -1,0 +1,5 @@
+direct direct-a:a:2:1:1:undefined:outer-a;direct-b:b:0:undefined:0:undefined:outer-b;
+custom custom-a:p:2:2:1:undefined:outer-p;custom-b:q:0:undefined:0:undefined:outer-q;
+one false lazy-a:r:2:3:1:outer-r
+two false lazy-b:s:0:undefined:0:outer-s
+three true recursive-nested-array-done

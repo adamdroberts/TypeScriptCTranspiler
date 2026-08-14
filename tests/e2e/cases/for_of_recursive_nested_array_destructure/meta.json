@@ -1,0 +1,3 @@
+{
+  "description": "recursive dynamic array bindings nested under static object properties in direct, custom-iterator, and lazy-generator for-of values"
+}
