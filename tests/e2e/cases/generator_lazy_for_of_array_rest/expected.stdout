@@ -1,0 +1,4 @@
+one false a:2:1:2
+two false b:0:undefined:undefined
+three false c:2:undefined:4
+four true array-rest-done

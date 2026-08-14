@@ -56056,7 +56056,8 @@ class Emitter {
                             ? T_VALUE
                         : null;
             if (!elemType) return false;
-            if (restIndex >= 0 && (elemType.kind !== "value" || sourceType.kind === "class")) return false;
+            const supportsRest = elemType.kind === "value" || (elemType.kind === "array" && !!elemType.elem);
+            if (restIndex >= 0 && (sourceType.kind === "class" || !supportsRest)) return false;
             if (restIndex < 0 && bindingPattern &&
                 bindingPattern.elements.some((element) => ts.isBindingElement(element) && element.initializer) &&
                 (elemType.kind !== "value" || sourceType.kind === "class")) return false;
@@ -60605,11 +60606,12 @@ class Emitter {
                         !ts.isIdentifier(restElement.name) ||
                         restElement.propertyName ||
                         restElement.initializer ||
-                        sourceElemType.kind !== "value"
+                        sourceElemType.kind !== "value" &&
+                        !(sourceElemType.kind === "array" && !!sourceElemType.elem)
                     ) {
                         unsupported(
                             decl.name,
-                            "lazy generator rest destructuring supports only a trailing identifier over dynamic values",
+                            "lazy generator rest destructuring supports only a trailing identifier over boxed or array-backed values",
                         );
                     }
                     for (const element of decl.name.elements) {
@@ -60626,8 +60628,22 @@ class Emitter {
                             );
                         }
                     }
-                    const entryValue = this.freshTemp("_lazy_value");
-                    buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                    const entryValue = sourceElemType.kind === "value"
+                        ? this.freshTemp("_lazy_value")
+                        : null;
+                    const entryArray = sourceElemType.kind === "array"
+                        ? this.freshTemp("_lazy_array")
+                        : null;
+                    if (entryValue) {
+                        buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                    } else if (entryArray) {
+                        buf.line(`${sourceElemType.c} const ${entryArray} = ${current};`);
+                    } else {
+                        unsupported(
+                            decl.name,
+                            "lazy generator rest destructuring requires boxed or array-backed values",
+                        );
+                    }
                     for (let index = 0; index < decl.name.elements.length; index++) {
                         const element = decl.name.elements[index];
                         if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
@@ -60638,20 +60654,50 @@ class Emitter {
                             const restArray = this.freshTemp("_lazy_rest");
                             const restElementIndex = this.freshTemp("_lazy_rest_i");
                             const restValue = this.freshTemp("_lazy_rest_v");
-                            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
-                            buf.open(
-                                `for (size_t ${restElementIndex} = ${index}; ${restElementIndex} < (size_t)tsc_value_length(${entryValue}); ${restElementIndex}++)`,
-                            );
-                            buf.line(
-                                `tsc_value_t ${restValue} = tsc_value_get_index(${entryValue}, (double)${restElementIndex});`,
-                            );
-                            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                            const restElementType = sourceElemType.kind === "array"
+                                ? sourceElemType.elem!
+                                : T_VALUE;
+                            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${restElementType.c}), 1);`);
+                            if (entryValue) {
+                                buf.open(
+                                    `for (size_t ${restElementIndex} = ${index}; ${restElementIndex} < (size_t)tsc_value_length(${entryValue}); ${restElementIndex}++)`,
+                                );
+                                buf.line(
+                                    `tsc_value_t ${restValue} = tsc_value_get_index(${entryValue}, (double)${restElementIndex});`,
+                                );
+                                buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                            } else {
+                                const restPresent = this.freshTemp("_lazy_rest_present");
+                                buf.open(
+                                    `for (size_t ${restElementIndex} = ${index}; ${restElementIndex} < ${entryArray!}->len; ${restElementIndex}++)`,
+                                );
+                                buf.line(`bool ${restPresent} = tsc_array_index_present(${entryArray!}, ${restElementIndex});`);
+                                buf.line(
+                                    `${restElementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${restElementType.c}, ${entryArray!}, ${restElementIndex}) : ${this.zeroValue(restElementType)};`,
+                                );
+                                buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+                                buf.open(`if (!${restPresent})`);
+                                buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
+                                buf.close();
+                            }
                             buf.close();
-                            assignBinding(element.name, { c: restArray, ty: arrayType(T_VALUE) });
-                        } else {
                             assignBinding(element.name, {
-                                c: `tsc_value_get_index(${entryValue}, ${index}.0)`,
-                                ty: T_VALUE,
+                                c: restArray,
+                                ty: arrayType(restElementType),
+                            });
+                        } else {
+                            const value = entryValue
+                                ? {
+                                    c: `tsc_value_get_index(${entryValue}, ${index}.0)`,
+                                    ty: T_VALUE,
+                                }
+                                : {
+                                    c: `tsc_array_index_present(${entryArray!}, ${index}) ? TSC_ARR(${sourceElemType.elem!.c}, ${entryArray!}, ${index}) : ${this.zeroValue(sourceElemType.elem!)}`,
+                                    ty: sourceElemType.elem!,
+                                };
+                            assignBinding(element.name, {
+                                c: value.c,
+                                ty: value.ty,
                             });
                         }
                     }
