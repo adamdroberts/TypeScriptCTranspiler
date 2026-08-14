@@ -1,0 +1,5 @@
+custom a:2;b:3;
+custom-total 5
+lazy1 false x:4
+lazy2 false y:6
+lazy3 true typed-done

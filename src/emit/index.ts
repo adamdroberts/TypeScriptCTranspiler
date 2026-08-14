@@ -56087,7 +56087,7 @@ class Emitter {
             if (objectBindingPattern && elemType.kind !== "value") return false;
             const bindingElements = arrayBindingPattern?.elements ?? objectBindingPattern?.elements ?? [];
             if (restIndex < 0 && bindingElements.some((element) => ts.isBindingElement(element) && element.initializer) &&
-                (elemType.kind !== "value" || sourceType.kind === "class")) return false;
+                ((elemType.kind !== "value" && elemType.kind !== "entry") || sourceType.kind === "class")) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -68166,14 +68166,14 @@ class Emitter {
         if (ts.isYieldExpression(initializer) || this.nodeContainsYield(element.initializer)) {
             unsupported(element.initializer, "for-of destructuring defaults cannot suspend");
         }
-        if (value.ty.kind !== "value") {
-            unsupported(element, "for-of destructuring defaults require dynamically boxed source elements");
-        }
         const fallback = this.emitExpr(element.initializer);
         const fallbackValue = this.coerce(fallback, T_VALUE, element.initializer);
+        const sourceValue = value.ty.kind === "value"
+            ? value.c
+            : this.coerce(value, T_VALUE, element);
         const valueTemp = this.freshTemp("_for_of_default");
         return {
-            c: `({ tsc_value_t ${valueTemp} = ${value.c}; tsc_value_is_undefined(${valueTemp}) ? ${fallbackValue} : ${valueTemp}; })`,
+            c: `({ tsc_value_t ${valueTemp} = ${sourceValue}; tsc_value_is_undefined(${valueTemp}) ? ${fallbackValue} : ${valueTemp}; })`,
             ty: T_VALUE,
         };
     }
