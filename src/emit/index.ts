@@ -55998,6 +55998,20 @@ class Emitter {
                 : -1;
             if (!ts.isIdentifier(decl.name)) {
                 if (objectBindingPattern) {
+                    const validArrayPattern = (pattern: ts.ArrayBindingPattern): boolean => {
+                        if (pattern.elements.length === 0) return false;
+                        for (const element of pattern.elements) {
+                            if (element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                            if (
+                                !ts.isBindingElement(element) ||
+                                !ts.isIdentifier(element.name) ||
+                                element.propertyName ||
+                                element.dotDotDotToken ||
+                                element.initializer && this.nodeContainsYield(element.initializer)
+                            ) return false;
+                        }
+                        return true;
+                    };
                     const validObjectPattern = (pattern: ts.ObjectBindingPattern, nested = false): boolean => {
                         if (pattern.elements.length === 0) return false;
                         let objectRestSeen = false;
@@ -56035,6 +56049,16 @@ class Emitter {
                                     !element.propertyName ||
                                     !this.staticPropertyName(element.propertyName) ||
                                     !validObjectPattern(element.name, true)
+                                ) return false;
+                                continue;
+                            }
+                            if (ts.isArrayBindingPattern(element.name)) {
+                                if (
+                                    element.initializer ||
+                                    computedProperty ||
+                                    !element.propertyName ||
+                                    !this.staticPropertyName(element.propertyName) ||
+                                    !validArrayPattern(element.name)
                                 ) return false;
                                 continue;
                             }
@@ -64156,7 +64180,7 @@ class Emitter {
                     if (
                         allowForOfPattern &&
                         objectPattern &&
-                        ts.isObjectBindingPattern(element.name) &&
+                        (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
                         !element.initializer &&
                         !element.dotDotDotToken &&
                         !!element.propertyName &&
@@ -68234,6 +68258,7 @@ class Emitter {
         rest: boolean;
         type: CType;
         path: string[];
+        arrayIndex: number | null;
     }[] {
         if (pattern.elements.length === 0) {
             unsupported(pattern, "for-of object destructuring requires at least one binding");
@@ -68246,7 +68271,42 @@ class Emitter {
             rest: boolean;
             type: CType;
             path: string[];
+            arrayIndex: number | null;
         }[] = [];
+        const collectArray = (
+            current: ts.ArrayBindingPattern,
+            prefix: readonly string[],
+        ): void => {
+            if (current.elements.length === 0) {
+                unsupported(current, "nested for-of array destructuring requires at least one binding");
+            }
+            for (let index = 0; index < current.elements.length; index++) {
+                const element = current.elements[index];
+                if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                if (
+                    !ts.isBindingElement(element) ||
+                    !ts.isIdentifier(element.name) ||
+                    element.propertyName ||
+                    element.dotDotDotToken ||
+                    element.initializer && this.nodeContainsYield(element.initializer)
+                ) {
+                    unsupported(
+                        element,
+                        "nested for-of array destructuring supports identifier bindings with await-free defaults",
+                    );
+                }
+                descriptors.push({
+                    element,
+                    identifier: element.name,
+                    property: null,
+                    computedKey: null,
+                    rest: false,
+                    type: this.prepareType(mapType(element.name, this.checker)),
+                    path: [...prefix],
+                    arrayIndex: index,
+                });
+            }
+        };
         const collect = (
             current: ts.ObjectBindingPattern,
             prefix: readonly string[],
@@ -68290,6 +68350,7 @@ class Emitter {
                         rest: true,
                         type,
                         path: [...prefix],
+                        arrayIndex: null,
                     });
                     restSeen = true;
                     continue;
@@ -68337,6 +68398,16 @@ class Emitter {
                     collect(element.name, [...prefix, property!], true);
                     continue;
                 }
+                if (ts.isArrayBindingPattern(element.name)) {
+                    if (element.initializer || computedProperty) {
+                        unsupported(
+                            element,
+                            "nested for-of array destructuring requires a static property without a default",
+                        );
+                    }
+                    collectArray(element.name, [...prefix, property!]);
+                    continue;
+                }
                 if (
                     !ts.isIdentifier(element.name) ||
                     element.initializer && this.nodeContainsYield(element.initializer)
@@ -68354,6 +68425,7 @@ class Emitter {
                     rest: false,
                     type: this.prepareType(mapType(element.name, this.checker)),
                     path: computedKey === null ? [...prefix, property!] : [],
+                    arrayIndex: null,
                 });
             }
         };
@@ -68369,6 +68441,7 @@ class Emitter {
             computedKey: string | null;
             rest: boolean;
             path: readonly string[];
+            arrayIndex: number | null;
         }[],
     ): EmitResult {
         const restObject = this.freshTemp("_for_of_object_rest");
@@ -68408,6 +68481,7 @@ class Emitter {
                 rest: boolean;
                 type: CType;
                 path: readonly string[];
+                arrayIndex: number | null;
             },
             value: EmitResult,
         ) => void,
@@ -68416,13 +68490,16 @@ class Emitter {
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         for (const descriptor of descriptors) {
-            const valueC = descriptor.computedKey !== null
+            const objectValueC = descriptor.computedKey !== null
                 ? `tsc_value_get_prop(${sourceVar}, ${descriptor.computedKey})`
                 : descriptor.path.reduce(
                     (source, property) =>
                         `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`,
                     sourceVar,
                 );
+            const valueC = descriptor.arrayIndex === null
+                ? objectValueC
+                : `tsc_value_get_index(${objectValueC}, ${descriptor.arrayIndex}.0)`;
             const value = descriptor.rest
                 ? this.emitDynamicObjectRestForOf(buf, sourceVar, descriptors)
                 : this.forOfBindingValueWithDefault(descriptor.element, {
