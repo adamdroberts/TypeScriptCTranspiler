@@ -1,0 +1,5 @@
+dynamic dynamic-name:10;d:2;
+array array-name:20;a:20;
+lazy1 false lazy-name:30
+lazy2 false l:3
+lazy3 true lazy-done

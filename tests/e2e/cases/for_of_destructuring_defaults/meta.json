@@ -1,0 +1,3 @@
+{
+  "description": "for-of destructuring applies bounded defaults to missing dynamic and array-backed pair elements, including lazy generators"
+}

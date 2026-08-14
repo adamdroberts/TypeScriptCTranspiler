@@ -55989,7 +55989,24 @@ class Emitter {
             if (stmt.awaitModifier || !ts.isVariableDeclarationList(stmt.initializer)) return false;
             if (stmt.initializer.declarations.length !== 1) return false;
             const decl = stmt.initializer.declarations[0]!;
-            if (!ts.isIdentifier(decl.name)) return false;
+            if (!ts.isIdentifier(decl.name)) {
+                if (!ts.isArrayBindingPattern(decl.name) || decl.name.elements.length !== 2) return false;
+                const [first, second] = decl.name.elements;
+                if (
+                    !first ||
+                    !second ||
+                    !ts.isBindingElement(first) ||
+                    !ts.isBindingElement(second) ||
+                    !ts.isIdentifier(first.name) ||
+                    !ts.isIdentifier(second.name) ||
+                    first.propertyName ||
+                    second.propertyName ||
+                    first.dotDotDotToken ||
+                    second.dotDotDotToken ||
+                    (first.initializer && this.nodeContainsYield(first.initializer)) ||
+                    (second.initializer && this.nodeContainsYield(second.initializer))
+                ) return false;
+            }
             const yieldedSource = this.directLazyYieldCondition(stmt.expression);
             if (this.nodeContainsYield(stmt.expression) && !yieldedSource) return false;
             const sourceType = yieldedSource
@@ -56017,6 +56034,9 @@ class Emitter {
                             ? T_VALUE
                         : null;
             if (!elemType) return false;
+            if (ts.isArrayBindingPattern(decl.name) &&
+                decl.name.elements.some((element) => ts.isBindingElement(element) && element.initializer) &&
+                (elemType.kind !== "value" || sourceType.kind === "class")) return false;
             return this.isValidLazyGeneratorStatement(stmt.statement, loopDepth + 1);
         }
 
@@ -60561,8 +60581,6 @@ class Emitter {
                     !ts.isIdentifier(second.name) ||
                     first.propertyName ||
                     second.propertyName ||
-                    first.initializer ||
-                    second.initializer ||
                     first.dotDotDotToken ||
                     second.dotDotDotToken
                 ) {
@@ -60575,22 +60593,34 @@ class Emitter {
                     const valueType = sourceElemType.elem ?? T_VOID;
                     assignBinding(
                         first.name,
-                        { c: this.objectEntryKeyValue(entryVar, keyType), ty: keyType },
+                        this.forOfBindingValueWithDefault(first, {
+                            c: this.objectEntryKeyValue(entryVar, keyType),
+                            ty: keyType,
+                        }),
                     );
                     assignBinding(
                         second.name,
-                        { c: this.objectEntryValue(entryVar, valueType), ty: valueType },
+                        this.forOfBindingValueWithDefault(second, {
+                            c: this.objectEntryValue(entryVar, valueType),
+                            ty: valueType,
+                        }),
                     );
                 } else if (sourceElemType.kind === "value") {
                     const entryValue = this.freshTemp("_lazy_value");
                     buf.line(`tsc_value_t const ${entryValue} = ${current};`);
                     assignBinding(
                         first.name,
-                        { c: `tsc_value_get_index(${entryValue}, 0.0)`, ty: T_VALUE },
+                        this.forOfBindingValueWithDefault(first, {
+                            c: `tsc_value_get_index(${entryValue}, 0.0)`,
+                            ty: T_VALUE,
+                        }),
                     );
                     assignBinding(
                         second.name,
-                        { c: `tsc_value_get_index(${entryValue}, 1.0)`, ty: T_VALUE },
+                        this.forOfBindingValueWithDefault(second, {
+                            c: `tsc_value_get_index(${entryValue}, 1.0)`,
+                            ty: T_VALUE,
+                        }),
                     );
                 } else {
                     unsupported(decl.name, "lazy generator for-of destructuring requires entry or dynamic value elements");
@@ -63898,7 +63928,7 @@ class Emitter {
             field: string;
         }> = [];
         if (fn.body && ts.isBlock(fn.body)) {
-            const bindingIdentifiers = (name: ts.BindingName): ts.Identifier[] => {
+            const bindingIdentifiers = (name: ts.BindingName, allowForOfDefaults: boolean): ts.Identifier[] => {
                 if (ts.isIdentifier(name)) return [name];
                 const identifiers: ts.Identifier[] = [];
                 for (const element of name.elements) {
@@ -63906,7 +63936,7 @@ class Emitter {
                         !ts.isBindingElement(element) ||
                         !ts.isIdentifier(element.name) ||
                         element.propertyName ||
-                        element.initializer ||
+                        (element.initializer && !allowForOfDefaults) ||
                         element.dotDotDotToken
                     ) {
                         unsupported(name, "lazy generator locals support only identifier bindings in array patterns");
@@ -63921,7 +63951,9 @@ class Emitter {
                         if (ts.isCatchClause(parent)) return;
                         if (ts.isFunctionLike(parent) || ts.isClassLike(parent)) break;
                     }
-                    for (const identifier of bindingIdentifiers(node.name)) {
+                    const declarationList = ts.isVariableDeclarationList(node.parent) ? node.parent : null;
+                    const allowForOfDefaults = !!declarationList && ts.isForOfStatement(declarationList.parent);
+                    for (const identifier of bindingIdentifiers(node.name, allowForOfDefaults)) {
                         const symbol = this.symbolForIdentifier(identifier);
                         if (!symbol) unsupported(identifier, "could not resolve lazy generator local symbol");
                         let type = this.variableStorageType(this.prepareType(mapType(identifier, this.checker)));
@@ -67433,12 +67465,10 @@ class Emitter {
                 !ts.isIdentifier(valueEl.name) ||
                 keyEl.propertyName ||
                 valueEl.propertyName ||
-                keyEl.initializer ||
-                valueEl.initializer ||
                 keyEl.dotDotDotToken ||
                 valueEl.dotDotDotToken
             ) {
-                unsupported(entryBindingDecl.name, "custom iterator destructuring must be [keyIdentifier, valueIdentifier]");
+                unsupported(entryBindingDecl.name, "custom iterator destructuring must be [keyIdentifier, valueIdentifier] bindings");
             }
             const iterVar = this.freshTemp("_it");
             const stepVar = this.freshTemp("_step");
@@ -67462,8 +67492,15 @@ class Emitter {
             if (valueType.kind === "entry") {
                 const entryValueType = valueType.elem ?? T_VOID;
                 buf.line(`${valueType.c}${qual} ${entryVar} = ${stepVar}->value;`);
-                buf.line(`tsc_str_t*${qual} ${keyName} = ${entryVar}.key;`);
-                buf.line(`${entryValueType.c}${qual} ${valueName} = ${this.objectEntryValue(entryVar, entryValueType)};`);
+                const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
+                const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
+                const keyValue: EmitResult = { c: `${entryVar}.key`, ty: T_STRING };
+                const elementValue: EmitResult = {
+                    c: this.objectEntryValue(entryVar, entryValueType),
+                    ty: entryValueType,
+                };
+                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(this.forOfBindingValueWithDefault(keyEl, keyValue), keyType, keyEl.name)};`);
+                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(this.forOfBindingValueWithDefault(valueEl, elementValue), elementValueType, valueEl.name)};`);
             } else if (valueType.kind === "value") {
                 const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
                 const elementValueType = this.variableStorageType(this.prepareType(mapType(valueEl.name, this.checker)));
@@ -67476,8 +67513,8 @@ class Emitter {
                     ty: T_VALUE,
                 };
                 buf.line(`tsc_value_t const ${entryVar} = ${stepVar}->value;`);
-                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(keyValue, keyType, keyEl.name)};`);
-                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(elementValue, elementValueType, valueEl.name)};`);
+                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(this.forOfBindingValueWithDefault(keyEl, keyValue), keyType, keyEl.name)};`);
+                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(this.forOfBindingValueWithDefault(valueEl, elementValue), elementValueType, valueEl.name)};`);
             } else if (valueType.kind === "array" && valueType.elem) {
                 const elementType = valueType.elem;
                 const keyType = this.variableStorageType(this.prepareType(mapType(keyEl.name, this.checker)));
@@ -67491,8 +67528,8 @@ class Emitter {
                     ty: elementType,
                 };
                 buf.line(`tsc_array_t* const ${entryVar} = ${stepVar}->value;`);
-                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(keyValue, keyType, keyEl.name)};`);
-                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(elementValue, elementValueType, valueEl.name)};`);
+                buf.line(`${keyType.c}${qual} ${keyName} = ${this.coerce(this.forOfBindingValueWithDefault(keyEl, keyValue), keyType, keyEl.name)};`);
+                buf.line(`${elementValueType.c}${qual} ${valueName} = ${this.coerce(this.forOfBindingValueWithDefault(valueEl, elementValue), elementValueType, valueEl.name)};`);
             } else {
                 unsupported(fos.initializer, "custom iterator destructuring requires ObjectEntry, dynamic, or array-backed values");
             }
@@ -67830,6 +67867,27 @@ class Emitter {
         }
         const base = this.baseClassDecl(cd);
         return base ? this.findNamedClassMethod(base, name) : null;
+    }
+
+    private forOfBindingValueWithDefault(
+        element: ts.BindingElement,
+        value: EmitResult,
+    ): EmitResult {
+        if (!element.initializer) return value;
+        const initializer = this.unwrapTransparentExpression(element.initializer);
+        if (ts.isYieldExpression(initializer) || this.nodeContainsYield(element.initializer)) {
+            unsupported(element.initializer, "for-of destructuring defaults cannot suspend");
+        }
+        if (value.ty.kind !== "value") {
+            unsupported(element, "for-of destructuring defaults require dynamically boxed source elements");
+        }
+        const fallback = this.emitExpr(element.initializer);
+        const fallbackValue = this.coerce(fallback, T_VALUE, element.initializer);
+        const valueTemp = this.freshTemp("_for_of_default");
+        return {
+            c: `({ tsc_value_t ${valueTemp} = ${value.c}; tsc_value_is_undefined(${valueTemp}) ? ${fallbackValue} : ${valueTemp}; })`,
+            ty: T_VALUE,
+        };
     }
 
     private emitDynamicArrayBindingForOf(
