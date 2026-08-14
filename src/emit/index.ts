@@ -109,6 +109,7 @@ interface ForOfTypedObjectBindingDescriptor {
     accessPath: ForOfTypedObjectAccessSegment[];
     fieldType: CType;
     type: CType;
+    arrayRestIndex: number | null;
 }
 
 type ForOfTypedObjectAccessSegment =
@@ -68730,6 +68731,38 @@ class Emitter {
             for (let index = 0; index < current.elements.length; index++) {
                 const element = current.elements[index];
                 if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+                if (ts.isBindingElement(element) && element.dotDotDotToken) {
+                    if (
+                        index !== current.elements.length - 1 ||
+                        !ts.isIdentifier(element.name) ||
+                        element.propertyName ||
+                        element.initializer
+                    ) {
+                        unsupported(
+                            element,
+                            "nested typed for-of array rest requires one terminal identifier without a default",
+                        );
+                    }
+                    const restType = this.prepareType(mapType(element.name, this.checker));
+                    if (
+                        restType.kind !== "value" &&
+                        (restType.kind !== "array" || !restType.elem)
+                    ) {
+                        unsupported(
+                            element.name,
+                            "nested typed for-of array rest requires a typed array-compatible binding",
+                        );
+                    }
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        accessPath: [...arrayPrefix],
+                        fieldType: arrayType,
+                        type: restType,
+                        arrayRestIndex: index,
+                    });
+                    continue;
+                }
                 if (
                     !ts.isBindingElement(element) ||
                     element.dotDotDotToken ||
@@ -68788,6 +68821,7 @@ class Emitter {
                     accessPath,
                     fieldType: elementType,
                     type: this.prepareType(mapType(element.name, this.checker)),
+                    arrayRestIndex: null,
                 });
             }
         };
@@ -68882,6 +68916,7 @@ class Emitter {
                     accessPath,
                     fieldType,
                     type: this.prepareType(mapType(element.name, this.checker)),
+                    arrayRestIndex: null,
                 });
             }
         };
@@ -68902,6 +68937,38 @@ class Emitter {
         }, sourceC);
     }
 
+    private emitTypedArrayRestForOf(
+        buf: CBuf,
+        sourceC: string,
+        sourceType: CType,
+        startIndex: number,
+        node: ts.Node,
+    ): EmitResult {
+        if (sourceType.kind !== "array" || !sourceType.elem) {
+            unsupported(node, "typed for-of array rest requires a typed array source");
+        }
+        const elementType = sourceType.elem;
+        const sourceVar = this.freshTemp("_typed_array_rest_source");
+        const restArray = this.freshTemp("_typed_array_rest");
+        const restIndex = this.freshTemp("_typed_array_rest_i");
+        const restValue = this.freshTemp("_typed_array_rest_v");
+        const restPresent = this.freshTemp("_typed_array_rest_present");
+        buf.line(`tsc_array_t* const ${sourceVar} = ${sourceC};`);
+        buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${elementType.c}), 1);`);
+        buf.open(`if (${sourceVar} != NULL)`);
+        buf.line(`tsc_array_materialize_all(${sourceVar});`);
+        buf.open(`for (size_t ${restIndex} = ${startIndex}; ${restIndex} < ${sourceVar}->len; ${restIndex}++)`);
+        buf.line(`bool ${restPresent} = tsc_array_index_present(${sourceVar}, ${restIndex});`);
+        buf.line(`${elementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${elementType.c}, ${sourceVar}, ${restIndex}) : ${this.zeroValue(elementType)};`);
+        buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+        buf.open(`if (!${restPresent})`);
+        buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
+        buf.close();
+        buf.close();
+        buf.close();
+        return { c: restArray, ty: arrayType(elementType) };
+    }
+
     private emitTypedObjectBindingsForOf(
         buf: CBuf,
         pattern: ts.ObjectBindingPattern,
@@ -68915,10 +68982,19 @@ class Emitter {
         }
         const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType);
         for (const descriptor of descriptors) {
-            const value = this.forOfBindingValueWithDefault(descriptor.element, {
-                c: this.typedObjectBindingAccess(sourceC, descriptor.accessPath),
-                ty: descriptor.fieldType,
-            });
+            const sourceValue = this.typedObjectBindingAccess(sourceC, descriptor.accessPath);
+            const value = descriptor.arrayRestIndex === null
+                ? this.forOfBindingValueWithDefault(descriptor.element, {
+                    c: sourceValue,
+                    ty: descriptor.fieldType,
+                })
+                : this.emitTypedArrayRestForOf(
+                    buf,
+                    sourceValue,
+                    descriptor.fieldType,
+                    descriptor.arrayRestIndex,
+                    descriptor.element,
+                );
             assign(descriptor, value);
         }
     }
