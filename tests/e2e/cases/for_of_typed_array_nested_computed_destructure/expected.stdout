@@ -1,0 +1,5 @@
+direct direct-red-a:direct-keep-a:undefined:direct-blue-a;direct-blue-c:direct-keep-c:direct-red-c:undefined; 2
+custom custom-red-a:custom-keep-a;custom-blue-c:custom-keep-c; 2
+lazy1 false lazy-red-a:lazy-keep-a
+lazy2 false lazy-blue-c:lazy-keep-c
+lazy3 true typed-array-nested-computed-done 2

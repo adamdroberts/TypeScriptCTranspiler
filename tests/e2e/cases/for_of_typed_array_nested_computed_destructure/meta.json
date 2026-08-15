@@ -1,0 +1,3 @@
+{
+  "description": "typed for-of array-element object patterns support yield-free finite-union computed keys and object-rest exclusion across direct arrays, custom iterators, and lazy generators"
+}

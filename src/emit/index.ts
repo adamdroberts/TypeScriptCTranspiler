@@ -69385,6 +69385,19 @@ class Emitter {
         return visitObject(pattern);
     }
 
+    private typedArrayBindingHasRuntimeComputedKey(pattern: ts.ArrayBindingPattern): boolean {
+        return pattern.elements.some((element) => {
+            if (!element || !ts.isBindingElement(element)) return false;
+            if (ts.isObjectBindingPattern(element.name)) {
+                return this.typedObjectBindingHasRuntimeComputedKey(element.name);
+            }
+            if (ts.isArrayBindingPattern(element.name)) {
+                return this.typedArrayBindingHasRuntimeComputedKey(element.name);
+            }
+            return false;
+        });
+    }
+
     private emitTypedObjectRestForOf(
         buf: CBuf,
         sourceC: string,
@@ -69458,6 +69471,151 @@ class Emitter {
         return { c: restArray, ty: arrayType(elementType) };
     }
 
+    private emitTypedArrayBindingPatternForOf(
+        buf: CBuf,
+        pattern: ts.ArrayBindingPattern,
+        sourceC: string,
+        sourceType: CType,
+        sourceTsType: ts.Type,
+        assign: (descriptor: ForOfTypedObjectBindingDescriptor, value: EmitResult) => void,
+    ): void {
+        if (pattern.elements.length === 0) {
+            unsupported(pattern, "typed for-of array destructuring requires at least one binding");
+        }
+        if (sourceType.kind !== "array" || !sourceType.elem) {
+            unsupported(pattern, "typed for-of array destructuring requires a typed array element");
+        }
+        const elementType = sourceType.elem;
+        const elementTsType = this.forOfTypedArrayElementTsType(sourceTsType);
+        if (!elementTsType) {
+            unsupported(pattern, "typed for-of array destructuring could not resolve the element type");
+        }
+        for (let index = 0; index < pattern.elements.length; index++) {
+            const element = pattern.elements[index];
+            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (ts.isBindingElement(element) && element.dotDotDotToken) {
+                if (
+                    index !== pattern.elements.length - 1 ||
+                    !ts.isIdentifier(element.name) ||
+                    element.propertyName ||
+                    element.initializer
+                ) {
+                    unsupported(
+                        element,
+                        "typed for-of array rest requires one terminal identifier without a default",
+                    );
+                }
+                const restType = this.prepareType(mapType(element.name, this.checker));
+                if (
+                    restType.kind !== "value" &&
+                    (restType.kind !== "array" || !restType.elem)
+                ) {
+                    unsupported(
+                        element.name,
+                        "typed for-of array rest requires a boxed or typed array-compatible binding",
+                    );
+                }
+                assign(
+                    {
+                        element,
+                        identifier: element.name,
+                        accessPath: [],
+                        fieldType: sourceType,
+                        fieldTsType: sourceTsType,
+                        type: restType,
+                        arrayRestIndex: index,
+                        objectRest: false,
+                        objectRestKeys: [],
+                    },
+                    this.emitTypedArrayRestForOf(buf, sourceC, sourceType, index, element),
+                );
+                continue;
+            }
+            if (
+                !ts.isBindingElement(element) ||
+                element.dotDotDotToken ||
+                element.propertyName
+            ) {
+                unsupported(
+                    element,
+                    "typed for-of array bindings support fixed identifier/object/array elements without rest",
+                );
+            }
+            if (element.initializer && this.nodeContainsYield(element.initializer)) {
+                unsupported(
+                    element,
+                    "typed for-of array bindings support await-free defaults only",
+                );
+            }
+            const sourceValue = this.typedObjectBindingAccess(sourceC, [
+                { kind: "index", value: index, type: elementType },
+            ]);
+            if (ts.isObjectBindingPattern(element.name)) {
+                if (element.initializer) {
+                    unsupported(
+                        element,
+                        "typed for-of array object bindings do not support a default for the nested object",
+                    );
+                }
+                if (elementType.kind !== "class" && elementType.kind !== "array") {
+                    unsupported(
+                        element.name,
+                        "typed for-of array object bindings require typed object or array elements",
+                    );
+                }
+                this.emitTypedObjectBindingsForOf(
+                    buf,
+                    element.name,
+                    sourceValue,
+                    elementType,
+                    elementTsType,
+                    assign,
+                );
+                continue;
+            }
+            if (ts.isArrayBindingPattern(element.name)) {
+                if (element.initializer) {
+                    unsupported(
+                        element,
+                        "typed for-of arrays do not support a default for the nested array",
+                    );
+                }
+                this.emitTypedArrayBindingPatternForOf(
+                    buf,
+                    element.name,
+                    sourceValue,
+                    elementType,
+                    elementTsType,
+                    assign,
+                );
+                continue;
+            }
+            if (!ts.isIdentifier(element.name)) {
+                unsupported(
+                    element,
+                    "typed for-of array bindings support identifier elements without rest",
+                );
+            }
+            assign(
+                {
+                    element,
+                    identifier: element.name,
+                    accessPath: [],
+                    fieldType: elementType,
+                    fieldTsType: elementTsType,
+                    type: this.prepareType(mapType(element.name, this.checker)),
+                    arrayRestIndex: null,
+                    objectRest: false,
+                    objectRestKeys: [],
+                },
+                this.forOfBindingValueWithDefault(element, {
+                    c: sourceValue,
+                    ty: elementType,
+                }),
+            );
+        }
+    }
+
     private emitTypedArrayBindingsForOf(
         buf: CBuf,
         pattern: ts.ArrayBindingPattern,
@@ -69466,6 +69624,17 @@ class Emitter {
         sourceTsType: ts.Type,
         assign: (descriptor: ForOfTypedObjectBindingDescriptor, value: EmitResult) => void,
     ): void {
+        if (this.typedArrayBindingHasRuntimeComputedKey(pattern)) {
+            this.emitTypedArrayBindingPatternForOf(
+                buf,
+                pattern,
+                sourceC,
+                sourceType,
+                sourceTsType,
+                assign,
+            );
+            return;
+        }
         const descriptors = this.forOfTypedArrayBindingDescriptors(
             pattern,
             sourceType,
