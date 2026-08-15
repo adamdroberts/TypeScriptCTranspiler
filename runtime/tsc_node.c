@@ -3398,8 +3398,19 @@ static tsc_value_t tsc_net_socket_end(void* env, tsc_value_t this_arg, tsc_array
 }
 
 static tsc_value_t tsc_net_socket_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)args;
-    tsc_net_socket_close_internal((tsc_net_socket_t*)env);
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    tsc_value_t callback = tsc_value_undefined();
+    if (args && args->len > 0 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 0))) {
+        callback = TSC_ARR(tsc_value_t, args, 0);
+    }
+    if (socket && socket->close_emitted) {
+        tsc_net_socket_invoke_callback(callback);
+        return this_arg;
+    }
+    if (socket) {
+        tsc_net_register_listener(&socket->event, "close", callback, true);
+    }
+    tsc_net_socket_close_internal(socket);
     return this_arg;
 }
 

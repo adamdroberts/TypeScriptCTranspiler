@@ -1,0 +1,3 @@
+{
+  "description": "net.Socket destroy close callback and final lifecycle state"
+}
