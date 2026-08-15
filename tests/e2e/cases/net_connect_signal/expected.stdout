@@ -1,0 +1,3 @@
+pre: error:pre-stop|close true
+post: error:post-stop|close true
+server close false

@@ -3687,6 +3687,8 @@ typedef struct tsc_net_socket {
     double idle_timeout_ms;
     double poll_timer;
     bool refed;
+    tsc_value_t abort_signal;
+    bool abort_requested;
     tsc_net_server_t* server;
 } tsc_net_socket_t;
 
@@ -3910,6 +3912,23 @@ static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number
     if (!socket || !socket->event.emitter) return;
     const char* message = strerror(error_number > 0 ? error_number : EIO);
     tsc_child_emit_one_value(socket->event.emitter, "error", tsc_value_string(tsc_str_from_cstr(message)));
+}
+
+static tsc_value_t tsc_net_socket_abort_reason(const tsc_net_socket_t* socket) {
+    if (!socket || tsc_value_is_nullish(socket->abort_signal)) {
+        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    }
+    tsc_value_t reason = tsc_value_get_prop(socket->abort_signal, tsc_str_from_lit("reason", 6));
+    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
+        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    }
+    return reason;
+}
+
+static void tsc_net_socket_abort(void* env) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (!socket || socket->close_emitted) return;
+    socket->abort_requested = true;
 }
 
 static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
@@ -4352,6 +4371,7 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     socket->poll_timer = 0.0;
     socket->refed = true;
     socket->end_callback = tsc_value_undefined();
+    socket->abort_signal = tsc_value_undefined();
     socket->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();
     socket->event.object = object;
@@ -4491,6 +4511,12 @@ static void tsc_net_socket_read(tsc_net_socket_t* socket) {
 static void tsc_net_socket_poll(void* env) {
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
     if (!socket || socket->destroyed || socket->fd < 0) return;
+    if (socket->abort_requested) {
+        socket->abort_requested = false;
+        tsc_child_emit_one_value(socket->event.emitter, "error", tsc_net_socket_abort_reason(socket));
+        tsc_net_socket_close_internal(socket);
+        return;
+    }
     struct pollfd descriptor;
     descriptor.fd = socket->fd;
     descriptor.events = POLLHUP | POLLERR;
@@ -4804,7 +4830,7 @@ typedef struct {
     bool keep_alive_initial_delay_set;
 } tsc_net_connect_socket_options_t;
 
-static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int address_family, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, const tsc_net_connect_socket_options_t* socket_options, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
+static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int address_family, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, tsc_value_t abort_signal, const tsc_net_connect_socket_options_t* socket_options, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
     }
@@ -4905,12 +4931,18 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int ad
     if (tsc_value_is_callable(connect_listener)) {
         tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
     }
+    if (socket) {
+        socket->abort_signal = abort_signal;
+        if (!tsc_value_is_nullish(abort_signal)) {
+            tsc_abort_signal_add_callback(abort_signal, tsc_net_socket_abort, socket);
+        }
+    }
     if (out_socket) *out_socket = socket;
     return socket_value;
 }
 
 tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
-    return tsc_net_connect_internal(port, host, AF_UNSPEC, NULL, 0.0, false, 0.0, false, NULL, connect_listener, NULL);
+    return tsc_net_connect_internal(port, host, AF_UNSPEC, NULL, 0.0, false, 0.0, false, tsc_value_undefined(), NULL, connect_listener, NULL);
 }
 
 tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_listener) {
@@ -4968,6 +5000,7 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
         timeout_ms = tsc_value_as_num(timeout_value);
         timeout_set = true;
     }
+    tsc_value_t abort_signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
     tsc_net_connect_socket_options_t socket_options;
     memset(&socket_options, 0, sizeof(socket_options));
     tsc_value_t no_delay_value = tsc_value_get_prop(options, tsc_str_from_lit("noDelay", 7));
@@ -4996,7 +5029,7 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
         socket_options.keep_alive_initial_delay = tsc_value_as_num(keep_alive_delay_value);
         socket_options.keep_alive_initial_delay_set = true;
     }
-    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, address_family, local_address, local_port, local_port_set, timeout_ms, timeout_set, &socket_options, connect_listener, NULL);
+    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, address_family, local_address, local_port, local_port_set, timeout_ms, timeout_set, abort_signal, &socket_options, connect_listener, NULL);
 }
 
 static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
@@ -6534,7 +6567,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
         client->socket = tls
             ? tsc_net_tls_connect_internal(port, hostname, reject_unauthorized, servername, connect_listener, &client->native_socket)
-            : tsc_net_connect_internal(port, hostname, AF_UNSPEC, NULL, 0.0, false, 0.0, false, NULL, connect_listener, &client->native_socket);
+            : tsc_net_connect_internal(port, hostname, AF_UNSPEC, NULL, 0.0, false, 0.0, false, tsc_value_undefined(), NULL, connect_listener, &client->native_socket);
         if (client->poolable) {
             client->pool_entry = tsc_http_client_pool_create(client, hostname, port, tls, reject_unauthorized, servername);
         }
