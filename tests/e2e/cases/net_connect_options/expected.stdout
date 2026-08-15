@@ -1,0 +1,5 @@
+connect options
+first data: ok
+createConnection options
+second data: ok
+server close

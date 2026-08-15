@@ -3890,6 +3890,25 @@ tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_li
     return tsc_net_connect_internal(port, host, connect_listener, NULL);
 }
 
+tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_listener) {
+    if (tsc_value_is_nullish(options)) {
+        tsc_throw_str(tsc_str_from_cstr("net.connect options must be an object"));
+    }
+    tsc_value_t port_value = tsc_value_get_prop(options, tsc_str_from_lit("port", 4));
+    if (tsc_value_is_nullish(port_value)) {
+        tsc_throw_str(tsc_str_from_cstr("net.connect options.port is required"));
+    }
+    tsc_value_t host_value = tsc_value_get_prop(options, tsc_str_from_lit("host", 4));
+    tsc_str_t* host = NULL;
+    if (!tsc_value_is_nullish(host_value)) {
+        host = tsc_value_as_string(host_value);
+        if (!host) {
+            tsc_throw_str(tsc_str_from_cstr("net.connect options.host must be a string"));
+        }
+    }
+    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, connect_listener, NULL);
+}
+
 static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("https.request port must be an integer from 1 to 65535"));

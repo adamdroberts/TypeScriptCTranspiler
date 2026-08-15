@@ -2644,6 +2644,10 @@ interface NetSocket {
     ref(...ignored: any[]): this;
     unref(...ignored: any[]): this;
 }
+interface NetConnectOptions {
+    port: number;
+    host?: string;
+}
 interface NetServer {
     readonly listening: boolean;
     readonly connections: number;
@@ -2666,8 +2670,10 @@ interface Net {
     isIPv6(input: string, ...ignored: any[]): boolean;
     SocketAddress: SocketAddressConstructor;
     createServer(connectionListener?: (socket: NetSocket) => void, ...ignored: any[]): NetServer;
+    connect(options: NetConnectOptions, callback?: () => void, ...ignored: any[]): NetSocket;
     connect(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
     connect(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
+    createConnection(options: NetConnectOptions, callback?: () => void, ...ignored: any[]): NetSocket;
     createConnection(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
     createConnection(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
 }
@@ -2678,8 +2684,10 @@ declare module "net" {
     export function isIPv6(input: string, ...ignored: any[]): boolean;
     export const SocketAddress: SocketAddressConstructor;
     export function createServer(connectionListener?: (socket: NetSocket) => void, ...ignored: any[]): NetServer;
+    export function connect(options: NetConnectOptions, callback?: () => void, ...ignored: any[]): NetSocket;
     export function connect(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
     export function connect(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function createConnection(options: NetConnectOptions, callback?: () => void, ...ignored: any[]): NetSocket;
     export function createConnection(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
     export function createConnection(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
     const defaultNet: Net;
@@ -2691,8 +2699,10 @@ declare module "node:net" {
     export function isIPv6(input: string, ...ignored: any[]): boolean;
     export const SocketAddress: SocketAddressConstructor;
     export function createServer(connectionListener?: (socket: NetSocket) => void, ...ignored: any[]): NetServer;
+    export function connect(options: NetConnectOptions, callback?: () => void, ...ignored: any[]): NetSocket;
     export function connect(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
     export function connect(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
+    export function createConnection(options: NetConnectOptions, callback?: () => void, ...ignored: any[]): NetSocket;
     export function createConnection(port: number, callback?: () => void, ...ignored: any[]): NetSocket;
     export function createConnection(port: number, host: string, callback?: () => void, ...ignored: any[]): NetSocket;
     const defaultNet: Net;

@@ -83899,6 +83899,20 @@ class Emitter {
             if (call.arguments.length < 1) unsupported(call, `net.${method} expects a port`);
             const portNode = call.arguments[0]!;
             const port = this.emitExpr(portNode);
+            if (this.prepareType(port.ty).kind === "value") {
+                const listenerNode = call.arguments[1];
+                const listener = listenerNode
+                    ? this.emitExpr(listenerNode)
+                    : { c: "tsc_value_undefined()", ty: T_VALUE };
+                if (listenerNode && this.prepareType(listener.ty).kind !== "function") {
+                    unsupported(listenerNode, `net.${method} options callback must be a function`);
+                }
+                return this.emitSequencedExpr(T_VALUE, [
+                    { value: port, target: T_VALUE, node: portNode },
+                    { value: listener, target: T_VALUE, node: listenerNode },
+                    ...this.ignoredArgumentSpecs(call.arguments, listenerNode ? 2 : 1),
+                ], ([optionsC, listenerC]) => `tsc_net_connect_options(${optionsC}, ${listenerC})`);
+            }
             let hostNode: ts.Expression | undefined;
             let listenerNode: ts.Expression | undefined;
             let secondValue: EmitResult | undefined;
