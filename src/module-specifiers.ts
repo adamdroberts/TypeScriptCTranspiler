@@ -4853,9 +4853,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (inputs.length !== 1) return null;
 
         const separatorArg = call.arguments[0];
-        const separators = !separatorArg || isStaticUndefinedExpression(separatorArg)
+        const regexps = separatorArg && !isStaticUndefinedExpression(separatorArg)
+            ? resolveFreshStaticRegExpRecords(separatorArg)
+            : [];
+        const separators: Array<string | RegExp | undefined> = !separatorArg || isStaticUndefinedExpression(separatorArg)
             ? [undefined]
-            : resolve(separatorArg);
+            : regexps.length > 0
+                ? regexps
+                : resolve(separatorArg);
         if (separators.length !== 1) return null;
 
         const limitArg = call.arguments[1];
@@ -4866,11 +4871,13 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const limit = limits[0];
         if (limit !== undefined && (limit < 0 || !Number.isSafeInteger(limit))) return null;
 
-        const parts = separators[0] === undefined
+        const parts: unknown[] = separators[0] === undefined
             ? [inputs[0]!]
             : inputs[0]!.split(separators[0], limit);
         if (parts.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
-        return ts.factory.createArrayLiteralExpression(parts.map((part) => ts.factory.createStringLiteral(part)));
+        const stringParts = parts.filter((part): part is string => typeof part === "string");
+        if (stringParts.length !== parts.length) return null;
+        return ts.factory.createArrayLiteralExpression(stringParts.map((part) => ts.factory.createStringLiteral(part)));
     };
 
     const resolveStaticStringRegExpSearchCall = (call: ts.CallExpression): string[] => {
@@ -5688,9 +5695,15 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
         const values = resolve(callee.expression);
         if (values.length === 0) return [];
-        const separators = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0]!)
+        const separatorArg = call.arguments[0];
+        const regexps = separatorArg && !isStaticUndefinedExpression(separatorArg)
+            ? resolveFreshStaticRegExpRecords(separatorArg)
+            : [];
+        const separators: Array<string | RegExp | undefined> = !separatorArg || isStaticUndefinedExpression(separatorArg)
             ? [undefined]
-            : resolve(call.arguments[0]!);
+            : regexps.length > 0
+                ? regexps
+                : resolve(separatorArg);
         if (separators.length === 0) return [];
         const limits = !call.arguments[1] || isStaticUndefinedExpression(call.arguments[1]!)
             ? [undefined]
@@ -5702,13 +5715,13 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const value of values) {
             for (const separator of separators) {
                 for (const limit of limits) {
-                    const parts = separator === undefined
+                    const parts: unknown[] = separator === undefined
                         ? [value]
                         : value.split(separator, limit);
                     if (parts.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                     for (const key of keys) {
                         const part = parts[key];
-                        if (part === undefined) return [];
+                        if (typeof part !== "string") return [];
                         out.push(part);
                         if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                     }
