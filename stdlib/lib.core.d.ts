@@ -1636,9 +1636,11 @@ interface FSFileWritevResult {
 }
 interface FSFileHandleReadFileBufferOptions {
     encoding?: FSBufferEncoding | null;
+    signal?: any;
 }
 interface FSFileHandleReadFileStringOptions {
     encoding: FSReadFileStringEncoding;
+    signal?: any;
 }
 interface FSFileHandleReadLinesOptions {
     encoding?: BufferEncoding | null;

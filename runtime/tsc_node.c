@@ -7301,15 +7301,19 @@ static bool tsc_fs_file_handle_read_file_options(
     tsc_value_t options,
     bool* want_buffer,
     tsc_str_t** result_encoding,
+    tsc_value_t* signal_out,
     bool allow_extended_encodings,
     bool read_lines
 ) {
     *want_buffer = true;
     *result_encoding = NULL;
+    if (signal_out) *signal_out = tsc_value_undefined();
     if (tsc_value_is_nullish(options)) return true;
 
     tsc_value_t encoding_value = options;
     if (value_is_box(options) && value_tag(options) == TSC_VALUE_TAG_OBJECT) {
+        tsc_value_t option_signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
+        if (signal_out && !tsc_value_is_nullish(option_signal)) *signal_out = option_signal;
         encoding_value = tsc_value_get_prop(options, tsc_str_from_lit("encoding", 8));
     }
     if (tsc_value_is_nullish(encoding_value)) return true;
@@ -7361,14 +7365,17 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
 
     bool want_buffer = true;
     tsc_str_t* result_encoding = NULL;
+    tsc_value_t option_signal = tsc_value_undefined();
     tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     if (!tsc_fs_file_handle_read_file_options(
         options,
         &want_buffer,
         &result_encoding,
+        &option_signal,
         allow_extended_encodings,
         read_lines
     )) return NULL;
+    if (!tsc_value_is_nullish(option_signal)) signal = option_signal;
 
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_read_file_async_t));

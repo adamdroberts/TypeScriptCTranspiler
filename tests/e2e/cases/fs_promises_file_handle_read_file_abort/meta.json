@@ -1,0 +1,3 @@
+{
+  "description": "FileHandle.readFile supports pending and pre-aborted AbortSignal cancellation without closing the caller-owned descriptor"
+}

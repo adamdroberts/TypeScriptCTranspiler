@@ -1,0 +1,4 @@
+pending: rejected:pending stop
+pre-aborted: rejected:pre stop
+closed-after-abort: true
+error: pending
