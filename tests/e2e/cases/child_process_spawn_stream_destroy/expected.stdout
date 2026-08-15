@@ -1,0 +1,2 @@
+destroy: true:true:false:true
+close: error:stop|callback:stop|second-callback true true

@@ -1421,22 +1421,30 @@ static tsc_value_t tsc_child_stream_is_paused(void* env, tsc_value_t this_arg, t
     return tsc_value_bool(stream && stream->paused);
 }
 
-static void tsc_child_stream_invoke_callback(tsc_value_t callback) {
+static void tsc_child_stream_invoke_callback_value(tsc_value_t callback, tsc_value_t value) {
     if (!tsc_value_is_callable(callback)) return;
-    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
-    (void)tsc_value_apply_function(callback, tsc_value_undefined(), tsc_value_array(empty));
+    tsc_array_t* values = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(values, value);
+    (void)tsc_value_apply_function(callback, tsc_value_undefined(), tsc_value_array(values));
 }
 
-static void tsc_child_stream_emit_error(tsc_child_stream_t* stream, const char* message) {
+static void tsc_child_stream_invoke_callback(tsc_value_t callback) {
+    tsc_child_stream_invoke_callback_value(callback, tsc_value_undefined());
+}
+
+static void tsc_child_stream_emit_error_value(tsc_child_stream_t* stream, tsc_value_t error) {
     if (!stream || stream->error_emitted) return;
     stream->error_emitted = true;
     if (stream->event.emitter) {
-        tsc_child_emit_one_value(
-            stream->event.emitter,
-            "error",
-            tsc_value_string(tsc_str_from_cstr(message ? message : "child_process stream error"))
-        );
+        tsc_child_emit_one_value(stream->event.emitter, "error", error);
     }
+}
+
+static void tsc_child_stream_emit_error(tsc_child_stream_t* stream, const char* message) {
+    tsc_child_stream_emit_error_value(
+        stream,
+        tsc_value_string(tsc_str_from_cstr(message ? message : "child_process stream error"))
+    );
 }
 
 static void tsc_child_stream_emit_drain(tsc_child_stream_t* stream) {
@@ -1654,12 +1662,32 @@ static tsc_value_t tsc_child_stream_end(void* env, tsc_value_t this_arg, tsc_arr
 }
 
 static tsc_value_t tsc_child_stream_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)args;
     tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
-    if (stream) {
-        stream->destroyed = true;
-        tsc_child_stream_close(stream, false);
+    tsc_value_t error = tsc_value_undefined();
+    tsc_value_t callback = tsc_value_undefined();
+    if (args && args->len > 0) {
+        tsc_value_t first = TSC_ARR(tsc_value_t, args, 0);
+        if (tsc_value_is_callable(first)) {
+            callback = first;
+        } else {
+            error = first;
+            if (args->len > 1) callback = TSC_ARR(tsc_value_t, args, 1);
+        }
     }
+    if (!tsc_value_is_undefined(callback) && !tsc_value_is_nullish(callback) && !tsc_value_is_callable(callback)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stream.destroy callback must be callable"));
+    }
+    bool has_error = !tsc_value_is_nullish(error);
+    if (!stream || stream->destroyed) {
+        tsc_child_stream_invoke_callback_value(callback, has_error ? error : tsc_value_undefined());
+        return this_arg;
+    }
+    stream->destroyed = true;
+    tsc_child_stream_close(stream, false);
+    if (has_error) {
+        tsc_child_stream_emit_error_value(stream, error);
+    }
+    tsc_child_stream_invoke_callback_value(callback, has_error ? error : tsc_value_undefined());
     return this_arg;
 }
 
