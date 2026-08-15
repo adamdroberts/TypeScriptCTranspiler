@@ -12,7 +12,7 @@ let error = "pending";
 
 fsp.open(path, "r")
     .then((handle: FSFileHandle): Promise<void> => {
-        const iterator: any = handle.readLines({ start: 5, end: 8 });
+        const iterator: any = handle.readLines({ start: 5, end: 8, autoClose: false });
         return iterator.next().then((first: any): Promise<any> => {
             return iterator.next().then((finished: any): Promise<string> => {
                 rangeSummary = `${first.value}:${finished.done}`;

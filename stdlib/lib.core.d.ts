@@ -1642,6 +1642,7 @@ interface FSFileHandleReadFileStringOptions {
 }
 interface FSFileHandleReadLinesOptions {
     encoding?: BufferEncoding | null;
+    autoClose?: boolean;
     start?: number;
     end?: number;
     signal?: any;

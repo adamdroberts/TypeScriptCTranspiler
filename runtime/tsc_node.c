@@ -5903,11 +5903,14 @@ typedef struct tsc_fs_file_handle_append_async {
 
 typedef struct tsc_fs_file_handle_read_lines {
     tsc_value_t iterator;
+    tsc_fs_file_handle_t* handle;
     tsc_promise_t* source;
     tsc_array_t* pending;
     tsc_str_t* content;
     size_t offset;
     tsc_value_t failure;
+    bool auto_close;
+    bool close_started;
     bool loaded;
     bool closed;
     bool done;
@@ -6876,11 +6879,8 @@ static tsc_value_t tsc_fs_file_handle_writev_builtin(void* env, tsc_value_t this
     return tsc_value_promise(tsc_fs_file_handle_vector_io_start((tsc_fs_file_handle_t*)env, args, false));
 }
 
-static tsc_value_t tsc_fs_file_handle_close_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)this_arg;
-    (void)args;
-    tsc_fs_file_handle_t* handle = (tsc_fs_file_handle_t*)env;
-    if (!handle || handle->closed) return tsc_value_promise(tsc_promise_resolve(tsc_value_undefined()));
+static tsc_promise_t* tsc_fs_file_handle_close_start(tsc_fs_file_handle_t* handle) {
+    if (!handle || handle->closed) return tsc_promise_resolve(tsc_value_undefined());
     handle->closed = true;
     int fd = handle->fd;
     handle->fd = -1;
@@ -6901,7 +6901,13 @@ static tsc_value_t tsc_fs_file_handle_close_builtin(void* env, tsc_value_t this_
     } else {
         task->req_pending = true;
     }
-    return tsc_value_promise(promise);
+    return promise;
+}
+
+static tsc_value_t tsc_fs_file_handle_close_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_promise(tsc_fs_file_handle_close_start((tsc_fs_file_handle_t*)env));
 }
 
 static tsc_value_t tsc_fs_file_handle_value(int fd) {
@@ -7402,6 +7408,12 @@ static void tsc_fs_file_handle_read_lines_remove_first(tsc_array_t* values) {
     values->len--;
 }
 
+static void tsc_fs_file_handle_read_lines_auto_close(tsc_fs_file_handle_read_lines_t* state) {
+    if (!state || !state->auto_close || state->close_started) return;
+    state->close_started = true;
+    (void)tsc_fs_file_handle_close_start(state->handle);
+}
+
 static bool tsc_fs_file_handle_read_lines_next_value(
     tsc_fs_file_handle_read_lines_t* state,
     tsc_str_t** out_line
@@ -7457,6 +7469,7 @@ static void tsc_fs_file_handle_read_lines_drain(tsc_fs_file_handle_read_lines_t*
             continue;
         }
         state->done = true;
+        tsc_fs_file_handle_read_lines_auto_close(state);
         tsc_promise_fulfill_in_place(
             promise,
             tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
@@ -7479,6 +7492,7 @@ static void tsc_fs_file_handle_read_lines_source_done(void* env) {
     if (tsc_promise_is_rejected(state->source)) {
         state->failed = true;
         state->failure = tsc_promise_reason(state->source);
+        tsc_fs_file_handle_read_lines_auto_close(state);
     } else if (tsc_promise_is_fulfilled(state->source)) {
         tsc_value_t value = tsc_promise_value(state->source);
         if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_STRING) {
@@ -7524,6 +7538,7 @@ static tsc_value_t tsc_fs_file_handle_read_lines_next(void* env, tsc_value_t thi
         ));
     }
     state->done = true;
+    tsc_fs_file_handle_read_lines_auto_close(state);
     return tsc_value_promise(tsc_promise_resolve(
         tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
     ));
@@ -7540,6 +7555,7 @@ static tsc_value_t tsc_fs_file_handle_read_lines_return(void* env, tsc_value_t t
     }
     state->closed = true;
     state->done = true;
+    tsc_fs_file_handle_read_lines_auto_close(state);
     while (state->pending->len > 0) {
         tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
         tsc_fs_file_handle_read_lines_remove_first(state->pending);
@@ -7566,19 +7582,25 @@ static bool tsc_fs_file_handle_read_lines_options(
     bool* position_is_set_out,
     int64_t* position_out,
     size_t* max_len_out,
-    tsc_str_t** encoding_out
+    tsc_str_t** encoding_out,
+    bool* auto_close_out
 ) {
     if (signal_out) *signal_out = tsc_value_undefined();
     if (position_is_set_out) *position_is_set_out = false;
     if (position_out) *position_out = 0;
     if (max_len_out) *max_len_out = 0;
     if (encoding_out) *encoding_out = NULL;
+    if (auto_close_out) *auto_close_out = true;
     if (tsc_value_is_nullish(options)) return true;
     if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr(
             "fs.promises.FileHandle.readLines options must be an object or null"
         ));
         return false;
+    }
+    tsc_value_t auto_close = tsc_value_get_prop(options, tsc_str_from_lit("autoClose", 9));
+    if (auto_close_out && !tsc_value_is_nullish(auto_close)) {
+        *auto_close_out = tsc_value_as_bool(auto_close);
     }
     tsc_value_t encoding = tsc_value_get_prop(options, tsc_str_from_lit("encoding", 8));
     if (!tsc_value_is_nullish(encoding)) {
@@ -7635,12 +7657,12 @@ static bool tsc_fs_file_handle_read_lines_options(
         if (max_len_out && has_end) *max_len_out = (size_t)(end - start + 1);
     }
 
-    const char* unsupported[] = { "autoClose", "emitClose", "highWaterMark" };
+    const char* unsupported[] = { "emitClose", "highWaterMark" };
     for (size_t i = 0; i < sizeof(unsupported) / sizeof(unsupported[0]); i++) {
         tsc_value_t value = tsc_value_get_prop(options, tsc_str_from_cstr(unsupported[i]));
         if (!tsc_value_is_nullish(value)) {
             tsc_throw_str(tsc_str_from_cstr(
-                "fs.promises.FileHandle.readLines option is outside the bounded encoding/range subset"
+                "fs.promises.FileHandle.readLines option is outside the bounded encoding/range/autoClose subset"
             ));
             return false;
         }
@@ -7655,18 +7677,22 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
     int64_t position = 0;
     size_t max_len = 0;
     tsc_str_t* encoding = NULL;
+    bool auto_close = true;
     if (!tsc_fs_file_handle_read_lines_options(
         options,
         &signal,
         &position_is_set,
         &position,
         &max_len,
-        &encoding
+        &encoding,
+        &auto_close
     )) return tsc_value_undefined();
 
     tsc_fs_file_handle_read_lines_t* state =
         (tsc_fs_file_handle_read_lines_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_read_lines_t));
     memset(state, 0, sizeof(*state));
+    state->handle = (tsc_fs_file_handle_t*)env;
+    state->auto_close = auto_close;
     state->pending = tsc_array_new(sizeof(tsc_promise_t*), 2);
     state->failure = tsc_value_undefined();
 
