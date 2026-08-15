@@ -266,7 +266,7 @@ await fs.promises.writeFile("/tmp/p.txt", "hello", { flag: "wx" });
 const entries = await fs.promises.readdir("/tmp", { withFileTypes: true });
 const dir = fs.opendirSync("/tmp");
 console.log(dir.readSync()?.name);
-dir.closeSync();
+dir[Symbol.dispose]();
 const asyncDir = await fs.promises.opendir("/tmp");
 await asyncDir[Symbol.asyncDispose]();
 

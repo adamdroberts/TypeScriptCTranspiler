@@ -1397,6 +1397,7 @@ interface FSDir {
     readSync(...ignored: any[]): FSDirHandleEntry | null;
     close(...ignored: any[]): Promise<void>;
     closeSync(...ignored: any[]): void;
+    [Symbol.dispose](...ignored: any[]): void;
     next(...ignored: any[]): Promise<IteratorResult<FSDirHandleEntry, void>>;
     return(value?: any, ...ignored: any[]): Promise<IteratorResult<FSDirHandleEntry, any>>;
     [Symbol.asyncIterator](...ignored: any[]): FSDir;
