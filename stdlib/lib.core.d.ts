@@ -2635,8 +2635,9 @@ interface NetSocket {
     setTimeout(timeout: number, callback?: () => void, ...ignored: any[]): this;
     pause(...ignored: any[]): this;
     resume(...ignored: any[]): this;
-    write(data: string | Buffer, ...ignored: any[]): boolean;
-    end(data?: string | Buffer, ...ignored: any[]): this;
+    write(data: string | Buffer, callback?: () => void, ...ignored: any[]): boolean;
+    end(callback?: () => void, ...ignored: any[]): this;
+    end(data: string | Buffer, callback?: () => void, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;
     address(...ignored: any[]): SocketAddress | null;
     ref(...ignored: any[]): this;

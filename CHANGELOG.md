@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded `net.Socket` completion support: POSIX TCP sockets invoke `write()` and `end()` callbacks after native completion and emit one `finish` event when the writable half closes. Test: `net_socket_write_callbacks`.
 - Bounded `net.Server` state support: POSIX TCP servers expose synchronized `listening` and live `connections` properties across listen, accept, socket close, and server close transitions. Test: `net_server_state`.
 - Bounded `net.Socket` state support: POSIX TCP sockets expose synchronized `readable`, `writable`, `readableEnded`, and `writableEnded` flags plus `localFamily` / `remoteFamily` endpoint metadata. Test: `net_socket_state`.
 - Bounded `net.Socket` pause/resume support: POSIX TCP sockets expose chainable `pause()` / `resume()` read gates that leave incoming data unread while paused and deliver it after resume. Test: `net_socket_pause_resume`.

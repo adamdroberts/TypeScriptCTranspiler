@@ -3005,6 +3005,7 @@ typedef struct tsc_net_socket {
     bool read_paused;
     bool connect_emitted;
     bool close_emitted;
+    bool finish_emitted;
     bool tls;
     bool tls_server;
     bool client_socket;
@@ -3124,6 +3125,19 @@ static void tsc_net_socket_refresh_state_props(tsc_net_socket_t* socket) {
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writable", 8), tsc_value_bool(!socket->destroyed && !socket->writable_ended));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readableEnded", 13), tsc_value_bool(socket->readable_ended));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writableEnded", 13), tsc_value_bool(socket->writable_ended));
+}
+
+static void tsc_net_socket_invoke_callback(tsc_value_t callback) {
+    if (!tsc_value_is_callable(callback)) return;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_value_apply_function(callback, tsc_value_undefined(), tsc_value_array(empty));
+}
+
+static void tsc_net_socket_emit_finish(tsc_net_socket_t* socket) {
+    if (!socket || socket->finish_emitted || !socket->event.emitter) return;
+    socket->finish_emitted = true;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("finish", 6), empty);
 }
 
 static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number) {
@@ -3330,28 +3344,42 @@ static tsc_value_t tsc_net_socket_resume(void* env, tsc_value_t this_arg, tsc_ar
     return this_arg;
 }
 
+static bool tsc_net_socket_write_value(tsc_net_socket_t* socket, tsc_value_t value) {
+    tsc_str_t* text = tsc_value_as_string(value);
+    if (text) return tsc_net_socket_write_bytes(socket, text->data, text->len);
+    tsc_buffer_t* buffer = tsc_value_as_buffer(value);
+    if (buffer) return tsc_net_socket_write_bytes(socket, buffer->data, buffer->len);
+    tsc_throw_str(tsc_str_from_cstr("net.Socket.write expects string or Buffer"));
+}
+
 static tsc_value_t tsc_net_socket_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
     if (!socket || !args || args->len < 1) return tsc_value_bool(false);
-    tsc_value_t value = TSC_ARR(tsc_value_t, args, 0);
-    tsc_str_t* text = tsc_value_as_string(value);
-    if (text) return tsc_value_bool(tsc_net_socket_write_bytes(socket, text->data, text->len));
-    tsc_buffer_t* buffer = tsc_value_as_buffer(value);
-    if (buffer) return tsc_value_bool(tsc_net_socket_write_bytes(socket, buffer->data, buffer->len));
-    tsc_throw_str(tsc_str_from_cstr("net.Socket.write expects string or Buffer"));
+    bool result = tsc_net_socket_write_value(socket, TSC_ARR(tsc_value_t, args, 0));
+    if (result && args->len > 1) tsc_net_socket_invoke_callback(TSC_ARR(tsc_value_t, args, 1));
+    return tsc_value_bool(result);
 }
 
 static tsc_value_t tsc_net_socket_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
-    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
-        (void)tsc_net_socket_write(env, this_arg, args);
+    tsc_value_t callback = tsc_value_undefined();
+    if (args && args->len > 0) {
+        tsc_value_t first = TSC_ARR(tsc_value_t, args, 0);
+        if (tsc_value_is_callable(first)) {
+            callback = first;
+        } else if (!tsc_value_is_undefined(first)) {
+            (void)tsc_net_socket_write_value(socket, first);
+            if (args->len > 1) callback = TSC_ARR(tsc_value_t, args, 1);
+        }
     }
     if (socket && socket->fd >= 0 && !socket->writable_ended) {
         (void)shutdown(socket->fd, SHUT_WR);
         socket->writable_ended = true;
         tsc_net_socket_refresh_state_props(socket);
+        tsc_net_socket_emit_finish(socket);
     }
+    tsc_net_socket_invoke_callback(callback);
     return this_arg;
 }
 
