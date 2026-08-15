@@ -68,6 +68,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             isNamedImportIdentifier(id, ["url", "node:url"], "URLSearchParams");
     };
 
+    const isDefaultImportIdentifier = (id: ts.Identifier, moduleNames: readonly string[]): boolean => {
+        const sourceFile = id.getSourceFile();
+        for (const stmt of sourceFile.statements) {
+            if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+            if (!moduleNames.includes(stmt.moduleSpecifier.text)) continue;
+            if (stmt.importClause?.name?.text === id.text) return true;
+        }
+        return false;
+    };
+
+    const isNamespaceImportIdentifier = (id: ts.Identifier, moduleNames: readonly string[]): boolean => {
+        const sourceFile = id.getSourceFile();
+        for (const stmt of sourceFile.statements) {
+            if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue;
+            if (!moduleNames.includes(stmt.moduleSpecifier.text)) continue;
+            const bindings = stmt.importClause?.namedBindings;
+            if (bindings && ts.isNamespaceImport(bindings) && bindings.name.text === id.text) return true;
+        }
+        return false;
+    };
+
     const resolve = (node: ts.Expression): string[] => {
         while (
             ts.isParenthesizedExpression(node) ||
@@ -1303,6 +1324,59 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return resolveStaticBufferExpression(callee.expression);
     };
 
+    const isStaticBufferTranscodeCall = (call: ts.CallExpression): boolean => {
+        if (call.arguments.length !== 3 || call.arguments.some(ts.isSpreadElement)) return false;
+        const callee = unwrapStaticExpression(call.expression);
+        if (ts.isIdentifier(callee)) {
+            return isNamedImportIdentifier(callee, ["buffer", "node:buffer"], "transcode");
+        }
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "transcode") return false;
+        const receiver = unwrapStaticExpression(callee.expression);
+        if (!ts.isIdentifier(receiver)) return false;
+        return isDefaultImportIdentifier(receiver, ["buffer", "node:buffer"]) ||
+            isNamespaceImportIdentifier(receiver, ["buffer", "node:buffer"]);
+    };
+
+    const resolveStaticBufferTranscodeExpression = (call: ts.CallExpression): Buffer[] => {
+        if (!isStaticBufferTranscodeCall(call)) return [];
+        const sources = resolveStaticBufferExpression(call.arguments[0]!);
+        const fromEncodings = resolve(call.arguments[1]!);
+        const toEncodings = resolve(call.arguments[2]!);
+        if (sources.length === 0 || fromEncodings.length === 0 || toEncodings.length === 0) return [];
+
+        const normalizeEncoding = (encoding: string): "utf8" | "hex" | "base64" | null => {
+            const normalized = encoding.toLowerCase();
+            if (normalized === "utf8" || normalized === "utf-8") return "utf8";
+            if (normalized === "hex" || normalized === "base64") return normalized;
+            return null;
+        };
+
+        const out: Buffer[] = [];
+        for (const source of sources) {
+            for (const fromEncoding of fromEncodings) {
+                const from = normalizeEncoding(fromEncoding);
+                if (!from) return [];
+                let raw: Buffer;
+                if (from === "utf8") {
+                    raw = Buffer.from(source);
+                } else {
+                    const encoded = source.toString("utf8");
+                    if (!isRuntimeValidBufferInput(encoded, from)) return [];
+                    raw = Buffer.from(encoded, from);
+                }
+                for (const toEncoding of toEncodings) {
+                    const to = normalizeEncoding(toEncoding);
+                    if (!to) return [];
+                    out.push(to === "utf8"
+                        ? Buffer.from(raw)
+                        : Buffer.from(raw.toString(to), "utf8"));
+                    if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
+                }
+            }
+        }
+        return dedupeBuffers(out);
+    };
+
     const resolveStaticTextEncoderEncodeExpression = (call: ts.CallExpression): Buffer[] => {
         if (call.arguments.length > 1 || call.arguments.some(ts.isSpreadElement)) return [];
         const callee = unwrapStaticExpression(call.expression);
@@ -1327,6 +1401,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     const resolveStaticBufferExpression = (expr: ts.Expression): Buffer[] => {
         const unwrapped = unwrapStaticExpression(expr);
         if (!ts.isCallExpression(unwrapped)) return [];
+        const transcodeBuffers = resolveStaticBufferTranscodeExpression(unwrapped);
+        if (transcodeBuffers.length > 0) return transcodeBuffers;
         const encodedBuffers = resolveStaticTextEncoderEncodeExpression(unwrapped);
         if (encodedBuffers.length > 0) return encodedBuffers;
         const fromBuffers = resolveStaticBufferFromExpression(unwrapped);
