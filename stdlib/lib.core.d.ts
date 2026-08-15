@@ -2673,6 +2673,7 @@ interface NetListenOptions {
     host?: string;
     backlog?: number;
     ipv6Only?: boolean;
+    signal?: any;
 }
 interface NetServer {
     readonly listening: boolean;

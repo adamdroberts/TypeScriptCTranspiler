@@ -3703,6 +3703,8 @@ struct tsc_net_server {
     SSL_CTX* tls_ctx;
     double poll_timer;
     uint64_t connection_count;
+    tsc_value_t abort_signal;
+    bool abort_requested;
 };
 
 static void tsc_net_server_refresh_props(tsc_net_server_t* server) {
@@ -3929,6 +3931,23 @@ static void tsc_net_socket_abort(void* env) {
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
     if (!socket || socket->close_emitted) return;
     socket->abort_requested = true;
+}
+
+static tsc_value_t tsc_net_server_abort_reason(const tsc_net_server_t* server) {
+    if (!server || tsc_value_is_nullish(server->abort_signal)) {
+        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    }
+    tsc_value_t reason = tsc_value_get_prop(server->abort_signal, tsc_str_from_lit("reason", 6));
+    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
+        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    }
+    return reason;
+}
+
+static void tsc_net_server_abort(void* env) {
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (!server || server->close_emitted) return;
+    server->abort_requested = true;
 }
 
 static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
@@ -4595,6 +4614,14 @@ static void tsc_net_server_close_internal(tsc_net_server_t* server) {
     (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("close", 5), empty);
 }
 
+static bool tsc_net_server_process_abort(tsc_net_server_t* server) {
+    if (!server || !server->abort_requested) return false;
+    server->abort_requested = false;
+    tsc_child_emit_one_value(server->event.emitter, "error", tsc_net_server_abort_reason(server));
+    tsc_net_server_close_internal(server);
+    return true;
+}
+
 static tsc_value_t tsc_net_server_close(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_net_server_t* server = (tsc_net_server_t*)env;
     if (args && args->len > 0 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 0))) {
@@ -4629,6 +4656,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     int backlog = 16;
     bool ipv6_only = false;
     bool ipv6_only_set = false;
+    tsc_value_t abort_signal = tsc_value_undefined();
     bool options_form = value_is_box(port_value) && value_tag(port_value) == TSC_VALUE_TAG_OBJECT;
     if (options_form) {
         tsc_value_t options_port = tsc_value_get_prop(port_value, tsc_str_from_lit("port", 4));
@@ -4659,6 +4687,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
             ipv6_only = tsc_value_as_bool(options_ipv6_only);
             ipv6_only_set = true;
         }
+        abort_signal = tsc_value_get_prop(port_value, tsc_str_from_lit("signal", 6));
         port_value = options_port;
         if (args->len > 1) {
             callback = TSC_ARR(tsc_value_t, args, 1);
@@ -4729,9 +4758,13 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     server->close_requested = false;
     server->close_emitted = false;
     server->listening_emitted = false;
+    server->abort_signal = abort_signal;
     tsc_net_server_refresh_props(server);
     server->poll_timer = tsc_set_interval(tsc_net_server_poll, server, 1.0);
     if (!server->refed) tsc_unref_timeout(server->poll_timer);
+    if (!tsc_value_is_nullish(abort_signal)) {
+        tsc_abort_signal_add_callback(abort_signal, tsc_net_server_abort, server);
+    }
     return this_arg;
 }
 
@@ -4748,11 +4781,13 @@ static void tsc_net_server_add_methods(tsc_object_t* object, tsc_net_server_t* s
 static void tsc_net_server_poll(void* env) {
     tsc_net_server_t* server = (tsc_net_server_t*)env;
     if (!server || server->fd < 0 || !server->listening) return;
+    if (tsc_net_server_process_abort(server)) return;
     if (!server->listening_emitted) {
         server->listening_emitted = true;
         tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
         (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("listening", 9), empty);
         if (server->fd < 0 || !server->listening) return;
+        if (tsc_net_server_process_abort(server)) return;
     }
     for (;;) {
         struct sockaddr_storage address;
@@ -4798,6 +4833,7 @@ static tsc_value_t tsc_net_create_server_with_tls(tsc_value_t connection_listene
     memset(server, 0, sizeof(*server));
     server->fd = -1;
     server->refed = true;
+    server->abort_signal = tsc_value_undefined();
     server->tls_ctx = tls_ctx;
     server->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();

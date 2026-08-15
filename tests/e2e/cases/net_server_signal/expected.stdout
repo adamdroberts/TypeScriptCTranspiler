@@ -1,0 +1,2 @@
+pre: error:pre-stop|close false
+post: error:post-stop|close false
