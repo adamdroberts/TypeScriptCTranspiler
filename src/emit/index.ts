@@ -60726,6 +60726,14 @@ class Emitter {
             };
             if (ts.isIdentifier(decl.name)) {
                 assignBinding(decl.name, { c: current, ty: sourceElemType });
+            } else if (ts.isArrayBindingPattern(decl.name) && sourceElemType.kind === "array" && sourceElemType.elem) {
+                this.emitLazyGeneratorTypedArrayBindingForOf(
+                    buf,
+                    decl.name,
+                    current,
+                    sourceElemType,
+                    assignBinding,
+                );
             } else if (ts.isArrayBindingPattern(decl.name)) {
                 const restIndex = decl.name.elements.findIndex(
                     (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
@@ -60934,6 +60942,93 @@ class Emitter {
             this.activeLazyGeneratorBreakTargets.pop();
         }
         buf.close();
+    }
+
+    private emitLazyGeneratorTypedArrayBindingForOf(
+        buf: CBuf,
+        pattern: ts.ArrayBindingPattern,
+        sourceC: string,
+        sourceType: CType,
+        assign: (identifier: ts.Identifier, value: EmitResult) => void,
+    ): void {
+        if (sourceType.kind !== "array" || !sourceType.elem) {
+            unsupported(pattern, "lazy generator typed array destructuring requires an array element type");
+        }
+        const bindings: {
+            element: ts.BindingElement;
+            index: number;
+            type: CType;
+            node: ts.Identifier;
+        }[] = [];
+        let restBinding: {
+            element: ts.BindingElement;
+            index: number;
+            type: CType;
+            node: ts.Identifier;
+        } | null = null;
+        for (let index = 0; index < pattern.elements.length; index++) {
+            const element = pattern.elements[index];
+            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (
+                !ts.isBindingElement(element) ||
+                !ts.isIdentifier(element.name) ||
+                element.propertyName ||
+                element.initializer && this.nodeContainsYield(element.initializer)
+            ) {
+                unsupported(
+                    element,
+                    "lazy generator typed array destructuring supports identifier bindings with await-free defaults",
+                );
+            }
+            const type = this.prepareType(mapType(element.name, this.checker));
+            if (element.dotDotDotToken) {
+                if (restBinding || index !== pattern.elements.length - 1) {
+                    unsupported(element, "lazy generator typed array destructuring supports only one trailing rest binding");
+                }
+                if (type.kind !== "value" && (type.kind !== "array" || !type.elem)) {
+                    unsupported(
+                        element.name,
+                        "lazy generator typed array rest requires a boxed or typed array-compatible binding",
+                    );
+                }
+                restBinding = { element, index, type, node: element.name };
+            } else {
+                bindings.push({ element, index, type, node: element.name });
+            }
+        }
+
+        const entry = this.freshTemp("_lazy_typed_array_entry");
+        const elementType = sourceType.elem;
+        buf.line(`tsc_array_t* const ${entry} = ${sourceC};`);
+        for (const binding of bindings) {
+            const value: EmitResult = {
+                c: `${entry} != NULL && tsc_array_index_present(${entry}, ${binding.index}) ? TSC_ARR(${elementType.c}, ${entry}, ${binding.index}) : ${this.zeroValue(elementType)}`,
+                ty: elementType,
+            };
+            assign(
+                binding.node,
+                this.forOfBindingValueWithDefault(binding.element, value),
+            );
+        }
+        if (restBinding) {
+            const restArray = this.freshTemp("_lazy_typed_array_rest");
+            const restIndex = this.freshTemp("_lazy_typed_array_rest_i");
+            const restValue = this.freshTemp("_lazy_typed_array_rest_v");
+            const restPresent = this.freshTemp("_lazy_typed_array_rest_present");
+            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${elementType.c}), 1);`);
+            buf.open(`if (${entry} != NULL)`);
+            buf.line(`tsc_array_materialize_all(${entry});`);
+            buf.open(`for (size_t ${restIndex} = ${restBinding.index}; ${restIndex} < ${entry}->len; ${restIndex}++)`);
+            buf.line(`bool ${restPresent} = tsc_array_index_present(${entry}, ${restIndex});`);
+            buf.line(`${elementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${elementType.c}, ${entry}, ${restIndex}) : ${this.zeroValue(elementType)};`);
+            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+            buf.open(`if (!${restPresent})`);
+            buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
+            buf.close();
+            buf.close();
+            buf.close();
+            assign(restBinding.node, { c: restArray, ty: arrayType(elementType) });
+        }
     }
 
     private emitLazyGeneratorForIn(
@@ -67492,6 +67587,20 @@ class Emitter {
                 return;
             }
         }
+        if (elemType.kind === "array" && elemType.elem && ts.isVariableDeclarationList(fos.initializer)) {
+            const d = fos.initializer.declarations[0];
+            if (d && ts.isArrayBindingPattern(d.name)) {
+                this.emitArrayBackedArrayBindingForOf(
+                    buf,
+                    fos,
+                    arrayExpr,
+                    elemType,
+                    arrVar,
+                    idxVar,
+                );
+                return;
+            }
+        }
         if ((elemType.kind === "class" || elemType.kind === "array") && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
             if (d && ts.isObjectBindingPattern(d.name)) {
@@ -67872,6 +67981,24 @@ class Emitter {
             return true;
         }
         if (entryBindingDecl && ts.isArrayBindingPattern(entryBindingDecl.name)) {
+            if (valueType.kind === "array" && valueType.elem) {
+                const custom = this.emitCustomIteratorArray(fos.expression, iter);
+                if (!custom || custom.ty.kind !== "array" || !custom.ty.elem) {
+                    unsupported(
+                        fos.expression,
+                        "custom iterator typed array destructuring requires an array-backed iterator value",
+                    );
+                }
+                this.emitArrayBackedArrayBindingForOf(
+                    buf,
+                    fos,
+                    custom.c,
+                    valueType,
+                    this.freshTemp("_custom_array_a"),
+                    this.freshTemp("_custom_array_i"),
+                );
+                return true;
+            }
             const restIndex = entryBindingDecl.name.elements.findIndex(
                 (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
             );
@@ -69565,20 +69692,33 @@ class Emitter {
             );
         }
 
-        const bindings: { name: string; index: number; type: CType; node: ts.Identifier }[] = [];
+        const bindings: {
+            element: ts.BindingElement;
+            name: string;
+            index: number;
+            type: CType;
+            node: ts.Identifier;
+        }[] = [];
         let restBinding: { name: string; index: number; type: CType; node: ts.Identifier } | null = null;
         for (let i = 0; i < d.name.elements.length; i++) {
             const el = d.name.elements[i];
             if (!el || el.kind === ts.SyntaxKind.OmittedExpression) continue;
-            if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name) || el.propertyName || el.initializer) {
+            if (
+                !ts.isBindingElement(el) ||
+                !ts.isIdentifier(el.name) ||
+                el.propertyName ||
+                el.initializer && this.nodeContainsYield(el.initializer)
+            ) {
                 unsupported(
                     d.name,
-                    "array-backed for-of rest destructuring supports identifier bindings without defaults",
+                    "array-backed for-of destructuring supports identifier bindings with await-free defaults",
                 );
             }
             const type = this.prepareType(mapType(el.name, this.checker));
             if (el.dotDotDotToken) {
-                if (restBinding) unsupported(el, "array-backed for-of destructuring supports only one rest binding");
+                if (restBinding || i !== d.name.elements.length - 1) {
+                    unsupported(el, "array-backed for-of destructuring supports only one trailing rest binding");
+                }
                 restBinding = {
                     name: mangleIdent(el.name.text),
                     index: i,
@@ -69587,15 +69727,13 @@ class Emitter {
                 };
             } else {
                 bindings.push({
+                    element: el,
                     name: mangleIdent(el.name.text),
                     index: i,
                     type,
                     node: el.name,
                 });
             }
-        }
-        if (!restBinding) {
-            unsupported(d.name, "array-backed for-of rest destructuring requires a trailing rest binding");
         }
 
         const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
@@ -69616,26 +69754,28 @@ class Emitter {
                 ty: entryElementType,
             };
             buf.line(
-                `${binding.type.c}${qual} ${binding.name} = ${this.coerce(value, binding.type, binding.node)};`,
+                `${binding.type.c}${qual} ${binding.name} = ${this.coerce(this.forOfBindingValueWithDefault(binding.element, value), binding.type, binding.node)};`,
             );
         }
-        const restArray = this.freshTemp("_array_rest");
-        const restIdx = this.freshTemp("_array_rest_i");
-        const restValue = this.freshTemp("_array_rest_v");
-        const restPresent = this.freshTemp("_array_rest_present");
-        buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${entryElementType.c}), 1);`);
-        buf.open(`for (size_t ${restIdx} = ${restBinding.index}; ${restIdx} < ${entryVar}->len; ${restIdx}++)`);
-        buf.line(`bool ${restPresent} = tsc_array_index_present(${entryVar}, ${restIdx});`);
-        buf.line(`${entryElementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${entryElementType.c}, ${entryVar}, ${restIdx}) : ${this.zeroValue(entryElementType)};`);
-        buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
-        buf.open(`if (!${restPresent})`);
-        buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
-        buf.close();
-        buf.close();
-        const restValueExpr: EmitResult = { c: restArray, ty: arrayType(entryElementType) };
-        buf.line(
-            `${restBinding.type.c}${qual} ${restBinding.name} = ${this.coerce(restValueExpr, restBinding.type, restBinding.node)};`,
-        );
+        if (restBinding) {
+            const restArray = this.freshTemp("_array_rest");
+            const restIdx = this.freshTemp("_array_rest_i");
+            const restValue = this.freshTemp("_array_rest_v");
+            const restPresent = this.freshTemp("_array_rest_present");
+            buf.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(${entryElementType.c}), 1);`);
+            buf.open(`for (size_t ${restIdx} = ${restBinding.index}; ${restIdx} < ${entryVar}->len; ${restIdx}++)`);
+            buf.line(`bool ${restPresent} = tsc_array_index_present(${entryVar}, ${restIdx});`);
+            buf.line(`${entryElementType.c} ${restValue} = ${restPresent} ? TSC_ARR(${entryElementType.c}, ${entryVar}, ${restIdx}) : ${this.zeroValue(entryElementType)};`);
+            buf.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
+            buf.open(`if (!${restPresent})`);
+            buf.line(`tsc_array_mark_hole(${restArray}, ${restArray}->len - 1);`);
+            buf.close();
+            buf.close();
+            const restValueExpr: EmitResult = { c: restArray, ty: arrayType(entryElementType) };
+            buf.line(
+                `${restBinding.type.c}${qual} ${restBinding.name} = ${this.coerce(restValueExpr, restBinding.type, restBinding.node)};`,
+            );
+        }
         const labeledContinueTarget = this.directLabeledLoopName(fos)
             ? this.freshTemp("_array_for_of_labeled_continue")
             : null;

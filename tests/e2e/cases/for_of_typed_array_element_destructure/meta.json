@@ -1,0 +1,3 @@
+{
+  "description": "typed for-of array bindings over typed array elements support await-free defaults and sparse-preserving trailing rest across direct arrays, custom iterators, and lazy generators"
+}
