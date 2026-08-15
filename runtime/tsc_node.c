@@ -3039,6 +3039,20 @@ static void tsc_net_server_refresh_props(tsc_net_server_t* server) {
     tsc_value_set_prop(server->event.value, tsc_str_from_lit("connections", 11), tsc_value_num((double)server->connection_count));
 }
 
+typedef struct {
+    tsc_net_server_t* server;
+    tsc_value_t callback;
+} tsc_net_server_connections_request_t;
+
+static void tsc_net_server_get_connections_deferred(void* env) {
+    tsc_net_server_connections_request_t* request = (tsc_net_server_connections_request_t*)env;
+    if (!request || !tsc_value_is_callable(request->callback)) return;
+    tsc_array_t* callback_args = tsc_array_new(sizeof(tsc_value_t), 2);
+    tsc_array_push_value(callback_args, tsc_value_null());
+    tsc_array_push_value(callback_args, tsc_value_num(request->server ? (double)request->server->connection_count : 0.0));
+    (void)tsc_value_apply_function(request->callback, tsc_value_undefined(), tsc_value_array(callback_args));
+}
+
 static void tsc_net_socket_poll(void* env);
 static void tsc_net_server_poll(void* env);
 static void tsc_net_socket_timeout(void* env);
@@ -3652,6 +3666,20 @@ static tsc_value_t tsc_net_server_close(void* env, tsc_value_t this_arg, tsc_arr
     return this_arg;
 }
 
+static tsc_value_t tsc_net_server_get_connections(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (!args || args->len < 1 || !tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 0))) {
+        tsc_throw_str(tsc_str_from_cstr("net.Server.getConnections expects a callback"));
+    }
+    tsc_net_server_connections_request_t* request =
+        (tsc_net_server_connections_request_t*)TSC_GC_MALLOC(sizeof(tsc_net_server_connections_request_t));
+    request->server = server;
+    request->callback = TSC_ARR(tsc_value_t, args, 0);
+    (void)tsc_set_immediate(tsc_net_server_get_connections_deferred, request);
+    return tsc_value_undefined();
+}
+
 static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_net_server_t* server = (tsc_net_server_t*)env;
     if (!server || !args || args->len < 1) {
@@ -3715,6 +3743,7 @@ static void tsc_net_server_add_methods(tsc_object_t* object, tsc_net_server_t* s
     tsc_child_add_event_methods(object, &server->event);
     tsc_object_set(object, tsc_str_from_lit("listen", 6), tsc_value_function_generic_named(tsc_net_server_listen, server, 1.0, tsc_str_from_lit("listen", 6)));
     tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_generic_named(tsc_net_server_close, server, 0.0, tsc_str_from_lit("close", 5)));
+    tsc_object_set(object, tsc_str_from_lit("getConnections", 14), tsc_value_function_generic_named(tsc_net_server_get_connections, server, 1.0, tsc_str_from_lit("getConnections", 14)));
     tsc_object_set(object, tsc_str_from_lit("address", 7), tsc_value_function_generic_named(tsc_net_server_address, server, 0.0, tsc_str_from_lit("address", 7)));
     tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_ref_noop, server, 0.0, tsc_str_from_lit("ref", 3)));
     tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_ref_noop, server, 0.0, tsc_str_from_lit("unref", 5)));

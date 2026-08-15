@@ -2646,6 +2646,7 @@ interface NetSocket {
 interface NetServer {
     readonly listening: boolean;
     readonly connections: number;
+    getConnections(callback: (error: any, count: number) => void, ...ignored: any[]): void;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;

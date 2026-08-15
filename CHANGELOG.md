@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded `net.Server.getConnections(...)` support: POSIX TCP servers asynchronously report a null error and live accepted-connection count through the existing event loop. Test: `net_server_get_connections`.
 - Bounded `net.Socket` completion support: POSIX TCP sockets invoke `write()` and `end()` callbacks after native completion and emit one `finish` event when the writable half closes. Test: `net_socket_write_callbacks`.
 - Bounded `net.Server` state support: POSIX TCP servers expose synchronized `listening` and live `connections` properties across listen, accept, socket close, and server close transitions. Test: `net_server_state`.
 - Bounded `net.Socket` state support: POSIX TCP sockets expose synchronized `readable`, `writable`, `readableEnded`, and `writableEnded` flags plus `localFamily` / `remoteFamily` endpoint metadata. Test: `net_socket_state`.

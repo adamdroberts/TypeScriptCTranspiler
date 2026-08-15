@@ -1,5 +1,6 @@
 # Implemented features
 
+- Verified bounded `net.Server.getConnections(...)` coverage: POSIX TCP servers asynchronously report a null error and live accepted-connection count through the existing event loop. Test: `net_server_get_connections`.
 - Verified bounded `net.Socket` completion coverage: POSIX TCP sockets now invoke `write()` and `end()` callbacks after native completion and emit one `finish` event when the writable half closes. Test: `net_socket_write_callbacks`.
 - Verified bounded `net.Server` state coverage: POSIX TCP servers now expose synchronized `listening` and live `connections` properties across listen, accept, socket close, and server close transitions. Test: `net_server_state`.
 - Verified bounded `net.Socket` state coverage: POSIX TCP sockets now expose synchronized `readable`, `writable`, `readableEnded`, and `writableEnded` flags plus `localFamily` / `remoteFamily` endpoint metadata. Test: `net_socket_state`.
