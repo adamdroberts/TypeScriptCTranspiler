@@ -291,6 +291,7 @@ typedef struct {
     double id;
     bool canceled;
     bool is_interval;
+    bool refed;
     double delay_ms;
     double trigger_ms;
 } tsc_timeout_entry_t;
@@ -1317,7 +1318,7 @@ double tsc_set_timeout(tsc_timeout_fn_t fn, void* env, double delay) {
     }
     double id = g_next_timer_id++;
     double delay_ms = tsc_timer_delay_ms(delay);
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, delay_ms, tsc_now_ms() + delay_ms };
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, false, true, delay_ms, tsc_now_ms() + delay_ms };
     return id;
 }
 
@@ -1332,7 +1333,7 @@ double tsc_set_interval(tsc_timeout_fn_t fn, void* env, double delay) {
     }
     double id = g_next_timer_id++;
     double delay_ms = tsc_timer_delay_ms(delay);
-    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, delay_ms, tsc_now_ms() + delay_ms };
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ fn, env, id, false, true, true, delay_ms, tsc_now_ms() + delay_ms };
     return id;
 }
 
@@ -1345,6 +1346,37 @@ void tsc_clear_timeout(double id) {
     }
 }
 
+static void tsc_set_timeout_refed(double id, bool refed) {
+    if (id <= 0.0) return;
+    for (size_t i = 0; i < g_timeout_len; i++) {
+        if (g_timeout_queue[i].id == id && !g_timeout_queue[i].canceled) {
+            g_timeout_queue[i].refed = refed;
+        }
+    }
+}
+
+void tsc_ref_timeout(double id) {
+    tsc_set_timeout_refed(id, true);
+}
+
+void tsc_unref_timeout(double id) {
+    tsc_set_timeout_refed(id, false);
+}
+
+static void tsc_append_interval(const tsc_timeout_entry_t* entry) {
+    if (g_timeout_len == g_timeout_cap) {
+        size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
+        tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
+        if (!entries) tsc_panic("setInterval reschedule: out of memory");
+        g_timeout_queue = entries;
+        g_timeout_cap = next;
+    }
+    g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){
+        entry->fn, entry->env, entry->id, false, true, entry->refed,
+        entry->delay_ms, tsc_now_ms() + entry->delay_ms
+    };
+}
+
 void tsc_drain_timeouts(void) {
     size_t count = g_timeout_len;
     size_t idx = 0;
@@ -1354,19 +1386,34 @@ void tsc_drain_timeouts(void) {
         if (!g_timeout_queue[idx - 1].canceled && entry.fn && tsc_timeout_ready(&entry, now_ms)) {
             entry.fn(entry.env);
             if (entry.is_interval && !g_timeout_queue[idx - 1].canceled) {
-                if (g_timeout_len == g_timeout_cap) {
-                    size_t next = g_timeout_cap ? g_timeout_cap * 2 : 8;
-                    tsc_timeout_entry_t* entries = (tsc_timeout_entry_t*)TSC_GC_REALLOC(g_timeout_queue, next * sizeof(tsc_timeout_entry_t));
-                    if (!entries) tsc_panic("setInterval reschedule: out of memory");
-                    g_timeout_queue = entries;
-                    g_timeout_cap = next;
-                }
-                g_timeout_queue[g_timeout_len++] = (tsc_timeout_entry_t){ entry.fn, entry.env, entry.id, false, true, entry.delay_ms, tsc_now_ms() + entry.delay_ms };
+                entry.refed = g_timeout_queue[idx - 1].refed;
+                tsc_append_interval(&entry);
             }
             g_timeout_queue[idx - 1].canceled = true;
         }
         tsc_drain_microtasks_and_next_ticks();
     }
+
+    /* Zero-delay intervals that were rescheduled during this phase are due
+     * before immediates get a turn. One-shot timers stay deferred so nested
+     * setTimeout callbacks retain their existing phase ordering. */
+    size_t interval_idx = count;
+    while (interval_idx < g_timeout_len) {
+        size_t current_idx = interval_idx++;
+        tsc_timeout_entry_t entry = g_timeout_queue[current_idx];
+        if (g_timeout_queue[current_idx].canceled || !entry.fn || !entry.is_interval ||
+            !tsc_timeout_ready(&entry, tsc_now_ms())) {
+            continue;
+        }
+        entry.fn(entry.env);
+        if (!g_timeout_queue[current_idx].canceled) {
+            entry.refed = g_timeout_queue[current_idx].refed;
+            tsc_append_interval(&entry);
+        }
+        g_timeout_queue[current_idx].canceled = true;
+        tsc_drain_microtasks_and_next_ticks();
+    }
+
     size_t live = 0;
     for (size_t i = 0; i < g_timeout_len; i++) {
         if (!g_timeout_queue[i].canceled) {
@@ -1388,7 +1435,9 @@ static bool tsc_has_ready_timeout(void) {
 
 static bool tsc_has_active_timeout(void) {
     for (size_t i = 0; i < g_timeout_len; i++) {
-        if (!g_timeout_queue[i].canceled && g_timeout_queue[i].fn) return true;
+        if (!g_timeout_queue[i].canceled && g_timeout_queue[i].fn && g_timeout_queue[i].refed) {
+            return true;
+        }
     }
     return false;
 }

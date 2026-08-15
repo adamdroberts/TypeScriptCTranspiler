@@ -6,6 +6,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded asynchronous `child_process.spawn(...)` `ref()` / `unref()` support: child polling and timeout handles now participate in event-loop liveness, so unrefed children can finish after the parent has no refed work while `ref()` restores the default keep-alive behavior. Test: `child_process_spawn_ref_unref`.
+- Stabilized zero-delay `setInterval(...)` phase ordering so due interval reschedules complete before same-tick `setImmediate(...)` callbacks while nested one-shot `setTimeout(...)` callbacks remain deferred. Test: `set_interval_zero`.
 - Bounded asynchronous `child_process.spawn(...)` AbortSignal support: `signal` cancellation now kills the POSIX child with the configured `killSignal`, emits the signal reason once before `exit` / `close`, suppresses `spawn` for pre-aborted signals, and preserves `killed` state. Broader AbortError object semantics remain deferred. Test: `child_process_spawn_signal`.
 - Bounded asynchronous `child_process.spawn(...)` readable-stream piping: stdout/stderr streams now forward data to one writable destination through `pipe()` and `unpipe()`, return the destination from `pipe()`, honor `{ end: false }`, end destinations by default, and use destination `drain` events to resume a source paused by backpressure. Broader multi-destination and stream lifecycle semantics remain deferred. Test: `child_process_spawn_stream_pipe`.
 - Bounded `net.Socket.destroy(callback?)` support: POSIX TCP sockets invoke a one-shot destroy callback from the close lifecycle, including already-closed sockets, while preserving synchronized destroyed and ready-state properties. Error-object destruction remains deferred. Test: `net_socket_destroy_callback`.

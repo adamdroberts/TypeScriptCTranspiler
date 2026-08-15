@@ -1760,9 +1760,23 @@ static void tsc_child_process_abort(void* env) {
     }
 }
 
-static tsc_value_t tsc_child_process_noop(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
+static tsc_value_t tsc_child_process_ref(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
+    tsc_child_process_async_t* child = (tsc_child_process_async_t*)env;
+    if (child) {
+        tsc_ref_timeout(child->poll_timer);
+        tsc_ref_timeout(child->timeout_timer);
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_child_process_unref(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_child_process_async_t* child = (tsc_child_process_async_t*)env;
+    if (child) {
+        tsc_unref_timeout(child->poll_timer);
+        tsc_unref_timeout(child->timeout_timer);
+    }
     return this_arg;
 }
 
@@ -2318,8 +2332,8 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     tsc_object_set(object, tsc_str_from_lit("killed", 6), tsc_value_bool(false));
     tsc_object_set(object, tsc_str_from_lit("connected", 9), tsc_value_bool(false));
     tsc_object_set(object, tsc_str_from_lit("kill", 4), tsc_value_function_generic_named(tsc_child_process_kill, child, 1.0, tsc_str_from_lit("kill", 4)));
-    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_child_process_noop, child, 0.0, tsc_str_from_lit("ref", 3)));
-    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_child_process_noop, child, 0.0, tsc_str_from_lit("unref", 5)));
+    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_child_process_ref, child, 0.0, tsc_str_from_lit("ref", 3)));
+    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_child_process_unref, child, 0.0, tsc_str_from_lit("unref", 5)));
     tsc_value_t stdin_value = tsc_value_null();
     tsc_value_t stdout_value = tsc_value_null();
     tsc_value_t stderr_value = tsc_value_null();
