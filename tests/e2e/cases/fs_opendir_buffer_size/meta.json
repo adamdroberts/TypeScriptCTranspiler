@@ -1,0 +1,3 @@
+{
+  "description": "fs.Dir bufferSize options with bounded recursive prefetch for sync and Promise handles"
+}

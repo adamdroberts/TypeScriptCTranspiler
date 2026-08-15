@@ -1,0 +1,2 @@
+sync: deep.txt@/tmp/tsc2c-fs-opendir-buffer-size/nested|nested@/tmp/tsc2c-fs-opendir-buffer-size|sibling.txt@/tmp/tsc2c-fs-opendir-buffer-size|top.txt@/tmp/tsc2c-fs-opendir-buffer-size
+async: deep.txt@/tmp/tsc2c-fs-opendir-buffer-size/nested|nested@/tmp/tsc2c-fs-opendir-buffer-size|sibling.txt@/tmp/tsc2c-fs-opendir-buffer-size|top.txt@/tmp/tsc2c-fs-opendir-buffer-size
