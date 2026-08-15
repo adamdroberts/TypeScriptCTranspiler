@@ -3686,6 +3686,7 @@ typedef struct tsc_net_socket {
     double idle_timeout_timer;
     double idle_timeout_ms;
     double poll_timer;
+    bool refed;
     tsc_net_server_t* server;
 } tsc_net_socket_t;
 
@@ -3696,6 +3697,7 @@ struct tsc_net_server {
     bool close_requested;
     bool close_emitted;
     bool listening_emitted;
+    bool refed;
     SSL_CTX* tls_ctx;
     double poll_timer;
     uint64_t connection_count;
@@ -3973,6 +3975,7 @@ static void tsc_net_socket_reset_idle_timer(tsc_net_socket_t* socket) {
         tsc_clear_timeout(socket->idle_timeout_timer);
     }
     socket->idle_timeout_timer = tsc_set_timeout(tsc_net_socket_timeout, socket, socket->idle_timeout_ms);
+    if (!socket->refed) tsc_unref_timeout(socket->idle_timeout_timer);
 }
 
 static int tsc_net_socket_send_now(tsc_net_socket_t* socket, const uint8_t* bytes, size_t len, size_t* written_out) {
@@ -4178,6 +4181,7 @@ static tsc_value_t tsc_net_socket_set_timeout(void* env, tsc_value_t this_arg, t
         }
         if (timeout_ms > 0.0 && !socket->destroyed) {
             socket->idle_timeout_timer = tsc_set_timeout(tsc_net_socket_timeout, socket, timeout_ms);
+            if (!socket->refed) tsc_unref_timeout(socket->idle_timeout_timer);
         }
     }
     return this_arg;
@@ -4277,9 +4281,45 @@ static tsc_value_t tsc_net_socket_address(void* env, tsc_value_t this_arg, tsc_a
     return tsc_net_endpoint_value(&local);
 }
 
-static tsc_value_t tsc_net_ref_noop(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)env;
+static tsc_value_t tsc_net_socket_ref(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (socket) {
+        socket->refed = true;
+        tsc_ref_timeout(socket->poll_timer);
+        tsc_ref_timeout(socket->idle_timeout_timer);
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_unref(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (socket) {
+        socket->refed = false;
+        tsc_unref_timeout(socket->poll_timer);
+        tsc_unref_timeout(socket->idle_timeout_timer);
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_server_ref(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (server) {
+        server->refed = true;
+        tsc_ref_timeout(server->poll_timer);
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_server_unref(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_net_server_t* server = (tsc_net_server_t*)env;
+    if (server) {
+        server->refed = false;
+        tsc_unref_timeout(server->poll_timer);
+    }
     return this_arg;
 }
 
@@ -4295,8 +4335,8 @@ static void tsc_net_socket_add_methods(tsc_object_t* object, tsc_net_socket_t* s
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_net_socket_end, socket, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_net_socket_destroy, socket, 0.0, tsc_str_from_lit("destroy", 7)));
     tsc_object_set(object, tsc_str_from_lit("address", 7), tsc_value_function_generic_named(tsc_net_socket_address, socket, 0.0, tsc_str_from_lit("address", 7)));
-    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_ref_noop, socket, 0.0, tsc_str_from_lit("ref", 3)));
-    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_ref_noop, socket, 0.0, tsc_str_from_lit("unref", 5)));
+    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_socket_ref, socket, 0.0, tsc_str_from_lit("ref", 3)));
+    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_socket_unref, socket, 0.0, tsc_str_from_lit("unref", 5)));
 }
 
 static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socket, tsc_net_socket_t** out_socket) {
@@ -4310,6 +4350,7 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     socket->idle_timeout_timer = 0.0;
     socket->idle_timeout_ms = 0.0;
     socket->poll_timer = 0.0;
+    socket->refed = true;
     socket->end_callback = tsc_value_undefined();
     socket->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();
@@ -4629,6 +4670,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     server->listening_emitted = false;
     tsc_net_server_refresh_props(server);
     server->poll_timer = tsc_set_interval(tsc_net_server_poll, server, 1.0);
+    if (!server->refed) tsc_unref_timeout(server->poll_timer);
     return this_arg;
 }
 
@@ -4638,8 +4680,8 @@ static void tsc_net_server_add_methods(tsc_object_t* object, tsc_net_server_t* s
     tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_generic_named(tsc_net_server_close, server, 0.0, tsc_str_from_lit("close", 5)));
     tsc_object_set(object, tsc_str_from_lit("getConnections", 14), tsc_value_function_generic_named(tsc_net_server_get_connections, server, 1.0, tsc_str_from_lit("getConnections", 14)));
     tsc_object_set(object, tsc_str_from_lit("address", 7), tsc_value_function_generic_named(tsc_net_server_address, server, 0.0, tsc_str_from_lit("address", 7)));
-    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_ref_noop, server, 0.0, tsc_str_from_lit("ref", 3)));
-    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_ref_noop, server, 0.0, tsc_str_from_lit("unref", 5)));
+    tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_net_server_ref, server, 0.0, tsc_str_from_lit("ref", 3)));
+    tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_net_server_unref, server, 0.0, tsc_str_from_lit("unref", 5)));
 }
 
 static void tsc_net_server_poll(void* env) {
@@ -4693,6 +4735,7 @@ static tsc_value_t tsc_net_create_server_with_tls(tsc_value_t connection_listene
     tsc_net_server_t* server = (tsc_net_server_t*)TSC_GC_MALLOC(sizeof(tsc_net_server_t));
     memset(server, 0, sizeof(*server));
     server->fd = -1;
+    server->refed = true;
     server->tls_ctx = tls_ctx;
     server->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();
