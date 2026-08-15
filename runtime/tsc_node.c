@@ -2117,33 +2117,44 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     tsc_object_set(object, tsc_str_from_lit("kill", 4), tsc_value_function_generic_named(tsc_child_process_kill, child, 1.0, tsc_str_from_lit("kill", 4)));
     tsc_object_set(object, tsc_str_from_lit("ref", 3), tsc_value_function_generic_named(tsc_child_process_noop, child, 0.0, tsc_str_from_lit("ref", 3)));
     tsc_object_set(object, tsc_str_from_lit("unref", 5), tsc_value_function_generic_named(tsc_child_process_noop, child, 0.0, tsc_str_from_lit("unref", 5)));
+    tsc_value_t stdin_value = tsc_value_null();
+    tsc_value_t stdout_value = tsc_value_null();
+    tsc_value_t stderr_value = tsc_value_null();
     if (pipe_stdin) {
         tsc_object_t* stream = tsc_object_new();
         child->stdin_stream->event.object = stream;
         child->stdin_stream->event.value = tsc_value_object(stream);
         tsc_child_set_stream_methods(stream, child->stdin_stream);
-        tsc_object_set(object, tsc_str_from_lit("stdin", 5), child->stdin_stream->event.value);
+        stdin_value = child->stdin_stream->event.value;
     } else {
-        tsc_object_set(object, tsc_str_from_lit("stdin", 5), tsc_value_null());
+        stdin_value = tsc_value_null();
     }
+    tsc_object_set(object, tsc_str_from_lit("stdin", 5), stdin_value);
     if (pipe_stdout) {
         tsc_object_t* stream = tsc_object_new();
         child->stdout_stream->event.object = stream;
         child->stdout_stream->event.value = tsc_value_object(stream);
         tsc_child_set_stream_methods(stream, child->stdout_stream);
-        tsc_object_set(object, tsc_str_from_lit("stdout", 6), child->stdout_stream->event.value);
+        stdout_value = child->stdout_stream->event.value;
     } else {
-        tsc_object_set(object, tsc_str_from_lit("stdout", 6), tsc_value_null());
+        stdout_value = tsc_value_null();
     }
+    tsc_object_set(object, tsc_str_from_lit("stdout", 6), stdout_value);
     if (pipe_stderr) {
         tsc_object_t* stream = tsc_object_new();
         child->stderr_stream->event.object = stream;
         child->stderr_stream->event.value = tsc_value_object(stream);
         tsc_child_set_stream_methods(stream, child->stderr_stream);
-        tsc_object_set(object, tsc_str_from_lit("stderr", 6), child->stderr_stream->event.value);
+        stderr_value = child->stderr_stream->event.value;
     } else {
-        tsc_object_set(object, tsc_str_from_lit("stderr", 6), tsc_value_null());
+        stderr_value = tsc_value_null();
     }
+    tsc_object_set(object, tsc_str_from_lit("stderr", 6), stderr_value);
+    tsc_array_t* stdio = tsc_array_new(sizeof(tsc_value_t), 3);
+    tsc_array_push_value(stdio, stdin_value);
+    tsc_array_push_value(stdio, stdout_value);
+    tsc_array_push_value(stdio, stderr_value);
+    tsc_object_set(object, tsc_str_from_lit("stdio", 5), tsc_value_array(stdio));
     child->poll_timer = tsc_set_interval(tsc_child_process_poll, child, 1.0);
     if (!isnan(timeout_ms) && !isinf(timeout_ms) && timeout_ms > 0.0) {
         child->timeout_timer = tsc_set_timeout(tsc_child_process_timeout, child, timeout_ms);

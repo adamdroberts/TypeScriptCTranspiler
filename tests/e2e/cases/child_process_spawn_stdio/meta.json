@@ -1,0 +1,3 @@
+{
+  "description": "child_process spawn exposes stdio aliases for piped and ignored streams"
+}
