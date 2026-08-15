@@ -48870,54 +48870,196 @@ class Emitter {
             (!ts.isReturnStatement(result) && !resultIsThrow) || !result.expression) return false;
         const initializer = loop.initializer;
         type BindingDescriptor = {
+            element: ts.BindingElement | null;
             identifier: ts.Identifier;
             index: number | null;
             property: string | null;
             initializer: ts.Expression | null;
             rest: boolean;
+            accessPath: ForOfObjectAccessSegment[];
+            objectRestKeys: string[];
+            type: CType;
+        };
+        const defaultInitializers = new Map<number, ts.Expression>();
+        let nextDefaultId = 0;
+        const bindingInitializerSuspends = (node: ts.Node): boolean => {
+            let suspends = false;
+            const visit = (child: ts.Node): void => {
+                if (suspends || ts.isAwaitExpression(child) || ts.isYieldExpression(child)) {
+                    suspends = true;
+                    return;
+                }
+                if (ts.isFunctionLike(child) || ts.isClassLike(child)) return;
+                ts.forEachChild(child, visit);
+            };
+            visit(node);
+            return suspends;
+        };
+        const segmentWithDefault = (
+            segment: ForOfObjectAccessSegment,
+            defaultInitializer: ts.Expression | undefined,
+        ): ForOfObjectAccessSegment | null => {
+            if (!defaultInitializer) return segment;
+            if (bindingInitializerSuspends(defaultInitializer)) return null;
+            const defaultId = nextDefaultId++;
+            defaultInitializers.set(defaultId, defaultInitializer);
+            return { ...segment, defaultId, defaultInitializer };
         };
         const bindingDescriptorsFor = (name: ts.BindingName): BindingDescriptor[] | null => {
-            if (ts.isIdentifier(name)) return [{ identifier: name, index: null, property: null, initializer: null, rest: false }];
-            if (ts.isArrayBindingPattern(name)) {
-                if (name.elements.length === 0) return null;
-                const descriptors: BindingDescriptor[] = [];
+            if (ts.isIdentifier(name)) {
+                return [{
+                    element: null,
+                    identifier: name,
+                    index: null,
+                    property: null,
+                    initializer: null,
+                    rest: false,
+                    accessPath: [],
+                    objectRestKeys: [],
+                    type: T_VALUE,
+                }];
+            }
+            const descriptors: BindingDescriptor[] = [];
+            const collectArray = (
+                current: ts.ArrayBindingPattern,
+                prefix: readonly ForOfObjectAccessSegment[],
+            ): boolean => {
+                if (current.elements.length === 0) return false;
                 let restSeen = false;
-                for (let index = 0; index < name.elements.length; index++) {
-                    const element = name.elements[index]!;
-                    if (ts.isOmittedExpression(element)) {
-                        if (restSeen) return null;
+                for (let index = 0; index < current.elements.length; index++) {
+                    const element = current.elements[index];
+                    if (!element || ts.isOmittedExpression(element)) {
+                        if (restSeen) return false;
                         continue;
                     }
-                    if (!ts.isBindingElement(element) || element.dotDotDotToken || !ts.isIdentifier(element.name)) {
-                        if (!ts.isBindingElement(element) || !element.dotDotDotToken || !ts.isIdentifier(element.name) || element.initializer || restSeen || index !== name.elements.length - 1) {
-                            return null;
-                        }
-                        descriptors.push({ identifier: element.name, index, property: null, initializer: null, rest: true });
+                    if (!ts.isBindingElement(element)) return false;
+                    if (element.dotDotDotToken) {
+                        if (
+                            restSeen ||
+                            index !== current.elements.length - 1 ||
+                            !ts.isIdentifier(element.name) ||
+                            element.propertyName ||
+                            element.initializer
+                        ) return false;
+                        descriptors.push({
+                            element,
+                            identifier: element.name,
+                            index,
+                            property: null,
+                            initializer: null,
+                            rest: true,
+                            accessPath: [...prefix],
+                            objectRestKeys: [],
+                            type: T_VALUE,
+                        });
                         restSeen = true;
                         continue;
                     }
-                    if (restSeen) return null;
-                    descriptors.push({ identifier: element.name, index, property: null, initializer: element.initializer ?? null, rest: false });
+                    if (restSeen || element.propertyName) return false;
+                    const segment = segmentWithDefault(
+                        { kind: "index", value: index },
+                        element.initializer,
+                    );
+                    if (!segment) return false;
+                    const accessPath = [...prefix, segment];
+                    if (ts.isObjectBindingPattern(element.name)) {
+                        if (!collectObject(element.name, accessPath)) return false;
+                        continue;
+                    }
+                    if (ts.isArrayBindingPattern(element.name)) {
+                        if (!collectArray(element.name, accessPath)) return false;
+                        continue;
+                    }
+                    if (!ts.isIdentifier(element.name)) return false;
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        index,
+                        property: null,
+                        initializer: element.initializer ?? null,
+                        rest: false,
+                        accessPath,
+                        objectRestKeys: [],
+                        type: T_VALUE,
+                    });
                 }
-                return descriptors;
-            }
-            if (!ts.isObjectBindingPattern(name) || name.elements.length === 0) return null;
-            const descriptors: BindingDescriptor[] = [];
-            let restSeen = false;
-            for (let index = 0; index < name.elements.length; index++) {
-                const element = name.elements[index]!;
-                if (element.dotDotDotToken) {
-                    if (restSeen || index !== name.elements.length - 1 || !ts.isIdentifier(element.name) || element.initializer) return null;
-                    descriptors.push({ identifier: element.name, index: null, property: null, initializer: null, rest: true });
-                    restSeen = true;
-                    continue;
+                return true;
+            };
+            const collectObject = (
+                current: ts.ObjectBindingPattern,
+                prefix: readonly ForOfObjectAccessSegment[],
+            ): boolean => {
+                if (current.elements.length === 0) return false;
+                let restSeen = false;
+                const boundProperties: string[] = [];
+                for (let index = 0; index < current.elements.length; index++) {
+                    const element = current.elements[index];
+                    if (!element || !ts.isBindingElement(element)) return false;
+                    if (element.dotDotDotToken) {
+                        if (
+                            restSeen ||
+                            index !== current.elements.length - 1 ||
+                            !ts.isIdentifier(element.name) ||
+                            element.initializer
+                        ) return false;
+                        descriptors.push({
+                            element,
+                            identifier: element.name,
+                            index: null,
+                            property: null,
+                            initializer: null,
+                            rest: true,
+                            accessPath: [...prefix],
+                            objectRestKeys: [...boundProperties],
+                            type: T_VALUE,
+                        });
+                        restSeen = true;
+                        continue;
+                    }
+                    if (restSeen) return false;
+                    const property = element.propertyName
+                        ? this.staticPropertyName(element.propertyName)
+                        : ts.isIdentifier(element.name)
+                            ? element.name.text
+                            : null;
+                    if (property === null) return false;
+                    if (element.propertyName && bindingInitializerSuspends(element.propertyName)) return false;
+                    const segment = segmentWithDefault(
+                        { kind: "property", value: property },
+                        element.initializer,
+                    );
+                    if (!segment) return false;
+                    const accessPath = [...prefix, segment];
+                    boundProperties.push(property);
+                    if (ts.isObjectBindingPattern(element.name)) {
+                        if (!collectObject(element.name, accessPath)) return false;
+                        continue;
+                    }
+                    if (ts.isArrayBindingPattern(element.name)) {
+                        if (!collectArray(element.name, accessPath)) return false;
+                        continue;
+                    }
+                    if (!ts.isIdentifier(element.name)) return false;
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        index: null,
+                        property,
+                        initializer: element.initializer ?? null,
+                        rest: false,
+                        accessPath,
+                        objectRestKeys: [],
+                        type: T_VALUE,
+                    });
                 }
-                if (restSeen || !ts.isIdentifier(element.name)) return null;
-                const property = element.propertyName ? this.staticPropertyName(element.propertyName) : element.name.text;
-                if (property === null) return null;
-                descriptors.push({ identifier: element.name, index: null, property, initializer: element.initializer ?? null, rest: false });
-            }
-            return descriptors;
+                return true;
+            };
+            const valid = ts.isArrayBindingPattern(name)
+                ? collectArray(name, [])
+                : ts.isObjectBindingPattern(name)
+                    ? collectObject(name, [])
+                    : false;
+            return valid && descriptors.length > 0 ? descriptors : null;
         };
         const bindingDescriptors = ts.isVariableDeclarationList(initializer)
             ? initializer.declarations.length === 1
@@ -49593,9 +49735,7 @@ class Emitter {
         for (const route of [directRoute, thenRoute, elseRoute]) {
             if (route?.expression) visitReturn(route.expression);
         }
-        for (const entry of bindingEntries) {
-            if (entry.initializer) visitReturn(entry.initializer);
-        }
+        for (const initializer of defaultInitializers.values()) visitReturn(initializer);
         visitReturn(result.expression);
         if (!bodySupported) return false;
 
@@ -49809,9 +49949,7 @@ class Emitter {
             for (const statement of route.statements) visitThis(statement);
             if (route.expression) visitThis(route.expression);
         }
-        for (const entry of bindingEntries) {
-            if (entry.initializer) visitThis(entry.initializer);
-        }
+        for (const initializer of defaultInitializers.values()) visitThis(initializer);
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
 
@@ -49873,23 +50011,22 @@ class Emitter {
             defaultScope.set(param.symbol, `state->${param.field}`);
             defaultScopeTypes.set(param.symbol, param.type);
         }
-        const bindingDefaults = new Map<typeof bindingEntries[number], string>();
-        for (const entry of bindingEntries) {
-            if (!entry.initializer) continue;
+        const bindingDefaults = new Map<number, string>();
+        for (const [defaultId, defaultInitializer] of defaultInitializers) {
             this.argumentValueScopes.push(defaultScope);
             this.argumentValueTypeScopes.push(defaultScopeTypes);
             if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
             let defaultResult: EmitResult;
             this.asyncAwaitContinuationAdapterDepth++;
             try {
-                defaultResult = this.emitExpr(entry.initializer);
+                defaultResult = this.emitExpr(defaultInitializer);
             } finally {
                 this.asyncAwaitContinuationAdapterDepth--;
                 if (usesThis && thisValue) this.functionThisStack.pop();
                 this.argumentValueTypeScopes.pop();
                 this.argumentValueScopes.pop();
             }
-            bindingDefaults.set(entry, this.coerce(defaultResult, T_VALUE, entry.initializer));
+            bindingDefaults.set(defaultId, this.coerce(defaultResult, T_VALUE, defaultInitializer));
         }
 
         const bodyBindingFieldBySymbol = new Map(bodyBindingFields.map(({ entry, field }) => [entry.symbol, field]));
@@ -50925,15 +51062,48 @@ class Emitter {
         callback.line(`bool ${finishVar} = ${doneVar};`);
         callback.open(`if (!${doneVar})`);
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
+        const accessTemps = new Map<ForOfObjectAccessSegment, string>();
+        const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string => {
+            let source = itemVar;
+            for (const segment of accessPath) {
+                const cached = accessTemps.get(segment);
+                if (cached) {
+                    source = cached;
+                    continue;
+                }
+                const value = segment.kind === "property"
+                    ? `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`
+                    : segment.kind === "index"
+                        ? `tsc_value_get_index(${source}, ${segment.value}.0)`
+                        : `tsc_value_get_prop(${source}, ${segment.value})`;
+                const valueTemp = this.freshTemp("_for_await_binding_value");
+                if (segment.defaultId === undefined) {
+                    callback.line(`${T_VALUE.c} const ${valueTemp} = ${value};`);
+                } else {
+                    const fallback = bindingDefaults.get(segment.defaultId);
+                    if (fallback === undefined) {
+                        throw new Error("for-await nested binding default was not staged");
+                    }
+                    callback.line(`${T_VALUE.c} ${valueTemp} = ${value};`);
+                    callback.open(`if (tsc_value_is_undefined(${valueTemp}))`);
+                    callback.line(`${valueTemp} = ${fallback};`);
+                    callback.close();
+                }
+                accessTemps.set(segment, valueTemp);
+                source = valueTemp;
+            }
+            return source;
+        };
         const bindingSource = (entry: (BindingDescriptor & { symbol: ts.Symbol; type: CType; name: string })): EmitResult => {
             if (entry.rest) {
+                const restSource = accessValue(entry.accessPath);
                 if (entry.index !== null) {
                     const restArray = this.freshTemp("_for_await_rest");
                     const restIndex = this.freshTemp("_for_await_rest_i");
                     const restValue = this.freshTemp("_for_await_rest_v");
                     callback.line(`tsc_array_t* ${restArray} = tsc_array_new(sizeof(tsc_value_t), 1);`);
-                    callback.open(`for (size_t ${restIndex} = ${entry.index}; ${restIndex} < (size_t)tsc_value_length(${itemVar}); ${restIndex}++)`);
-                    callback.line(`tsc_value_t ${restValue} = tsc_value_get_index(${itemVar}, (double)${restIndex});`);
+                    callback.open(`for (size_t ${restIndex} = ${entry.index}; ${restIndex} < (size_t)tsc_value_length(${restSource}); ${restIndex}++)`);
+                    callback.line(`tsc_value_t ${restValue} = tsc_value_get_index(${restSource}, (double)${restIndex});`);
                     callback.line(`tsc_array_push_raw(${restArray}, &${restValue});`);
                     callback.close();
                     return entry.type.kind === "value"
@@ -50944,36 +51114,22 @@ class Emitter {
                 const restKeys = this.freshTemp("_for_await_object_rest_keys");
                 const restIndex = this.freshTemp("_for_await_object_rest_i");
                 const restKey = this.freshTemp("_for_await_object_rest_key");
-                const excluded = bindingEntries
-                    .filter((candidate) => !candidate.rest && candidate.property !== null)
-                    .map((candidate) => candidate.property!);
+                const excluded = entry.objectRestKeys;
                 const skip = excluded
                     .map((property) => `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`)
                     .join(" || ");
                 callback.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
-                callback.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${itemVar});`);
+                callback.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${restSource});`);
                 callback.open(`for (size_t ${restIndex} = 0; ${restIndex} < ${restKeys}->len; ${restIndex}++)`);
                 callback.line(`tsc_str_t* ${restKey} = TSC_ARR(tsc_str_t*, ${restKeys}, ${restIndex});`);
-                callback.line(`${skip ? `if (!(${skip})) ` : ""}tsc_object_set(${restObject}, ${restKey}, tsc_value_get_prop(${itemVar}, ${restKey}));`);
+                callback.line(`${skip ? `if (!(${skip})) ` : ""}tsc_object_set(${restObject}, ${restKey}, tsc_value_get_prop(${restSource}, ${restKey}));`);
                 callback.close();
                 return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
             }
-            if (entry.index !== null) return { c: `tsc_value_get_index(${itemVar}, ${entry.index}.0)`, ty: T_VALUE };
-            if (entry.property !== null) {
-                return { c: `tsc_value_get_prop(${itemVar}, tsc_str_from_lit("${escapeCString(entry.property)}", ${utf8ByteLen(entry.property)}))`, ty: T_VALUE };
-            }
-            return { c: itemVar, ty: T_VALUE };
+            return { c: accessValue(entry.accessPath), ty: T_VALUE };
         };
         const bindingValueFor = (entry: typeof bindingEntries[number]): EmitResult => {
-            let source = bindingSource(entry);
-            const defaultValue = bindingDefaults.get(entry);
-            if (defaultValue !== undefined) {
-                const sourceVar = this.freshTemp("_for_await_binding");
-                callback.line(`${T_VALUE.c} ${sourceVar} = ${source.c};`);
-                callback.line(`if (tsc_value_is_undefined(${sourceVar})) ${sourceVar} = ${defaultValue};`);
-                source = { c: sourceVar, ty: T_VALUE };
-            }
-            return source;
+            return bindingSource(entry);
         };
         if (bindingParameter) {
             const source = bindingValueFor(binding);

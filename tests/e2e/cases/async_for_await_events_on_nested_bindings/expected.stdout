@@ -1,0 +1,4 @@
+array-nested: array-kind-parent,array-value-parent,array-label-parent,array-tail
+object-nested: object-first-parent,object-second-parent,object-third-parent
+leaf-defaults: leaf-kind,leaf-value,leaf-label
+fallback-calls: 2
