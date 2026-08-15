@@ -4601,6 +4601,8 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     tsc_str_t* host = NULL;
     tsc_value_t callback = tsc_value_undefined();
     int backlog = 16;
+    bool ipv6_only = false;
+    bool ipv6_only_set = false;
     bool options_form = value_is_box(port_value) && value_tag(port_value) == TSC_VALUE_TAG_OBJECT;
     if (options_form) {
         tsc_value_t options_port = tsc_value_get_prop(port_value, tsc_str_from_lit("port", 4));
@@ -4621,6 +4623,15 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
                 tsc_throw_str(tsc_str_from_cstr("net.Server.listen options.backlog must be a non-negative finite integer"));
             }
             backlog = (int)tsc_value_as_num(options_backlog);
+        }
+        tsc_value_t options_ipv6_only = tsc_value_get_prop(port_value, tsc_str_from_lit("ipv6Only", 8));
+        if (!tsc_value_is_nullish(options_ipv6_only)) {
+            if (!value_is_box(options_ipv6_only) ||
+                (value_tag(options_ipv6_only) != TSC_VALUE_TAG_FALSE && value_tag(options_ipv6_only) != TSC_VALUE_TAG_TRUE)) {
+                tsc_throw_str(tsc_str_from_cstr("net.Server.listen options.ipv6Only must be a boolean"));
+            }
+            ipv6_only = tsc_value_as_bool(options_ipv6_only);
+            ipv6_only_set = true;
         }
         port_value = options_port;
         if (args->len > 1) {
@@ -4662,6 +4673,21 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     }
     int reuse = 1;
     (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+    if (endpoint.ss_family == AF_INET6 && ipv6_only_set) {
+#ifdef IPV6_V6ONLY
+        int only = ipv6_only ? 1 : 0;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &only, sizeof(only)) != 0) {
+            int error = errno;
+            close(fd);
+            tsc_throw_str(tsc_str_from_cstr(strerror(error)));
+        }
+#else
+        if (ipv6_only) {
+            close(fd);
+            tsc_throw_str(tsc_str_from_cstr("net.Server.listen ipv6Only is unavailable on this platform"));
+        }
+#endif
+    }
     if (endpoint.ss_family == AF_INET) {
         ((struct sockaddr_in*)&endpoint)->sin_port = htons((uint16_t)port);
     } else if (endpoint.ss_family == AF_INET6) {

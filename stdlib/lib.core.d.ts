@@ -2664,6 +2664,7 @@ interface NetListenOptions {
     port: number;
     host?: string;
     backlog?: number;
+    ipv6Only?: boolean;
 }
 interface NetServer {
     readonly listening: boolean;

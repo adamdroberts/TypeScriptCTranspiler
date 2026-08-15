@@ -1,0 +1,4 @@
+invalid ipv6Only: true
+server ipv6Only: true
+data: ok
+server close

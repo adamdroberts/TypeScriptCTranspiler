@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded `net.Server.listen({ ipv6Only })` support: IPv6 options-form servers now validate the boolean option and configure native `IPV6_V6ONLY` behavior while preserving existing IPv4/IPv6 defaults. Test: `net_server_listen_ipv6_only`.
 - Bounded `net.Server.listen({ backlog })` support: options-form servers now validate a finite non-negative integer backlog and pass it to the native POSIX listen queue while preserving the existing default. Test: `net_server_listen_backlog`.
 - Bounded `net.Socket` / `net.Server` `ref()` / `unref()` support: socket and server polling handles now participate in event-loop liveness, socket idle-timeout handles preserve their unref state when recreated, and `ref()` restores the default keep-alive behavior. Tests: `net_socket_ref_unref`, `net_server_ref_unref`.
 - Bounded asynchronous `child_process.spawn(...)` `ref()` / `unref()` support: child polling and timeout handles now participate in event-loop liveness, so unrefed children can finish after the parent has no refed work while `ref()` restores the default keep-alive behavior. Test: `child_process_spawn_ref_unref`.
