@@ -4726,6 +4726,7 @@ static void tsc_net_server_poll(void* env) {
         server->listening_emitted = true;
         tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
         (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("listening", 9), empty);
+        if (server->fd < 0 || !server->listening) return;
     }
     for (;;) {
         struct sockaddr_storage address;
