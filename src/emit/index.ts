@@ -60735,6 +60735,24 @@ class Emitter {
                     this.forOfElementTsType(stmt.expression),
                     assignBinding,
                 );
+            } else if (
+                ts.isArrayBindingPattern(decl.name) &&
+                sourceElemType.kind === "value" &&
+                decl.name.elements.some(
+                    (element) =>
+                        !!element &&
+                        ts.isBindingElement(element) &&
+                        (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
+                )
+            ) {
+                const entryValue = this.freshTemp("_lazy_nested_value");
+                buf.line(`tsc_value_t const ${entryValue} = ${current};`);
+                this.emitDynamicArrayBindingPatternForOf(
+                    buf,
+                    decl.name,
+                    entryValue,
+                    (identifier, value) => assignBinding(identifier, value),
+                );
             } else if (ts.isArrayBindingPattern(decl.name)) {
                 const restIndex = decl.name.elements.findIndex(
                     (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
@@ -68024,6 +68042,29 @@ class Emitter {
                 );
                 return true;
             }
+            const hasNestedBinding = entryBindingDecl.name.elements.some(
+                (element) =>
+                    !!element &&
+                    ts.isBindingElement(element) &&
+                    (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
+            );
+            if (valueType.kind === "value" && hasNestedBinding) {
+                const custom = this.emitCustomIteratorArray(fos.expression, iter);
+                if (!custom || custom.ty.kind !== "array" || custom.ty.elem?.kind !== "value") {
+                    unsupported(
+                        fos.expression,
+                        "custom iterator dynamic nested destructuring requires boxed iterator values",
+                    );
+                }
+                this.emitDynamicArrayBindingForOf(
+                    buf,
+                    fos,
+                    custom.c,
+                    this.freshTemp("_custom_nested_array_a"),
+                    this.freshTemp("_custom_nested_array_i"),
+                );
+                return true;
+            }
             const restIndex = entryBindingDecl.name.elements.findIndex(
                 (element) => ts.isBindingElement(element) && !!element.dotDotDotToken,
             );
@@ -69938,6 +69979,109 @@ class Emitter {
         buf.close();
     }
 
+    private emitDynamicArrayBindingPatternForOf(
+        buf: CBuf,
+        pattern: ts.ArrayBindingPattern,
+        sourceC: string,
+        assign: (identifier: ts.Identifier, value: EmitResult) => void,
+    ): void {
+        if (pattern.elements.length === 0) {
+            unsupported(pattern, "dynamic for-of array destructuring requires at least one binding");
+        }
+        for (let index = 0; index < pattern.elements.length; index++) {
+            const element = pattern.elements[index];
+            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (ts.isBindingElement(element) && element.dotDotDotToken) {
+                if (
+                    index !== pattern.elements.length - 1 ||
+                    !ts.isIdentifier(element.name) ||
+                    element.propertyName ||
+                    element.initializer
+                ) {
+                    unsupported(
+                        element,
+                        "dynamic for-of array rest requires one terminal identifier without a default",
+                    );
+                }
+                const restType = this.prepareType(mapType(element.name, this.checker));
+                if (
+                    restType.kind !== "value" &&
+                    (restType.kind !== "array" || restType.elem?.kind !== "value")
+                ) {
+                    unsupported(
+                        element.name,
+                        "dynamic for-of array rest requires a boxed or dynamic array-compatible binding",
+                    );
+                }
+                assign(
+                    element.name,
+                    this.emitDynamicArrayRestForOf(buf, sourceC, index),
+                );
+                continue;
+            }
+            if (
+                !ts.isBindingElement(element) ||
+                element.dotDotDotToken ||
+                element.propertyName
+            ) {
+                unsupported(
+                    element,
+                    "dynamic for-of array bindings support fixed identifier/object/array elements without rest",
+                );
+            }
+            if (element.initializer && this.nodeContainsYield(element.initializer)) {
+                unsupported(
+                    element,
+                    "dynamic for-of array bindings support await-free defaults only",
+                );
+            }
+            const value: EmitResult = {
+                c: `tsc_value_get_index(${sourceC}, ${index}.0)`,
+                ty: T_VALUE,
+            };
+            if (ts.isObjectBindingPattern(element.name)) {
+                if (element.initializer) {
+                    unsupported(
+                        element,
+                        "dynamic for-of array object bindings do not support a default for the nested object",
+                    );
+                }
+                this.emitDynamicObjectBindingsForOf(
+                    buf,
+                    element.name,
+                    value.c,
+                    (descriptor, nestedValue) => assign(descriptor.identifier, nestedValue),
+                );
+                continue;
+            }
+            if (ts.isArrayBindingPattern(element.name)) {
+                if (element.initializer) {
+                    unsupported(
+                        element,
+                        "dynamic for-of arrays do not support a default for the nested array",
+                    );
+                }
+                this.emitDynamicArrayBindingPatternForOf(
+                    buf,
+                    element.name,
+                    value.c,
+                    assign,
+                );
+                continue;
+            }
+            if (!ts.isIdentifier(element.name)) {
+                unsupported(
+                    element,
+                    "dynamic for-of array bindings support identifier elements without rest",
+                );
+            }
+            assign(
+                element.name,
+                this.forOfBindingValueWithDefault(element, value),
+            );
+        }
+    }
+
     private emitDynamicArrayBindingForOf(
         buf: CBuf,
         fos: ts.ForOfStatement,
@@ -69957,6 +70101,47 @@ class Emitter {
                 fos.initializer,
                 "dynamic for-of binding must use an array binding pattern",
             );
+        }
+        const hasNestedBinding = d.name.elements.some(
+            (element) =>
+                !!element &&
+                ts.isBindingElement(element) &&
+                (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
+        );
+        if (hasNestedBinding) {
+            const bindingIsConst = (fos.initializer.flags & ts.NodeFlags.Const) !== 0;
+            const qual = bindingIsConst ? " const" : "";
+            const entryVar = this.freshTemp("_dyn_nested_entry");
+            buf.open("");
+            buf.line(`tsc_array_t* const ${arrVar} = ${arrayExpr};`);
+            buf.line(`tsc_array_materialize_all(${arrVar});`);
+            buf.open(
+                `for (size_t ${idxVar} = 0; ${idxVar} < ${arrVar}->len; ${idxVar}++)`,
+            );
+            buf.line(
+                `tsc_value_t const ${entryVar} = tsc_array_index_present(${arrVar}, ${idxVar}) ` +
+                `? TSC_ARR(tsc_value_t, ${arrVar}, ${idxVar}) : tsc_value_undefined();`,
+            );
+            this.emitDynamicArrayBindingPatternForOf(
+                buf,
+                d.name,
+                entryVar,
+                (identifier, value) => {
+                    const type = this.prepareType(mapType(identifier, this.checker));
+                    buf.line(
+                        `${type.c}${qual} ${mangleIdent(identifier.text)} = ${this.coerce(value, type, identifier)};`,
+                    );
+                },
+            );
+            const labeledContinueTarget = this.directLabeledLoopName(fos)
+                ? this.freshTemp("_dynamic_nested_for_of_labeled_continue")
+                : null;
+            this.registerLabeledContinueTarget(fos, labeledContinueTarget);
+            this.emitLoopStmtInBlock(buf, fos.statement);
+            if (labeledContinueTarget) buf.line(`${labeledContinueTarget}:;`);
+            buf.close();
+            buf.close();
+            return;
         }
 
         const bindings: { name: string; index: number; type: CType; node: ts.Identifier }[] = [];
