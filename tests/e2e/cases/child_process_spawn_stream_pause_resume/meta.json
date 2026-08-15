@@ -1,0 +1,3 @@
+{
+  "description": "child_process spawn stdout pause/resume gates unread pipe data and exposes readable state"
+}

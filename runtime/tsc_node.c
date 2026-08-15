@@ -1199,6 +1199,7 @@ typedef struct tsc_child_stream {
     int fd;
     bool writable;
     bool encoding_utf8;
+    bool paused;
     bool ended;
     bool destroyed;
     bool end_requested;
@@ -1340,6 +1341,7 @@ static tsc_value_t tsc_child_stream_set_encoding(void* env, tsc_value_t this_arg
 
 static void tsc_child_stream_refresh_props(tsc_child_stream_t* stream) {
     if (!stream || !stream->event.value) return;
+    bool readable = !stream->writable && stream->fd >= 0 && !stream->ended && !stream->destroyed;
     tsc_value_set_prop(
         stream->event.value,
         tsc_str_from_lit("writable", 8),
@@ -1370,6 +1372,53 @@ static void tsc_child_stream_refresh_props(tsc_child_stream_t* stream) {
         tsc_str_from_lit("destroyed", 9),
         tsc_value_bool(stream->destroyed)
     );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("readable", 8),
+        tsc_value_bool(readable)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("readableEnded", 13),
+        tsc_value_bool(stream->ended)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("readableFlowing", 15),
+        tsc_value_bool(readable && !stream->paused)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("paused", 6),
+        tsc_value_bool(stream->paused)
+    );
+}
+
+static tsc_value_t tsc_child_stream_pause(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
+    if (stream) {
+        stream->paused = true;
+        tsc_child_stream_refresh_props(stream);
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_child_stream_resume(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
+    if (stream) {
+        stream->paused = false;
+        tsc_child_stream_refresh_props(stream);
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_child_stream_is_paused(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
+    return tsc_value_bool(stream && stream->paused);
 }
 
 static void tsc_child_stream_invoke_callback(tsc_value_t callback) {
@@ -1669,7 +1718,7 @@ static void tsc_child_emit_one_value(tsc_event_emitter_t* emitter, const char* n
 }
 
 static void tsc_child_stream_read(tsc_child_stream_t* stream) {
-    if (!stream || stream->fd < 0 || stream->ended) return;
+    if (!stream || stream->fd < 0 || stream->ended || stream->paused) return;
     for (;;) {
         uint8_t chunk[4096];
         ssize_t n = read(stream->fd, chunk, sizeof(chunk));
@@ -1780,8 +1829,9 @@ static void tsc_child_process_poll(void* env) {
 static void tsc_child_set_stream_methods(tsc_object_t* object, tsc_child_stream_t* stream) {
     tsc_child_add_event_methods(object, &stream->event);
     tsc_object_set(object, tsc_str_from_lit("setEncoding", 11), tsc_value_function_generic_named(tsc_child_stream_set_encoding, stream, 1.0, tsc_str_from_lit("setEncoding", 11)));
-    tsc_object_set(object, tsc_str_from_lit("pause", 5), tsc_value_function_generic_named(tsc_child_process_noop, stream, 0.0, tsc_str_from_lit("pause", 5)));
-    tsc_object_set(object, tsc_str_from_lit("resume", 6), tsc_value_function_generic_named(tsc_child_process_noop, stream, 0.0, tsc_str_from_lit("resume", 6)));
+    tsc_object_set(object, tsc_str_from_lit("pause", 5), tsc_value_function_generic_named(tsc_child_stream_pause, stream, 0.0, tsc_str_from_lit("pause", 5)));
+    tsc_object_set(object, tsc_str_from_lit("resume", 6), tsc_value_function_generic_named(tsc_child_stream_resume, stream, 0.0, tsc_str_from_lit("resume", 6)));
+    tsc_object_set(object, tsc_str_from_lit("isPaused", 8), tsc_value_function_generic_named(tsc_child_stream_is_paused, stream, 0.0, tsc_str_from_lit("isPaused", 8)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_child_stream_destroy, stream, 0.0, tsc_str_from_lit("destroy", 7)));
     if (stream->writable) {
         tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_child_stream_write, stream, 2.0, tsc_str_from_lit("write", 5)));

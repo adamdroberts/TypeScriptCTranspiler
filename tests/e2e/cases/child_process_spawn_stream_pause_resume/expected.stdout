@@ -1,0 +1,3 @@
+paused: true:true:true:false:false 0 true false
+resumed: false false true
+close: firstsecond 2 0 false true false
