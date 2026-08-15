@@ -1,0 +1,9 @@
+stat: true 10
+chmod: 384
+chown: true true
+times: 11000 12000
+ignored: smot
+fstat error
+fchmod error
+fchown error
+futimes error

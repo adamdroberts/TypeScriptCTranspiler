@@ -1243,6 +1243,7 @@ tsc_array_t* tsc_fs_readdir_encode_names(tsc_array_t* entries, const tsc_str_t* 
 tsc_array_t* tsc_fs_dirents_encode_names(tsc_array_t* entries, const tsc_str_t* encoding);
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path);
+tsc_fs_stats_t* tsc_fs_fstat_sync(double fd);
 tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal);
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path);
@@ -1321,6 +1322,9 @@ double tsc_fs_write_string_sync(double fd, const tsc_str_t* str, double position
 void tsc_fs_fsync_sync(double fd);
 void tsc_fs_fdatasync_sync(double fd);
 void tsc_fs_ftruncate_sync(double fd, double len);
+void tsc_fs_fchmod_sync(double fd, double mode);
+void tsc_fs_fchown_sync(double fd, double uid, double gid);
+void tsc_fs_futimes_sync(double fd, double atime, double mtime);
 double tsc_fs_writev_sync(double fd, const tsc_array_t* buffers, double position, bool position_is_null);
 void tsc_fs_mkdir_sync(const tsc_str_t* path);
 void tsc_fs_mkdir_sync_opts(const tsc_str_t* path, bool recursive, double mode);

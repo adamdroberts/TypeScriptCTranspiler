@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Synchronous `fs.fstatSync`, `fchmodSync`, `fchownSync`, and `futimesSync` now operate on open POSIX descriptors, returning the typed `Stats` subset and supporting numeric/Date metadata updates, import aliases, catchable descriptor errors, and ignored-argument evaluation. Test: `fs_fd_metadata`.
 - Finite dynamic `require(...)` proofs now materialize static global-RegExp `String.prototype.matchAll()` collections through `Array.from(...)`, preserving full matches, captures, nested indexing, and collection length for AOT module edges. Test: `dynamic_require_static_string_match_all`.
 - Finite dynamic `require(...)` proofs now resolve static `String.prototype.isWellFormed()` and `.toWellFormed()` fragments, including chained normalization/code-point reads, into the AOT module graph. Test: `dynamic_require_static_string_well_formed`.
 - Bounded `for await...of` consumers now emit yield-free binding defaults in source-order scope, so nested parent and leaf fallbacks can reference earlier bindings while remaining lazy and once-per-item. Forward references, suspending defaults, and broader binding graphs remain deferred. Test: `async_for_await_events_on_binding_default_scope`.

@@ -75302,6 +75302,10 @@ class Emitter {
             "fsyncSync",
             "fdatasyncSync",
             "ftruncateSync",
+            "fstatSync",
+            "fchmodSync",
+            "fchownSync",
+            "futimesSync",
             "readSync",
             "writeSync",
             "readvSync",
@@ -90004,6 +90008,63 @@ class Emitter {
 
                 return this.emitSequencedExpr(T_VOID, specs, ([fd, length]) =>
                     `tsc_fs_ftruncate_sync(${fd!}, ${length!})`,
+                );
+            }
+            case "fstatSync": {
+                if (args.length < 1) unsupported(call, "fs.fstatSync needs a file descriptor and optional { bigint: false } options");
+                this.validateFsStatFsOptions(args[1], "fs.fstatSync");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.fstatSync file descriptor must be a number");
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
+                return this.emitSequencedExpr(T_FS_STATS, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    ...optionSpecs,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([fd]) => `tsc_fs_fstat_sync(${fd!})`);
+            }
+            case "fchmodSync": {
+                if (args.length < 2) unsupported(call, "fs.fchmodSync needs a file descriptor and numeric mode");
+                const fdExpr = this.emitExpr(args[0]!);
+                const modeExpr = this.emitExpr(args[1]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.fchmodSync file descriptor must be a number");
+                if (modeExpr.ty.kind !== "number") unsupported(args[1]!, "fs.fchmodSync mode must be a number");
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: modeExpr, target: T_NUMBER, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([fd, mode]) => `tsc_fs_fchmod_sync(${fd!}, ${mode!})`);
+            }
+            case "fchownSync": {
+                if (args.length < 3) unsupported(call, "fs.fchownSync needs a file descriptor, uid, and gid");
+                const fdExpr = this.emitExpr(args[0]!);
+                const uidExpr = this.emitExpr(args[1]!);
+                const gidExpr = this.emitExpr(args[2]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.fchownSync file descriptor must be a number");
+                if (uidExpr.ty.kind !== "number") unsupported(args[1]!, "fs.fchownSync uid must be a number");
+                if (gidExpr.ty.kind !== "number") unsupported(args[2]!, "fs.fchownSync gid must be a number");
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: uidExpr, target: T_NUMBER, node: args[1]! },
+                    { value: gidExpr, target: T_NUMBER, node: args[2]! },
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([fd, uid, gid]) => `tsc_fs_fchown_sync(${fd!}, ${uid!}, ${gid!})`);
+            }
+            case "futimesSync": {
+                if (args.length < 3) unsupported(call, "fs.futimesSync needs a file descriptor, atime, and mtime");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.futimesSync file descriptor must be a number");
+                const atime = this.emitFsTimeArg(args[1]!, "fs.futimesSync atime");
+                const mtime = this.emitFsTimeArg(args[2]!, "fs.futimesSync mtime");
+                return this.emitSequencedExpr(T_VOID, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    atime,
+                    mtime,
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([fd, atimeValue, mtimeValue]) =>
+                    `tsc_fs_futimes_sync(${fd!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)})`,
                 );
             }
             case "readSync": {

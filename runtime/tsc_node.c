@@ -10672,6 +10672,18 @@ tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path) {
     return out;
 }
 
+tsc_fs_stats_t* tsc_fs_fstat_sync(double fd) {
+    int fd_int = (int)fd;
+    struct stat st;
+    if (fstat(fd_int, &st) != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.fstatSync: could not stat file descriptor"));
+        return NULL;
+    }
+    tsc_fs_stats_t* out = (tsc_fs_stats_t*)TSC_GC_MALLOC(sizeof(tsc_fs_stats_t));
+    fs_stats_fill(out, &st);
+    return out;
+}
+
 #ifndef TSC_HAS_LIBUV
 typedef struct {
     tsc_promise_t* promise;
@@ -13850,6 +13862,40 @@ void tsc_fs_ftruncate_sync(double fd, double len) {
     if (r != 0) {
         char err_msg[256];
         snprintf(err_msg, sizeof(err_msg), "fs.ftruncateSync: ftruncate failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+void tsc_fs_fchmod_sync(double fd, double mode) {
+    int fd_int = (int)fd;
+    mode_t mode_value = mode < 0 ? 0 : (mode_t)mode;
+    int r = fchmod(fd_int, mode_value);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.fchmodSync: fchmod failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+void tsc_fs_fchown_sync(double fd, double uid, double gid) {
+    int fd_int = (int)fd;
+    int r = fchown(fd_int, (uid_t)uid, (gid_t)gid);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.fchownSync: fchown failed, %s", strerror(errno));
+        tsc_throw_str(tsc_str_from_cstr(err_msg));
+    }
+}
+
+void tsc_fs_futimes_sync(double fd, double atime, double mtime) {
+    int fd_int = (int)fd;
+    struct timespec times[2];
+    times[0] = fs_seconds_to_timespec(atime);
+    times[1] = fs_seconds_to_timespec(mtime);
+    int r = futimens(fd_int, times);
+    if (r != 0) {
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "fs.futimesSync: futimes failed, %s", strerror(errno));
         tsc_throw_str(tsc_str_from_cstr(err_msg));
     }
 }

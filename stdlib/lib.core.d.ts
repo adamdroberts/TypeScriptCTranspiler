@@ -1403,6 +1403,9 @@ interface FSStatsOptions {
     bigint?: false;
     throwIfNoEntry?: boolean;
 }
+interface FSDescriptorStatsOptions {
+    bigint?: false;
+}
 interface FSStatsNoEntryOptions {
     bigint?: false;
     throwIfNoEntry: false;
@@ -1569,6 +1572,10 @@ interface FS {
     fsyncSync(fd: number, ...ignored: any[]): void;
     fdatasyncSync(fd: number, ...ignored: any[]): void;
     ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
+    fstatSync(fd: number, options?: FSDescriptorStatsOptions, ...ignored: any[]): FSStats;
+    fchmodSync(fd: number, mode: number, ...ignored: any[]): void;
+    fchownSync(fd: number, uid: number, gid: number, ...ignored: any[]): void;
+    futimesSync(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
@@ -1702,6 +1709,10 @@ declare module "fs" {
     export function fsyncSync(fd: number, ...ignored: any[]): void;
     export function fdatasyncSync(fd: number, ...ignored: any[]): void;
     export function ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
+    export function fstatSync(fd: number, options?: FSDescriptorStatsOptions, ...ignored: any[]): FSStats;
+    export function fchmodSync(fd: number, mode: number, ...ignored: any[]): void;
+    export function fchownSync(fd: number, uid: number, gid: number, ...ignored: any[]): void;
+    export function futimesSync(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
@@ -1753,6 +1764,10 @@ declare module "node:fs" {
     export function fsyncSync(fd: number, ...ignored: any[]): void;
     export function fdatasyncSync(fd: number, ...ignored: any[]): void;
     export function ftruncateSync(fd: number, len?: number, ...ignored: any[]): void;
+    export function fstatSync(fd: number, options?: FSDescriptorStatsOptions, ...ignored: any[]): FSStats;
+    export function fchmodSync(fd: number, mode: number, ...ignored: any[]): void;
+    export function fchownSync(fd: number, uid: number, gid: number, ...ignored: any[]): void;
+    export function futimesSync(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): void;
     export function readSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
     export function readvSync(fd: number, buffers: Buffer[], position?: number | null, ...ignored: any[]): number;
     export function writeSync(fd: number, buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): number;
