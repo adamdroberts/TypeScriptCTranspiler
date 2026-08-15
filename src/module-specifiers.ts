@@ -262,6 +262,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringCodeText.length > 0) return stringCodeText;
             const stringSearchText = resolveStaticStringSearchCall(node);
             if (stringSearchText.length > 0) return stringSearchText;
+            const stringLocaleCompareText = resolveStaticStringLocaleCompareCall(node);
+            if (stringLocaleCompareText.length > 0) return stringLocaleCompareText;
             const stringIdentityText = resolveStaticStringIdentityCall(node);
             if (stringIdentityText.length > 0) return stringIdentityText;
             const stringConcatText = resolveStaticStringConcatCall(node);
@@ -5460,6 +5462,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     out.push(String(result));
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
+            }
+        }
+        return dedupe(out);
+    };
+
+    const resolveStaticStringLocaleCompareCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "localeCompare") return [];
+        const values = resolve(callee.expression);
+        const others = resolve(call.arguments[0]!);
+        if (values.length === 0 || others.length === 0) return [];
+
+        const out: string[] = [];
+        for (const value of values) {
+            for (const other of others) {
+                const comparison = Buffer.compare(Buffer.from(value, "utf8"), Buffer.from(other, "utf8"));
+                out.push(String(comparison < 0 ? -1 : comparison > 0 ? 1 : 0));
+                if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
             }
         }
         return dedupe(out);
