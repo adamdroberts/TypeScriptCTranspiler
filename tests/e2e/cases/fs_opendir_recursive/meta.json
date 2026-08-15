@@ -1,0 +1,3 @@
+{
+  "description": "recursive fs.Dir handles with sync and Promise reads and early close"
+}

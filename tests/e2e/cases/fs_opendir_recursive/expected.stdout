@@ -1,0 +1,4 @@
+sync: deep.txt|nested|sibling.txt|top.txt
+flat: nested|sibling.txt|top.txt
+early: true true
+async: deep.txt|nested|sibling.txt|top.txt

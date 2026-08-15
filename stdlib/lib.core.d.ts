@@ -1391,6 +1391,9 @@ interface FSDirHandleEntry {
     isFIFO(...ignored: any[]): boolean;
     isSocket(...ignored: any[]): boolean;
 }
+interface FSDirOptions {
+    recursive?: boolean;
+}
 interface FSDir {
     readonly path: string;
     read(...ignored: any[]): Promise<FSDirHandleEntry | null>;
@@ -1616,7 +1619,7 @@ interface FS {
     readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
     readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
     readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
-    opendirSync(path: FSPathLike, options?: undefined | null, ...ignored: any[]): FSDir;
+    opendirSync(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): FSDir;
     statSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
@@ -1724,7 +1727,7 @@ interface FSPromises {
     readFile(path: FSPathLike, options: FSPromisesReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
     readFile(path: FSPathLike, options?: FSPromisesReadFileStringOptions, ...ignored: any[]): Promise<string>;
     open(path: FSPathLike, flags?: string | number, mode?: number, ...ignored: any[]): Promise<FSFileHandle>;
-    opendir(path: FSPathLike, options?: undefined | null, ...ignored: any[]): Promise<FSDir>;
+    opendir(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): Promise<FSDir>;
     writeFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
     appendFile(path: FSPathLike, data: string | Buffer, options?: FSPromisesAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
     readdir(path: FSPathLike, options: FSBufferEncoding | FSPromisesReaddirBufferOptions, ...ignored: any[]): Promise<Buffer[]>;
@@ -1783,7 +1786,7 @@ declare module "fs" {
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
     export function readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
-    export function opendirSync(path: FSPathLike, options?: undefined | null, ...ignored: any[]): FSDir;
+    export function opendirSync(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): FSDir;
     export function statSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
@@ -1839,7 +1842,7 @@ declare module "node:fs" {
     export function readdirSync(path: FSPathLike, options: FSBufferEncoding | FSReaddirBufferOptions, ...ignored: any[]): Buffer[];
     export function readdirSync(path: FSPathLike, options: FSReaddirDirentOptions, ...ignored: any[]): FSDirent[];
     export function readdirSync(path: FSPathLike, options?: FSReaddirStringOptions, ...ignored: any[]): string[];
-    export function opendirSync(path: FSPathLike, options?: undefined | null, ...ignored: any[]): FSDir;
+    export function opendirSync(path: FSPathLike, options?: FSDirOptions | null, ...ignored: any[]): FSDir;
     export function statSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;
     export function statSync(path: FSPathLike, options?: FSStatsOptions, ...ignored: any[]): FSStats;
     export function lstatSync(path: FSPathLike, options: FSStatsNoEntryOptions, ...ignored: any[]): FSStats | undefined;

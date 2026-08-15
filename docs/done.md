@@ -1,6 +1,7 @@
 # Implemented features
 
-- Verified bounded fs directory-handle coverage: `fs.opendirSync(...)` and `fs.promises.opendir(...)` now expose POSIX directory handles with `path`, synchronous and Promise `read`/`close` methods, boxed `Dirent` entries, direct iterator `next`/`return`, and `[Symbol.asyncIterator]()` support. Directory options beyond `undefined`/`null` and libuv-backed scheduling remain deferred. Test: `fs_opendir`.
+- Verified bounded fs directory-handle coverage: `fs.opendirSync(...)` and `fs.promises.opendir(...)` now expose POSIX directory handles with `path`, synchronous and Promise `read`/`close` methods, boxed `Dirent` entries, direct iterator `next`/`return`, and `[Symbol.asyncIterator]()` support. Literal/const `{ recursive: true | false }` options are covered by `fs_opendir_recursive`; encoding, buffer sizing, and libuv-backed scheduling remain deferred. Test: `fs_opendir`.
+- Verified bounded recursive fs directory-handle coverage: `fs.opendirSync(...)` and `fs.promises.opendir(...)` accept literal/const `{ recursive: true }` options and traverse nested POSIX directories depth-first, while early close releases active and parent handles. Encoding, buffer sizing, and libuv-backed scheduling remain deferred. Test: `fs_opendir_recursive`.
 - Verified bounded fs directory disposal coverage: `fs.Dir` handles now expose `[Symbol.asyncDispose]()` through the idempotent `close()` path, including automatic cleanup from bounded `await using` declarations. Test: `fs_dir_async_dispose`.
 - Verified bounded synchronous fs directory disposal coverage: `fs.Dir` handles now expose `[Symbol.dispose]()` through the idempotent `closeSync()` path, including automatic cleanup from bounded `using` declarations. Test: `fs_dir_dispose`.
 - CommonJS local object-returning factories now accept recursively `const`-aliased static `require(...)` arguments, preserving factory-parameter member reads and finite named/default/namespace AOT metadata. Test: `node_modules_commonjs_module_exports_factory_argument_alias_object`.
@@ -3563,6 +3564,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_copy_flags` | fs copy constants, libuv-backed Promise completion, COPYFILE_EXCL behavior, and static flag aliases |
 | `fs_open_flag_constants` | fs.constants exposes common POSIX open flags |
 | `fs_opendir` | fs.opendirSync and fs.promises.opendir directory handles, boxed entries, close, and async iteration |
+| `fs_opendir_recursive` | recursive fs.Dir traversal for sync and Promise handles plus early close |
 | `fs_dir_async_dispose` | fs.Dir Symbol.asyncDispose delegation to close, await using cleanup, and idempotency |
 | `fs_dir_dispose` | fs.Dir Symbol.dispose delegation to closeSync, using cleanup, and idempotency |
 | `fs_option_property_undefined` | fs option objects treat explicit or aliased undefined property values as defaults |

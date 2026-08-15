@@ -89858,12 +89858,18 @@ class Emitter {
                 });
             }
             case "opendirSync": {
-                if (args.length < 1) unsupported(call, "fs.opendirSync needs a path and optional options");
+                if (args.length < 1) unsupported(call, "fs.opendirSync needs a path and optional { recursive } options");
+                const options = this.emitFsDirOptions(args[1], "fs.opendirSync");
                 const pathExpr = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(T_VALUE, [
                     this.fsPathSpec(pathExpr, args[0]!, "fs.opendirSync path"),
-                    ...this.ignoredArgumentSpecs(args, 1),
-                ], ([path]) => `tsc_fs_opendir_sync(${path!})`);
+                    ...optionSpecs,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([path]) => `tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"})`);
             }
             case "statSync": {
                 if (args.length < 1) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
@@ -90567,6 +90573,41 @@ class Emitter {
             unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
         }
         return { recursive, mode: modeArg };
+    }
+
+    private emitFsDirOptions(
+        options: ts.Expression | undefined,
+        label: string,
+    ): { recursive: boolean } {
+        if (!options || this.isUndefinedLikeExpression(options)) return { recursive: false };
+        const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
+        if (this.isUndefinedLikeExpression(resolvedOptions) || resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
+            return { recursive: false };
+        }
+        if (!ts.isObjectLiteralExpression(resolvedOptions)) {
+            unsupported(options, `${label} options must be an object literal in this subset`);
+        }
+        let recursive = false;
+        for (const prop of resolvedOptions.properties) {
+            if (!ts.isPropertyAssignment(prop)) {
+                unsupported(prop, `${label} options only support recursive property assignments`);
+            }
+            const key = this.staticPropertyName(prop.name);
+            if (key !== "recursive") {
+                unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
+            }
+            const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+            if (this.isUndefinedExpression(valueNode)) {
+                recursive = false;
+                continue;
+            }
+            const value = this.fsBooleanOptionValue(valueNode);
+            if (value === null) {
+                unsupported(prop.initializer, `${label}.recursive must be a boolean literal in this subset`);
+            }
+            recursive = value;
+        }
+        return { recursive };
     }
 
     private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; copy: boolean; mode: SequencedCallArg } {
@@ -91316,13 +91357,19 @@ class Emitter {
                 ));
             }
             case "opendir": {
-                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional options");
+                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional { recursive } options");
+                const options = this.emitFsDirOptions(args[1], "fs.promises.opendir");
                 const pathExpr = this.emitExpr(args[0]!);
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(pathExpr, args[0]!, "fs.promises.opendir path"),
-                    ...this.ignoredArgumentSpecs(args, 1),
+                    ...optionSpecs,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => settle(
-                    `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}))`,
+                    `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}))`,
                 ));
             }
             case "readFile": {

@@ -11934,10 +11934,19 @@ static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent) {
     return tsc_value_object(object);
 }
 
+typedef struct tsc_fs_dir_frame {
+    DIR* dir;
+    char* path;
+} tsc_fs_dir_frame_t;
+
 typedef struct tsc_fs_dir {
     DIR* dir;
     tsc_str_t* path;
+    char* current_path;
+    bool recursive;
     bool closed;
+    bool exhausted;
+    tsc_array_t* frames;
     tsc_value_t value;
 } tsc_fs_dir_t;
 
@@ -11948,21 +11957,64 @@ static void tsc_fs_dir_close_internal(tsc_fs_dir_t* state) {
         closedir(state->dir);
         state->dir = NULL;
     }
+    free(state->current_path);
+    state->current_path = NULL;
+    if (state->frames) {
+        for (size_t i = 0; i < state->frames->len; i++) {
+            tsc_fs_dir_frame_t* frame = &TSC_ARR(tsc_fs_dir_frame_t, state->frames, i);
+            if (frame->dir) closedir(frame->dir);
+            free(frame->path);
+        }
+        state->frames->len = 0;
+    }
 }
 
 static tsc_value_t tsc_fs_dir_read_entry(tsc_fs_dir_t* state) {
-    if (!state || state->closed || !state->dir) {
+    if (!state || state->closed) {
         tsc_throw_str(tsc_str_from_cstr("fs.Dir is closed"));
         return tsc_value_null();
     }
-    errno = 0;
-    struct dirent* entry;
-    while ((entry = readdir(state->dir))) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-        return tsc_fs_dirent_value(fs_dirent_from_path(state->path->data, entry->d_name));
-    }
-    if (errno != 0) {
-        tsc_throw_str(tsc_str_from_cstr("fs.Dir.read: could not read dir"));
+    if (state->exhausted) return tsc_value_null();
+    while (state->dir) {
+        errno = 0;
+        struct dirent* entry;
+        while ((entry = readdir(state->dir))) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+            const char* parent_path = state->current_path ? state->current_path : state->path->data;
+            tsc_fs_dirent_t* dirent = fs_dirent_from_path(parent_path, entry->d_name);
+            tsc_value_t value = tsc_fs_dirent_value(dirent);
+            if (state->recursive && dirent->is_directory) {
+                char* child_path = fs_join_path(parent_path, entry->d_name);
+                DIR* child = opendir(child_path);
+                if (child) {
+                    tsc_fs_dir_frame_t frame;
+                    frame.dir = state->dir;
+                    frame.path = state->current_path;
+                    tsc_array_push_raw(state->frames, &frame);
+                    state->dir = child;
+                    state->current_path = child_path;
+                } else {
+                    free(child_path);
+                }
+            }
+            return value;
+        }
+        if (errno != 0) {
+            tsc_throw_str(tsc_str_from_cstr("fs.Dir.read: could not read dir"));
+            return tsc_value_null();
+        }
+        closedir(state->dir);
+        state->dir = NULL;
+        free(state->current_path);
+        state->current_path = NULL;
+        if (state->recursive && state->frames && state->frames->len > 0) {
+            tsc_fs_dir_frame_t frame = TSC_ARR(tsc_fs_dir_frame_t, state->frames, state->frames->len - 1);
+            state->frames->len--;
+            state->dir = frame.dir;
+            state->current_path = frame.path;
+            continue;
+        }
+        state->exhausted = true;
         return tsc_value_null();
     }
     return tsc_value_null();
@@ -12013,7 +12065,7 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
     (void)this_arg;
     (void)args;
     tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
-    if (!state || state->closed || !state->dir) {
+    if (!state || state->closed || state->exhausted || !state->dir) {
         return tsc_value_promise(tsc_promise_resolve(
             tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
         ));
@@ -12050,7 +12102,7 @@ static tsc_value_t tsc_fs_dir_async_iterator_builtin(void* env, tsc_value_t this
     return state ? state->value : tsc_value_undefined();
 }
 
-tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path) {
+tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive) {
     char* p = cstr_dup(path);
     DIR* dir = opendir(p);
     free(p);
@@ -12062,7 +12114,11 @@ tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path) {
     tsc_fs_dir_t* state = (tsc_fs_dir_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_t));
     state->dir = dir;
     state->path = (tsc_str_t*)path;
+    state->current_path = cstr_dup(path);
+    state->recursive = recursive;
     state->closed = false;
+    state->exhausted = false;
+    state->frames = tsc_array_new(sizeof(tsc_fs_dir_frame_t), 4);
     state->value = tsc_value_undefined();
 
     tsc_object_t* object = tsc_object_new();
