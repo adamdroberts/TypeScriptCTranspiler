@@ -5891,11 +5891,13 @@ typedef struct tsc_fs_file_handle_append_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
     tsc_value_t data_value;
+    tsc_value_t signal;
     tsc_buffer_t* buffer;
     int fd;
     size_t offset;
     bool flush;
     bool is_append;
+    bool aborted;
     bool req_pending;
     tsc_str_t* error;
     tsc_uv_buf_t write_buf;
@@ -6332,15 +6334,30 @@ static const char* tsc_fs_file_handle_append_error(const tsc_fs_file_handle_appe
 }
 
 static void tsc_fs_file_handle_append_async_finish(tsc_fs_file_handle_append_async_t* task, bool success) {
-    if (success) {
-        tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
-    } else {
-        tsc_promise_reject_in_place(
-            task->promise,
-            tsc_value_string(task->error ? task->error : tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, false)))
-        );
+    if (!task->aborted) {
+        if (success) {
+            tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
+        } else {
+            tsc_promise_reject_in_place(
+                task->promise,
+                tsc_value_string(task->error ? task->error : tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, false)))
+            );
+        }
     }
     tsc_fs_file_handle_append_async_remove(task);
+}
+
+static void tsc_fs_file_handle_append_async_abort(void* env) {
+    tsc_fs_file_handle_append_async_t* task = (tsc_fs_file_handle_append_async_t*)env;
+    if (!task || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) {
+        (void)uv_cancel((void*)&task->req);
+    }
 }
 
 static void tsc_fs_file_handle_append_async_fsync_cb(tsc_uv_fs_t* req);
@@ -6348,7 +6365,7 @@ static void tsc_fs_file_handle_append_async_fsync_cb(tsc_uv_fs_t* req);
 static void tsc_fs_file_handle_append_async_write_next(tsc_fs_file_handle_append_async_t* task);
 
 static void tsc_fs_file_handle_append_async_flush_or_finish(tsc_fs_file_handle_append_async_t* task, bool success) {
-    if (success && task->flush) {
+    if (success && task->flush && !task->aborted) {
         task->flush = false;
         int rc = uv_fs_fsync(g_tsc_fs_uv_loop, &task->req, task->fd, tsc_fs_file_handle_append_async_fsync_cb);
         if (rc < 0) {
@@ -6382,6 +6399,10 @@ static void tsc_fs_file_handle_append_async_write_cb(tsc_uv_fs_t* req) {
     task->req_pending = false;
     ssize_t result = uv_fs_get_result(req);
     uv_fs_req_cleanup(req);
+    if (task->aborted) {
+        tsc_fs_file_handle_append_async_finish(task, false);
+        return;
+    }
     if (result < 0 || result == 0) {
         task->error = tsc_str_from_cstr(tsc_fs_file_handle_append_error(task, false));
         tsc_fs_file_handle_append_async_flush_or_finish(task, false);
@@ -6392,6 +6413,10 @@ static void tsc_fs_file_handle_append_async_write_cb(tsc_uv_fs_t* req) {
 }
 
 static void tsc_fs_file_handle_append_async_write_next(tsc_fs_file_handle_append_async_t* task) {
+    if (task->aborted) {
+        tsc_fs_file_handle_append_async_finish(task, false);
+        return;
+    }
     if (task->offset == task->buffer->len) {
         tsc_fs_file_handle_append_async_flush_or_finish(task, true);
         return;
@@ -6448,6 +6473,13 @@ static bool tsc_fs_file_handle_append_flush(tsc_value_t options) {
     return !tsc_value_is_undefined(flush) && tsc_value_as_bool(flush);
 }
 
+static tsc_value_t tsc_fs_file_handle_append_signal(tsc_value_t options) {
+    if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) {
+        return tsc_value_undefined();
+    }
+    return tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
+}
+
 static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, bool is_append) {
     if (!args || args->len < 1) {
         tsc_throw_str(tsc_str_from_cstr(is_append
@@ -6459,7 +6491,9 @@ static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* hand
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
     }
     tsc_value_t data_value = TSC_ARR(tsc_value_t, args, 0);
-    tsc_str_t* encoding = args->len > 1 ? tsc_fs_file_handle_append_encoding(TSC_ARR(tsc_value_t, args, 1), is_append) : NULL;
+    tsc_value_t options = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    tsc_str_t* encoding = args->len > 1 ? tsc_fs_file_handle_append_encoding(options, is_append) : NULL;
+    tsc_value_t signal = tsc_fs_file_handle_append_signal(options);
     tsc_buffer_t* buffer = NULL;
     if (value_is_box(data_value) && value_tag(data_value) == TSC_VALUE_TAG_STRING) {
         buffer = tsc_buffer_from_str(tsc_value_as_string(data_value), encoding);
@@ -6477,14 +6511,23 @@ static tsc_promise_t* tsc_fs_file_handle_append_start(tsc_fs_file_handle_t* hand
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->data_value = data_value;
+    task->signal = signal;
     task->buffer = buffer;
     task->fd = handle->fd;
-    task->flush = args->len > 1 && tsc_fs_file_handle_append_flush(TSC_ARR(tsc_value_t, args, 1));
+    task->flush = args->len > 1 && tsc_fs_file_handle_append_flush(options);
     task->is_append = is_append;
     task->next = g_tsc_fs_file_handle_append_async;
     g_tsc_fs_file_handle_append_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
+    if (tsc_abort_signal_is_aborted(signal)) {
+        tsc_fs_file_handle_append_async_abort(task);
+        tsc_fs_file_handle_append_async_remove(task);
+        return promise;
+    }
     tsc_fs_file_handle_append_async_write_next(task);
+    if (task->req_pending) {
+        tsc_abort_signal_add_callback(signal, tsc_fs_file_handle_append_async_abort, task);
+    }
     return promise;
 }
 

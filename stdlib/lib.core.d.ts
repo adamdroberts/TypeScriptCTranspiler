@@ -1493,6 +1493,10 @@ interface FSWriteFileOptions {
     flush?: boolean;
 }
 type FSWriteFileEncodingOptions = FSFileContentEncoding | null | FSWriteFileOptions;
+interface FSFileHandleWriteFileOptions extends FSWriteFileOptions {
+    signal?: any;
+}
+type FSFileHandleWriteFileEncodingOptions = FSFileContentEncoding | null | FSFileHandleWriteFileOptions;
 interface FSPromisesWriteFileOptions extends FSWriteFileOptions {
     signal?: any;
 }
@@ -1505,6 +1509,10 @@ interface FSAppendFileOptions {
     flush?: boolean;
 }
 type FSAppendFileEncodingOptions = FSFileContentEncoding | null | FSAppendFileOptions;
+interface FSFileHandleAppendFileOptions extends FSAppendFileOptions {
+    signal?: any;
+}
+type FSFileHandleAppendFileEncodingOptions = FSFileContentEncoding | null | FSFileHandleAppendFileOptions;
 interface FSPromisesAppendFileOptions extends FSAppendFileOptions {
     signal?: any;
 }
@@ -1663,8 +1671,8 @@ interface FSFileHandle {
     write(string: string, position?: number | null, encoding?: BufferEncoding, ...ignored: any[]): Promise<FSFileStringWriteResult>;
     readv(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileReadvResult>;
     writev(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileWritevResult>;
-    appendFile(data: string | Buffer, options?: FSAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
-    writeFile(data: string | Buffer, options?: FSWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
+    appendFile(data: string | Buffer, options?: FSFileHandleAppendFileEncodingOptions, ...ignored: any[]): Promise<void>;
+    writeFile(data: string | Buffer, options?: FSFileHandleWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
     readFile(options?: FSBufferEncoding | null | FSFileHandleReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
     readFile(options: FSReadFileStringEncoding | FSFileHandleReadFileStringOptions, ...ignored: any[]): Promise<string>;
     readLines(options?: FSFileHandleReadLinesOptions | null, ...ignored: any[]): FSFileHandleReadLinesIterator;

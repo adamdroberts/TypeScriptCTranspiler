@@ -1,0 +1,9 @@
+write pending: rejected:write stop
+append pending: rejected:append stop
+write pre-aborted: rejected:pre-write stop
+append pre-aborted: rejected:pre-append stop
+write closed: true
+append closed: true
+write pre-aborted closed: true
+append pre-aborted closed: true
+error: pending
