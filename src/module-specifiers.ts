@@ -4809,7 +4809,16 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "match") return null;
         const inputs = resolve(callee.expression);
         if (inputs.length !== 1) return null;
-        const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        let regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        if (regexps.length === 0) {
+            const patterns = resolve(call.arguments[0]!);
+            if (patterns.length !== 1) return null;
+            try {
+                regexps = [new RegExp(patterns[0]!)];
+            } catch {
+                return null;
+            }
+        }
         if (regexps.length !== 1) return null;
 
         const match = inputs[0]!.match(regexps[0]!);
