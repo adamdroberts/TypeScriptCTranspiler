@@ -75395,12 +75395,12 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "resolveAny", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
         if (dnsNamed) {
             return this.emitDnsCall(call, dnsNamed);
         }
-        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "resolveAny", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
         if (dnsPromisesNamed) {
             return this.emitDnsPromisesCall(call, dnsPromisesNamed);
@@ -83217,6 +83217,7 @@ class Emitter {
             method !== "resolve6" &&
             method !== "reverse" &&
             method !== "resolveCname" &&
+            method !== "resolveAny" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -83249,6 +83250,9 @@ class Emitter {
         }
         if (method === "resolveCname") {
             return this.emitDnsResolveCall(call, "dns.resolveCname", "CNAME");
+        }
+        if (method === "resolveAny") {
+            return this.emitDnsResolveAnyCall(call);
         }
         if (method === "lookupService") {
             if (call.arguments.length < 3) {
@@ -83420,6 +83424,37 @@ class Emitter {
                     ? "tsc_dns_resolve_ptr"
                     : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
             return `({ ${resultType} ${result} = ${resolver}(${values[0]}); (void)${callbackCall}; })`;
+        });
+    }
+
+    private emitDnsResolveAnyCall(call: ts.CallExpression, label = "dns.resolveAny"): EmitResult {
+        if (call.arguments.length < 2) {
+            unsupported(call, `${label} expects hostname and callback`);
+        }
+        const hostNode = call.arguments[0]!;
+        const callbackNode = call.arguments[1]!;
+        const host = this.emitExpr(hostNode);
+        const callback = this.emitExpr(callbackNode);
+        const callbackType = this.prepareType(callback.ty);
+        if (callbackType.kind !== "function" || !callbackType.ret) {
+            unsupported(callbackNode, `${label} callback must be a function`);
+        }
+        return this.emitSequencedExpr(T_VOID, [
+            { value: host, target: T_STRING, node: hostNode },
+            { value: callback, target: callbackType, node: callbackNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 2),
+        ], (values) => {
+            const result = this.freshTemp("_dns");
+            const err: EmitResult = {
+                c: `${result}.error ? tsc_value_string(${result}.error) : tsc_value_null()`,
+                ty: T_VALUE,
+            };
+            const records: EmitResult = {
+                c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
+                ty: arrayType(T_VALUE),
+            };
+            const callbackCall = this.promiseCallbackCall(call, callbackType, values[1]!, [err, records], callbackNode);
+            return `({ tsc_dns_lookup_all_result_t ${result} = tsc_dns_resolve_any(${values[0]}); (void)${callbackCall}; })`;
         });
     }
 
@@ -83690,6 +83725,30 @@ class Emitter {
         });
     }
 
+    private emitDnsResolveAnyPromiseCall(call: ts.CallExpression, label = "dns.promises.resolveAny"): EmitResult {
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `${label} result must be Promise<T>`);
+        if (call.arguments.length < 1) {
+            unsupported(call, `${label} expects hostname`);
+        }
+        const hostNode = call.arguments[0]!;
+        const host = this.emitExpr(hostNode);
+        return this.emitSequencedExpr(mapped, [
+            { value: host, target: T_STRING, node: hostNode },
+            ...this.ignoredArgumentSpecs(call.arguments, 1),
+        ], (values) => {
+            const result = this.freshTemp("_dns");
+            const out = this.freshTemp("_dns_promise");
+            const records = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
+            return `({ ` +
+                `tsc_dns_lookup_all_result_t ${result} = tsc_dns_resolve_any(${values[0]}); ` +
+                `tsc_promise_t* ${out}; ` +
+                `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                `${out} = tsc_promise_resolve(tsc_value_array(${records})); } ` +
+                `${out}; })`;
+        });
+    }
+
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
         if (
             method !== "lookup" &&
@@ -83698,6 +83757,7 @@ class Emitter {
             method !== "resolve6" &&
             method !== "reverse" &&
             method !== "resolveCname" &&
+            method !== "resolveAny" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -83732,6 +83792,9 @@ class Emitter {
         }
         if (method === "resolveCname") {
             return this.emitDnsResolvePromiseCall(call, "dns.promises.resolveCname", "CNAME");
+        }
+        if (method === "resolveAny") {
+            return this.emitDnsResolveAnyPromiseCall(call);
         }
         if (method === "lookupService") {
             if (call.arguments.length < 2) {

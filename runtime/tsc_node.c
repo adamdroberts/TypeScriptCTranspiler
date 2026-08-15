@@ -2340,6 +2340,62 @@ tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double famil
     return out;
 }
 
+static void tsc_dns_resolve_any_append_family(tsc_array_t* records, struct addrinfo* result, int wanted_family) {
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        if (wanted_family != AF_UNSPEC && cur->ai_family != wanted_family) continue;
+        tsc_str_t* address = NULL;
+        double family = 0.0;
+        if (!tsc_dns_addrinfo_entry(cur, &address, &family)) continue;
+        tsc_object_t* entry = tsc_object_new();
+        tsc_object_set(entry, tsc_str_from_lit("type", 4), tsc_value_string(
+            cur->ai_family == AF_INET ? tsc_str_from_lit("A", 1) : tsc_str_from_lit("AAAA", 4)
+        ));
+        tsc_object_set(entry, tsc_str_from_lit("address", 7), tsc_value_string(address));
+        tsc_object_set(entry, tsc_str_from_lit("family", 6), tsc_value_num(family));
+        tsc_value_t boxed = tsc_value_object(entry);
+        tsc_array_push_raw(records, &boxed);
+    }
+}
+
+tsc_dns_lookup_all_result_t tsc_dns_resolve_any(tsc_str_t* hostname) {
+    tsc_dns_lookup_all_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!hostname) {
+        out.error = tsc_str_from_lit("dns.resolveAny: hostname required", 33);
+        return out;
+    }
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = 0;
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+    out.addresses = tsc_array_new(sizeof(tsc_value_t), 4);
+    const char* order = tsc_dns_effective_result_order(0.0);
+    if (strcmp(order, "ipv4first") == 0) {
+        tsc_dns_resolve_any_append_family(out.addresses, result, AF_INET);
+        tsc_dns_resolve_any_append_family(out.addresses, result, AF_INET6);
+    } else if (strcmp(order, "ipv6first") == 0) {
+        tsc_dns_resolve_any_append_family(out.addresses, result, AF_INET6);
+        tsc_dns_resolve_any_append_family(out.addresses, result, AF_INET);
+    } else {
+        tsc_dns_resolve_any_append_family(out.addresses, result, AF_UNSPEC);
+    }
+    freeaddrinfo(result);
+    if (out.addresses->len == 0) {
+        out.error = tsc_str_from_lit("dns.resolveAny: no address record found", 39);
+    }
+    return out;
+}
+
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {
     tsc_dns_resolve4_result_t out;
     out.error = NULL;

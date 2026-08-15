@@ -2267,6 +2267,7 @@ type DnsLookupCallback = (err: any, address: string, family: number) => void;
 type DnsLookupAllCallback = (err: any, addresses: any[]) => void;
 type DnsLookupFamily = 0 | 4 | 6;
 type DnsResolveCallback = (err: any, addresses: string[]) => void;
+type DnsResolveAnyCallback = (err: any, records: any[]) => void;
 type DnsResolveType = "A" | "AAAA" | "PTR" | "CNAME";
 type DnsLookupServiceCallback = (err: any, hostname: string, service: string) => void;
 interface DnsResolveOptions {
@@ -2284,6 +2285,7 @@ interface DnsPromises {
     lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, ...ignored: any[]): Promise<any>;
     resolve(hostname: string): Promise<string[]>;
     resolve(hostname: string, rrtype: DnsResolveType, ...ignored: any[]): Promise<string[]>;
+    resolveAny(hostname: string, ...ignored: any[]): Promise<any[]>;
     reverse(hostname: string, ...ignored: any[]): Promise<string[]>;
     resolveCname(hostname: string, ...ignored: any[]): Promise<string[]>;
     resolve4(hostname: string): Promise<string[]>;
@@ -2304,6 +2306,7 @@ interface DNS {
     lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     resolve(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve(hostname: string, rrtype: DnsResolveType, callback: DnsResolveCallback, ...ignored: any[]): void;
+    resolveAny(hostname: string, callback: DnsResolveAnyCallback, ...ignored: any[]): void;
     reverse(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolveCname(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
@@ -2325,6 +2328,7 @@ declare module "dns" {
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve(hostname: string, rrtype: DnsResolveType, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolveAny(hostname: string, callback: DnsResolveAnyCallback, ...ignored: any[]): void;
     export function reverse(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolveCname(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
@@ -2347,6 +2351,7 @@ declare module "node:dns" {
     export function lookup(hostname: string, options: DnsLookupOptions | DnsLookupFamily | undefined | null, callback: DnsLookupAllCallback, ...ignored: any[]): void;
     export function resolve(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve(hostname: string, rrtype: DnsResolveType, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolveAny(hostname: string, callback: DnsResolveAnyCallback, ...ignored: any[]): void;
     export function reverse(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolveCname(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
@@ -2362,6 +2367,7 @@ declare module "node:dns" {
 declare module "dns/promises" {
     export const lookup: DnsPromises["lookup"];
     export const resolve: DnsPromises["resolve"];
+    export const resolveAny: DnsPromises["resolveAny"];
     export const reverse: DnsPromises["reverse"];
     export const resolveCname: DnsPromises["resolveCname"];
     export const resolve4: DnsPromises["resolve4"];
@@ -2375,6 +2381,7 @@ declare module "dns/promises" {
 declare module "node:dns/promises" {
     export const lookup: DnsPromises["lookup"];
     export const resolve: DnsPromises["resolve"];
+    export const resolveAny: DnsPromises["resolveAny"];
     export const reverse: DnsPromises["reverse"];
     export const resolveCname: DnsPromises["resolveCname"];
     export const resolve4: DnsPromises["resolve4"];

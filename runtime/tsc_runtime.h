@@ -911,6 +911,7 @@ struct tsc_dns_lookup_service_result {
 };
 tsc_dns_lookup_result_t tsc_dns_lookup(tsc_str_t* hostname, double family, double hints, double order);
 tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double family, double hints, double order);
+tsc_dns_lookup_all_result_t tsc_dns_resolve_any(tsc_str_t* hostname);
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
 tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname);
 tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address);

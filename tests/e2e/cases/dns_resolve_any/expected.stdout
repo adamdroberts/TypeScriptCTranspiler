@@ -1,0 +1,8 @@
+callback any: true
+callback default any: true
+callback trailing: true
+invalid callback: true true
+marks: c
+promise any: true
+promise default any: true
+invalid promise: true
