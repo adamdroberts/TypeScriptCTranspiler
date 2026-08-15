@@ -1,2 +1,2 @@
 destroy: true:true:false:true
-close: error:stop|callback:stop|second-callback true true
+close: error:stop|stream-close|callback:stop|second-callback true true

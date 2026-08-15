@@ -1206,6 +1206,7 @@ typedef struct tsc_child_stream {
     bool writable_need_drain;
     bool error_emitted;
     bool finish_emitted;
+    bool close_emitted;
     size_t writable_length;
     tsc_child_write_request_t* write_head;
     tsc_child_write_request_t* write_tail;
@@ -1447,6 +1448,15 @@ static void tsc_child_stream_emit_error(tsc_child_stream_t* stream, const char* 
     );
 }
 
+static void tsc_child_stream_emit_close(tsc_child_stream_t* stream) {
+    if (!stream || stream->close_emitted) return;
+    stream->close_emitted = true;
+    if (stream->event.emitter) {
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("close", 5), empty);
+    }
+}
+
 static void tsc_child_stream_emit_drain(tsc_child_stream_t* stream) {
     if (!stream || !stream->writable_need_drain) return;
     stream->writable_need_drain = false;
@@ -1474,6 +1484,7 @@ static void tsc_child_stream_complete_end(tsc_child_stream_t* stream) {
     tsc_value_t callback = stream->end_callback;
     stream->end_callback = tsc_value_undefined();
     tsc_child_stream_invoke_callback(callback);
+    tsc_child_stream_emit_close(stream);
 }
 
 static void tsc_child_stream_close(tsc_child_stream_t* stream, bool emit_error) {
@@ -1491,6 +1502,7 @@ static void tsc_child_stream_close(tsc_child_stream_t* stream, bool emit_error) 
     stream->end_callback = tsc_value_undefined();
     if (emit_error) tsc_child_stream_emit_error(stream, "child_process stdin write failed");
     tsc_child_stream_refresh_props(stream);
+    tsc_child_stream_emit_close(stream);
 }
 
 static int tsc_child_stream_write_now(
@@ -1683,10 +1695,10 @@ static tsc_value_t tsc_child_stream_destroy(void* env, tsc_value_t this_arg, tsc
         return this_arg;
     }
     stream->destroyed = true;
-    tsc_child_stream_close(stream, false);
     if (has_error) {
         tsc_child_stream_emit_error_value(stream, error);
     }
+    tsc_child_stream_close(stream, false);
     tsc_child_stream_invoke_callback_value(callback, has_error ? error : tsc_value_undefined());
     return this_arg;
 }
@@ -1769,6 +1781,7 @@ static void tsc_child_stream_read(tsc_child_stream_t* stream) {
             tsc_child_stream_refresh_props(stream);
             tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
             (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("end", 3), empty);
+            tsc_child_stream_emit_close(stream);
             return;
         }
         if (errno == EINTR) continue;
@@ -1777,6 +1790,7 @@ static void tsc_child_stream_read(tsc_child_stream_t* stream) {
         stream->fd = -1;
         stream->ended = true;
         tsc_child_stream_refresh_props(stream);
+        tsc_child_stream_emit_close(stream);
         return;
     }
 }
