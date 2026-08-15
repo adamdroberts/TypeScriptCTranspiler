@@ -104,6 +104,28 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             isNamedImportIdentifier(id, ["util", "node:util"], "TextDecoder");
     };
 
+    const isStaticTextEncoderConstructorExpression = (expr: ts.Expression): boolean => {
+        const unwrapped = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(unwrapped)) return isStaticTextEncoderConstructorIdentifier(unwrapped);
+        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "TextEncoder") return false;
+        const receiver = unwrapStaticExpression(unwrapped.expression);
+        return ts.isIdentifier(receiver) && (
+            isDefaultImportIdentifier(receiver, ["util", "node:util"]) ||
+            isNamespaceImportIdentifier(receiver, ["util", "node:util"])
+        );
+    };
+
+    const isStaticTextDecoderConstructorExpression = (expr: ts.Expression): boolean => {
+        const unwrapped = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(unwrapped)) return isStaticTextDecoderConstructorIdentifier(unwrapped);
+        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "TextDecoder") return false;
+        const receiver = unwrapStaticExpression(unwrapped.expression);
+        return ts.isIdentifier(receiver) && (
+            isDefaultImportIdentifier(receiver, ["util", "node:util"]) ||
+            isNamespaceImportIdentifier(receiver, ["util", "node:util"])
+        );
+    };
+
     const resolve = (node: ts.Expression): string[] => {
         while (
             ts.isParenthesizedExpression(node) ||
@@ -1399,7 +1421,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const receiver = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(receiver)) return [];
         const ctor = unwrapStaticExpression(receiver.expression);
-        if (!ts.isIdentifier(ctor) || !isStaticTextEncoderConstructorIdentifier(ctor)) return [];
+        if (!isStaticTextEncoderConstructorExpression(ctor)) return [];
         if ((receiver.arguments?.length ?? 0) > 0 || receiver.arguments?.some(ts.isSpreadElement)) return [];
         const values = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0])
             ? [""]
@@ -1479,7 +1501,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const receiver = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(receiver)) return [];
         const ctor = unwrapStaticExpression(receiver.expression);
-        if (!ts.isIdentifier(ctor) || !isStaticTextDecoderConstructorIdentifier(ctor)) return [];
+        if (!isStaticTextDecoderConstructorExpression(ctor)) return [];
         if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return [];
         const labelValues = !receiver.arguments?.[0] || isStaticUndefinedExpression(receiver.arguments[0])
             ? ["utf-8"]

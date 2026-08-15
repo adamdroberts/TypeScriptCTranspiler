@@ -1138,6 +1138,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite dynamic `require(...)` proofs resolve static `buffer.transcode(...)` Buffer results for UTF-8, hex, and base64 conversions across named, default, and namespace `buffer` / `node:buffer` imports. Test: `dynamic_require_static_buffer_transcode`
 - Finite dynamic `require(...)` proofs accept named `Buffer` imports from `buffer` / `node:buffer` for static construction, encoding, concatenation, and byte-length fragments. Test: `dynamic_require_static_buffer_named_import`
 - Finite dynamic `require(...)` proofs accept named `TextEncoder` / `TextDecoder` imports from `util` / `node:util` for static UTF-8 encode/decode fragments. Test: `dynamic_require_static_text_encoder_named_import`
+- Finite dynamic `require(...)` proofs accept default and namespace `TextEncoder` / `TextDecoder` module objects from `util` / `node:util` for static UTF-8 encode/decode fragments. Test: `dynamic_require_static_text_encoder_module_import`
 - Finite dynamic `require(...)` proofs resolve static `String.prototype.split(...)[index]` specifier expressions, including const separator/index aliases and finite numeric index unions. Test: `dynamic_require_static_string_split`
 - Finite dynamic `require(...)` proofs materialize deterministic static `String.prototype.split(...)` collection expressions for downstream `Array.from(...)`, spread, const aliases, explicit limits, and omitted separators. Test: `dynamic_require_static_string_split_collection`
 - Finite dynamic `require(...)` proofs accept fresh static RegExp literal and constructor separators for `String.prototype.split(...)` indexed and collection expressions, with conservative string-only result validation. Test: `dynamic_require_static_string_split_regex`
@@ -4628,6 +4629,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_buffer_transcode` | static `buffer.transcode(...)` results provide finite AOT dynamic require alternatives for UTF-8, hex, and base64 conversions |
 | `dynamic_require_static_buffer_named_import` | named `Buffer` imports from `buffer` / `node:buffer` provide finite AOT dynamic require alternatives for supported static Buffer helpers |
 | `dynamic_require_static_text_encoder_named_import` | named `TextEncoder` / `TextDecoder` imports from `util` / `node:util` provide finite AOT dynamic require alternatives for UTF-8 encode/decode fragments |
+| `dynamic_require_static_text_encoder_module_import` | default and namespace `util` / `node:util` module imports provide finite AOT dynamic require alternatives for UTF-8 encode/decode fragments |
 | `dynamic_require_logical_specifiers` | typed string logical OR/AND expressions preserve selected string values and provide finite AOT dynamic require alternatives |
 | `dynamic_require_nullish_specifiers` | finite nullish coalescing string specifiers provide AOT dynamic require alternatives without stringifying nullish values |
 | `dynamic_require_static_keyof_map` | `keyof typeof` const object-map indexes provide finite AOT dynamic require alternatives |
