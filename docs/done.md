@@ -1,5 +1,6 @@
 # Implemented features
 
+- Verified bounded fs directory-handle coverage: `fs.opendirSync(...)` and `fs.promises.opendir(...)` now expose POSIX directory handles with `path`, synchronous and Promise `read`/`close` methods, boxed `Dirent` entries, direct iterator `next`/`return`, and `[Symbol.asyncIterator]()` support. Directory options beyond `undefined`/`null` and libuv-backed scheduling remain deferred. Test: `fs_opendir`.
 - CommonJS local object-returning factories now accept recursively `const`-aliased static `require(...)` arguments, preserving factory-parameter member reads and finite named/default/namespace AOT metadata. Test: `node_modules_commonjs_module_exports_factory_argument_alias_object`.
 - Bounded async `for await...of` consumers now accept one labeled outer loop around the supported `events.on(...)` continuation shape, routing matching `break label` and `continue label` statements through the existing iterator-close protocol while rejecting unrelated labels. Test: `async_for_await_events_on_labeled_control`.
 - Bounded generic `dns.resolve` callback and Promise forms now dispatch the default or literal/static-const "A" and "AAAA" record types through the existing resolver subset across global, default, named, namespace, and `dns/promises` imports; broader DNS record types, TTL result objects, and resolver options remain deferred. Test: `dns_resolve`.
@@ -3559,6 +3560,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_chmod` | fs.chmodSync and libuv-backed fs.promises chmod with asynchronous completion, rejection, and Stats.mode |
 | `fs_copy_flags` | fs copy constants, libuv-backed Promise completion, COPYFILE_EXCL behavior, and static flag aliases |
 | `fs_open_flag_constants` | fs.constants exposes common POSIX open flags |
+| `fs_opendir` | fs.opendirSync and fs.promises.opendir directory handles, boxed entries, close, and async iteration |
 | `fs_option_property_undefined` | fs option objects treat explicit or aliased undefined property values as defaults |
 | `fs_readdir_dirents` | fs readdir with withFileTypes Dirent subset, including recursive sync and libuv-backed promise forms |
 | `fs_readdir_dirent_encoded_options` | fs readdir with withFileTypes Dirent names encoded as hex/base64 strings across sync and libuv-backed promise forms |

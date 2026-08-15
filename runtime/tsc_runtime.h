@@ -1256,6 +1256,7 @@ void tsc_fs_append_file_sync(const tsc_str_t* path, const tsc_str_t* data);
 void tsc_fs_append_file_buffer_sync(const tsc_str_t* path, const tsc_buffer_t* data);
 bool tsc_fs_exists_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_sync(const tsc_str_t* path);
+tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_buffer_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_sync(const tsc_str_t* path);
 tsc_array_t* tsc_fs_readdir_recursive_buffer_sync(const tsc_str_t* path);

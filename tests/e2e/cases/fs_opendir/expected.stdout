@@ -1,0 +1,6 @@
+sync: true entry.txt true true
+sync closed: true
+async: true entry.txt true true
+iterator: true false true true true
+return: done true
+async closed: true

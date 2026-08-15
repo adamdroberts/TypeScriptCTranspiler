@@ -75311,6 +75311,7 @@ class Emitter {
             "existsSync",
             "accessSync",
             "readdirSync",
+            "opendirSync",
             "statSync",
             "lstatSync",
             "statfsSync",
@@ -75354,6 +75355,7 @@ class Emitter {
             "writeFile",
             "appendFile",
             "readdir",
+            "opendir",
             "statfs",
             "stat",
             "lstat",
@@ -89855,6 +89857,14 @@ class Emitter {
                     return this.emitFsStringArrayEncodingResult(value, options.encoding);
                 });
             }
+            case "opendirSync": {
+                if (args.length < 1) unsupported(call, "fs.opendirSync needs a path and optional options");
+                const pathExpr = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(T_VALUE, [
+                    this.fsPathSpec(pathExpr, args[0]!, "fs.opendirSync path"),
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([path]) => `tsc_fs_opendir_sync(${path!})`);
+            }
             case "statSync": {
                 if (args.length < 1) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
                 const options = this.validateFsStatsOptions(args[1], "fs.statSync");
@@ -91303,6 +91313,16 @@ class Emitter {
                     ...this.ignoredArgumentSpecs(args, 3),
                 ], ([path, flags, mode]) => settle(
                     `tsc_fs_promises_open_async(${path!}, ${flagsIsNum ? "NULL" : flags!}, ${flagsIsNum ? flags! : "0.0"}, ${flagsIsNum ? "true" : "false"}, ${mode!})`,
+                ));
+            }
+            case "opendir": {
+                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional options");
+                const pathExpr = this.emitExpr(args[0]!);
+                return this.emitSequencedExpr(mapped, [
+                    this.fsPathSpec(pathExpr, args[0]!, "fs.promises.opendir path"),
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([path]) => settle(
+                    `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}))`,
                 ));
             }
             case "readFile": {

@@ -11864,6 +11864,235 @@ bool tsc_fs_dirent_is_socket(const tsc_fs_dirent_t* ent) {
     return ent ? ent->is_socket : false;
 }
 
+static tsc_value_t tsc_fs_dirent_is_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_file((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_is_directory_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_directory((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_is_symbolic_link_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_symbolic_link((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_is_block_device_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_block_device((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_is_character_device_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_character_device((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_is_fifo_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_fifo((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_is_socket_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_value_bool(tsc_fs_dirent_is_socket((const tsc_fs_dirent_t*)env));
+}
+
+static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent) {
+    if (!ent) return tsc_value_null();
+    tsc_object_t* object = tsc_object_new();
+    tsc_object_set(object, tsc_str_from_lit("name", 4), tsc_value_string(tsc_fs_dirent_name(ent)));
+    tsc_object_set(object, tsc_str_from_lit("isFile", 6), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_file_builtin, ent, 0.0, tsc_str_from_lit("isFile", 6)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("isDirectory", 11), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_directory_builtin, ent, 0.0, tsc_str_from_lit("isDirectory", 11)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("isSymbolicLink", 14), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_symbolic_link_builtin, ent, 0.0, tsc_str_from_lit("isSymbolicLink", 14)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("isBlockDevice", 13), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_block_device_builtin, ent, 0.0, tsc_str_from_lit("isBlockDevice", 13)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("isCharacterDevice", 17), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_character_device_builtin, ent, 0.0, tsc_str_from_lit("isCharacterDevice", 17)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("isFIFO", 6), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_fifo_builtin, ent, 0.0, tsc_str_from_lit("isFIFO", 6)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("isSocket", 8), tsc_value_function_builtin_named(
+        tsc_fs_dirent_is_socket_builtin, ent, 0.0, tsc_str_from_lit("isSocket", 8)
+    ));
+    return tsc_value_object(object);
+}
+
+typedef struct tsc_fs_dir {
+    DIR* dir;
+    tsc_str_t* path;
+    bool closed;
+    tsc_value_t value;
+} tsc_fs_dir_t;
+
+static void tsc_fs_dir_close_internal(tsc_fs_dir_t* state) {
+    if (!state || state->closed) return;
+    state->closed = true;
+    if (state->dir) {
+        closedir(state->dir);
+        state->dir = NULL;
+    }
+}
+
+static tsc_value_t tsc_fs_dir_read_entry(tsc_fs_dir_t* state) {
+    if (!state || state->closed || !state->dir) {
+        tsc_throw_str(tsc_str_from_cstr("fs.Dir is closed"));
+        return tsc_value_null();
+    }
+    errno = 0;
+    struct dirent* entry;
+    while ((entry = readdir(state->dir))) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        return tsc_fs_dirent_value(fs_dirent_from_path(state->path->data, entry->d_name));
+    }
+    if (errno != 0) {
+        tsc_throw_str(tsc_str_from_cstr("fs.Dir.read: could not read dir"));
+        return tsc_value_null();
+    }
+    return tsc_value_null();
+}
+
+static tsc_value_t tsc_fs_dir_iterator_result(tsc_value_t value, bool done) {
+    tsc_object_t* result = tsc_object_new();
+    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    return tsc_value_object(result);
+}
+
+static tsc_value_t tsc_fs_dir_read_sync_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    return tsc_fs_dir_read_entry((tsc_fs_dir_t*)env);
+}
+
+static tsc_value_t tsc_fs_dir_read_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+    tsc_try_frame_t frame;
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        tsc_value_t value = tsc_fs_dir_read_entry(state);
+        tsc_try_pop();
+        return tsc_value_promise(tsc_promise_resolve(value));
+    }
+    return tsc_value_promise(tsc_promise_reject(tsc_value_string(tsc_current_error())));
+}
+
+static tsc_value_t tsc_fs_dir_close_sync_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_dir_close_internal((tsc_fs_dir_t*)env);
+    return tsc_value_undefined();
+}
+
+static tsc_value_t tsc_fs_dir_close_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_dir_close_internal((tsc_fs_dir_t*)env);
+    return tsc_value_promise(tsc_promise_resolve(tsc_value_undefined()));
+}
+
+static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+    if (!state || state->closed || !state->dir) {
+        return tsc_value_promise(tsc_promise_resolve(
+            tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+        ));
+    }
+    tsc_try_frame_t frame;
+    tsc_try_push(&frame);
+    if (setjmp(frame.jb) == 0) {
+        tsc_value_t value = tsc_fs_dir_read_entry(state);
+        tsc_try_pop();
+        if (value == tsc_value_null()) {
+            tsc_fs_dir_close_internal(state);
+            return tsc_value_promise(tsc_promise_resolve(
+                tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+            ));
+        }
+        return tsc_value_promise(tsc_promise_resolve(
+            tsc_fs_dir_iterator_result(value, false)
+        ));
+    }
+    return tsc_value_promise(tsc_promise_reject(tsc_value_string(tsc_current_error())));
+}
+
+static tsc_value_t tsc_fs_dir_return_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_fs_dir_close_internal((tsc_fs_dir_t*)env);
+    tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    return tsc_value_promise(tsc_promise_resolve(tsc_fs_dir_iterator_result(value, true)));
+}
+
+static tsc_value_t tsc_fs_dir_async_iterator_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+    (void)this_arg;
+    (void)args;
+    return state ? state->value : tsc_value_undefined();
+}
+
+tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path) {
+    char* p = cstr_dup(path);
+    DIR* dir = opendir(p);
+    free(p);
+    if (!dir) {
+        tsc_throw_str(tsc_str_from_cstr("fs.opendirSync: could not open dir"));
+        return tsc_value_undefined();
+    }
+
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_t));
+    state->dir = dir;
+    state->path = (tsc_str_t*)path;
+    state->closed = false;
+    state->value = tsc_value_undefined();
+
+    tsc_object_t* object = tsc_object_new();
+    tsc_object_define(object, tsc_str_from_lit("path", 4), tsc_value_string(state->path), false, true, false);
+    tsc_object_set(object, tsc_str_from_lit("readSync", 8), tsc_value_function_builtin_named(
+        tsc_fs_dir_read_sync_builtin, state, 0.0, tsc_str_from_lit("readSync", 8)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("read", 4), tsc_value_function_builtin_named(
+        tsc_fs_dir_read_builtin, state, 0.0, tsc_str_from_lit("read", 4)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("closeSync", 9), tsc_value_function_builtin_named(
+        tsc_fs_dir_close_sync_builtin, state, 0.0, tsc_str_from_lit("closeSync", 9)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_builtin_named(
+        tsc_fs_dir_close_builtin, state, 0.0, tsc_str_from_lit("close", 5)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(
+        tsc_fs_dir_next_builtin, state, 0.0, tsc_str_from_lit("next", 4)
+    ));
+    tsc_object_set(object, tsc_str_from_lit("return", 6), tsc_value_function_builtin_named(
+        tsc_fs_dir_return_builtin, state, 1.0, tsc_str_from_lit("return", 6)
+    ));
+    tsc_value_t value = tsc_value_object(object);
+    state->value = value;
+    tsc_value_set_symbol_prop(value, tsc_symbol_async_iterator(), tsc_value_function_builtin_named(
+        tsc_fs_dir_async_iterator_builtin, state, 0.0, tsc_str_from_lit("[Symbol.asyncIterator]", 22)
+    ));
+    return value;
+}
+
 void tsc_fs_access_sync(const tsc_str_t* path) {
     tsc_fs_access_sync_mode(path, (double)F_OK);
 }

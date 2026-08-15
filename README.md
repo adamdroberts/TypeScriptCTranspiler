@@ -264,6 +264,11 @@ console.log(st.size, st.isFile(), st.mtimeMs);
 
 await fs.promises.writeFile("/tmp/p.txt", "hello", { flag: "wx" });
 const entries = await fs.promises.readdir("/tmp", { withFileTypes: true });
+const dir = fs.opendirSync("/tmp");
+console.log(dir.readSync()?.name);
+dir.closeSync();
+const asyncDir = await fs.promises.opendir("/tmp");
+await asyncDir.close();
 
 console.log(path.join("/tmp", "sub", "x.txt"), path.parse("/a/b/c.txt"));
 console.log(os.platform(), os.arch(), os.cpus().length, os.devNull);
