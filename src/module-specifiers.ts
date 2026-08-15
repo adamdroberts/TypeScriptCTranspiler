@@ -6125,24 +6125,39 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
 export function staticStringReplacementCallbackText(
     expr: ts.Expression,
-    seen: Set<ts.VariableDeclaration> = new Set(),
+    seen: Set<ts.Node> = new Set(),
 ): string | null {
     const callback = unwrapStaticExpression(expr);
     if (ts.isIdentifier(callback)) {
         const decl = earlierConstStringDeclaration(callback) ?? topLevelConstStringDeclaration(callback);
-        if (!decl?.initializer || seen.has(decl)) return null;
-        seen.add(decl);
-        const text = staticStringReplacementCallbackText(decl.initializer, seen);
-        seen.delete(decl);
+        if (decl?.initializer) {
+            if (seen.has(decl)) return null;
+            seen.add(decl);
+            const text = staticStringReplacementCallbackText(decl.initializer, seen);
+            seen.delete(decl);
+            return text;
+        }
+        const functionDecl = topLevelFunctionDeclaration(callback);
+        if (!functionDecl || seen.has(functionDecl)) return null;
+        seen.add(functionDecl);
+        const text = staticStringReplacementCallbackBodyText(functionDecl);
+        seen.delete(functionDecl);
         return text;
     }
     if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return null;
+    return staticStringReplacementCallbackBodyText(callback);
+}
+
+function staticStringReplacementCallbackBodyText(
+    callback: ts.ArrowFunction | ts.FunctionDeclaration | ts.FunctionExpression,
+): string | null {
     if (
         callback.parameters.length !== 0 ||
         ts.getModifiers(callback)?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
     ) {
         return null;
     }
+    if (!callback.body) return null;
     const body = ts.isBlock(callback.body)
         ? callback.body.statements.length === 1 && ts.isReturnStatement(callback.body.statements[0]!)
             ? callback.body.statements[0]!.expression
@@ -6391,6 +6406,14 @@ function earlierConstStringDeclaration(id: ts.Identifier): ts.VariableDeclaratio
         for (const decl of sibling.declarationList.declarations) {
             if (ts.isIdentifier(decl.name) && decl.name.text === id.text) return decl;
         }
+    }
+    return null;
+}
+
+function topLevelFunctionDeclaration(id: ts.Identifier): ts.FunctionDeclaration | null {
+    const sf = id.getSourceFile();
+    for (const stmt of sf.statements) {
+        if (ts.isFunctionDeclaration(stmt) && stmt.name?.text === id.text) return stmt;
     }
     return null;
 }

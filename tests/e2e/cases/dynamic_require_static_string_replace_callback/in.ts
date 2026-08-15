@@ -11,6 +11,7 @@ const functionAlias = function () {
 };
 const alias = require("pkg-alias-callback".replace("pkg-", arrowAlias));
 const functionAliasValue = require("pkg-function-alias-callback".replace("pkg-", functionAlias));
+const declaration = require("pkg-declaration-callback".replace("pkg-", declarationCallback));
 
 type Choice = "left" | "right";
 function load(choice: Choice): any {
@@ -21,6 +22,13 @@ function loadAlias(choice: Choice): any {
     const specifier = `pkg-${choice}-alias-callback`.replaceAll("pkg-", arrowAlias);
     return require(specifier);
 }
+function loadDeclaration(choice: Choice): any {
+    const specifier = `pkg-${choice}-declaration-callback`.replaceAll("pkg-", declarationCallback);
+    return require(specifier);
+}
+function declarationCallback() {
+    return "./";
+}
 
 console.log(
     direct.label,
@@ -29,8 +37,11 @@ console.log(
     token.label,
     alias.label,
     functionAliasValue.label,
+    declaration.label,
     load("left").label,
     load("right").label,
     loadAlias("left").label,
     loadAlias("right").label,
+    loadDeclaration("left").label,
+    loadDeclaration("right").label,
 );
