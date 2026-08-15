@@ -2660,6 +2660,7 @@ interface ChildProcessSpawnOptions {
     detached?: boolean;
     uid?: number;
     gid?: number;
+    timeout?: number;
     killSignal?: ChildProcessKillSignal;
 }
 interface ChildProcessExecFileSyncOptions {

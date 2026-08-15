@@ -1194,6 +1194,7 @@ typedef struct tsc_child_process_async {
     int exec_error_fd;
     int kill_signal;
     double poll_timer;
+    double timeout_timer;
     int status;
     bool exited;
     bool closed;
@@ -1392,6 +1393,17 @@ static tsc_value_t tsc_child_process_kill(void* env, tsc_value_t this_arg, tsc_a
     return tsc_value_bool(false);
 }
 
+static void tsc_child_process_timeout(void* env) {
+    tsc_child_process_async_t* child = (tsc_child_process_async_t*)env;
+    if (!child) return;
+    child->timeout_timer = 0.0;
+    if (child->closed || child->exited || child->pid <= 0) return;
+    if (kill(child->pid, child->kill_signal) == 0) {
+        child->killed = true;
+        tsc_value_set_prop(child->event.value, tsc_str_from_lit("killed", 6), tsc_value_bool(true));
+    }
+}
+
 static tsc_value_t tsc_child_process_noop(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)args;
@@ -1501,6 +1513,10 @@ static void tsc_child_process_poll(void* env) {
     }
     tsc_clear_timeout(child->poll_timer);
     child->poll_timer = 0.0;
+    if (child->timeout_timer > 0.0) {
+        tsc_clear_timeout(child->timeout_timer);
+        child->timeout_timer = 0.0;
+    }
     child->closed = true;
     tsc_value_t code = tsc_value_null();
     tsc_value_t signal = tsc_value_null();
@@ -1535,7 +1551,7 @@ static void tsc_child_close_parent_pipe(int pair[2], int keep) {
     if (pair[1] >= 0 && pair[1] != keep) close(pair[1]);
 }
 
-tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool pipe_stdout, bool ignore_stdout, bool inherit_stdout, bool pipe_stderr, bool ignore_stderr, bool inherit_stderr, bool detached, double uid, double gid, int kill_signal) {
+tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool pipe_stdout, bool ignore_stdout, bool inherit_stdout, bool pipe_stderr, bool ignore_stderr, bool inherit_stderr, bool detached, double uid, double gid, double timeout_ms, int kill_signal) {
     if (!file) tsc_panic("child_process.spawn file required");
     const tsc_str_t* actual_file = file;
     const tsc_array_t* actual_args = args;
@@ -1706,6 +1722,9 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
         tsc_object_set(object, tsc_str_from_lit("stderr", 6), tsc_value_null());
     }
     child->poll_timer = tsc_set_interval(tsc_child_process_poll, child, 1.0);
+    if (!isnan(timeout_ms) && !isinf(timeout_ms) && timeout_ms > 0.0) {
+        child->timeout_timer = tsc_set_timeout(tsc_child_process_timeout, child, timeout_ms);
+    }
     tsc_process_next_tick(tsc_child_emit_spawn, child);
     return child->event.value;
 }

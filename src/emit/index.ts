@@ -84550,6 +84550,7 @@ class Emitter {
             const argv0 = options ? this.childProcessOptionString(options, "argv0") : null;
             const uid = options ? this.childProcessNumberOption(options, "uid") : null;
             const gid = options ? this.childProcessNumberOption(options, "gid") : null;
+            const timeout = options ? this.childProcessNumberOption(options, "timeout") : null;
             const killSignal = options ? this.childProcessKillSignalOption(options) : "15.0";
             const stdio = options ? this.childProcessSpawnSyncStdioOption(options) : this.childProcessDefaultSpawnSyncStdio();
             const detached = options ? this.childProcessBooleanOption(options, "detached") : "false";
@@ -84583,10 +84584,13 @@ class Emitter {
                 gid
                     ? { value: gid, target: T_NUMBER, node: gid.node }
                     : { value: { c: "-1.0", ty: T_NUMBER } },
+                timeout
+                    ? { value: timeout, target: T_NUMBER, node: timeout.node }
+                    : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: killSignal, ty: T_NUMBER } },
                 ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-            ], ([fileC, argsC, cwdC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, pipeStdoutC, ignoreStdoutC, inheritStdoutC, pipeStderrC, ignoreStderrC, inheritStderrC, detachedC, uidC, gidC, killSignalC]) =>
-                `tsc_child_process_spawn(${fileC}, ${argsC}, ${cwdC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${pipeStdoutC}, ${ignoreStdoutC}, ${inheritStdoutC}, ${pipeStderrC}, ${ignoreStderrC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, (int)${killSignalC})`,
+            ], ([fileC, argsC, cwdC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, pipeStdoutC, ignoreStdoutC, inheritStdoutC, pipeStderrC, ignoreStderrC, inheritStderrC, detachedC, uidC, gidC, timeoutC, killSignalC]) =>
+                `tsc_child_process_spawn(${fileC}, ${argsC}, ${cwdC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${pipeStdoutC}, ${ignoreStdoutC}, ${inheritStdoutC}, ${pipeStderrC}, ${ignoreStderrC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${timeoutC}, (int)${killSignalC})`,
             );
         }
         unsupported(call, `child_process.${method}`);

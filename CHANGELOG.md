@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- Asynchronous `child_process.spawn(...)` now accepts a numeric `timeout` option, terminates unfinished POSIX children with the configured `killSignal`, sets `killed`, and cancels the one-shot timer when the child closes. Broader async lifecycle, stream backpressure/error, and spawn-option semantics remain deferred. Test: `child_process_spawn_timeout`.
 - CommonJS local object-returning factories now accept recursively `const`-aliased static `require(...)` arguments, preserving factory-parameter member reads and finite named/default/namespace AOT metadata. Test: `node_modules_commonjs_module_exports_factory_argument_alias_object`.
 - Bounded async `for await...of` consumers now accept one labeled outer loop around the supported `events.on(...)` continuation shape, routing matching `break label` and `continue label` statements through the existing iterator-close protocol while rejecting unrelated labels. Test: `async_for_await_events_on_labeled_control`.
 - Bounded generic `dns.resolve` callback and Promise forms now dispatch the default or literal/static-const "A" and "AAAA" record types through the existing resolver subset across global, default, named, namespace, and `dns/promises` imports; broader DNS record types, TTL result objects, and resolver options remain deferred. Test: `dns_resolve`.
