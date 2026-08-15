@@ -4424,6 +4424,22 @@ bool tsc_util_types_is_typed_array(tsc_value_t v) {
     return false;
 }
 
+bool tsc_util_types_is_any_array_buffer(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_array_buffer;
+    }
+    return false;
+}
+
+bool tsc_util_types_is_array_buffer_view(tsc_value_t v) {
+    if (value_is_box(v) && value_tag(v) == TSC_VALUE_TAG_OBJECT) {
+        tsc_object_t* o = (tsc_object_t*)value_ptr(v);
+        return o->is_typed_array || o->is_data_view;
+    }
+    return false;
+}
+
 static tsc_value_t reflect_apply_method(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)env;
     (void)this_arg;

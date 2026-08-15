@@ -1,0 +1,3 @@
+arraybuffer: true false false false
+view: false true true false
+ignored: av

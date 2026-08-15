@@ -2859,6 +2859,8 @@ interface UtilTypes {
     isMap(object: any): object is Map<any, any>;
     isSet(object: any): object is Set<any>;
     isTypedArray(object: any): boolean;
+    isAnyArrayBuffer(object: any): boolean;
+    isArrayBufferView(object: any): boolean;
 }
 
 interface UtilModule {

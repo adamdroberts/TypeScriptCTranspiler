@@ -701,6 +701,8 @@ bool tsc_util_types_is_promise(tsc_value_t v);
 bool tsc_util_types_is_map(tsc_value_t v);
 bool tsc_util_types_is_set(tsc_value_t v);
 bool tsc_util_types_is_typed_array(tsc_value_t v);
+bool tsc_util_types_is_any_array_buffer(tsc_value_t v);
+bool tsc_util_types_is_array_buffer_view(tsc_value_t v);
 tsc_value_t tsc_value_apply_function(tsc_value_t fn, tsc_value_t this_arg, tsc_value_t args);
 tsc_value_t tsc_value_construct(tsc_value_t target, tsc_value_t args);
 tsc_value_t tsc_value_construct_with_new_target(tsc_value_t target, tsc_value_t args, tsc_value_t new_target);

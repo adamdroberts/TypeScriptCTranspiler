@@ -93651,6 +93651,12 @@ class Emitter {
             case "isTypedArray":
                 fnName = "tsc_util_types_is_typed_array";
                 break;
+            case "isAnyArrayBuffer":
+                fnName = "tsc_util_types_is_any_array_buffer";
+                break;
+            case "isArrayBufferView":
+                fnName = "tsc_util_types_is_array_buffer_view";
+                break;
             default:
                 unsupported(call, `util.types.${name}`);
         }
