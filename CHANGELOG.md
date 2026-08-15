@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded `net.Socket` pause/resume support: POSIX TCP sockets expose chainable `pause()` / `resume()` read gates that leave incoming data unread while paused and deliver it after resume. Test: `net_socket_pause_resume`.
 - Bounded `net.Socket` timeout support: POSIX TCP sockets expose chainable `setTimeout(timeout, callback?)`, emit `timeout` after inactivity, reset the idle timer on socket activity, and cancel it when disabled or closed. Test: `net_socket_timeout`.
 - Bounded `net.Socket` option and counter support: POSIX TCP sockets expose `bytesRead` / `bytesWritten`, chainable `setNoDelay(noDelay?)`, and chainable `setKeepAlive(enable?, initialDelay?)` controls backed by TCP socket options. Test: `net_socket_options_counters`.
 - Promise-chain `fs.promises.opendir(...)` now accepts `{ signal }` for the libuv-backed root open: pre-aborted signals reject with their reason, in-flight `uv_fs_opendir` requests are cancelled, late completions are suppressed, and aborts after the handle is delivered do not disturb it. Test: `fs_opendir_abort_libuv`.

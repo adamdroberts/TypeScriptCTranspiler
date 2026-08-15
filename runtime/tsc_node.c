@@ -3000,6 +3000,7 @@ typedef struct tsc_net_socket {
     bool encoding_utf8;
     bool writable_ended;
     bool readable_ended;
+    bool read_paused;
     bool connect_emitted;
     bool close_emitted;
     bool tls;
@@ -3288,6 +3289,20 @@ static tsc_value_t tsc_net_socket_set_timeout(void* env, tsc_value_t this_arg, t
     return this_arg;
 }
 
+static tsc_value_t tsc_net_socket_pause(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (socket) socket->read_paused = true;
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_resume(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (socket) socket->read_paused = false;
+    return this_arg;
+}
+
 static tsc_value_t tsc_net_socket_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
@@ -3342,6 +3357,8 @@ static void tsc_net_socket_add_methods(tsc_object_t* object, tsc_net_socket_t* s
     tsc_object_set(object, tsc_str_from_lit("setNoDelay", 10), tsc_value_function_generic_named(tsc_net_socket_set_no_delay, socket, 0.0, tsc_str_from_lit("setNoDelay", 10)));
     tsc_object_set(object, tsc_str_from_lit("setKeepAlive", 12), tsc_value_function_generic_named(tsc_net_socket_set_keep_alive, socket, 0.0, tsc_str_from_lit("setKeepAlive", 12)));
     tsc_object_set(object, tsc_str_from_lit("setTimeout", 10), tsc_value_function_generic_named(tsc_net_socket_set_timeout, socket, 1.0, tsc_str_from_lit("setTimeout", 10)));
+    tsc_object_set(object, tsc_str_from_lit("pause", 5), tsc_value_function_generic_named(tsc_net_socket_pause, socket, 0.0, tsc_str_from_lit("pause", 5)));
+    tsc_object_set(object, tsc_str_from_lit("resume", 6), tsc_value_function_generic_named(tsc_net_socket_resume, socket, 0.0, tsc_str_from_lit("resume", 6)));
     tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_net_socket_write, socket, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_net_socket_end, socket, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_net_socket_destroy, socket, 0.0, tsc_str_from_lit("destroy", 7)));
@@ -3357,6 +3374,7 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     socket->connecting = connecting;
     socket->client_socket = client_socket;
     socket->connect_emitted = !client_socket;
+    socket->read_paused = false;
     socket->idle_timeout_timer = 0.0;
     socket->idle_timeout_ms = 0.0;
     socket->poll_timer = 0.0;
@@ -3491,7 +3509,8 @@ static void tsc_net_socket_poll(void* env) {
     if (!socket || socket->destroyed || socket->fd < 0) return;
     struct pollfd descriptor;
     descriptor.fd = socket->fd;
-    descriptor.events = POLLIN | POLLHUP | POLLERR;
+    descriptor.events = POLLHUP | POLLERR;
+    if (!socket->read_paused || socket->connecting || (socket->tls && !socket->tls_handshake_complete)) descriptor.events |= POLLIN;
     descriptor.revents = 0;
     if (socket->connecting || (socket->tls && !socket->tls_handshake_complete && socket->tls_want_write)) descriptor.events |= POLLOUT;
     int ready = poll(&descriptor, 1, 0);
@@ -3523,7 +3542,7 @@ static void tsc_net_socket_poll(void* env) {
     if (!socket->connecting && (!socket->tls || socket->tls_handshake_complete) && !socket->connect_emitted) {
         tsc_net_socket_emit_connect(socket);
     }
-    if (!socket->connecting && (!socket->tls || socket->tls_handshake_complete) && ready > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR))) {
+    if (!socket->read_paused && !socket->connecting && (!socket->tls || socket->tls_handshake_complete) && ready > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR))) {
         tsc_net_socket_read(socket);
     }
 }

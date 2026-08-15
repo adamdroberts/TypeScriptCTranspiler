@@ -1,5 +1,6 @@
 # Implemented features
 
+- Verified bounded `net.Socket` pause/resume coverage: POSIX TCP sockets now expose chainable `pause()` / `resume()` read gates, leaving incoming data unread while paused and delivering it after resume. Test: `net_socket_pause_resume`.
 - Verified bounded `net.Socket` timeout coverage: POSIX TCP sockets now expose chainable `setTimeout(timeout, callback?)`, emit the "timeout" event after inactivity, reset the idle timer on successful socket activity, and cancel the timer when disabled or closed. Test: `net_socket_timeout`.
 - Verified bounded `net.Socket` option and counter coverage: POSIX TCP sockets now expose `bytesRead` / `bytesWritten`, apply `setNoDelay(noDelay?)` through `TCP_NODELAY`, and apply `setKeepAlive(enable?, initialDelay?)` through `SO_KEEPALIVE` with platform TCP idle-delay support while preserving chainable socket methods. Test: `net_socket_options_counters`.
 - Verified bounded fs Promise directory cancellation coverage: Promise-chain `fs.promises.opendir(...)` accepts `{ signal }`, rejects pre-aborted and in-flight root opens with the signal reason, cancels pending libuv open requests, suppresses late completions, and leaves an already-delivered `fs.Dir` usable after a late abort. Test: `fs_opendir_abort_libuv`.
