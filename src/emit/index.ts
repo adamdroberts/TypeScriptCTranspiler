@@ -75395,12 +75395,12 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
         if (dnsNamed) {
             return this.emitDnsCall(call, dnsNamed);
         }
-        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
         if (dnsPromisesNamed) {
             return this.emitDnsPromisesCall(call, dnsPromisesNamed);
@@ -83215,6 +83215,7 @@ class Emitter {
             method !== "resolve" &&
             method !== "resolve4" &&
             method !== "resolve6" &&
+            method !== "reverse" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -83241,6 +83242,9 @@ class Emitter {
         }
         if (method === "resolve") {
             return this.emitDnsResolveCall(call);
+        }
+        if (method === "reverse") {
+            return this.emitDnsResolveCall(call, "dns.reverse", "PTR");
         }
         if (method === "lookupService") {
             if (call.arguments.length < 3) {
@@ -83356,26 +83360,30 @@ class Emitter {
         });
     }
 
-    private emitDnsResolveCall(call: ts.CallExpression): EmitResult {
+    private emitDnsResolveCall(
+        call: ts.CallExpression,
+        label = "dns.resolve",
+        forcedRrtype?: "A" | "AAAA" | "PTR",
+    ): EmitResult {
         if (call.arguments.length < 2) {
-            unsupported(call, "dns.resolve expects hostname, optional rrtype, and callback");
+            unsupported(call, `${label} expects hostname and callback`);
         }
         const hostNode = call.arguments[0]!;
         const possibleCallbackNode = call.arguments[1]!;
-        const secondArgType = this.checker.getTypeAtLocation(possibleCallbackNode);
-        const callbackIndex = secondArgType.getCallSignatures().length > 0 ? 1 : 2;
+        const secondArgType = forcedRrtype ? undefined : this.checker.getTypeAtLocation(possibleCallbackNode);
+        const callbackIndex = forcedRrtype ? 1 : secondArgType!.getCallSignatures().length > 0 ? 1 : 2;
         if (callbackIndex >= call.arguments.length) {
-            unsupported(call, "dns.resolve expects hostname, optional rrtype, and callback");
+            unsupported(call, `${label} expects hostname, optional rrtype, and callback`);
         }
-        const rrtypeNode = callbackIndex === 2 ? call.arguments[1]! : undefined;
+        const rrtypeNode = forcedRrtype ? undefined : callbackIndex === 2 ? call.arguments[1]! : undefined;
         const callbackNode = call.arguments[callbackIndex]!;
-        const rrtype = rrtypeNode ? this.dnsResolveTypeValue(rrtypeNode, "dns.resolve") : "A";
+        const rrtype = forcedRrtype ?? (rrtypeNode ? this.dnsResolveTypeValue(rrtypeNode, label) : "A");
         const host = this.emitExpr(hostNode);
         const rrtypeExpr = rrtypeNode ? this.emitExpr(rrtypeNode) : undefined;
         const callback = this.emitExpr(callbackNode);
         const callbackType = this.prepareType(callback.ty);
         if (callbackType.kind !== "function" || !callbackType.ret) {
-            unsupported(callbackNode, "dns.resolve callback must be a function");
+            unsupported(callbackNode, `${label} callback must be a function`);
         }
         const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
         if (rrtypeNode && rrtypeExpr) {
@@ -83397,8 +83405,12 @@ class Emitter {
                 ty: arrayType(T_STRING),
             };
             const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-            const resultType = rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
-            const resolver = rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
+            const resultType = rrtype === "PTR"
+                ? "tsc_dns_resolve_ptr_result_t"
+                : rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
+            const resolver = rrtype === "PTR"
+                ? "tsc_dns_resolve_ptr"
+                : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
             return `({ ${resultType} ${result} = ${resolver}(${values[0]}); (void)${callbackCall}; })`;
         });
     }
@@ -83611,10 +83623,10 @@ class Emitter {
         }
     }
 
-    private dnsResolveTypeValue(expr: ts.Expression, label: string): "A" | "AAAA" {
+    private dnsResolveTypeValue(expr: ts.Expression, label: string): "A" | "AAAA" | "PTR" {
         const rrtype = this.dnsLookupStringValue(expr);
-        if (rrtype === "A" || rrtype === "AAAA") return rrtype;
-        unsupported(expr, `${label} rrtype must be A or AAAA in this subset`);
+        if (rrtype === "A" || rrtype === "AAAA" || rrtype === "PTR") return rrtype;
+        unsupported(expr, `${label} rrtype must be A, AAAA, or PTR in this subset`);
     }
 
     private shouldEvaluateDnsDefaultOptions(options: ts.Expression): boolean {
@@ -83627,12 +83639,52 @@ class Emitter {
         return ts.isVoidExpression(unwrapped) && !this.isSideEffectFreeTopLevelConstInitializer(unwrapped.expression);
     }
 
+    private emitDnsResolvePromiseCall(
+        call: ts.CallExpression,
+        label: string,
+        forcedRrtype?: "A" | "AAAA" | "PTR",
+    ): EmitResult {
+        const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
+        if (mapped.kind !== "promise") unsupported(call, `${label} result must be Promise<T>`);
+        if (call.arguments.length < 1) {
+            unsupported(call, `${label} expects hostname${forcedRrtype ? "" : " and optional rrtype"}`);
+        }
+        const hostNode = call.arguments[0]!;
+        const rrtypeNode = forcedRrtype ? undefined : call.arguments[1];
+        const rrtype = forcedRrtype ?? (rrtypeNode ? this.dnsResolveTypeValue(rrtypeNode, label) : "A");
+        const host = this.emitExpr(hostNode);
+        const rrtypeExpr = rrtypeNode ? this.emitExpr(rrtypeNode) : undefined;
+        const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
+        if (rrtypeNode && rrtypeExpr) {
+            specs.push({ value: rrtypeExpr, target: T_STRING, node: rrtypeNode });
+        }
+        specs.push(...this.ignoredArgumentSpecs(call.arguments, rrtypeNode ? 2 : 1));
+        return this.emitSequencedExpr(mapped, specs, (values) => {
+            const result = this.freshTemp("_dns");
+            const out = this.freshTemp("_dns_promise");
+            const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
+            const resultType = rrtype === "PTR"
+                ? "tsc_dns_resolve_ptr_result_t"
+                : rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
+            const resolver = rrtype === "PTR"
+                ? "tsc_dns_resolve_ptr"
+                : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
+            return `({ ` +
+                `${resultType} ${result} = ${resolver}(${values[0]}); ` +
+                `tsc_promise_t* ${out}; ` +
+                `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                `${out}; })`;
+        });
+    }
+
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
         if (
             method !== "lookup" &&
             method !== "resolve" &&
             method !== "resolve4" &&
             method !== "resolve6" &&
+            method !== "reverse" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -83660,32 +83712,10 @@ class Emitter {
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `dns.promises.${method} result must be Promise<T>`);
         if (method === "resolve") {
-            if (call.arguments.length < 1) {
-                unsupported(call, "dns.promises.resolve expects hostname and optional rrtype");
-            }
-            const hostNode = call.arguments[0]!;
-            const rrtypeNode = call.arguments[1];
-            const rrtype = rrtypeNode ? this.dnsResolveTypeValue(rrtypeNode, "dns.promises.resolve") : "A";
-            const host = this.emitExpr(hostNode);
-            const rrtypeExpr = rrtypeNode ? this.emitExpr(rrtypeNode) : undefined;
-            const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
-            if (rrtypeNode && rrtypeExpr) {
-                specs.push({ value: rrtypeExpr, target: T_STRING, node: rrtypeNode });
-            }
-            specs.push(...this.ignoredArgumentSpecs(call.arguments, rrtypeNode ? 2 : 1));
-            return this.emitSequencedExpr(mapped, specs, (values) => {
-                const result = this.freshTemp("_dns");
-                const out = this.freshTemp("_dns_promise");
-                const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
-                const resultType = rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
-                const resolver = rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
-                return `({ ` +
-                    `${resultType} ${result} = ${resolver}(${values[0]}); ` +
-                    `tsc_promise_t* ${out}; ` +
-                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
-                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
-                    `${out}; })`;
-            });
+            return this.emitDnsResolvePromiseCall(call, "dns.promises.resolve");
+        }
+        if (method === "reverse") {
+            return this.emitDnsResolvePromiseCall(call, "dns.promises.reverse", "PTR");
         }
         if (method === "lookupService") {
             if (call.arguments.length < 2) {

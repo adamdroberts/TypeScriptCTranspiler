@@ -2420,6 +2420,57 @@ tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname) {
     return out;
 }
 
+tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address) {
+    tsc_dns_resolve_ptr_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!address) {
+        out.error = tsc_str_from_cstr("dns.resolve PTR: address required");
+        return out;
+    }
+
+    char* ip_str = cstr_dup(address);
+    struct in_addr in4_addr;
+    struct in6_addr in6_addr;
+    struct sockaddr* sa_ptr = NULL;
+    socklen_t sa_len = 0;
+    struct sockaddr_in sa4;
+    struct sockaddr_in6 sa6;
+
+    if (inet_pton(AF_INET, ip_str, &in4_addr) == 1) {
+        memset(&sa4, 0, sizeof(sa4));
+        sa4.sin_family = AF_INET;
+        sa4.sin_addr = in4_addr;
+        sa_ptr = (struct sockaddr*)&sa4;
+        sa_len = sizeof(sa4);
+    } else if (inet_pton(AF_INET6, ip_str, &in6_addr) == 1) {
+        memset(&sa6, 0, sizeof(sa6));
+        sa6.sin6_family = AF_INET6;
+        sa6.sin6_addr = in6_addr;
+        sa_ptr = (struct sockaddr*)&sa6;
+        sa_len = sizeof(sa6);
+    }
+
+    if (!sa_ptr) {
+        free(ip_str);
+        out.error = tsc_str_from_cstr("dns.resolve PTR: invalid IP address");
+        return out;
+    }
+
+    char host[NI_MAXHOST];
+    int rc = getnameinfo(sa_ptr, sa_len, host, sizeof(host), NULL, 0, NI_NAMEREQD);
+    free(ip_str);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+
+    out.addresses = tsc_array_new(sizeof(tsc_str_t*), 1);
+    tsc_str_t* hostname = tsc_str_from_cstr(host);
+    tsc_array_push_raw(out.addresses, &hostname);
+    return out;
+}
+
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port) {
     tsc_dns_lookup_service_result_t out;
     out.error = NULL;
