@@ -1,0 +1,6 @@
+server address: ::1 ipv6
+server endpoint: IPv6 IPv6
+client family: IPv6 IPv6
+server data: ping
+client data: pong
+server close

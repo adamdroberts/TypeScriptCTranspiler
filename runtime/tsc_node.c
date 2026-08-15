@@ -3092,38 +3092,89 @@ static bool tsc_net_resolve_ipv4(const tsc_str_t* host, struct in_addr* out) {
     return ok;
 }
 
-static tsc_value_t tsc_net_endpoint_value(const struct sockaddr_in* address) {
-    char text[INET_ADDRSTRLEN] = { 0 };
-    const char* rendered = inet_ntop(AF_INET, &address->sin_addr, text, sizeof(text));
+static bool tsc_net_resolve_endpoint(const tsc_str_t* host, struct sockaddr_storage* out, socklen_t* out_len) {
+    if (!out || !out_len) return false;
+    const tsc_str_t* value = host ? host : tsc_str_from_lit("127.0.0.1", 9);
+    char* cstr = cstr_dup(value);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo* result = NULL;
+    bool ok = false;
+    if (getaddrinfo(cstr, NULL, &hints, &result) == 0 && result && result->ai_addrlen <= sizeof(*out)) {
+        memset(out, 0, sizeof(*out));
+        memcpy(out, result->ai_addr, result->ai_addrlen);
+        *out_len = (socklen_t)result->ai_addrlen;
+        ok = result->ai_family == AF_INET || result->ai_family == AF_INET6;
+    }
+    if (result) freeaddrinfo(result);
+    free(cstr);
+    return ok;
+}
+
+static bool tsc_net_endpoint_parts(const struct sockaddr_storage* address, char* text, size_t text_len, const char** family_name, uint16_t* port) {
+    if (!address || !text || text_len == 0 || !family_name || !port) return false;
+    if (address->ss_family == AF_INET) {
+        const struct sockaddr_in* address4 = (const struct sockaddr_in*)address;
+        if (!inet_ntop(AF_INET, &address4->sin_addr, text, text_len)) return false;
+        *family_name = "IPv4";
+        *port = ntohs(address4->sin_port);
+        return true;
+    }
+    if (address->ss_family == AF_INET6) {
+        const struct sockaddr_in6* address6 = (const struct sockaddr_in6*)address;
+        if (!inet_ntop(AF_INET6, &address6->sin6_addr, text, text_len)) return false;
+        *family_name = "IPv6";
+        *port = ntohs(address6->sin6_port);
+        return true;
+    }
+    return false;
+}
+
+static tsc_value_t tsc_net_endpoint_value(const struct sockaddr_storage* address) {
+    char text[INET6_ADDRSTRLEN] = { 0 };
+    const char* family_name = "IPv4";
+    uint16_t port = 0;
+    bool valid = tsc_net_endpoint_parts(address, text, sizeof(text), &family_name, &port);
+    bool ipv6 = strcmp(family_name, "IPv6") == 0;
+    const char* fallback = ipv6 ? "::" : "0.0.0.0";
+    const char* family_value = ipv6 ? "ipv6" : "ipv4";
     tsc_object_t* obj = tsc_object_new();
-    tsc_object_set(obj, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
-    tsc_object_set(obj, tsc_str_from_lit("family", 6), tsc_value_string(tsc_str_from_lit("ipv4", 4)));
-    tsc_object_set(obj, tsc_str_from_lit("port", 4), tsc_value_num((double)ntohs(address->sin_port)));
+    tsc_object_set(obj, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(valid ? text : fallback)));
+    tsc_object_set(obj, tsc_str_from_lit("family", 6), tsc_value_string(tsc_str_from_cstr(family_value)));
+    tsc_object_set(obj, tsc_str_from_lit("port", 4), tsc_value_num((double)port));
     tsc_object_set(obj, tsc_str_from_lit("flowlabel", 9), tsc_value_num(0.0));
     return tsc_value_object(obj);
 }
 
 static void tsc_net_socket_refresh_endpoint_props(tsc_net_socket_t* socket) {
     if (!socket || socket->fd < 0) return;
-    struct sockaddr_in local;
-    struct sockaddr_in remote;
+    struct sockaddr_storage local;
+    struct sockaddr_storage remote;
     socklen_t local_len = sizeof(local);
     socklen_t remote_len = sizeof(remote);
     memset(&local, 0, sizeof(local));
     memset(&remote, 0, sizeof(remote));
     if (getsockname(socket->fd, (struct sockaddr*)&local, &local_len) == 0) {
-        char text[INET_ADDRSTRLEN] = { 0 };
-        const char* rendered = inet_ntop(AF_INET, &local.sin_addr, text, sizeof(text));
-        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localAddress", 12), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
-        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localPort", 9), tsc_value_num((double)ntohs(local.sin_port)));
-        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localFamily", 11), tsc_value_string(tsc_str_from_lit("IPv4", 4)));
+        char text[INET6_ADDRSTRLEN] = { 0 };
+        const char* family_name = NULL;
+        uint16_t port = 0;
+        if (tsc_net_endpoint_parts(&local, text, sizeof(text), &family_name, &port)) {
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localAddress", 12), tsc_value_string(tsc_str_from_cstr(text)));
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localPort", 9), tsc_value_num((double)port));
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localFamily", 11), tsc_value_string(tsc_str_from_cstr(family_name)));
+        }
     }
     if (getpeername(socket->fd, (struct sockaddr*)&remote, &remote_len) == 0) {
-        char text[INET_ADDRSTRLEN] = { 0 };
-        const char* rendered = inet_ntop(AF_INET, &remote.sin_addr, text, sizeof(text));
-        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteAddress", 13), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
-        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remotePort", 10), tsc_value_num((double)ntohs(remote.sin_port)));
-        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteFamily", 12), tsc_value_string(tsc_str_from_lit("IPv4", 4)));
+        char text[INET6_ADDRSTRLEN] = { 0 };
+        const char* family_name = NULL;
+        uint16_t port = 0;
+        if (tsc_net_endpoint_parts(&remote, text, sizeof(text), &family_name, &port)) {
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteAddress", 13), tsc_value_string(tsc_str_from_cstr(text)));
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remotePort", 10), tsc_value_num((double)port));
+            tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteFamily", 12), tsc_value_string(tsc_str_from_cstr(family_name)));
+        }
     }
 }
 
@@ -3431,7 +3482,7 @@ static tsc_value_t tsc_net_socket_address(void* env, tsc_value_t this_arg, tsc_a
     (void)args;
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
     if (!socket || socket->fd < 0) return tsc_value_null();
-    struct sockaddr_in local;
+    struct sockaddr_storage local;
     socklen_t len = sizeof(local);
     memset(&local, 0, sizeof(local));
     if (getsockname(socket->fd, (struct sockaddr*)&local, &len) != 0) return tsc_value_null();
@@ -3652,7 +3703,7 @@ static tsc_value_t tsc_net_server_address(void* env, tsc_value_t this_arg, tsc_a
     (void)args;
     tsc_net_server_t* server = (tsc_net_server_t*)env;
     if (!server || server->fd < 0 || !server->listening) return tsc_value_null();
-    struct sockaddr_in address;
+    struct sockaddr_storage address;
     socklen_t len = sizeof(address);
     memset(&address, 0, sizeof(address));
     if (getsockname(server->fd, (struct sockaddr*)&address, &len) != 0) return tsc_value_null();
@@ -3749,11 +3800,12 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
         tsc_net_register_listener(&server->event, "listening", callback, true);
     }
     if (server->fd >= 0) return this_arg;
-    struct in_addr address;
-    if (!tsc_net_resolve_ipv4(host, &address)) {
+    struct sockaddr_storage endpoint;
+    socklen_t endpoint_len = 0;
+    if (!tsc_net_resolve_endpoint(host, &endpoint, &endpoint_len)) {
         tsc_throw_str(tsc_str_from_cstr("net.Server.listen host could not be resolved"));
     }
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(endpoint.ss_family, SOCK_STREAM, 0);
     if (fd < 0 || !tsc_net_set_nonblocking(fd)) {
         int error = errno;
         if (fd >= 0) close(fd);
@@ -3763,12 +3815,12 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     }
     int reuse = 1;
     (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
-    struct sockaddr_in endpoint;
-    memset(&endpoint, 0, sizeof(endpoint));
-    endpoint.sin_family = AF_INET;
-    endpoint.sin_addr = address;
-    endpoint.sin_port = htons((uint16_t)port);
-    if (bind(fd, (struct sockaddr*)&endpoint, sizeof(endpoint)) != 0 || listen(fd, 16) != 0) {
+    if (endpoint.ss_family == AF_INET) {
+        ((struct sockaddr_in*)&endpoint)->sin_port = htons((uint16_t)port);
+    } else if (endpoint.ss_family == AF_INET6) {
+        ((struct sockaddr_in6*)&endpoint)->sin6_port = htons((uint16_t)port);
+    }
+    if (bind(fd, (struct sockaddr*)&endpoint, endpoint_len) != 0 || listen(fd, 16) != 0) {
         int error = errno;
         close(fd);
         tsc_throw_str(tsc_str_from_cstr(strerror(error)));
@@ -3802,7 +3854,7 @@ static void tsc_net_server_poll(void* env) {
         (void)tsc_event_emitter_emit(server->event.emitter, tsc_str_from_lit("listening", 9), empty);
     }
     for (;;) {
-        struct sockaddr_in address;
+        struct sockaddr_storage address;
         socklen_t address_len = sizeof(address);
         int accepted = accept(server->fd, (struct sockaddr*)&address, &address_len);
         if (accepted < 0) {
@@ -3874,11 +3926,12 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_va
     if (!tsc_value_is_undefined(connect_listener) && !tsc_value_is_nullish(connect_listener) && !tsc_value_is_callable(connect_listener)) {
         tsc_throw_str(tsc_str_from_cstr("net.connect connect listener must be a function"));
     }
-    struct in_addr address;
-    if (!tsc_net_resolve_ipv4(host, &address)) {
+    struct sockaddr_storage endpoint;
+    socklen_t endpoint_len = 0;
+    if (!tsc_net_resolve_endpoint(host, &endpoint, &endpoint_len)) {
         tsc_throw_str(tsc_str_from_cstr("net.connect host could not be resolved"));
     }
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = socket(endpoint.ss_family, SOCK_STREAM, 0);
     if (fd < 0 || !tsc_net_set_nonblocking(fd)) {
         int error = errno;
         if (fd >= 0) close(fd);
@@ -3886,12 +3939,12 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_va
         snprintf(message, sizeof(message), "net.connect socket initialization failed: %s", strerror(error));
         tsc_throw_str(tsc_str_from_cstr(message));
     }
-    struct sockaddr_in endpoint;
-    memset(&endpoint, 0, sizeof(endpoint));
-    endpoint.sin_family = AF_INET;
-    endpoint.sin_addr = address;
-    endpoint.sin_port = htons((uint16_t)port);
-    int result = connect(fd, (struct sockaddr*)&endpoint, sizeof(endpoint));
+    if (endpoint.ss_family == AF_INET) {
+        ((struct sockaddr_in*)&endpoint)->sin_port = htons((uint16_t)port);
+    } else if (endpoint.ss_family == AF_INET6) {
+        ((struct sockaddr_in6*)&endpoint)->sin6_port = htons((uint16_t)port);
+    }
+    int result = connect(fd, (struct sockaddr*)&endpoint, endpoint_len);
     bool connecting = result != 0;
     if (result != 0 && errno != EINPROGRESS) {
         int error = errno;
