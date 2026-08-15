@@ -12079,6 +12079,9 @@ tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path) {
     tsc_object_set(object, tsc_str_from_lit("close", 5), tsc_value_function_builtin_named(
         tsc_fs_dir_close_builtin, state, 0.0, tsc_str_from_lit("close", 5)
     ));
+    tsc_object_set(object, tsc_str_from_cstr("__tsc_symbol_asyncDispose"), tsc_value_function_builtin_named(
+        tsc_fs_dir_close_builtin, state, 0.0, tsc_str_from_lit("asyncDispose", 12)
+    ));
     tsc_object_set(object, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(
         tsc_fs_dir_next_builtin, state, 0.0, tsc_str_from_lit("next", 4)
     ));

@@ -1400,6 +1400,7 @@ interface FSDir {
     next(...ignored: any[]): Promise<IteratorResult<FSDirHandleEntry, void>>;
     return(value?: any, ...ignored: any[]): Promise<IteratorResult<FSDirHandleEntry, any>>;
     [Symbol.asyncIterator](...ignored: any[]): FSDir;
+    [Symbol.asyncDispose](...ignored: any[]): Promise<void>;
 }
 interface FSStatFsOptions {
     bigint?: false;

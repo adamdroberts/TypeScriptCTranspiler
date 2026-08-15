@@ -268,7 +268,7 @@ const dir = fs.opendirSync("/tmp");
 console.log(dir.readSync()?.name);
 dir.closeSync();
 const asyncDir = await fs.promises.opendir("/tmp");
-await asyncDir.close();
+await asyncDir[Symbol.asyncDispose]();
 
 console.log(path.join("/tmp", "sub", "x.txt"), path.parse("/a/b/c.txt"));
 console.log(os.platform(), os.arch(), os.cpus().length, os.devNull);
