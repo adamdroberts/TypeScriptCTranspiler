@@ -1,0 +1,2 @@
+read: true:true:true:false:false true read -me true true false 0
+close: end|stream-close

@@ -1757,40 +1757,95 @@ static void tsc_child_emit_one_value(tsc_event_emitter_t* emitter, const char* n
     (void)tsc_event_emitter_emit(emitter, tsc_str_from_cstr(name), args);
 }
 
+static tsc_value_t tsc_child_stream_value_from_bytes(tsc_child_stream_t* stream, const uint8_t* data, size_t len) {
+    if (stream->encoding_utf8) {
+        return tsc_value_string(child_capture_string(data, len));
+    }
+    tsc_buffer_t* buffer = tsc_buffer_alloc((double)len, 0);
+    memcpy(buffer->data, data, len);
+    return tsc_value_buffer(buffer);
+}
+
+static void tsc_child_stream_mark_eof(tsc_child_stream_t* stream) {
+    if (!stream || stream->ended) return;
+    if (stream->fd >= 0) {
+        close(stream->fd);
+        stream->fd = -1;
+    }
+    stream->ended = true;
+    tsc_child_stream_refresh_props(stream);
+    if (stream->event.emitter) {
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("end", 3), empty);
+    }
+    tsc_child_stream_emit_close(stream);
+}
+
+static void tsc_child_stream_mark_read_error(tsc_child_stream_t* stream) {
+    if (!stream || stream->ended) return;
+    if (stream->fd >= 0) {
+        close(stream->fd);
+        stream->fd = -1;
+    }
+    stream->ended = true;
+    tsc_child_stream_refresh_props(stream);
+    tsc_child_stream_emit_error(stream, "child_process stream read failed");
+    tsc_child_stream_emit_close(stream);
+}
+
+static size_t tsc_child_stream_read_limit(tsc_array_t* args) {
+    if (!args || args->len == 0 || tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+        return 4096;
+    }
+    tsc_value_t value = TSC_ARR(tsc_value_t, args, 0);
+    if (!tsc_value_number_is_integer(value)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stream.read size must be a non-negative integer"));
+    }
+    double size = tsc_value_as_num(value);
+    if (size < 0.0 || size > 65536.0) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stream.read size must be between 0 and 65536"));
+    }
+    return (size_t)size;
+}
+
+static tsc_value_t tsc_child_stream_read_one(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
+    if (!stream || stream->writable || stream->fd < 0 || stream->ended) return tsc_value_null();
+    size_t limit = tsc_child_stream_read_limit(args);
+    if (limit == 0) return tsc_value_null();
+    uint8_t chunk[65536];
+    for (;;) {
+        ssize_t n = read(stream->fd, chunk, limit);
+        if (n > 0) return tsc_child_stream_value_from_bytes(stream, chunk, (size_t)n);
+        if (n == 0) {
+            tsc_child_stream_mark_eof(stream);
+            return tsc_value_null();
+        }
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return tsc_value_null();
+        tsc_child_stream_mark_read_error(stream);
+        return tsc_value_null();
+    }
+}
+
 static void tsc_child_stream_read(tsc_child_stream_t* stream) {
     if (!stream || stream->fd < 0 || stream->ended || stream->paused) return;
     for (;;) {
         uint8_t chunk[4096];
         ssize_t n = read(stream->fd, chunk, sizeof(chunk));
         if (n > 0) {
-            tsc_value_t value;
-            if (stream->encoding_utf8) {
-                value = tsc_value_string(child_capture_string(chunk, (size_t)n));
-            } else {
-                tsc_buffer_t* buffer = tsc_buffer_alloc((double)n, 0);
-                memcpy(buffer->data, chunk, (size_t)n);
-                value = tsc_value_buffer(buffer);
-            }
-            tsc_child_emit_one_value(stream->event.emitter, "data", value);
+            tsc_child_emit_one_value(stream->event.emitter, "data", tsc_child_stream_value_from_bytes(stream, chunk, (size_t)n));
+            if (stream->paused) return;
             continue;
         }
         if (n == 0) {
-            close(stream->fd);
-            stream->fd = -1;
-            stream->ended = true;
-            tsc_child_stream_refresh_props(stream);
-            tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
-            (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("end", 3), empty);
-            tsc_child_stream_emit_close(stream);
+            tsc_child_stream_mark_eof(stream);
             return;
         }
         if (errno == EINTR) continue;
         if (errno == EAGAIN || errno == EWOULDBLOCK) return;
-        close(stream->fd);
-        stream->fd = -1;
-        stream->ended = true;
-        tsc_child_stream_refresh_props(stream);
-        tsc_child_stream_emit_close(stream);
+        tsc_child_stream_mark_read_error(stream);
         return;
     }
 }
@@ -1875,6 +1930,9 @@ static void tsc_child_set_stream_methods(tsc_object_t* object, tsc_child_stream_
     tsc_object_set(object, tsc_str_from_lit("resume", 6), tsc_value_function_generic_named(tsc_child_stream_resume, stream, 0.0, tsc_str_from_lit("resume", 6)));
     tsc_object_set(object, tsc_str_from_lit("isPaused", 8), tsc_value_function_generic_named(tsc_child_stream_is_paused, stream, 0.0, tsc_str_from_lit("isPaused", 8)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_child_stream_destroy, stream, 0.0, tsc_str_from_lit("destroy", 7)));
+    if (!stream->writable) {
+        tsc_object_set(object, tsc_str_from_lit("read", 4), tsc_value_function_generic_named(tsc_child_stream_read_one, stream, 1.0, tsc_str_from_lit("read", 4)));
+    }
     if (stream->writable) {
         tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_child_stream_write, stream, 2.0, tsc_str_from_lit("write", 5)));
         tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_child_stream_end, stream, 1.0, tsc_str_from_lit("end", 3)));
