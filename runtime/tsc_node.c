@@ -5770,6 +5770,9 @@ typedef struct tsc_fs_read_file_async {
     tsc_promise_t* promise;
     char* path;
     int fd;
+    bool position_is_set;
+    int64_t position;
+    size_t max_len;
     uint8_t* bytes;
     size_t len;
     size_t cap;
@@ -7156,21 +7159,31 @@ static void tsc_fs_read_file_async_close_cb(tsc_uv_fs_t* req) {
 static void tsc_fs_read_file_async_read_cb(tsc_uv_fs_t* req);
 
 static void tsc_fs_read_file_async_read_next(tsc_fs_read_file_async_t* task) {
-    if (task->cap - task->len < TSC_UV_READ_CHUNK) {
+    size_t request_len = TSC_UV_READ_CHUNK;
+    if (task->max_len > 0) {
+        if (task->len >= task->max_len) {
+            tsc_fs_read_file_async_close_or_finish(task, true);
+            return;
+        }
+        if (request_len > task->max_len - task->len) request_len = task->max_len - task->len;
+    }
+    if (task->cap - task->len < request_len) {
         size_t next_cap = task->cap == 0 ? TSC_UV_READ_CHUNK : task->cap * 2;
-        if (next_cap < task->len + TSC_UV_READ_CHUNK) next_cap = task->len + TSC_UV_READ_CHUNK;
+        if (next_cap < task->len + request_len) next_cap = task->len + request_len;
         task->bytes = (uint8_t*)TSC_GC_REALLOC(task->bytes, next_cap);
         task->cap = next_cap;
     }
     task->read_buf.base = (char*)task->bytes + task->len;
-    task->read_buf.len = task->cap - task->len;
+    task->read_buf.len = request_len;
     int rc = uv_fs_read(
         g_tsc_fs_uv_loop,
         &task->req,
         task->fd,
         &task->read_buf,
         1,
-        task->path ? (int64_t)task->len : -1,
+        task->path
+            ? (int64_t)task->len
+            : (task->position_is_set ? task->position + (int64_t)task->len : -1),
         tsc_fs_read_file_async_read_cb
     );
     if (rc < 0) {
@@ -7304,7 +7317,10 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
     tsc_fs_file_handle_t* handle,
     tsc_value_t owner_value,
     tsc_array_t* args,
-    tsc_value_t signal
+    tsc_value_t signal,
+    bool position_is_set,
+    int64_t position,
+    size_t max_len
 ) {
     if (!handle || handle->closed || handle->fd < 0) {
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
@@ -7320,6 +7336,9 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
     memset(task, 0, sizeof(*task));
     task->promise = promise;
     task->fd = handle->fd;
+    task->position_is_set = position_is_set;
+    task->position = position;
+    task->max_len = max_len;
     task->owner_object = value_is_box(owner_value) && value_tag(owner_value) == TSC_VALUE_TAG_OBJECT
         ? value_ptr(owner_value)
         : NULL;
@@ -7342,7 +7361,15 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
 }
 
 static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    return tsc_value_promise(tsc_fs_file_handle_read_file_start((tsc_fs_file_handle_t*)env, this_arg, args, tsc_value_undefined()));
+    return tsc_value_promise(tsc_fs_file_handle_read_file_start(
+        (tsc_fs_file_handle_t*)env,
+        this_arg,
+        args,
+        tsc_value_undefined(),
+        false,
+        0,
+        0
+    ));
 }
 
 static tsc_value_t tsc_fs_file_handle_read_lines_result(tsc_value_t value, bool done) {
@@ -7518,8 +7545,17 @@ static tsc_value_t tsc_fs_file_handle_read_lines_async_iterator(void* env, tsc_v
     return state ? state->iterator : tsc_value_undefined();
 }
 
-static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options, tsc_value_t* signal_out) {
+static bool tsc_fs_file_handle_read_lines_options(
+    tsc_value_t options,
+    tsc_value_t* signal_out,
+    bool* position_is_set_out,
+    int64_t* position_out,
+    size_t* max_len_out
+) {
     if (signal_out) *signal_out = tsc_value_undefined();
+    if (position_is_set_out) *position_is_set_out = false;
+    if (position_out) *position_out = 0;
+    if (max_len_out) *max_len_out = 0;
     if (tsc_value_is_nullish(options)) return true;
     if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr(
@@ -7540,7 +7576,44 @@ static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options, tsc_value
     }
     tsc_value_t signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
     if (signal_out && !tsc_value_is_nullish(signal)) *signal_out = signal;
-    const char* unsupported[] = { "start", "end", "autoClose", "emitClose", "highWaterMark" };
+
+    tsc_value_t start_value = tsc_value_get_prop(options, tsc_str_from_lit("start", 5));
+    tsc_value_t end_value = tsc_value_get_prop(options, tsc_str_from_lit("end", 3));
+    bool has_start = !tsc_value_is_nullish(start_value);
+    bool has_end = !tsc_value_is_nullish(end_value);
+    int64_t start = 0;
+    int64_t end = 0;
+    if (has_start) {
+        if (!tsc_value_number_is_safe_integer(start_value) || tsc_value_as_num(start_value) < 0.0) {
+            tsc_throw_str(tsc_str_from_cstr(
+                "fs.promises.FileHandle.readLines start must be a non-negative safe integer"
+            ));
+            return false;
+        }
+        start = (int64_t)tsc_value_as_num(start_value);
+    }
+    if (has_end) {
+        if (!tsc_value_number_is_safe_integer(end_value) || tsc_value_as_num(end_value) < 0.0) {
+            tsc_throw_str(tsc_str_from_cstr(
+                "fs.promises.FileHandle.readLines end must be a non-negative safe integer"
+            ));
+            return false;
+        }
+        end = (int64_t)tsc_value_as_num(end_value);
+    }
+    if (has_start && has_end && end < start) {
+        tsc_throw_str(tsc_str_from_cstr(
+            "fs.promises.FileHandle.readLines end must be greater than or equal to start"
+        ));
+        return false;
+    }
+    if (has_start || has_end) {
+        if (position_is_set_out) *position_is_set_out = true;
+        if (position_out) *position_out = start;
+        if (max_len_out && has_end) *max_len_out = (size_t)(end - start + 1);
+    }
+
+    const char* unsupported[] = { "autoClose", "emitClose", "highWaterMark" };
     for (size_t i = 0; i < sizeof(unsupported) / sizeof(unsupported[0]); i++) {
         tsc_value_t value = tsc_value_get_prop(options, tsc_str_from_cstr(unsupported[i]));
         if (!tsc_value_is_nullish(value)) {
@@ -7556,7 +7629,16 @@ static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options, tsc_value
 static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     tsc_value_t signal = tsc_value_undefined();
-    if (!tsc_fs_file_handle_read_lines_options(options, &signal)) return tsc_value_undefined();
+    bool position_is_set = false;
+    int64_t position = 0;
+    size_t max_len = 0;
+    if (!tsc_fs_file_handle_read_lines_options(
+        options,
+        &signal,
+        &position_is_set,
+        &position,
+        &max_len
+    )) return tsc_value_undefined();
 
     tsc_fs_file_handle_read_lines_t* state =
         (tsc_fs_file_handle_read_lines_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_read_lines_t));
@@ -7598,7 +7680,10 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
         (tsc_fs_file_handle_t*)env,
         this_arg,
         read_args,
-        signal
+        signal,
+        position_is_set,
+        position,
+        max_len
     );
     if (!state->source) {
         state->failed = true;

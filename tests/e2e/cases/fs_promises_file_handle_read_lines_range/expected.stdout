@@ -1,0 +1,6 @@
+range: one:true
+position: preserved
+bounds: two:zero
+invalid: true
+reversed: true
+error: pending
