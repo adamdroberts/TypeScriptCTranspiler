@@ -1211,6 +1211,7 @@ typedef struct tsc_child_stream {
     tsc_child_write_request_t* write_head;
     tsc_child_write_request_t* write_tail;
     tsc_value_t end_callback;
+    struct tsc_child_pipe_env* pipe;
 } tsc_child_stream_t;
 
 typedef struct tsc_child_process_async {
@@ -1235,6 +1236,16 @@ typedef struct tsc_child_listener_env {
     tsc_value_t fn;
     tsc_value_t receiver;
 } tsc_child_listener_env_t;
+
+typedef struct tsc_child_pipe_env {
+    tsc_child_stream_t* source;
+    tsc_value_t destination;
+    void* destination_ptr;
+    tsc_value_t drain_listener;
+    bool end_destination;
+    bool drain_listener_registered;
+    bool paused_by_pipe;
+} tsc_child_pipe_env_t;
 
 static void tsc_child_dynamic_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
     (void)emitter;
@@ -1850,6 +1861,168 @@ static void tsc_child_stream_read(tsc_child_stream_t* stream) {
     }
 }
 
+static void tsc_child_pipe_data_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    (void)emitter;
+    tsc_child_pipe_env_t* pipe = (tsc_child_pipe_env_t*)env;
+    if (!pipe || !args || args->len < 1) return;
+    tsc_value_t write = tsc_value_get_prop(pipe->destination, tsc_str_from_lit("write", 5));
+    if (!tsc_value_is_callable(write)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stream pipe destination must have a write method"));
+    }
+    tsc_array_t* write_args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(write_args, TSC_ARR(tsc_value_t, args, 0));
+    tsc_value_t accepted = tsc_value_apply_function(write, pipe->destination, tsc_value_array(write_args));
+    if (pipe->source && pipe->drain_listener_registered && tsc_value_eq(accepted, tsc_value_bool(false))) {
+        pipe->source->paused = true;
+        pipe->paused_by_pipe = true;
+        tsc_child_stream_refresh_props(pipe->source);
+    }
+}
+
+static void tsc_child_pipe_end_listener(void* env, tsc_event_emitter_t* emitter, tsc_array_t* args) {
+    (void)emitter;
+    (void)args;
+    tsc_child_pipe_env_t* pipe = (tsc_child_pipe_env_t*)env;
+    if (!pipe || !pipe->end_destination) return;
+    tsc_value_t end = tsc_value_get_prop(pipe->destination, tsc_str_from_lit("end", 3));
+    if (!tsc_value_is_callable(end)) return;
+    tsc_array_t* end_args = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_value_apply_function(end, pipe->destination, tsc_value_array(end_args));
+}
+
+static tsc_value_t tsc_child_pipe_drain_listener(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_child_pipe_env_t* pipe = (tsc_child_pipe_env_t*)env;
+    if (pipe && pipe->source && pipe->paused_by_pipe) {
+        pipe->source->paused = false;
+        pipe->paused_by_pipe = false;
+        tsc_child_stream_refresh_props(pipe->source);
+    }
+    return tsc_value_undefined();
+}
+
+static void tsc_child_stream_unpipe_internal(tsc_child_stream_t* stream, tsc_value_t destination) {
+    if (!stream || !stream->pipe) return;
+    tsc_child_pipe_env_t* pipe = stream->pipe;
+    if (!tsc_value_is_nullish(destination) && !tsc_value_eq(destination, pipe->destination)) return;
+    tsc_event_emitter_off(
+        stream->event.emitter,
+        tsc_str_from_lit("data", 4),
+        tsc_child_pipe_data_listener,
+        pipe
+    );
+    tsc_event_emitter_off(
+        stream->event.emitter,
+        tsc_str_from_lit("end", 3),
+        tsc_child_pipe_end_listener,
+        pipe
+    );
+    if (pipe->drain_listener_registered) {
+        tsc_value_t off = tsc_value_get_prop(pipe->destination, tsc_str_from_lit("off", 3));
+        if (!tsc_value_is_callable(off)) {
+            off = tsc_value_get_prop(pipe->destination, tsc_str_from_lit("removeListener", 14));
+        }
+        if (tsc_value_is_callable(off)) {
+            tsc_array_t* off_args = tsc_array_new(sizeof(tsc_value_t), 2);
+            tsc_array_push_value(off_args, tsc_value_string(tsc_str_from_lit("drain", 5)));
+            tsc_array_push_value(off_args, pipe->drain_listener);
+            (void)tsc_value_apply_function(off, pipe->destination, tsc_value_array(off_args));
+        }
+    }
+    if (pipe->source && pipe->paused_by_pipe) {
+        pipe->source->paused = false;
+        tsc_child_stream_refresh_props(pipe->source);
+    }
+    pipe->source = NULL;
+    stream->pipe = NULL;
+}
+
+static tsc_value_t tsc_child_stream_pipe(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
+    if (!stream || stream->writable || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("child_process readable stream.pipe destination required"));
+    }
+    tsc_value_t destination = TSC_ARR(tsc_value_t, args, 0);
+    if (!tsc_value_is_object(destination)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stream.pipe destination must be an object"));
+    }
+    tsc_value_t write = tsc_value_get_prop(destination, tsc_str_from_lit("write", 5));
+    if (!tsc_value_is_callable(write)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stream.pipe destination must have a write method"));
+    }
+    bool end_destination = true;
+    if (args->len > 1 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
+        tsc_value_t options = TSC_ARR(tsc_value_t, args, 1);
+        if (tsc_value_is_object(options)) {
+            tsc_value_t end = tsc_value_get_prop(options, tsc_str_from_lit("end", 3));
+            if (!tsc_value_is_undefined(end) && !tsc_value_is_nullish(end)) {
+                end_destination = tsc_value_is_truthy(end);
+            }
+        }
+    }
+    if (end_destination) {
+        tsc_value_t end = tsc_value_get_prop(destination, tsc_str_from_lit("end", 3));
+        if (!tsc_value_is_callable(end)) {
+            tsc_throw_str(tsc_str_from_cstr("child_process stream.pipe destination must have an end method"));
+        }
+    }
+    tsc_child_stream_unpipe_internal(stream, tsc_value_undefined());
+    tsc_child_pipe_env_t* pipe = (tsc_child_pipe_env_t*)TSC_GC_MALLOC(sizeof(tsc_child_pipe_env_t));
+    memset(pipe, 0, sizeof(*pipe));
+    pipe->source = stream;
+    pipe->destination = destination;
+    pipe->destination_ptr = value_is_box(destination) ? value_ptr(destination) : NULL;
+    pipe->drain_listener = tsc_value_undefined();
+    pipe->end_destination = end_destination;
+
+    tsc_value_t on = tsc_value_get_prop(destination, tsc_str_from_lit("on", 2));
+    if (tsc_value_is_callable(on)) {
+        pipe->drain_listener = tsc_value_function_generic_named(
+            tsc_child_pipe_drain_listener,
+            pipe,
+            0.0,
+            tsc_str_from_lit("drain", 5)
+        );
+        tsc_array_t* on_args = tsc_array_new(sizeof(tsc_value_t), 2);
+        tsc_array_push_value(on_args, tsc_value_string(tsc_str_from_lit("drain", 5)));
+        tsc_array_push_value(on_args, pipe->drain_listener);
+        (void)tsc_value_apply_function(on, destination, tsc_value_array(on_args));
+        pipe->drain_listener_registered = true;
+    }
+    stream->pipe = pipe;
+    tsc_event_emitter_on(
+        stream->event.emitter,
+        tsc_str_from_lit("data", 4),
+        tsc_child_pipe_data_listener,
+        pipe,
+        pipe,
+        false,
+        false
+    );
+    if (end_destination) {
+        tsc_event_emitter_on(
+            stream->event.emitter,
+            tsc_str_from_lit("end", 3),
+            tsc_child_pipe_end_listener,
+            pipe,
+            pipe,
+            false,
+            false
+        );
+        if (stream->ended) tsc_child_pipe_end_listener(pipe, NULL, NULL);
+    }
+    return destination;
+}
+
+static tsc_value_t tsc_child_stream_unpipe(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
+    tsc_value_t destination = tsc_value_undefined();
+    if (args && args->len > 0) destination = TSC_ARR(tsc_value_t, args, 0);
+    tsc_child_stream_unpipe_internal(stream, destination);
+    return this_arg;
+}
+
 static bool tsc_child_exec_error_closed_or_reported(tsc_child_process_async_t* child) {
     if (!child || child->exec_error_fd < 0) return true;
     int error = 0;
@@ -1933,6 +2106,8 @@ static void tsc_child_set_stream_methods(tsc_object_t* object, tsc_child_stream_
     tsc_object_set(object, tsc_str_from_lit("isPaused", 8), tsc_value_function_generic_named(tsc_child_stream_is_paused, stream, 0.0, tsc_str_from_lit("isPaused", 8)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_child_stream_destroy, stream, 0.0, tsc_str_from_lit("destroy", 7)));
     if (!stream->writable) {
+        tsc_object_set(object, tsc_str_from_lit("pipe", 4), tsc_value_function_generic_named(tsc_child_stream_pipe, stream, 1.0, tsc_str_from_lit("pipe", 4)));
+        tsc_object_set(object, tsc_str_from_lit("unpipe", 6), tsc_value_function_generic_named(tsc_child_stream_unpipe, stream, 1.0, tsc_str_from_lit("unpipe", 6)));
         tsc_object_set(object, tsc_str_from_lit("read", 4), tsc_value_function_generic_named(tsc_child_stream_read_one, stream, 1.0, tsc_str_from_lit("read", 4)));
     }
     if (stream->writable) {
