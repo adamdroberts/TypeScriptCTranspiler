@@ -976,6 +976,14 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
     const resolveFreshStaticRegExpRecords = (expr: ts.Expression): RegExp[] => {
         const current = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(current)) {
+            const decl = earlierConstStringDeclaration(current) ?? topLevelConstStringDeclaration(current);
+            if (!decl?.initializer || seen.has(decl)) return [];
+            seen.add(decl);
+            const values = resolveFreshStaticRegExpRecords(decl.initializer);
+            seen.delete(decl);
+            return values;
+        }
         if (ts.isRegularExpressionLiteral(current)) {
             const text = current.text;
             const slash = text.lastIndexOf("/");
