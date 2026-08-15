@@ -91407,11 +91407,11 @@ class Emitter {
                      * immediately-settled path while Promise-chain call sites
                      * use the real libuv-backed Dir implementation. */
                     const awaitedDirectly = ts.isAwaitExpression(call.parent);
-                    const useLibuv = !options.recursive && !awaitedDirectly;
+                    const useLibuv = !awaitedDirectly;
                     if (useLibuv) this.usesLibuv = true;
                     return settle(!useLibuv
                         ? `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize}))`
-                        : `tsc_fs_promises_opendir_async(${path!}, false, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize})`);
+                        : `tsc_fs_promises_opendir_async(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize})`);
                 });
             }
             case "readFile": {

@@ -11976,6 +11976,16 @@ typedef struct tsc_fs_dir_waiter {
     bool iterator;
 } tsc_fs_dir_waiter_t;
 
+#ifdef TSC_HAS_LIBUV
+typedef struct tsc_fs_dir_uv_frame {
+    tsc_uv_dir_t* dir;
+    char* path;
+    tsc_array_t* entries;
+    tsc_array_t* entry_dirents;
+    size_t entry_index;
+} tsc_fs_dir_uv_frame_t;
+#endif
+
 typedef struct tsc_fs_dir {
 #ifdef TSC_HAS_LIBUV
     /* Keep the request first: libuv callbacks recover the owning Dir from it. */
@@ -11999,10 +12009,13 @@ typedef struct tsc_fs_dir {
     tsc_uv_dirent_t* uv_dirents;
     size_t uv_dirent_capacity;
     tsc_array_t* uv_entries;
+    tsc_array_t* uv_entry_dirents;
     size_t uv_entry_index;
+    tsc_array_t* uv_frames;
     tsc_array_t* uv_waiters;
     tsc_array_t* uv_close_waiters;
     bool uv_req_pending;
+    bool uv_child_open_pending;
     bool uv_close_requested;
     bool uv_close_started;
     struct tsc_fs_dir* uv_next;
@@ -12033,9 +12046,11 @@ static void tsc_fs_dir_pending_clear(tsc_array_t* pending, size_t pending_index)
 typedef struct tsc_fs_dir_open_async {
     tsc_uv_fs_t req;
     tsc_promise_t* promise;
+    struct tsc_fs_dir* state;
     char* path;
     tsc_str_t* encoding;
     size_t buffer_size;
+    bool recursive;
     struct tsc_fs_dir_open_async* next;
 } tsc_fs_dir_open_async_t;
 
@@ -12044,6 +12059,8 @@ static tsc_fs_dir_t* g_tsc_fs_dir_uv_pending = NULL;
 
 static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state);
 static void tsc_fs_dir_uv_close_start(tsc_fs_dir_t* state);
+static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req);
+static void tsc_fs_dir_uv_start_child(tsc_fs_dir_t* state, tsc_fs_dirent_t* dirent);
 
 static bool tsc_fs_dir_libuv_pending(void) {
     return g_tsc_fs_dir_open_async != NULL || g_tsc_fs_dir_uv_pending != NULL;
@@ -12076,8 +12093,9 @@ static tsc_value_t tsc_fs_dir_uv_error(const char* message) {
 }
 
 static void tsc_fs_dir_uv_entries_clear(tsc_fs_dir_t* state) {
-    if (!state || !state->uv_entries) return;
-    state->uv_entries->len = 0;
+    if (!state) return;
+    if (state->uv_entries) state->uv_entries->len = 0;
+    if (state->uv_entry_dirents) state->uv_entry_dirents->len = 0;
     state->uv_entry_index = 0;
 }
 
@@ -12085,11 +12103,17 @@ static bool tsc_fs_dir_uv_has_entries(const tsc_fs_dir_t* state) {
     return state && state->uv_entries && state->uv_entry_index < state->uv_entries->len;
 }
 
-static tsc_value_t tsc_fs_dir_uv_take_entry(tsc_fs_dir_t* state) {
+static tsc_value_t tsc_fs_dir_uv_take_entry(tsc_fs_dir_t* state, tsc_fs_dirent_t** out_dirent) {
+    if (out_dirent) *out_dirent = NULL;
     if (!tsc_fs_dir_uv_has_entries(state)) return tsc_value_null();
-    tsc_value_t value = TSC_ARR(tsc_value_t, state->uv_entries, state->uv_entry_index++);
+    size_t index = state->uv_entry_index++;
+    tsc_value_t value = TSC_ARR(tsc_value_t, state->uv_entries, index);
+    if (out_dirent && state->uv_entry_dirents && index < state->uv_entry_dirents->len) {
+        *out_dirent = TSC_ARR(tsc_fs_dirent_t*, state->uv_entry_dirents, index);
+    }
     if (state->uv_entry_index == state->uv_entries->len) {
         state->uv_entries->len = 0;
+        if (state->uv_entry_dirents) state->uv_entry_dirents->len = 0;
         state->uv_entry_index = 0;
     }
     return value;
@@ -12130,19 +12154,130 @@ static bool tsc_fs_dir_uv_ensure_buffer(tsc_fs_dir_t* state) {
     if (!state->uv_entries) {
         state->uv_entries = tsc_array_new(sizeof(tsc_value_t), state->uv_dirent_capacity);
     }
+    if (!state->uv_entry_dirents) {
+        state->uv_entry_dirents = tsc_array_new(sizeof(tsc_fs_dirent_t*), state->uv_dirent_capacity);
+    }
     return true;
 }
 
 static void tsc_fs_dir_uv_fill_entries(tsc_fs_dir_t* state, size_t count) {
     tsc_fs_dir_uv_entries_clear(state);
-    const char* parent_path = state->path ? state->path->data : "";
+    const char* parent_path = state->current_path
+        ? state->current_path
+        : (state->path ? state->path->data : "");
     for (size_t i = 0; i < count; i++) {
         tsc_uv_dirent_t* entry = &state->uv_dirents[i];
         if (!entry->name) continue;
         tsc_fs_dirent_t* dirent = fs_dirent_from_uv(parent_path, entry->name, entry->type);
         tsc_value_t value = tsc_fs_dirent_value(dirent, state->encoding);
         tsc_array_push_raw(state->uv_entries, &value);
+        tsc_array_push_raw(state->uv_entry_dirents, &dirent);
     }
+}
+
+static bool tsc_fs_dir_uv_close_handle_sync(tsc_fs_dir_t* state, tsc_uv_dir_t* dir) {
+    if (!state || !dir) return true;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_closedir(g_tsc_fs_uv_loop, &state->uv_req, dir, NULL);
+    ssize_t result = rc < 0 ? (ssize_t)rc : uv_fs_get_result(&state->uv_req);
+    uv_fs_req_cleanup(&state->uv_req);
+    return result >= 0;
+}
+
+static bool tsc_fs_dir_uv_close_frames_sync(tsc_fs_dir_t* state) {
+    if (!state || !state->uv_frames) return true;
+    bool success = true;
+    while (state->uv_frames->len > 0) {
+        tsc_fs_dir_uv_frame_t frame = TSC_ARR(
+            tsc_fs_dir_uv_frame_t,
+            state->uv_frames,
+            state->uv_frames->len - 1
+        );
+        state->uv_frames->len--;
+        if (!tsc_fs_dir_uv_close_handle_sync(state, frame.dir)) success = false;
+        free(frame.path);
+    }
+    return success;
+}
+
+static void tsc_fs_dir_uv_push_child(
+    tsc_fs_dir_t* state,
+    tsc_uv_dir_t* child,
+    char* child_path
+) {
+    if (!state || !child || !child_path) return;
+    if (!state->uv_frames) state->uv_frames = tsc_array_new(sizeof(tsc_fs_dir_uv_frame_t), 4);
+    tsc_fs_dir_uv_frame_t frame;
+    frame.dir = state->uv_dir;
+    frame.path = state->current_path;
+    frame.entries = state->uv_entries;
+    frame.entry_dirents = state->uv_entry_dirents;
+    frame.entry_index = state->uv_entry_index;
+    tsc_array_push_raw(state->uv_frames, &frame);
+    state->uv_dir = child;
+    state->current_path = child_path;
+    state->uv_entries = NULL;
+    state->uv_entry_dirents = NULL;
+    state->uv_entry_index = 0;
+    state->exhausted = false;
+}
+
+/* A recursive child has its own libuv directory handle. Close it synchronously
+ * at EOF before restoring the parent's handle, just as the POSIX traversal
+ * closes each exhausted frame before continuing depth-first. */
+static bool tsc_fs_dir_uv_restore_parent(tsc_fs_dir_t* state) {
+    if (!state || !state->recursive || !state->uv_frames || state->uv_frames->len == 0) {
+        return false;
+    }
+    if (state->uv_dir) {
+        (void)tsc_fs_dir_uv_close_handle_sync(state, state->uv_dir);
+        state->uv_dir = NULL;
+    }
+    free(state->current_path);
+    state->current_path = NULL;
+    tsc_fs_dir_uv_entries_clear(state);
+
+    tsc_fs_dir_uv_frame_t frame = TSC_ARR(
+        tsc_fs_dir_uv_frame_t,
+        state->uv_frames,
+        state->uv_frames->len - 1
+    );
+    state->uv_frames->len--;
+    state->uv_dir = frame.dir;
+    state->current_path = frame.path;
+    state->uv_entries = frame.entries;
+    state->uv_entry_dirents = frame.entry_dirents;
+    state->uv_entry_index = frame.entry_index;
+    state->exhausted = false;
+    return true;
+}
+
+static void tsc_fs_dir_uv_descend_sync(tsc_fs_dir_t* state, tsc_fs_dirent_t* dirent) {
+    if (!state || !state->recursive || !state->uv_dir || !tsc_fs_dirent_is_directory(dirent)) return;
+    const char* parent_path = state->current_path
+        ? state->current_path
+        : (state->path ? state->path->data : "");
+    char* child_path = fs_join_path_cstr(parent_path, tsc_fs_dirent_name(dirent)->data);
+    if (!child_path) return;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_opendir(g_tsc_fs_uv_loop, &state->uv_req, child_path, NULL);
+    ssize_t result = rc < 0 ? (ssize_t)rc : uv_fs_get_result(&state->uv_req);
+    tsc_uv_dir_t* child = rc < 0 ? NULL : (tsc_uv_dir_t*)uv_fs_get_ptr(&state->uv_req);
+    uv_fs_req_cleanup(&state->uv_req);
+    if (result >= 0 && child) {
+        tsc_fs_dir_uv_push_child(state, child, child_path);
+        return;
+    }
+    free(child_path);
+}
+
+static tsc_value_t tsc_fs_dir_uv_take_entry_sync(tsc_fs_dir_t* state) {
+    tsc_fs_dirent_t* dirent = NULL;
+    tsc_value_t value = tsc_fs_dir_uv_take_entry(state, &dirent);
+    if (state && state->recursive && dirent && tsc_fs_dirent_is_directory(dirent)) {
+        tsc_fs_dir_uv_descend_sync(state, dirent);
+    }
+    return value;
 }
 
 static void tsc_fs_dir_uv_fulfill_close_waiters(tsc_fs_dir_t* state, bool success) {
@@ -12161,11 +12296,16 @@ static void tsc_fs_dir_uv_fulfill_close_waiters(tsc_fs_dir_t* state, bool succes
 
 static void tsc_fs_dir_uv_finish_close(tsc_fs_dir_t* state, bool success) {
     if (!state) return;
+    bool frames_closed = tsc_fs_dir_uv_close_frames_sync(state);
+    success = success && frames_closed;
     state->uv_req_pending = false;
     state->uv_close_started = false;
     state->uv_close_requested = true;
     state->closed = true;
     state->uv_dir = NULL;
+    state->uv_child_open_pending = false;
+    free(state->current_path);
+    state->current_path = NULL;
     free(state->uv_dirents);
     state->uv_dirents = NULL;
     tsc_fs_dir_uv_entries_clear(state);
@@ -12195,7 +12335,7 @@ static void tsc_fs_dir_uv_closedir_cb(tsc_uv_fs_t* req) {
 static void tsc_fs_dir_uv_close_start(tsc_fs_dir_t* state) {
     if (!state || !state->uv_backend || state->closed || state->uv_close_started) return;
     state->uv_close_requested = true;
-    if (state->uv_req_pending) return;
+    if (state->uv_req_pending || state->uv_child_open_pending) return;
     if (!state->uv_dir) {
         tsc_fs_dir_uv_finish_close(state, true);
         return;
@@ -12225,17 +12365,18 @@ static void tsc_fs_dir_uv_readdir_cb(tsc_uv_fs_t* req) {
         return;
     }
     if (result == 0) {
-        state->exhausted = true;
+        uv_fs_req_cleanup(req);
         tsc_fs_dir_uv_entries_clear(state);
+        if (!tsc_fs_dir_uv_restore_parent(state)) state->exhausted = true;
     } else {
         tsc_fs_dir_uv_fill_entries(state, (size_t)result);
+        uv_fs_req_cleanup(req);
     }
-    uv_fs_req_cleanup(req);
     tsc_fs_dir_uv_pump(state);
 }
 
 static void tsc_fs_dir_uv_start_read(tsc_fs_dir_t* state) {
-    if (!state || state->closed || state->uv_close_requested || state->uv_req_pending) return;
+    if (!state || state->closed || state->uv_close_requested || state->uv_req_pending || !state->uv_dir) return;
     if (!tsc_fs_dir_uv_ensure_buffer(state)) {
         tsc_fs_dir_uv_reject_waiters(state, "fs.Dir.read: could not allocate dir buffer");
         return;
@@ -12284,13 +12425,18 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
                 tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
             }
         }
-        if (!state->uv_req_pending) tsc_fs_dir_uv_close_start(state);
+        if (!state->uv_req_pending && !state->uv_child_open_pending) tsc_fs_dir_uv_close_start(state);
         return;
     }
+    if (state->uv_child_open_pending) return;
     while (state->uv_waiters->len > 0) {
         if (tsc_fs_dir_uv_has_entries(state)) {
             tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
-            tsc_value_t value = tsc_fs_dir_uv_take_entry(state);
+            tsc_fs_dirent_t* dirent = NULL;
+            tsc_value_t value = tsc_fs_dir_uv_take_entry(state, &dirent);
+            if (state->recursive && dirent && tsc_fs_dirent_is_directory(dirent)) {
+                tsc_fs_dir_uv_start_child(state, dirent);
+            }
             if (waiter.promise) {
                 tsc_promise_fulfill_in_place(
                     waiter.promise,
@@ -12317,6 +12463,7 @@ static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
             if (close_after) tsc_fs_dir_uv_close_start(state);
             return;
         }
+        if (state->uv_child_open_pending) return;
         if (state->uv_req_pending) return;
         tsc_fs_dir_uv_start_read(state);
         return;
@@ -12328,12 +12475,12 @@ static tsc_value_t tsc_fs_dir_uv_read_sync(tsc_fs_dir_t* state) {
         tsc_throw_str(tsc_str_from_cstr("fs.Dir is closed"));
         return tsc_value_null();
     }
-    if (tsc_fs_dir_uv_has_entries(state)) return tsc_fs_dir_uv_take_entry(state);
-    if (state->exhausted) return tsc_value_null();
-    if (state->uv_req_pending) {
+    if (state->uv_req_pending || state->uv_child_open_pending) {
         tsc_throw_str(tsc_str_from_cstr("fs.Dir has a pending operation"));
         return tsc_value_null();
     }
+    if (tsc_fs_dir_uv_has_entries(state)) return tsc_fs_dir_uv_take_entry_sync(state);
+    if (state->exhausted) return tsc_value_null();
     if (!tsc_fs_dir_uv_ensure_buffer(state)) {
         tsc_throw_str(tsc_str_from_cstr("fs.Dir.readSync: could not allocate dir buffer"));
         return tsc_value_null();
@@ -12351,18 +12498,20 @@ static tsc_value_t tsc_fs_dir_uv_read_sync(tsc_fs_dir_t* state) {
         }
         if (result == 0) {
             uv_fs_req_cleanup(&state->uv_req);
+            tsc_fs_dir_uv_entries_clear(state);
+            if (tsc_fs_dir_uv_restore_parent(state)) continue;
             state->exhausted = true;
             return tsc_value_null();
         }
         tsc_fs_dir_uv_fill_entries(state, (size_t)result);
         uv_fs_req_cleanup(&state->uv_req);
-        if (tsc_fs_dir_uv_has_entries(state)) return tsc_fs_dir_uv_take_entry(state);
+        if (tsc_fs_dir_uv_has_entries(state)) return tsc_fs_dir_uv_take_entry_sync(state);
     }
 }
 
 static void tsc_fs_dir_uv_close_sync(tsc_fs_dir_t* state) {
     if (!state || state->closed) return;
-    if (state->uv_req_pending) {
+    if (state->uv_req_pending || state->uv_child_open_pending) {
         tsc_throw_str(tsc_str_from_cstr("fs.Dir has a pending operation"));
         return;
     }
@@ -12707,10 +12856,54 @@ static void tsc_fs_dir_open_async_remove(tsc_fs_dir_open_async_t* task) {
     }
 }
 
+static void tsc_fs_dir_uv_start_child(tsc_fs_dir_t* state, tsc_fs_dirent_t* dirent) {
+    if (!state || !state->recursive || state->uv_child_open_pending || !dirent) return;
+    const char* parent_path = state->current_path
+        ? state->current_path
+        : (state->path ? state->path->data : "");
+    char* child_path = fs_join_path_cstr(parent_path, tsc_fs_dirent_name(dirent)->data);
+    if (!child_path) return;
+
+    tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_open_async_t));
+    memset(task, 0, sizeof(*task));
+    task->state = state;
+    task->path = child_path;
+    task->next = g_tsc_fs_dir_open_async;
+    g_tsc_fs_dir_open_async = task;
+    state->uv_child_open_pending = true;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_opendir(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_dir_open_async_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_fs_dir_open_async_remove(task);
+        state->uv_child_open_pending = false;
+        free(task->path);
+        task->path = NULL;
+        tsc_fs_dir_uv_pump(state);
+    }
+}
+
 static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)req;
     ssize_t result = uv_fs_get_result(req);
     tsc_uv_dir_t* uv_dir = (tsc_uv_dir_t*)uv_fs_get_ptr(req);
+    if (task->state) {
+        tsc_fs_dir_t* state = task->state;
+        uv_fs_req_cleanup(req);
+        tsc_fs_dir_open_async_remove(task);
+        state->uv_child_open_pending = false;
+        if (result >= 0 && uv_dir && !state->closed) {
+            char* child_path = task->path;
+            task->path = NULL;
+            tsc_fs_dir_uv_push_child(state, uv_dir, child_path);
+        } else {
+            free(task->path);
+            task->path = NULL;
+        }
+        if (state->uv_close_requested) tsc_fs_dir_uv_close_start(state);
+        tsc_fs_dir_uv_pump(state);
+        return;
+    }
     if (result < 0 || !uv_dir) {
         uv_fs_req_cleanup(req);
         tsc_promise_reject_in_place(task->promise, tsc_fs_dir_uv_error("fs.promises.opendir: could not open dir"));
@@ -12725,8 +12918,11 @@ static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
     state->uv_backend = true;
     state->uv_dir = uv_dir;
     state->path = tsc_str_from_cstr(task->path);
+    state->current_path = strdup(task->path);
+    state->recursive = task->recursive;
     state->encoding = task->encoding;
     state->buffer_size = task->buffer_size > 0 ? task->buffer_size : 32;
+    state->uv_frames = tsc_array_new(sizeof(tsc_fs_dir_uv_frame_t), 4);
     state->uv_waiters = tsc_array_new(sizeof(tsc_fs_dir_waiter_t), 2);
     state->uv_close_waiters = tsc_array_new(sizeof(tsc_promise_t*), 1);
     state->value = tsc_value_undefined();
@@ -12736,9 +12932,6 @@ static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
 }
 
 tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
-    if (recursive) {
-        return tsc_promise_resolve(tsc_fs_opendir_sync(path, true, encoding, buffer_size));
-    }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_open_async_t));
     memset(task, 0, sizeof(*task));
@@ -12746,6 +12939,7 @@ tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursi
     task->path = cstr_dup(path);
     task->encoding = (tsc_str_t*)encoding;
     task->buffer_size = buffer_size > 0 ? buffer_size : 32;
+    task->recursive = recursive;
     task->next = g_tsc_fs_dir_open_async;
     g_tsc_fs_dir_open_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();

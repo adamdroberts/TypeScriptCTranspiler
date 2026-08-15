@@ -1,0 +1,2 @@
+async: true 616c7068612e747874@/tmp/tsc2c-fs-opendir-libuv-recursive|626574612e747874@/tmp/tsc2c-fs-opendir-libuv-recursive/nested|6e6573746564@/tmp/tsc2c-fs-opendir-libuv-recursive true
+sync: 3 true
