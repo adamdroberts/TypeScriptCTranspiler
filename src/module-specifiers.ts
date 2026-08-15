@@ -4904,7 +4904,16 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "search") return [];
         const inputs = resolve(callee.expression);
         if (inputs.length === 0) return [];
-        const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        let regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        if (regexps.length === 0) {
+            const patterns = resolve(call.arguments[0]!);
+            if (patterns.length === 0) return [];
+            try {
+                regexps = patterns.map((pattern) => new RegExp(pattern));
+            } catch {
+                return [];
+            }
+        }
         if (regexps.length === 0) return [];
 
         const out: string[] = [];
