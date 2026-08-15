@@ -1,0 +1,3 @@
+{
+  "description": "FileHandle readLines emits a bounded close event on exhaustion or return and suppresses it with emitClose false"
+}

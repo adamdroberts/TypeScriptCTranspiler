@@ -1643,11 +1643,12 @@ interface FSFileHandleReadFileStringOptions {
 interface FSFileHandleReadLinesOptions {
     encoding?: BufferEncoding | null;
     autoClose?: boolean;
+    emitClose?: boolean;
     start?: number;
     end?: number;
     signal?: any;
 }
-interface FSFileHandleReadLinesIterator {
+interface FSFileHandleReadLinesIterator extends EventEmitter {
     next(...ignored: any[]): Promise<IteratorResult<string, void>>;
     return(value?: any, ...ignored: any[]): Promise<IteratorResult<string, any>>;
     [Symbol.asyncIterator](...ignored: any[]): FSFileHandleReadLinesIterator;
