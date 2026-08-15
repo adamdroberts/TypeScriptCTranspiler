@@ -1,0 +1,6 @@
+request: 0 /one a
+response: one
+request: 1 /two b
+response: two
+connections: 1
+server close

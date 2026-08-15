@@ -4398,10 +4398,19 @@ static size_t tsc_http_find_crlf(const char* data, size_t len, size_t start) {
     return SIZE_MAX;
 }
 
-static bool tsc_http_decode_chunked(const char* data, size_t len, char* output, size_t max_body, size_t* out_len, bool* complete) {
-    if (!data || !output || !out_len || !complete) return false;
+static bool tsc_http_decode_chunked(
+    const char* data,
+    size_t len,
+    char* output,
+    size_t max_body,
+    size_t* out_len,
+    bool* complete,
+    size_t* consumed
+) {
+    if (!data || !output || !out_len || !complete || !consumed) return false;
     *out_len = 0;
     *complete = false;
+    *consumed = 0;
     size_t cursor = 0;
     while (cursor < len) {
         size_t line_end = tsc_http_find_crlf(data, len, cursor);
@@ -4423,11 +4432,13 @@ static bool tsc_http_decode_chunked(const char* data, size_t len, char* output, 
         cursor = line_end + 2;
         if (chunk_size == 0) {
             if (len - cursor >= 2 && data[cursor] == '\r' && data[cursor + 1] == '\n') {
+                *consumed = cursor + 2;
                 *complete = true;
                 return true;
             }
             size_t trailer_end = tsc_http_find_header_end(data + cursor, len - cursor);
             if (trailer_end != SIZE_MAX) {
+                *consumed = cursor + trailer_end + 4;
                 *complete = true;
                 return true;
             }
@@ -4798,14 +4809,15 @@ static void tsc_http_server_process_input(tsc_http_connection_state_t* connectio
     char decoded_body[TSC_HTTP_MAX_REQUEST + 1];
     if (chunked) {
         bool complete = false;
-        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete)) {
+        size_t chunked_consumed = 0;
+        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete, &chunked_consumed)) {
             (void)tsc_http_bad_request(connection->socket);
             connection->handled = true;
             return;
         }
         if (!complete) return;
         body = decoded_body;
-        request_keep_alive = false;
+        request_consumed = body_offset + chunked_consumed;
     } else {
         if (connection->input_len - body_offset < content_length) return;
     }
@@ -5083,7 +5095,7 @@ static tsc_http_client_pool_entry_t* tsc_http_client_pool_create(
 
 static void tsc_http_client_pool_release(tsc_http_client_state_t* client) {
     if (!client || !client->pool_entry || !client->poolable || !client->response_keep_alive ||
-        !client->response_has_content_length || client->response_chunked) return;
+        (!client->response_has_content_length && !client->response_chunked)) return;
     tsc_http_client_pool_entry_t* entry = client->pool_entry;
     if (entry->active != client || entry->stale) return;
     tsc_http_detach_socket_listener(client->socket, "data", client->data_listener);
@@ -5184,7 +5196,7 @@ static bool tsc_http_client_try_send(tsc_http_client_state_t* client) {
         if (client->request_ended && !client->request_end_sent) {
             accepted = tsc_http_socket_write(socket, tsc_str_from_lit("0\r\n\r\n", 5)) && accepted;
             client->request_end_sent = true;
-            tsc_http_socket_end(socket, NULL);
+            if (!client->poolable) tsc_http_socket_end(socket, NULL);
         }
         tsc_http_sync_writable_props(&client->event, socket);
         return accepted;
@@ -5258,21 +5270,26 @@ static tsc_value_t tsc_http_client_end(void* env, tsc_value_t this_arg, tsc_arra
     return this_arg;
 }
 
+static void tsc_http_client_pool_drop_active(tsc_http_client_state_t* client) {
+    if (!client || !client->pool_entry || client->pool_entry->active != client) return;
+    tsc_http_client_pool_entry_t* entry = client->pool_entry;
+    tsc_http_detach_socket_listener(client->socket, "data", client->data_listener);
+    tsc_http_detach_socket_listener(client->socket, "end", client->end_listener);
+    tsc_http_detach_socket_listener(client->socket, "drain", client->drain_listener);
+    client->data_listener = tsc_value_undefined();
+    client->end_listener = tsc_value_undefined();
+    client->drain_listener = tsc_value_undefined();
+    entry->active = NULL;
+    client->pool_entry = NULL;
+    tsc_http_client_pool_discard(entry);
+}
+
 static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
     if (client) {
         if (client->pool_entry && client->pool_entry->active == client) {
-            tsc_http_client_pool_entry_t* entry = client->pool_entry;
-            tsc_http_detach_socket_listener(client->socket, "data", client->data_listener);
-            tsc_http_detach_socket_listener(client->socket, "end", client->end_listener);
-            tsc_http_detach_socket_listener(client->socket, "drain", client->drain_listener);
-            client->data_listener = tsc_value_undefined();
-            client->end_listener = tsc_value_undefined();
-            client->drain_listener = tsc_value_undefined();
-            entry->active = NULL;
-            client->pool_entry = NULL;
-            tsc_http_client_pool_discard(entry);
+            tsc_http_client_pool_drop_active(client);
             return this_arg;
         }
         tsc_value_t socket = tsc_http_client_socket_value(client);
@@ -5285,6 +5302,23 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
         }
     }
     return this_arg;
+}
+
+static bool tsc_http_client_response_can_pool(const tsc_http_client_state_t* client) {
+    return client && client->poolable && client->response_keep_alive &&
+        (client->response_has_content_length || client->response_chunked);
+}
+
+static void tsc_http_client_finish_pool_lifecycle(tsc_http_client_state_t* client) {
+    if (!client) return;
+    if (tsc_http_client_response_can_pool(client)) tsc_http_client_pool_schedule_release(client);
+}
+
+static void tsc_http_client_close_unreusable_pool(tsc_http_client_state_t* client) {
+    if (!client || tsc_http_client_response_can_pool(client) ||
+        !client->pool_entry || client->pool_entry->active != client) return;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_http_client_destroy(client, client->event.value, empty);
 }
 
 static int tsc_http_client_parse_response_headers(tsc_http_client_state_t* client) {
@@ -5385,7 +5419,7 @@ static void tsc_http_client_finish_response(tsc_http_client_state_t* client) {
     }
     tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
     (void)tsc_event_emitter_emit(client->response_event.emitter, tsc_str_from_lit("end", 3), empty);
-    tsc_http_client_pool_schedule_release(client);
+    tsc_http_client_finish_pool_lifecycle(client);
 }
 
 static bool tsc_http_client_process_response_body(tsc_http_client_state_t* client) {
@@ -5474,7 +5508,7 @@ static void tsc_http_client_emit_response(tsc_http_client_state_t* client) {
         tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
         (void)tsc_event_emitter_emit(client->response_event.emitter, tsc_str_from_lit("end", 3), empty);
     }
-    if (client->response_complete) tsc_http_client_pool_schedule_release(client);
+    if (client->response_complete) tsc_http_client_finish_pool_lifecycle(client);
 }
 
 static tsc_value_t tsc_http_client_data(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -5512,7 +5546,11 @@ static tsc_value_t tsc_http_client_end_read(void* env, tsc_value_t this_arg, tsc
     (void)this_arg;
     (void)args;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
-    if (!client || client->response_handled) return tsc_value_undefined();
+    if (!client) return tsc_value_undefined();
+    if (client->response_handled) {
+        tsc_http_client_close_unreusable_pool(client);
+        return tsc_value_undefined();
+    }
     bool had_response_headers = client->response_headers_parsed;
     int parsed = had_response_headers ? 1 : tsc_http_client_parse_response_headers(client);
     if (parsed < 0 || (!client->response_headers_parsed && parsed == 0)) {
@@ -5532,6 +5570,7 @@ static tsc_value_t tsc_http_client_end_read(void* env, tsc_value_t this_arg, tsc
         tsc_http_client_emit_error(client, "http.ClientRequest received an invalid or incomplete HTTP response");
     }
     if (parsed > 0 && !had_response_headers) tsc_http_client_emit_response(client);
+    tsc_http_client_close_unreusable_pool(client);
     return tsc_value_undefined();
 }
 
@@ -5599,8 +5638,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->response_pending_data = tsc_array_new(sizeof(tsc_str_t*), 4);
     tsc_http_client_copy_headers(client, tsc_value_object(client->options_object));
     client->poolable =
-        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "connection", "close") &&
-        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked");
+        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "connection", "close");
 
     tsc_object_t* object = tsc_object_new();
     client->event.object = object;
@@ -5615,9 +5653,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_net_register_listener(&client->event, "response", rooted_response_listener, true);
     }
     tsc_http_client_pool_entry_t* pooled_entry =
-        !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "transfer-encoding", "chunked")
-        ? tsc_http_client_pool_acquire(hostname, port, tls, reject_unauthorized, servername)
-        : NULL;
+        tsc_http_client_pool_acquire(hostname, port, tls, reject_unauthorized, servername);
     if (pooled_entry) {
         pooled_entry->active = client;
         client->pool_entry = pooled_entry;
