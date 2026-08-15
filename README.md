@@ -324,7 +324,7 @@ The entry file plus every reachable `.ts` / supported `.js` (and resolved Common
            • Boehm GC behind a wrapper (malloc fallback for --no-gc)
    │
    ▼
- gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -lpcre2-8 -lssl -lcrypto -licuuc -licui18n -lgmp -o <output>
+ gcc -std=c11 -O2 main.c runtime/tsc_runtime.c -lgc -lm -lresolv -lpcre2-8 -lssl -lcrypto -licuuc -licui18n -lgmp -o <output>
  # --release switches the gcc optimization/link mode to -Os -s.
 ```
 

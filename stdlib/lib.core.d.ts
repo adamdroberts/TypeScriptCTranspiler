@@ -2306,8 +2306,16 @@ type DnsResolveCallback = (err: any, addresses: string[]) => void;
 type DnsResolveAnyCallback = (err: any, records: any[]) => void;
 type DnsResolveType = "A" | "AAAA" | "PTR" | "CNAME";
 type DnsLookupServiceCallback = (err: any, hostname: string, service: string) => void;
+interface DnsResolveRecord {
+    address: string;
+    ttl: number;
+}
+type DnsResolveTtlCallback = (err: any, addresses: DnsResolveRecord[]) => void;
 interface DnsResolveOptions {
     ttl?: boolean;
+}
+interface DnsResolveWithTtlOptions {
+    ttl: true;
 }
 interface DnsLookupOptions {
     family?: DnsLookupFamily;
@@ -2325,8 +2333,10 @@ interface DnsPromises {
     reverse(hostname: string, ...ignored: any[]): Promise<string[]>;
     resolveCname(hostname: string, ...ignored: any[]): Promise<string[]>;
     resolve4(hostname: string): Promise<string[]>;
+    resolve4(hostname: string, options: DnsResolveWithTtlOptions, ...ignored: any[]): Promise<DnsResolveRecord[]>;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, ...ignored: any[]): Promise<string[]>;
     resolve6(hostname: string): Promise<string[]>;
+    resolve6(hostname: string, options: DnsResolveWithTtlOptions, ...ignored: any[]): Promise<DnsResolveRecord[]>;
     resolve6(hostname: string, options: DnsResolveOptions | undefined, ...ignored: any[]): Promise<string[]>;
     lookupService(address: string, port: number): Promise<{ hostname: string; service: string }>;
     getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
@@ -2346,8 +2356,10 @@ interface DNS {
     reverse(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolveCname(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    resolve4(hostname: string, options: DnsResolveWithTtlOptions, callback: DnsResolveTtlCallback, ...ignored: any[]): void;
     resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    resolve6(hostname: string, options: DnsResolveWithTtlOptions, callback: DnsResolveTtlCallback, ...ignored: any[]): void;
     resolve6(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
@@ -2368,8 +2380,10 @@ declare module "dns" {
     export function reverse(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolveCname(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve4(hostname: string, options: DnsResolveWithTtlOptions, callback: DnsResolveTtlCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve6(hostname: string, options: DnsResolveWithTtlOptions, callback: DnsResolveTtlCallback, ...ignored: any[]): void;
     export function resolve6(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     export function getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";
@@ -2391,8 +2405,10 @@ declare module "node:dns" {
     export function reverse(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolveCname(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve4(hostname: string, options: DnsResolveWithTtlOptions, callback: DnsResolveTtlCallback, ...ignored: any[]): void;
     export function resolve4(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function resolve6(hostname: string, callback: DnsResolveCallback, ...ignored: any[]): void;
+    export function resolve6(hostname: string, options: DnsResolveWithTtlOptions, callback: DnsResolveTtlCallback, ...ignored: any[]): void;
     export function resolve6(hostname: string, options: DnsResolveOptions | undefined, callback: DnsResolveCallback, ...ignored: any[]): void;
     export function lookupService(address: string, port: number, callback: DnsLookupServiceCallback, ...ignored: any[]): void;
     export function getDefaultResultOrder(...ignored: any[]): "ipv4first" | "ipv6first" | "verbatim";

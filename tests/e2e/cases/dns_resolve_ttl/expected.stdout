@@ -1,0 +1,5 @@
+callback4: true 127.0.0.1 number true
+callback4 direct: true 127.0.0.1 number true
+callback6: true ::1 number true
+promise4: 127.0.0.1 number true
+promise6: ::1 number true

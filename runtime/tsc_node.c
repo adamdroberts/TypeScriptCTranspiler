@@ -1,4 +1,6 @@
 #include "tsc_internal.h"
+#include <arpa/nameser.h>
+#include <resolv.h>
 #include <sys/statvfs.h>
 
 /* ---------------- crypto ---------------- */
@@ -2413,6 +2415,114 @@ tsc_dns_lookup_all_result_t tsc_dns_resolve_any(tsc_str_t* hostname) {
         out.error = tsc_str_from_lit("dns.resolveAny: no address record found", 39);
     }
     return out;
+}
+
+static void tsc_dns_resolve_ttl_append_record(
+    tsc_array_t* records,
+    const char* address,
+    unsigned long ttl
+) {
+    tsc_object_t* entry = tsc_object_new();
+    tsc_object_set(entry, tsc_str_from_lit("address", 7), tsc_value_string(tsc_str_from_cstr(address)));
+    tsc_object_set(entry, tsc_str_from_lit("ttl", 3), tsc_value_num((double)ttl));
+    tsc_value_t boxed = tsc_value_object(entry);
+    tsc_array_push_raw(records, &boxed);
+}
+
+static bool tsc_dns_resolve_ttl_query(
+    tsc_str_t* hostname,
+    int wanted_family,
+    tsc_array_t* records
+) {
+    char* host = cstr_dup(hostname);
+    unsigned char answer[65536];
+    int rrtype = wanted_family == AF_INET ? ns_t_a : ns_t_aaaa;
+    int answer_len = res_query(host, ns_c_in, rrtype, answer, sizeof(answer));
+    free(host);
+    if (answer_len < 0) return false;
+
+    ns_msg message;
+    if (ns_initparse(answer, answer_len, &message) < 0) return false;
+    int answer_count = ns_msg_count(message, ns_s_an);
+    char address[INET6_ADDRSTRLEN];
+    for (int i = 0; i < answer_count; i++) {
+        ns_rr record;
+        if (ns_parserr(&message, ns_s_an, i, &record) < 0) continue;
+        if (ns_rr_type(record) != rrtype) continue;
+        const u_char* data = ns_rr_rdata(record);
+        size_t expected_len = wanted_family == AF_INET ? sizeof(struct in_addr) : sizeof(struct in6_addr);
+        if (ns_rr_rdlen(record) != expected_len) continue;
+        if (!inet_ntop(wanted_family, data, address, sizeof(address))) continue;
+        tsc_dns_resolve_ttl_append_record(records, address, ns_rr_ttl(record));
+    }
+    return records->len > 0;
+}
+
+static tsc_dns_resolve_ttl_result_t tsc_dns_resolve_with_ttl(
+    tsc_str_t* hostname,
+    int wanted_family,
+    const char* required_label,
+    const char* not_found_label
+) {
+    tsc_dns_resolve_ttl_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!hostname) {
+        out.error = tsc_str_from_cstr(required_label);
+        return out;
+    }
+
+    out.addresses = tsc_array_new(sizeof(tsc_value_t), 4);
+    if (tsc_dns_resolve_ttl_query(hostname, wanted_family, out.addresses)) return out;
+
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = wanted_family;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = 0;
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+    char address[INET6_ADDRSTRLEN];
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        void* src = NULL;
+        if (wanted_family == AF_INET && cur->ai_family == AF_INET) {
+            src = &((struct sockaddr_in*)cur->ai_addr)->sin_addr;
+        } else if (wanted_family == AF_INET6 && cur->ai_family == AF_INET6) {
+            src = &((struct sockaddr_in6*)cur->ai_addr)->sin6_addr;
+        }
+        if (src && inet_ntop(wanted_family, src, address, sizeof(address))) {
+            tsc_dns_resolve_ttl_append_record(out.addresses, address, 0UL);
+        }
+    }
+    freeaddrinfo(result);
+    if (out.addresses->len == 0) {
+        out.error = tsc_str_from_cstr(not_found_label);
+    }
+    return out;
+}
+
+tsc_dns_resolve_ttl_result_t tsc_dns_resolve4_ttl(tsc_str_t* hostname) {
+    return tsc_dns_resolve_with_ttl(
+        hostname,
+        AF_INET,
+        "dns.resolve4: hostname required",
+        "dns.resolve4: no address found"
+    );
+}
+
+tsc_dns_resolve_ttl_result_t tsc_dns_resolve6_ttl(tsc_str_t* hostname) {
+    return tsc_dns_resolve_with_ttl(
+        hostname,
+        AF_INET6,
+        "dns.resolve6: hostname required",
+        "dns.resolve6: no address found"
+    );
 }
 
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname) {

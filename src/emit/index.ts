@@ -83332,22 +83332,22 @@ class Emitter {
                 ty: T_VALUE,
             };
             if (method === "resolve4") {
-                this.dnsResolveOptions(optionsNode, "dns.resolve4");
+                const ttl = this.dnsResolveOptions(optionsNode, "dns.resolve4");
                 const addresses: EmitResult = {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
-                    ty: arrayType(T_STRING),
+                    ty: arrayType(ttl ? T_VALUE : T_STRING),
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); (void)${callbackCall}; })`;
+                return `({ ${(ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve4_result_t")} ${result} = ${(ttl ? "tsc_dns_resolve4_ttl" : "tsc_dns_resolve4")}(${hostC}); (void)${callbackCall}; })`;
             }
             if (method === "resolve6") {
-                this.dnsResolveOptions(optionsNode, "dns.resolve6");
+                const ttl = this.dnsResolveOptions(optionsNode, "dns.resolve6");
                 const addresses: EmitResult = {
                     c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
-                    ty: arrayType(T_STRING),
+                    ty: arrayType(ttl ? T_VALUE : T_STRING),
                 };
                 const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-                return `({ tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); (void)${callbackCall}; })`;
+                return `({ ${(ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve6_result_t")} ${result} = ${(ttl ? "tsc_dns_resolve6_ttl" : "tsc_dns_resolve6")}(${hostC}); (void)${callbackCall}; })`;
             }
             const lookupOptions = this.dnsLookupOptions(optionsNode);
             if (lookupOptions.all) {
@@ -83633,13 +83633,14 @@ class Emitter {
         return out;
     }
 
-    private dnsResolveOptions(options: ts.Expression | undefined, label: string): void {
-        if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return;
+    private dnsResolveOptions(options: ts.Expression | undefined, label: string): boolean {
+        if (!options || this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return false;
         options = this.resolveSideEffectFreeEarlierConstExpression(options);
-        if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return;
+        if (this.isUndefinedLikeExpression(options) || this.isNullExpression(options)) return false;
         if (!ts.isObjectLiteralExpression(options)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
+        let ttlEnabled = false;
         for (const prop of options.properties) {
             let key: string | null = null;
             let valueNode: ts.Expression | undefined;
@@ -83660,10 +83661,9 @@ class Emitter {
             if (ttl === null) {
                 unsupported(valueNode, `${label}.ttl must be a boolean literal in this subset`);
             }
-            if (ttl) {
-                unsupported(valueNode, `${label}.ttl true requires TTL object results, which are not in this string-array subset`);
-            }
+            ttlEnabled = ttl;
         }
+        return ttlEnabled;
     }
 
     private dnsResolveTypeValue(expr: ts.Expression, label: string): "A" | "AAAA" | "PTR" | "CNAME" {
@@ -83838,20 +83838,20 @@ class Emitter {
             const result = this.freshTemp("_dns");
             const out = this.freshTemp("_dns_promise");
             if (method === "resolve4") {
-                this.dnsResolveOptions(optionsNode, "dns.promises.resolve4");
+                const ttl = this.dnsResolveOptions(optionsNode, "dns.promises.resolve4");
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
-                    `tsc_dns_resolve4_result_t ${result} = tsc_dns_resolve4(${hostC}); ` +
+                    `${ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve4_result_t"} ${result} = ${ttl ? "tsc_dns_resolve4_ttl" : "tsc_dns_resolve4"}(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
                     `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
                     `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
                     `${out}; })`;
             }
             if (method === "resolve6") {
-                this.dnsResolveOptions(optionsNode, "dns.promises.resolve6");
+                const ttl = this.dnsResolveOptions(optionsNode, "dns.promises.resolve6");
                 const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
                 return `({ ` +
-                    `tsc_dns_resolve6_result_t ${result} = tsc_dns_resolve6(${hostC}); ` +
+                    `${ttl ? "tsc_dns_resolve_ttl_result_t" : "tsc_dns_resolve6_result_t"} ${result} = ${ttl ? "tsc_dns_resolve6_ttl" : "tsc_dns_resolve6"}(${hostC}); ` +
                     `tsc_promise_t* ${out}; ` +
                     `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
                     `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +

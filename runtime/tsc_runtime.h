@@ -634,6 +634,7 @@ typedef struct tsc_dns_lookup_result tsc_dns_lookup_result_t;
 typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef struct tsc_dns_resolve4_result tsc_dns_resolve4_result_t;
 typedef struct tsc_dns_resolve6_result tsc_dns_resolve6_result_t;
+typedef struct tsc_dns_resolve_ttl_result tsc_dns_resolve_ttl_result_t;
 typedef struct tsc_dns_resolve_ptr_result tsc_dns_resolve_ptr_result_t;
 typedef struct tsc_dns_resolve_cname_result tsc_dns_resolve_cname_result_t;
 typedef struct tsc_dns_lookup_service_result tsc_dns_lookup_service_result_t;
@@ -896,6 +897,10 @@ struct tsc_dns_resolve6_result {
     tsc_str_t* error;
     tsc_array_t* addresses;
 };
+struct tsc_dns_resolve_ttl_result {
+    tsc_str_t* error;
+    tsc_array_t* addresses;
+};
 struct tsc_dns_resolve_ptr_result {
     tsc_str_t* error;
     tsc_array_t* addresses;
@@ -914,6 +919,8 @@ tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double famil
 tsc_dns_lookup_all_result_t tsc_dns_resolve_any(tsc_str_t* hostname);
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
 tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname);
+tsc_dns_resolve_ttl_result_t tsc_dns_resolve4_ttl(tsc_str_t* hostname);
+tsc_dns_resolve_ttl_result_t tsc_dns_resolve6_ttl(tsc_str_t* hostname);
 tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address);
 tsc_dns_resolve_cname_result_t tsc_dns_resolve_cname(tsc_str_t* hostname);
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port);

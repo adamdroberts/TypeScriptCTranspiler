@@ -13,7 +13,7 @@ flowchart LR
     C --> E
     D --> E[Emitter<br/>src/emit/index.ts]
     E --> F[build/main.c<br/>single C file]
-    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm<br/>or -Os -s plus section GC with --release on Linux]
+    F --> G[gcc -O2 main.c tsc_runtime.c -lgc -lm -lresolv<br/>or -Os -s plus section GC with --release on Linux]
     G --> H[native binary]
 ```
 
