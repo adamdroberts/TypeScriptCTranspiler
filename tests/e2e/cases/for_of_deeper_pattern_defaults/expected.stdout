@@ -1,0 +1,6 @@
+direct direct-a:direct-profile-fallback:70:direct-first-fallback:80:direct-second:2;direct-b:direct-real:3:direct-third:4:direct-second-fallback:80;
+custom custom-a:custom-profile-fallback:71:custom-first-fallback:81:custom-second:6;custom-b:custom-real:7:custom-third:8:custom-second-fallback:90;
+lazy1 false lazy-a:lazy-profile-fallback:72:lazy-first-fallback:82:lazy-second:10
+lazy2 false lazy-b:lazy-real:11:lazy-third:12:lazy-second-fallback:100
+lazy3 true deeper-default-done
+dynamic dynamic-profile-fallback:73:dynamic-first-fallback:83:dynamic-second:14;dynamic-real:15:dynamic-third:83:dynamic-second-fallback:110;

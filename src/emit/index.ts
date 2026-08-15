@@ -86,9 +86,25 @@ interface EmitResult {
 }
 
 type ForOfObjectAccessSegment =
-    | { kind: "property"; value: string }
-    | { kind: "index"; value: number }
-    | { kind: "computed"; value: string; id: number };
+    | {
+        kind: "property";
+        value: string;
+        defaultId?: number;
+        defaultInitializer?: ts.Expression;
+    }
+    | {
+        kind: "index";
+        value: number;
+        defaultId?: number;
+        defaultInitializer?: ts.Expression;
+    }
+    | {
+        kind: "computed";
+        value: string;
+        id: number;
+        defaultId?: number;
+        defaultInitializer?: ts.Expression;
+    };
 
 interface ForOfObjectBindingDescriptor {
     element: ts.BindingElement;
@@ -116,8 +132,20 @@ interface ForOfTypedObjectBindingDescriptor {
 }
 
 type ForOfTypedObjectAccessSegment =
-    | { kind: "property"; value: string; type: CType }
-    | { kind: "index"; value: number; type: CType };
+    | {
+        kind: "property";
+        value: string;
+        type: CType;
+        defaultId?: number;
+        defaultInitializer?: ts.Expression;
+    }
+    | {
+        kind: "index";
+        value: number;
+        type: CType;
+        defaultId?: number;
+        defaultInitializer?: ts.Expression;
+    };
 
 interface SequencedCallArg {
     value: EmitResult;
@@ -68577,6 +68605,7 @@ class Emitter {
         }
         const descriptors: ForOfObjectBindingDescriptor[] = [];
         let nextComputedKeyId = 0;
+        let nextDefaultId = 0;
         const collectArray = (
             current: ts.ArrayBindingPattern,
             prefix: readonly ForOfObjectAccessSegment[],
@@ -68622,31 +68651,45 @@ class Emitter {
                     });
                     continue;
                 }
+                const nestedIndex = (): ForOfObjectAccessSegment => {
+                    if (!element.initializer) {
+                        return { kind: "index", value: index };
+                    }
+                    if (this.nodeContainsYield(element.initializer)) {
+                        unsupported(element.initializer, "for-of destructuring defaults cannot suspend");
+                    }
+                    return {
+                        kind: "index",
+                        value: index,
+                        defaultId: nextDefaultId++,
+                        defaultInitializer: element.initializer,
+                    };
+                };
                 if (ts.isObjectBindingPattern(element.name)) {
-                    if (element.propertyName || element.initializer) {
+                    if (element.propertyName) {
                         unsupported(
                             element,
-                            "nested for-of array object bindings require a plain object pattern without a default",
+                            "nested for-of array object bindings require a plain object pattern",
                         );
                     }
                     collect(
                         element.name,
-                        [...prefix, { kind: "index", value: index }],
+                        [...prefix, nestedIndex()],
                         inheritedComputedKey,
                         inheritedComputedKeyId,
                     );
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
-                    if (element.propertyName || element.initializer) {
+                    if (element.propertyName) {
                         unsupported(
                             element,
-                            "nested for-of array bindings require a plain nested array pattern without a default",
+                            "nested for-of array bindings require a plain nested array pattern",
                         );
                     }
                     collectArray(
                         element.name,
-                        [...prefix, { kind: "index", value: index }],
+                        [...prefix, nestedIndex()],
                         inheritedComputedKey,
                         inheritedComputedKeyId,
                     );
@@ -68764,16 +68807,28 @@ class Emitter {
                 }
                 const bindingComputedKey = computedKey ?? inheritedComputedKey;
                 const bindingComputedKeyId = computedKeyId;
-                const bindingPrefix: ForOfObjectAccessSegment[] = computedProperty
+                const bindingPrefixBase: ForOfObjectAccessSegment[] = computedProperty
                     ? [...prefix, { kind: "computed", value: computedKey!, id: computedKeyId! }]
                     : [...prefix, { kind: "property", value: property! }];
+                const bindingPrefix: ForOfObjectAccessSegment[] =
+                    (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
+                    element.initializer
+                        ? (() => {
+                            if (this.nodeContainsYield(element.initializer!)) {
+                                unsupported(element.initializer!, "for-of destructuring defaults cannot suspend");
+                            }
+                            const last = bindingPrefixBase[bindingPrefixBase.length - 1];
+                            return [
+                                ...bindingPrefixBase.slice(0, -1),
+                                {
+                                    ...last,
+                                    defaultId: nextDefaultId++,
+                                    defaultInitializer: element.initializer!,
+                                },
+                            ];
+                        })()
+                        : bindingPrefixBase;
                 if (ts.isObjectBindingPattern(element.name)) {
-                    if (element.initializer) {
-                        unsupported(
-                            element,
-                            "nested for-of object destructuring does not support a default for the nested object",
-                        );
-                    }
                     collect(
                         element.name,
                         bindingPrefix,
@@ -68783,12 +68838,6 @@ class Emitter {
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
-                    if (element.initializer) {
-                        unsupported(
-                            element,
-                            "nested for-of array destructuring requires a static property without a default",
-                        );
-                    }
                     collectArray(
                         element.name,
                         bindingPrefix,
@@ -69045,6 +69094,7 @@ class Emitter {
         prefix: readonly ForOfTypedObjectAccessSegment[] = [],
     ): ForOfTypedObjectBindingDescriptor[] {
         const descriptors: ForOfTypedObjectBindingDescriptor[] = [];
+        let nextDefaultId = 0;
         const collectArray = (
             current: ts.ArrayBindingPattern,
             arrayType: CType,
@@ -69118,15 +69168,20 @@ class Emitter {
                 }
                 const accessPath = [
                     ...arrayPrefix,
-                    { kind: "index" as const, value: index, type: elementType },
+                    {
+                        kind: "index" as const,
+                        value: index,
+                        type: elementType,
+                        ...(ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
+                        element.initializer
+                            ? {
+                                defaultId: nextDefaultId++,
+                                defaultInitializer: element.initializer,
+                            }
+                            : {},
+                    },
                 ];
                 if (ts.isObjectBindingPattern(element.name)) {
-                    if (element.initializer) {
-                        unsupported(
-                            element,
-                            "nested typed for-of array object bindings do not support a default",
-                        );
-                    }
                     if (elementType.kind !== "class" && elementType.kind !== "array") {
                         unsupported(
                             element.name,
@@ -69137,12 +69192,6 @@ class Emitter {
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
-                    if (element.initializer) {
-                        unsupported(
-                            element,
-                            "nested typed for-of arrays do not support a default for the nested array",
-                        );
-                    }
                     collectArray(element.name, elementType, elementTsType, accessPath);
                     continue;
                 }
@@ -69209,15 +69258,20 @@ class Emitter {
                     }
                     const accessPath = [
                         ...objectPrefix,
-                        { kind: "index" as const, value: arrayIndex, type: currentCType.elem },
+                        {
+                            kind: "index" as const,
+                            value: arrayIndex,
+                            type: currentCType.elem,
+                            ...(ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
+                            element.initializer
+                                ? {
+                                    defaultId: nextDefaultId++,
+                                    defaultInitializer: element.initializer,
+                                }
+                                : {},
+                        },
                     ];
                     if (ts.isObjectBindingPattern(element.name)) {
-                        if (element.initializer) {
-                            unsupported(
-                                element,
-                                "nested typed for-of array-index object bindings do not support a default for the nested object",
-                            );
-                        }
                         if (currentCType.elem.kind !== "class" && currentCType.elem.kind !== "array") {
                             unsupported(
                                 element.name,
@@ -69228,12 +69282,6 @@ class Emitter {
                         continue;
                     }
                     if (ts.isArrayBindingPattern(element.name)) {
-                        if (element.initializer) {
-                            unsupported(
-                                element,
-                                "nested typed for-of array-index bindings do not support a default for the nested array",
-                            );
-                        }
                         collectArray(element.name, currentCType.elem, elementTsType, accessPath);
                         continue;
                     }
@@ -69336,16 +69384,21 @@ class Emitter {
                 }
                 const accessPath = [
                     ...objectPrefix,
-                    { kind: "property" as const, value: property, type: fieldType },
+                    {
+                        kind: "property" as const,
+                        value: property,
+                        type: fieldType,
+                        ...(ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
+                        element.initializer
+                            ? {
+                                defaultId: nextDefaultId++,
+                                defaultInitializer: element.initializer,
+                            }
+                            : {},
+                    },
                 ];
                 boundProperties.push(property);
                 if (ts.isObjectBindingPattern(element.name)) {
-                    if (element.initializer) {
-                        unsupported(
-                            element,
-                            "nested typed for-of object bindings do not support a default for the nested object",
-                        );
-                    }
                     if (fieldType.kind !== "class" && fieldType.kind !== "array") {
                         unsupported(
                             element.name,
@@ -69356,12 +69409,6 @@ class Emitter {
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
-                    if (element.initializer) {
-                        unsupported(
-                            element,
-                            "nested typed for-of array bindings do not support a default for the nested array",
-                        );
-                    }
                     collectArray(element.name, fieldType, fieldTsType, accessPath);
                     continue;
                 }
@@ -69385,13 +69432,24 @@ class Emitter {
     private typedObjectBindingAccess(
         sourceC: string,
         accessPath: readonly ForOfTypedObjectAccessSegment[],
+        defaultTemps: ReadonlyMap<number, string> = new Map(),
     ): string {
         return accessPath.reduce((source, segment) => {
+            let value: string;
             if (segment.kind === "property") {
-                return `(${source})->${mangleIdent(segment.value)}`;
+                value = `(${source})->${mangleIdent(segment.value)}`;
+            } else {
+                value = `(${source} != NULL && tsc_array_index_present(${source}, ${segment.value}) ? ` +
+                    `TSC_ARR(${segment.type.c}, ${source}, ${segment.value}) : ${this.zeroValue(segment.type)})`;
             }
-            return `(${source} != NULL && tsc_array_index_present(${source}, ${segment.value}) ? ` +
-                `TSC_ARR(${segment.type.c}, ${source}, ${segment.value}) : ${this.zeroValue(segment.type)})`;
+            if (segment.defaultId === undefined) return value;
+            const fallbackTemp = defaultTemps.get(segment.defaultId);
+            if (!fallbackTemp) {
+                throw new Error("typed for-of nested default was not staged");
+            }
+            const valueTemp = this.freshTemp("_typed_for_of_nested_default_value");
+            return `({ ${segment.type.c} ${valueTemp} = ${value}; ` +
+                `${valueTemp} != NULL ? ${valueTemp} : ${fallbackTemp}; })`;
         }, sourceC);
     }
 
@@ -69439,13 +69497,34 @@ class Emitter {
         });
     }
 
-    private typedArrayBindingHasDirectNestedDefault(pattern: ts.ArrayBindingPattern): boolean {
-        return pattern.elements.some((element) =>
-            !!element &&
-            ts.isBindingElement(element) &&
-            !!element.initializer &&
-            (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
-        );
+    private typedArrayBindingHasNestedDefault(pattern: ts.ArrayBindingPattern): boolean {
+        const objectHasDefault = (current: ts.ObjectBindingPattern): boolean =>
+            current.elements.some((element) => {
+                if (!ts.isBindingElement(element)) return false;
+                if (
+                    element.initializer &&
+                    (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name))
+                ) {
+                    return true;
+                }
+                if (ts.isObjectBindingPattern(element.name)) return objectHasDefault(element.name);
+                if (ts.isArrayBindingPattern(element.name)) return arrayHasDefault(element.name);
+                return false;
+            });
+        const arrayHasDefault = (current: ts.ArrayBindingPattern): boolean =>
+            current.elements.some((element) => {
+                if (!ts.isBindingElement(element)) return false;
+                if (
+                    element.initializer &&
+                    (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name))
+                ) {
+                    return true;
+                }
+                if (ts.isObjectBindingPattern(element.name)) return objectHasDefault(element.name);
+                if (ts.isArrayBindingPattern(element.name)) return arrayHasDefault(element.name);
+                return false;
+            });
+        return arrayHasDefault(pattern);
     }
 
     private emitTypedObjectRestForOf(
@@ -69540,6 +69619,8 @@ class Emitter {
         if (!elementTsType) {
             unsupported(pattern, "typed for-of array destructuring could not resolve the element type");
         }
+        const sourceVar = this.freshTemp("_typed_for_of_nested_array_value");
+        buf.line(`${sourceType.c} const ${sourceVar} = ${sourceC};`);
         for (let index = 0; index < pattern.elements.length; index++) {
             const element = pattern.elements[index];
             if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
@@ -69577,7 +69658,7 @@ class Emitter {
                         objectRest: false,
                         objectRestKeys: [],
                     },
-                    this.emitTypedArrayRestForOf(buf, sourceC, sourceType, index, element),
+                    this.emitTypedArrayRestForOf(buf, sourceVar, sourceType, index, element),
                 );
                 continue;
             }
@@ -69597,7 +69678,7 @@ class Emitter {
                     "typed for-of array bindings support await-free defaults only",
                 );
             }
-            const sourceValue = this.typedObjectBindingAccess(sourceC, [
+            const sourceValue = this.typedObjectBindingAccess(sourceVar, [
                 { kind: "index", value: index, type: elementType },
             ]);
             const nestedSource = (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
@@ -69672,7 +69753,7 @@ class Emitter {
     ): void {
         if (
             this.typedArrayBindingHasRuntimeComputedKey(pattern) ||
-            this.typedArrayBindingHasDirectNestedDefault(pattern)
+            this.typedArrayBindingHasNestedDefault(pattern)
         ) {
             this.emitTypedArrayBindingPatternForOf(
                 buf,
@@ -69750,8 +69831,29 @@ class Emitter {
             return;
         }
         const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType, sourceType);
+        const defaultTemps = new Map<number, string>();
         for (const descriptor of descriptors) {
-            const sourceValue = this.typedObjectBindingAccess(sourceC, descriptor.accessPath);
+            for (const segment of descriptor.accessPath) {
+                if (segment.defaultId === undefined || defaultTemps.has(segment.defaultId)) continue;
+                if (!segment.defaultInitializer) {
+                    unsupported(descriptor.element, "typed for-of nested defaults require an initializer");
+                }
+                const fallback = this.coerce(
+                    this.emitExpr(segment.defaultInitializer),
+                    segment.type,
+                    segment.defaultInitializer,
+                );
+                const fallbackTemp = this.freshTemp("_typed_for_of_nested_default");
+                defaultTemps.set(segment.defaultId, fallbackTemp);
+                buf.line(`${segment.type.c} const ${fallbackTemp} = ${fallback};`);
+            }
+        }
+        for (const descriptor of descriptors) {
+            const sourceValue = this.typedObjectBindingAccess(
+                sourceC,
+                descriptor.accessPath,
+                defaultTemps,
+            );
             const value = descriptor.objectRest
                 ? this.emitTypedObjectRestForOf(
                     buf,
@@ -69905,6 +70007,7 @@ class Emitter {
         const sourceVar = this.freshTemp("_for_of_object_value");
         buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         const computedKeyTemps = new Map<number, string>();
+        const defaultTemps = new Map<number, string>();
         for (const descriptor of descriptors) {
             for (const segment of descriptor.accessPath) {
                 if (segment.kind !== "computed" || computedKeyTemps.has(segment.id)) continue;
@@ -69913,17 +70016,42 @@ class Emitter {
                 buf.line(`tsc_str_t* const ${keyTemp} = ${segment.value};`);
             }
         }
+        for (const descriptor of descriptors) {
+            for (const segment of descriptor.accessPath) {
+                if (segment.defaultId === undefined || defaultTemps.has(segment.defaultId)) continue;
+                if (!segment.defaultInitializer) {
+                    unsupported(descriptor.element, "for-of nested defaults require an initializer");
+                }
+                const fallback = this.coerce(
+                    this.emitExpr(segment.defaultInitializer),
+                    T_VALUE,
+                    segment.defaultInitializer,
+                );
+                const fallbackTemp = this.freshTemp("_for_of_nested_default");
+                defaultTemps.set(segment.defaultId, fallbackTemp);
+                buf.line(`tsc_value_t const ${fallbackTemp} = ${fallback};`);
+            }
+        }
         const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string =>
             accessPath.reduce(
                 (source, segment) => {
+                    let value: string;
                     if (segment.kind === "property") {
-                        return `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`;
-                    }
-                    if (segment.kind === "computed") {
+                        value = `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`;
+                    } else if (segment.kind === "computed") {
                         const key = computedKeyTemps.get(segment.id) ?? segment.value;
-                        return `tsc_value_get_prop(${source}, ${key})`;
+                        value = `tsc_value_get_prop(${source}, ${key})`;
+                    } else {
+                        value = `tsc_value_get_index(${source}, ${segment.value}.0)`;
                     }
-                    return `tsc_value_get_index(${source}, ${segment.value}.0)`;
+                    if (segment.defaultId === undefined) return value;
+                    const fallbackTemp = defaultTemps.get(segment.defaultId);
+                    if (!fallbackTemp) {
+                        unsupported(segment.defaultInitializer ?? pattern, "for-of nested default was not staged");
+                    }
+                    const valueTemp = this.freshTemp("_for_of_nested_default_value");
+                    return `({ tsc_value_t ${valueTemp} = ${value}; ` +
+                        `tsc_value_is_undefined(${valueTemp}) ? ${fallbackTemp} : ${valueTemp}; })`;
                 },
                 sourceVar,
             );
@@ -69996,6 +70124,8 @@ class Emitter {
         if (pattern.elements.length === 0) {
             unsupported(pattern, "dynamic for-of array destructuring requires at least one binding");
         }
+        const sourceVar = this.freshTemp("_for_of_nested_array_value");
+        buf.line(`tsc_value_t const ${sourceVar} = ${sourceC};`);
         for (let index = 0; index < pattern.elements.length; index++) {
             const element = pattern.elements[index];
             if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
@@ -70023,7 +70153,7 @@ class Emitter {
                 }
                 assign(
                     element.name,
-                    this.emitDynamicArrayRestForOf(buf, sourceC, index),
+                    this.emitDynamicArrayRestForOf(buf, sourceVar, index),
                 );
                 continue;
             }
@@ -70044,7 +70174,7 @@ class Emitter {
                 );
             }
             const value: EmitResult = {
-                c: `tsc_value_get_index(${sourceC}, ${index}.0)`,
+                c: `tsc_value_get_index(${sourceVar}, ${index}.0)`,
                 ty: T_VALUE,
             };
             const nestedValue = (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
