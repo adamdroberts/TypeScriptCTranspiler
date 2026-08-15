@@ -1,5 +1,6 @@
 # Implemented features
 
+- Verified bounded `net.Server` state coverage: POSIX TCP servers now expose synchronized `listening` and live `connections` properties across listen, accept, socket close, and server close transitions. Test: `net_server_state`.
 - Verified bounded `net.Socket` state coverage: POSIX TCP sockets now expose synchronized `readable`, `writable`, `readableEnded`, and `writableEnded` flags plus `localFamily` / `remoteFamily` endpoint metadata. Test: `net_socket_state`.
 - Verified bounded `net.Socket` pause/resume coverage: POSIX TCP sockets now expose chainable `pause()` / `resume()` read gates, leaving incoming data unread while paused and delivering it after resume. Test: `net_socket_pause_resume`.
 - Verified bounded `net.Socket` timeout coverage: POSIX TCP sockets now expose chainable `setTimeout(timeout, callback?)`, emit the "timeout" event after inactivity, reset the idle timer on successful socket activity, and cancel the timer when disabled or closed. Test: `net_socket_timeout`.

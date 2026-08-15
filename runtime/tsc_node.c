@@ -2992,6 +2992,8 @@ tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input) {
 
 /* ---------------- net TCP sockets and servers ---------------- */
 
+typedef struct tsc_net_server tsc_net_server_t;
+
 typedef struct tsc_net_socket {
     tsc_child_event_target_t event;
     int fd;
@@ -3015,9 +3017,10 @@ typedef struct tsc_net_socket {
     double idle_timeout_timer;
     double idle_timeout_ms;
     double poll_timer;
+    tsc_net_server_t* server;
 } tsc_net_socket_t;
 
-typedef struct tsc_net_server {
+struct tsc_net_server {
     tsc_child_event_target_t event;
     int fd;
     bool listening;
@@ -3026,7 +3029,14 @@ typedef struct tsc_net_server {
     bool listening_emitted;
     SSL_CTX* tls_ctx;
     double poll_timer;
-} tsc_net_server_t;
+    uint64_t connection_count;
+};
+
+static void tsc_net_server_refresh_props(tsc_net_server_t* server) {
+    if (!server || !server->event.value) return;
+    tsc_value_set_prop(server->event.value, tsc_str_from_lit("listening", 9), tsc_value_bool(server->listening));
+    tsc_value_set_prop(server->event.value, tsc_str_from_lit("connections", 11), tsc_value_num((double)server->connection_count));
+}
 
 static void tsc_net_socket_poll(void* env);
 static void tsc_net_server_poll(void* env);
@@ -3135,6 +3145,12 @@ static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
     if (socket->tls_ctx) {
         SSL_CTX_free(socket->tls_ctx);
         socket->tls_ctx = NULL;
+    }
+    if (socket->server) {
+        tsc_net_server_t* server = socket->server;
+        socket->server = NULL;
+        if (server->connection_count > 0) server->connection_count--;
+        tsc_net_server_refresh_props(server);
     }
     socket->destroyed = true;
     socket->connecting = false;
@@ -3589,6 +3605,7 @@ static void tsc_net_server_close_internal(tsc_net_server_t* server) {
         server->tls_ctx = NULL;
     }
     server->listening = false;
+    tsc_net_server_refresh_props(server);
     server->close_emitted = true;
     if (server->poll_timer != 0.0) {
         tsc_clear_timeout(server->poll_timer);
@@ -3661,6 +3678,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     server->close_requested = false;
     server->close_emitted = false;
     server->listening_emitted = false;
+    tsc_net_server_refresh_props(server);
     server->poll_timer = tsc_set_interval(tsc_net_server_poll, server, 1.0);
     return this_arg;
 }
@@ -3698,6 +3716,9 @@ static void tsc_net_server_poll(void* env) {
         }
         tsc_net_socket_t* socket = NULL;
         tsc_value_t socket_value = tsc_net_socket_new(accepted, false, false, &socket);
+        socket->server = server;
+        server->connection_count++;
+        tsc_net_server_refresh_props(server);
         if (server->tls_ctx && !tsc_net_socket_enable_tls_server(socket, server->tls_ctx)) {
             tsc_net_socket_close_internal(socket);
             continue;
@@ -3721,6 +3742,8 @@ static tsc_value_t tsc_net_create_server_with_tls(tsc_value_t connection_listene
     server->event.object = object;
     server->event.value = tsc_value_object(object);
     tsc_net_server_add_methods(object, server);
+    tsc_object_set(object, tsc_str_from_lit("listening", 9), tsc_value_bool(false));
+    tsc_object_set(object, tsc_str_from_lit("connections", 11), tsc_value_num(0.0));
     if (tsc_value_is_callable(connection_listener)) {
         tsc_net_register_listener(&server->event, "connection", connection_listener, false);
     }
