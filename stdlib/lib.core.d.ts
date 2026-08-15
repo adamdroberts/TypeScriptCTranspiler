@@ -2648,6 +2648,10 @@ interface NetConnectOptions {
     port: number;
     host?: string;
 }
+interface NetListenOptions {
+    port: number;
+    host?: string;
+}
 interface NetServer {
     readonly listening: boolean;
     readonly connections: number;
@@ -2657,6 +2661,7 @@ interface NetServer {
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    listen(options: NetListenOptions, callback?: () => void, ...ignored: any[]): this;
     listen(port: number, callback?: () => void, ...ignored: any[]): this;
     listen(port: number, host: string, callback?: () => void, ...ignored: any[]): this;
     close(callback?: () => void, ...ignored: any[]): this;

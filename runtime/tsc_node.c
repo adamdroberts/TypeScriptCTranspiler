@@ -3709,19 +3709,40 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
         tsc_throw_str(tsc_str_from_cstr("net.Server.listen expects a port"));
     }
     tsc_value_t port_value = TSC_ARR(tsc_value_t, args, 0);
+    tsc_str_t* host = NULL;
+    tsc_value_t callback = tsc_value_undefined();
+    bool options_form = value_is_box(port_value) && value_tag(port_value) == TSC_VALUE_TAG_OBJECT;
+    if (options_form) {
+        tsc_value_t options_port = tsc_value_get_prop(port_value, tsc_str_from_lit("port", 4));
+        if (tsc_value_is_nullish(options_port)) {
+            tsc_throw_str(tsc_str_from_cstr("net.Server.listen options.port is required"));
+        }
+        tsc_value_t options_host = tsc_value_get_prop(port_value, tsc_str_from_lit("host", 4));
+        if (!tsc_value_is_nullish(options_host)) {
+            host = tsc_value_as_string(options_host);
+            if (!host) {
+                tsc_throw_str(tsc_str_from_cstr("net.Server.listen options.host must be a string"));
+            }
+        }
+        port_value = options_port;
+        if (args->len > 1) {
+            callback = TSC_ARR(tsc_value_t, args, 1);
+            if (!tsc_value_is_nullish(callback) && !tsc_value_is_callable(callback)) {
+                tsc_throw_str(tsc_str_from_cstr("net.Server.listen options callback must be a function"));
+            }
+        }
+    }
     double port = tsc_value_as_num(port_value);
     if (!tsc_value_number_is_finite(port) || !tsc_value_number_is_integer(port) || port < 0.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.Server.listen port must be an integer from 0 to 65535"));
     }
-    tsc_str_t* host = NULL;
-    tsc_value_t callback = tsc_value_undefined();
-    if (args->len > 1) {
+    if (!options_form && args->len > 1) {
         tsc_value_t second = TSC_ARR(tsc_value_t, args, 1);
         if (tsc_value_is_callable(second)) callback = second;
         else if (!tsc_value_is_undefined(second) && !tsc_value_is_nullish(second)) host = tsc_value_as_string(second);
     }
-    if (args->len > 2 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 2))) callback = TSC_ARR(tsc_value_t, args, 2);
-    if (!host && args->len > 1 && !tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 1)) && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
+    if (!options_form && args->len > 2 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 2))) callback = TSC_ARR(tsc_value_t, args, 2);
+    if (!options_form && !host && args->len > 1 && !tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 1)) && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
         tsc_throw_str(tsc_str_from_cstr("net.Server.listen host must be a string"));
     }
     if (!tsc_value_is_undefined(callback) && tsc_value_is_callable(callback)) {
