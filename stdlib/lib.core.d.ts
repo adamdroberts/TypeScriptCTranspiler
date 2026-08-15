@@ -2619,6 +2619,12 @@ interface NetSocket {
     readonly localPort?: number;
     readonly remoteAddress?: string;
     readonly remotePort?: number;
+    readonly localFamily?: string;
+    readonly remoteFamily?: string;
+    readonly readable: boolean;
+    readonly writable: boolean;
+    readonly readableEnded: boolean;
+    readonly writableEnded: boolean;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;

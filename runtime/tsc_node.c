@@ -3091,12 +3091,14 @@ static void tsc_net_socket_refresh_endpoint_props(tsc_net_socket_t* socket) {
         const char* rendered = inet_ntop(AF_INET, &local.sin_addr, text, sizeof(text));
         tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localAddress", 12), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
         tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localPort", 9), tsc_value_num((double)ntohs(local.sin_port)));
+        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("localFamily", 11), tsc_value_string(tsc_str_from_lit("IPv4", 4)));
     }
     if (getpeername(socket->fd, (struct sockaddr*)&remote, &remote_len) == 0) {
         char text[INET_ADDRSTRLEN] = { 0 };
         const char* rendered = inet_ntop(AF_INET, &remote.sin_addr, text, sizeof(text));
         tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteAddress", 13), tsc_value_string(tsc_str_from_cstr(rendered ? rendered : "0.0.0.0")));
         tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remotePort", 10), tsc_value_num((double)ntohs(remote.sin_port)));
+        tsc_value_set_prop(socket->event.value, tsc_str_from_lit("remoteFamily", 12), tsc_value_string(tsc_str_from_lit("IPv4", 4)));
     }
 }
 
@@ -3104,6 +3106,14 @@ static void tsc_net_socket_refresh_byte_props(tsc_net_socket_t* socket) {
     if (!socket || !socket->event.value) return;
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("bytesRead", 9), tsc_value_num((double)socket->bytes_read));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("bytesWritten", 12), tsc_value_num((double)socket->bytes_written));
+}
+
+static void tsc_net_socket_refresh_state_props(tsc_net_socket_t* socket) {
+    if (!socket || !socket->event.value) return;
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readable", 8), tsc_value_bool(!socket->destroyed && !socket->readable_ended));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writable", 8), tsc_value_bool(!socket->destroyed && !socket->writable_ended));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readableEnded", 13), tsc_value_bool(socket->readable_ended));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writableEnded", 13), tsc_value_bool(socket->writable_ended));
 }
 
 static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number) {
@@ -3130,6 +3140,7 @@ static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
     socket->connecting = false;
     socket->readable_ended = true;
     socket->writable_ended = true;
+    tsc_net_socket_refresh_state_props(socket);
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("destroyed", 9), tsc_value_bool(true));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("connecting", 10), tsc_value_bool(false));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit("closed", 6)));
@@ -3323,6 +3334,7 @@ static tsc_value_t tsc_net_socket_end(void* env, tsc_value_t this_arg, tsc_array
     if (socket && socket->fd >= 0 && !socket->writable_ended) {
         (void)shutdown(socket->fd, SHUT_WR);
         socket->writable_ended = true;
+        tsc_net_socket_refresh_state_props(socket);
     }
     return this_arg;
 }
@@ -3392,6 +3404,12 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     tsc_object_set(object, tsc_str_from_lit("localPort", 9), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("remoteAddress", 13), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("remotePort", 10), tsc_value_null());
+    tsc_object_set(object, tsc_str_from_lit("localFamily", 11), tsc_value_null());
+    tsc_object_set(object, tsc_str_from_lit("remoteFamily", 12), tsc_value_null());
+    tsc_object_set(object, tsc_str_from_lit("readable", 8), tsc_value_bool(true));
+    tsc_object_set(object, tsc_str_from_lit("writable", 8), tsc_value_bool(true));
+    tsc_object_set(object, tsc_str_from_lit("readableEnded", 13), tsc_value_bool(false));
+    tsc_object_set(object, tsc_str_from_lit("writableEnded", 13), tsc_value_bool(false));
     if (!connecting) tsc_net_socket_refresh_endpoint_props(socket);
     socket->poll_timer = tsc_set_interval(tsc_net_socket_poll, socket, 1.0);
     if (out_socket) *out_socket = socket;
@@ -3491,6 +3509,7 @@ static void tsc_net_socket_read(tsc_net_socket_t* socket) {
         }
         if (n == 0) {
             socket->readable_ended = true;
+            tsc_net_socket_refresh_state_props(socket);
             tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
             (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("end", 3), empty);
             if (socket->writable_ended || !socket->client_socket) tsc_net_socket_close_internal(socket);
