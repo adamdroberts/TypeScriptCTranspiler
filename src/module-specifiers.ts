@@ -3446,6 +3446,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (regexpExec) return resolveCollectionExpression(regexpExec);
             const stringMatch = resolveStaticStringMatchCollectionExpression(cur);
             if (stringMatch) return resolveCollectionExpression(stringMatch);
+            const stringMatchAll = resolveStaticStringMatchAllCollectionExpression(cur);
+            if (stringMatchAll) return resolveCollectionExpression(stringMatchAll);
             const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
             if (valueOfReceiver) return resolveCollectionExpression(valueOfReceiver);
         }
@@ -4814,6 +4816,29 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             return value === undefined
                 ? ts.factory.createIdentifier("undefined")
                 : ts.factory.createStringLiteral(value);
+        }));
+    };
+
+    const resolveStaticStringMatchAllCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length !== 1 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "matchAll") return null;
+        const inputs = resolve(callee.expression);
+        if (inputs.length !== 1) return null;
+        const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
+        if (regexps.length !== 1 || !regexps[0]!.global) return null;
+
+        const matchAllValue = inputs[0]! as string & {
+            matchAll(pattern: RegExp): Iterable<RegExpMatchArray>;
+        };
+        const matches = Array.from(matchAllValue.matchAll(regexps[0]!));
+        if (matches.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        return ts.factory.createArrayLiteralExpression(matches.map((match) => {
+            return ts.factory.createArrayLiteralExpression(Array.from(match, (value) => {
+                return value === undefined
+                    ? ts.factory.createIdentifier("undefined")
+                    : ts.factory.createStringLiteral(value);
+            }));
         }));
     };
 
