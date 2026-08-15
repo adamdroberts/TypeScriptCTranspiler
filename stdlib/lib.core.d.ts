@@ -2659,6 +2659,8 @@ interface NetSocket {
 interface NetConnectOptions {
     port: number;
     host?: string;
+    localAddress?: string;
+    localPort?: number;
 }
 interface NetListenOptions {
     port: number;
