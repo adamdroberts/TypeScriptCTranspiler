@@ -60892,10 +60892,10 @@ class Emitter {
                     }
                 }
             } else if (ts.isObjectBindingPattern(decl.name)) {
-                if (sourceElemType.kind !== "value" && sourceElemType.kind !== "class") {
+                if (sourceElemType.kind !== "value" && sourceElemType.kind !== "class" && sourceElemType.kind !== "array") {
                     unsupported(
                         decl.name,
-                        "lazy generator object destructuring requires dynamically boxed or typed object source elements",
+                        "lazy generator object destructuring requires dynamically boxed or typed object or array source elements",
                     );
                 }
                 if (sourceElemType.kind === "value") {
@@ -60909,7 +60909,7 @@ class Emitter {
                     if (!objectTsType) {
                         unsupported(
                             decl.name,
-                            "lazy generator typed object destructuring could not resolve the element object type",
+                            "lazy generator typed object destructuring could not resolve the element object or array type",
                         );
                     }
                     this.emitTypedObjectBindingsForOf(
@@ -67492,7 +67492,7 @@ class Emitter {
                 return;
             }
         }
-        if (elemType.kind === "class" && ts.isVariableDeclarationList(fos.initializer)) {
+        if ((elemType.kind === "class" || elemType.kind === "array") && ts.isVariableDeclarationList(fos.initializer)) {
             const d = fos.initializer.declarations[0];
             if (d && ts.isObjectBindingPattern(d.name)) {
                 const objectTsType = this.forOfElementTsType(fos.expression);
@@ -67812,10 +67812,10 @@ class Emitter {
             ? fos.initializer.declarations[0]
             : null;
         if (entryBindingDecl && ts.isObjectBindingPattern(entryBindingDecl.name)) {
-            if (valueType.kind !== "value" && valueType.kind !== "class") {
+            if (valueType.kind !== "value" && valueType.kind !== "class" && valueType.kind !== "array") {
                 unsupported(
                     entryBindingDecl.name,
-                    "custom iterator object destructuring requires dynamically boxed or typed object iterator values",
+                    "custom iterator object destructuring requires dynamically boxed or typed object or array iterator values",
                 );
             }
             const iterVar = this.freshTemp("_it");
@@ -67845,7 +67845,7 @@ class Emitter {
                 if (!valueTsType) {
                     unsupported(
                         entryBindingDecl.name,
-                        "typed custom iterator object destructuring could not resolve the value object type",
+                        "typed custom iterator object destructuring could not resolve the value object or array type",
                     );
                 }
                 this.emitTypedObjectBindingsForOf(
@@ -68797,10 +68797,10 @@ class Emitter {
                             "nested typed for-of array object bindings do not support a default",
                         );
                     }
-                    if (elementType.kind !== "class") {
+                    if (elementType.kind !== "class" && elementType.kind !== "array") {
                         unsupported(
                             element.name,
-                            "nested typed for-of array object bindings require typed object elements",
+                            "nested typed for-of array object bindings require typed object or array elements",
                         );
                     }
                     collectObject(element.name, elementType, elementTsType, accessPath);
@@ -68843,6 +68843,89 @@ class Emitter {
         ): void => {
             if (current.elements.length === 0) {
                 unsupported(current, "typed for-of object destructuring requires at least one binding");
+            }
+            if (currentCType.kind === "array") {
+                if (!currentCType.elem) {
+                    unsupported(current, "typed for-of array-index bindings require a typed array element");
+                }
+                const elementTsType = this.forOfTypedArrayElementTsType(currentType);
+                if (!elementTsType) {
+                    unsupported(current, "typed for-of array-index bindings could not resolve the element type");
+                }
+                for (const element of current.elements) {
+                    if (!ts.isBindingElement(element) || element.dotDotDotToken) {
+                        unsupported(
+                            element,
+                            "typed for-of array-index object bindings support fixed numeric properties without rest",
+                        );
+                    }
+                    if (element.initializer && this.nodeContainsYield(element.initializer)) {
+                        unsupported(
+                            element,
+                            "typed for-of array-index object bindings support await-free defaults only",
+                        );
+                    }
+                    const property = element.propertyName
+                        ? this.staticPropertyName(element.propertyName)
+                        : null;
+                    const arrayIndex = property === null
+                        ? null
+                        : this.typedArrayBindingIndex(property);
+                    if (arrayIndex === null) {
+                        unsupported(
+                            element,
+                            "typed for-of array-index object bindings require static non-negative numeric property names",
+                        );
+                    }
+                    const accessPath = [
+                        ...objectPrefix,
+                        { kind: "index" as const, value: arrayIndex, type: currentCType.elem },
+                    ];
+                    if (ts.isObjectBindingPattern(element.name)) {
+                        if (element.initializer) {
+                            unsupported(
+                                element,
+                                "nested typed for-of array-index object bindings do not support a default for the nested object",
+                            );
+                        }
+                        if (currentCType.elem.kind !== "class" && currentCType.elem.kind !== "array") {
+                            unsupported(
+                                element.name,
+                                "nested typed for-of array-index object bindings require typed object or array elements",
+                            );
+                        }
+                        collectObject(element.name, currentCType.elem, elementTsType, accessPath);
+                        continue;
+                    }
+                    if (ts.isArrayBindingPattern(element.name)) {
+                        if (element.initializer) {
+                            unsupported(
+                                element,
+                                "nested typed for-of array-index bindings do not support a default for the nested array",
+                            );
+                        }
+                        collectArray(element.name, currentCType.elem, elementTsType, accessPath);
+                        continue;
+                    }
+                    if (!ts.isIdentifier(element.name)) {
+                        unsupported(
+                            element,
+                            "typed for-of array-index object bindings require identifier elements",
+                        );
+                    }
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        accessPath,
+                        fieldType: currentCType.elem,
+                        fieldTsType: elementTsType,
+                        type: this.prepareType(mapType(element.name, this.checker)),
+                        arrayRestIndex: null,
+                        objectRest: false,
+                        objectRestKeys: [],
+                    });
+                }
+                return;
             }
             const boundProperties: string[] = [];
             for (let index = 0; index < current.elements.length; index++) {
@@ -68933,10 +69016,10 @@ class Emitter {
                             "nested typed for-of object bindings do not support a default for the nested object",
                         );
                     }
-                    if (fieldType.kind !== "class") {
+                    if (fieldType.kind !== "class" && fieldType.kind !== "array") {
                         unsupported(
                             element.name,
-                            "nested typed for-of object bindings require a typed object field",
+                            "nested typed for-of object bindings require a typed object or array field",
                         );
                     }
                     collectObject(element.name, fieldType, fieldTsType, accessPath);
@@ -68982,6 +69065,12 @@ class Emitter {
         }, sourceC);
     }
 
+    private typedArrayBindingIndex(property: string): number | null {
+        if (!/^(?:0|[1-9][0-9]*)$/.test(property)) return null;
+        const index = Number(property);
+        return Number.isSafeInteger(index) ? index : null;
+    }
+
     private typedObjectBindingHasRuntimeComputedKey(pattern: ts.ObjectBindingPattern): boolean {
         const visitArray = (current: ts.ArrayBindingPattern): boolean =>
             current.elements.some((element) => {
@@ -69015,6 +69104,12 @@ class Emitter {
         excludedProperties: readonly string[],
         node: ts.Node,
     ): EmitResult {
+        if (sourceType.kind === "array") {
+            return {
+                c: this.coerce({ c: sourceC, ty: sourceType }, T_VALUE, node),
+                ty: T_VALUE,
+            };
+        }
         if (sourceType.kind !== "class") {
             unsupported(node, "typed for-of object rest requires a typed object source");
         }
@@ -69082,11 +69177,16 @@ class Emitter {
         objectType: ts.Type,
         assign: (descriptor: ForOfTypedObjectBindingDescriptor, value: EmitResult) => void,
     ): void {
-        if (sourceType.kind !== "class") {
-            unsupported(pattern, "typed for-of object destructuring requires a typed object element");
+        if (sourceType.kind !== "class" && sourceType.kind !== "array") {
+            unsupported(pattern, "typed for-of object destructuring requires a typed object or array element");
         }
         if (this.typedObjectBindingHasRuntimeComputedKey(pattern)) {
-            const boxed = this.emitTypedObjectRestForOf(buf, sourceC, sourceType, objectType, [], pattern);
+            const boxed: EmitResult = sourceType.kind === "class"
+                ? this.emitTypedObjectRestForOf(buf, sourceC, sourceType, objectType, [], pattern)
+                : {
+                    c: this.coerce({ c: sourceC, ty: sourceType }, T_VALUE, pattern),
+                    ty: T_VALUE,
+                };
             this.emitDynamicObjectBindingsForOf(buf, pattern, boxed.c, (descriptor, value) => {
                 assign({
                     element: descriptor.element,
