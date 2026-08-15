@@ -75395,12 +75395,12 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        const dnsNamed = ["lookup", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
         if (dnsNamed) {
             return this.emitDnsCall(call, dnsNamed);
         }
-        const dnsPromisesNamed = ["lookup", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
         if (dnsPromisesNamed) {
             return this.emitDnsPromisesCall(call, dnsPromisesNamed);
@@ -83212,6 +83212,7 @@ class Emitter {
     private emitDnsCall(call: ts.CallExpression, method: string): EmitResult {
         if (
             method !== "lookup" &&
+            method !== "resolve" &&
             method !== "resolve4" &&
             method !== "resolve6" &&
             method !== "lookupService" &&
@@ -83237,6 +83238,9 @@ class Emitter {
                 ],
                 ([orderC]) => `tsc_dns_set_default_result_order(${orderC})`,
             );
+        }
+        if (method === "resolve") {
+            return this.emitDnsResolveCall(call);
         }
         if (method === "lookupService") {
             if (call.arguments.length < 3) {
@@ -83349,6 +83353,53 @@ class Emitter {
             const family: EmitResult = { c: `${result}.family`, ty: T_NUMBER };
             const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, address, family], callbackNode);
             return `({ tsc_dns_lookup_result_t ${result} = tsc_dns_lookup(${hostC}, ${lookupOptions.family.toFixed(1)}, ${lookupOptions.hints.toFixed(1)}, ${lookupOptions.order.toFixed(1)}); ${checkpointBeforeCallback ? "tsc_drain_microtasks_and_next_ticks(); " : ""}(void)${callbackCall}; })`;
+        });
+    }
+
+    private emitDnsResolveCall(call: ts.CallExpression): EmitResult {
+        if (call.arguments.length < 2) {
+            unsupported(call, "dns.resolve expects hostname, optional rrtype, and callback");
+        }
+        const hostNode = call.arguments[0]!;
+        const possibleCallbackNode = call.arguments[1]!;
+        const secondArgType = this.checker.getTypeAtLocation(possibleCallbackNode);
+        const callbackIndex = secondArgType.getCallSignatures().length > 0 ? 1 : 2;
+        if (callbackIndex >= call.arguments.length) {
+            unsupported(call, "dns.resolve expects hostname, optional rrtype, and callback");
+        }
+        const rrtypeNode = callbackIndex === 2 ? call.arguments[1]! : undefined;
+        const callbackNode = call.arguments[callbackIndex]!;
+        const rrtype = rrtypeNode ? this.dnsResolveTypeValue(rrtypeNode, "dns.resolve") : "A";
+        const host = this.emitExpr(hostNode);
+        const rrtypeExpr = rrtypeNode ? this.emitExpr(rrtypeNode) : undefined;
+        const callback = this.emitExpr(callbackNode);
+        const callbackType = this.prepareType(callback.ty);
+        if (callbackType.kind !== "function" || !callbackType.ret) {
+            unsupported(callbackNode, "dns.resolve callback must be a function");
+        }
+        const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
+        if (rrtypeNode && rrtypeExpr) {
+            specs.push({ value: rrtypeExpr, target: T_STRING, node: rrtypeNode });
+        }
+        specs.push(
+            { value: callback, target: callbackType, node: callbackNode },
+            ...this.ignoredArgumentSpecs(call.arguments, callbackIndex + 1),
+        );
+        return this.emitSequencedExpr(T_VOID, specs, (values) => {
+            const callbackC = values[rrtypeNode ? 2 : 1];
+            const result = this.freshTemp("_dns");
+            const err: EmitResult = {
+                c: `${result}.error ? tsc_value_string(${result}.error) : tsc_value_null()`,
+                ty: T_VALUE,
+            };
+            const addresses: EmitResult = {
+                c: `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`,
+                ty: arrayType(T_STRING),
+            };
+            const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
+            const resultType = rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
+            const resolver = rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
+            return `({ ${resultType} ${result} = ${resolver}(${values[0]}); (void)${callbackCall}; })`;
         });
     }
 
@@ -83560,6 +83611,12 @@ class Emitter {
         }
     }
 
+    private dnsResolveTypeValue(expr: ts.Expression, label: string): "A" | "AAAA" {
+        const rrtype = this.dnsLookupStringValue(expr);
+        if (rrtype === "A" || rrtype === "AAAA") return rrtype;
+        unsupported(expr, `${label} rrtype must be A or AAAA in this subset`);
+    }
+
     private shouldEvaluateDnsDefaultOptions(options: ts.Expression): boolean {
         return this.shouldEvaluateSideEffectfulVoidDefault(options);
     }
@@ -83573,6 +83630,7 @@ class Emitter {
     private emitDnsPromisesCall(call: ts.CallExpression, method: string): EmitResult {
         if (
             method !== "lookup" &&
+            method !== "resolve" &&
             method !== "resolve4" &&
             method !== "resolve6" &&
             method !== "lookupService" &&
@@ -83601,6 +83659,34 @@ class Emitter {
         }
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `dns.promises.${method} result must be Promise<T>`);
+        if (method === "resolve") {
+            if (call.arguments.length < 1) {
+                unsupported(call, "dns.promises.resolve expects hostname and optional rrtype");
+            }
+            const hostNode = call.arguments[0]!;
+            const rrtypeNode = call.arguments[1];
+            const rrtype = rrtypeNode ? this.dnsResolveTypeValue(rrtypeNode, "dns.promises.resolve") : "A";
+            const host = this.emitExpr(hostNode);
+            const rrtypeExpr = rrtypeNode ? this.emitExpr(rrtypeNode) : undefined;
+            const specs: SequencedCallArg[] = [{ value: host, target: T_STRING, node: hostNode }];
+            if (rrtypeNode && rrtypeExpr) {
+                specs.push({ value: rrtypeExpr, target: T_STRING, node: rrtypeNode });
+            }
+            specs.push(...this.ignoredArgumentSpecs(call.arguments, rrtypeNode ? 2 : 1));
+            return this.emitSequencedExpr(mapped, specs, (values) => {
+                const result = this.freshTemp("_dns");
+                const out = this.freshTemp("_dns_promise");
+                const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
+                const resultType = rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
+                const resolver = rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
+                return `({ ` +
+                    `${resultType} ${result} = ${resolver}(${values[0]}); ` +
+                    `tsc_promise_t* ${out}; ` +
+                    `if (${result}.error) { ${out} = tsc_promise_reject(tsc_value_string(${result}.error)); } else { ` +
+                    `${out} = tsc_promise_resolve(tsc_value_array(${addresses})); } ` +
+                    `${out}; })`;
+            });
+        }
         if (method === "lookupService") {
             if (call.arguments.length < 2) {
                 unsupported(call, `dns.promises.lookupService expects address and port`);
