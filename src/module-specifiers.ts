@@ -94,6 +94,16 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             isNamedImportIdentifier(id, ["buffer", "node:buffer"], "Buffer");
     };
 
+    const isStaticTextEncoderConstructorIdentifier = (id: ts.Identifier): boolean => {
+        return id.text === "TextEncoder" ||
+            isNamedImportIdentifier(id, ["util", "node:util"], "TextEncoder");
+    };
+
+    const isStaticTextDecoderConstructorIdentifier = (id: ts.Identifier): boolean => {
+        return id.text === "TextDecoder" ||
+            isNamedImportIdentifier(id, ["util", "node:util"], "TextDecoder");
+    };
+
     const resolve = (node: ts.Expression): string[] => {
         while (
             ts.isParenthesizedExpression(node) ||
@@ -1389,7 +1399,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const receiver = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(receiver)) return [];
         const ctor = unwrapStaticExpression(receiver.expression);
-        if (!ts.isIdentifier(ctor) || ctor.text !== "TextEncoder") return [];
+        if (!ts.isIdentifier(ctor) || !isStaticTextEncoderConstructorIdentifier(ctor)) return [];
         if ((receiver.arguments?.length ?? 0) > 0 || receiver.arguments?.some(ts.isSpreadElement)) return [];
         const values = !call.arguments[0] || isStaticUndefinedExpression(call.arguments[0])
             ? [""]
@@ -1469,7 +1479,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const receiver = unwrapStaticExpression(callee.expression);
         if (!ts.isNewExpression(receiver)) return [];
         const ctor = unwrapStaticExpression(receiver.expression);
-        if (!ts.isIdentifier(ctor) || ctor.text !== "TextDecoder") return [];
+        if (!ts.isIdentifier(ctor) || !isStaticTextDecoderConstructorIdentifier(ctor)) return [];
         if ((receiver.arguments?.length ?? 0) > 1 || receiver.arguments?.some(ts.isSpreadElement)) return [];
         const labelValues = !receiver.arguments?.[0] || isStaticUndefinedExpression(receiver.arguments[0])
             ? ["utf-8"]

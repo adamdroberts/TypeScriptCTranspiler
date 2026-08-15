@@ -2866,16 +2866,22 @@ interface UtilTypes {
 interface UtilModule {
     format(format?: any, ...args: any[]): string;
     types: UtilTypes;
+    TextEncoder: TextEncoderConstructor;
+    TextDecoder: TextDecoderConstructor;
 }
 declare module "util" {
     export function format(format?: any, ...args: any[]): string;
     export const types: UtilTypes;
+    export const TextEncoder: TextEncoderConstructor;
+    export const TextDecoder: TextDecoderConstructor;
     const defaultUtil: UtilModule;
     export default defaultUtil;
 }
 declare module "node:util" {
     export function format(format?: any, ...args: any[]): string;
     export const types: UtilTypes;
+    export const TextEncoder: TextEncoderConstructor;
+    export const TextDecoder: TextDecoderConstructor;
     const defaultUtil: UtilModule;
     export default defaultUtil;
 }
