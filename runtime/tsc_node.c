@@ -7303,7 +7303,8 @@ static bool tsc_fs_file_handle_read_file_options(
 static tsc_promise_t* tsc_fs_file_handle_read_file_start(
     tsc_fs_file_handle_t* handle,
     tsc_value_t owner_value,
-    tsc_array_t* args
+    tsc_array_t* args,
+    tsc_value_t signal
 ) {
     if (!handle || handle->closed || handle->fd < 0) {
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
@@ -7323,16 +7324,25 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
         ? value_ptr(owner_value)
         : NULL;
     task->want_buffer = want_buffer;
+    task->signal = signal;
     task->result_encoding = result_encoding;
     task->next = g_tsc_fs_read_file_async;
     g_tsc_fs_read_file_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
+    if (tsc_abort_signal_is_aborted(signal)) {
+        tsc_fs_read_file_async_abort(task);
+        tsc_fs_read_file_async_remove(task);
+        return promise;
+    }
     tsc_fs_read_file_async_read_next(task);
+    if (task->req_pending) {
+        tsc_abort_signal_add_callback(signal, tsc_fs_read_file_async_abort, task);
+    }
     return promise;
 }
 
 static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    return tsc_value_promise(tsc_fs_file_handle_read_file_start((tsc_fs_file_handle_t*)env, this_arg, args));
+    return tsc_value_promise(tsc_fs_file_handle_read_file_start((tsc_fs_file_handle_t*)env, this_arg, args, tsc_value_undefined()));
 }
 
 static tsc_value_t tsc_fs_file_handle_read_lines_result(tsc_value_t value, bool done) {
@@ -7508,7 +7518,8 @@ static tsc_value_t tsc_fs_file_handle_read_lines_async_iterator(void* env, tsc_v
     return state ? state->iterator : tsc_value_undefined();
 }
 
-static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options) {
+static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options, tsc_value_t* signal_out) {
+    if (signal_out) *signal_out = tsc_value_undefined();
     if (tsc_value_is_nullish(options)) return true;
     if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr(
@@ -7527,7 +7538,9 @@ static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options) {
             return false;
         }
     }
-    const char* unsupported[] = { "start", "end", "autoClose", "emitClose", "highWaterMark", "signal" };
+    tsc_value_t signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
+    if (signal_out && !tsc_value_is_nullish(signal)) *signal_out = signal;
+    const char* unsupported[] = { "start", "end", "autoClose", "emitClose", "highWaterMark" };
     for (size_t i = 0; i < sizeof(unsupported) / sizeof(unsupported[0]); i++) {
         tsc_value_t value = tsc_value_get_prop(options, tsc_str_from_cstr(unsupported[i]));
         if (!tsc_value_is_nullish(value)) {
@@ -7542,7 +7555,8 @@ static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options) {
 
 static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (!tsc_fs_file_handle_read_lines_options(options)) return tsc_value_undefined();
+    tsc_value_t signal = tsc_value_undefined();
+    if (!tsc_fs_file_handle_read_lines_options(options, &signal)) return tsc_value_undefined();
 
     tsc_fs_file_handle_read_lines_t* state =
         (tsc_fs_file_handle_read_lines_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_read_lines_t));
@@ -7583,7 +7597,8 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
     state->source = tsc_fs_file_handle_read_file_start(
         (tsc_fs_file_handle_t*)env,
         this_arg,
-        read_args
+        read_args,
+        signal
     );
     if (!state->source) {
         state->failed = true;

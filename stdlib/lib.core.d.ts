@@ -1642,6 +1642,7 @@ interface FSFileHandleReadFileStringOptions {
 }
 interface FSFileHandleReadLinesOptions {
     encoding?: FSReadFileStringEncoding | null;
+    signal?: any;
 }
 interface FSFileHandleReadLinesIterator {
     next(...ignored: any[]): Promise<IteratorResult<string, void>>;

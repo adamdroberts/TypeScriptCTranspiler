@@ -1,0 +1,1 @@
+{"description":"FileHandle.readLines rejects pending and pre-aborted next calls through AbortSignal while preserving the handle"}
