@@ -274,6 +274,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (trimText.length > 0) return trimText;
             const normalizeText = resolveStaticStringNormalizeCall(node);
             if (normalizeText.length > 0) return normalizeText;
+            const wellFormedText = resolveStaticStringWellFormedCall(node);
+            if (wellFormedText.length > 0) return wellFormedText;
             const repeatText = resolveStaticStringRepeatCall(node);
             if (repeatText.length > 0) return repeatText;
             const padText = resolveStaticStringPadCall(node);
@@ -5466,6 +5468,25 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             }
         }
         return dedupe(out);
+    };
+
+    const resolveStaticStringWellFormedCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length !== 0) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee)) return [];
+        const method = callee.name.text;
+        if (method !== "isWellFormed" && method !== "toWellFormed") return [];
+        const values = resolve(callee.expression);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => {
+            const wellFormedValue = value as string & {
+                isWellFormed(): boolean;
+                toWellFormed(): string;
+            };
+            return method === "isWellFormed"
+                ? String(wellFormedValue.isWellFormed())
+                : wellFormedValue.toWellFormed();
+        }));
     };
 
     const resolveStaticStringRepeatCall = (call: ts.CallExpression): string[] => {
