@@ -89,6 +89,28 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return false;
     };
 
+    const isStaticUrlConstructorExpression = (expr: ts.Expression): boolean => {
+        const unwrapped = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(unwrapped)) return isStaticUrlConstructorIdentifier(unwrapped);
+        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "URL") return false;
+        const receiver = unwrapStaticExpression(unwrapped.expression);
+        return ts.isIdentifier(receiver) && (
+            isDefaultImportIdentifier(receiver, ["url", "node:url"]) ||
+            isNamespaceImportIdentifier(receiver, ["url", "node:url"])
+        );
+    };
+
+    const isStaticUrlSearchParamsConstructorExpression = (expr: ts.Expression): boolean => {
+        const unwrapped = unwrapStaticExpression(expr);
+        if (ts.isIdentifier(unwrapped)) return isStaticUrlSearchParamsConstructorIdentifier(unwrapped);
+        if (!ts.isPropertyAccessExpression(unwrapped) || unwrapped.name.text !== "URLSearchParams") return false;
+        const receiver = unwrapStaticExpression(unwrapped.expression);
+        return ts.isIdentifier(receiver) && (
+            isDefaultImportIdentifier(receiver, ["url", "node:url"]) ||
+            isNamespaceImportIdentifier(receiver, ["url", "node:url"])
+        );
+    };
+
     const isStaticBufferConstructorIdentifier = (id: ts.Identifier): boolean => {
         return id.text === "Buffer" ||
             isNamedImportIdentifier(id, ["buffer", "node:buffer"], "Buffer");
@@ -1064,7 +1086,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "canParse") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || !isStaticUrlConstructorIdentifier(target)) return [];
+        if (!isStaticUrlConstructorExpression(target)) return [];
 
         const inputs = resolve(call.arguments[0]!);
         if (inputs.length === 0) return [];
@@ -1098,7 +1120,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         }
         if (!ts.isNewExpression(current) || current.arguments?.some(ts.isSpreadElement)) return [];
         const target = unwrapStaticExpression(current.expression);
-        if (!ts.isIdentifier(target) || !isStaticUrlConstructorIdentifier(target)) return [];
+        if (!isStaticUrlConstructorExpression(target)) return [];
         const args = current.arguments ?? [];
         if (args.length < 1 || args.length > 2) return [];
         if (args.length === 2 && isStaticUndefinedExpression(args[1]!)) return [];
@@ -4786,7 +4808,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (!ts.isIdentifier(ctor)) return null;
         if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return null;
         const arg = source.arguments?.[0];
-        if (ctor.text === "URLSearchParams") return resolveStaticArrayFromUrlSearchParamsSource(arg);
+        if (isStaticUrlSearchParamsConstructorExpression(ctor)) return resolveStaticArrayFromUrlSearchParamsSource(arg);
         if (ctor.text !== "Map") return null;
         if (!arg || isStaticUndefinedExpression(arg)) return ts.factory.createArrayLiteralExpression([]);
         const entries = resolveCollectionExpression(arg);
@@ -4798,7 +4820,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const source = unwrapStaticExpression(expr);
         if (ts.isNewExpression(source)) {
             const ctor = unwrapStaticExpression(source.expression);
-            if (!ts.isIdentifier(ctor) || !isStaticUrlSearchParamsConstructorIdentifier(ctor)) return [];
+            if (!isStaticUrlSearchParamsConstructorExpression(ctor)) return [];
             if ((source.arguments?.length ?? 0) > 1 || source.arguments?.some(ts.isSpreadElement)) return [];
             const arg = source.arguments?.[0];
             return !arg || isStaticUndefinedExpression(arg) ? [""] : resolve(arg);

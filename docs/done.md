@@ -1138,6 +1138,7 @@ Full-suite verification, when deliberately needed: `TSC2C_NO_GC=1 bun tests/e2e/
 - Finite dynamic `require(...)` proofs resolve static `buffer.transcode(...)` Buffer results for UTF-8, hex, and base64 conversions across named, default, and namespace `buffer` / `node:buffer` imports. Test: `dynamic_require_static_buffer_transcode`
 - Finite dynamic `require(...)` proofs accept named `Buffer` imports from `buffer` / `node:buffer` for static construction, encoding, concatenation, and byte-length fragments. Test: `dynamic_require_static_buffer_named_import`
 - Finite dynamic `require(...)` proofs accept default and namespace `buffer` / `node:buffer` module objects for static `Buffer` construction, composition, comparison, and inspection fragments. Test: `dynamic_require_static_buffer_module_import`
+- Finite dynamic `require(...)` proofs accept default and namespace `url` / `node:url` module objects for static `URL` and `URLSearchParams` metadata, parsing, and collection fragments. Test: `dynamic_require_static_url_module_import`
 - Finite dynamic `require(...)` proofs accept named `TextEncoder` / `TextDecoder` imports from `util` / `node:util` for static UTF-8 encode/decode fragments. Test: `dynamic_require_static_text_encoder_named_import`
 - Finite dynamic `require(...)` proofs accept default and namespace `TextEncoder` / `TextDecoder` module objects from `util` / `node:util` for static UTF-8 encode/decode fragments. Test: `dynamic_require_static_text_encoder_module_import`
 - Finite dynamic `require(...)` proofs resolve static `String.prototype.split(...)[index]` specifier expressions, including const separator/index aliases and finite numeric index unions. Test: `dynamic_require_static_string_split`
@@ -4659,6 +4660,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `dynamic_require_static_url_search_params_get_has` | static new URLSearchParams(...).get(...) and .has(...) calls over static query inputs and static names/values provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_url_credentials` | static new URL(...).username and .password credential metadata provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_url_import_constructors` | named URL and URLSearchParams imports from url/node:url provide finite AOT dynamic require alternatives |
+| `dynamic_require_static_url_module_import` | default and namespace url/node:url module imports provide finite AOT dynamic require alternatives for URL and URLSearchParams fragments |
 | `dynamic_require_static_url_search_params_property` | static new URL(...).searchParams fragments provide finite AOT dynamic require alternatives |
 | `dynamic_require_static_url_search_params_sorted_collections` | static URLSearchParams entry collections compose through default sort, indexed reads, and Object.fromEntries for finite AOT dynamic require alternatives |
 | `dynamic_require_static_url_search_params` | static new URLSearchParams(...).toString() calls over empty, undefined, and static string query inputs provide finite AOT dynamic require alternatives |
