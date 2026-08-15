@@ -3794,6 +3794,13 @@ static void tsc_net_server_poll(void* env) {
             close(accepted);
             continue;
         }
+        tsc_value_t max_connections_value = tsc_value_get_prop(server->event.value, tsc_str_from_lit("maxConnections", 14));
+        if (tsc_value_number_is_safe_integer(max_connections_value) &&
+            tsc_value_as_num(max_connections_value) > 0.0 &&
+            server->connection_count >= (uint64_t)tsc_value_as_num(max_connections_value)) {
+            close(accepted);
+            continue;
+        }
         tsc_net_socket_t* socket = NULL;
         tsc_value_t socket_value = tsc_net_socket_new(accepted, false, false, &socket);
         socket->server = server;
@@ -3824,6 +3831,7 @@ static tsc_value_t tsc_net_create_server_with_tls(tsc_value_t connection_listene
     tsc_net_server_add_methods(object, server);
     tsc_object_set(object, tsc_str_from_lit("listening", 9), tsc_value_bool(false));
     tsc_object_set(object, tsc_str_from_lit("connections", 11), tsc_value_num(0.0));
+    tsc_object_set(object, tsc_str_from_lit("maxConnections", 14), tsc_value_num(0.0));
     if (tsc_value_is_callable(connection_listener)) {
         tsc_net_register_listener(&server->event, "connection", connection_listener, false);
     }

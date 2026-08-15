@@ -422,7 +422,7 @@ The emitter stringifies each argument to `tsc_str_t*` at the call site, then inv
 
 | Symbol | Signature | JS equivalent |
 |--------|-----------|---------------|
-| `tsc_net_create_server(connection_listener)` | `tsc_value_t` | `net.createServer(connectionListener?)` — creates a timer-polled POSIX IPv4 server with dynamic EventEmitter-compatible lifecycle methods, `listen`, `close`, `address`, synchronized `listening` and live `connections` state, and asynchronous `getConnections(callback)` |
+| `tsc_net_create_server(connection_listener)` | `tsc_value_t` | `net.createServer(connectionListener?)` — creates a timer-polled POSIX IPv4 server with dynamic EventEmitter-compatible lifecycle methods, `listen`, `close`, `address`, synchronized `listening`, assignment-compatible `maxConnections` admission limits, live `connections` state, and asynchronous `getConnections(callback)` |
 | `tsc_net_connect(port, host, connect_listener)` | `tsc_value_t` | `net.connect` / `net.createConnection` — creates a nonblocking POSIX IPv4 socket, emits `connect` / `data` / `end` / `close` / `error` / `timeout` / `finish`, and exposes UTF-8, string/Buffer write/end callbacks, half-close, `destroy(error?, callback?)` error-before-close delivery, endpoint metadata, byte counters, `setNoDelay` / `setKeepAlive` controls, chainable idle `setTimeout` scheduling, `pause` / `resume` read gates, lifecycle flags, and endpoint-family metadata |
 | `tsc_net_tls_connect(port, host, reject_unauthorized, servername, connect_listener)` | `tsc_value_t` | Internal HTTPS transport helper — creates a nonblocking POSIX IPv4 socket, negotiates an OpenSSL client session, and emits the underlying socket lifecycle after the TLS handshake |
 
