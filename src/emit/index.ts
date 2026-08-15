@@ -69439,6 +69439,15 @@ class Emitter {
         });
     }
 
+    private typedArrayBindingHasDirectNestedDefault(pattern: ts.ArrayBindingPattern): boolean {
+        return pattern.elements.some((element) =>
+            !!element &&
+            ts.isBindingElement(element) &&
+            !!element.initializer &&
+            (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)),
+        );
+    }
+
     private emitTypedObjectRestForOf(
         buf: CBuf,
         sourceC: string,
@@ -69591,13 +69600,15 @@ class Emitter {
             const sourceValue = this.typedObjectBindingAccess(sourceC, [
                 { kind: "index", value: index, type: elementType },
             ]);
+            const nestedSource = (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
+                element.initializer
+                ? (() => {
+                    const fallback = this.emitExpr(element.initializer!);
+                    const fallbackC = this.coerce(fallback, elementType, element.initializer!);
+                    return `(${sourceValue} != NULL ? ${sourceValue} : ${fallbackC})`;
+                })()
+                : sourceValue;
             if (ts.isObjectBindingPattern(element.name)) {
-                if (element.initializer) {
-                    unsupported(
-                        element,
-                        "typed for-of array object bindings do not support a default for the nested object",
-                    );
-                }
                 if (elementType.kind !== "class" && elementType.kind !== "array") {
                     unsupported(
                         element.name,
@@ -69607,7 +69618,7 @@ class Emitter {
                 this.emitTypedObjectBindingsForOf(
                     buf,
                     element.name,
-                    sourceValue,
+                    nestedSource,
                     elementType,
                     elementTsType,
                     assign,
@@ -69615,16 +69626,10 @@ class Emitter {
                 continue;
             }
             if (ts.isArrayBindingPattern(element.name)) {
-                if (element.initializer) {
-                    unsupported(
-                        element,
-                        "typed for-of arrays do not support a default for the nested array",
-                    );
-                }
                 this.emitTypedArrayBindingPatternForOf(
                     buf,
                     element.name,
-                    sourceValue,
+                    nestedSource,
                     elementType,
                     elementTsType,
                     assign,
@@ -69665,7 +69670,10 @@ class Emitter {
         sourceTsType: ts.Type,
         assign: (descriptor: ForOfTypedObjectBindingDescriptor, value: EmitResult) => void,
     ): void {
-        if (this.typedArrayBindingHasRuntimeComputedKey(pattern)) {
+        if (
+            this.typedArrayBindingHasRuntimeComputedKey(pattern) ||
+            this.typedArrayBindingHasDirectNestedDefault(pattern)
+        ) {
             this.emitTypedArrayBindingPatternForOf(
                 buf,
                 pattern,
@@ -70039,32 +70047,24 @@ class Emitter {
                 c: `tsc_value_get_index(${sourceC}, ${index}.0)`,
                 ty: T_VALUE,
             };
+            const nestedValue = (ts.isObjectBindingPattern(element.name) || ts.isArrayBindingPattern(element.name)) &&
+                element.initializer
+                ? this.forOfBindingValueWithDefault(element, value)
+                : value;
             if (ts.isObjectBindingPattern(element.name)) {
-                if (element.initializer) {
-                    unsupported(
-                        element,
-                        "dynamic for-of array object bindings do not support a default for the nested object",
-                    );
-                }
                 this.emitDynamicObjectBindingsForOf(
                     buf,
                     element.name,
-                    value.c,
+                    nestedValue.c,
                     (descriptor, nestedValue) => assign(descriptor.identifier, nestedValue),
                 );
                 continue;
             }
             if (ts.isArrayBindingPattern(element.name)) {
-                if (element.initializer) {
-                    unsupported(
-                        element,
-                        "dynamic for-of arrays do not support a default for the nested array",
-                    );
-                }
                 this.emitDynamicArrayBindingPatternForOf(
                     buf,
                     element.name,
-                    value.c,
+                    nestedValue.c,
                     assign,
                 );
                 continue;
