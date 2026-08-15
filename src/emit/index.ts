@@ -53,6 +53,7 @@ import {
     filterSpecifiersByStaticAffix,
     staticStringExpressionText,
     staticStringExpressionTexts,
+    staticStringReplacementCallbackText,
 } from "../module-specifiers";
 import {
     type NativeAddonManifest,
@@ -88285,6 +88286,16 @@ class Emitter {
             ...specs,
             ...this.ignoredArgumentSpecs(args, consumed),
         ];
+        const replacementArgument = (expr: ts.Expression): EmitResult => {
+            const text = staticStringReplacementCallbackText(expr);
+            if (text === null) return this.emitExpr(expr);
+            // Runtime replacement strings interpret `$` tokens; callback results are literal.
+            const escaped = text.replaceAll("$", "$$");
+            return {
+                c: `tsc_str_from_lit("${escapeCString(escaped)}", ${utf8ByteLen(escaped)})`,
+                ty: T_STRING,
+            };
+        };
         switch (method) {
             case "codePointAt": {
                 const idx = optionalNumberArg(0, "0.0");
@@ -88576,7 +88587,7 @@ class Emitter {
             case "replace": {
                 if (args.length < 2) unsupported(call, "replace expects at least 2 args");
                 const s = this.emitExpr(args[0]!);
-                const r = this.emitExpr(args[1]!);
+                const r = replacementArgument(args[1]!);
                 if (s.ty.kind === "regexp") {
                     return this.emitSequencedExpr(
                         T_STRING,
@@ -88604,7 +88615,7 @@ class Emitter {
             case "replaceAll": {
                 if (args.length < 2) unsupported(call, "replaceAll expects at least 2 args");
                 const s = this.emitExpr(args[0]!);
-                const r = this.emitExpr(args[1]!);
+                const r = replacementArgument(args[1]!);
                 if (s.ty.kind === "regexp") {
                     // Force global semantics for replaceAll even if /g isn't on the pattern.
                     // Simpler: just call tsc_str_replace_regex; works for /g regexes.

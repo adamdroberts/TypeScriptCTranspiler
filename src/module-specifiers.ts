@@ -5897,8 +5897,27 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const values = resolve(callee.expression);
         if (values.length === 0) return [];
 
-        const replacementValues = resolve(call.arguments[1]!);
+        const replacementArgument = unwrapStaticExpression(call.arguments[1]!);
+        const replacementCallback = ts.isArrowFunction(replacementArgument) ||
+            ts.isFunctionExpression(replacementArgument);
+        const replacementCallbackText = replacementCallback
+            ? staticStringReplacementCallbackText(replacementArgument)
+            : null;
+        if (replacementCallback && replacementCallbackText === null) return [];
+        const replacementValues = replacementCallback
+            ? [replacementCallbackText!]
+            : resolve(call.arguments[1]!);
         if (replacementValues.length === 0) return [];
+        const replaceValue = (value: string, search: string | RegExp, replacement: string): string => {
+            if (replacementCallback) {
+                return method === "replace"
+                    ? value.replace(search, () => replacement)
+                    : value.replaceAll(search, () => replacement);
+            }
+            return method === "replace"
+                ? value.replace(search, replacement)
+                : value.replaceAll(search, replacement);
+        };
 
         const out: string[] = [];
         const regexps = resolveFreshStaticRegExpRecords(call.arguments[0]!);
@@ -5907,9 +5926,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                 for (const regexp of regexps) {
                     for (const replacement of replacementValues) {
                         try {
-                            out.push(method === "replace"
-                                ? value.replace(regexp, replacement)
-                                : value.replaceAll(regexp, replacement));
+                            out.push(replaceValue(value, regexp, replacement));
                         } catch {
                             return [];
                         }
@@ -5925,9 +5942,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         for (const value of values) {
             for (const search of searchValues) {
                 for (const replacement of replacementValues) {
-                    out.push(method === "replace"
-                        ? value.replace(search, replacement)
-                        : value.replaceAll(search, replacement));
+                    out.push(replaceValue(value, search, replacement));
                     if (out.length > MAX_STATIC_STRING_ALTERNATIVES) return [];
                 }
             }
@@ -6099,6 +6114,23 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     };
 
     return dedupe(resolve(expr));
+}
+
+export function staticStringReplacementCallbackText(expr: ts.Expression): string | null {
+    const callback = unwrapStaticExpression(expr);
+    if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return null;
+    if (
+        callback.parameters.length !== 0 ||
+        ts.getModifiers(callback)?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+    ) {
+        return null;
+    }
+    const body = ts.isBlock(callback.body)
+        ? callback.body.statements.length === 1 && ts.isReturnStatement(callback.body.statements[0]!)
+            ? callback.body.statements[0]!.expression
+            : null
+        : callback.body;
+    return body ? staticStringExpressionText(body) : null;
 }
 
 export function staticStringExpressionAffix(expr: ts.Expression): { prefix: string; suffix: string } | null {
