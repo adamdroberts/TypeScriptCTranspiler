@@ -3764,13 +3764,13 @@ static bool tsc_net_resolve_ipv4(const tsc_str_t* host, struct in_addr* out) {
     return ok;
 }
 
-static bool tsc_net_resolve_endpoint(const tsc_str_t* host, struct sockaddr_storage* out, socklen_t* out_len) {
+static bool tsc_net_resolve_endpoint(const tsc_str_t* host, int family, struct sockaddr_storage* out, socklen_t* out_len) {
     if (!out || !out_len) return false;
     const tsc_str_t* value = host ? host : tsc_str_from_lit("127.0.0.1", 9);
     char* cstr = cstr_dup(value);
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = family;
     hints.ai_socktype = SOCK_STREAM;
     struct addrinfo* result = NULL;
     bool ok = false;
@@ -4660,7 +4660,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     if (server->fd >= 0) return this_arg;
     struct sockaddr_storage endpoint;
     socklen_t endpoint_len = 0;
-    if (!tsc_net_resolve_endpoint(host, &endpoint, &endpoint_len)) {
+    if (!tsc_net_resolve_endpoint(host, AF_UNSPEC, &endpoint, &endpoint_len)) {
         tsc_throw_str(tsc_str_from_cstr("net.Server.listen host could not be resolved"));
     }
     int fd = socket(endpoint.ss_family, SOCK_STREAM, 0);
@@ -4795,7 +4795,7 @@ tsc_value_t tsc_net_create_server_tls(tsc_value_t connection_listener, void* tls
     return tsc_net_create_server_with_tls(connection_listener, (SSL_CTX*)tls_ctx);
 }
 
-static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
+static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int address_family, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
     }
@@ -4804,7 +4804,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_st
     }
     struct sockaddr_storage endpoint;
     socklen_t endpoint_len = 0;
-    if (!tsc_net_resolve_endpoint(host, &endpoint, &endpoint_len)) {
+    if (!tsc_net_resolve_endpoint(host, address_family, &endpoint, &endpoint_len)) {
         tsc_throw_str(tsc_str_from_cstr("net.connect host could not be resolved"));
     }
     bool local_bind = local_address != NULL || local_port_set;
@@ -4812,7 +4812,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_st
     socklen_t local_endpoint_len = 0;
     if (local_bind) {
         if (local_address) {
-            if (!tsc_net_resolve_endpoint(local_address, &local_endpoint, &local_endpoint_len)) {
+            if (!tsc_net_resolve_endpoint(local_address, endpoint.ss_family, &local_endpoint, &local_endpoint_len)) {
                 tsc_throw_str(tsc_str_from_cstr("net.connect localAddress could not be resolved"));
             }
             if (local_endpoint.ss_family != endpoint.ss_family) {
@@ -4876,7 +4876,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_st
 }
 
 tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
-    return tsc_net_connect_internal(port, host, NULL, 0.0, false, 0.0, false, connect_listener, NULL);
+    return tsc_net_connect_internal(port, host, AF_UNSPEC, NULL, 0.0, false, 0.0, false, connect_listener, NULL);
 }
 
 tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_listener) {
@@ -4894,6 +4894,16 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
         if (!host) {
             tsc_throw_str(tsc_str_from_cstr("net.connect options.host must be a string"));
         }
+    }
+    tsc_value_t family_value = tsc_value_get_prop(options, tsc_str_from_lit("family", 6));
+    int address_family = AF_UNSPEC;
+    if (!tsc_value_is_nullish(family_value)) {
+        if (!tsc_value_number_is_finite(family_value) || !tsc_value_number_is_integer(family_value) ||
+            (tsc_value_as_num(family_value) != 0.0 && tsc_value_as_num(family_value) != 4.0 && tsc_value_as_num(family_value) != 6.0)) {
+            tsc_throw_str(tsc_str_from_cstr("net.connect options.family must be 0, 4, or 6"));
+        }
+        address_family = tsc_value_as_num(family_value) == 4.0 ? AF_INET :
+            (tsc_value_as_num(family_value) == 6.0 ? AF_INET6 : AF_UNSPEC);
     }
     tsc_value_t local_address_value = tsc_value_get_prop(options, tsc_str_from_lit("localAddress", 12));
     tsc_str_t* local_address = NULL;
@@ -4924,7 +4934,7 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
         timeout_ms = tsc_value_as_num(timeout_value);
         timeout_set = true;
     }
-    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, local_address, local_port, local_port_set, timeout_ms, timeout_set, connect_listener, NULL);
+    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, address_family, local_address, local_port, local_port_set, timeout_ms, timeout_set, connect_listener, NULL);
 }
 
 static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
@@ -6462,7 +6472,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
         client->socket = tls
             ? tsc_net_tls_connect_internal(port, hostname, reject_unauthorized, servername, connect_listener, &client->native_socket)
-            : tsc_net_connect_internal(port, hostname, NULL, 0.0, false, 0.0, false, connect_listener, &client->native_socket);
+            : tsc_net_connect_internal(port, hostname, AF_UNSPEC, NULL, 0.0, false, 0.0, false, connect_listener, &client->native_socket);
         if (client->poolable) {
             client->pool_entry = tsc_http_client_pool_create(client, hostname, port, tls, reject_unauthorized, servername);
         }

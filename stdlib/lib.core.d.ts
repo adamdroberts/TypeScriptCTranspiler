@@ -2659,6 +2659,7 @@ interface NetSocket {
 interface NetConnectOptions {
     port: number;
     host?: string;
+    family?: number;
     localAddress?: string;
     localPort?: number;
     timeout?: number;
