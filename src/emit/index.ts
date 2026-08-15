@@ -90578,11 +90578,12 @@ class Emitter {
     private emitFsDirOptions(
         options: ts.Expression | undefined,
         label: string,
-    ): { recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer"; bufferSize: number } {
-        if (!options || this.isUndefinedLikeExpression(options)) return { recursive: false, encoding: "utf8", bufferSize: 32 };
+        allowSignal = false,
+    ): { recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer"; bufferSize: number; signal: SequencedCallArg | null } {
+        if (!options || this.isUndefinedLikeExpression(options)) return { recursive: false, encoding: "utf8", bufferSize: 32, signal: null };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions) || resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
-            return { recursive: false, encoding: "utf8", bufferSize: 32 };
+            return { recursive: false, encoding: "utf8", bufferSize: 32, signal: null };
         }
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
@@ -90590,11 +90591,23 @@ class Emitter {
         let recursive = false;
         let encoding: "utf8" | "hex" | "base64" | "buffer" = "utf8";
         let bufferSize = 32;
+        let signal: SequencedCallArg | null = null;
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support recursive, encoding, and bufferSize property assignments`);
+                unsupported(prop, `${label} options only support recursive, encoding, bufferSize, and signal property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
+            if (key === "signal") {
+                if (!allowSignal) unsupported(prop.name, `${label} does not support a signal option`);
+                const signalNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(signalNode)) {
+                    signal = null;
+                    continue;
+                }
+                const value = this.emitExpr(prop.initializer);
+                signal = { value, target: T_VALUE, node: prop.initializer };
+                continue;
+            }
             if (key === "encoding") {
                 const encodingNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
                 if (this.isUndefinedExpression(encodingNode) || encodingNode.kind === ts.SyntaxKind.NullKeyword) {
@@ -90640,7 +90653,7 @@ class Emitter {
             }
             recursive = value;
         }
-        return { recursive, encoding, bufferSize };
+        return { recursive, encoding, bufferSize, signal };
     }
 
     private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; copy: boolean; mode: SequencedCallArg } {
@@ -91390,18 +91403,24 @@ class Emitter {
                 ));
             }
             case "opendir": {
-                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional { recursive, encoding, bufferSize } options");
-                const options = this.emitFsDirOptions(args[1], "fs.promises.opendir");
+                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional { recursive, encoding, bufferSize, signal } options");
+                const options = this.emitFsDirOptions(args[1], "fs.promises.opendir", true);
                 const pathExpr = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
-                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                const sideEffectfulVoidOptions = Boolean(args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1]));
+                if (sideEffectfulVoidOptions) {
                     optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
                 }
+                if (options.signal) optionSpecs.push(options.signal);
                 return this.emitSequencedExpr(mapped, [
                     this.fsPathSpec(pathExpr, args[0]!, "fs.promises.opendir path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => {
+                ], (values) => {
+                    const path = values[0]!;
+                    const signal = options.signal
+                        ? values[1 + (sideEffectfulVoidOptions ? 1 : 0)]!
+                        : "tsc_value_undefined()";
                     /* The broad async-body fallback cannot resume a pending
                      * await after arbitrary statements. Keep its historical
                      * immediately-settled path while Promise-chain call sites
@@ -91410,8 +91429,8 @@ class Emitter {
                     const useLibuv = !awaitedDirectly;
                     if (useLibuv) this.usesLibuv = true;
                     return settle(!useLibuv
-                        ? `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize}))`
-                        : `tsc_fs_promises_opendir_async(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize})`);
+                        ? `tsc_promise_resolve(tsc_fs_opendir_sync(${path}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize}))`
+                        : `tsc_fs_promises_opendir_async(${path}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize}, ${signal})`);
                 });
             }
             case "readFile": {

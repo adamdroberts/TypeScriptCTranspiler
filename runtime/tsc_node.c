@@ -12051,6 +12051,9 @@ typedef struct tsc_fs_dir_open_async {
     tsc_str_t* encoding;
     size_t buffer_size;
     bool recursive;
+    tsc_value_t signal;
+    bool aborted;
+    bool req_pending;
     struct tsc_fs_dir_open_async* next;
 } tsc_fs_dir_open_async_t;
 
@@ -12856,6 +12859,17 @@ static void tsc_fs_dir_open_async_remove(tsc_fs_dir_open_async_t* task) {
     }
 }
 
+static void tsc_fs_dir_open_async_abort(void* env) {
+    tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)env;
+    if (!task || task->state || task->aborted) return;
+    task->aborted = true;
+    tsc_promise_reject_in_place(
+        task->promise,
+        tsc_value_get_prop(task->signal, tsc_str_from_lit("reason", 6))
+    );
+    if (task->req_pending) (void)uv_cancel((void*)&task->req);
+}
+
 static void tsc_fs_dir_uv_start_child(tsc_fs_dir_t* state, tsc_fs_dirent_t* dirent) {
     if (!state || !state->recursive || state->uv_child_open_pending || !dirent) return;
     const char* parent_path = state->current_path
@@ -12904,6 +12918,14 @@ static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
         tsc_fs_dir_uv_pump(state);
         return;
     }
+    task->req_pending = false;
+    if (task->aborted) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_dir_open_async_remove(task);
+        free(task->path);
+        task->path = NULL;
+        return;
+    }
     if (result < 0 || !uv_dir) {
         uv_fs_req_cleanup(req);
         tsc_promise_reject_in_place(task->promise, tsc_fs_dir_uv_error("fs.promises.opendir: could not open dir"));
@@ -12931,7 +12953,7 @@ static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
     free(task->path);
 }
 
-tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
+tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size, tsc_value_t signal) {
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_open_async_t));
     memset(task, 0, sizeof(*task));
@@ -12940,20 +12962,38 @@ tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursi
     task->encoding = (tsc_str_t*)encoding;
     task->buffer_size = buffer_size > 0 ? buffer_size : 32;
     task->recursive = recursive;
+    task->signal = signal;
     task->next = g_tsc_fs_dir_open_async;
     g_tsc_fs_dir_open_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
+    if (tsc_abort_signal_is_aborted(signal)) {
+        tsc_fs_dir_open_async_abort(task);
+        tsc_fs_dir_open_async_remove(task);
+        free(task->path);
+        task->path = NULL;
+        return promise;
+    }
     int rc = uv_fs_opendir(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_dir_open_async_cb);
     if (rc < 0) {
+        task->req_pending = false;
         uv_fs_req_cleanup(&task->req);
         tsc_promise_reject_in_place(promise, tsc_fs_dir_uv_error("fs.promises.opendir: could not open dir"));
         tsc_fs_dir_open_async_remove(task);
         free(task->path);
+        task->path = NULL;
+    } else {
+        task->req_pending = true;
+        tsc_abort_signal_add_callback(signal, tsc_fs_dir_open_async_abort, task);
     }
     return promise;
 }
 #else
-tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
+tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size, tsc_value_t signal) {
+    if (tsc_abort_signal_is_aborted(signal)) {
+        return tsc_promise_reject(
+            tsc_value_get_prop(signal, tsc_str_from_lit("reason", 6))
+        );
+    }
     return tsc_promise_resolve(tsc_fs_opendir_sync(path, recursive, encoding, buffer_size));
 }
 #endif

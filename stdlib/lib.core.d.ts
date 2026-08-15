@@ -1399,6 +1399,7 @@ interface FSDirOptions {
     recursive?: boolean;
     encoding?: "utf8" | "utf-8" | "hex" | "base64" | "buffer" | null;
     bufferSize?: number;
+    signal?: any;
 }
 interface FSDir {
     readonly path: string;
