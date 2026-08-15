@@ -48886,7 +48886,13 @@ class Emitter {
         thisValue: EmitResult | null,
     ): boolean {
         if (body.statements.length !== 2) return false;
-        const loop = body.statements[0];
+        const loopStatement = body.statements[0];
+        const labeledLoop = loopStatement && ts.isLabeledStatement(loopStatement) &&
+            ts.isForOfStatement(loopStatement.statement)
+            ? loopStatement
+            : null;
+        const loop = labeledLoop ? labeledLoop.statement : loopStatement;
+        const loopLabel = labeledLoop ? labeledLoop.label.text : null;
         const result = body.statements[1];
         const resultIsThrow = !!result && ts.isThrowStatement(result);
         if (!loop || !result || !ts.isForOfStatement(loop) || !loop.awaitModifier ||
@@ -49157,8 +49163,12 @@ class Emitter {
         };
         const controlFor = (statement: ts.Statement | undefined): BodyControl | null => {
             if (!statement) return null;
-            if (ts.isContinueStatement(statement)) return statement.label ? null : "continue";
-            if (ts.isBreakStatement(statement)) return statement.label ? null : "break";
+            if (ts.isContinueStatement(statement)) {
+                return statement.label && statement.label.text !== loopLabel ? null : "continue";
+            }
+            if (ts.isBreakStatement(statement)) {
+                return statement.label && statement.label.text !== loopLabel ? null : "break";
+            }
             if (ts.isReturnStatement(statement)) return "return";
             if (ts.isThrowStatement(statement)) return "throw";
             return null;
@@ -49730,8 +49740,10 @@ class Emitter {
                 ts.isClassLike(node) ||
                 ts.isReturnStatement(node) ||
                 (ts.isThrowStatement(node) && !(caughtThrowDepth > 0 || catchThrowDepth > 0 || finalizerDepth > 0)) ||
-                (ts.isBreakStatement(node) && loopDepth === 0 && switchDepth === 0) ||
-                (ts.isContinueStatement(node) && loopDepth === 0)
+                (ts.isBreakStatement(node) && loopDepth === 0 && switchDepth === 0 &&
+                    (!node.label || node.label.text !== loopLabel)) ||
+                (ts.isContinueStatement(node) && loopDepth === 0 &&
+                    (!node.label || node.label.text !== loopLabel))
             ) {
                 bodySupported = false;
                 return;

@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await lowering supports matching labeled break and continue control over events.on iterators"
+}

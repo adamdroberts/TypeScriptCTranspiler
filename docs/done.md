@@ -1,6 +1,7 @@
 # Implemented features
 
 - CommonJS local object-returning factories now accept recursively `const`-aliased static `require(...)` arguments, preserving factory-parameter member reads and finite named/default/namespace AOT metadata. Test: `node_modules_commonjs_module_exports_factory_argument_alias_object`.
+- Bounded async `for await...of` consumers now accept one labeled outer loop around the supported `events.on(...)` continuation shape, routing matching `break label` and `continue label` statements through the existing iterator-close protocol while rejecting unrelated labels. Test: `async_for_await_events_on_labeled_control`.
 - Finite dynamic `require(...)` proofs now materialize static global-RegExp `String.prototype.matchAll()` collections through `Array.from(...)`, preserving full matches, captures, nested indexing, and collection length for AOT module edges. Test: `dynamic_require_static_string_match_all`.
 - Finite dynamic `require(...)` proofs now resolve bounded `String.raw(...)` call templates from static `raw` arrays, finite substitutions, and JavaScript's missing-substitution `undefined` behavior. Test: `dynamic_require_static_string_raw_call`.
 - Finite dynamic `require(...)` proofs now resolve static string `.length` reads, including lengths of `String(...)` and `String.raw(...)` results. Test: `dynamic_require_static_string_length`.
@@ -3443,6 +3444,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `event_emitter_on_watermark_backpressure` | module-level events.on high/low watermark pause/resume thresholds and iterator-return cleanup |
 | `async_for_await_events_on` | bounded for-await lowering over a dynamic events.on iterator with synchronous body and iterator return |
 | `async_for_await_events_on_control` | bounded for-await direct synchronous break and continue paths over events.on iterators |
+| `async_for_await_events_on_labeled_control` | bounded for-await matching labeled break and continue paths over events.on iterators with iterator cleanup |
 | `async_for_await_events_on_return` | bounded for-await direct synchronous loop-body return closes the events.on iterator |
 | `async_for_await_events_on_throw` | bounded for-await direct synchronous loop-body throw closes the events.on iterator |
 | `async_for_await_events_on_branch_control` | bounded for-await final synchronous if routes branch continue, break, return, and throw paths |
