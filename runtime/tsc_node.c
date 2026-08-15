@@ -4600,6 +4600,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     tsc_value_t port_value = TSC_ARR(tsc_value_t, args, 0);
     tsc_str_t* host = NULL;
     tsc_value_t callback = tsc_value_undefined();
+    int backlog = 16;
     bool options_form = value_is_box(port_value) && value_tag(port_value) == TSC_VALUE_TAG_OBJECT;
     if (options_form) {
         tsc_value_t options_port = tsc_value_get_prop(port_value, tsc_str_from_lit("port", 4));
@@ -4612,6 +4613,14 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
             if (!host) {
                 tsc_throw_str(tsc_str_from_cstr("net.Server.listen options.host must be a string"));
             }
+        }
+        tsc_value_t options_backlog = tsc_value_get_prop(port_value, tsc_str_from_lit("backlog", 7));
+        if (!tsc_value_is_nullish(options_backlog)) {
+            if (!tsc_value_number_is_finite(options_backlog) || !tsc_value_number_is_integer(options_backlog) ||
+                tsc_value_as_num(options_backlog) < 0.0 || tsc_value_as_num(options_backlog) > (double)INT_MAX) {
+                tsc_throw_str(tsc_str_from_cstr("net.Server.listen options.backlog must be a non-negative finite integer"));
+            }
+            backlog = (int)tsc_value_as_num(options_backlog);
         }
         port_value = options_port;
         if (args->len > 1) {
@@ -4658,7 +4667,7 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     } else if (endpoint.ss_family == AF_INET6) {
         ((struct sockaddr_in6*)&endpoint)->sin6_port = htons((uint16_t)port);
     }
-    if (bind(fd, (struct sockaddr*)&endpoint, endpoint_len) != 0 || listen(fd, 16) != 0) {
+    if (bind(fd, (struct sockaddr*)&endpoint, endpoint_len) != 0 || listen(fd, backlog) != 0) {
         int error = errno;
         close(fd);
         tsc_throw_str(tsc_str_from_cstr(strerror(error)));

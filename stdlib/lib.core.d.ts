@@ -2663,6 +2663,7 @@ interface NetConnectOptions {
 interface NetListenOptions {
     port: number;
     host?: string;
+    backlog?: number;
 }
 interface NetServer {
     readonly listening: boolean;
