@@ -1,0 +1,6 @@
+raw call a init
+raw call b init
+raw call undefined init
+raw call first: raw-call-b
+raw call second: raw-call-a
+raw call missing: raw-call-undefined

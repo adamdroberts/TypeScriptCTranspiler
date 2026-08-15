@@ -245,6 +245,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (primitiveConstructorText.length > 0) return primitiveConstructorText;
             const stringStaticText = resolveStaticStringConstructorCall(node);
             if (stringStaticText.length > 0) return stringStaticText;
+            const stringRawText = resolveStaticStringRawCall(node);
+            if (stringRawText.length > 0) return stringRawText;
             const regexpEscapeText = resolveStaticRegExpEscapeCall(node);
             if (regexpEscapeText.length > 0) return regexpEscapeText;
             const regexpStringText = resolveStaticRegExpStringCall(node);
@@ -535,6 +537,53 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         let out = [templateRawText(template.head)];
         for (const span of template.templateSpans) {
             out = concat(concat(out, resolve(span.expression)), [templateRawText(span.literal)]);
+            if (out.length === 0) return [];
+        }
+        return out;
+    };
+
+    const resolveStaticStringRawCall = (call: ts.CallExpression): string[] => {
+        if (call.arguments.length === 0 || call.arguments.some(ts.isSpreadElement)) return [];
+        const callee = unwrapStaticExpression(call.expression);
+        if (!isStringRawMember(callee)) return [];
+
+        const template = resolveCollectionExpression(call.arguments[0]!);
+        if (!template || !ts.isObjectLiteralExpression(template)) return [];
+
+        let rawExpression: ts.Expression | null = null;
+        for (const property of template.properties) {
+            if (ts.isPropertyAssignment(property)) {
+                if (staticPropertyName(property.name) === "raw") rawExpression = property.initializer;
+            } else if (ts.isShorthandPropertyAssignment(property)) {
+                if (staticPropertyName(property.name) === "raw") rawExpression = property.name;
+            } else {
+                return [];
+            }
+        }
+        if (!rawExpression) return [];
+
+        const raw = resolveCollectionExpression(rawExpression);
+        if (!raw || !ts.isArrayLiteralExpression(raw) || raw.elements.length > MAX_STATIC_STRING_ALTERNATIVES) {
+            return [];
+        }
+        if (raw.elements.some((element) => ts.isSpreadElement(element) || element.kind === ts.SyntaxKind.OmittedExpression)) {
+            return [];
+        }
+
+        let out = [""];
+        for (let index = 0; index < raw.elements.length; index++) {
+            const rawValues = resolve(raw.elements[index]!);
+            if (rawValues.length === 0) return [];
+            out = index === 0 ? concat(out, rawValues) : out;
+            if (index > 0) {
+                const substitutionIndex = index - 1;
+                const substitution = substitutionIndex < call.arguments.length - 1
+                    ? resolve(call.arguments[substitutionIndex + 1]!)
+                    : ["undefined"];
+                if (substitution.length === 0) return [];
+                out = concat(out, substitution);
+                out = concat(out, rawValues);
+            }
             if (out.length === 0) return [];
         }
         return out;
@@ -6580,12 +6629,16 @@ function staticPropertyName(name: ts.PropertyName): string | null {
     return null;
 }
 
-function isStringRawTag(expr: ts.Expression): boolean {
+function isStringRawMember(expr: ts.Expression): boolean {
     const unwrapped = unwrapStaticExpression(expr);
     return ts.isPropertyAccessExpression(unwrapped) &&
         unwrapped.name.text === "raw" &&
         ts.isIdentifier(unwrapped.expression) &&
         unwrapped.expression.text === "String";
+}
+
+function isStringRawTag(expr: ts.Expression): boolean {
+    return isStringRawMember(expr);
 }
 
 function templateRawText(node: ts.TemplateLiteralLikeNode): string {

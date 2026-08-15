@@ -1,6 +1,7 @@
 # Implemented features
 
 - Finite dynamic `require(...)` proofs now materialize static global-RegExp `String.prototype.matchAll()` collections through `Array.from(...)`, preserving full matches, captures, nested indexing, and collection length for AOT module edges. Test: `dynamic_require_static_string_match_all`.
+- Finite dynamic `require(...)` proofs now resolve bounded `String.raw(...)` call templates from static `raw` arrays, finite substitutions, and JavaScript's missing-substitution `undefined` behavior. Test: `dynamic_require_static_string_raw_call`.
 - Finite dynamic `require(...)` proofs now materialize static string-pattern `String.prototype.matchAll()` collections using the standard global-RegExp conversion, preserving full matches, captures, nested indexing, and collection length for AOT module edges. Test: `dynamic_require_static_string_match_all_string`.
 - Finite dynamic `require(...)` proofs now materialize static string-pattern `String.prototype.match()` collections using the standard RegExp conversion, preserving full matches, captures, nested indexing, and collection length for AOT module edges. Test: `dynamic_require_static_string_match_string`.
 - Finite dynamic `require(...)` proofs now resolve static string-pattern `String.prototype.search()` positions using the standard RegExp conversion for AOT module edges. Test: `dynamic_require_static_string_search_string`.

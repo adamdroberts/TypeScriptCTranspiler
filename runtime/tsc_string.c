@@ -53,6 +53,8 @@ tsc_str_t* tsc_str_raw(tsc_value_t template_value, const tsc_array_t* substituti
         if (substitutions && index < substitutions->len) {
             tsc_value_t substitution = TSC_ARR(tsc_value_t, substitutions, index);
             result = tsc_str_concat(result, tsc_value_to_string(substitution));
+        } else if (index + 1 < length) {
+            result = tsc_str_concat(result, tsc_str_from_lit("undefined", 9));
         }
     }
     return result;
