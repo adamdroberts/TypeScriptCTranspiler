@@ -5906,11 +5906,10 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (values.length === 0) return [];
 
         const replacementArgument = unwrapStaticExpression(call.arguments[1]!);
-        const replacementCallback = ts.isArrowFunction(replacementArgument) ||
+        const replacementCallbackText = staticStringReplacementCallbackText(replacementArgument);
+        const replacementCallback = replacementCallbackText !== null ||
+            ts.isArrowFunction(replacementArgument) ||
             ts.isFunctionExpression(replacementArgument);
-        const replacementCallbackText = replacementCallback
-            ? staticStringReplacementCallbackText(replacementArgument)
-            : null;
         if (replacementCallback && replacementCallbackText === null) return [];
         const replacementValues = replacementCallback
             ? [replacementCallbackText!]
@@ -6124,8 +6123,19 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
     return dedupe(resolve(expr));
 }
 
-export function staticStringReplacementCallbackText(expr: ts.Expression): string | null {
+export function staticStringReplacementCallbackText(
+    expr: ts.Expression,
+    seen: Set<ts.VariableDeclaration> = new Set(),
+): string | null {
     const callback = unwrapStaticExpression(expr);
+    if (ts.isIdentifier(callback)) {
+        const decl = earlierConstStringDeclaration(callback) ?? topLevelConstStringDeclaration(callback);
+        if (!decl?.initializer || seen.has(decl)) return null;
+        seen.add(decl);
+        const text = staticStringReplacementCallbackText(decl.initializer, seen);
+        seen.delete(decl);
+        return text;
+    }
     if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return null;
     if (
         callback.parameters.length !== 0 ||
