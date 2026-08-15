@@ -1,0 +1,3 @@
+{
+  "description": "bounded UTF-8 FileHandle readLines async iterator with CRLF splitting, for-await, direct return, and async-iterator identity"
+}

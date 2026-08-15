@@ -1640,6 +1640,14 @@ interface FSFileHandleReadFileBufferOptions {
 interface FSFileHandleReadFileStringOptions {
     encoding: FSReadFileStringEncoding;
 }
+interface FSFileHandleReadLinesOptions {
+    encoding?: FSReadFileStringEncoding | null;
+}
+interface FSFileHandleReadLinesIterator {
+    next(...ignored: any[]): Promise<IteratorResult<string, void>>;
+    return(value?: any, ...ignored: any[]): Promise<IteratorResult<string, any>>;
+    [Symbol.asyncIterator](...ignored: any[]): FSFileHandleReadLinesIterator;
+}
 interface FSFileHandle {
     readonly fd: number;
     read(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileReadResult>;
@@ -1651,6 +1659,7 @@ interface FSFileHandle {
     writeFile(data: string | Buffer, options?: FSWriteFileEncodingOptions, ...ignored: any[]): Promise<void>;
     readFile(options?: FSBufferEncoding | null | FSFileHandleReadFileBufferOptions, ...ignored: any[]): Promise<Buffer>;
     readFile(options: FSReadFileStringEncoding | FSFileHandleReadFileStringOptions, ...ignored: any[]): Promise<string>;
+    readLines(options?: FSFileHandleReadLinesOptions | null, ...ignored: any[]): FSFileHandleReadLinesIterator;
     chmod(mode: number, ...ignored: any[]): Promise<void>;
     chown(uid: number, gid: number, ...ignored: any[]): Promise<void>;
     utimes(atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;

@@ -5879,6 +5879,20 @@ typedef struct tsc_fs_file_handle_append_async {
     struct tsc_fs_file_handle_append_async* next;
 } tsc_fs_file_handle_append_async_t;
 
+typedef struct tsc_fs_file_handle_read_lines {
+    tsc_value_t iterator;
+    tsc_promise_t* source;
+    tsc_array_t* pending;
+    tsc_str_t* content;
+    size_t offset;
+    tsc_value_t failure;
+    bool loaded;
+    bool closed;
+    bool done;
+    bool failed;
+    bool failure_delivered;
+} tsc_fs_file_handle_read_lines_t;
+
 static tsc_fs_open_async_t* g_tsc_fs_open_async = NULL;
 static tsc_fs_file_handle_close_async_t* g_tsc_fs_file_handle_close_async = NULL;
 static tsc_fs_file_handle_io_async_t* g_tsc_fs_file_handle_io_async = NULL;
@@ -6454,6 +6468,7 @@ static tsc_value_t tsc_fs_file_handle_write_file_builtin(void* env, tsc_value_t 
 }
 
 static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args);
+static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args);
 
 enum {
     TSC_FS_FILE_HANDLE_CHMOD = 1,
@@ -6915,6 +6930,12 @@ static tsc_value_t tsc_fs_file_handle_value(int fd) {
         0.0,
         tsc_str_from_lit("readFile", 8)
     ));
+    tsc_object_set(object, tsc_str_from_lit("readLines", 9), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_read_lines_builtin,
+        handle,
+        0.0,
+        tsc_str_from_lit("readLines", 9)
+    ));
     tsc_object_set(object, tsc_str_from_lit("chmod", 5), tsc_value_function_builtin_named(
         tsc_fs_file_handle_chmod_builtin,
         handle,
@@ -7293,6 +7314,269 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
 
 static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     return tsc_value_promise(tsc_fs_file_handle_read_file_start((tsc_fs_file_handle_t*)env, this_arg, args));
+}
+
+static tsc_value_t tsc_fs_file_handle_read_lines_result(tsc_value_t value, bool done) {
+    tsc_object_t* result = tsc_object_new();
+    tsc_object_set(result, tsc_str_from_lit("value", 5), value);
+    tsc_object_set(result, tsc_str_from_lit("done", 4), tsc_value_bool(done));
+    return tsc_value_object(result);
+}
+
+static void tsc_fs_file_handle_read_lines_remove_first(tsc_array_t* values) {
+    if (!values || values->len == 0) return;
+    if (values->len > 1) {
+        memmove(values->data, (char*)values->data + values->es, (values->len - 1) * values->es);
+    }
+    values->len--;
+}
+
+static bool tsc_fs_file_handle_read_lines_next_value(
+    tsc_fs_file_handle_read_lines_t* state,
+    tsc_str_t** out_line
+) {
+    if (!state || !state->content || state->offset >= state->content->len) return false;
+    const char* data = state->content->data;
+    size_t start = state->offset;
+    size_t index = start;
+    while (index < state->content->len && data[index] != '\n' && data[index] != '\r') index++;
+    size_t end = index;
+    if (index < state->content->len) {
+        if (data[index] == '\r' && index + 1 < state->content->len && data[index + 1] == '\n') {
+            state->offset = index + 2;
+        } else {
+            state->offset = index + 1;
+        }
+    } else {
+        state->offset = state->content->len;
+    }
+    if (out_line) *out_line = tsc_str_from_lit(data + start, end - start);
+    return true;
+}
+
+static void tsc_fs_file_handle_read_lines_drain(tsc_fs_file_handle_read_lines_t* state) {
+    if (!state || !state->pending) return;
+    if (state->failed) {
+        if (state->pending->len > 0) {
+            tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+            tsc_fs_file_handle_read_lines_remove_first(state->pending);
+            state->failure_delivered = true;
+            tsc_promise_reject_in_place(promise, state->failure);
+        }
+        while (state->pending->len > 0) {
+            tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+            tsc_fs_file_handle_read_lines_remove_first(state->pending);
+            tsc_promise_fulfill_in_place(
+                promise,
+                tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+            );
+        }
+        return;
+    }
+    if (!state->loaded || state->closed) return;
+    while (state->pending->len > 0) {
+        tsc_str_t* line = NULL;
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        tsc_fs_file_handle_read_lines_remove_first(state->pending);
+        if (tsc_fs_file_handle_read_lines_next_value(state, &line)) {
+            tsc_promise_fulfill_in_place(
+                promise,
+                tsc_fs_file_handle_read_lines_result(tsc_value_string(line), false)
+            );
+            continue;
+        }
+        state->done = true;
+        tsc_promise_fulfill_in_place(
+            promise,
+            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+        );
+        while (state->pending->len > 0) {
+            promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+            tsc_fs_file_handle_read_lines_remove_first(state->pending);
+            tsc_promise_fulfill_in_place(
+                promise,
+                tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+            );
+        }
+    }
+}
+
+static void tsc_fs_file_handle_read_lines_source_done(void* env) {
+    tsc_fs_file_handle_read_lines_t* state = (tsc_fs_file_handle_read_lines_t*)env;
+    if (!state || state->closed || !state->source) return;
+    if (tsc_promise_is_pending(state->source)) return;
+    if (tsc_promise_is_rejected(state->source)) {
+        state->failed = true;
+        state->failure = tsc_promise_reason(state->source);
+    } else if (tsc_promise_is_fulfilled(state->source)) {
+        tsc_value_t value = tsc_promise_value(state->source);
+        if (!value_is_box(value) || value_tag(value) != TSC_VALUE_TAG_STRING) {
+            state->failed = true;
+            state->failure = tsc_value_string(tsc_str_from_cstr(
+                "fs.promises.FileHandle.readLines: UTF-8 read did not return a string"
+            ));
+        } else {
+            state->content = tsc_value_as_string(value);
+            state->loaded = true;
+        }
+    }
+    tsc_fs_file_handle_read_lines_drain(state);
+}
+
+static tsc_value_t tsc_fs_file_handle_read_lines_next(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_file_handle_read_lines_t* state = (tsc_fs_file_handle_read_lines_t*)env;
+    if (!state || state->closed || state->done) {
+        return tsc_value_promise(tsc_promise_resolve(
+            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+        ));
+    }
+    if (state->failed) {
+        if (!state->failure_delivered) {
+            state->failure_delivered = true;
+            return tsc_value_promise(tsc_promise_reject(state->failure));
+        }
+        return tsc_value_promise(tsc_promise_resolve(
+            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+        ));
+    }
+    if (!state->loaded) {
+        tsc_promise_t* promise = tsc_promise_pending();
+        tsc_array_push_raw(state->pending, &promise);
+        return tsc_value_promise(promise);
+    }
+    tsc_str_t* line = NULL;
+    if (tsc_fs_file_handle_read_lines_next_value(state, &line)) {
+        return tsc_value_promise(tsc_promise_resolve(
+            tsc_fs_file_handle_read_lines_result(tsc_value_string(line), false)
+        ));
+    }
+    state->done = true;
+    return tsc_value_promise(tsc_promise_resolve(
+        tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+    ));
+}
+
+static tsc_value_t tsc_fs_file_handle_read_lines_return(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_fs_file_handle_read_lines_t* state = (tsc_fs_file_handle_read_lines_t*)env;
+    tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (!state) {
+        return tsc_value_promise(tsc_promise_resolve(
+            tsc_fs_file_handle_read_lines_result(value, true)
+        ));
+    }
+    state->closed = true;
+    state->done = true;
+    while (state->pending->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->pending, 0);
+        tsc_fs_file_handle_read_lines_remove_first(state->pending);
+        tsc_promise_fulfill_in_place(
+            promise,
+            tsc_fs_file_handle_read_lines_result(tsc_value_undefined(), true)
+        );
+    }
+    return tsc_value_promise(tsc_promise_resolve(
+        tsc_fs_file_handle_read_lines_result(value, true)
+    ));
+}
+
+static tsc_value_t tsc_fs_file_handle_read_lines_async_iterator(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_fs_file_handle_read_lines_t* state = (tsc_fs_file_handle_read_lines_t*)env;
+    return state ? state->iterator : tsc_value_undefined();
+}
+
+static bool tsc_fs_file_handle_read_lines_options(tsc_value_t options) {
+    if (tsc_value_is_nullish(options)) return true;
+    if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) {
+        tsc_throw_str(tsc_str_from_cstr(
+            "fs.promises.FileHandle.readLines options must be an object or null"
+        ));
+        return false;
+    }
+    tsc_value_t encoding = tsc_value_get_prop(options, tsc_str_from_lit("encoding", 8));
+    if (!tsc_value_is_nullish(encoding)) {
+        if (!value_is_box(encoding) || value_tag(encoding) != TSC_VALUE_TAG_STRING ||
+            (!str_lit_eq(tsc_value_as_string(encoding), "utf8") &&
+             !str_lit_eq(tsc_value_as_string(encoding), "utf-8"))) {
+            tsc_throw_str(tsc_str_from_cstr(
+                "fs.promises.FileHandle.readLines only supports UTF-8 encoding"
+            ));
+            return false;
+        }
+    }
+    const char* unsupported[] = { "start", "end", "autoClose", "emitClose", "highWaterMark", "signal" };
+    for (size_t i = 0; i < sizeof(unsupported) / sizeof(unsupported[0]); i++) {
+        tsc_value_t value = tsc_value_get_prop(options, tsc_str_from_cstr(unsupported[i]));
+        if (!tsc_value_is_nullish(value)) {
+            tsc_throw_str(tsc_str_from_cstr(
+                "fs.promises.FileHandle.readLines option is outside the bounded UTF-8 subset"
+            ));
+            return false;
+        }
+    }
+    return true;
+}
+
+static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    if (!tsc_fs_file_handle_read_lines_options(options)) return tsc_value_undefined();
+
+    tsc_fs_file_handle_read_lines_t* state =
+        (tsc_fs_file_handle_read_lines_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_read_lines_t));
+    memset(state, 0, sizeof(*state));
+    state->pending = tsc_array_new(sizeof(tsc_promise_t*), 2);
+    state->failure = tsc_value_undefined();
+
+    tsc_object_t* iterator = tsc_object_new();
+    state->iterator = tsc_value_object(iterator);
+    tsc_object_set(iterator, tsc_str_from_lit("next", 4), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_read_lines_next,
+        state,
+        0.0,
+        tsc_str_from_lit("next", 4)
+    ));
+    tsc_object_set(iterator, tsc_str_from_lit("return", 6), tsc_value_function_builtin_named(
+        tsc_fs_file_handle_read_lines_return,
+        state,
+        0.0,
+        tsc_str_from_lit("return", 6)
+    ));
+    tsc_value_set_symbol_prop(
+        state->iterator,
+        tsc_symbol_async_iterator(),
+        tsc_value_function_builtin_named(
+            tsc_fs_file_handle_read_lines_async_iterator,
+            state,
+            0.0,
+            tsc_str_from_lit("[Symbol.asyncIterator]", 22)
+        )
+    );
+
+    tsc_object_t* read_options = tsc_object_new();
+    tsc_object_set(read_options, tsc_str_from_lit("encoding", 8), tsc_value_string(tsc_str_from_lit("utf8", 4)));
+    tsc_value_t read_options_value = tsc_value_object(read_options);
+    tsc_array_t* read_args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_raw(read_args, &read_options_value);
+    state->source = tsc_fs_file_handle_read_file_start(
+        (tsc_fs_file_handle_t*)env,
+        this_arg,
+        read_args
+    );
+    if (!state->source) {
+        state->failed = true;
+        state->failure = tsc_value_string(tsc_str_from_cstr(
+            "fs.promises.FileHandle.readLines: could not start UTF-8 read"
+        ));
+    } else if (tsc_promise_is_pending(state->source)) {
+        tsc_promise_add_callback(state->source, tsc_fs_file_handle_read_lines_source_done, state);
+    } else {
+        tsc_queue_microtask(tsc_fs_file_handle_read_lines_source_done, state);
+    }
+    return state->iterator;
 }
 
 typedef struct tsc_fs_write_file_async {
