@@ -2993,6 +2993,17 @@ tsc_value_t tsc_net_socket_address_parse(tsc_str_t* input) {
 /* ---------------- net TCP sockets and servers ---------------- */
 
 typedef struct tsc_net_server tsc_net_server_t;
+typedef struct tsc_net_write_request tsc_net_write_request_t;
+
+#define TSC_NET_SOCKET_HIGH_WATER_MARK ((size_t)16384)
+
+struct tsc_net_write_request {
+    tsc_net_write_request_t* next;
+    uint8_t* data;
+    size_t len;
+    size_t offset;
+    tsc_value_t callback;
+};
 
 typedef struct tsc_net_socket {
     tsc_child_event_target_t event;
@@ -3015,6 +3026,12 @@ typedef struct tsc_net_socket {
     SSL* tls_ssl;
     uint64_t bytes_read;
     uint64_t bytes_written;
+    tsc_net_write_request_t* write_head;
+    tsc_net_write_request_t* write_tail;
+    size_t writable_length;
+    bool writable_need_drain;
+    bool end_requested;
+    tsc_value_t end_callback;
     double idle_timeout_timer;
     double idle_timeout_ms;
     double poll_timer;
@@ -3057,6 +3074,8 @@ static void tsc_net_socket_poll(void* env);
 static void tsc_net_server_poll(void* env);
 static void tsc_net_socket_timeout(void* env);
 static void tsc_net_socket_reset_idle_timer(tsc_net_socket_t* socket);
+static void tsc_net_socket_flush_writes(tsc_net_socket_t* socket);
+static void tsc_net_socket_invoke_callback(tsc_value_t callback);
 
 static void tsc_net_register_listener(tsc_child_event_target_t* target, const char* event_name, tsc_value_t fn, bool once) {
     if (!target || !target->emitter || !tsc_value_is_callable(fn)) return;
@@ -3192,6 +3211,13 @@ static void tsc_net_socket_refresh_state_props(tsc_net_socket_t* socket) {
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writableEnded", 13), tsc_value_bool(socket->writable_ended));
 }
 
+static void tsc_net_socket_refresh_write_props(tsc_net_socket_t* socket) {
+    if (!socket || !socket->event.value) return;
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writableHighWaterMark", 21), tsc_value_num((double)TSC_NET_SOCKET_HIGH_WATER_MARK));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writableLength", 14), tsc_value_num((double)socket->writable_length));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("writableNeedDrain", 17), tsc_value_bool(socket->writable_need_drain));
+}
+
 static void tsc_net_socket_invoke_callback(tsc_value_t callback) {
     if (!tsc_value_is_callable(callback)) return;
     tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
@@ -3203,6 +3229,28 @@ static void tsc_net_socket_emit_finish(tsc_net_socket_t* socket) {
     socket->finish_emitted = true;
     tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
     (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("finish", 6), empty);
+}
+
+static void tsc_net_socket_emit_drain(tsc_net_socket_t* socket) {
+    if (!socket || !socket->writable_need_drain || !socket->event.emitter) return;
+    socket->writable_need_drain = false;
+    tsc_net_socket_refresh_write_props(socket);
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("drain", 5), empty);
+}
+
+static void tsc_net_socket_complete_end(tsc_net_socket_t* socket) {
+    if (!socket || !socket->end_requested) return;
+    if (socket->fd >= 0 && !socket->writable_ended) {
+        (void)shutdown(socket->fd, SHUT_WR);
+        socket->writable_ended = true;
+        tsc_net_socket_refresh_state_props(socket);
+        tsc_net_socket_emit_finish(socket);
+    }
+    tsc_value_t callback = socket->end_callback;
+    socket->end_callback = tsc_value_undefined();
+    socket->end_requested = false;
+    tsc_net_socket_invoke_callback(callback);
 }
 
 static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number) {
@@ -3225,6 +3273,12 @@ static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
         SSL_CTX_free(socket->tls_ctx);
         socket->tls_ctx = NULL;
     }
+    socket->write_head = NULL;
+    socket->write_tail = NULL;
+    socket->writable_length = 0;
+    socket->writable_need_drain = false;
+    socket->end_requested = false;
+    socket->end_callback = tsc_value_undefined();
     if (socket->server) {
         tsc_net_server_t* server = socket->server;
         socket->server = NULL;
@@ -3236,6 +3290,7 @@ static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
     socket->readable_ended = true;
     socket->writable_ended = true;
     tsc_net_socket_refresh_state_props(socket);
+    tsc_net_socket_refresh_write_props(socket);
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("destroyed", 9), tsc_value_bool(true));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("connecting", 10), tsc_value_bool(false));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit("closed", 6)));
@@ -3269,9 +3324,9 @@ static void tsc_net_socket_reset_idle_timer(tsc_net_socket_t* socket) {
     socket->idle_timeout_timer = tsc_set_timeout(tsc_net_socket_timeout, socket, socket->idle_timeout_ms);
 }
 
-static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* data, size_t len) {
-    if (!socket || socket->fd < 0 || socket->destroyed || socket->connecting || socket->writable_ended) return false;
-    const uint8_t* bytes = (const uint8_t*)data;
+static int tsc_net_socket_send_now(tsc_net_socket_t* socket, const uint8_t* bytes, size_t len, size_t* written_out) {
+    if (written_out) *written_out = 0;
+    if (!socket || socket->fd < 0 || socket->destroyed || socket->connecting || socket->writable_ended) return -1;
     size_t written = 0;
     while (written < len) {
         ssize_t n;
@@ -3280,12 +3335,13 @@ static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* dat
             if (ssl_n <= 0) {
                 int ssl_error = SSL_get_error(socket->tls_ssl, ssl_n);
                 if (ssl_error == SSL_ERROR_WANT_READ || ssl_error == SSL_ERROR_WANT_WRITE) {
-                    struct pollfd descriptor = { .fd = socket->fd, .events = (short)(ssl_error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN), .revents = 0 };
-                    if (poll(&descriptor, 1, 1000) >= 0) continue;
+                    if (written_out) *written_out = written;
+                    return 0;
                 }
                 tsc_net_socket_emit_error(socket, EIO);
                 tsc_net_socket_close_internal(socket);
-                return false;
+                if (written_out) *written_out = written;
+                return -1;
             }
             n = ssl_n;
         } else {
@@ -3299,12 +3355,93 @@ static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* dat
             continue;
         }
         if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return false;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            if (written_out) *written_out = written;
+            return 0;
+        }
         tsc_net_socket_emit_error(socket, errno);
         tsc_net_socket_close_internal(socket);
-        return false;
+        if (written_out) *written_out = written;
+        return -1;
     }
-    return true;
+    if (written_out) *written_out = written;
+    return 1;
+}
+
+static void tsc_net_socket_queue_write(tsc_net_socket_t* socket, const uint8_t* data, size_t len, tsc_value_t callback) {
+    if (!socket || len == 0) {
+        tsc_net_socket_invoke_callback(callback);
+        return;
+    }
+    tsc_net_write_request_t* request = (tsc_net_write_request_t*)TSC_GC_MALLOC(sizeof(tsc_net_write_request_t));
+    request->next = NULL;
+    request->data = (uint8_t*)TSC_GC_MALLOC_ATOMIC(len);
+    memcpy(request->data, data, len);
+    request->len = len;
+    request->offset = 0;
+    request->callback = callback;
+    if (socket->write_tail) {
+        socket->write_tail->next = request;
+    } else {
+        socket->write_head = request;
+    }
+    socket->write_tail = request;
+    socket->writable_length += len;
+    if (socket->writable_length >= TSC_NET_SOCKET_HIGH_WATER_MARK) {
+        socket->writable_need_drain = true;
+    }
+    tsc_net_socket_refresh_write_props(socket);
+}
+
+static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* data, size_t len, tsc_value_t callback) {
+    if (!socket || socket->fd < 0 || socket->destroyed || socket->connecting || socket->writable_ended || socket->end_requested) return false;
+    const uint8_t* bytes = (const uint8_t*)data;
+    if (len == 0) {
+        tsc_net_socket_invoke_callback(callback);
+        return true;
+    }
+    if (socket->write_head || len > TSC_NET_SOCKET_HIGH_WATER_MARK) {
+        tsc_net_socket_queue_write(socket, bytes, len, callback);
+    } else {
+        size_t written = 0;
+        int status = tsc_net_socket_send_now(socket, bytes, len, &written);
+        if (status < 0) return false;
+        if (written == len) {
+            tsc_net_socket_invoke_callback(callback);
+            return true;
+        }
+        tsc_net_socket_queue_write(socket, bytes + written, len - written, callback);
+    }
+    return !socket->writable_need_drain && socket->writable_length < TSC_NET_SOCKET_HIGH_WATER_MARK;
+}
+
+static void tsc_net_socket_flush_writes(tsc_net_socket_t* socket) {
+    if (!socket || socket->destroyed || socket->fd < 0) return;
+    while (socket->write_head) {
+        tsc_net_write_request_t* request = socket->write_head;
+        size_t written = 0;
+        int status = tsc_net_socket_send_now(socket, request->data + request->offset, request->len - request->offset, &written);
+        request->offset += written;
+        if (socket->writable_length >= written) {
+            socket->writable_length -= written;
+        } else {
+            socket->writable_length = 0;
+        }
+        tsc_net_socket_refresh_write_props(socket);
+        if (status < 0 || socket->destroyed) return;
+        if (request->offset < request->len) return;
+        socket->write_head = request->next;
+        if (!socket->write_head) socket->write_tail = NULL;
+        request->next = NULL;
+        tsc_value_t callback = request->callback;
+        request->callback = tsc_value_undefined();
+        tsc_net_socket_invoke_callback(callback);
+        if (socket->destroyed) return;
+    }
+    if (socket->end_requested) tsc_net_socket_complete_end(socket);
+    if (socket->destroyed) return;
+    tsc_net_socket_emit_drain(socket);
+    tsc_net_socket_refresh_write_props(socket);
 }
 
 static tsc_value_t tsc_net_socket_set_encoding(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -3409,21 +3546,21 @@ static tsc_value_t tsc_net_socket_resume(void* env, tsc_value_t this_arg, tsc_ar
     return this_arg;
 }
 
-static bool tsc_net_socket_write_value(tsc_net_socket_t* socket, tsc_value_t value) {
+static bool tsc_net_socket_write_value(tsc_net_socket_t* socket, tsc_value_t value, tsc_value_t callback) {
     tsc_str_t* text = tsc_value_as_string(value);
-    if (text) return tsc_net_socket_write_bytes(socket, text->data, text->len);
+    if (text) return tsc_net_socket_write_bytes(socket, text->data, text->len, callback);
     tsc_buffer_t* buffer = tsc_value_as_buffer(value);
-    if (buffer) return tsc_net_socket_write_bytes(socket, buffer->data, buffer->len);
+    if (buffer) return tsc_net_socket_write_bytes(socket, buffer->data, buffer->len, callback);
     tsc_throw_str(tsc_str_from_cstr("net.Socket.write expects string or Buffer"));
+    return false;
 }
 
 static tsc_value_t tsc_net_socket_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
     if (!socket || !args || args->len < 1) return tsc_value_bool(false);
-    bool result = tsc_net_socket_write_value(socket, TSC_ARR(tsc_value_t, args, 0));
-    if (result && args->len > 1) tsc_net_socket_invoke_callback(TSC_ARR(tsc_value_t, args, 1));
-    return tsc_value_bool(result);
+    tsc_value_t callback = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    return tsc_value_bool(tsc_net_socket_write_value(socket, TSC_ARR(tsc_value_t, args, 0), callback));
 }
 
 static tsc_value_t tsc_net_socket_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -3434,17 +3571,17 @@ static tsc_value_t tsc_net_socket_end(void* env, tsc_value_t this_arg, tsc_array
         if (tsc_value_is_callable(first)) {
             callback = first;
         } else if (!tsc_value_is_undefined(first)) {
-            (void)tsc_net_socket_write_value(socket, first);
+            (void)tsc_net_socket_write_value(socket, first, tsc_value_undefined());
             if (args->len > 1) callback = TSC_ARR(tsc_value_t, args, 1);
         }
     }
     if (socket && socket->fd >= 0 && !socket->writable_ended) {
-        (void)shutdown(socket->fd, SHUT_WR);
-        socket->writable_ended = true;
-        tsc_net_socket_refresh_state_props(socket);
-        tsc_net_socket_emit_finish(socket);
+        socket->end_requested = true;
+        socket->end_callback = callback;
+        if (!socket->write_head) tsc_net_socket_complete_end(socket);
+    } else {
+        tsc_net_socket_invoke_callback(callback);
     }
-    tsc_net_socket_invoke_callback(callback);
     return this_arg;
 }
 
@@ -3522,6 +3659,7 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     socket->idle_timeout_timer = 0.0;
     socket->idle_timeout_ms = 0.0;
     socket->poll_timer = 0.0;
+    socket->end_callback = tsc_value_undefined();
     socket->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();
     socket->event.object = object;
@@ -3532,6 +3670,9 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     tsc_object_set(object, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit(connecting ? "opening" : "open", connecting ? 7 : 4)));
     tsc_object_set(object, tsc_str_from_lit("bytesRead", 9), tsc_value_num(0.0));
     tsc_object_set(object, tsc_str_from_lit("bytesWritten", 12), tsc_value_num(0.0));
+    tsc_object_set(object, tsc_str_from_lit("writableHighWaterMark", 21), tsc_value_num((double)TSC_NET_SOCKET_HIGH_WATER_MARK));
+    tsc_object_set(object, tsc_str_from_lit("writableLength", 14), tsc_value_num(0.0));
+    tsc_object_set(object, tsc_str_from_lit("writableNeedDrain", 17), tsc_value_bool(false));
     tsc_object_set(object, tsc_str_from_lit("localAddress", 12), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("localPort", 9), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("remoteAddress", 13), tsc_value_null());
@@ -3661,9 +3802,9 @@ static void tsc_net_socket_poll(void* env) {
     struct pollfd descriptor;
     descriptor.fd = socket->fd;
     descriptor.events = POLLHUP | POLLERR;
-    if (!socket->read_paused || socket->connecting || (socket->tls && !socket->tls_handshake_complete)) descriptor.events |= POLLIN;
+    if (!socket->read_paused || socket->connecting || (socket->tls && !socket->tls_handshake_complete) || (socket->tls && socket->write_head)) descriptor.events |= POLLIN;
     descriptor.revents = 0;
-    if (socket->connecting || (socket->tls && !socket->tls_handshake_complete && socket->tls_want_write)) descriptor.events |= POLLOUT;
+    if (socket->connecting || (socket->tls && !socket->tls_handshake_complete && socket->tls_want_write) || socket->write_head) descriptor.events |= POLLOUT;
     int ready = poll(&descriptor, 1, 0);
     if (ready < 0) {
         if (errno == EINTR) return;
@@ -3692,6 +3833,11 @@ static void tsc_net_socket_poll(void* env) {
     }
     if (!socket->connecting && (!socket->tls || socket->tls_handshake_complete) && !socket->connect_emitted) {
         tsc_net_socket_emit_connect(socket);
+    }
+    if (!socket->connecting && (!socket->tls || socket->tls_handshake_complete) && socket->write_head && ready > 0 &&
+        (descriptor.revents & (POLLIN | POLLOUT | POLLHUP | POLLERR))) {
+        tsc_net_socket_flush_writes(socket);
+        if (socket->destroyed) return;
     }
     if (!socket->read_paused && !socket->connecting && (!socket->tls || socket->tls_handshake_complete) && ready > 0 && (descriptor.revents & (POLLIN | POLLHUP | POLLERR))) {
         tsc_net_socket_read(socket);

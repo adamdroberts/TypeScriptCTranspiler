@@ -2615,6 +2615,9 @@ interface NetSocket {
     readonly readyState: string;
     readonly bytesRead: number;
     readonly bytesWritten: number;
+    readonly writableHighWaterMark: number;
+    readonly writableLength: number;
+    readonly writableNeedDrain: boolean;
     readonly localAddress?: string;
     readonly localPort?: number;
     readonly remoteAddress?: string;
