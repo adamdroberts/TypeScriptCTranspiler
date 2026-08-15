@@ -68890,12 +68890,6 @@ class Emitter {
                         "typed for-of object destructuring supports nested static object/array bindings without rest",
                     );
                 }
-                if (element.propertyName && ts.isComputedPropertyName(element.propertyName)) {
-                    unsupported(
-                        element,
-                        "typed for-of object destructuring supports static property names only",
-                    );
-                }
                 if (element.initializer && this.nodeContainsYield(element.initializer)) {
                     unsupported(
                         element,
@@ -68908,7 +68902,10 @@ class Emitter {
                         ? element.name.text
                         : null;
                 if (property === null) {
-                    unsupported(element, "typed for-of object destructuring requires static property names");
+                    unsupported(
+                        element,
+                        "typed for-of object destructuring requires static property names or statically resolvable computed keys",
+                    );
                 }
                 const fieldType = this.prepareType(this.objectFieldType(
                     element,

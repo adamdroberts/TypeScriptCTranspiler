@@ -1,0 +1,3 @@
+{
+  "description": "statically resolvable computed keys at outer and nested levels with aliases, defaults, and object-rest exclusion across direct arrays, custom iterators, and lazy generators"
+}
