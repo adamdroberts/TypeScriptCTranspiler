@@ -91401,9 +91401,18 @@ class Emitter {
                     this.fsPathSpec(pathExpr, args[0]!, "fs.promises.opendir path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => settle(
-                    `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize}))`,
-                ));
+                ], ([path]) => {
+                    /* The broad async-body fallback cannot resume a pending
+                     * await after arbitrary statements. Keep its historical
+                     * immediately-settled path while Promise-chain call sites
+                     * use the real libuv-backed Dir implementation. */
+                    const awaitedDirectly = ts.isAwaitExpression(call.parent);
+                    const useLibuv = !options.recursive && !awaitedDirectly;
+                    if (useLibuv) this.usesLibuv = true;
+                    return settle(!useLibuv
+                        ? `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize}))`
+                        : `tsc_fs_promises_opendir_async(${path!}, false, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}), ${options.bufferSize})`);
+                });
             }
             case "readFile": {
                 if (args.length < 1) unsupported(call, "fs.promises.readFile needs path and optional UTF-8/ASCII/Latin-1/binary/hex/base64/buffer/null encoding/flag options");

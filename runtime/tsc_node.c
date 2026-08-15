@@ -5789,12 +5789,17 @@ typedef struct {
     const char* name;
     int type;
 } tsc_uv_dirent_t;
+#define TSC_UV_DIRENT_FILE 1
 #define TSC_UV_DIRENT_DIR 2
 #define TSC_UV_DIRENT_LINK 3
 #define TSC_UV_DIRENT_FIFO 4
 #define TSC_UV_DIRENT_SOCKET 5
 #define TSC_UV_DIRENT_CHAR 6
 #define TSC_UV_DIRENT_BLOCK 7
+typedef struct {
+    tsc_uv_dirent_t* dirents;
+    size_t nentries;
+} tsc_uv_dir_t;
 typedef struct {
     long tv_sec;
     long tv_nsec;
@@ -5834,6 +5839,9 @@ extern int uv_run(uv_loop_t* loop, int mode);
 extern int uv_fs_open(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, int mode, tsc_uv_fs_cb cb);
 extern int uv_fs_read(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
 extern int uv_fs_write(uv_loop_t* loop, tsc_uv_fs_t* req, int file, const tsc_uv_buf_t bufs[], unsigned int nbufs, int64_t offset, tsc_uv_fs_cb cb);
+extern int uv_fs_opendir(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, tsc_uv_fs_cb cb);
+extern int uv_fs_readdir(uv_loop_t* loop, tsc_uv_fs_t* req, tsc_uv_dir_t* dir, tsc_uv_fs_cb cb);
+extern int uv_fs_closedir(uv_loop_t* loop, tsc_uv_fs_t* req, tsc_uv_dir_t* dir, tsc_uv_fs_cb cb);
 extern int uv_fs_scandir(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int flags, tsc_uv_fs_cb cb);
 extern int uv_fs_scandir_next(const tsc_uv_fs_t* req, tsc_uv_dirent_t* ent);
 extern int uv_fs_access(uv_loop_t* loop, tsc_uv_fs_t* req, const char* path, int mode, tsc_uv_fs_cb cb);
@@ -11128,8 +11136,12 @@ tsc_promise_t* tsc_fs_promises_mkdtemp_async(const tsc_str_t* prefix, int encodi
     return tsc_fs_promises_path_result_async(prefix, encoding, false, true, signal);
 }
 
+#ifdef TSC_HAS_LIBUV
+static bool tsc_fs_dir_libuv_pending(void);
+#endif
+
 bool tsc_fs_libuv_pending(void) {
-    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_file_handle_io_async != NULL || g_tsc_fs_file_handle_vector_io_async != NULL || g_tsc_fs_file_handle_stat_async != NULL || g_tsc_fs_file_handle_truncate_async != NULL || g_tsc_fs_file_handle_sync_async != NULL || g_tsc_fs_file_handle_metadata_async != NULL || g_tsc_fs_file_handle_append_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL;
+    return g_tsc_fs_open_async != NULL || g_tsc_fs_file_handle_close_async != NULL || g_tsc_fs_file_handle_io_async != NULL || g_tsc_fs_file_handle_vector_io_async != NULL || g_tsc_fs_file_handle_stat_async != NULL || g_tsc_fs_file_handle_truncate_async != NULL || g_tsc_fs_file_handle_sync_async != NULL || g_tsc_fs_file_handle_metadata_async != NULL || g_tsc_fs_file_handle_append_async != NULL || g_tsc_fs_read_file_async != NULL || g_tsc_fs_write_file_async != NULL || g_tsc_fs_readdir_async != NULL || g_tsc_fs_readdir_recursive_async != NULL || g_tsc_fs_access_async != NULL || g_tsc_fs_stats_libuv_async != NULL || g_tsc_fs_statfs_libuv_async != NULL || g_tsc_fs_copy_file_libuv_async != NULL || g_tsc_fs_cp_libuv_async != NULL || g_tsc_fs_cp_recursive_libuv_async != NULL || g_tsc_fs_rename_libuv_async != NULL || g_tsc_fs_link_libuv_async != NULL || g_tsc_fs_times_libuv_async != NULL || g_tsc_fs_chmod_libuv_async != NULL || g_tsc_fs_chown_libuv_async != NULL || g_tsc_fs_simple_mutation_libuv_async != NULL || g_tsc_fs_mkdir_recursive_libuv_async != NULL || g_tsc_fs_rm_recursive_libuv_async != NULL || g_tsc_fs_truncate_libuv_async != NULL || g_tsc_fs_realpath_libuv_async != NULL || tsc_fs_dir_libuv_pending();
 }
 
 void tsc_fs_libuv_run_once(bool block) {
@@ -11959,7 +11971,16 @@ typedef struct tsc_fs_dir_frame {
     size_t pending_index;
 } tsc_fs_dir_frame_t;
 
+typedef struct tsc_fs_dir_waiter {
+    tsc_promise_t* promise;
+    bool iterator;
+} tsc_fs_dir_waiter_t;
+
 typedef struct tsc_fs_dir {
+#ifdef TSC_HAS_LIBUV
+    /* Keep the request first: libuv callbacks recover the owning Dir from it. */
+    tsc_uv_fs_t uv_req;
+#endif
     DIR* dir;
     tsc_str_t* path;
     char* current_path;
@@ -11972,7 +11993,24 @@ typedef struct tsc_fs_dir {
     size_t pending_index;
     tsc_array_t* frames;
     tsc_value_t value;
+#ifdef TSC_HAS_LIBUV
+    bool uv_backend;
+    tsc_uv_dir_t* uv_dir;
+    tsc_uv_dirent_t* uv_dirents;
+    size_t uv_dirent_capacity;
+    tsc_array_t* uv_entries;
+    size_t uv_entry_index;
+    tsc_array_t* uv_waiters;
+    tsc_array_t* uv_close_waiters;
+    bool uv_req_pending;
+    bool uv_close_requested;
+    bool uv_close_started;
+    struct tsc_fs_dir* uv_next;
+    bool uv_listed;
+#endif
 } tsc_fs_dir_t;
+
+static tsc_value_t tsc_fs_dir_iterator_result(tsc_value_t value, bool done);
 
 static tsc_array_t* tsc_fs_dir_pending_new(size_t buffer_size) {
     size_t initial_cap = buffer_size < 32 ? buffer_size : 32;
@@ -11988,6 +12026,359 @@ static void tsc_fs_dir_pending_clear(tsc_array_t* pending, size_t pending_index)
     }
     pending->len = 0;
 }
+
+#ifdef TSC_HAS_LIBUV
+#define TSC_FS_DIR_UV_MAX_BATCH ((size_t)4096)
+
+typedef struct tsc_fs_dir_open_async {
+    tsc_uv_fs_t req;
+    tsc_promise_t* promise;
+    char* path;
+    tsc_str_t* encoding;
+    size_t buffer_size;
+    struct tsc_fs_dir_open_async* next;
+} tsc_fs_dir_open_async_t;
+
+static tsc_fs_dir_open_async_t* g_tsc_fs_dir_open_async = NULL;
+static tsc_fs_dir_t* g_tsc_fs_dir_uv_pending = NULL;
+
+static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state);
+static void tsc_fs_dir_uv_close_start(tsc_fs_dir_t* state);
+
+static bool tsc_fs_dir_libuv_pending(void) {
+    return g_tsc_fs_dir_open_async != NULL || g_tsc_fs_dir_uv_pending != NULL;
+}
+
+static void tsc_fs_dir_uv_add_pending(tsc_fs_dir_t* state) {
+    if (!state || state->uv_listed) return;
+    state->uv_next = g_tsc_fs_dir_uv_pending;
+    g_tsc_fs_dir_uv_pending = state;
+    state->uv_listed = true;
+}
+
+static void tsc_fs_dir_uv_remove_pending(tsc_fs_dir_t* state) {
+    if (!state || !state->uv_listed) return;
+    tsc_fs_dir_t** cursor = &g_tsc_fs_dir_uv_pending;
+    while (*cursor) {
+        if (*cursor == state) {
+            *cursor = state->uv_next;
+            state->uv_next = NULL;
+            state->uv_listed = false;
+            return;
+        }
+        cursor = &(*cursor)->uv_next;
+    }
+    state->uv_listed = false;
+}
+
+static tsc_value_t tsc_fs_dir_uv_error(const char* message) {
+    return tsc_value_string(tsc_str_from_cstr(message));
+}
+
+static void tsc_fs_dir_uv_entries_clear(tsc_fs_dir_t* state) {
+    if (!state || !state->uv_entries) return;
+    state->uv_entries->len = 0;
+    state->uv_entry_index = 0;
+}
+
+static bool tsc_fs_dir_uv_has_entries(const tsc_fs_dir_t* state) {
+    return state && state->uv_entries && state->uv_entry_index < state->uv_entries->len;
+}
+
+static tsc_value_t tsc_fs_dir_uv_take_entry(tsc_fs_dir_t* state) {
+    if (!tsc_fs_dir_uv_has_entries(state)) return tsc_value_null();
+    tsc_value_t value = TSC_ARR(tsc_value_t, state->uv_entries, state->uv_entry_index++);
+    if (state->uv_entry_index == state->uv_entries->len) {
+        state->uv_entries->len = 0;
+        state->uv_entry_index = 0;
+    }
+    return value;
+}
+
+static tsc_fs_dir_waiter_t tsc_fs_dir_uv_pop_waiter(tsc_fs_dir_t* state) {
+    tsc_fs_dir_waiter_t waiter = { NULL, false };
+    if (!state || !state->uv_waiters || state->uv_waiters->len == 0) return waiter;
+    waiter = TSC_ARR(tsc_fs_dir_waiter_t, state->uv_waiters, 0);
+    for (size_t i = 1; i < state->uv_waiters->len; i++) {
+        TSC_ARR(tsc_fs_dir_waiter_t, state->uv_waiters, i - 1) = TSC_ARR(tsc_fs_dir_waiter_t, state->uv_waiters, i);
+    }
+    state->uv_waiters->len--;
+    return waiter;
+}
+
+static void tsc_fs_dir_uv_reject_waiters(tsc_fs_dir_t* state, const char* message) {
+    if (!state || !state->uv_waiters) return;
+    while (state->uv_waiters->len > 0) {
+        tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
+        if (!waiter.promise) continue;
+        tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error(message));
+    }
+}
+
+static bool tsc_fs_dir_uv_ensure_buffer(tsc_fs_dir_t* state) {
+    if (!state) return false;
+    if (!state->uv_dirent_capacity) {
+        state->uv_dirent_capacity = state->buffer_size < TSC_FS_DIR_UV_MAX_BATCH
+            ? state->buffer_size
+            : TSC_FS_DIR_UV_MAX_BATCH;
+        if (state->uv_dirent_capacity == 0) state->uv_dirent_capacity = 1;
+    }
+    if (!state->uv_dirents) {
+        state->uv_dirents = (tsc_uv_dirent_t*)calloc(state->uv_dirent_capacity, sizeof(tsc_uv_dirent_t));
+        if (!state->uv_dirents) return false;
+    }
+    if (!state->uv_entries) {
+        state->uv_entries = tsc_array_new(sizeof(tsc_value_t), state->uv_dirent_capacity);
+    }
+    return true;
+}
+
+static void tsc_fs_dir_uv_fill_entries(tsc_fs_dir_t* state, size_t count) {
+    tsc_fs_dir_uv_entries_clear(state);
+    const char* parent_path = state->path ? state->path->data : "";
+    for (size_t i = 0; i < count; i++) {
+        tsc_uv_dirent_t* entry = &state->uv_dirents[i];
+        if (!entry->name) continue;
+        tsc_fs_dirent_t* dirent = fs_dirent_from_uv(parent_path, entry->name, entry->type);
+        tsc_value_t value = tsc_fs_dirent_value(dirent, state->encoding);
+        tsc_array_push_raw(state->uv_entries, &value);
+    }
+}
+
+static void tsc_fs_dir_uv_fulfill_close_waiters(tsc_fs_dir_t* state, bool success) {
+    if (!state || !state->uv_close_waiters) return;
+    while (state->uv_close_waiters->len > 0) {
+        tsc_promise_t* promise = TSC_ARR(tsc_promise_t*, state->uv_close_waiters, 0);
+        for (size_t i = 1; i < state->uv_close_waiters->len; i++) {
+            TSC_ARR(tsc_promise_t*, state->uv_close_waiters, i - 1) = TSC_ARR(tsc_promise_t*, state->uv_close_waiters, i);
+        }
+        state->uv_close_waiters->len--;
+        if (!promise) continue;
+        if (success) tsc_promise_fulfill_in_place(promise, tsc_value_undefined());
+        else tsc_promise_reject_in_place(promise, tsc_fs_dir_uv_error("fs.Dir.close: could not close dir"));
+    }
+}
+
+static void tsc_fs_dir_uv_finish_close(tsc_fs_dir_t* state, bool success) {
+    if (!state) return;
+    state->uv_req_pending = false;
+    state->uv_close_started = false;
+    state->uv_close_requested = true;
+    state->closed = true;
+    state->uv_dir = NULL;
+    free(state->uv_dirents);
+    state->uv_dirents = NULL;
+    tsc_fs_dir_uv_entries_clear(state);
+    tsc_fs_dir_uv_remove_pending(state);
+    while (state->uv_waiters && state->uv_waiters->len > 0) {
+        tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
+        if (!waiter.promise) continue;
+        if (waiter.iterator) {
+            tsc_promise_fulfill_in_place(
+                waiter.promise,
+                tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+            );
+        } else {
+            tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
+        }
+    }
+    tsc_fs_dir_uv_fulfill_close_waiters(state, success);
+}
+
+static void tsc_fs_dir_uv_closedir_cb(tsc_uv_fs_t* req) {
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    uv_fs_req_cleanup(req);
+    tsc_fs_dir_uv_finish_close(state, result >= 0);
+}
+
+static void tsc_fs_dir_uv_close_start(tsc_fs_dir_t* state) {
+    if (!state || !state->uv_backend || state->closed || state->uv_close_started) return;
+    state->uv_close_requested = true;
+    if (state->uv_req_pending) return;
+    if (!state->uv_dir) {
+        tsc_fs_dir_uv_finish_close(state, true);
+        return;
+    }
+    state->uv_close_started = true;
+    state->uv_req_pending = true;
+    tsc_fs_dir_uv_add_pending(state);
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_closedir(g_tsc_fs_uv_loop, &state->uv_req, state->uv_dir, tsc_fs_dir_uv_closedir_cb);
+    if (rc < 0) {
+        state->uv_req_pending = false;
+        tsc_fs_dir_uv_remove_pending(state);
+        uv_fs_req_cleanup(&state->uv_req);
+        tsc_fs_dir_uv_finish_close(state, false);
+    }
+}
+
+static void tsc_fs_dir_uv_readdir_cb(tsc_uv_fs_t* req) {
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    state->uv_req_pending = false;
+    tsc_fs_dir_uv_remove_pending(state);
+    if (result < 0) {
+        uv_fs_req_cleanup(req);
+        tsc_fs_dir_uv_reject_waiters(state, "fs.Dir.read: could not read dir");
+        if (state->uv_close_requested) tsc_fs_dir_uv_close_start(state);
+        return;
+    }
+    if (result == 0) {
+        state->exhausted = true;
+        tsc_fs_dir_uv_entries_clear(state);
+    } else {
+        tsc_fs_dir_uv_fill_entries(state, (size_t)result);
+    }
+    uv_fs_req_cleanup(req);
+    tsc_fs_dir_uv_pump(state);
+}
+
+static void tsc_fs_dir_uv_start_read(tsc_fs_dir_t* state) {
+    if (!state || state->closed || state->uv_close_requested || state->uv_req_pending) return;
+    if (!tsc_fs_dir_uv_ensure_buffer(state)) {
+        tsc_fs_dir_uv_reject_waiters(state, "fs.Dir.read: could not allocate dir buffer");
+        return;
+    }
+    state->uv_dir->dirents = state->uv_dirents;
+    state->uv_dir->nentries = state->uv_dirent_capacity;
+    state->uv_req_pending = true;
+    tsc_fs_dir_uv_add_pending(state);
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_readdir(g_tsc_fs_uv_loop, &state->uv_req, state->uv_dir, tsc_fs_dir_uv_readdir_cb);
+    if (rc < 0) {
+        state->uv_req_pending = false;
+        tsc_fs_dir_uv_remove_pending(state);
+        uv_fs_req_cleanup(&state->uv_req);
+        tsc_fs_dir_uv_reject_waiters(state, "fs.Dir.read: could not read dir");
+    }
+}
+
+static void tsc_fs_dir_uv_pump(tsc_fs_dir_t* state) {
+    if (!state || !state->uv_backend || !state->uv_waiters) return;
+    if (state->closed) {
+        while (state->uv_waiters->len > 0) {
+            tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
+            if (!waiter.promise) continue;
+            if (waiter.iterator) {
+                tsc_promise_fulfill_in_place(
+                    waiter.promise,
+                    tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                );
+            } else {
+                tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
+            }
+        }
+        return;
+    }
+    if (state->uv_close_requested) {
+        while (state->uv_waiters->len > 0) {
+            tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
+            if (!waiter.promise) continue;
+            if (waiter.iterator) {
+                tsc_promise_fulfill_in_place(
+                    waiter.promise,
+                    tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                );
+            } else {
+                tsc_promise_reject_in_place(waiter.promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
+            }
+        }
+        if (!state->uv_req_pending) tsc_fs_dir_uv_close_start(state);
+        return;
+    }
+    while (state->uv_waiters->len > 0) {
+        if (tsc_fs_dir_uv_has_entries(state)) {
+            tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
+            tsc_value_t value = tsc_fs_dir_uv_take_entry(state);
+            if (waiter.promise) {
+                tsc_promise_fulfill_in_place(
+                    waiter.promise,
+                    waiter.iterator ? tsc_fs_dir_iterator_result(value, false) : value
+                );
+            }
+            continue;
+        }
+        if (state->exhausted) {
+            bool close_after = false;
+            while (state->uv_waiters->len > 0) {
+                tsc_fs_dir_waiter_t waiter = tsc_fs_dir_uv_pop_waiter(state);
+                if (!waiter.promise) continue;
+                if (waiter.iterator) {
+                    close_after = true;
+                    tsc_promise_fulfill_in_place(
+                        waiter.promise,
+                        tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+                    );
+                } else {
+                    tsc_promise_fulfill_in_place(waiter.promise, tsc_value_null());
+                }
+            }
+            if (close_after) tsc_fs_dir_uv_close_start(state);
+            return;
+        }
+        if (state->uv_req_pending) return;
+        tsc_fs_dir_uv_start_read(state);
+        return;
+    }
+}
+
+static tsc_value_t tsc_fs_dir_uv_read_sync(tsc_fs_dir_t* state) {
+    if (!state || state->closed || state->uv_close_requested) {
+        tsc_throw_str(tsc_str_from_cstr("fs.Dir is closed"));
+        return tsc_value_null();
+    }
+    if (tsc_fs_dir_uv_has_entries(state)) return tsc_fs_dir_uv_take_entry(state);
+    if (state->exhausted) return tsc_value_null();
+    if (state->uv_req_pending) {
+        tsc_throw_str(tsc_str_from_cstr("fs.Dir has a pending operation"));
+        return tsc_value_null();
+    }
+    if (!tsc_fs_dir_uv_ensure_buffer(state)) {
+        tsc_throw_str(tsc_str_from_cstr("fs.Dir.readSync: could not allocate dir buffer"));
+        return tsc_value_null();
+    }
+    g_tsc_fs_uv_loop = uv_default_loop();
+    for (;;) {
+        state->uv_dir->dirents = state->uv_dirents;
+        state->uv_dir->nentries = state->uv_dirent_capacity;
+        int rc = uv_fs_readdir(g_tsc_fs_uv_loop, &state->uv_req, state->uv_dir, NULL);
+        ssize_t result = rc < 0 ? (ssize_t)rc : uv_fs_get_result(&state->uv_req);
+        if (result < 0) {
+            uv_fs_req_cleanup(&state->uv_req);
+            tsc_throw_str(tsc_str_from_cstr("fs.Dir.readSync: could not read dir"));
+            return tsc_value_null();
+        }
+        if (result == 0) {
+            uv_fs_req_cleanup(&state->uv_req);
+            state->exhausted = true;
+            return tsc_value_null();
+        }
+        tsc_fs_dir_uv_fill_entries(state, (size_t)result);
+        uv_fs_req_cleanup(&state->uv_req);
+        if (tsc_fs_dir_uv_has_entries(state)) return tsc_fs_dir_uv_take_entry(state);
+    }
+}
+
+static void tsc_fs_dir_uv_close_sync(tsc_fs_dir_t* state) {
+    if (!state || state->closed) return;
+    if (state->uv_req_pending) {
+        tsc_throw_str(tsc_str_from_cstr("fs.Dir has a pending operation"));
+        return;
+    }
+    state->uv_close_requested = true;
+    if (!state->uv_dir) {
+        tsc_fs_dir_uv_finish_close(state, true);
+        return;
+    }
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_closedir(g_tsc_fs_uv_loop, &state->uv_req, state->uv_dir, NULL);
+    ssize_t result = rc < 0 ? (ssize_t)rc : uv_fs_get_result(&state->uv_req);
+    uv_fs_req_cleanup(&state->uv_req);
+    tsc_fs_dir_uv_finish_close(state, result >= 0);
+    if (result < 0) tsc_throw_str(tsc_str_from_cstr("fs.Dir.closeSync: could not close dir"));
+}
+#endif
 
 static bool tsc_fs_dir_fill_pending(tsc_fs_dir_t* state) {
     if (!state || !state->dir) return false;
@@ -12016,6 +12407,12 @@ static bool tsc_fs_dir_fill_pending(tsc_fs_dir_t* state) {
 
 static void tsc_fs_dir_close_internal(tsc_fs_dir_t* state) {
     if (!state || state->closed) return;
+#ifdef TSC_HAS_LIBUV
+    if (state->uv_backend) {
+        tsc_fs_dir_uv_close_sync(state);
+        return;
+    }
+#endif
     state->closed = true;
     if (state->dir) {
         closedir(state->dir);
@@ -12043,6 +12440,9 @@ static tsc_value_t tsc_fs_dir_read_entry(tsc_fs_dir_t* state) {
         tsc_throw_str(tsc_str_from_cstr("fs.Dir is closed"));
         return tsc_value_null();
     }
+#ifdef TSC_HAS_LIBUV
+    if (state->uv_backend) return tsc_fs_dir_uv_read_sync(state);
+#endif
     if (state->exhausted) return tsc_value_null();
     while (state->dir) {
         if (!tsc_fs_dir_fill_pending(state)) {
@@ -12106,6 +12506,29 @@ static tsc_value_t tsc_fs_dir_iterator_result(tsc_value_t value, bool done) {
     return tsc_value_object(result);
 }
 
+#ifdef TSC_HAS_LIBUV
+static tsc_value_t tsc_fs_dir_uv_wait(tsc_fs_dir_t* state, bool iterator) {
+    tsc_promise_t* promise = tsc_promise_pending();
+    if (!state || state->closed || state->uv_close_requested) {
+        if (iterator) {
+            tsc_promise_fulfill_in_place(
+                promise,
+                tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
+            );
+        } else {
+            tsc_promise_reject_in_place(promise, tsc_fs_dir_uv_error("fs.Dir is closed"));
+        }
+        return tsc_value_promise(promise);
+    }
+    tsc_fs_dir_waiter_t waiter;
+    waiter.promise = promise;
+    waiter.iterator = iterator;
+    tsc_array_push_raw(state->uv_waiters, &waiter);
+    tsc_fs_dir_uv_pump(state);
+    return tsc_value_promise(promise);
+}
+#endif
+
 static tsc_value_t tsc_fs_dir_read_sync_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
@@ -12116,6 +12539,9 @@ static tsc_value_t tsc_fs_dir_read_builtin(void* env, tsc_value_t this_arg, tsc_
     (void)this_arg;
     (void)args;
     tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+#ifdef TSC_HAS_LIBUV
+    if (state && state->uv_backend) return tsc_fs_dir_uv_wait(state, false);
+#endif
     tsc_try_frame_t frame;
     tsc_try_push(&frame);
     if (setjmp(frame.jb) == 0) {
@@ -12136,6 +12562,21 @@ static tsc_value_t tsc_fs_dir_close_sync_builtin(void* env, tsc_value_t this_arg
 static tsc_value_t tsc_fs_dir_close_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
+#ifdef TSC_HAS_LIBUV
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+    if (state && state->uv_backend) {
+        tsc_promise_t* promise = tsc_promise_pending();
+        if (state->closed) {
+            tsc_promise_fulfill_in_place(promise, tsc_value_undefined());
+        } else {
+            state->uv_close_requested = true;
+            tsc_array_push_raw(state->uv_close_waiters, &promise);
+            tsc_fs_dir_uv_close_start(state);
+            tsc_fs_dir_uv_pump(state);
+        }
+        return tsc_value_promise(promise);
+    }
+#endif
     tsc_fs_dir_close_internal((tsc_fs_dir_t*)env);
     return tsc_value_promise(tsc_promise_resolve(tsc_value_undefined()));
 }
@@ -12144,6 +12585,9 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
     (void)this_arg;
     (void)args;
     tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+#ifdef TSC_HAS_LIBUV
+    if (state && state->uv_backend) return tsc_fs_dir_uv_wait(state, true);
+#endif
     if (!state || state->closed || state->exhausted || !state->dir) {
         return tsc_value_promise(tsc_promise_resolve(
             tsc_fs_dir_iterator_result(tsc_value_undefined(), true)
@@ -12169,6 +12613,14 @@ static tsc_value_t tsc_fs_dir_next_builtin(void* env, tsc_value_t this_arg, tsc_
 
 static tsc_value_t tsc_fs_dir_return_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
+#ifdef TSC_HAS_LIBUV
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)env;
+    if (state && state->uv_backend) {
+        tsc_fs_dir_uv_close_start(state);
+        tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+        return tsc_value_promise(tsc_promise_resolve(tsc_fs_dir_iterator_result(value, true)));
+    }
+#endif
     tsc_fs_dir_close_internal((tsc_fs_dir_t*)env);
     tsc_value_t value = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
     return tsc_value_promise(tsc_promise_resolve(tsc_fs_dir_iterator_result(value, true)));
@@ -12181,29 +12633,7 @@ static tsc_value_t tsc_fs_dir_async_iterator_builtin(void* env, tsc_value_t this
     return state ? state->value : tsc_value_undefined();
 }
 
-tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
-    char* p = cstr_dup(path);
-    DIR* dir = opendir(p);
-    free(p);
-    if (!dir) {
-        tsc_throw_str(tsc_str_from_cstr("fs.opendirSync: could not open dir"));
-        return tsc_value_undefined();
-    }
-
-    tsc_fs_dir_t* state = (tsc_fs_dir_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_t));
-    state->dir = dir;
-    state->path = (tsc_str_t*)path;
-    state->current_path = cstr_dup(path);
-    state->recursive = recursive;
-    state->encoding = (tsc_str_t*)encoding;
-    state->buffer_size = buffer_size > 0 ? buffer_size : 32;
-    state->closed = false;
-    state->exhausted = false;
-    state->pending = tsc_fs_dir_pending_new(state->buffer_size);
-    state->pending_index = 0;
-    state->frames = tsc_array_new(sizeof(tsc_fs_dir_frame_t), 4);
-    state->value = tsc_value_undefined();
-
+static tsc_value_t tsc_fs_dir_value(tsc_fs_dir_t* state) {
     tsc_object_t* object = tsc_object_new();
     tsc_object_define(object, tsc_str_from_lit("path", 4), tsc_value_string(state->path), false, true, false);
     tsc_object_set(object, tsc_str_from_lit("readSync", 8), tsc_value_function_builtin_named(
@@ -12237,6 +12667,102 @@ tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc
     ));
     return value;
 }
+
+tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
+    char* p = cstr_dup(path);
+    DIR* dir = opendir(p);
+    free(p);
+    if (!dir) {
+        tsc_throw_str(tsc_str_from_cstr("fs.opendirSync: could not open dir"));
+        return tsc_value_undefined();
+    }
+
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_t));
+    memset(state, 0, sizeof(*state));
+    state->dir = dir;
+    state->path = (tsc_str_t*)path;
+    state->current_path = cstr_dup(path);
+    state->recursive = recursive;
+    state->encoding = (tsc_str_t*)encoding;
+    state->buffer_size = buffer_size > 0 ? buffer_size : 32;
+    state->closed = false;
+    state->exhausted = false;
+    state->pending = tsc_fs_dir_pending_new(state->buffer_size);
+    state->pending_index = 0;
+    state->frames = tsc_array_new(sizeof(tsc_fs_dir_frame_t), 4);
+    state->value = tsc_value_undefined();
+    return tsc_fs_dir_value(state);
+}
+
+#ifdef TSC_HAS_LIBUV
+static void tsc_fs_dir_open_async_remove(tsc_fs_dir_open_async_t* task) {
+    tsc_fs_dir_open_async_t** cursor = &g_tsc_fs_dir_open_async;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->next;
+            task->next = NULL;
+            return;
+        }
+        cursor = &(*cursor)->next;
+    }
+}
+
+static void tsc_fs_dir_open_async_cb(tsc_uv_fs_t* req) {
+    tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)req;
+    ssize_t result = uv_fs_get_result(req);
+    tsc_uv_dir_t* uv_dir = (tsc_uv_dir_t*)uv_fs_get_ptr(req);
+    if (result < 0 || !uv_dir) {
+        uv_fs_req_cleanup(req);
+        tsc_promise_reject_in_place(task->promise, tsc_fs_dir_uv_error("fs.promises.opendir: could not open dir"));
+        tsc_fs_dir_open_async_remove(task);
+        free(task->path);
+        return;
+    }
+    uv_fs_req_cleanup(req);
+
+    tsc_fs_dir_t* state = (tsc_fs_dir_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_t));
+    memset(state, 0, sizeof(*state));
+    state->uv_backend = true;
+    state->uv_dir = uv_dir;
+    state->path = tsc_str_from_cstr(task->path);
+    state->encoding = task->encoding;
+    state->buffer_size = task->buffer_size > 0 ? task->buffer_size : 32;
+    state->uv_waiters = tsc_array_new(sizeof(tsc_fs_dir_waiter_t), 2);
+    state->uv_close_waiters = tsc_array_new(sizeof(tsc_promise_t*), 1);
+    state->value = tsc_value_undefined();
+    tsc_promise_fulfill_in_place(task->promise, tsc_fs_dir_value(state));
+    tsc_fs_dir_open_async_remove(task);
+    free(task->path);
+}
+
+tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
+    if (recursive) {
+        return tsc_promise_resolve(tsc_fs_opendir_sync(path, true, encoding, buffer_size));
+    }
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_dir_open_async_t* task = (tsc_fs_dir_open_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dir_open_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->path = cstr_dup(path);
+    task->encoding = (tsc_str_t*)encoding;
+    task->buffer_size = buffer_size > 0 ? buffer_size : 32;
+    task->next = g_tsc_fs_dir_open_async;
+    g_tsc_fs_dir_open_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_opendir(g_tsc_fs_uv_loop, &task->req, task->path, tsc_fs_dir_open_async_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_promise_reject_in_place(promise, tsc_fs_dir_uv_error("fs.promises.opendir: could not open dir"));
+        tsc_fs_dir_open_async_remove(task);
+        free(task->path);
+    }
+    return promise;
+}
+#else
+tsc_promise_t* tsc_fs_promises_opendir_async(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding, size_t buffer_size) {
+    return tsc_promise_resolve(tsc_fs_opendir_sync(path, recursive, encoding, buffer_size));
+}
+#endif
 
 void tsc_fs_access_sync(const tsc_str_t* path) {
     tsc_fs_access_sync_mode(path, (double)F_OK);

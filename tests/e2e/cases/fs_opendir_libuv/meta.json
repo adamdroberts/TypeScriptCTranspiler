@@ -1,0 +1,3 @@
+{
+  "description": "nonrecursive fs.promises.opendir uses pending libuv open, buffered readdir, and close requests"
+}
