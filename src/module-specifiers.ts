@@ -3448,6 +3448,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             if (stringMatch) return resolveCollectionExpression(stringMatch);
             const stringMatchAll = resolveStaticStringMatchAllCollectionExpression(cur);
             if (stringMatchAll) return resolveCollectionExpression(stringMatchAll);
+            const stringSplit = resolveStaticStringSplitCollectionExpression(cur);
+            if (stringSplit) return resolveCollectionExpression(stringSplit);
             const valueOfReceiver = resolveStaticObjectPrototypeValueOfReceiver(cur);
             if (valueOfReceiver) return resolveCollectionExpression(valueOfReceiver);
         }
@@ -4840,6 +4842,35 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
                     : ts.factory.createStringLiteral(value);
             }));
         }));
+    };
+
+    const resolveStaticStringSplitCollectionExpression = (call: ts.CallExpression): ts.Expression | null => {
+        if (call.arguments.length > 2 || call.arguments.some(ts.isSpreadElement)) return null;
+        const callee = unwrapStaticExpression(call.expression);
+        if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "split") return null;
+
+        const inputs = resolve(callee.expression);
+        if (inputs.length !== 1) return null;
+
+        const separatorArg = call.arguments[0];
+        const separators = !separatorArg || isStaticUndefinedExpression(separatorArg)
+            ? [undefined]
+            : resolve(separatorArg);
+        if (separators.length !== 1) return null;
+
+        const limitArg = call.arguments[1];
+        const limits = !limitArg || isStaticUndefinedExpression(limitArg)
+            ? [undefined]
+            : resolveStaticIntegerKeys(limitArg);
+        if (limits.length !== 1) return null;
+        const limit = limits[0];
+        if (limit !== undefined && (limit < 0 || !Number.isSafeInteger(limit))) return null;
+
+        const parts = separators[0] === undefined
+            ? [inputs[0]!]
+            : inputs[0]!.split(separators[0], limit);
+        if (parts.length > MAX_STATIC_STRING_ALTERNATIVES) return null;
+        return ts.factory.createArrayLiteralExpression(parts.map((part) => ts.factory.createStringLiteral(part)));
     };
 
     const resolveStaticStringRegExpSearchCall = (call: ts.CallExpression): string[] => {

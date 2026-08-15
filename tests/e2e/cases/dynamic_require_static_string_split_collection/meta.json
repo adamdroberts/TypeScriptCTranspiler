@@ -1,0 +1,3 @@
+{
+  "description": "Finite dynamic require proofs resolve static String.prototype.split collection results through Array.from, spread, aliases, and omitted separators"
+}
