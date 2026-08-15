@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await consumers stage yield-free computed binding keys once per dynamic iterator item, including nested defaults and object-rest exclusion"
+}

@@ -48878,10 +48878,13 @@ class Emitter {
             rest: boolean;
             accessPath: ForOfObjectAccessSegment[];
             objectRestKeys: string[];
+            objectRestComputedKeyIds: number[];
             type: CType;
         };
         const defaultInitializers = new Map<number, ts.Expression>();
+        const computedKeyExpressions = new Map<number, ts.Expression>();
         let nextDefaultId = 0;
+        let nextComputedKeyId = 0;
         const bindingInitializerSuspends = (node: ts.Node): boolean => {
             let suspends = false;
             const visit = (child: ts.Node): void => {
@@ -48905,6 +48908,15 @@ class Emitter {
             defaultInitializers.set(defaultId, defaultInitializer);
             return { ...segment, defaultId, defaultInitializer };
         };
+        const computedKeySegment = (
+            propertyName: ts.ComputedPropertyName,
+        ): ForOfObjectAccessSegment | null => {
+            const expression = propertyName.expression;
+            if (bindingInitializerSuspends(expression)) return null;
+            const id = nextComputedKeyId++;
+            computedKeyExpressions.set(id, expression);
+            return { kind: "computed", value: "", id };
+        };
         const bindingDescriptorsFor = (name: ts.BindingName): BindingDescriptor[] | null => {
             if (ts.isIdentifier(name)) {
                 return [{
@@ -48916,6 +48928,7 @@ class Emitter {
                     rest: false,
                     accessPath: [],
                     objectRestKeys: [],
+                    objectRestComputedKeyIds: [],
                     type: T_VALUE,
                 }];
             }
@@ -48950,6 +48963,7 @@ class Emitter {
                             rest: true,
                             accessPath: [...prefix],
                             objectRestKeys: [],
+                            objectRestComputedKeyIds: [],
                             type: T_VALUE,
                         });
                         restSeen = true;
@@ -48980,6 +48994,7 @@ class Emitter {
                         rest: false,
                         accessPath,
                         objectRestKeys: [],
+                        objectRestComputedKeyIds: [],
                         type: T_VALUE,
                     });
                 }
@@ -48992,6 +49007,7 @@ class Emitter {
                 if (current.elements.length === 0) return false;
                 let restSeen = false;
                 const boundProperties: string[] = [];
+                const boundComputedKeyIds: number[] = [];
                 for (let index = 0; index < current.elements.length; index++) {
                     const element = current.elements[index];
                     if (!element || !ts.isBindingElement(element)) return false;
@@ -49011,26 +49027,38 @@ class Emitter {
                             rest: true,
                             accessPath: [...prefix],
                             objectRestKeys: [...boundProperties],
+                            objectRestComputedKeyIds: [...boundComputedKeyIds],
                             type: T_VALUE,
                         });
                         restSeen = true;
                         continue;
                     }
                     if (restSeen) return false;
-                    const property = element.propertyName
-                        ? this.staticPropertyName(element.propertyName)
-                        : ts.isIdentifier(element.name)
-                            ? element.name.text
-                            : null;
-                    if (property === null) return false;
-                    if (element.propertyName && bindingInitializerSuspends(element.propertyName)) return false;
+                    const computedProperty = element.propertyName && ts.isComputedPropertyName(element.propertyName)
+                        ? computedKeySegment(element.propertyName)
+                        : null;
+                    if (element.propertyName && ts.isComputedPropertyName(element.propertyName) && !computedProperty) return false;
+                    const property = computedProperty
+                        ? null
+                        : element.propertyName
+                            ? this.staticPropertyName(element.propertyName)
+                            : ts.isIdentifier(element.name)
+                                ? element.name.text
+                                : null;
+                    if (property === null && !computedProperty) return false;
                     const segment = segmentWithDefault(
-                        { kind: "property", value: property },
+                        computedProperty ?? { kind: "property", value: property! },
                         element.initializer,
                     );
                     if (!segment) return false;
                     const accessPath = [...prefix, segment];
-                    boundProperties.push(property);
+                    if (property !== null) {
+                        boundProperties.push(property);
+                    } else if (computedProperty && computedProperty.kind === "computed") {
+                        boundComputedKeyIds.push(computedProperty.id);
+                    } else {
+                        return false;
+                    }
                     if (ts.isObjectBindingPattern(element.name)) {
                         if (!collectObject(element.name, accessPath)) return false;
                         continue;
@@ -49049,6 +49077,7 @@ class Emitter {
                         rest: false,
                         accessPath,
                         objectRestKeys: [],
+                        objectRestComputedKeyIds: [],
                         type: T_VALUE,
                     });
                 }
@@ -49736,6 +49765,7 @@ class Emitter {
             if (route?.expression) visitReturn(route.expression);
         }
         for (const initializer of defaultInitializers.values()) visitReturn(initializer);
+        for (const expression of computedKeyExpressions.values()) visitReturn(expression);
         visitReturn(result.expression);
         if (!bodySupported) return false;
 
@@ -49950,6 +49980,7 @@ class Emitter {
             if (route.expression) visitThis(route.expression);
         }
         for (const initializer of defaultInitializers.values()) visitThis(initializer);
+        for (const expression of computedKeyExpressions.values()) visitThis(expression);
         visitThis(result.expression);
         if (usesThis && !thisValue) return false;
 
@@ -51062,6 +51093,30 @@ class Emitter {
         callback.line(`bool ${finishVar} = ${doneVar};`);
         callback.open(`if (!${doneVar})`);
         callback.line(`${T_VALUE.c} ${itemVar} = tsc_value_get_prop(${stepVar}, tsc_str_from_lit("value", 5));`);
+        const computedKeyTemps = new Map<number, string>();
+        const computedKeyValue = (id: number): string => {
+            const cached = computedKeyTemps.get(id);
+            if (cached) return cached;
+            const expression = computedKeyExpressions.get(id);
+            if (!expression) throw new Error("for-await computed binding key was not staged");
+            this.argumentValueScopes.push(scope);
+            this.argumentValueTypeScopes.push(scopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let key: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                key = this.emitExpr(expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const keyTemp = this.freshTemp("_for_await_computed_key");
+            callback.line(`${T_STRING.c} const ${keyTemp} = ${this.coerce(key, T_STRING, expression)};`);
+            computedKeyTemps.set(id, keyTemp);
+            return keyTemp;
+        };
         const accessTemps = new Map<ForOfObjectAccessSegment, string>();
         const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string => {
             let source = itemVar;
@@ -51075,7 +51130,7 @@ class Emitter {
                     ? `tsc_value_get_prop(${source}, tsc_str_from_lit("${escapeCString(segment.value)}", ${utf8ByteLen(segment.value)}))`
                     : segment.kind === "index"
                         ? `tsc_value_get_index(${source}, ${segment.value}.0)`
-                        : `tsc_value_get_prop(${source}, ${segment.value})`;
+                        : `tsc_value_get_prop(${source}, ${computedKeyValue(segment.id)})`;
                 const valueTemp = this.freshTemp("_for_await_binding_value");
                 if (segment.defaultId === undefined) {
                     callback.line(`${T_VALUE.c} const ${valueTemp} = ${value};`);
@@ -51115,8 +51170,10 @@ class Emitter {
                 const restIndex = this.freshTemp("_for_await_object_rest_i");
                 const restKey = this.freshTemp("_for_await_object_rest_key");
                 const excluded = entry.objectRestKeys;
-                const skip = excluded
-                    .map((property) => `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`)
+                const skip = [
+                    ...excluded.map((property) => `tsc_str_eq(${restKey}, tsc_str_from_lit("${escapeCString(property)}", ${utf8ByteLen(property)}))`),
+                    ...entry.objectRestComputedKeyIds.map((id) => `tsc_str_eq(${restKey}, ${computedKeyValue(id)})`),
+                ]
                     .join(" || ");
                 callback.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
                 callback.line(`tsc_array_t* ${restKeys} = tsc_value_object_keys(${restSource});`);

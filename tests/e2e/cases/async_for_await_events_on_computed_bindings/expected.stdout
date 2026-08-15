@@ -1,0 +1,4 @@
+computed-nested: parent
+computed-rest: value,tail
+computed-key-calls: 3
+computed-key-order: outer,inner,rest
