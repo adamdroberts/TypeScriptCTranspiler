@@ -2613,6 +2613,8 @@ interface NetSocket {
     readonly connecting: boolean;
     readonly destroyed: boolean;
     readonly readyState: string;
+    readonly bytesRead: number;
+    readonly bytesWritten: number;
     readonly localAddress?: string;
     readonly localPort?: number;
     readonly remoteAddress?: string;
@@ -2622,6 +2624,8 @@ interface NetSocket {
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     removeListener(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     setEncoding(encoding: "utf8" | "utf-8", ...ignored: any[]): this;
+    setNoDelay(noDelay?: boolean, ...ignored: any[]): this;
+    setKeepAlive(enable?: boolean, initialDelay?: number, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;

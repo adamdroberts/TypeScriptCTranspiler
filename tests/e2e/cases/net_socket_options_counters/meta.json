@@ -1,0 +1,3 @@
+{
+  "description": "net.Socket byte counters and POSIX TCP no-delay/keep-alive controls"
+}

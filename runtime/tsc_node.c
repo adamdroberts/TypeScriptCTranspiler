@@ -3009,6 +3009,8 @@ typedef struct tsc_net_socket {
     bool tls_want_write;
     SSL_CTX* tls_ctx;
     SSL* tls_ssl;
+    uint64_t bytes_read;
+    uint64_t bytes_written;
     double poll_timer;
 } tsc_net_socket_t;
 
@@ -3093,6 +3095,12 @@ static void tsc_net_socket_refresh_endpoint_props(tsc_net_socket_t* socket) {
     }
 }
 
+static void tsc_net_socket_refresh_byte_props(tsc_net_socket_t* socket) {
+    if (!socket || !socket->event.value) return;
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("bytesRead", 9), tsc_value_num((double)socket->bytes_read));
+    tsc_value_set_prop(socket->event.value, tsc_str_from_lit("bytesWritten", 12), tsc_value_num((double)socket->bytes_written));
+}
+
 static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number) {
     if (!socket || !socket->event.emitter) return;
     const char* message = strerror(error_number > 0 ? error_number : EIO);
@@ -3153,6 +3161,8 @@ static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* dat
         }
         if (n > 0) {
             written += (size_t)n;
+            socket->bytes_written += (uint64_t)n;
+            tsc_net_socket_refresh_byte_props(socket);
             continue;
         }
         if (n < 0 && errno == EINTR) continue;
@@ -3172,6 +3182,55 @@ static tsc_value_t tsc_net_socket_set_encoding(void* env, tsc_value_t this_arg, 
             tsc_throw_str(tsc_str_from_cstr("net.Socket.setEncoding only supports utf8 encoding"));
         }
         if (socket) socket->encoding_utf8 = true;
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_set_no_delay(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    bool enabled = true;
+    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+        enabled = tsc_value_as_bool(TSC_ARR(tsc_value_t, args, 0));
+    }
+    if (socket && socket->fd >= 0) {
+        int value = enabled ? 1 : 0;
+        if (setsockopt(socket->fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value)) != 0) {
+            tsc_throw_str(tsc_str_from_cstr("net.Socket.setNoDelay failed"));
+        }
+    }
+    return this_arg;
+}
+
+static tsc_value_t tsc_net_socket_set_keep_alive(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    bool enabled = true;
+    double initial_delay = 0.0;
+    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
+        enabled = tsc_value_as_bool(TSC_ARR(tsc_value_t, args, 0));
+    }
+    if (args && args->len > 1 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 1)) && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
+        tsc_value_t delay = TSC_ARR(tsc_value_t, args, 1);
+        if (!tsc_value_number_is_safe_integer(delay) || tsc_value_as_num(delay) < 0.0) {
+            tsc_throw_str(tsc_str_from_cstr("net.Socket.setKeepAlive initialDelay must be a non-negative safe integer"));
+        }
+        initial_delay = tsc_value_as_num(delay);
+    }
+    if (socket && socket->fd >= 0) {
+        int keep_alive = enabled ? 1 : 0;
+        if (setsockopt(socket->fd, SOL_SOCKET, SO_KEEPALIVE, &keep_alive, sizeof(keep_alive)) != 0) {
+            tsc_throw_str(tsc_str_from_cstr("net.Socket.setKeepAlive failed"));
+        }
+        if (enabled && initial_delay > 0.0) {
+            double seconds_value = initial_delay / 1000.0;
+            int seconds = seconds_value >= (double)INT_MAX ? INT_MAX : (int)seconds_value;
+            if (seconds < INT_MAX && (seconds < 1 || initial_delay > (double)seconds * 1000.0)) seconds++;
+            if (seconds < 1) seconds = 1;
+#if defined(TCP_KEEPIDLE)
+            (void)setsockopt(socket->fd, IPPROTO_TCP, TCP_KEEPIDLE, &seconds, sizeof(seconds));
+#elif defined(TCP_KEEPALIVE)
+            (void)setsockopt(socket->fd, IPPROTO_TCP, TCP_KEEPALIVE, &seconds, sizeof(seconds));
+#endif
+        }
     }
     return this_arg;
 }
@@ -3227,6 +3286,8 @@ static tsc_value_t tsc_net_ref_noop(void* env, tsc_value_t this_arg, tsc_array_t
 static void tsc_net_socket_add_methods(tsc_object_t* object, tsc_net_socket_t* socket) {
     tsc_child_add_event_methods(object, &socket->event);
     tsc_object_set(object, tsc_str_from_lit("setEncoding", 11), tsc_value_function_generic_named(tsc_net_socket_set_encoding, socket, 1.0, tsc_str_from_lit("setEncoding", 11)));
+    tsc_object_set(object, tsc_str_from_lit("setNoDelay", 10), tsc_value_function_generic_named(tsc_net_socket_set_no_delay, socket, 0.0, tsc_str_from_lit("setNoDelay", 10)));
+    tsc_object_set(object, tsc_str_from_lit("setKeepAlive", 12), tsc_value_function_generic_named(tsc_net_socket_set_keep_alive, socket, 0.0, tsc_str_from_lit("setKeepAlive", 12)));
     tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_net_socket_write, socket, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_net_socket_end, socket, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_net_socket_destroy, socket, 0.0, tsc_str_from_lit("destroy", 7)));
@@ -3251,6 +3312,8 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     tsc_object_set(object, tsc_str_from_lit("connecting", 10), tsc_value_bool(connecting));
     tsc_object_set(object, tsc_str_from_lit("destroyed", 9), tsc_value_bool(false));
     tsc_object_set(object, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit(connecting ? "opening" : "open", connecting ? 7 : 4)));
+    tsc_object_set(object, tsc_str_from_lit("bytesRead", 9), tsc_value_num(0.0));
+    tsc_object_set(object, tsc_str_from_lit("bytesWritten", 12), tsc_value_num(0.0));
     tsc_object_set(object, tsc_str_from_lit("localAddress", 12), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("localPort", 9), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("remoteAddress", 13), tsc_value_null());
@@ -3337,6 +3400,8 @@ static void tsc_net_socket_read(tsc_net_socket_t* socket) {
             n = recv(socket->fd, chunk, sizeof(chunk), 0);
         }
         if (n > 0) {
+            socket->bytes_read += (uint64_t)n;
+            tsc_net_socket_refresh_byte_props(socket);
             tsc_value_t value;
             if (socket->encoding_utf8) {
                 value = tsc_value_string(child_capture_string(chunk, (size_t)n));

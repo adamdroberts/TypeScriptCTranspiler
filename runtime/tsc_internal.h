@@ -15,6 +15,7 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/hmac.h>
