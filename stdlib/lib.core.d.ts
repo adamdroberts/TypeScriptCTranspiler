@@ -2626,6 +2626,7 @@ interface NetSocket {
     setEncoding(encoding: "utf8" | "utf-8", ...ignored: any[]): this;
     setNoDelay(noDelay?: boolean, ...ignored: any[]): this;
     setKeepAlive(enable?: boolean, initialDelay?: number, ...ignored: any[]): this;
+    setTimeout(timeout: number, callback?: () => void, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;

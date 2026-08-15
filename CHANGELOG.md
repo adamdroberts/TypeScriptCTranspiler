@@ -5,6 +5,8 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+
+- Bounded `net.Socket` timeout support: POSIX TCP sockets expose chainable `setTimeout(timeout, callback?)`, emit `timeout` after inactivity, reset the idle timer on socket activity, and cancel it when disabled or closed. Test: `net_socket_timeout`.
 - Bounded `net.Socket` option and counter support: POSIX TCP sockets expose `bytesRead` / `bytesWritten`, chainable `setNoDelay(noDelay?)`, and chainable `setKeepAlive(enable?, initialDelay?)` controls backed by TCP socket options. Test: `net_socket_options_counters`.
 - Promise-chain `fs.promises.opendir(...)` now accepts `{ signal }` for the libuv-backed root open: pre-aborted signals reject with their reason, in-flight `uv_fs_opendir` requests are cancelled, late completions are suppressed, and aborts after the handle is delivered do not disturb it. Test: `fs_opendir_abort_libuv`.
 - Recursive and nonrecursive `fs.promises.opendir(...)` Promise-chain calls now use libuv's directory-stream lifecycle: `uv_fs_opendir` opens the root and child handles, `uv_fs_readdir` serves bounded `Dir.read()` / iterator requests, and `uv_fs_closedir` completes async disposal for active and parent frames. Encoding, `bufferSize`, boxed `Dirent` values, pending reads, depth-first restoration, and close behavior are covered by `fs_opendir_libuv` and `fs_opendir_libuv_recursive`; direct-await calls retain the POSIX fallback while broader arbitrary pending-await lowering is deferred. Test: `fs_opendir_libuv_recursive`.

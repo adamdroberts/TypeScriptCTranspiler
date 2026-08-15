@@ -1,0 +1,3 @@
+{
+  "description": "net.Socket idle timeout events, callbacks, activity resets, and cancellation"
+}

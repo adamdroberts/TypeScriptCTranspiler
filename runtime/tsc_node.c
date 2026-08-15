@@ -3011,6 +3011,8 @@ typedef struct tsc_net_socket {
     SSL* tls_ssl;
     uint64_t bytes_read;
     uint64_t bytes_written;
+    double idle_timeout_timer;
+    double idle_timeout_ms;
     double poll_timer;
 } tsc_net_socket_t;
 
@@ -3027,6 +3029,8 @@ typedef struct tsc_net_server {
 
 static void tsc_net_socket_poll(void* env);
 static void tsc_net_server_poll(void* env);
+static void tsc_net_socket_timeout(void* env);
+static void tsc_net_socket_reset_idle_timer(tsc_net_socket_t* socket);
 
 static void tsc_net_register_listener(tsc_child_event_target_t* target, const char* event_name, tsc_value_t fn, bool once) {
     if (!target || !target->emitter || !tsc_value_is_callable(fn)) return;
@@ -3132,9 +3136,30 @@ static void tsc_net_socket_close_internal(tsc_net_socket_t* socket) {
         tsc_clear_timeout(socket->poll_timer);
         socket->poll_timer = 0.0;
     }
+    if (socket->idle_timeout_timer != 0.0) {
+        tsc_clear_timeout(socket->idle_timeout_timer);
+        socket->idle_timeout_timer = 0.0;
+    }
+    socket->idle_timeout_ms = 0.0;
     socket->close_emitted = true;
     tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
     (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("close", 5), empty);
+}
+
+static void tsc_net_socket_timeout(void* env) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (!socket || socket->destroyed || socket->close_emitted) return;
+    socket->idle_timeout_timer = 0.0;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("timeout", 7), empty);
+}
+
+static void tsc_net_socket_reset_idle_timer(tsc_net_socket_t* socket) {
+    if (!socket || socket->destroyed || socket->idle_timeout_ms <= 0.0) return;
+    if (socket->idle_timeout_timer != 0.0) {
+        tsc_clear_timeout(socket->idle_timeout_timer);
+    }
+    socket->idle_timeout_timer = tsc_set_timeout(tsc_net_socket_timeout, socket, socket->idle_timeout_ms);
 }
 
 static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* data, size_t len) {
@@ -3163,6 +3188,7 @@ static bool tsc_net_socket_write_bytes(tsc_net_socket_t* socket, const void* dat
             written += (size_t)n;
             socket->bytes_written += (uint64_t)n;
             tsc_net_socket_refresh_byte_props(socket);
+            tsc_net_socket_reset_idle_timer(socket);
             continue;
         }
         if (n < 0 && errno == EINTR) continue;
@@ -3235,6 +3261,33 @@ static tsc_value_t tsc_net_socket_set_keep_alive(void* env, tsc_value_t this_arg
     return this_arg;
 }
 
+static tsc_value_t tsc_net_socket_set_timeout(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
+    if (!args || args->len < 1 || !tsc_value_number_is_finite(TSC_ARR(tsc_value_t, args, 0)) ||
+        tsc_value_as_num(TSC_ARR(tsc_value_t, args, 0)) < 0.0) {
+        tsc_throw_str(tsc_str_from_cstr("net.Socket.setTimeout timeout must be a non-negative finite number"));
+    }
+    double timeout_ms = tsc_value_as_num(TSC_ARR(tsc_value_t, args, 0));
+    if (args->len > 1 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1)) &&
+        !tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 1))) {
+        tsc_throw_str(tsc_str_from_cstr("net.Socket.setTimeout callback must be callable"));
+    }
+    if (socket) {
+        socket->idle_timeout_ms = timeout_ms;
+        if (socket->idle_timeout_timer != 0.0) {
+            tsc_clear_timeout(socket->idle_timeout_timer);
+            socket->idle_timeout_timer = 0.0;
+        }
+        if (args->len > 1 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
+            tsc_net_register_listener(&socket->event, "timeout", TSC_ARR(tsc_value_t, args, 1), false);
+        }
+        if (timeout_ms > 0.0 && !socket->destroyed) {
+            socket->idle_timeout_timer = tsc_set_timeout(tsc_net_socket_timeout, socket, timeout_ms);
+        }
+    }
+    return this_arg;
+}
+
 static tsc_value_t tsc_net_socket_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_net_socket_t* socket = (tsc_net_socket_t*)env;
@@ -3288,6 +3341,7 @@ static void tsc_net_socket_add_methods(tsc_object_t* object, tsc_net_socket_t* s
     tsc_object_set(object, tsc_str_from_lit("setEncoding", 11), tsc_value_function_generic_named(tsc_net_socket_set_encoding, socket, 1.0, tsc_str_from_lit("setEncoding", 11)));
     tsc_object_set(object, tsc_str_from_lit("setNoDelay", 10), tsc_value_function_generic_named(tsc_net_socket_set_no_delay, socket, 0.0, tsc_str_from_lit("setNoDelay", 10)));
     tsc_object_set(object, tsc_str_from_lit("setKeepAlive", 12), tsc_value_function_generic_named(tsc_net_socket_set_keep_alive, socket, 0.0, tsc_str_from_lit("setKeepAlive", 12)));
+    tsc_object_set(object, tsc_str_from_lit("setTimeout", 10), tsc_value_function_generic_named(tsc_net_socket_set_timeout, socket, 1.0, tsc_str_from_lit("setTimeout", 10)));
     tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_net_socket_write, socket, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_net_socket_end, socket, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_net_socket_destroy, socket, 0.0, tsc_str_from_lit("destroy", 7)));
@@ -3303,6 +3357,8 @@ static tsc_value_t tsc_net_socket_new(int fd, bool connecting, bool client_socke
     socket->connecting = connecting;
     socket->client_socket = client_socket;
     socket->connect_emitted = !client_socket;
+    socket->idle_timeout_timer = 0.0;
+    socket->idle_timeout_ms = 0.0;
     socket->poll_timer = 0.0;
     socket->event.emitter = tsc_event_emitter_new();
     tsc_object_t* object = tsc_object_new();
@@ -3352,6 +3408,7 @@ static void tsc_net_socket_emit_connect(tsc_net_socket_t* socket) {
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("connecting", 10), tsc_value_bool(false));
     tsc_value_set_prop(socket->event.value, tsc_str_from_lit("readyState", 10), tsc_value_string(tsc_str_from_lit("open", 4)));
     tsc_net_socket_refresh_endpoint_props(socket);
+    tsc_net_socket_reset_idle_timer(socket);
     tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
     (void)tsc_event_emitter_emit(socket->event.emitter, tsc_str_from_lit("connect", 7), empty);
 }
@@ -3402,6 +3459,7 @@ static void tsc_net_socket_read(tsc_net_socket_t* socket) {
         if (n > 0) {
             socket->bytes_read += (uint64_t)n;
             tsc_net_socket_refresh_byte_props(socket);
+            tsc_net_socket_reset_idle_timer(socket);
             tsc_value_t value;
             if (socket->encoding_utf8) {
                 value = tsc_value_string(child_capture_string(chunk, (size_t)n));

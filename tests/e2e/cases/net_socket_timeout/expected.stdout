@@ -1,0 +1,7 @@
+client connect: true
+client data: ping
+client after activity: false
+client timeout event: false
+client timeout callback: false true
+client close: true
+server close
