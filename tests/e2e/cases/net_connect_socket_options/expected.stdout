@@ -1,0 +1,6 @@
+invalid noDelay: true
+invalid keepAlive: true
+invalid keepAliveInitialDelay: true
+socket options: true
+data: ok
+server close

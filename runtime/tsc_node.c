@@ -4795,7 +4795,16 @@ tsc_value_t tsc_net_create_server_tls(tsc_value_t connection_listener, void* tls
     return tsc_net_create_server_with_tls(connection_listener, (SSL_CTX*)tls_ctx);
 }
 
-static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int address_family, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
+typedef struct {
+    bool no_delay;
+    bool no_delay_set;
+    bool keep_alive;
+    bool keep_alive_set;
+    double keep_alive_initial_delay;
+    bool keep_alive_initial_delay_set;
+} tsc_net_connect_socket_options_t;
+
+static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int address_family, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, const tsc_net_connect_socket_options_t* socket_options, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
     }
@@ -4853,6 +4862,31 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int ad
         snprintf(message, sizeof(message), "net.connect local bind failed: %s", strerror(error));
         tsc_throw_str(tsc_str_from_cstr(message));
     }
+    if (socket_options && socket_options->no_delay_set) {
+        int value = socket_options->no_delay ? 1 : 0;
+        if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &value, sizeof(value)) != 0) {
+            close(fd);
+            tsc_throw_str(tsc_str_from_cstr("net.connect noDelay failed"));
+        }
+    }
+    if (socket_options && socket_options->keep_alive_set) {
+        int keep_alive = socket_options->keep_alive ? 1 : 0;
+        if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &keep_alive, sizeof(keep_alive)) != 0) {
+            close(fd);
+            tsc_throw_str(tsc_str_from_cstr("net.connect keepAlive failed"));
+        }
+        if (socket_options->keep_alive && socket_options->keep_alive_initial_delay_set && socket_options->keep_alive_initial_delay > 0.0) {
+            double seconds_value = socket_options->keep_alive_initial_delay / 1000.0;
+            int seconds = seconds_value >= (double)INT_MAX ? INT_MAX : (int)seconds_value;
+            if (seconds < INT_MAX && (seconds < 1 || socket_options->keep_alive_initial_delay > (double)seconds * 1000.0)) seconds++;
+            if (seconds < 1) seconds = 1;
+#if defined(TCP_KEEPIDLE)
+            (void)setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &seconds, sizeof(seconds));
+#elif defined(TCP_KEEPALIVE)
+            (void)setsockopt(fd, IPPROTO_TCP, TCP_KEEPALIVE, &seconds, sizeof(seconds));
+#endif
+        }
+    }
     if (endpoint.ss_family == AF_INET) {
         ((struct sockaddr_in*)&endpoint)->sin_port = htons((uint16_t)port);
     } else if (endpoint.ss_family == AF_INET6) {
@@ -4876,7 +4910,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int ad
 }
 
 tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
-    return tsc_net_connect_internal(port, host, AF_UNSPEC, NULL, 0.0, false, 0.0, false, connect_listener, NULL);
+    return tsc_net_connect_internal(port, host, AF_UNSPEC, NULL, 0.0, false, 0.0, false, NULL, connect_listener, NULL);
 }
 
 tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_listener) {
@@ -4934,7 +4968,35 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
         timeout_ms = tsc_value_as_num(timeout_value);
         timeout_set = true;
     }
-    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, address_family, local_address, local_port, local_port_set, timeout_ms, timeout_set, connect_listener, NULL);
+    tsc_net_connect_socket_options_t socket_options;
+    memset(&socket_options, 0, sizeof(socket_options));
+    tsc_value_t no_delay_value = tsc_value_get_prop(options, tsc_str_from_lit("noDelay", 7));
+    if (!tsc_value_is_nullish(no_delay_value)) {
+        if (!value_is_box(no_delay_value) ||
+            (value_tag(no_delay_value) != TSC_VALUE_TAG_FALSE && value_tag(no_delay_value) != TSC_VALUE_TAG_TRUE)) {
+            tsc_throw_str(tsc_str_from_cstr("net.connect options.noDelay must be a boolean"));
+        }
+        socket_options.no_delay = tsc_value_as_bool(no_delay_value);
+        socket_options.no_delay_set = true;
+    }
+    tsc_value_t keep_alive_value = tsc_value_get_prop(options, tsc_str_from_lit("keepAlive", 9));
+    if (!tsc_value_is_nullish(keep_alive_value)) {
+        if (!value_is_box(keep_alive_value) ||
+            (value_tag(keep_alive_value) != TSC_VALUE_TAG_FALSE && value_tag(keep_alive_value) != TSC_VALUE_TAG_TRUE)) {
+            tsc_throw_str(tsc_str_from_cstr("net.connect options.keepAlive must be a boolean"));
+        }
+        socket_options.keep_alive = tsc_value_as_bool(keep_alive_value);
+        socket_options.keep_alive_set = true;
+    }
+    tsc_value_t keep_alive_delay_value = tsc_value_get_prop(options, tsc_str_from_lit("keepAliveInitialDelay", 21));
+    if (!tsc_value_is_nullish(keep_alive_delay_value)) {
+        if (!tsc_value_number_is_finite(keep_alive_delay_value) || tsc_value_as_num(keep_alive_delay_value) < 0.0) {
+            tsc_throw_str(tsc_str_from_cstr("net.connect options.keepAliveInitialDelay must be a non-negative finite number"));
+        }
+        socket_options.keep_alive_initial_delay = tsc_value_as_num(keep_alive_delay_value);
+        socket_options.keep_alive_initial_delay_set = true;
+    }
+    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, address_family, local_address, local_port, local_port_set, timeout_ms, timeout_set, &socket_options, connect_listener, NULL);
 }
 
 static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
@@ -6472,7 +6534,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
         client->socket = tls
             ? tsc_net_tls_connect_internal(port, hostname, reject_unauthorized, servername, connect_listener, &client->native_socket)
-            : tsc_net_connect_internal(port, hostname, AF_UNSPEC, NULL, 0.0, false, 0.0, false, connect_listener, &client->native_socket);
+            : tsc_net_connect_internal(port, hostname, AF_UNSPEC, NULL, 0.0, false, 0.0, false, NULL, connect_listener, &client->native_socket);
         if (client->poolable) {
             client->pool_entry = tsc_http_client_pool_create(client, hostname, port, tls, reject_unauthorized, servername);
         }

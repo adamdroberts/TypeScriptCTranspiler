@@ -2660,6 +2660,9 @@ interface NetConnectOptions {
     port: number;
     host?: string;
     family?: number;
+    noDelay?: boolean;
+    keepAlive?: boolean;
+    keepAliveInitialDelay?: number;
     localAddress?: string;
     localPort?: number;
     timeout?: number;
