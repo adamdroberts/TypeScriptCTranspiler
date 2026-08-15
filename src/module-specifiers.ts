@@ -408,6 +408,8 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         if (ts.isPropertyAccessExpression(node)) {
             const numericConstant = resolveStaticNumericConstantAccess(node);
             if (numericConstant.length > 0) return numericConstant;
+            const stringLength = resolveStaticStringLengthAccess(node);
+            if (stringLength.length > 0) return stringLength;
             const bufferLength = resolveStaticBufferLengthAccess(node);
             if (bufferLength.length > 0) return bufferLength;
             const arrayBufferLength = resolveStaticArrayBufferLengthAccess(node);
@@ -5688,6 +5690,13 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const method = callee.name.text;
         if (method !== "toString" && method !== "toLocaleString" && method !== "valueOf") return [];
         return resolve(callee.expression);
+    };
+
+    const resolveStaticStringLengthAccess = (access: ts.PropertyAccessExpression): string[] => {
+        if (access.name.text !== "length") return [];
+        const values = resolve(access.expression);
+        if (values.length === 0) return [];
+        return dedupe(values.map((value) => String(value.length)));
     };
 
     const resolveStaticStringElementAccess = (expr: ts.ElementAccessExpression): string[] => {
