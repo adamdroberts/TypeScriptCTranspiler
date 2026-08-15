@@ -2661,6 +2661,7 @@ interface NetConnectOptions {
     host?: string;
     localAddress?: string;
     localPort?: number;
+    timeout?: number;
 }
 interface NetListenOptions {
     port: number;

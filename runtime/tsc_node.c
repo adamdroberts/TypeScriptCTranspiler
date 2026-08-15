@@ -4795,7 +4795,7 @@ tsc_value_t tsc_net_create_server_tls(tsc_value_t connection_listener, void* tls
     return tsc_net_create_server_with_tls(connection_listener, (SSL_CTX*)tls_ctx);
 }
 
-static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_str_t* local_address, double local_port, bool local_port_set, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
+static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_str_t* local_address, double local_port, bool local_port_set, double timeout_ms, bool timeout_set, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
     if (!tsc_value_number_is_finite(tsc_value_num(port)) || !tsc_value_number_is_integer(tsc_value_num(port)) || port < 1.0 || port > 65535.0) {
         tsc_throw_str(tsc_str_from_cstr("net.connect port must be an integer from 1 to 65535"));
     }
@@ -4867,6 +4867,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_st
     }
     tsc_net_socket_t* socket = NULL;
     tsc_value_t socket_value = tsc_net_socket_new(fd, connecting, true, &socket);
+    if (timeout_set && socket) socket->idle_timeout_ms = timeout_ms;
     if (tsc_value_is_callable(connect_listener)) {
         tsc_net_register_listener(&socket->event, "connect", connect_listener, true);
     }
@@ -4875,7 +4876,7 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, tsc_st
 }
 
 tsc_value_t tsc_net_connect(double port, tsc_str_t* host, tsc_value_t connect_listener) {
-    return tsc_net_connect_internal(port, host, NULL, 0.0, false, connect_listener, NULL);
+    return tsc_net_connect_internal(port, host, NULL, 0.0, false, 0.0, false, connect_listener, NULL);
 }
 
 tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_listener) {
@@ -4913,7 +4914,17 @@ tsc_value_t tsc_net_connect_options(tsc_value_t options, tsc_value_t connect_lis
         local_port = tsc_value_as_num(local_port_value);
         local_port_set = true;
     }
-    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, local_address, local_port, local_port_set, connect_listener, NULL);
+    tsc_value_t timeout_value = tsc_value_get_prop(options, tsc_str_from_lit("timeout", 7));
+    double timeout_ms = 0.0;
+    bool timeout_set = false;
+    if (!tsc_value_is_nullish(timeout_value)) {
+        if (!tsc_value_number_is_finite(timeout_value) || tsc_value_as_num(timeout_value) < 0.0) {
+            tsc_throw_str(tsc_str_from_cstr("net.connect options.timeout must be a non-negative finite number"));
+        }
+        timeout_ms = tsc_value_as_num(timeout_value);
+        timeout_set = true;
+    }
+    return tsc_net_connect_internal(tsc_value_as_num(port_value), host, local_address, local_port, local_port_set, timeout_ms, timeout_set, connect_listener, NULL);
 }
 
 static tsc_value_t tsc_net_tls_connect_internal(double port, tsc_str_t* host, bool reject_unauthorized, tsc_str_t* servername, tsc_value_t connect_listener, tsc_net_socket_t** out_socket) {
@@ -6451,7 +6462,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         tsc_value_t connect_listener = tsc_value_function_generic_named(tsc_http_client_connect, client, 0.0, tsc_str_from_lit("httpClientConnect", 17));
         client->socket = tls
             ? tsc_net_tls_connect_internal(port, hostname, reject_unauthorized, servername, connect_listener, &client->native_socket)
-            : tsc_net_connect_internal(port, hostname, NULL, 0.0, false, connect_listener, &client->native_socket);
+            : tsc_net_connect_internal(port, hostname, NULL, 0.0, false, 0.0, false, connect_listener, &client->native_socket);
         if (client->poolable) {
             client->pool_entry = tsc_http_client_pool_create(client, hostname, port, tls, reject_unauthorized, servername);
         }
