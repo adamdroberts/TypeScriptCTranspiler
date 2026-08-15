@@ -1,0 +1,1 @@
+{"description":"FileHandle.readLines supports ASCII, Latin-1, hex, and base64 encodings with byte-aware line behavior"}

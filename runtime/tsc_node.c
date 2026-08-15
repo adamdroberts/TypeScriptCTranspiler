@@ -7283,7 +7283,8 @@ tsc_promise_t* tsc_fs_promises_read_file_encoded_async(const tsc_str_t* path, ts
 static bool tsc_fs_file_handle_read_file_options(
     tsc_value_t options,
     bool* want_buffer,
-    tsc_str_t** result_encoding
+    tsc_str_t** result_encoding,
+    bool allow_extended_encodings
 ) {
     *want_buffer = true;
     *result_encoding = NULL;
@@ -7302,9 +7303,16 @@ static bool tsc_fs_file_handle_read_file_options(
     }
     tsc_str_t* encoding = tsc_value_as_string(encoding_value);
     if (str_lit_eq(encoding, "buffer")) return true;
-    if (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8") && !str_lit_eq(encoding, "hex") && !str_lit_eq(encoding, "base64")) {
+    bool supported = str_lit_eq(encoding, "utf8") || str_lit_eq(encoding, "utf-8") ||
+        str_lit_eq(encoding, "hex") || str_lit_eq(encoding, "base64");
+    if (allow_extended_encodings) {
+        supported = supported || buffer_encoding_is_latin1(encoding) || buffer_encoding_is_ascii(encoding);
+    }
+    if (!supported) {
         tsc_throw_str(tsc_str_from_cstr(
-            "fs.promises.FileHandle.readFile encoding must be UTF-8, hex, base64, buffer, or null"
+            allow_extended_encodings
+                ? "fs.promises.FileHandle.readLines encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, or null"
+                : "fs.promises.FileHandle.readFile encoding must be UTF-8, hex, base64, buffer, or null"
         ));
         return false;
     }
@@ -7320,7 +7328,8 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
     tsc_value_t signal,
     bool position_is_set,
     int64_t position,
-    size_t max_len
+    size_t max_len,
+    bool allow_extended_encodings
 ) {
     if (!handle || handle->closed || handle->fd < 0) {
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
@@ -7329,7 +7338,12 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
     bool want_buffer = true;
     tsc_str_t* result_encoding = NULL;
     tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
-    if (!tsc_fs_file_handle_read_file_options(options, &want_buffer, &result_encoding)) return NULL;
+    if (!tsc_fs_file_handle_read_file_options(
+        options,
+        &want_buffer,
+        &result_encoding,
+        allow_extended_encodings
+    )) return NULL;
 
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_read_file_async_t* task = (tsc_fs_read_file_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_read_file_async_t));
@@ -7368,7 +7382,8 @@ static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t t
         tsc_value_undefined(),
         false,
         0,
-        0
+        0,
+        false
     ));
 }
 
@@ -7550,12 +7565,14 @@ static bool tsc_fs_file_handle_read_lines_options(
     tsc_value_t* signal_out,
     bool* position_is_set_out,
     int64_t* position_out,
-    size_t* max_len_out
+    size_t* max_len_out,
+    tsc_str_t** encoding_out
 ) {
     if (signal_out) *signal_out = tsc_value_undefined();
     if (position_is_set_out) *position_is_set_out = false;
     if (position_out) *position_out = 0;
     if (max_len_out) *max_len_out = 0;
+    if (encoding_out) *encoding_out = NULL;
     if (tsc_value_is_nullish(options)) return true;
     if (!value_is_box(options) || value_tag(options) != TSC_VALUE_TAG_OBJECT) {
         tsc_throw_str(tsc_str_from_cstr(
@@ -7567,12 +7584,17 @@ static bool tsc_fs_file_handle_read_lines_options(
     if (!tsc_value_is_nullish(encoding)) {
         if (!value_is_box(encoding) || value_tag(encoding) != TSC_VALUE_TAG_STRING ||
             (!str_lit_eq(tsc_value_as_string(encoding), "utf8") &&
-             !str_lit_eq(tsc_value_as_string(encoding), "utf-8"))) {
+             !str_lit_eq(tsc_value_as_string(encoding), "utf-8") &&
+             !str_lit_eq(tsc_value_as_string(encoding), "hex") &&
+             !str_lit_eq(tsc_value_as_string(encoding), "base64") &&
+             !buffer_encoding_is_latin1(tsc_value_as_string(encoding)) &&
+             !buffer_encoding_is_ascii(tsc_value_as_string(encoding)))) {
             tsc_throw_str(tsc_str_from_cstr(
-                "fs.promises.FileHandle.readLines only supports UTF-8 encoding"
+                "fs.promises.FileHandle.readLines encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, or null"
             ));
             return false;
         }
+        if (encoding_out) *encoding_out = tsc_value_as_string(encoding);
     }
     tsc_value_t signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
     if (signal_out && !tsc_value_is_nullish(signal)) *signal_out = signal;
@@ -7618,7 +7640,7 @@ static bool tsc_fs_file_handle_read_lines_options(
         tsc_value_t value = tsc_value_get_prop(options, tsc_str_from_cstr(unsupported[i]));
         if (!tsc_value_is_nullish(value)) {
             tsc_throw_str(tsc_str_from_cstr(
-                "fs.promises.FileHandle.readLines option is outside the bounded UTF-8 subset"
+                "fs.promises.FileHandle.readLines option is outside the bounded encoding/range subset"
             ));
             return false;
         }
@@ -7632,12 +7654,14 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
     bool position_is_set = false;
     int64_t position = 0;
     size_t max_len = 0;
+    tsc_str_t* encoding = NULL;
     if (!tsc_fs_file_handle_read_lines_options(
         options,
         &signal,
         &position_is_set,
         &position,
-        &max_len
+        &max_len,
+        &encoding
     )) return tsc_value_undefined();
 
     tsc_fs_file_handle_read_lines_t* state =
@@ -7672,7 +7696,9 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
     );
 
     tsc_object_t* read_options = tsc_object_new();
-    tsc_object_set(read_options, tsc_str_from_lit("encoding", 8), tsc_value_string(tsc_str_from_lit("utf8", 4)));
+    tsc_object_set(read_options, tsc_str_from_lit("encoding", 8), tsc_value_string(
+        encoding ? encoding : tsc_str_from_lit("utf8", 4)
+    ));
     tsc_value_t read_options_value = tsc_value_object(read_options);
     tsc_array_t* read_args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_array_push_raw(read_args, &read_options_value);
@@ -7683,7 +7709,8 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
         signal,
         position_is_set,
         position,
-        max_len
+        max_len,
+        true
     );
     if (!state->source) {
         state->failed = true;

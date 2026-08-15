@@ -1641,7 +1641,7 @@ interface FSFileHandleReadFileStringOptions {
     encoding: FSReadFileStringEncoding;
 }
 interface FSFileHandleReadLinesOptions {
-    encoding?: FSReadFileStringEncoding | null;
+    encoding?: BufferEncoding | null;
     start?: number;
     end?: number;
     signal?: any;
