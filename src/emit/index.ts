@@ -50032,33 +50032,6 @@ class Emitter {
             scope.set(param.symbol, `state->${param.field}`);
             scopeTypes.set(param.symbol, param.type);
         }
-        for (const entry of bindingEntries) {
-            if (!(bindingIsParameter && entry.symbol === bindingSymbol)) scope.set(entry.symbol, entry.name);
-            scopeTypes.set(entry.symbol, entry.type);
-        }
-        const defaultScope = new Map<ts.Symbol, string>();
-        const defaultScopeTypes = new Map<ts.Symbol, CType>();
-        for (const param of params) {
-            defaultScope.set(param.symbol, `state->${param.field}`);
-            defaultScopeTypes.set(param.symbol, param.type);
-        }
-        const bindingDefaults = new Map<number, string>();
-        for (const [defaultId, defaultInitializer] of defaultInitializers) {
-            this.argumentValueScopes.push(defaultScope);
-            this.argumentValueTypeScopes.push(defaultScopeTypes);
-            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
-            let defaultResult: EmitResult;
-            this.asyncAwaitContinuationAdapterDepth++;
-            try {
-                defaultResult = this.emitExpr(defaultInitializer);
-            } finally {
-                this.asyncAwaitContinuationAdapterDepth--;
-                if (usesThis && thisValue) this.functionThisStack.pop();
-                this.argumentValueTypeScopes.pop();
-                this.argumentValueScopes.pop();
-            }
-            bindingDefaults.set(defaultId, this.coerce(defaultResult, T_VALUE, defaultInitializer));
-        }
 
         const bodyBindingFieldBySymbol = new Map(bodyBindingFields.map(({ entry, field }) => [entry.symbol, field]));
         const emitLoopResult = (target: CBuf): void => {
@@ -51117,6 +51090,29 @@ class Emitter {
             computedKeyTemps.set(id, keyTemp);
             return keyTemp;
         };
+        const bindingDefaultTemps = new Map<number, string>();
+        const bindingDefaultValue = (id: number): string => {
+            const cached = bindingDefaultTemps.get(id);
+            if (cached) return cached;
+            const initializer = defaultInitializers.get(id);
+            if (!initializer) throw new Error("for-await binding default was not staged");
+            this.argumentValueScopes.push(scope);
+            this.argumentValueTypeScopes.push(scopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let fallback: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                fallback = this.emitExpr(initializer);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const fallbackValue = this.coerce(fallback, T_VALUE, initializer);
+            bindingDefaultTemps.set(id, fallbackValue);
+            return fallbackValue;
+        };
         const accessTemps = new Map<ForOfObjectAccessSegment, string>();
         const accessValue = (accessPath: readonly ForOfObjectAccessSegment[]): string => {
             let source = itemVar;
@@ -51135,10 +51131,7 @@ class Emitter {
                 if (segment.defaultId === undefined) {
                     callback.line(`${T_VALUE.c} const ${valueTemp} = ${value};`);
                 } else {
-                    const fallback = bindingDefaults.get(segment.defaultId);
-                    if (fallback === undefined) {
-                        throw new Error("for-await nested binding default was not staged");
-                    }
+                    const fallback = bindingDefaultValue(segment.defaultId);
                     callback.line(`${T_VALUE.c} ${valueTemp} = ${value};`);
                     callback.open(`if (tsc_value_is_undefined(${valueTemp}))`);
                     callback.line(`${valueTemp} = ${fallback};`);
@@ -51196,11 +51189,15 @@ class Emitter {
             const source = bindingValueFor(binding);
             const bindingValue = this.coerce(source, binding.type, binding.identifier);
             callback.line(`${binding.type.c} ${binding.name} = ${bindingValue};`);
+            scope.set(binding.symbol, binding.name);
+            scopeTypes.set(binding.symbol, binding.type);
         } else {
             for (const entry of bindingEntries) {
                 const source = bindingValueFor(entry);
                 const bindingValue = this.coerce(source, entry.type, entry.identifier);
                 callback.line(`${entry.type.c} ${entry.name} = ${bindingValue};`);
+                scope.set(entry.symbol, entry.name);
+                scopeTypes.set(entry.symbol, entry.type);
             }
         }
         for (const { entry, field } of bodyBindingFields) {

@@ -1,0 +1,3 @@
+{
+  "description": "for-await binding defaults can reference earlier bindings across nested fallback paths"
+}
