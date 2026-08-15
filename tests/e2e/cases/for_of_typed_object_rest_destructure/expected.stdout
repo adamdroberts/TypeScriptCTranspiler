@@ -1,0 +1,5 @@
+direct direct-a:x:2:alpha:10:outer-a:undefined;direct-b:y:5:beta:6:outer-b:undefined;
+custom custom-a:p:8:one:20:outer-p;custom-b:q:11:two:12:outer-q;
+lazy1 false lazy-a:r:14:red:30:outer-r
+lazy2 false lazy-b:s:17:blue:18:outer-s
+lazy3 true typed-object-rest-done

@@ -108,8 +108,11 @@ interface ForOfTypedObjectBindingDescriptor {
     identifier: ts.Identifier;
     accessPath: ForOfTypedObjectAccessSegment[];
     fieldType: CType;
+    fieldTsType: ts.Type;
     type: CType;
     arrayRestIndex: number | null;
+    objectRest: boolean;
+    objectRestKeys: string[];
 }
 
 type ForOfTypedObjectAccessSegment =
@@ -68708,6 +68711,7 @@ class Emitter {
     private forOfTypedObjectBindingDescriptors(
         pattern: ts.ObjectBindingPattern,
         objectType: ts.Type,
+        objectCType: CType,
         prefix: readonly ForOfTypedObjectAccessSegment[] = [],
     ): ForOfTypedObjectBindingDescriptor[] {
         const descriptors: ForOfTypedObjectBindingDescriptor[] = [];
@@ -68758,8 +68762,11 @@ class Emitter {
                         identifier: element.name,
                         accessPath: [...arrayPrefix],
                         fieldType: arrayType,
+                        fieldTsType: arrayTsType,
                         type: restType,
                         arrayRestIndex: index,
+                        objectRest: false,
+                        objectRestKeys: [],
                     });
                     continue;
                 }
@@ -68796,7 +68803,7 @@ class Emitter {
                             "nested typed for-of array object bindings require typed object elements",
                         );
                     }
-                    collectObject(element.name, elementTsType, accessPath);
+                    collectObject(element.name, elementType, elementTsType, accessPath);
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
@@ -68820,20 +68827,57 @@ class Emitter {
                     identifier: element.name,
                     accessPath,
                     fieldType: elementType,
+                    fieldTsType: elementTsType,
                     type: this.prepareType(mapType(element.name, this.checker)),
                     arrayRestIndex: null,
+                    objectRest: false,
+                    objectRestKeys: [],
                 });
             }
         };
         const collectObject = (
             current: ts.ObjectBindingPattern,
+            currentCType: CType,
             currentType: ts.Type,
             objectPrefix: readonly ForOfTypedObjectAccessSegment[],
         ): void => {
             if (current.elements.length === 0) {
                 unsupported(current, "typed for-of object destructuring requires at least one binding");
             }
-            for (const element of current.elements) {
+            const boundProperties: string[] = [];
+            for (let index = 0; index < current.elements.length; index++) {
+                const element = current.elements[index];
+                if (ts.isBindingElement(element) && element.dotDotDotToken) {
+                    if (
+                        index !== current.elements.length - 1 ||
+                        !ts.isIdentifier(element.name) ||
+                        element.initializer
+                    ) {
+                        unsupported(
+                            element,
+                            "typed for-of object rest requires one terminal identifier without a default",
+                        );
+                    }
+                    const restType = this.prepareType(mapType(element.name, this.checker));
+                    if (restType.kind !== "value") {
+                        unsupported(
+                            element.name,
+                            "typed for-of object rest requires an any or unknown binding",
+                        );
+                    }
+                    descriptors.push({
+                        element,
+                        identifier: element.name,
+                        accessPath: [...objectPrefix],
+                        fieldType: currentCType,
+                        fieldTsType: currentType,
+                        type: restType,
+                        arrayRestIndex: null,
+                        objectRest: true,
+                        objectRestKeys: [...boundProperties],
+                    });
+                    continue;
+                }
                 if (
                     !ts.isBindingElement(element) ||
                     element.dotDotDotToken ||
@@ -68884,6 +68928,7 @@ class Emitter {
                     ...objectPrefix,
                     { kind: "property" as const, value: property, type: fieldType },
                 ];
+                boundProperties.push(property);
                 if (ts.isObjectBindingPattern(element.name)) {
                     if (element.initializer) {
                         unsupported(
@@ -68897,7 +68942,7 @@ class Emitter {
                             "nested typed for-of object bindings require a typed object field",
                         );
                     }
-                    collectObject(element.name, fieldTsType, accessPath);
+                    collectObject(element.name, fieldType, fieldTsType, accessPath);
                     continue;
                 }
                 if (ts.isArrayBindingPattern(element.name)) {
@@ -68915,12 +68960,15 @@ class Emitter {
                     identifier: element.name,
                     accessPath,
                     fieldType,
+                    fieldTsType,
                     type: this.prepareType(mapType(element.name, this.checker)),
                     arrayRestIndex: null,
+                    objectRest: false,
+                    objectRestKeys: [],
                 });
             }
         };
-        collectObject(pattern, objectType, prefix);
+        collectObject(pattern, objectCType, objectType, prefix);
         return descriptors;
     }
 
@@ -68935,6 +68983,37 @@ class Emitter {
             return `(${source} != NULL && tsc_array_index_present(${source}, ${segment.value}) ? ` +
                 `TSC_ARR(${segment.type.c}, ${source}, ${segment.value}) : ${this.zeroValue(segment.type)})`;
         }, sourceC);
+    }
+
+    private emitTypedObjectRestForOf(
+        buf: CBuf,
+        sourceC: string,
+        sourceType: CType,
+        sourceTsType: ts.Type,
+        excludedProperties: readonly string[],
+        node: ts.Node,
+    ): EmitResult {
+        if (sourceType.kind !== "class") {
+            unsupported(node, "typed for-of object rest requires a typed object source");
+        }
+        const restObject = this.freshTemp("_typed_object_rest");
+        buf.line(`tsc_object_t* ${restObject} = tsc_object_new();`);
+        const excluded = new Set(excludedProperties);
+        for (const property of this.objectProperties(sourceTsType)) {
+            const name = property.getName();
+            if (excluded.has(name)) continue;
+            const declaration = property.valueDeclaration ?? property.getDeclarations()?.[0];
+            if (!declaration) continue;
+            const propertyType = this.prepareType(
+                mapTsType(declaration, this.checker.getTypeOfSymbolAtLocation(property, declaration), this.checker),
+            );
+            const field = `(${sourceC})->${mangleIdent(name)}`;
+            buf.line(
+                `tsc_object_set(${restObject}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ` +
+                `${this.coerce({ c: field, ty: propertyType }, T_VALUE, node)});`,
+            );
+        }
+        return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
     }
 
     private emitTypedArrayRestForOf(
@@ -68980,10 +69059,19 @@ class Emitter {
         if (sourceType.kind !== "class") {
             unsupported(pattern, "typed for-of object destructuring requires a typed object element");
         }
-        const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType);
+        const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType, sourceType);
         for (const descriptor of descriptors) {
             const sourceValue = this.typedObjectBindingAccess(sourceC, descriptor.accessPath);
-            const value = descriptor.arrayRestIndex === null
+            const value = descriptor.objectRest
+                ? this.emitTypedObjectRestForOf(
+                    buf,
+                    sourceValue,
+                    descriptor.fieldType,
+                    descriptor.fieldTsType,
+                    descriptor.objectRestKeys,
+                    descriptor.element,
+                )
+                : descriptor.arrayRestIndex === null
                 ? this.forOfBindingValueWithDefault(descriptor.element, {
                     c: sourceValue,
                     ty: descriptor.fieldType,
