@@ -1448,7 +1448,7 @@ interface FSCpOptions {
 }
 type FSEncoding = "utf8" | "utf-8";
 type FSReadFileStringEncoding = FSEncoding | "hex" | "base64" | "latin1" | "binary" | "ascii";
-type FSFileContentEncoding = FSEncoding | "hex" | "base64";
+type FSFileContentEncoding = FSEncoding | "hex" | "base64" | "latin1" | "binary" | "ascii";
 type FSPathResultEncoding = FSEncoding | "hex" | "base64";
 type FSReaddirStringEncoding = FSEncoding | "hex" | "base64";
 type FSBufferEncoding = "buffer";

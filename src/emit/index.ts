@@ -89735,7 +89735,7 @@ class Emitter {
             }
             case "writeFileSync": {
                 if (args.length < 2)
-                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
+                    unsupported(call, "fs.writeFileSync needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.writeFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
@@ -89766,7 +89766,7 @@ class Emitter {
                 });
             }
             case "appendFileSync": {
-                if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.appendFileSync needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.appendFileSync");
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
@@ -90857,7 +90857,7 @@ class Emitter {
         path: string,
         data: string,
         dataKind: "string" | "buffer",
-        encoding: "utf8" | "hex" | "base64",
+        encoding: "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii",
         append: string,
         exclusive: string,
         update: string,
@@ -90878,7 +90878,7 @@ class Emitter {
         path: string,
         data: string,
         dataKind: "string" | "buffer",
-        encoding: "utf8" | "hex" | "base64",
+        encoding: "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii",
         append: string,
         exclusive: string,
         update: string,
@@ -90900,15 +90900,15 @@ class Emitter {
         options: ts.Expression | undefined,
         label: string,
         allowSignal = false,
-    ): { append: boolean; exclusive: boolean; update: boolean; flush: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
+    ): { append: boolean; exclusive: boolean; update: boolean; flush: boolean; encoding: "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii"; mode: SequencedCallArg } {
         const out = { append: false, exclusive: false, update: false, flush: false };
-        let encoding: "utf8" | "hex" | "base64" = "utf8";
+        let encoding: "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, encoding, mode };
         if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) return { ...out, encoding, mode };
-        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
+        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
@@ -90916,8 +90916,9 @@ class Emitter {
             if (text !== null) {
                 if (text === "utf8" || text === "utf-8") return "utf8";
                 if (text === "hex" || text === "base64") return text;
+                if (text === "latin1" || text === "binary" || text === "ascii") return text;
             }
-            unsupported(node, `${label} only supports UTF-8, hex, or base64 encoding options in this subset`);
+            unsupported(node, `${label} only supports UTF-8, ASCII, Latin-1, binary, hex, or base64 encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
@@ -90936,7 +90937,7 @@ class Emitter {
             return { ...out, encoding, mode };
         }
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
-            unsupported(options, `${label} options must be a UTF-8/hex/base64 string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/ASCII/Latin-1/binary/hex/base64 string literal or object literal in this subset`);
         }
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
@@ -90979,15 +90980,15 @@ class Emitter {
         options: ts.Expression | undefined,
         label: string,
         allowSignal = false,
-    ): { exclusive: boolean; flush: boolean; encoding: "utf8" | "hex" | "base64"; mode: SequencedCallArg } {
+    ): { exclusive: boolean; flush: boolean; encoding: "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii"; mode: SequencedCallArg } {
         const out = { exclusive: false, flush: false };
-        let encoding: "utf8" | "hex" | "base64" = "utf8";
+        let encoding: "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii" = "utf8";
         let mode: SequencedCallArg = { value: { c: "-1.0", ty: T_NUMBER }, target: T_NUMBER, node: options ?? undefined };
         if (!options || this.isUndefinedLikeExpression(options)) return { ...out, encoding, mode };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions)) return { ...out, encoding, mode };
         if (resolvedOptions.kind === ts.SyntaxKind.NullKeyword) return { ...out, encoding, mode };
-        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" => {
+        const checkEncoding = (node: ts.Expression): "utf8" | "hex" | "base64" | "latin1" | "binary" | "ascii" => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
             if (this.isUndefinedExpression(node)) return "utf8";
             if (node.kind === ts.SyntaxKind.NullKeyword) return "utf8";
@@ -90995,8 +90996,9 @@ class Emitter {
             if (text !== null) {
                 if (text === "utf8" || text === "utf-8") return "utf8";
                 if (text === "hex" || text === "base64") return text;
+                if (text === "latin1" || text === "binary" || text === "ascii") return text;
             }
-            unsupported(node, `${label} only supports UTF-8, hex, or base64 encoding options in this subset`);
+            unsupported(node, `${label} only supports UTF-8, ASCII, Latin-1, binary, hex, or base64 encoding options in this subset`);
         };
         const checkFlag = (node: ts.Expression): void => {
             node = this.resolveSideEffectFreeEarlierConstExpression(node);
@@ -91013,7 +91015,7 @@ class Emitter {
             return { ...out, encoding, mode };
         }
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
-            unsupported(options, `${label} options must be a UTF-8/hex/base64 string literal or object literal in this subset`);
+            unsupported(options, `${label} options must be a UTF-8/ASCII/Latin-1/binary/hex/base64 string literal or object literal in this subset`);
         }
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
@@ -91336,7 +91338,7 @@ class Emitter {
                 });
             }
             case "writeFile": {
-                if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.promises.writeFile needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsWriteFileOptions(args[2], "fs.promises.writeFile", true);
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);
@@ -91369,7 +91371,7 @@ class Emitter {
                 });
             }
             case "appendFile": {
-                if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8/hex/base64 encoding/flag options");
+                if (args.length < 2) unsupported(call, "fs.promises.appendFile needs path, data, and optional UTF-8/ASCII/Latin-1/binary/hex/base64 encoding/flag options");
                 const options = this.validateFsAppendFileOptions(args[2], "fs.promises.appendFile", true);
                 const p = this.emitExpr(args[0]!);
                 const d = this.emitExpr(args[1]!);

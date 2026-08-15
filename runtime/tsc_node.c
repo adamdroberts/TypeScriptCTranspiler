@@ -6426,15 +6426,17 @@ static tsc_str_t* tsc_fs_file_handle_append_encoding(tsc_value_t options, bool i
     if (tsc_value_is_nullish(encoding_value)) return NULL;
     if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
         tsc_throw_str(tsc_str_from_cstr(is_append
-            ? "fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"
-            : "fs.promises.FileHandle.writeFile encoding must be UTF-8, hex, or base64"));
+            ? "fs.promises.FileHandle.appendFile encoding must be UTF-8, ASCII, Latin-1, binary, hex, or base64"
+            : "fs.promises.FileHandle.writeFile encoding must be UTF-8, ASCII, Latin-1, binary, hex, or base64"));
         return NULL;
     }
     tsc_str_t* encoding = tsc_value_as_string(encoding_value);
-    if (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8") && !str_lit_eq(encoding, "hex") && !str_lit_eq(encoding, "base64")) {
+    if (!str_lit_eq(encoding, "utf8") && !str_lit_eq(encoding, "utf-8") &&
+        !str_lit_eq(encoding, "hex") && !str_lit_eq(encoding, "base64") &&
+        !buffer_encoding_is_latin1(encoding) && !buffer_encoding_is_ascii(encoding)) {
         tsc_throw_str(tsc_str_from_cstr(is_append
-            ? "fs.promises.FileHandle.appendFile encoding must be UTF-8, hex, or base64"
-            : "fs.promises.FileHandle.writeFile encoding must be UTF-8, hex, or base64"));
+            ? "fs.promises.FileHandle.appendFile encoding must be UTF-8, ASCII, Latin-1, binary, hex, or base64"
+            : "fs.promises.FileHandle.writeFile encoding must be UTF-8, ASCII, Latin-1, binary, hex, or base64"));
         return NULL;
     }
     return encoding;

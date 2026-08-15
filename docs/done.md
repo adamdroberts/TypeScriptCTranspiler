@@ -10,6 +10,7 @@
 - `fs.promises.open` FileHandle `readLines({ highWaterMark })` now validates non-negative safe-integer chunk sizes, defaults to 64 KiB, accepts zero, and routes the selected size through the existing libuv reader. Test: `fs_promises_file_handle_read_lines_high_water_mark`.
 - Verified bounded `fs.readFile` encoding coverage: `fs.readFileSync` and libuv-backed `fs.promises.readFile` now accept direct and object-literal `ascii`, `latin1`, and `binary` string encodings; ASCII masks high bits while Latin-1/binary preserve byte values, and existing UTF-8/hex/base64/Buffer/null paths remain intact. Test: `fs_read_file_additional_encodings`.
 - Verified bounded FileHandle `readFile()` encoding coverage: libuv-backed `fs.promises.open` handles now accept direct and object-literal ASCII, Latin-1, and binary string encodings alongside existing UTF-8/hex/base64/Buffer/null results. Test: `fs_promises_file_handle_read_file_additional_encodings`.
+- Verified bounded fs write/append encoding coverage: `fs.writeFileSync`, `fs.appendFileSync`, libuv-backed `fs.promises.writeFile` / `appendFile`, and `fs.promises.open` FileHandle `writeFile()` / `appendFile()` now accept direct and object-literal ASCII, Latin-1, and binary string encodings alongside UTF-8/hex/base64. Test: `fs_write_append_additional_encodings`.
 - `fs.promises.open` FileHandle `readLines({ autoClose })` now closes the underlying descriptor by default when the iterator exhausts, is returned, or fails, while `autoClose: false` preserves the caller-owned descriptor for later use. Test: `fs_promises_file_handle_read_lines_autoclose`.
 - `fs.promises.open` FileHandle `readLines({ emitClose })` now exposes EventEmitter-compatible iterator listeners and emits one `close` event on exhaustion, return, or read failure by default, while `emitClose: false` suppresses that event. Test: `fs_promises_file_handle_read_lines_emit_close`.
 - `fs.promises.open` FileHandle `readLines({ signal })` now rejects a pending iterator `next()` with the AbortSignal reason and handles pre-aborted signals. Test: `fs_promises_file_handle_read_lines_abort`.
@@ -3775,6 +3776,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `fs_write_append_mode_options` | fs writeFile/appendFile numeric mode and const flush options for sync, named import, and promises |
 | `fs_write_append_flush` | fs writeFile/appendFile flush-before-close semantics for sync and libuv-backed Promise forms |
 | `fs_write_append_encoded_options` | fs writeFile/appendFile hex/base64 string encodings for sync and libuv-backed promise forms |
+| `fs_write_append_additional_encodings` | fs writeFile/appendFile and FileHandle writeFile/appendFile ASCII/Latin-1/binary string encodings |
 | `fs_write_append_ignored_arguments` | fs writeFile/appendFile sync and promise explicit undefined options and ignored extra arguments |
 | `fs_mutation_ignored_arguments` | fs mutation sync and promise calls evaluate ignored extra arguments after consumed options |
 | `fs_promises_stat_access_ignored_arguments` | fs.promises stat/lstat/access explicit undefined options and ignored extra arguments |
