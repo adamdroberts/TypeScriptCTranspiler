@@ -1,0 +1,5 @@
+read: 2:.ab.
+write: 2:WXYZ
+default read: 3:.abc
+content: abcdXY
+error: pending

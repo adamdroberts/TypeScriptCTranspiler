@@ -6710,6 +6710,10 @@ static size_t tsc_fs_file_handle_io_index(tsc_value_t value) {
     return (size_t)number;
 }
 
+static tsc_value_t tsc_fs_file_handle_io_option(tsc_value_t options, const char* name, size_t length) {
+    return tsc_value_get_prop(options, tsc_str_from_lit(name, length));
+}
+
 static tsc_promise_t* tsc_fs_file_handle_io_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, bool is_read, tsc_value_t result_value) {
     if (!args || args->len < 1) {
         tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle I/O needs a Buffer"));
@@ -6723,27 +6727,56 @@ static tsc_promise_t* tsc_fs_file_handle_io_start(tsc_fs_file_handle_t* handle, 
 
     size_t offset = 0;
     size_t length = buffer->len;
-    if (args->len > 1 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 1))) {
-        offset = tsc_fs_file_handle_io_index(TSC_ARR(tsc_value_t, args, 1));
-    }
-    if (args->len > 2 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 2))) {
-        length = tsc_fs_file_handle_io_index(TSC_ARR(tsc_value_t, args, 2));
-    }
     bool position_is_null = true;
     int64_t position = 0;
-    if (args->len > 3 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 3))) {
-        tsc_value_t position_value = TSC_ARR(tsc_value_t, args, 3);
-        if (!tsc_value_number_is_safe_integer(position_value)) {
-            tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle position must be a safe integer or null"));
-            return NULL;
+    bool options_form = args->len > 1 && tsc_value_is_object(TSC_ARR(tsc_value_t, args, 1));
+    if (options_form) {
+        tsc_value_t options = TSC_ARR(tsc_value_t, args, 1);
+        tsc_value_t offset_value = tsc_fs_file_handle_io_option(options, "offset", 6);
+        tsc_value_t length_value = tsc_fs_file_handle_io_option(options, "length", 6);
+        tsc_value_t position_value = tsc_fs_file_handle_io_option(options, "position", 8);
+        if (!tsc_value_is_undefined(offset_value)) {
+            offset = tsc_fs_file_handle_io_index(offset_value);
         }
-        double position_number = tsc_value_as_num(position_value);
-        if (position_number < 0.0) {
-            tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle position must be non-negative"));
-            return NULL;
+        if (!tsc_value_is_undefined(length_value)) {
+            length = tsc_fs_file_handle_io_index(length_value);
+        } else if (offset <= buffer->len) {
+            length = buffer->len - offset;
         }
-        position = (int64_t)position_number;
-        position_is_null = false;
+        if (!tsc_value_is_undefined(position_value) && !tsc_value_is_nullish(position_value)) {
+            if (!tsc_value_number_is_safe_integer(position_value)) {
+                tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle position must be a safe integer or null"));
+                return NULL;
+            }
+            double position_number = tsc_value_as_num(position_value);
+            if (position_number < 0.0) {
+                tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle position must be non-negative"));
+                return NULL;
+            }
+            position = (int64_t)position_number;
+            position_is_null = false;
+        }
+    } else {
+        if (args->len > 1 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 1))) {
+            offset = tsc_fs_file_handle_io_index(TSC_ARR(tsc_value_t, args, 1));
+        }
+        if (args->len > 2 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 2))) {
+            length = tsc_fs_file_handle_io_index(TSC_ARR(tsc_value_t, args, 2));
+        }
+        if (args->len > 3 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 3))) {
+            tsc_value_t position_value = TSC_ARR(tsc_value_t, args, 3);
+            if (!tsc_value_number_is_safe_integer(position_value)) {
+                tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle position must be a safe integer or null"));
+                return NULL;
+            }
+            double position_number = tsc_value_as_num(position_value);
+            if (position_number < 0.0) {
+                tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle position must be non-negative"));
+                return NULL;
+            }
+            position = (int64_t)position_number;
+            position_is_null = false;
+        }
     }
     if (offset > buffer->len || length > buffer->len - offset) {
         return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle I/O range is out of bounds")));

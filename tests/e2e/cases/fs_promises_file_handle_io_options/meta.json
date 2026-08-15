@@ -1,0 +1,3 @@
+{
+  "description": "FileHandle Buffer read and write options objects with offset, length, position, and Node-compatible default lengths"
+}

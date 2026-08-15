@@ -1630,6 +1630,11 @@ interface FSFileWriteResult {
     readonly bytesWritten: number;
     readonly buffer: Buffer;
 }
+interface FSFileHandleIOOptions {
+    offset?: number;
+    length?: number;
+    position?: number | null;
+}
 interface FSFileStringWriteResult {
     readonly bytesWritten: number;
     readonly buffer: string;
@@ -1667,7 +1672,9 @@ interface FSFileHandleReadLinesIterator extends EventEmitter {
 interface FSFileHandle {
     readonly fd: number;
     read(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileReadResult>;
+    read(buffer: Buffer, options?: FSFileHandleIOOptions, ...ignored: any[]): Promise<FSFileReadResult>;
     write(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileWriteResult>;
+    write(buffer: Buffer, options?: FSFileHandleIOOptions, ...ignored: any[]): Promise<FSFileWriteResult>;
     write(string: string, position?: number | null, encoding?: BufferEncoding, ...ignored: any[]): Promise<FSFileStringWriteResult>;
     readv(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileReadvResult>;
     writev(buffers: Buffer[], position?: number | null, ...ignored: any[]): Promise<FSFileWritevResult>;
