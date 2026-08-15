@@ -2785,6 +2785,8 @@ interface ChildProcessSpawnOptions {
     stdio?: ChildProcessSpawnSyncStdio;
     argv0?: string;
     detached?: boolean;
+    windowsHide?: boolean;
+    windowsVerbatimArguments?: boolean;
     uid?: number;
     gid?: number;
     timeout?: number;

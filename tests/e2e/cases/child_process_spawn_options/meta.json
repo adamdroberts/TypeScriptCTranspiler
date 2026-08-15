@@ -1,0 +1,3 @@
+{
+  "description": "child_process spawn forwards argv0 and accepts POSIX-inert Windows options"
+}
