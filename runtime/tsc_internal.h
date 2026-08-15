@@ -155,6 +155,9 @@ struct tsc_object {
     uint64_t object_id;
     tsc_value_t proxy_target;
     tsc_value_t proxy_handler;
+    /* Keep tagged proxy slots conservatively rooted for Boehm GC. */
+    void* proxy_target_root;
+    void* proxy_handler_root;
     tsc_value_t prototype;
     tsc_object_prop_t* props;
 };

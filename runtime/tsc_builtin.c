@@ -2132,6 +2132,8 @@ tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler) {
     o->object_id = 0;
     o->proxy_target = target;
     o->proxy_handler = handler;
+    o->proxy_target_root = value_ptr(target);
+    o->proxy_handler_root = value_ptr(handler);
     o->prototype = tsc_value_null();
     o->props = NULL;
     return tsc_value_object(o);
@@ -2146,6 +2148,7 @@ tsc_value_t tsc_proxy_revoke(void* env, tsc_value_t receiver, tsc_array_t* args)
         if (o->is_proxy) {
             o->proxy_revoked = true;
             o->proxy_handler = tsc_value_null();
+            o->proxy_handler_root = NULL;
         }
     }
     return tsc_value_undefined();
