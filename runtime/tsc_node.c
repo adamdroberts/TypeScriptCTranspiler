@@ -7299,7 +7299,8 @@ static bool tsc_fs_file_handle_read_file_options(
     tsc_value_t options,
     bool* want_buffer,
     tsc_str_t** result_encoding,
-    bool allow_extended_encodings
+    bool allow_extended_encodings,
+    bool read_lines
 ) {
     *want_buffer = true;
     *result_encoding = NULL;
@@ -7312,7 +7313,9 @@ static bool tsc_fs_file_handle_read_file_options(
     if (tsc_value_is_nullish(encoding_value)) return true;
     if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
         tsc_throw_str(tsc_str_from_cstr(
-            "fs.promises.FileHandle.readFile encoding must be UTF-8, hex, base64, buffer, or null"
+            read_lines
+                ? "fs.promises.FileHandle.readLines encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, or null"
+                : "fs.promises.FileHandle.readFile encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, buffer, or null"
         ));
         return false;
     }
@@ -7326,7 +7329,9 @@ static bool tsc_fs_file_handle_read_file_options(
     if (!supported) {
         tsc_throw_str(tsc_str_from_cstr(
             allow_extended_encodings
-                ? "fs.promises.FileHandle.readLines encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, or null"
+                ? (read_lines
+                    ? "fs.promises.FileHandle.readLines encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, or null"
+                    : "fs.promises.FileHandle.readFile encoding must be UTF-8, ASCII, Latin-1, binary, hex, base64, buffer, or null")
                 : "fs.promises.FileHandle.readFile encoding must be UTF-8, hex, base64, buffer, or null"
         ));
         return false;
@@ -7345,6 +7350,7 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
     int64_t position,
     size_t max_len,
     bool allow_extended_encodings,
+    bool read_lines,
     size_t read_chunk_size
 ) {
     if (!handle || handle->closed || handle->fd < 0) {
@@ -7358,7 +7364,8 @@ static tsc_promise_t* tsc_fs_file_handle_read_file_start(
         options,
         &want_buffer,
         &result_encoding,
-        allow_extended_encodings
+        allow_extended_encodings,
+        read_lines
     )) return NULL;
 
     tsc_promise_t* promise = tsc_promise_pending();
@@ -7400,6 +7407,7 @@ static tsc_value_t tsc_fs_file_handle_read_file_builtin(void* env, tsc_value_t t
         false,
         0,
         0,
+        true,
         false,
         TSC_UV_READ_CHUNK
     ));
@@ -7778,6 +7786,7 @@ static tsc_value_t tsc_fs_file_handle_read_lines_builtin(void* env, tsc_value_t 
         position_is_set,
         position,
         max_len,
+        true,
         true,
         high_water_mark
     );
