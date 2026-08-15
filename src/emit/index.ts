@@ -19454,10 +19454,12 @@ class Emitter {
     }
 
     private isCommonJsWrapperArgumentExpression(expr: ts.Expression): boolean {
-        return this.isCommonJsRequireCallee(expr) ||
-            this.isCommonJsModuleThisArg(expr) ||
-            this.isCommonJsExportsTargetExpression(expr) ||
-            this.requireCallSpecifier(expr) !== null;
+        const unwrapped = this.unwrapTransparentExpression(expr);
+        return this.isCommonJsRequireCallee(unwrapped) ||
+            this.isCommonJsModuleThisArg(unwrapped) ||
+            this.isCommonJsExportsTargetExpression(unwrapped) ||
+            this.requireCallSpecifier(unwrapped) !== null ||
+            (ts.isIdentifier(unwrapped) && this.requireBindingSpecifier(unwrapped) !== null);
     }
 
     private emitCommonJsIifeWrapper(buf: CBuf, stmt: ts.Statement): boolean {
@@ -21614,17 +21616,36 @@ class Emitter {
         return ty;
     }
 
-    private requireBindingSpecifier(id: ts.Identifier): string | null {
+    private requireBindingSpecifier(id: ts.Identifier, seen: Set<ts.Node> = new Set()): string | null {
+        const resolveInitializer = (
+            initializer: ts.Expression,
+            owner: ts.Node,
+            followIdentifierAlias: boolean,
+        ): string | null => {
+            if (seen.has(owner)) return null;
+            seen.add(owner);
+            const unwrapped = this.unwrapTransparentExpression(initializer);
+            const direct = this.requireCallSpecifier(unwrapped);
+            const resolved = direct ?? (
+                followIdentifierAlias && ts.isIdentifier(unwrapped)
+                    ? this.requireBindingSpecifier(unwrapped, seen)
+                    : null
+            );
+            seen.delete(owner);
+            return resolved;
+        };
         const sym = this.symbolForIdentifier(id);
         const decl = sym?.valueDeclaration ?? sym?.declarations?.[0];
         if (decl && ts.isVariableDeclaration(decl) && decl.initializer) {
-            const spec = this.requireCallSpecifier(decl.initializer);
+            const isConst = ts.isVariableDeclarationList(decl.parent) &&
+                (ts.getCombinedNodeFlags(decl.parent) & ts.NodeFlags.Const) !== 0;
+            const spec = resolveInitializer(decl.initializer, decl, isConst);
             if (spec) return spec;
         }
         if (decl && ts.isParameter(decl)) {
             const arg = this.commonJsIifeParameterArgument(decl);
             if (arg) {
-                const spec = this.requireCallSpecifier(arg);
+                const spec = resolveInitializer(arg, decl, true);
                 if (spec) return spec;
             }
         }
@@ -21636,7 +21657,8 @@ class Emitter {
                     fallbackDecl.name.text === id.text &&
                     fallbackDecl.initializer
                 ) {
-                    const spec = this.requireCallSpecifier(fallbackDecl.initializer);
+                    const isConst = (ts.getCombinedNodeFlags(stmt.declarationList) & ts.NodeFlags.Const) !== 0;
+                    const spec = resolveInitializer(fallbackDecl.initializer, fallbackDecl, isConst);
                     if (spec) return spec;
                 }
             }

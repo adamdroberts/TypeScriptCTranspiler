@@ -1724,6 +1724,10 @@ const packages: Record<string, PackageFixture> = {
     "tsc2c-cjs-module-local-factory-object": cjsPackage("tsc2c-cjs-module-local-factory-object", {
         "index.js": 'const label = "factory-object";\nfunction makeApi() {\n  return {\n    default: "factory-default",\n    label,\n    count: 125,\n    double(value) { return value * 2; },\n    enabled: true\n  };\n}\nmodule.exports = makeApi();\n',
     }),
+    "tsc2c-cjs-module-factory-argument-alias-object": cjsPackage("tsc2c-cjs-module-factory-argument-alias-object", {
+        "index.js": 'const dependency = require("./dependency.js");\nconst dependencyAlias = dependency;\nconst dependencyAliasAgain = dependencyAlias;\nfunction makeApi(value) {\n  return {\n    default: value.label,\n    label: value.label,\n    count: value.count,\n    double(input) { return input * 2; }\n  };\n}\nmodule.exports = makeApi(dependencyAliasAgain);\n',
+        "dependency.js": 'module.exports = { label: "factory-argument-alias", count: 159 };\n',
+    }),
     "tsc2c-cjs-module-local-factory-parenthesized-object": cjsPackage("tsc2c-cjs-module-local-factory-parenthesized-object", {
         "index.js": 'function createApi() {\n  return ({\n    default: "factory-paren-default",\n    label: "factory-paren",\n    count: 126,\n    triple: (value) => value * 3\n  });\n}\nmodule.exports = createApi();\n',
     }),

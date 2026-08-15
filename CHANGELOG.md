@@ -5,6 +5,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 ## Unreleased
 
 ### Added
+- CommonJS local object-returning factories now accept recursively `const`-aliased static `require(...)` arguments, preserving factory-parameter member reads and finite named/default/namespace AOT metadata. Test: `node_modules_commonjs_module_exports_factory_argument_alias_object`.
 - Synchronous `fs.fstatSync`, `fchmodSync`, `fchownSync`, and `futimesSync` now operate on open POSIX descriptors, returning the typed `Stats` subset and supporting numeric/Date metadata updates, import aliases, catchable descriptor errors, and ignored-argument evaluation. Test: `fs_fd_metadata`.
 - Finite dynamic `require(...)` proofs now materialize static global-RegExp `String.prototype.matchAll()` collections through `Array.from(...)`, preserving full matches, captures, nested indexing, and collection length for AOT module edges. Test: `dynamic_require_static_string_match_all`.
 - Finite dynamic `require(...)` proofs now resolve bounded `String.raw(...)` call templates from static `raw` arrays, finite substitutions, and JavaScript's missing-substitution `undefined` behavior. Test: `dynamic_require_static_string_raw_call`.
