@@ -1,6 +1,7 @@
 # Implemented features
 
 - Verified bounded `net.Socket.destroy(callback?)` coverage: POSIX TCP sockets invoke a one-shot destroy callback from the close lifecycle, including already-closed sockets, while preserving synchronized destroyed and ready-state properties. Error-object destruction remains deferred. Test: `net_socket_destroy_callback`.
+- Verified bounded `net.Socket.destroy(error, callback?)` coverage: POSIX TCP sockets emit a supplied error value before the close lifecycle and then invoke the one-shot destroy callback with synchronized destroyed and ready-state properties. Test: `net_socket_destroy_error`.
 - Verified bounded `net.Server.getConnections(...)` coverage: POSIX TCP servers asynchronously report a null error and live accepted-connection count through the existing event loop. Test: `net_server_get_connections`.
 - Verified bounded `net.Socket` completion coverage: POSIX TCP sockets now invoke `write()` and `end()` callbacks after native completion and emit one `finish` event when the writable half closes. Test: `net_socket_write_callbacks`.
 - Verified bounded `net.Server` state coverage: POSIX TCP servers now expose synchronized `listening` and live `connections` properties across listen, accept, socket close, and server close transitions. Test: `net_server_state`.
