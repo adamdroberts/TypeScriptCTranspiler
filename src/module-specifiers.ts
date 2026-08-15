@@ -5491,7 +5491,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee)) return [];
         const method = callee.name.text;
-        if (method !== "toString" && method !== "valueOf") return [];
+        if (method !== "toString" && method !== "toLocaleString" && method !== "valueOf") return [];
         return resolve(callee.expression);
     };
 
