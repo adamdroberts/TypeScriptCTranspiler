@@ -2535,6 +2535,9 @@ interface HttpServerResponse {
     end(data?: string | Buffer, ...ignored: any[]): this;
 }
 interface HttpClientRequest {
+    readonly writableHighWaterMark: number;
+    readonly writableLength: number;
+    readonly writableNeedDrain: boolean;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
