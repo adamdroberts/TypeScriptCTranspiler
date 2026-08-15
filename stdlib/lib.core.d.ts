@@ -2791,6 +2791,7 @@ interface ChildProcessSpawnOptions {
     gid?: number;
     timeout?: number;
     killSignal?: ChildProcessKillSignal;
+    signal?: any;
 }
 interface ChildProcessExecFileSyncOptions {
     cwd?: string;

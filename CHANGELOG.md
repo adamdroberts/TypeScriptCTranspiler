@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded asynchronous `child_process.spawn(...)` AbortSignal support: `signal` cancellation now kills the POSIX child with the configured `killSignal`, emits the signal reason once before `exit` / `close`, suppresses `spawn` for pre-aborted signals, and preserves `killed` state. Broader AbortError object semantics remain deferred. Test: `child_process_spawn_signal`.
 - Bounded asynchronous `child_process.spawn(...)` readable-stream piping: stdout/stderr streams now forward data to one writable destination through `pipe()` and `unpipe()`, return the destination from `pipe()`, honor `{ end: false }`, end destinations by default, and use destination `drain` events to resume a source paused by backpressure. Broader multi-destination and stream lifecycle semantics remain deferred. Test: `child_process_spawn_stream_pipe`.
 - Bounded `net.Socket.destroy(callback?)` support: POSIX TCP sockets invoke a one-shot destroy callback from the close lifecycle, including already-closed sockets, while preserving synchronized destroyed and ready-state properties. Error-object destruction remains deferred. Test: `net_socket_destroy_callback`.
 - Extended bounded `net.Socket.destroy(error, callback?)` support: POSIX TCP sockets emit a supplied error value before close and then invoke the one-shot destroy callback while preserving synchronized destroyed and ready-state properties. Test: `net_socket_destroy_error`.

@@ -1,0 +1,2 @@
+pre: error:pre-stop|exit:null:SIGTERM|close:null:SIGTERM true
+post: spawn|error:post-stop|exit:null:SIGTERM|close:null:SIGTERM true

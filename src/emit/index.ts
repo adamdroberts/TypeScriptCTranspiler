@@ -84569,6 +84569,7 @@ class Emitter {
             const timeout = options ? this.childProcessNumberOption(options, "timeout") : null;
             const killSignal = options ? this.childProcessKillSignalOption(options) : "15.0";
             const stdio = options ? this.childProcessSpawnSyncStdioOption(options) : this.childProcessDefaultSpawnSyncStdio();
+            const signal = options ? this.childProcessSignalOption(options) : null;
             const detached = options ? this.childProcessBooleanOption(options, "detached") : "false";
             return this.emitSequencedExpr(T_VALUE, [
                 { value: file, target: T_STRING, node: call.arguments[0]! },
@@ -84604,9 +84605,12 @@ class Emitter {
                     ? { value: timeout, target: T_NUMBER, node: timeout.node }
                     : { value: { c: "-1.0", ty: T_NUMBER } },
                 { value: { c: killSignal, ty: T_NUMBER } },
+                signal
+                    ? { value: signal, target: T_VALUE, node: signal.node }
+                    : { value: { c: "tsc_value_undefined()", ty: T_VALUE }, target: T_VALUE, node: call },
                 ...this.ignoredArgumentSpecs(call.arguments, consumedArgCount),
-            ], ([fileC, argsC, cwdC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, pipeStdoutC, ignoreStdoutC, inheritStdoutC, pipeStderrC, ignoreStderrC, inheritStderrC, detachedC, uidC, gidC, timeoutC, killSignalC]) =>
-                `tsc_child_process_spawn(${fileC}, ${argsC}, ${cwdC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${pipeStdoutC}, ${ignoreStdoutC}, ${inheritStdoutC}, ${pipeStderrC}, ${ignoreStderrC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${timeoutC}, (int)${killSignalC})`,
+            ], ([fileC, argsC, cwdC, envC, shellC, argv0C, pipeStdinC, ignoreStdinC, pipeStdoutC, ignoreStdoutC, inheritStdoutC, pipeStderrC, ignoreStderrC, inheritStderrC, detachedC, uidC, gidC, timeoutC, killSignalC, signalC]) =>
+                `tsc_child_process_spawn(${fileC}, ${argsC}, ${cwdC}, ${envC}, ${shellC}, ${argv0C}, ${pipeStdinC}, ${ignoreStdinC}, ${pipeStdoutC}, ${ignoreStdoutC}, ${inheritStdoutC}, ${pipeStderrC}, ${ignoreStderrC}, ${inheritStderrC}, ${detachedC}, ${uidC}, ${gidC}, ${timeoutC}, (int)${killSignalC}, ${signalC})`,
             );
         }
         unsupported(call, `child_process.${method}`);
@@ -84625,6 +84629,17 @@ class Emitter {
         if (this.isUndefinedExpression(valueNode)) return null;
         const value = this.emitExpr(valueNode);
         if (value.ty.kind !== "string") unsupported(prop.initializer, `child_process ${key} must be a string`);
+        return { ...value, node: valueNode };
+    }
+
+    private childProcessSignalOption(options: ts.ObjectLiteralExpression): (EmitResult & { node: ts.Expression }) | null {
+        const prop = options.properties.find((entry): entry is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(entry) && this.staticPropertyName(entry.name) === "signal",
+        );
+        if (!prop) return null;
+        const valueNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+        if (this.isUndefinedExpression(valueNode)) return null;
+        const value = this.emitExpr(valueNode);
         return { ...value, node: valueNode };
     }
 
