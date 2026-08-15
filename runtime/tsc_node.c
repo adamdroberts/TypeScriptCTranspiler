@@ -6918,7 +6918,26 @@ static tsc_promise_t* tsc_fs_file_handle_vector_io_start(tsc_fs_file_handle_t* h
 
 static tsc_value_t tsc_fs_file_handle_read_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
-    return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, true, tsc_value_undefined()));
+    if (args && args->len > 0 && tsc_util_types_is_typed_array(TSC_ARR(tsc_value_t, args, 0))) {
+        return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, true, tsc_value_undefined()));
+    }
+    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0)) && !tsc_value_is_object(TSC_ARR(tsc_value_t, args, 0))) {
+        return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, args, true, tsc_value_undefined()));
+    }
+
+    tsc_value_t options = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    tsc_value_t buffer_value = tsc_value_is_undefined(options)
+        ? tsc_value_undefined()
+        : tsc_fs_file_handle_io_option(options, "buffer", 6);
+    if (tsc_value_is_undefined(buffer_value)) {
+        buffer_value = tsc_value_buffer(tsc_buffer_alloc(16384.0, 0.0));
+    }
+    tsc_array_t* io_args = tsc_array_new(sizeof(tsc_value_t), tsc_value_is_undefined(options) ? 1 : 2);
+    tsc_array_push_raw(io_args, &buffer_value);
+    if (!tsc_value_is_undefined(options)) {
+        tsc_array_push_raw(io_args, &options);
+    }
+    return tsc_value_promise(tsc_fs_file_handle_io_start((tsc_fs_file_handle_t*)env, io_args, true, tsc_value_undefined()));
 }
 
 static tsc_value_t tsc_fs_file_handle_write_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {

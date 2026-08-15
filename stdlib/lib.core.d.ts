@@ -1635,6 +1635,9 @@ interface FSFileHandleIOOptions {
     length?: number;
     position?: number | null;
 }
+interface FSFileHandleReadOptions extends FSFileHandleIOOptions {
+    buffer?: Buffer;
+}
 interface FSFileStringWriteResult {
     readonly bytesWritten: number;
     readonly buffer: string;
@@ -1673,6 +1676,7 @@ interface FSFileHandle {
     readonly fd: number;
     read(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileReadResult>;
     read(buffer: Buffer, options?: FSFileHandleIOOptions, ...ignored: any[]): Promise<FSFileReadResult>;
+    read(options?: FSFileHandleReadOptions, ...ignored: any[]): Promise<FSFileReadResult>;
     write(buffer: Buffer, offset?: number, length?: number, position?: number | null, ...ignored: any[]): Promise<FSFileWriteResult>;
     write(buffer: Buffer, options?: FSFileHandleIOOptions, ...ignored: any[]): Promise<FSFileWriteResult>;
     write(string: string, position?: number | null, encoding?: BufferEncoding, ...ignored: any[]): Promise<FSFileStringWriteResult>;

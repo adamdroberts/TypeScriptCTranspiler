@@ -1,0 +1,7 @@
+explicit: 2:.aa.
+default length: 3:.aaa
+default buffer: 16384:aa
+no options: 16384:aa
+explicit undefined: 616:aa
+content length: 17000
+error: pending
