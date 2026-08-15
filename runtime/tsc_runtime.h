@@ -635,6 +635,7 @@ typedef struct tsc_dns_lookup_all_result tsc_dns_lookup_all_result_t;
 typedef struct tsc_dns_resolve4_result tsc_dns_resolve4_result_t;
 typedef struct tsc_dns_resolve6_result tsc_dns_resolve6_result_t;
 typedef struct tsc_dns_resolve_ptr_result tsc_dns_resolve_ptr_result_t;
+typedef struct tsc_dns_resolve_cname_result tsc_dns_resolve_cname_result_t;
 typedef struct tsc_dns_lookup_service_result tsc_dns_lookup_service_result_t;
 typedef tsc_value_t (*tsc_accessor_getter_t)(void* env, tsc_value_t receiver);
 typedef bool (*tsc_accessor_setter_t)(void* env, tsc_value_t receiver, tsc_value_t value);
@@ -899,6 +900,10 @@ struct tsc_dns_resolve_ptr_result {
     tsc_str_t* error;
     tsc_array_t* addresses;
 };
+struct tsc_dns_resolve_cname_result {
+    tsc_str_t* error;
+    tsc_array_t* addresses;
+};
 struct tsc_dns_lookup_service_result {
     tsc_str_t* error;
     tsc_str_t* hostname;
@@ -909,6 +914,7 @@ tsc_dns_lookup_all_result_t tsc_dns_lookup_all(tsc_str_t* hostname, double famil
 tsc_dns_resolve4_result_t tsc_dns_resolve4(tsc_str_t* hostname);
 tsc_dns_resolve6_result_t tsc_dns_resolve6(tsc_str_t* hostname);
 tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address);
+tsc_dns_resolve_cname_result_t tsc_dns_resolve_cname(tsc_str_t* hostname);
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port);
 tsc_str_t* tsc_dns_get_default_result_order(void);
 void tsc_dns_set_default_result_order(tsc_str_t* order);

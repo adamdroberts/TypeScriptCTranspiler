@@ -2471,6 +2471,47 @@ tsc_dns_resolve_ptr_result_t tsc_dns_resolve_ptr(tsc_str_t* address) {
     return out;
 }
 
+tsc_dns_resolve_cname_result_t tsc_dns_resolve_cname(tsc_str_t* hostname) {
+    tsc_dns_resolve_cname_result_t out;
+    out.error = NULL;
+    out.addresses = NULL;
+    if (!hostname) {
+        out.error = tsc_str_from_cstr("dns.resolveCname: hostname required");
+        return out;
+    }
+
+    char* host = cstr_dup(hostname);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_CANONNAME;
+    struct addrinfo* result = NULL;
+    int rc = getaddrinfo(host, NULL, &hints, &result);
+    free(host);
+    if (rc != 0) {
+        out.error = tsc_str_from_cstr(gai_strerror(rc));
+        return out;
+    }
+
+    tsc_str_t* canonical = NULL;
+    for (struct addrinfo* cur = result; cur; cur = cur->ai_next) {
+        if (cur->ai_canonname && cur->ai_canonname[0] != '\0') {
+            canonical = tsc_str_from_cstr(cur->ai_canonname);
+            break;
+        }
+    }
+    freeaddrinfo(result);
+    if (!canonical) {
+        out.error = tsc_str_from_cstr("dns.resolveCname: no canonical name found");
+        return out;
+    }
+
+    out.addresses = tsc_array_new(sizeof(tsc_str_t*), 1);
+    tsc_array_push_raw(out.addresses, &canonical);
+    return out;
+}
+
 tsc_dns_lookup_service_result_t tsc_dns_lookup_service(tsc_str_t* address, double port) {
     tsc_dns_lookup_service_result_t out;
     out.error = NULL;

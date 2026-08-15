@@ -1,0 +1,10 @@
+callback cname: true true
+callback resolve CNAME: true true
+callback default cname: true true
+callback trailing: true true
+invalid callback: true true
+marks: cp
+promise cname: true
+promise resolve CNAME: true
+promise default cname: true
+invalid promise: true

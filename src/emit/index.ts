@@ -75395,12 +75395,12 @@ class Emitter {
         if (utilNamed) {
             return this.emitUtilCall(call, utilNamed);
         }
-        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns", "node:dns"], exported));
         if (dnsNamed) {
             return this.emitDnsCall(call, dnsNamed);
         }
-        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
+        const dnsPromisesNamed = ["lookup", "resolve", "resolve4", "resolve6", "reverse", "resolveCname", "lookupService", "getDefaultResultOrder", "setDefaultResultOrder"]
             .find((exported) => this.isNamedImportFrom(calleeId, ["dns/promises", "node:dns/promises"], exported));
         if (dnsPromisesNamed) {
             return this.emitDnsPromisesCall(call, dnsPromisesNamed);
@@ -83216,6 +83216,7 @@ class Emitter {
             method !== "resolve4" &&
             method !== "resolve6" &&
             method !== "reverse" &&
+            method !== "resolveCname" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -83245,6 +83246,9 @@ class Emitter {
         }
         if (method === "reverse") {
             return this.emitDnsResolveCall(call, "dns.reverse", "PTR");
+        }
+        if (method === "resolveCname") {
+            return this.emitDnsResolveCall(call, "dns.resolveCname", "CNAME");
         }
         if (method === "lookupService") {
             if (call.arguments.length < 3) {
@@ -83363,7 +83367,7 @@ class Emitter {
     private emitDnsResolveCall(
         call: ts.CallExpression,
         label = "dns.resolve",
-        forcedRrtype?: "A" | "AAAA" | "PTR",
+        forcedRrtype?: "A" | "AAAA" | "PTR" | "CNAME",
     ): EmitResult {
         if (call.arguments.length < 2) {
             unsupported(call, `${label} expects hostname and callback`);
@@ -83405,12 +83409,16 @@ class Emitter {
                 ty: arrayType(T_STRING),
             };
             const callbackCall = this.promiseCallbackCall(call, callbackType, callbackC!, [err, addresses], callbackNode);
-            const resultType = rrtype === "PTR"
-                ? "tsc_dns_resolve_ptr_result_t"
-                : rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
-            const resolver = rrtype === "PTR"
-                ? "tsc_dns_resolve_ptr"
-                : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
+            const resultType = rrtype === "CNAME"
+                ? "tsc_dns_resolve_cname_result_t"
+                : rrtype === "PTR"
+                    ? "tsc_dns_resolve_ptr_result_t"
+                    : rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
+            const resolver = rrtype === "CNAME"
+                ? "tsc_dns_resolve_cname"
+                : rrtype === "PTR"
+                    ? "tsc_dns_resolve_ptr"
+                    : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
             return `({ ${resultType} ${result} = ${resolver}(${values[0]}); (void)${callbackCall}; })`;
         });
     }
@@ -83623,10 +83631,10 @@ class Emitter {
         }
     }
 
-    private dnsResolveTypeValue(expr: ts.Expression, label: string): "A" | "AAAA" | "PTR" {
+    private dnsResolveTypeValue(expr: ts.Expression, label: string): "A" | "AAAA" | "PTR" | "CNAME" {
         const rrtype = this.dnsLookupStringValue(expr);
-        if (rrtype === "A" || rrtype === "AAAA" || rrtype === "PTR") return rrtype;
-        unsupported(expr, `${label} rrtype must be A, AAAA, or PTR in this subset`);
+        if (rrtype === "A" || rrtype === "AAAA" || rrtype === "PTR" || rrtype === "CNAME") return rrtype;
+        unsupported(expr, `${label} rrtype must be A, AAAA, PTR, or CNAME in this subset`);
     }
 
     private shouldEvaluateDnsDefaultOptions(options: ts.Expression): boolean {
@@ -83642,7 +83650,7 @@ class Emitter {
     private emitDnsResolvePromiseCall(
         call: ts.CallExpression,
         label: string,
-        forcedRrtype?: "A" | "AAAA" | "PTR",
+        forcedRrtype?: "A" | "AAAA" | "PTR" | "CNAME",
     ): EmitResult {
         const mapped = this.prepareType(mapTsType(call, this.checker.getTypeAtLocation(call), this.checker));
         if (mapped.kind !== "promise") unsupported(call, `${label} result must be Promise<T>`);
@@ -83663,12 +83671,16 @@ class Emitter {
             const result = this.freshTemp("_dns");
             const out = this.freshTemp("_dns_promise");
             const addresses = `${result}.addresses ? ${result}.addresses : tsc_array_new(sizeof(tsc_value_t), 0)`;
-            const resultType = rrtype === "PTR"
-                ? "tsc_dns_resolve_ptr_result_t"
-                : rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
-            const resolver = rrtype === "PTR"
-                ? "tsc_dns_resolve_ptr"
-                : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
+            const resultType = rrtype === "CNAME"
+                ? "tsc_dns_resolve_cname_result_t"
+                : rrtype === "PTR"
+                    ? "tsc_dns_resolve_ptr_result_t"
+                    : rrtype === "AAAA" ? "tsc_dns_resolve6_result_t" : "tsc_dns_resolve4_result_t";
+            const resolver = rrtype === "CNAME"
+                ? "tsc_dns_resolve_cname"
+                : rrtype === "PTR"
+                    ? "tsc_dns_resolve_ptr"
+                    : rrtype === "AAAA" ? "tsc_dns_resolve6" : "tsc_dns_resolve4";
             return `({ ` +
                 `${resultType} ${result} = ${resolver}(${values[0]}); ` +
                 `tsc_promise_t* ${out}; ` +
@@ -83685,6 +83697,7 @@ class Emitter {
             method !== "resolve4" &&
             method !== "resolve6" &&
             method !== "reverse" &&
+            method !== "resolveCname" &&
             method !== "lookupService" &&
             method !== "getDefaultResultOrder" &&
             method !== "setDefaultResultOrder"
@@ -83716,6 +83729,9 @@ class Emitter {
         }
         if (method === "reverse") {
             return this.emitDnsResolvePromiseCall(call, "dns.promises.reverse", "PTR");
+        }
+        if (method === "resolveCname") {
+            return this.emitDnsResolvePromiseCall(call, "dns.promises.resolveCname", "CNAME");
         }
         if (method === "lookupService") {
             if (call.arguments.length < 2) {
