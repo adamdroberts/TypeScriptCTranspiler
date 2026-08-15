@@ -1880,10 +1880,12 @@ static bool tsc_child_exec_error_closed_or_reported(tsc_child_process_async_t* c
 static void tsc_child_process_poll(void* env) {
     tsc_child_process_async_t* child = (tsc_child_process_async_t*)env;
     if (!child || child->closed) return;
+    bool exec_ready = tsc_child_exec_error_closed_or_reported(child);
+    if (!exec_ready) return;
+    if (!child->error_emitted) tsc_child_emit_spawn(child);
     tsc_child_stream_flush_writes(child->stdin_stream);
     tsc_child_stream_read(child->stdout_stream);
     tsc_child_stream_read(child->stderr_stream);
-    (void)tsc_child_exec_error_closed_or_reported(child);
     if (!child->exited) {
         int status = 0;
         pid_t result = waitpid(child->pid, &status, WNOHANG);
@@ -1945,6 +1947,12 @@ static void tsc_child_close_parent_pipe(int pair[2], int keep) {
     if (pair[1] >= 0 && pair[1] != keep) close(pair[1]);
 }
 
+static void tsc_child_report_setup_error(int fd) {
+    int error = errno;
+    (void)write(fd, &error, sizeof(error));
+    _exit(127);
+}
+
 tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* args, const tsc_str_t* cwd, const tsc_array_t* env, const tsc_str_t* shell, const tsc_str_t* argv0, bool pipe_stdin, bool ignore_stdin, bool pipe_stdout, bool ignore_stdout, bool inherit_stdout, bool pipe_stderr, bool ignore_stderr, bool inherit_stderr, bool detached, double uid, double gid, double timeout_ms, int kill_signal) {
     if (!file) tsc_panic("child_process.spawn file required");
     const tsc_str_t* actual_file = file;
@@ -1978,29 +1986,32 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
         close(exec_err_pipe[0]);
         if (pipe_stdin) {
             close(in_pipe[1]);
-            if (dup2(in_pipe[0], STDIN_FILENO) < 0) _exit(127);
+            if (dup2(in_pipe[0], STDIN_FILENO) < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
             close(in_pipe[0]);
         } else if (ignore_stdin) {
             int null_fd = open("/dev/null", O_RDONLY);
-            if (null_fd < 0 || dup2(null_fd, STDIN_FILENO) < 0) _exit(127);
+            if (null_fd < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
+            if (dup2(null_fd, STDIN_FILENO) < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
             close(null_fd);
         }
         if (pipe_stdout) {
             close(out_pipe[0]);
-            if (dup2(out_pipe[1], STDOUT_FILENO) < 0) _exit(127);
+            if (dup2(out_pipe[1], STDOUT_FILENO) < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
             close(out_pipe[1]);
         } else if (ignore_stdout) {
             int null_fd = open("/dev/null", O_WRONLY);
-            if (null_fd < 0 || dup2(null_fd, STDOUT_FILENO) < 0) _exit(127);
+            if (null_fd < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
+            if (dup2(null_fd, STDOUT_FILENO) < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
             close(null_fd);
         }
         if (pipe_stderr) {
             close(err_pipe[0]);
-            if (dup2(err_pipe[1], STDERR_FILENO) < 0) _exit(127);
+            if (dup2(err_pipe[1], STDERR_FILENO) < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
             close(err_pipe[1]);
         } else if (ignore_stderr) {
             int null_fd = open("/dev/null", O_WRONLY);
-            if (null_fd < 0 || dup2(null_fd, STDERR_FILENO) < 0) _exit(127);
+            if (null_fd < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
+            if (dup2(null_fd, STDERR_FILENO) < 0) tsc_child_report_setup_error(exec_err_pipe[1]);
             close(null_fd);
         }
         if (detached && setsid() < 0) {
@@ -2025,7 +2036,10 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
         }
         size_t argc = 1 + (actual_args ? actual_args->len : 0);
         char** argv = (char**)calloc(argc + 1, sizeof(char*));
-        if (!argv) _exit(127);
+        if (!argv) {
+            errno = ENOMEM;
+            tsc_child_report_setup_error(exec_err_pipe[1]);
+        }
         argv[0] = cstr_dup(argv0 ? argv0 : actual_file);
         for (size_t i = 1; i < argc; i++) {
             tsc_str_t* arg = TSC_ARR(tsc_str_t*, actual_args, i - 1);
@@ -2134,7 +2148,6 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     if (!isnan(timeout_ms) && !isinf(timeout_ms) && timeout_ms > 0.0) {
         child->timeout_timer = tsc_set_timeout(tsc_child_process_timeout, child, timeout_ms);
     }
-    tsc_process_next_tick(tsc_child_emit_spawn, child);
     return child->event.value;
 }
 
