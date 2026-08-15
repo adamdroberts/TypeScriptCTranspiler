@@ -2086,8 +2086,16 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     child->stdin_stream->event.value = tsc_value_undefined();
     child->stdout_stream->event.value = tsc_value_undefined();
     child->stderr_stream->event.value = tsc_value_undefined();
+    tsc_array_t* spawnargs = tsc_array_new(sizeof(tsc_value_t), (args ? args->len : 0) + 1);
+    tsc_array_push_value(spawnargs, tsc_value_string((tsc_str_t*)file));
+    for (size_t i = 0; args && i < args->len; i++) {
+        tsc_str_t* arg = TSC_ARR(tsc_str_t*, args, i);
+        tsc_array_push_value(spawnargs, tsc_value_string(arg ? arg : tsc_str_from_lit("", 0)));
+    }
     tsc_child_add_event_methods(object, &child->event);
     tsc_object_set(object, tsc_str_from_lit("pid", 3), tsc_value_num((double)pid));
+    tsc_object_set(object, tsc_str_from_lit("spawnfile", 9), tsc_value_string((tsc_str_t*)file));
+    tsc_object_set(object, tsc_str_from_lit("spawnargs", 9), tsc_value_array(spawnargs));
     tsc_object_set(object, tsc_str_from_lit("exitCode", 8), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("signalCode", 10), tsc_value_null());
     tsc_object_set(object, tsc_str_from_lit("killed", 6), tsc_value_bool(false));

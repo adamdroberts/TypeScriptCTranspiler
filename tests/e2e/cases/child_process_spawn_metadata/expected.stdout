@@ -1,0 +1,2 @@
+before: /bin/printf 2 /bin/printf meta
+close: /bin/printf /bin/printf meta 0 null
