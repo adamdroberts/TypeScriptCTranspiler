@@ -1,0 +1,6 @@
+direct direct-a:10:20:2:undefined:3:undefined:direct-b:4:5:2:undefined:7:undefined:1;direct-d:10:11:0:undefined:undefined:undefined:direct-e:30:40:1:13:undefined:undefined:0;
+custom custom-a:1:2:2:undefined:4:undefined:custom-b:70:80:2:6:7:undefined:0;custom-c:8:9:1:10:undefined:undefined:custom-d:11:80:1:12:undefined:undefined:0;
+lazy1 false lazy-a:90:91:1:14:undefined:undefined:lazy-b:15:16:2:undefined:18:undefined:0
+lazy2 false lazy-c:19:20:0:undefined:undefined:undefined:lazy-d:92:93:1:22:undefined:undefined:0
+lazy3 true typed-array-nested-pattern-done
+nested 50:2:undefined:3:4:2:undefined:6;7:1:8:undefined:60:1:10:undefined;
