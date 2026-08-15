@@ -1,0 +1,5 @@
+one: alpha|beta|gamma|delta:true
+two: alpha|beta|gamma|delta:true
+zero: :true
+invalid: fs.promises.FileHandle.readLines highWaterMark must be a non-negative safe integer
+error: pending

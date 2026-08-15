@@ -1644,6 +1644,7 @@ interface FSFileHandleReadLinesOptions {
     encoding?: BufferEncoding | null;
     autoClose?: boolean;
     emitClose?: boolean;
+    highWaterMark?: number;
     start?: number;
     end?: number;
     signal?: any;

@@ -1,0 +1,3 @@
+{
+  "description": "FileHandle.readLines accepts bounded highWaterMark chunk sizes, including zero, and rejects invalid values"
+}
