@@ -68982,6 +68982,31 @@ class Emitter {
         }, sourceC);
     }
 
+    private typedObjectBindingHasRuntimeComputedKey(pattern: ts.ObjectBindingPattern): boolean {
+        const visitArray = (current: ts.ArrayBindingPattern): boolean =>
+            current.elements.some((element) => {
+                if (!element || !ts.isBindingElement(element)) return false;
+                if (ts.isObjectBindingPattern(element.name)) return visitObject(element.name);
+                if (ts.isArrayBindingPattern(element.name)) return visitArray(element.name);
+                return false;
+            });
+        const visitObject = (current: ts.ObjectBindingPattern): boolean =>
+            current.elements.some((element) => {
+                if (!ts.isBindingElement(element)) return false;
+                if (
+                    element.propertyName &&
+                    ts.isComputedPropertyName(element.propertyName) &&
+                    this.staticPropertyName(element.propertyName) === null
+                ) {
+                    return true;
+                }
+                if (ts.isObjectBindingPattern(element.name)) return visitObject(element.name);
+                if (ts.isArrayBindingPattern(element.name)) return visitArray(element.name);
+                return false;
+            });
+        return visitObject(pattern);
+    }
+
     private emitTypedObjectRestForOf(
         buf: CBuf,
         sourceC: string,
@@ -69001,13 +69026,17 @@ class Emitter {
             if (excluded.has(name)) continue;
             const declaration = property.valueDeclaration ?? property.getDeclarations()?.[0];
             if (!declaration) continue;
+            const propertyTsType = this.checker.getTypeOfSymbolAtLocation(property, declaration);
             const propertyType = this.prepareType(
-                mapTsType(declaration, this.checker.getTypeOfSymbolAtLocation(property, declaration), this.checker),
+                mapTsType(declaration, propertyTsType, this.checker),
             );
             const field = `(${sourceC})->${mangleIdent(name)}`;
+            const value = propertyType.kind === "class"
+                ? this.emitTypedObjectRestForOf(buf, field, propertyType, propertyTsType, [], node).c
+                : this.coerce({ c: field, ty: propertyType }, T_VALUE, node);
             buf.line(
                 `tsc_object_set(${restObject}, tsc_str_from_lit("${escapeCString(name)}", ${utf8ByteLen(name)}), ` +
-                `${this.coerce({ c: field, ty: propertyType }, T_VALUE, node)});`,
+                `${value});`,
             );
         }
         return { c: `tsc_value_object(${restObject})`, ty: T_VALUE };
@@ -69055,6 +69084,23 @@ class Emitter {
     ): void {
         if (sourceType.kind !== "class") {
             unsupported(pattern, "typed for-of object destructuring requires a typed object element");
+        }
+        if (this.typedObjectBindingHasRuntimeComputedKey(pattern)) {
+            const boxed = this.emitTypedObjectRestForOf(buf, sourceC, sourceType, objectType, [], pattern);
+            this.emitDynamicObjectBindingsForOf(buf, pattern, boxed.c, (descriptor, value) => {
+                assign({
+                    element: descriptor.element,
+                    identifier: descriptor.identifier,
+                    accessPath: [],
+                    fieldType: T_VALUE,
+                    fieldTsType: objectType,
+                    type: descriptor.type,
+                    arrayRestIndex: descriptor.arrayRestIndex,
+                    objectRest: false,
+                    objectRestKeys: [],
+                }, value);
+            });
+            return;
         }
         const descriptors = this.forOfTypedObjectBindingDescriptors(pattern, objectType, sourceType);
         for (const descriptor of descriptors) {

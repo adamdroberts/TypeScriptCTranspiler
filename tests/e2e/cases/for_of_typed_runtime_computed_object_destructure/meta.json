@@ -1,0 +1,3 @@
+{
+  "description": "finite-union runtime-computed keys at outer and nested typed object levels with once-per-iteration evaluation, nested rest exclusion, custom iterators, and lazy generators"
+}

@@ -1,0 +1,5 @@
+direct direct-first-a:direct-red-a:direct-keep-a:direct-extra-a:undefined:direct-second-a:undefined:direct-blue-a;direct-second-b:direct-blue-b:direct-keep-b:direct-extra-b:direct-first-b:undefined:direct-red-b:undefined; 2 2
+custom custom-first-a:custom-red-a;custom-second-b:custom-blue-b; 2 2
+lazy1 false lazy-first-a:lazy-red-a
+lazy2 false lazy-second-b:lazy-blue-b
+lazy3 true runtime-computed-done 2 2
