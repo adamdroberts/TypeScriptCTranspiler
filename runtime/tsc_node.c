@@ -1182,12 +1182,33 @@ typedef struct tsc_child_event_target {
     tsc_value_t value;
 } tsc_child_event_target_t;
 
+typedef struct tsc_child_write_request tsc_child_write_request_t;
+
+#define TSC_CHILD_STREAM_HIGH_WATER_MARK ((size_t)16384)
+
+struct tsc_child_write_request {
+    tsc_child_write_request_t* next;
+    uint8_t* data;
+    size_t len;
+    size_t offset;
+    tsc_value_t callback;
+};
+
 typedef struct tsc_child_stream {
     tsc_child_event_target_t event;
     int fd;
     bool writable;
     bool encoding_utf8;
     bool ended;
+    bool destroyed;
+    bool end_requested;
+    bool writable_need_drain;
+    bool error_emitted;
+    bool finish_emitted;
+    size_t writable_length;
+    tsc_child_write_request_t* write_head;
+    tsc_child_write_request_t* write_tail;
+    tsc_value_t end_callback;
 } tsc_child_stream_t;
 
 typedef struct tsc_child_process_async {
@@ -1303,6 +1324,8 @@ static void tsc_child_add_event_methods(tsc_object_t* object, tsc_child_event_ta
     tsc_object_set(object, tsc_str_from_lit("listenerCount", 13), tsc_value_function_generic_named(tsc_child_event_listener_count, target, 1.0, tsc_str_from_lit("listenerCount", 13)));
 }
 
+static void tsc_child_emit_one_value(tsc_event_emitter_t* emitter, const char* name, tsc_value_t value);
+
 static tsc_value_t tsc_child_stream_set_encoding(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
     if (args && args->len > 0) {
@@ -1315,9 +1338,112 @@ static tsc_value_t tsc_child_stream_set_encoding(void* env, tsc_value_t this_arg
     return this_arg;
 }
 
-static bool tsc_child_write_bytes(tsc_child_stream_t* stream, const void* data, size_t len) {
-    if (!stream || stream->fd < 0 || stream->ended) return false;
-    const uint8_t* bytes = (const uint8_t*)data;
+static void tsc_child_stream_refresh_props(tsc_child_stream_t* stream) {
+    if (!stream || !stream->event.value) return;
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("writable", 8),
+        tsc_value_bool(stream->writable && !stream->destroyed && !stream->ended)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("writableEnded", 13),
+        tsc_value_bool(stream->ended)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("writableHighWaterMark", 21),
+        tsc_value_num((double)TSC_CHILD_STREAM_HIGH_WATER_MARK)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("writableLength", 14),
+        tsc_value_num((double)stream->writable_length)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("writableNeedDrain", 17),
+        tsc_value_bool(stream->writable_need_drain)
+    );
+    tsc_value_set_prop(
+        stream->event.value,
+        tsc_str_from_lit("destroyed", 9),
+        tsc_value_bool(stream->destroyed)
+    );
+}
+
+static void tsc_child_stream_invoke_callback(tsc_value_t callback) {
+    if (!tsc_value_is_callable(callback)) return;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_value_apply_function(callback, tsc_value_undefined(), tsc_value_array(empty));
+}
+
+static void tsc_child_stream_emit_error(tsc_child_stream_t* stream, const char* message) {
+    if (!stream || stream->error_emitted) return;
+    stream->error_emitted = true;
+    if (stream->event.emitter) {
+        tsc_child_emit_one_value(
+            stream->event.emitter,
+            "error",
+            tsc_value_string(tsc_str_from_cstr(message ? message : "child_process stream error"))
+        );
+    }
+}
+
+static void tsc_child_stream_emit_drain(tsc_child_stream_t* stream) {
+    if (!stream || !stream->writable_need_drain) return;
+    stream->writable_need_drain = false;
+    tsc_child_stream_refresh_props(stream);
+    if (stream->event.emitter) {
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("drain", 5), empty);
+    }
+}
+
+static void tsc_child_stream_complete_end(tsc_child_stream_t* stream) {
+    if (!stream || !stream->end_requested || stream->write_head) return;
+    if (stream->fd >= 0) {
+        close(stream->fd);
+        stream->fd = -1;
+    }
+    stream->ended = true;
+    stream->end_requested = false;
+    tsc_child_stream_refresh_props(stream);
+    if (!stream->finish_emitted && stream->event.emitter) {
+        stream->finish_emitted = true;
+        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+        (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("finish", 6), empty);
+    }
+    tsc_value_t callback = stream->end_callback;
+    stream->end_callback = tsc_value_undefined();
+    tsc_child_stream_invoke_callback(callback);
+}
+
+static void tsc_child_stream_close(tsc_child_stream_t* stream, bool emit_error) {
+    if (!stream) return;
+    if (stream->fd >= 0) {
+        close(stream->fd);
+        stream->fd = -1;
+    }
+    stream->ended = true;
+    stream->end_requested = false;
+    stream->write_head = NULL;
+    stream->write_tail = NULL;
+    stream->writable_length = 0;
+    stream->writable_need_drain = false;
+    stream->end_callback = tsc_value_undefined();
+    if (emit_error) tsc_child_stream_emit_error(stream, "child_process stdin write failed");
+    tsc_child_stream_refresh_props(stream);
+}
+
+static int tsc_child_stream_write_now(
+    tsc_child_stream_t* stream,
+    const uint8_t* bytes,
+    size_t len,
+    size_t* written_out
+) {
+    if (written_out) *written_out = 0;
+    if (!stream || stream->fd < 0 || stream->ended || stream->destroyed) return -1;
     size_t written = 0;
     while (written < len) {
         ssize_t n = write(stream->fd, bytes + written, len - written);
@@ -1326,10 +1452,120 @@ static bool tsc_child_write_bytes(tsc_child_stream_t* stream, const void* data, 
             continue;
         }
         if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return false;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            if (written_out) *written_out = written;
+            return 0;
+        }
+        if (written_out) *written_out = written;
+        return -1;
+    }
+    if (written_out) *written_out = written;
+    return 1;
+}
+
+static void tsc_child_stream_queue_write(
+    tsc_child_stream_t* stream,
+    const uint8_t* data,
+    size_t len,
+    tsc_value_t callback
+) {
+    if (!stream || len == 0) {
+        tsc_child_stream_invoke_callback(callback);
+        return;
+    }
+    tsc_child_write_request_t* request = (tsc_child_write_request_t*)TSC_GC_MALLOC(sizeof(tsc_child_write_request_t));
+    request->next = NULL;
+    request->data = (uint8_t*)TSC_GC_MALLOC_ATOMIC(len);
+    memcpy(request->data, data, len);
+    request->len = len;
+    request->offset = 0;
+    request->callback = callback;
+    if (stream->write_tail) {
+        stream->write_tail->next = request;
+    } else {
+        stream->write_head = request;
+    }
+    stream->write_tail = request;
+    stream->writable_length += len;
+    if (stream->writable_length >= TSC_CHILD_STREAM_HIGH_WATER_MARK) {
+        stream->writable_need_drain = true;
+    }
+    tsc_child_stream_refresh_props(stream);
+}
+
+static bool tsc_child_stream_write_value(tsc_child_stream_t* stream, tsc_value_t value, tsc_value_t callback) {
+    if (!stream || !stream->writable || stream->fd < 0 || stream->ended || stream->destroyed || stream->end_requested) {
+        tsc_child_stream_emit_error(stream, "child_process stdin is not writable");
         return false;
     }
-    return true;
+    const char* data = NULL;
+    size_t len = 0;
+    tsc_str_t* text = value_is_box(value) && value_tag(value) == TSC_VALUE_TAG_STRING
+        ? (tsc_str_t*)value_ptr(value)
+        : NULL;
+    if (text) {
+        data = text->data;
+        len = text->len;
+    } else {
+        tsc_buffer_t* buffer = tsc_value_as_buffer(value);
+        if (!buffer) tsc_throw_str(tsc_str_from_cstr("child_process stdin.write expects string or Buffer"));
+        data = (const char*)buffer->data;
+        len = buffer->len;
+    }
+    if (len == 0) {
+        tsc_child_stream_invoke_callback(callback);
+        return true;
+    }
+    if (stream->write_head || len >= TSC_CHILD_STREAM_HIGH_WATER_MARK) {
+        tsc_child_stream_queue_write(stream, (const uint8_t*)data, len, callback);
+        return !stream->writable_need_drain;
+    }
+    size_t written = 0;
+    int status = tsc_child_stream_write_now(stream, (const uint8_t*)data, len, &written);
+    if (status < 0) {
+        tsc_child_stream_close(stream, true);
+        return false;
+    }
+    if (written == len) {
+        tsc_child_stream_invoke_callback(callback);
+        tsc_child_stream_refresh_props(stream);
+        return true;
+    }
+    tsc_child_stream_queue_write(stream, (const uint8_t*)data + written, len - written, callback);
+    return !stream->writable_need_drain;
+}
+
+static void tsc_child_stream_flush_writes(tsc_child_stream_t* stream) {
+    if (!stream || !stream->writable || stream->ended || stream->destroyed || stream->fd < 0) return;
+    while (stream->write_head) {
+        tsc_child_write_request_t* request = stream->write_head;
+        size_t written = 0;
+        int status = tsc_child_stream_write_now(stream, request->data + request->offset, request->len - request->offset, &written);
+        request->offset += written;
+        if (stream->writable_length >= written) {
+            stream->writable_length -= written;
+        } else {
+            stream->writable_length = 0;
+        }
+        tsc_child_stream_refresh_props(stream);
+        if (status < 0) {
+            tsc_child_stream_close(stream, true);
+            return;
+        }
+        if (request->offset < request->len) return;
+        stream->write_head = request->next;
+        if (!stream->write_head) stream->write_tail = NULL;
+        request->next = NULL;
+        tsc_value_t callback = request->callback;
+        request->callback = tsc_value_undefined();
+        tsc_child_stream_invoke_callback(callback);
+        if (stream->destroyed || stream->ended) return;
+    }
+    if (stream->end_requested) tsc_child_stream_complete_end(stream);
+    if (stream->destroyed) return;
+    tsc_child_stream_emit_drain(stream);
+    if (stream->ended) return;
+    tsc_child_stream_refresh_props(stream);
 }
 
 static tsc_value_t tsc_child_stream_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -1337,37 +1573,43 @@ static tsc_value_t tsc_child_stream_write(void* env, tsc_value_t this_arg, tsc_a
     tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
     if (!stream || !stream->writable || !args || args->len < 1) return tsc_value_bool(false);
     tsc_value_t value = TSC_ARR(tsc_value_t, args, 0);
-    tsc_str_t* text = tsc_value_as_string(value);
-    if (text) return tsc_value_bool(tsc_child_write_bytes(stream, text->data, text->len));
-    tsc_buffer_t* buffer = tsc_value_as_buffer(value);
-    if (buffer) return tsc_value_bool(tsc_child_write_bytes(stream, buffer->data, buffer->len));
-    tsc_throw_str(tsc_str_from_cstr("child_process stdin.write expects string or Buffer"));
+    tsc_value_t callback = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined();
+    if (!tsc_value_is_undefined(callback) && !tsc_value_is_nullish(callback) && !tsc_value_is_callable(callback)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stdin.write callback must be callable"));
+    }
+    return tsc_value_bool(tsc_child_stream_write_value(stream, value, callback));
 }
 
 static tsc_value_t tsc_child_stream_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
-    if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
-        (void)tsc_child_stream_write(env, this_arg, args);
+    tsc_value_t first = args && args->len > 0 ? TSC_ARR(tsc_value_t, args, 0) : tsc_value_undefined();
+    bool first_is_data = (value_is_box(first) && value_tag(first) == TSC_VALUE_TAG_STRING) || tsc_util_types_is_typed_array(first);
+    tsc_value_t callback = first_is_data
+        ? (args && args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_undefined())
+        : first;
+    if (!tsc_value_is_undefined(callback) && !tsc_value_is_nullish(callback) && !tsc_value_is_callable(callback)) {
+        tsc_throw_str(tsc_str_from_cstr("child_process stdin.end callback must be callable"));
     }
-    if (stream && stream->fd >= 0) {
-        close(stream->fd);
-        stream->fd = -1;
+    if (!stream || stream->ended || stream->destroyed) {
+        tsc_child_stream_invoke_callback(callback);
+        return this_arg;
     }
-    if (stream) stream->ended = true;
-    if (stream && stream->event.emitter) {
-        tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
-        (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("finish", 6), empty);
+    if (first_is_data) {
+        (void)tsc_child_stream_write_value(stream, first, tsc_value_undefined());
     }
+    stream->end_requested = true;
+    stream->end_callback = callback;
+    if (!stream->write_head) tsc_child_stream_complete_end(stream);
+    tsc_child_stream_refresh_props(stream);
     return this_arg;
 }
 
 static tsc_value_t tsc_child_stream_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
     tsc_child_stream_t* stream = (tsc_child_stream_t*)env;
-    if (stream && stream->fd >= 0) close(stream->fd);
     if (stream) {
-        stream->fd = -1;
-        stream->ended = true;
+        stream->destroyed = true;
+        tsc_child_stream_close(stream, false);
     }
     return this_arg;
 }
@@ -1447,6 +1689,7 @@ static void tsc_child_stream_read(tsc_child_stream_t* stream) {
             close(stream->fd);
             stream->fd = -1;
             stream->ended = true;
+            tsc_child_stream_refresh_props(stream);
             tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
             (void)tsc_event_emitter_emit(stream->event.emitter, tsc_str_from_lit("end", 3), empty);
             return;
@@ -1456,6 +1699,7 @@ static void tsc_child_stream_read(tsc_child_stream_t* stream) {
         close(stream->fd);
         stream->fd = -1;
         stream->ended = true;
+        tsc_child_stream_refresh_props(stream);
         return;
     }
 }
@@ -1490,6 +1734,7 @@ static bool tsc_child_exec_error_closed_or_reported(tsc_child_process_async_t* c
 static void tsc_child_process_poll(void* env) {
     tsc_child_process_async_t* child = (tsc_child_process_async_t*)env;
     if (!child || child->closed) return;
+    tsc_child_stream_flush_writes(child->stdin_stream);
     tsc_child_stream_read(child->stdout_stream);
     tsc_child_stream_read(child->stderr_stream);
     (void)tsc_child_exec_error_closed_or_reported(child);
@@ -1508,11 +1753,7 @@ static void tsc_child_process_poll(void* env) {
         (child->stdout_stream && !child->stdout_stream->ended) ||
         (child->stderr_stream && !child->stderr_stream->ended)) return;
 
-    if (child->stdin_stream && child->stdin_stream->fd >= 0) {
-        close(child->stdin_stream->fd);
-        child->stdin_stream->fd = -1;
-        child->stdin_stream->ended = true;
-    }
+    tsc_child_stream_close(child->stdin_stream, false);
     tsc_clear_timeout(child->poll_timer);
     child->poll_timer = 0.0;
     if (child->timeout_timer > 0.0) {
@@ -1543,9 +1784,10 @@ static void tsc_child_set_stream_methods(tsc_object_t* object, tsc_child_stream_
     tsc_object_set(object, tsc_str_from_lit("resume", 6), tsc_value_function_generic_named(tsc_child_process_noop, stream, 0.0, tsc_str_from_lit("resume", 6)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_child_stream_destroy, stream, 0.0, tsc_str_from_lit("destroy", 7)));
     if (stream->writable) {
-        tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_child_stream_write, stream, 1.0, tsc_str_from_lit("write", 5)));
-        tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_child_stream_end, stream, 0.0, tsc_str_from_lit("end", 3)));
+        tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_child_stream_write, stream, 2.0, tsc_str_from_lit("write", 5)));
+        tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_child_stream_end, stream, 1.0, tsc_str_from_lit("end", 3)));
     }
+    tsc_child_stream_refresh_props(stream);
 }
 
 static void tsc_child_close_parent_pipe(int pair[2], int keep) {
@@ -1652,8 +1894,12 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     if (pipe_stdout) close(out_pipe[1]);
     if (pipe_stderr) close(err_pipe[1]);
     if (fcntl(exec_err_pipe[0], F_SETFL, O_NONBLOCK) < 0) { /* best effort */ }
+    if (pipe_stdin) (void)fcntl(in_pipe[1], F_SETFL, O_NONBLOCK);
     if (pipe_stdout) (void)fcntl(out_pipe[0], F_SETFL, O_NONBLOCK);
     if (pipe_stderr) (void)fcntl(err_pipe[0], F_SETFL, O_NONBLOCK);
+#ifdef SIGPIPE
+    (void)signal(SIGPIPE, SIG_IGN);
+#endif
 
     tsc_child_process_async_t* child = (tsc_child_process_async_t*)TSC_GC_MALLOC(sizeof(tsc_child_process_async_t));
     memset(child, 0, sizeof(*child));
@@ -1680,6 +1926,9 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     child->stdin_stream->ended = !pipe_stdin;
     child->stdout_stream->ended = !pipe_stdout;
     child->stderr_stream->ended = !pipe_stderr;
+    child->stdin_stream->end_callback = tsc_value_undefined();
+    child->stdout_stream->end_callback = tsc_value_undefined();
+    child->stderr_stream->end_callback = tsc_value_undefined();
 
     tsc_object_t* object = tsc_object_new();
     child->event.object = object;

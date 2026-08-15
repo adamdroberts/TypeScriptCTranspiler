@@ -1,0 +1,3 @@
+write: true true true 16384
+close: true 0 false 65536 write-callback|second-write-callback|finish|end-callback|drain
+error: false child_process stdin is not writable true

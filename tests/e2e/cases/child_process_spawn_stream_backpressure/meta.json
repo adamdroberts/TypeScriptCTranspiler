@@ -1,0 +1,3 @@
+{
+  "description": "asynchronous child_process stdin writes use bounded backpressure, callbacks, drain/finish lifecycle, and post-close errors"
+}
