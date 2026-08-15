@@ -11167,6 +11167,7 @@ struct tsc_fs_stats {
 
 struct tsc_fs_dirent {
     tsc_str_t* name;
+    tsc_str_t* parent_path;
     bool is_file;
     bool is_directory;
     bool is_symbolic_link;
@@ -11289,6 +11290,7 @@ static void tsc_fs_stats_fill_uv(tsc_fs_stats_t* out, const tsc_uv_stat_t* st) {
 tsc_fs_dirent_t* fs_dirent_from_path(const char* dir_path, const char* name) {
     tsc_fs_dirent_t* out = (tsc_fs_dirent_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dirent_t));
     out->name = tsc_str_from_cstr(name);
+    out->parent_path = tsc_str_from_cstr(dir_path);
     out->is_file = false;
     out->is_directory = false;
     out->is_symbolic_link = false;
@@ -11338,6 +11340,7 @@ tsc_fs_dirent_t* fs_dirent_from_uv(const char* dir_path, const char* name, int t
     if (type == 0) return fs_dirent_from_path(dir_path, name);
     tsc_fs_dirent_t* out = (tsc_fs_dirent_t*)TSC_GC_MALLOC(sizeof(tsc_fs_dirent_t));
     out->name = tsc_str_from_cstr(name);
+    out->parent_path = tsc_str_from_cstr(dir_path);
     out->is_file = type == TSC_UV_DIRENT_FILE;
     out->is_directory = type == TSC_UV_DIRENT_DIR;
     out->is_symbolic_link = type == TSC_UV_DIRENT_LINK;
@@ -11836,6 +11839,10 @@ tsc_str_t* tsc_fs_dirent_name(const tsc_fs_dirent_t* ent) {
     return ent ? ent->name : tsc_str_from_lit("", 0);
 }
 
+tsc_str_t* tsc_fs_dirent_parent_path(const tsc_fs_dirent_t* ent) {
+    return ent ? ent->parent_path : tsc_str_from_lit("", 0);
+}
+
 bool tsc_fs_dirent_is_file(const tsc_fs_dirent_t* ent) {
     return ent ? ent->is_file : false;
 }
@@ -11919,6 +11926,8 @@ static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent, const tsc_str_t* en
         ));
     }
     tsc_object_set(object, tsc_str_from_lit("name", 4), name);
+    tsc_object_set(object, tsc_str_from_lit("parentPath", 10), tsc_value_string(tsc_fs_dirent_parent_path(ent)));
+    tsc_object_set(object, tsc_str_from_lit("path", 4), tsc_value_string(tsc_fs_dirent_parent_path(ent)));
     tsc_object_set(object, tsc_str_from_lit("isFile", 6), tsc_value_function_builtin_named(
         tsc_fs_dirent_is_file_builtin, ent, 0.0, tsc_str_from_lit("isFile", 6)
     ));

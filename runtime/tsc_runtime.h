@@ -1326,6 +1326,7 @@ bool tsc_fs_stats_is_character_device(const tsc_fs_stats_t* st);
 bool tsc_fs_stats_is_fifo(const tsc_fs_stats_t* st);
 bool tsc_fs_stats_is_socket(const tsc_fs_stats_t* st);
 tsc_str_t* tsc_fs_dirent_name(const tsc_fs_dirent_t* ent);
+tsc_str_t* tsc_fs_dirent_parent_path(const tsc_fs_dirent_t* ent);
 bool tsc_fs_dirent_is_file(const tsc_fs_dirent_t* ent);
 bool tsc_fs_dirent_is_directory(const tsc_fs_dirent_t* ent);
 bool tsc_fs_dirent_is_symbolic_link(const tsc_fs_dirent_t* ent);

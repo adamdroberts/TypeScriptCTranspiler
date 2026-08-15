@@ -1373,6 +1373,8 @@ interface FSStats {
 }
 interface FSDirent {
     readonly name: string;
+    readonly parentPath: string;
+    readonly path: string;
     isFile(...ignored: any[]): boolean;
     isDirectory(...ignored: any[]): boolean;
     isSymbolicLink(...ignored: any[]): boolean;
@@ -1383,6 +1385,8 @@ interface FSDirent {
 }
 interface FSDirHandleEntry {
     readonly name: string | Buffer;
+    readonly parentPath: string;
+    readonly path: string;
     isFile(...ignored: any[]): boolean;
     isDirectory(...ignored: any[]): boolean;
     isSymbolicLink(...ignored: any[]): boolean;

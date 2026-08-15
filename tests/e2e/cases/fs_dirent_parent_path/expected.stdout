@@ -1,0 +1,8 @@
+sync: child:true:/tmp/tsc2c-fs-dirent-parent-path|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path
+named: child:true:/tmp/tsc2c-fs-dirent-parent-path|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path
+reflect: name|parentPath|path name|parentPath|path true true
+promise: child:true:/tmp/tsc2c-fs-dirent-parent-path|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path
+recursive: child:true:/tmp/tsc2c-fs-dirent-parent-path|nested.txt:true:/tmp/tsc2c-fs-dirent-parent-path/child|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path
+handle sync: child:true:/tmp/tsc2c-fs-dirent-parent-path|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path
+handle recursive: child:true:/tmp/tsc2c-fs-dirent-parent-path|nested.txt:true:/tmp/tsc2c-fs-dirent-parent-path/child|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path
+handle async: child:true:/tmp/tsc2c-fs-dirent-parent-path|root.txt:true:/tmp/tsc2c-fs-dirent-parent-path

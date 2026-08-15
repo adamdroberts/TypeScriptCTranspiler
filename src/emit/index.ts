@@ -96965,7 +96965,7 @@ class Emitter {
         return this.emitSequencedExpr(arrayType(T_STRING), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
             const out = this.freshTemp("_dirent_keys");
             const key = this.freshTemp("_dirent_key");
-            return `({ (void)${dirent}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), 1); tsc_str_t* ${key} = tsc_str_from_lit("name", 4); tsc_array_push_raw(${out}, &${key}); ${out}; })`;
+            return `({ (void)${dirent}; tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_str_t*), 3); tsc_str_t* ${key} = tsc_str_from_lit("name", 4); tsc_array_push_raw(${out}, &${key}); ${key} = tsc_str_from_lit("parentPath", 10); tsc_array_push_raw(${out}, &${key}); ${key} = tsc_str_from_lit("path", 4); tsc_array_push_raw(${out}, &${key}); ${out}; })`;
         });
     }
 
@@ -96977,7 +96977,7 @@ class Emitter {
         return this.emitSequencedExpr(arrayType(T_VALUE), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
             const out = this.freshTemp("_dirent_values");
             const value = this.freshTemp("_dirent_value");
-            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), 1); tsc_value_t ${value} = tsc_value_string(tsc_fs_dirent_name(${dirent})); tsc_array_push_raw(${out}, &${value}); ${out}; })`;
+            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(tsc_value_t), 3); tsc_value_t ${value} = tsc_value_string(tsc_fs_dirent_name(${dirent})); tsc_array_push_raw(${out}, &${value}); ${value} = tsc_value_string(tsc_fs_dirent_parent_path(${dirent})); tsc_array_push_raw(${out}, &${value}); ${value} = tsc_value_string(tsc_fs_dirent_parent_path(${dirent})); tsc_array_push_raw(${out}, &${value}); ${out}; })`;
         });
     }
 
@@ -96990,7 +96990,7 @@ class Emitter {
         return this.emitSequencedExpr(arrayType(elemType), [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
             const out = this.freshTemp("_dirent_entries");
             const entry = this.freshTemp("_dirent_entry");
-            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), 1); ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_lit("name", 4); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${out}; })`;
+            return `({ tsc_array_t* ${out} = tsc_array_new(sizeof(${elemType.c}), 3); ${elemType.c} ${entry}; ${entry}.key = tsc_str_from_lit("name", 4); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${entry}.key = tsc_str_from_lit("parentPath", 10); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${entry}.key = tsc_str_from_lit("path", 4); ${this.objectEntrySet(entry, T_VALUE, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`)}; tsc_array_push_raw(${out}, &${entry}); ${out}; })`;
         });
     }
 
@@ -97008,7 +97008,7 @@ class Emitter {
         ], ([dirent, keyC]) => {
             const out = this.freshTemp("_dirent_desc_out");
             const desc = this.freshTemp("_dirent_desc");
-            return `({ tsc_value_t ${out} = tsc_value_undefined(); if (tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4))) { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; ${out} = tsc_value_object(${desc}); } ${out}; })`;
+            return `({ tsc_value_t ${out} = tsc_value_undefined(); if (tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4))) { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; ${out} = tsc_value_object(${desc}); } else if (tsc_str_eq(${keyC}, tsc_str_from_lit("parentPath", 10)) || tsc_str_eq(${keyC}, tsc_str_from_lit("path", 4))) { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`, "true", "true", "true")}; ${out} = tsc_value_object(${desc}); } ${out}; })`;
         });
     }
 
@@ -97020,7 +97020,7 @@ class Emitter {
         return this.emitSequencedExpr(T_VALUE, [{ value: obj, node: objExpr }, ...ignored], ([dirent]) => {
             const out = this.freshTemp("_dirent_descs");
             const desc = this.freshTemp("_dirent_desc");
-            return `({ tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; tsc_object_set(${out}, tsc_str_from_lit("name", 4), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
+            return `({ tsc_object_t* ${out} = tsc_object_new(); { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_name(${dirent}))`, "true", "true", "true")}; tsc_object_set(${out}, tsc_str_from_lit("name", 4), tsc_value_object(${desc})); } { ${this.typedArrayDescriptorInit(desc, `tsc_value_string(tsc_fs_dirent_parent_path(${dirent}))`, "true", "true", "true")}; tsc_object_set(${out}, tsc_str_from_lit("parentPath", 10), tsc_value_object(${desc})); tsc_object_set(${out}, tsc_str_from_lit("path", 4), tsc_value_object(${desc})); } tsc_value_object(${out}); })`;
         });
     }
 
@@ -97035,7 +97035,7 @@ class Emitter {
             { value: obj, node: objExpr },
             { value: key, target: T_STRING, node: keyExpr },
             ...ignored,
-        ], ([dirent, keyC]) => `({ (void)${dirent}; tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)); })`);
+        ], ([dirent, keyC]) => `({ (void)${dirent}; tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)) || tsc_str_eq(${keyC}, tsc_str_from_lit("parentPath", 10)) || tsc_str_eq(${keyC}, tsc_str_from_lit("path", 4)); })`);
     }
 
     private emitFsDirentReflectGet(
@@ -97054,7 +97054,7 @@ class Emitter {
         specs.push(...ignored);
         return this.emitSequencedExpr(T_VALUE, specs, ([dirent, keyC, receiverC]) => {
             const ignoredReceiver = receiver ? `(void)${receiverC}; ` : "";
-            return `({ ${ignoredReceiver}tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)) ? tsc_value_string(tsc_fs_dirent_name(${dirent})) : tsc_value_undefined(); })`;
+            return `({ ${ignoredReceiver}tsc_str_eq(${keyC}, tsc_str_from_lit("name", 4)) ? tsc_value_string(tsc_fs_dirent_name(${dirent})) : (tsc_str_eq(${keyC}, tsc_str_from_lit("parentPath", 10)) || tsc_str_eq(${keyC}, tsc_str_from_lit("path", 4))) ? tsc_value_string(tsc_fs_dirent_parent_path(${dirent})) : tsc_value_undefined(); })`;
         });
     }
 
@@ -100233,8 +100233,13 @@ class Emitter {
         if (recv.ty.kind === "fsstats" && pa.name.text === "birthtime") {
             return { c: `tsc_date_from_ms(tsc_fs_stats_birthtime_ms(${recv.c}))`, ty: T_DATE };
         }
-        if (recv.ty.kind === "fsdirent" && pa.name.text === "name") {
-            return { c: `tsc_fs_dirent_name(${recv.c})`, ty: T_STRING };
+        if (recv.ty.kind === "fsdirent") {
+            if (pa.name.text === "name") {
+                return { c: `tsc_fs_dirent_name(${recv.c})`, ty: T_STRING };
+            }
+            if (pa.name.text === "parentPath" || pa.name.text === "path") {
+                return { c: `tsc_fs_dirent_parent_path(${recv.c})`, ty: T_STRING };
+            }
         }
         if (recv.ty.kind === "value") {
             if (isOpt) {
