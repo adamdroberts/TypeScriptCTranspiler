@@ -89858,7 +89858,7 @@ class Emitter {
                 });
             }
             case "opendirSync": {
-                if (args.length < 1) unsupported(call, "fs.opendirSync needs a path and optional { recursive } options");
+                if (args.length < 1) unsupported(call, "fs.opendirSync needs a path and optional { recursive, encoding } options");
                 const options = this.emitFsDirOptions(args[1], "fs.opendirSync");
                 const pathExpr = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
@@ -89869,7 +89869,7 @@ class Emitter {
                     this.fsPathSpec(pathExpr, args[0]!, "fs.opendirSync path"),
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
-                ], ([path]) => `tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"})`);
+                ], ([path]) => `tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length}))`);
             }
             case "statSync": {
                 if (args.length < 1) unsupported(call, "fs.statSync needs path and optional { bigint: false, throwIfNoEntry } options");
@@ -90578,21 +90578,34 @@ class Emitter {
     private emitFsDirOptions(
         options: ts.Expression | undefined,
         label: string,
-    ): { recursive: boolean } {
-        if (!options || this.isUndefinedLikeExpression(options)) return { recursive: false };
+    ): { recursive: boolean; encoding: "utf8" | "hex" | "base64" | "buffer" } {
+        if (!options || this.isUndefinedLikeExpression(options)) return { recursive: false, encoding: "utf8" };
         const resolvedOptions = this.resolveSideEffectFreeEarlierConstExpression(options);
         if (this.isUndefinedLikeExpression(resolvedOptions) || resolvedOptions.kind === ts.SyntaxKind.NullKeyword) {
-            return { recursive: false };
+            return { recursive: false, encoding: "utf8" };
         }
         if (!ts.isObjectLiteralExpression(resolvedOptions)) {
             unsupported(options, `${label} options must be an object literal in this subset`);
         }
         let recursive = false;
+        let encoding: "utf8" | "hex" | "base64" | "buffer" = "utf8";
         for (const prop of resolvedOptions.properties) {
             if (!ts.isPropertyAssignment(prop)) {
-                unsupported(prop, `${label} options only support recursive property assignments`);
+                unsupported(prop, `${label} options only support recursive and encoding property assignments`);
             }
             const key = this.staticPropertyName(prop.name);
+            if (key === "encoding") {
+                const encodingNode = this.resolveSideEffectFreeEarlierConstExpression(prop.initializer);
+                if (this.isUndefinedExpression(encodingNode) || encodingNode.kind === ts.SyntaxKind.NullKeyword) {
+                    encoding = "utf8";
+                    continue;
+                }
+                const value = this.sideEffectFreeStringLiteralText(encodingNode, new Set());
+                if (value === "utf8" || value === "utf-8") encoding = "utf8";
+                else if (value === "hex" || value === "base64" || value === "buffer") encoding = value;
+                else unsupported(prop.initializer, `${label}.encoding must be UTF-8, hex, base64, buffer, or null in this subset`);
+                continue;
+            }
             if (key !== "recursive") {
                 unsupported(prop.name, `${label} unsupported option ${key ?? ts.SyntaxKind[prop.name.kind]}`);
             }
@@ -90607,7 +90620,7 @@ class Emitter {
             }
             recursive = value;
         }
-        return { recursive };
+        return { recursive, encoding };
     }
 
     private emitFsCpOptions(options: ts.Expression | undefined, label: string): { recursive: boolean; force: boolean; errorOnExist: boolean; dereference: boolean; verbatimSymlinks: boolean; preserveTimestamps: boolean; copy: boolean; mode: SequencedCallArg } {
@@ -91357,7 +91370,7 @@ class Emitter {
                 ));
             }
             case "opendir": {
-                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional { recursive } options");
+                if (args.length < 1) unsupported(call, "fs.promises.opendir needs a path and optional { recursive, encoding } options");
                 const options = this.emitFsDirOptions(args[1], "fs.promises.opendir");
                 const pathExpr = this.emitExpr(args[0]!);
                 const optionSpecs: SequencedCallArg[] = [];
@@ -91369,7 +91382,7 @@ class Emitter {
                     ...optionSpecs,
                     ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
                 ], ([path]) => settle(
-                    `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}))`,
+                    `tsc_promise_resolve(tsc_fs_opendir_sync(${path!}, ${options.recursive ? "true" : "false"}, tsc_str_from_lit("${options.encoding}", ${options.encoding.length})))`,
                 ));
             }
             case "readFile": {

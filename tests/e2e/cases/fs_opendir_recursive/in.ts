@@ -6,7 +6,7 @@ function readSyncNames(dir: FSDir): string[] {
     const names: string[] = [];
     let entry = dir.readSync();
     while (entry !== null) {
-        names.push(entry.name);
+        names.push(typeof entry.name === "string" ? entry.name : entry.name.toString());
         entry = dir.readSync();
     }
     return names.sort();
@@ -16,7 +16,7 @@ async function readAsyncNames(dir: FSDir): Promise<string[]> {
     const names: string[] = [];
     let entry = await dir.read();
     while (entry !== null) {
-        names.push(entry.name);
+        names.push(typeof entry.name === "string" ? entry.name : entry.name.toString());
         entry = await dir.read();
     }
     return names.sort();

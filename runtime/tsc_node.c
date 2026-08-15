@@ -11906,10 +11906,19 @@ static tsc_value_t tsc_fs_dirent_is_socket_builtin(void* env, tsc_value_t this_a
     return tsc_value_bool(tsc_fs_dirent_is_socket((const tsc_fs_dirent_t*)env));
 }
 
-static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent) {
+static tsc_value_t tsc_fs_dirent_value(tsc_fs_dirent_t* ent, const tsc_str_t* encoding) {
     if (!ent) return tsc_value_null();
     tsc_object_t* object = tsc_object_new();
-    tsc_object_set(object, tsc_str_from_lit("name", 4), tsc_value_string(tsc_fs_dirent_name(ent)));
+    tsc_value_t name = tsc_value_string(tsc_fs_dirent_name(ent));
+    if (encoding && str_lit_eq(encoding, "buffer")) {
+        name = tsc_value_buffer(tsc_buffer_from_str(tsc_fs_dirent_name(ent), NULL));
+    } else if (encoding && (str_lit_eq(encoding, "hex") || str_lit_eq(encoding, "base64"))) {
+        name = tsc_value_string(tsc_buffer_to_string(
+            tsc_buffer_from_str(tsc_fs_dirent_name(ent), NULL),
+            encoding
+        ));
+    }
+    tsc_object_set(object, tsc_str_from_lit("name", 4), name);
     tsc_object_set(object, tsc_str_from_lit("isFile", 6), tsc_value_function_builtin_named(
         tsc_fs_dirent_is_file_builtin, ent, 0.0, tsc_str_from_lit("isFile", 6)
     ));
@@ -11944,6 +11953,7 @@ typedef struct tsc_fs_dir {
     tsc_str_t* path;
     char* current_path;
     bool recursive;
+    tsc_str_t* encoding;
     bool closed;
     bool exhausted;
     tsc_array_t* frames;
@@ -11982,7 +11992,7 @@ static tsc_value_t tsc_fs_dir_read_entry(tsc_fs_dir_t* state) {
             if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
             const char* parent_path = state->current_path ? state->current_path : state->path->data;
             tsc_fs_dirent_t* dirent = fs_dirent_from_path(parent_path, entry->d_name);
-            tsc_value_t value = tsc_fs_dirent_value(dirent);
+            tsc_value_t value = tsc_fs_dirent_value(dirent, state->encoding);
             if (state->recursive && dirent->is_directory) {
                 char* child_path = fs_join_path(parent_path, entry->d_name);
                 DIR* child = opendir(child_path);
@@ -12102,7 +12112,7 @@ static tsc_value_t tsc_fs_dir_async_iterator_builtin(void* env, tsc_value_t this
     return state ? state->value : tsc_value_undefined();
 }
 
-tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive) {
+tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive, const tsc_str_t* encoding) {
     char* p = cstr_dup(path);
     DIR* dir = opendir(p);
     free(p);
@@ -12116,6 +12126,7 @@ tsc_value_t tsc_fs_opendir_sync(const tsc_str_t* path, bool recursive) {
     state->path = (tsc_str_t*)path;
     state->current_path = cstr_dup(path);
     state->recursive = recursive;
+    state->encoding = (tsc_str_t*)encoding;
     state->closed = false;
     state->exhausted = false;
     state->frames = tsc_array_new(sizeof(tsc_fs_dir_frame_t), 4);

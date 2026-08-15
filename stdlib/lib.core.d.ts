@@ -1382,7 +1382,7 @@ interface FSDirent {
     isSocket(...ignored: any[]): boolean;
 }
 interface FSDirHandleEntry {
-    readonly name: string;
+    readonly name: string | Buffer;
     isFile(...ignored: any[]): boolean;
     isDirectory(...ignored: any[]): boolean;
     isSymbolicLink(...ignored: any[]): boolean;
@@ -1393,6 +1393,7 @@ interface FSDirHandleEntry {
 }
 interface FSDirOptions {
     recursive?: boolean;
+    encoding?: "utf8" | "utf-8" | "hex" | "base64" | "buffer" | null;
 }
 interface FSDir {
     readonly path: string;
