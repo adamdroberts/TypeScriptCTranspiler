@@ -1,0 +1,3 @@
+{
+  "description": "Finite dynamic require proofs resolve Buffer constructors through default and namespace buffer module imports"
+}
