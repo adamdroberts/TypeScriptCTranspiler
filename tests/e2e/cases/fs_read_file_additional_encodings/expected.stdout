@@ -1,0 +1,7 @@
+sync ascii: 65|0|66|105|127
+sync latin1: 65|0|66|233|255
+sync binary: 65|0|66|233|255
+promise ascii: 65|0|66|105|127
+promise latin1: 65|0|66|233|255
+promise binary: 65|0|66|233|255
+error: pending
