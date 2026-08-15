@@ -89,6 +89,11 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         return false;
     };
 
+    const isStaticBufferConstructorIdentifier = (id: ts.Identifier): boolean => {
+        return id.text === "Buffer" ||
+            isNamedImportIdentifier(id, ["buffer", "node:buffer"], "Buffer");
+    };
+
     const resolve = (node: ts.Expression): string[] => {
         while (
             ts.isParenthesizedExpression(node) ||
@@ -1157,7 +1162,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "from") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (!ts.isIdentifier(target) || !isStaticBufferConstructorIdentifier(target)) return [];
 
         const arrayValue = unwrapStaticExpression(call.arguments[0]!);
         if (ts.isArrayLiteralExpression(arrayValue)) {
@@ -1199,7 +1204,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const method = callee.name.text;
         if (method !== "alloc" && method !== "allocUnsafe" && method !== "allocUnsafeSlow") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (!ts.isIdentifier(target) || !isStaticBufferConstructorIdentifier(target)) return [];
         if (method !== "alloc" && call.arguments.length > 1) return [];
 
         const sizes = resolveStaticIntegerKeys(call.arguments[0]!);
@@ -1420,7 +1425,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(unwrapped.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "concat") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (!ts.isIdentifier(target) || !isStaticBufferConstructorIdentifier(target)) return [];
         if (unwrapped.arguments.length < 1 || unwrapped.arguments.length > 2 || unwrapped.arguments.some(ts.isSpreadElement)) {
             return [];
         }
@@ -1500,7 +1505,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "byteLength") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (!ts.isIdentifier(target) || !isStaticBufferConstructorIdentifier(target)) return [];
 
         const buffers = resolveStaticBufferExpression(call.arguments[0]!);
         if (buffers.length > 0) {
@@ -1532,7 +1537,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "isEncoding") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (!ts.isIdentifier(target) || !isStaticBufferConstructorIdentifier(target)) return [];
 
         const values = resolve(call.arguments[0]!);
         if (values.length === 0) return [];
@@ -1551,7 +1556,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const fromCallee = unwrapStaticExpression(receiver.expression);
         if (!ts.isPropertyAccessExpression(fromCallee) || fromCallee.name.text !== "from") return [];
         const fromTarget = unwrapStaticExpression(fromCallee.expression);
-        if (!ts.isIdentifier(fromTarget) || fromTarget.text !== "Buffer") return [];
+        if (!ts.isIdentifier(fromTarget) || !isStaticBufferConstructorIdentifier(fromTarget)) return [];
 
         const values = resolve(receiver.arguments[0]!);
         if (values.length === 0) return [];
@@ -1719,7 +1724,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
 
         if (ts.isPropertyAccessExpression(callee) && callee.name.text === "compare") {
             const target = unwrapStaticExpression(callee.expression);
-            if (ts.isIdentifier(target) && target.text === "Buffer") {
+            if (ts.isIdentifier(target) && isStaticBufferConstructorIdentifier(target)) {
                 if (call.arguments.length !== 2) return [];
                 leftExpr = call.arguments[0]!;
                 rightExpr = call.arguments[1]!;
@@ -2100,7 +2105,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
             const callee = unwrapStaticExpression(unwrapped.expression);
             if (ts.isPropertyAccessExpression(callee)) {
                 const target = unwrapStaticExpression(callee.expression);
-                if (ts.isIdentifier(target) && target.text === "Buffer") {
+                if (ts.isIdentifier(target) && isStaticBufferConstructorIdentifier(target)) {
                     const name = callee.name.text;
                     return name === "from" ||
                         name === "alloc" ||
@@ -2132,7 +2137,7 @@ export function staticStringExpressionTexts(expr: ts.Expression): string[] {
         const callee = unwrapStaticExpression(call.expression);
         if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "isBuffer") return [];
         const target = unwrapStaticExpression(callee.expression);
-        if (!ts.isIdentifier(target) || target.text !== "Buffer") return [];
+        if (!ts.isIdentifier(target) || !isStaticBufferConstructorIdentifier(target)) return [];
         const result = isStaticBufferExpression(call.arguments[0]!);
         return result === null ? [] : [String(result)];
     };
