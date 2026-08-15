@@ -4277,6 +4277,7 @@ typedef struct tsc_http_connection_state {
 } tsc_http_connection_state_t;
 
 typedef struct tsc_http_response_state {
+    tsc_child_event_target_t event;
     tsc_value_t socket;
     tsc_http_connection_state_t* connection;
     size_t request_consumed;
@@ -4290,6 +4291,7 @@ typedef struct tsc_http_response_state {
     bool headers_sent;
     bool chunked_stream;
     bool keep_alive;
+    tsc_value_t drain_listener;
 } tsc_http_response_state_t;
 
 static bool tsc_http_equal_ci(const tsc_str_t* value, const char* literal) {
@@ -4488,12 +4490,54 @@ static void tsc_http_socket_end(tsc_value_t socket, tsc_str_t* data) {
     (void)tsc_value_apply_function(end, socket, tsc_value_array(args));
 }
 
-static void tsc_http_socket_write(tsc_value_t socket, tsc_str_t* data) {
+static bool tsc_http_socket_write(tsc_value_t socket, tsc_str_t* data) {
     tsc_value_t write = tsc_value_get_prop(socket, tsc_str_from_lit("write", 5));
-    if (!tsc_value_is_callable(write)) return;
+    if (!tsc_value_is_callable(write)) return false;
     tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
     tsc_array_push_value(args, tsc_value_string(data ? data : tsc_str_from_lit("", 0)));
-    (void)tsc_value_apply_function(write, socket, tsc_value_array(args));
+    return tsc_value_as_bool(tsc_value_apply_function(write, socket, tsc_value_array(args)));
+}
+
+typedef struct tsc_http_drain_bridge {
+    tsc_child_event_target_t* target;
+    tsc_value_t socket;
+} tsc_http_drain_bridge_t;
+
+static void tsc_http_sync_writable_props(tsc_child_event_target_t* target, tsc_value_t socket) {
+    if (!target || !target->value) return;
+    tsc_value_t high_water_mark = tsc_value_get_prop(socket, tsc_str_from_lit("writableHighWaterMark", 21));
+    tsc_value_t writable_length = tsc_value_get_prop(socket, tsc_str_from_lit("writableLength", 14));
+    tsc_value_t need_drain = tsc_value_get_prop(socket, tsc_str_from_lit("writableNeedDrain", 17));
+    if (tsc_value_is_undefined(high_water_mark)) high_water_mark = tsc_value_num(16384.0);
+    if (tsc_value_is_undefined(writable_length)) writable_length = tsc_value_num(0.0);
+    if (tsc_value_is_undefined(need_drain)) need_drain = tsc_value_bool(false);
+    tsc_value_set_prop(target->value, tsc_str_from_lit("writableHighWaterMark", 21), high_water_mark);
+    tsc_value_set_prop(target->value, tsc_str_from_lit("writableLength", 14), writable_length);
+    tsc_value_set_prop(target->value, tsc_str_from_lit("writableNeedDrain", 17), need_drain);
+}
+
+static tsc_value_t tsc_http_forward_drain(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_http_drain_bridge_t* bridge = (tsc_http_drain_bridge_t*)env;
+    if (!bridge || !bridge->target || !bridge->target->emitter) return tsc_value_undefined();
+    tsc_http_sync_writable_props(bridge->target, bridge->socket);
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(bridge->target->emitter, tsc_str_from_lit("drain", 5), empty);
+    return tsc_value_undefined();
+}
+
+static void tsc_http_attach_drain_bridge(
+    tsc_child_event_target_t* target,
+    tsc_value_t socket,
+    tsc_value_t* listener_out,
+    const char* name
+) {
+    if (!target || !listener_out) return;
+    tsc_http_drain_bridge_t* bridge = (tsc_http_drain_bridge_t*)TSC_GC_MALLOC(sizeof(tsc_http_drain_bridge_t));
+    bridge->target = target;
+    bridge->socket = socket;
+    *listener_out = tsc_http_attach_socket_listener(socket, "drain", tsc_http_forward_drain, bridge, 0.0, name);
 }
 
 static void tsc_http_server_process_input(tsc_http_connection_state_t* connection);
@@ -4521,8 +4565,9 @@ static void tsc_http_connection_finish_response(tsc_http_response_state_t* respo
     tsc_http_server_process_input(connection);
 }
 
-static void tsc_http_response_send_headers(tsc_http_response_state_t* response) {
-    if (!response || response->headers_sent) return;
+static bool tsc_http_response_send_headers(tsc_http_response_state_t* response) {
+    if (!response) return false;
+    if (response->headers_sent) return true;
     int status = (int)tsc_value_as_num(tsc_value_get_prop(response->value, tsc_str_from_lit("statusCode", 10)));
     if (status <= 0) status = 200;
     char status_line[96];
@@ -4540,7 +4585,7 @@ static void tsc_http_response_send_headers(tsc_http_response_state_t* response) 
     }
     output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
     response->headers_sent = true;
-    tsc_http_socket_write(response->socket, output);
+    return tsc_http_socket_write(response->socket, output);
 }
 
 static tsc_value_t tsc_http_response_set_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -4581,7 +4626,7 @@ static tsc_value_t tsc_http_response_write(void* env, tsc_value_t this_arg, tsc_
     }
     if (tsc_http_header_value_contains(response->headers, "transfer-encoding", "chunked")) {
         response->chunked_stream = true;
-        tsc_http_response_send_headers(response);
+        bool accepted = tsc_http_response_send_headers(response);
         char chunk_line[64];
         snprintf(chunk_line, sizeof(chunk_line), "%zx\r\n", len);
         tsc_str_t* chunk = tsc_str_concat_n(4,
@@ -4590,14 +4635,16 @@ static tsc_value_t tsc_http_response_write(void* env, tsc_value_t this_arg, tsc_
             tsc_str_from_lit("\r\n", 2),
             tsc_str_from_lit("", 0)
         );
-        tsc_http_socket_write(response->socket, chunk);
-        return tsc_value_bool(true);
+        accepted = tsc_http_socket_write(response->socket, chunk) && accepted;
+        tsc_http_sync_writable_props(&response->event, response->socket);
+        return tsc_value_bool(accepted);
     }
     if (response->body_len + len > TSC_HTTP_MAX_RESPONSE) {
         tsc_throw_str(tsc_str_from_cstr("http.ServerResponse response body exceeds the bounded limit"));
     }
     memcpy(response->body + response->body_len, data, len);
     response->body_len += len;
+    tsc_http_sync_writable_props(&response->event, response->socket);
     return tsc_value_bool(true);
 }
 
@@ -4609,8 +4656,8 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
         if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
             (void)tsc_http_response_write(env, this_arg, args);
         }
-        tsc_http_response_send_headers(response);
-        tsc_http_socket_write(response->socket, tsc_str_from_lit("0\r\n\r\n", 7));
+        (void)tsc_http_response_send_headers(response);
+        tsc_http_socket_write(response->socket, tsc_str_from_lit("0\r\n\r\n", 5));
         response->ended = true;
         if (tsc_http_response_should_keep_alive(response)) {
             tsc_http_connection_finish_response(response);
@@ -4622,7 +4669,7 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
     if (args && args->len > 0 && !tsc_value_is_undefined(TSC_ARR(tsc_value_t, args, 0))) {
         (void)tsc_http_response_write(env, this_arg, args);
     }
-    tsc_http_response_send_headers(response);
+    (void)tsc_http_response_send_headers(response);
     tsc_str_t* output = tsc_str_from_lit(response->body, response->body_len);
     response->ended = true;
     if (tsc_http_response_should_keep_alive(response)) {
@@ -4631,6 +4678,7 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
     } else {
         tsc_http_socket_end(response->socket, output);
     }
+    tsc_http_sync_writable_props(&response->event, response->socket);
     return this_arg;
 }
 
@@ -4660,7 +4708,13 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     tsc_object_t* response_object = tsc_object_new();
     response->object = response_object;
     response->value = tsc_value_object(response_object);
+    response->event.object = response_object;
+    response->event.value = response->value;
+    response->event.emitter = tsc_event_emitter_new();
+    tsc_child_add_event_methods(response_object, &response->event);
     tsc_object_set(response_object, tsc_str_from_lit("statusCode", 10), tsc_value_num(200.0));
+    tsc_http_sync_writable_props(&response->event, response->socket);
+    tsc_http_attach_drain_bridge(&response->event, response->socket, &response->drain_listener, "httpResponseDrain");
     tsc_object_set(response_object, tsc_str_from_lit("setHeader", 9), tsc_value_function_generic_named(tsc_http_response_set_header, response, 2.0, tsc_str_from_lit("setHeader", 9)));
     tsc_object_set(response_object, tsc_str_from_lit("writeHead", 9), tsc_value_function_generic_named(tsc_http_response_write_head, response, 1.0, tsc_str_from_lit("writeHead", 9)));
     tsc_object_set(response_object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_response_write, response, 1.0, tsc_str_from_lit("write", 5)));
@@ -5099,7 +5153,7 @@ static void tsc_http_client_try_send(tsc_http_client_state_t* client) {
         }
         if (client->request_chunks) client->request_chunks->len = 0;
         if (client->request_ended && !client->request_end_sent) {
-            tsc_http_socket_write(socket, tsc_str_from_lit("0\r\n\r\n", 7));
+            tsc_http_socket_write(socket, tsc_str_from_lit("0\r\n\r\n", 5));
             client->request_end_sent = true;
             tsc_http_socket_end(socket, NULL);
         }

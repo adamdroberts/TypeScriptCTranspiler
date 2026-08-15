@@ -2522,7 +2522,13 @@ interface HttpRequestOptions {
     headers?: any;
 }
 interface HttpServerResponse {
+    readonly writableHighWaterMark: number;
+    readonly writableLength: number;
+    readonly writableNeedDrain: boolean;
     statusCode: number;
+    on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     setHeader(name: string, value: string, ...ignored: any[]): this;
     writeHead(statusCode: number, headers?: any, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
