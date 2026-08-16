@@ -2557,6 +2557,7 @@ interface HttpClientRequest {
     addTrailers(headers: any, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
+    setTimeout(timeout: number, callback?: () => void, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;
 }
 interface HttpServer {

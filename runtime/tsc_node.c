@@ -5516,6 +5516,73 @@ static void tsc_http_detach_socket_listener(tsc_value_t socket, const char* even
     (void)tsc_value_apply_function(off, socket, tsc_value_array(args));
 }
 
+typedef struct tsc_http_timeout_context {
+    tsc_child_event_target_t* target;
+    tsc_value_t socket;
+    tsc_value_t timeout_listener;
+} tsc_http_timeout_context_t;
+
+static tsc_value_t tsc_http_forward_timeout(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    (void)args;
+    tsc_http_timeout_context_t* context = (tsc_http_timeout_context_t*)env;
+    if (!context || !context->target || !context->target->emitter) return tsc_value_undefined();
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_event_emitter_emit(context->target->emitter, tsc_str_from_lit("timeout", 7), empty);
+    return tsc_value_undefined();
+}
+
+static tsc_http_timeout_context_t* tsc_http_timeout_context_new(
+    tsc_child_event_target_t* target,
+    tsc_value_t socket,
+    const char* listener_name
+) {
+    tsc_http_timeout_context_t* context = (tsc_http_timeout_context_t*)TSC_GC_MALLOC(sizeof(tsc_http_timeout_context_t));
+    context->target = target;
+    context->socket = socket;
+    context->timeout_listener = tsc_http_attach_socket_listener(
+        socket,
+        "timeout",
+        tsc_http_forward_timeout,
+        context,
+        0.0,
+        listener_name
+    );
+    return context;
+}
+
+static void tsc_http_set_socket_timeout(tsc_value_t socket, double timeout_ms) {
+    tsc_value_t set_timeout = tsc_value_get_prop(socket, tsc_str_from_lit("setTimeout", 10));
+    if (!tsc_value_is_callable(set_timeout)) return;
+    tsc_array_t* args = tsc_array_new(sizeof(tsc_value_t), 1);
+    tsc_array_push_value(args, tsc_value_num(timeout_ms));
+    (void)tsc_value_apply_function(set_timeout, socket, tsc_value_array(args));
+}
+
+static tsc_value_t tsc_http_message_set_timeout(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_http_timeout_context_t* context = (tsc_http_timeout_context_t*)env;
+    if (!context || !args || args->len < 1 || !tsc_value_number_is_finite(TSC_ARR(tsc_value_t, args, 0)) ||
+        tsc_value_as_num(TSC_ARR(tsc_value_t, args, 0)) < 0.0) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.setTimeout timeout must be a non-negative finite number"));
+    }
+    if (args->len > 1 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1)) &&
+        !tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 1))) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.setTimeout callback must be callable"));
+    }
+    if (args->len > 1 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 1))) {
+        tsc_net_register_listener(context->target, "timeout", TSC_ARR(tsc_value_t, args, 1), false);
+    }
+    tsc_http_set_socket_timeout(context->socket, tsc_value_as_num(TSC_ARR(tsc_value_t, args, 0)));
+    return this_arg;
+}
+
+static void tsc_http_timeout_context_dispose(tsc_http_timeout_context_t* context) {
+    if (!context) return;
+    tsc_http_detach_socket_listener(context->socket, "timeout", context->timeout_listener);
+    context->timeout_listener = tsc_value_undefined();
+    tsc_http_set_socket_timeout(context->socket, 0.0);
+}
+
 static bool tsc_http_value_bytes(tsc_value_t value, const char** data, size_t* len) {
     tsc_str_t* text = tsc_value_as_string(value);
     if (text) {
@@ -6071,6 +6138,7 @@ struct tsc_http_client_state {
     void* abort_signal_root;
     bool abort_requested;
     double abort_timer;
+    tsc_http_timeout_context_t* timeout_context;
     tsc_value_t data_listener;
     tsc_value_t end_listener;
     tsc_value_t drain_listener;
@@ -6519,6 +6587,7 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
     if (client && !client->destroyed) {
         client->destroyed = true;
         client->abort_requested = false;
+        tsc_http_timeout_context_dispose(client->timeout_context);
         if (client->abort_timer != 0.0) {
             tsc_clear_timeout(client->abort_timer);
             client->abort_timer = 0.0;
@@ -6678,6 +6747,7 @@ static void tsc_http_client_finish_response(tsc_http_client_state_t* client) {
     if (!client || client->response_complete) return;
     client->response_complete = true;
     client->response_handled = true;
+    tsc_http_timeout_context_dispose(client->timeout_context);
     if (!client->response_event_emitted) {
         client->response_end_pending = true;
         return;
@@ -6987,6 +7057,8 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
         ? (tsc_object_t*)value_ptr(client->socket)
         : NULL;
     tsc_value_t socket = tsc_http_client_socket_value(client);
+    client->timeout_context = tsc_http_timeout_context_new(&client->event, socket, "httpClientTimeout");
+    tsc_object_set(object, tsc_str_from_lit("setTimeout", 10), tsc_value_function_generic_named(tsc_http_message_set_timeout, client->timeout_context, 1.0, tsc_str_from_lit("setTimeout", 10)));
     client->data_listener = tsc_http_attach_socket_listener(socket, "data", tsc_http_client_data, client, 1.0, "httpClientData");
     client->end_listener = tsc_http_attach_socket_listener(socket, "end", tsc_http_client_end_read, client, 0.0, "httpClientEnd");
     tsc_http_sync_writable_props(&client->event, socket);
