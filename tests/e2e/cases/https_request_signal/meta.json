@@ -1,0 +1,1 @@
+{"description":"https.request AbortSignal cancellation across pre-aborted and in-flight TLS requests"}

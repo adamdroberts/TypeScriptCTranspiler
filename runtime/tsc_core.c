@@ -307,6 +307,7 @@ typedef struct {
 
 typedef struct {
     tsc_object_t* signal;
+    tsc_object_t* controller;
     bool aborted;
     tsc_abort_callback_t* callbacks;
     size_t callback_len;
@@ -454,6 +455,7 @@ static tsc_value_t abort_signal_throw_if_aborted(void* env, tsc_value_t this_arg
 tsc_value_t tsc_abort_controller_new(void) {
     tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)TSC_GC_MALLOC(sizeof(tsc_abort_controller_state_t));
     state->signal = tsc_object_new_class(state);
+    state->controller = NULL;
     state->aborted = false;
     state->callbacks = NULL;
     state->callback_len = 0;
@@ -516,6 +518,7 @@ tsc_value_t tsc_abort_controller_new(void) {
             tsc_str_from_lit("abort", 5)
         )
     );
+    state->controller = controller;
     return tsc_value_object(controller);
 }
 

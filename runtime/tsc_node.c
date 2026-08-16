@@ -1229,6 +1229,7 @@ typedef struct tsc_child_process_async {
     bool error_emitted;
     bool abort_requested;
     tsc_value_t abort_signal;
+    void* abort_signal_root;
     tsc_child_stream_t* stdin_stream;
     tsc_child_stream_t* stdout_stream;
     tsc_child_stream_t* stderr_stream;
@@ -2288,6 +2289,9 @@ tsc_value_t tsc_child_process_spawn(const tsc_str_t* file, const tsc_array_t* ar
     child->exec_error_fd = exec_err_pipe[0];
     child->kill_signal = kill_signal > 0 ? kill_signal : SIGTERM;
     child->abort_signal = abort_signal;
+    child->abort_signal_root = (value_is_box(abort_signal) && value_tag(abort_signal) == TSC_VALUE_TAG_OBJECT)
+        ? value_ptr(abort_signal)
+        : NULL;
     child->status = 0;
     child->stdin_stream = (tsc_child_stream_t*)TSC_GC_MALLOC(sizeof(tsc_child_stream_t));
     child->stdout_stream = (tsc_child_stream_t*)TSC_GC_MALLOC(sizeof(tsc_child_stream_t));
@@ -3688,6 +3692,7 @@ typedef struct tsc_net_socket {
     double poll_timer;
     bool refed;
     tsc_value_t abort_signal;
+    void* abort_signal_root;
     bool abort_requested;
     tsc_net_server_t* server;
 } tsc_net_socket_t;
@@ -3704,6 +3709,7 @@ struct tsc_net_server {
     double poll_timer;
     uint64_t connection_count;
     tsc_value_t abort_signal;
+    void* abort_signal_root;
     bool abort_requested;
 };
 
@@ -4759,6 +4765,9 @@ static tsc_value_t tsc_net_server_listen(void* env, tsc_value_t this_arg, tsc_ar
     server->close_emitted = false;
     server->listening_emitted = false;
     server->abort_signal = abort_signal;
+    server->abort_signal_root = (value_is_box(abort_signal) && value_tag(abort_signal) == TSC_VALUE_TAG_OBJECT)
+        ? value_ptr(abort_signal)
+        : NULL;
     tsc_net_server_refresh_props(server);
     server->poll_timer = tsc_set_interval(tsc_net_server_poll, server, 1.0);
     if (!server->refed) tsc_unref_timeout(server->poll_timer);
@@ -4969,6 +4978,9 @@ static tsc_value_t tsc_net_connect_internal(double port, tsc_str_t* host, int ad
     }
     if (socket) {
         socket->abort_signal = abort_signal;
+        socket->abort_signal_root = (value_is_box(abort_signal) && value_tag(abort_signal) == TSC_VALUE_TAG_OBJECT)
+            ? value_ptr(abort_signal)
+            : NULL;
         if (!tsc_value_is_nullish(abort_signal)) {
             tsc_abort_signal_add_callback(abort_signal, tsc_net_socket_abort, socket);
         }
@@ -5846,6 +5858,8 @@ struct tsc_http_client_state {
     tsc_object_t* socket_object;
     tsc_object_t* options_object;
     tsc_object_t* headers_object;
+    void** header_value_roots;
+    size_t header_value_root_len;
     tsc_object_t* response_object;
     tsc_child_event_target_t response_event;
     void* response_listener_identity;
@@ -5881,8 +5895,13 @@ struct tsc_http_client_state {
     bool poolable;
     bool pool_release_scheduled;
     bool tls;
+    bool destroyed;
     tsc_http_client_pool_entry_t* pool_entry;
     tsc_net_socket_t* native_socket;
+    tsc_value_t abort_signal;
+    void* abort_signal_root;
+    bool abort_requested;
+    double abort_timer;
     tsc_value_t data_listener;
     tsc_value_t end_listener;
     tsc_value_t drain_listener;
@@ -6226,7 +6245,13 @@ static void tsc_http_client_pool_drop_active(tsc_http_client_state_t* client) {
 static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)args;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
-    if (client) {
+    if (client && !client->destroyed) {
+        client->destroyed = true;
+        client->abort_requested = false;
+        if (client->abort_timer != 0.0) {
+            tsc_clear_timeout(client->abort_timer);
+            client->abort_timer = 0.0;
+        }
         if (client->pool_entry && client->pool_entry->active == client) {
             tsc_http_client_pool_drop_active(client);
             return this_arg;
@@ -6241,6 +6266,38 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
         }
     }
     return this_arg;
+}
+
+static tsc_value_t tsc_http_client_abort_reason(const tsc_http_client_state_t* client) {
+    if (!client || tsc_value_is_nullish(client->abort_signal)) {
+        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    }
+    tsc_value_t reason = tsc_value_get_prop(client->abort_signal, tsc_str_from_lit("reason", 6));
+    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
+        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+    }
+    return reason;
+}
+
+static void tsc_http_client_abort_deferred(void* env) {
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client) return;
+    client->abort_timer = 0.0;
+    if (!client->abort_requested || client->destroyed || client->response_complete) return;
+    client->abort_requested = false;
+    client->response_handled = true;
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_http_client_destroy(client, client->event.value, empty);
+    tsc_child_emit_one_value(client->event.emitter, "error", tsc_http_client_abort_reason(client));
+}
+
+static void tsc_http_client_abort(void* env) {
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || client->destroyed || client->response_complete) return;
+    client->abort_requested = true;
+    if (client->abort_timer == 0.0) {
+        client->abort_timer = tsc_set_timeout(tsc_http_client_abort_deferred, client, 0.0);
+    }
 }
 
 static bool tsc_http_client_response_can_pool(const tsc_http_client_state_t* client) {
@@ -6515,12 +6572,25 @@ static tsc_value_t tsc_http_client_end_read(void* env, tsc_value_t this_arg, tsc
 
 static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_value_t options) {
     client->headers_object = tsc_object_new();
+    client->header_value_roots = NULL;
+    client->header_value_root_len = 0;
     tsc_value_t headers = tsc_value_get_prop(options, tsc_str_from_lit("headers", 7));
     if (!tsc_value_is_object(headers)) return;
     tsc_array_t* keys = tsc_value_object_keys(headers);
+    if (keys && keys->len > 0) {
+        client->header_value_roots = (void**)TSC_GC_MALLOC(keys->len * sizeof(void*));
+    }
     for (size_t i = 0; keys && i < keys->len; i++) {
         tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
-        tsc_object_set(client->headers_object, key, tsc_value_get_prop(headers, key));
+        tsc_value_t value = tsc_value_get_prop(headers, key);
+        tsc_object_set(client->headers_object, key, value);
+        if (client->header_value_roots && value_is_box(value)) {
+            tsc_value_tag_t tag = value_tag(value);
+            if (tag == TSC_VALUE_TAG_FUNCTION || tag == TSC_VALUE_TAG_STRING ||
+                tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_OBJECT) {
+                client->header_value_roots[client->header_value_root_len++] = value_ptr(value);
+            }
+        }
     }
 }
 
@@ -6559,6 +6629,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     bool reject_unauthorized = !tls || tsc_value_is_undefined(reject_value) || tsc_value_as_bool(reject_value);
     tsc_value_t servername_value = tsc_value_get_prop(options, tsc_str_from_lit("servername", 10));
     tsc_str_t* servername = tsc_value_as_string(servername_value);
+    tsc_value_t abort_signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
 
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_client_state_t));
     memset(client, 0, sizeof(*client));
@@ -6570,6 +6641,10 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->method = method;
     client->port = port;
     client->tls = tls;
+    client->abort_signal = abort_signal;
+    client->abort_signal_root = (value_is_box(abort_signal) && value_tag(abort_signal) == TSC_VALUE_TAG_OBJECT)
+        ? value_ptr(abort_signal)
+        : NULL;
     client->body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_REQUEST + 1);
     client->request_chunks = tsc_array_new(sizeof(tsc_str_t*), 4);
     client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
@@ -6619,6 +6694,9 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     if (force_get) {
         tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
         (void)tsc_http_client_end(client, client->event.value, empty);
+    }
+    if (!tsc_value_is_nullish(abort_signal)) {
+        tsc_abort_signal_add_callback(abort_signal, tsc_http_client_abort, client);
     }
     return client->event.value;
 }

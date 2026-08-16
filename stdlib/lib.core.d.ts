@@ -2520,6 +2520,7 @@ interface HttpRequestOptions {
     path?: string;
     method?: string;
     headers?: any;
+    signal?: any;
 }
 interface HttpServerResponse {
     readonly writableHighWaterMark: number;
