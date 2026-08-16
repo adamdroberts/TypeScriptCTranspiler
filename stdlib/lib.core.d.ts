@@ -2508,6 +2508,7 @@ interface HttpIncomingMessage {
     readonly statusCode?: number;
     readonly statusMessage?: string;
     readonly headers: any;
+    readonly trailers: any;
     readonly body: string;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
@@ -2536,6 +2537,7 @@ interface HttpServerResponse {
     getHeader(name: string, ...ignored: any[]): any;
     hasHeader(name: string, ...ignored: any[]): boolean;
     removeHeader(name: string, ...ignored: any[]): void;
+    addTrailers(headers: any, ...ignored: any[]): this;
     writeHead(statusCode: number, headers?: any, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
@@ -2552,6 +2554,7 @@ interface HttpClientRequest {
     getHeader(name: string, ...ignored: any[]): any;
     hasHeader(name: string, ...ignored: any[]): boolean;
     removeHeader(name: string, ...ignored: any[]): void;
+    addTrailers(headers: any, ...ignored: any[]): this;
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;

@@ -5227,6 +5227,8 @@ typedef struct tsc_http_response_state {
     tsc_object_t* object;
     tsc_value_t headers;
     tsc_object_t* headers_object;
+    tsc_value_t trailers;
+    tsc_object_t* trailers_object;
     char* body;
     size_t body_len;
     bool ended;
@@ -5322,6 +5324,22 @@ static bool tsc_http_remove_header_value(tsc_object_t* headers, const tsc_str_t*
     return existing ? tsc_object_delete(headers, existing) : false;
 }
 
+static void tsc_http_copy_trailer_headers(tsc_object_t* target, tsc_value_t source, const char* label) {
+    if (!target || !tsc_value_is_object(source)) {
+        tsc_throw_str(tsc_str_from_cstr(label ? label : "http.addTrailers expects an object"));
+        return;
+    }
+    tsc_array_t* keys = tsc_value_object_keys(source);
+    for (size_t i = 0; keys && i < keys->len; i++) {
+        tsc_str_t* name = ((tsc_str_t**)keys->data)[i];
+        tsc_value_t value = tsc_value_get_prop(source, name);
+        tsc_str_t* text = tsc_value_to_string(value);
+        tsc_http_validate_header_name(name);
+        tsc_http_validate_header_value(name, text);
+        tsc_http_set_header_value(target, name, tsc_value_string(text));
+    }
+}
+
 static tsc_str_t* tsc_http_header_block(tsc_value_t headers) {
     tsc_str_t* result = tsc_str_from_lit("", 0);
     tsc_array_t* keys = tsc_value_object_keys(headers);
@@ -5378,6 +5396,42 @@ static size_t tsc_http_find_crlf(const char* data, size_t len, size_t start) {
     return SIZE_MAX;
 }
 
+static bool tsc_http_parse_trailer_block(
+    const char* data,
+    size_t len,
+    tsc_object_t** trailers_out,
+    size_t* consumed
+) {
+    if (!data || !trailers_out || !consumed) return false;
+    size_t header_end = tsc_http_find_header_end(data, len);
+    if (header_end == SIZE_MAX) return false;
+    tsc_object_t* trailers = tsc_object_new();
+    size_t cursor = 0;
+    while (cursor < header_end) {
+        size_t line_end = tsc_http_find_crlf(data, len, cursor);
+        if (line_end == SIZE_MAX || line_end > header_end) return false;
+        size_t line_len = line_end - cursor;
+        char* colon = memchr(data + cursor, ':', line_len);
+        if (!colon) return false;
+        size_t name_len = (size_t)(colon - (data + cursor));
+        size_t value_start = name_len + 1;
+        while (value_start < line_len && isspace((unsigned char)data[cursor + value_start])) value_start++;
+        size_t value_len = line_len - value_start;
+        char name[256] = { 0 };
+        if (name_len == 0 || name_len >= sizeof(name)) return false;
+        for (size_t i = 0; i < name_len; i++) name[i] = (char)tolower((unsigned char)data[cursor + i]);
+        tsc_object_set(
+            trailers,
+            tsc_str_from_cstr(name),
+            tsc_value_string(tsc_str_from_lit(data + cursor + value_start, value_len))
+        );
+        cursor = line_end + 2;
+    }
+    *trailers_out = trailers;
+    *consumed = header_end + 4;
+    return true;
+}
+
 static bool tsc_http_decode_chunked(
     const char* data,
     size_t len,
@@ -5385,12 +5439,14 @@ static bool tsc_http_decode_chunked(
     size_t max_body,
     size_t* out_len,
     bool* complete,
-    size_t* consumed
+    size_t* consumed,
+    tsc_object_t** trailers_out
 ) {
-    if (!data || !output || !out_len || !complete || !consumed) return false;
+    if (!data || !output || !out_len || !complete || !consumed || !trailers_out) return false;
     *out_len = 0;
     *complete = false;
     *consumed = 0;
+    *trailers_out = NULL;
     size_t cursor = 0;
     while (cursor < len) {
         size_t line_end = tsc_http_find_crlf(data, len, cursor);
@@ -5413,12 +5469,15 @@ static bool tsc_http_decode_chunked(
         if (chunk_size == 0) {
             if (len - cursor >= 2 && data[cursor] == '\r' && data[cursor + 1] == '\n') {
                 *consumed = cursor + 2;
+                *trailers_out = tsc_object_new();
                 *complete = true;
                 return true;
             }
             size_t trailer_end = tsc_http_find_header_end(data + cursor, len - cursor);
             if (trailer_end != SIZE_MAX) {
-                *consumed = cursor + trailer_end + 4;
+                size_t trailer_consumed = 0;
+                if (!tsc_http_parse_trailer_block(data + cursor, len - cursor, trailers_out, &trailer_consumed)) return false;
+                *consumed = cursor + trailer_consumed;
                 *complete = true;
                 return true;
             }
@@ -5650,6 +5709,18 @@ static tsc_value_t tsc_http_response_remove_header(void* env, tsc_value_t this_a
     return tsc_value_undefined();
 }
 
+static tsc_value_t tsc_http_response_add_trailers(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
+    if (!response || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.addTrailers expects an object"));
+    }
+    if (response->ended) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.addTrailers after end"));
+    }
+    tsc_http_copy_trailer_headers(response->trailers_object, TSC_ARR(tsc_value_t, args, 0), "http.ServerResponse.addTrailers expects an object");
+    return this_arg;
+}
+
 static tsc_value_t tsc_http_response_write_head(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
     if (!response || !args || args->len < 1) {
@@ -5710,7 +5781,14 @@ static tsc_value_t tsc_http_response_end(void* env, tsc_value_t this_arg, tsc_ar
             (void)tsc_http_response_write(env, this_arg, args);
         }
         (void)tsc_http_response_send_headers(response);
-        tsc_http_socket_write(response->socket, tsc_str_from_lit("0\r\n\r\n", 5));
+        tsc_str_t* trailer_block = tsc_http_header_block(response->trailers);
+        tsc_str_t* terminator = tsc_str_concat_n(
+            3,
+            tsc_str_from_lit("0\r\n", 3),
+            trailer_block,
+            tsc_str_from_lit("\r\n", 2)
+        );
+        tsc_http_socket_write(response->socket, terminator);
         response->ended = true;
         if (tsc_http_response_should_keep_alive(response)) {
             tsc_http_connection_finish_response(response);
@@ -5740,13 +5818,14 @@ static tsc_value_t tsc_http_bad_request(tsc_value_t socket) {
     return tsc_value_undefined();
 }
 
-static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* connection, const char* method, const char* target, const char* version, tsc_value_t headers, const char* body, size_t body_len, size_t request_consumed, bool keep_alive) {
+static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* connection, const char* method, const char* target, const char* version, tsc_value_t headers, tsc_value_t trailers, const char* body, size_t body_len, size_t request_consumed, bool keep_alive) {
     tsc_object_t* request_object = tsc_object_new();
     connection->request_object = request_object;
     tsc_object_set(request_object, tsc_str_from_lit("method", 6), tsc_value_string(tsc_str_from_cstr(method)));
     tsc_object_set(request_object, tsc_str_from_lit("url", 3), tsc_value_string(tsc_str_from_cstr(target)));
     tsc_object_set(request_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
     tsc_object_set(request_object, tsc_str_from_lit("headers", 7), headers);
+    tsc_object_set(request_object, tsc_str_from_lit("trailers", 8), trailers);
     tsc_object_set(request_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit(body, body_len)));
 
     tsc_http_response_state_t* response = (tsc_http_response_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_response_state_t));
@@ -5757,6 +5836,8 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     response->keep_alive = keep_alive;
     response->headers_object = tsc_object_new();
     response->headers = tsc_value_object(response->headers_object);
+    response->trailers_object = tsc_object_new();
+    response->trailers = tsc_value_object(response->trailers_object);
     response->body = (char*)TSC_GC_MALLOC(TSC_HTTP_MAX_RESPONSE);
     tsc_object_t* response_object = tsc_object_new();
     response->object = response_object;
@@ -5773,6 +5854,7 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     tsc_object_set(response_object, tsc_str_from_lit("getHeader", 9), tsc_value_function_generic_named(tsc_http_response_get_header, response, 1.0, tsc_str_from_lit("getHeader", 9)));
     tsc_object_set(response_object, tsc_str_from_lit("hasHeader", 9), tsc_value_function_generic_named(tsc_http_response_has_header, response, 1.0, tsc_str_from_lit("hasHeader", 9)));
     tsc_object_set(response_object, tsc_str_from_lit("removeHeader", 12), tsc_value_function_generic_named(tsc_http_response_remove_header, response, 1.0, tsc_str_from_lit("removeHeader", 12)));
+    tsc_object_set(response_object, tsc_str_from_lit("addTrailers", 11), tsc_value_function_generic_named(tsc_http_response_add_trailers, response, 1.0, tsc_str_from_lit("addTrailers", 11)));
     tsc_object_set(response_object, tsc_str_from_lit("writeHead", 9), tsc_value_function_generic_named(tsc_http_response_write_head, response, 1.0, tsc_str_from_lit("writeHead", 9)));
     tsc_object_set(response_object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_response_write, response, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(response_object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_http_response_end, response, 0.0, tsc_str_from_lit("end", 3)));
@@ -5840,16 +5922,19 @@ static void tsc_http_server_process_input(tsc_http_connection_state_t* connectio
     const char* body = connection->input + body_offset;
     size_t body_len = content_length;
     size_t request_consumed = body_offset + content_length;
+    tsc_value_t trailers = tsc_value_object(tsc_object_new());
     char decoded_body[TSC_HTTP_MAX_REQUEST + 1];
     if (chunked) {
         bool complete = false;
         size_t chunked_consumed = 0;
-        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete, &chunked_consumed)) {
+        tsc_object_t* trailer_object = NULL;
+        if (!tsc_http_decode_chunked(body, connection->input_len - body_offset, decoded_body, TSC_HTTP_MAX_REQUEST, &body_len, &complete, &chunked_consumed, &trailer_object)) {
             (void)tsc_http_bad_request(connection->socket);
             connection->handled = true;
             return;
         }
         if (!complete) return;
+        trailers = tsc_value_object(trailer_object ? trailer_object : tsc_object_new());
         body = decoded_body;
         request_consumed = body_offset + chunked_consumed;
     } else {
@@ -5859,7 +5944,7 @@ static void tsc_http_server_process_input(tsc_http_connection_state_t* connectio
     connection->request_keep_alive = request_keep_alive;
     connection->request_active = true;
     connection->handled = true;
-    (void)tsc_http_make_request_response(connection, method, target, version, headers, body, body_len, request_consumed, request_keep_alive);
+    (void)tsc_http_make_request_response(connection, method, target, version, headers, trailers, body, body_len, request_consumed, request_keep_alive);
 }
 
 static tsc_value_t tsc_http_server_data(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -5941,6 +6026,7 @@ struct tsc_http_client_state {
     tsc_object_t* socket_object;
     tsc_object_t* options_object;
     tsc_object_t* headers_object;
+    tsc_object_t* request_trailers_object;
     void** header_value_roots;
     size_t header_value_root_len;
     tsc_object_t* response_object;
@@ -6248,7 +6334,14 @@ static bool tsc_http_client_try_send(tsc_http_client_state_t* client) {
         }
         if (client->request_chunks) client->request_chunks->len = 0;
         if (client->request_ended && !client->request_end_sent) {
-            accepted = tsc_http_socket_write(socket, tsc_str_from_lit("0\r\n\r\n", 5)) && accepted;
+            tsc_str_t* trailer_block = tsc_http_header_block(tsc_value_object(client->request_trailers_object));
+            tsc_str_t* terminator = tsc_str_concat_n(
+                3,
+                tsc_str_from_lit("0\r\n", 3),
+                trailer_block,
+                tsc_str_from_lit("\r\n", 2)
+            );
+            accepted = tsc_http_socket_write(socket, terminator) && accepted;
             client->request_end_sent = true;
             if (!client->poolable) tsc_http_socket_end(socket, NULL);
         }
@@ -6381,6 +6474,18 @@ static tsc_value_t tsc_http_client_remove_header(void* env, tsc_value_t this_arg
         "close"
     );
     return tsc_value_undefined();
+}
+
+static tsc_value_t tsc_http_client_add_trailers(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.addTrailers expects an object"));
+    }
+    if (client->request_ended || client->request_end_sent) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.addTrailers after end"));
+    }
+    tsc_http_copy_trailer_headers(client->request_trailers_object, TSC_ARR(tsc_value_t, args, 0), "http.ClientRequest.addTrailers expects an object");
+    return this_arg;
 }
 
 static tsc_value_t tsc_http_client_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -6542,6 +6647,7 @@ static int tsc_http_client_parse_response_headers(tsc_http_client_state_t* clien
     tsc_object_set(response_object, tsc_str_from_lit("statusMessage", 13), tsc_value_string(tsc_str_from_cstr(scanned >= 3 ? status_message : "")));
     tsc_object_set(response_object, tsc_str_from_lit("httpVersion", 11), tsc_value_string(tsc_str_from_cstr(version)));
     tsc_object_set(response_object, tsc_str_from_lit("headers", 7), tsc_value_object(headers_object));
+    tsc_object_set(response_object, tsc_str_from_lit("trailers", 8), tsc_value_object(tsc_object_new()));
     tsc_object_set(response_object, tsc_str_from_lit("body", 4), tsc_value_string(tsc_str_from_lit("", 0)));
     client->response_body_len = 0;
     client->response_cursor = header_end + 4;
@@ -6605,21 +6711,29 @@ static bool tsc_http_client_process_response_body(tsc_http_client_state_t* clien
                 client->response_cursor = line_end + 2;
                 client->response_chunk_size_ready = true;
                 if (client->response_chunk_size == 0) {
+                    tsc_object_t* trailers = NULL;
+                    size_t trailer_consumed = 0;
                     if (client->response_input_len - client->response_cursor >= 2 &&
                         client->response_input[client->response_cursor] == '\r' &&
                         client->response_input[client->response_cursor + 1] == '\n') {
-                        client->response_cursor += 2;
-                        tsc_http_client_finish_response(client);
-                        return true;
+                        trailers = tsc_object_new();
+                        trailer_consumed = 2;
+                    } else {
+                        size_t trailer_end = tsc_http_find_header_end(
+                            client->response_input + client->response_cursor,
+                            client->response_input_len - client->response_cursor
+                        );
+                        if (trailer_end == SIZE_MAX) return true;
+                        if (!tsc_http_parse_trailer_block(
+                            client->response_input + client->response_cursor,
+                            client->response_input_len - client->response_cursor,
+                            &trailers,
+                            &trailer_consumed
+                        )) return false;
                     }
-                    size_t trailer_end = tsc_http_find_header_end(
-                        client->response_input + client->response_cursor,
-                        client->response_input_len - client->response_cursor
-                    );
-                    if (trailer_end != SIZE_MAX) {
-                        client->response_cursor += trailer_end + 4;
-                        tsc_http_client_finish_response(client);
-                    }
+                    tsc_object_set(client->response_object, tsc_str_from_lit("trailers", 8), tsc_value_object(trailers));
+                    client->response_cursor += trailer_consumed;
+                    tsc_http_client_finish_response(client);
                     return true;
                 }
             }
@@ -6829,6 +6943,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_pending_data = tsc_array_new(sizeof(tsc_str_t*), 4);
+    client->request_trailers_object = tsc_object_new();
     tsc_http_client_copy_headers(client, tsc_value_object(client->options_object), auth);
     client->poolable =
         !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "connection", "close");
@@ -6842,6 +6957,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     tsc_object_set(object, tsc_str_from_lit("getHeader", 9), tsc_value_function_generic_named(tsc_http_client_get_header, client, 1.0, tsc_str_from_lit("getHeader", 9)));
     tsc_object_set(object, tsc_str_from_lit("hasHeader", 9), tsc_value_function_generic_named(tsc_http_client_has_header, client, 1.0, tsc_str_from_lit("hasHeader", 9)));
     tsc_object_set(object, tsc_str_from_lit("removeHeader", 12), tsc_value_function_generic_named(tsc_http_client_remove_header, client, 1.0, tsc_str_from_lit("removeHeader", 12)));
+    tsc_object_set(object, tsc_str_from_lit("addTrailers", 11), tsc_value_function_generic_named(tsc_http_client_add_trailers, client, 1.0, tsc_str_from_lit("addTrailers", 11)));
     tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_client_write, client, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_http_client_end, client, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_http_client_destroy, client, 0.0, tsc_str_from_lit("destroy", 7)));
