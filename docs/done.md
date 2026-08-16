@@ -1,6 +1,7 @@
 # Implemented features
 
 - Verified bounded default AbortError reason coverage: `AbortController.abort()` and `abort(undefined)` now preserve a shared error-shaped reason with `name: "AbortError"`, Node-compatible message and code `20`, dynamic Error stringification/tagging, and propagation through timers, filesystem Promise pre-aborts, and native net/HTTP/child-process cancellation; explicit `null` and custom reasons remain unchanged. The string-only `throwIfAborted()` exception channel remains deferred. Tests: `abort_controller_default_reason`, `net_connect_signal`.
+- Verified bounded HTTP header mutation/introspection coverage: `ClientRequest` and `ServerResponse` now expose case-insensitive `setHeader` / `getHeader` / `hasHeader` / `removeHeader` methods with validation, replacement, and pre-send mutation guards, while both objects synchronize `headersSent` when request or response headers are written. Test: `http_header_mutation`.
 - Verified bounded `net.Server.listen` AbortSignal coverage: options-form POSIX servers accept pre-aborted and in-flight cancellation, defer cancellation to the server poll so listeners receive the signal reason as one error before close, and preserve synchronized `listening` state. Test: `net_server_signal`.
 - Verified bounded `net.connect` / `net.createConnection` AbortSignal coverage: options-form POSIX sockets accept pre-aborted and in-flight cancellation, defer cancellation to the socket poll so listeners receive the signal reason as one error before close, and preserve destroyed lifecycle state. Test: `net_connect_signal`.
 - Verified bounded `net.connect` / `net.createConnection` socket options coverage: options-form POSIX sockets validate and apply `noDelay`, `keepAlive`, and `keepAliveInitialDelay` before connecting while preserving existing endpoint and lifecycle behavior. Test: `net_connect_socket_options`.
@@ -3810,6 +3811,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `http_client_transport` | http.request and http.get send bounded HTTP/1.1 requests and parse responses over TCP |
 | `http_client_keep_alive_pool` | sequential same-origin HTTP client requests reuse one idle keep-alive connection |
 | `http_request_auth` | http.request and http.get synthesize or preserve Basic/explicit Authorization headers |
+| `http_header_mutation` | HTTP ClientRequest and ServerResponse case-insensitive header mutation, lookup, removal, and headersSent state |
 | `http_request_signal` | http.request pre-aborted and in-flight AbortSignal cancellation |
 | `http_server_transport` | http.createServer parses a bounded HTTP/1.1 request and writes a response over TCP |
 | `http_response_streaming` | explicit chunked HTTP responses stream data/end events and maintain the body field |

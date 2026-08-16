@@ -5246,6 +5246,14 @@ static bool tsc_http_equal_ci(const tsc_str_t* value, const char* literal) {
     return true;
 }
 
+static bool tsc_http_header_names_equal(const tsc_str_t* left, const tsc_str_t* right) {
+    if (!left || !right || left->len != right->len) return false;
+    for (size_t i = 0; i < left->len; i++) {
+        if (tolower((unsigned char)left->data[i]) != tolower((unsigned char)right->data[i])) return false;
+    }
+    return true;
+}
+
 static size_t tsc_http_find_header_end(const char* data, size_t len) {
     if (!data || len < 4) return SIZE_MAX;
     for (size_t i = 0; i + 3 < len; i++) {
@@ -5282,6 +5290,36 @@ static bool tsc_http_has_header(tsc_value_t headers, const char* name) {
         if (tsc_http_equal_ci(key, name)) return true;
     }
     return false;
+}
+
+static tsc_str_t* tsc_http_find_header_key(tsc_value_t headers, const tsc_str_t* name) {
+    tsc_array_t* keys = tsc_value_object_keys(headers);
+    for (size_t i = 0; keys && i < keys->len; i++) {
+        tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
+        if (tsc_http_header_names_equal(key, name)) return key;
+    }
+    return NULL;
+}
+
+static tsc_value_t tsc_http_get_header_value(tsc_value_t headers, const tsc_str_t* name) {
+    tsc_str_t* key = tsc_http_find_header_key(headers, name);
+    return key ? tsc_value_get_prop(headers, key) : tsc_value_undefined();
+}
+
+static void tsc_http_set_header_value(tsc_object_t* headers, tsc_str_t* name, tsc_value_t value) {
+    if (!headers || !name) return;
+    tsc_value_t headers_value = tsc_value_object(headers);
+    tsc_str_t* existing = tsc_http_find_header_key(headers_value, name);
+    if (existing) {
+        (void)tsc_object_delete(headers, existing);
+    }
+    tsc_object_set(headers, name, value);
+}
+
+static bool tsc_http_remove_header_value(tsc_object_t* headers, const tsc_str_t* name) {
+    if (!headers || !name) return false;
+    tsc_str_t* existing = tsc_http_find_header_key(tsc_value_object(headers), name);
+    return existing ? tsc_object_delete(headers, existing) : false;
 }
 
 static tsc_str_t* tsc_http_header_block(tsc_value_t headers) {
@@ -5550,6 +5588,7 @@ static bool tsc_http_response_send_headers(tsc_http_response_state_t* response) 
     }
     output = tsc_str_concat(output, tsc_str_from_lit("\r\n", 2));
     response->headers_sent = true;
+    tsc_value_set_prop(response->value, tsc_str_from_lit("headersSent", 11), tsc_value_bool(true));
     return tsc_http_socket_write(response->socket, output);
 }
 
@@ -5558,11 +5597,57 @@ static tsc_value_t tsc_http_response_set_header(void* env, tsc_value_t this_arg,
     if (!response || !args || args->len < 2) {
         tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.setHeader expects name and value"));
     }
+    if (response->headers_sent) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.setHeader after headers sent"));
+    }
     tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
     if (!name) tsc_throw_str(tsc_str_from_cstr("http.ServerResponse header name must be a string"));
     tsc_value_t value = TSC_ARR(tsc_value_t, args, 1);
-    tsc_object_set(response->headers_object, name, tsc_value_string(tsc_value_to_string(value)));
+    tsc_http_validate_header_name(name);
+    tsc_str_t* text = tsc_value_to_string(value);
+    tsc_http_validate_header_value(name, text);
+    tsc_http_set_header_value(response->headers_object, name, tsc_value_string(text));
     return this_arg;
+}
+
+static tsc_value_t tsc_http_response_get_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
+    if (!response || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.getHeader expects a name"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ServerResponse header name must be a string"));
+    tsc_http_validate_header_name(name);
+    return tsc_http_get_header_value(response->headers, name);
+}
+
+static tsc_value_t tsc_http_response_has_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
+    if (!response || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.hasHeader expects a name"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ServerResponse header name must be a string"));
+    tsc_http_validate_header_name(name);
+    return tsc_value_bool(tsc_http_find_header_key(response->headers, name) != NULL);
+}
+
+static tsc_value_t tsc_http_response_remove_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_response_state_t* response = (tsc_http_response_state_t*)env;
+    if (!response || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.removeHeader expects a name"));
+    }
+    if (response->headers_sent) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.removeHeader after headers sent"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ServerResponse header name must be a string"));
+    tsc_http_validate_header_name(name);
+    (void)tsc_http_remove_header_value(response->headers_object, name);
+    return tsc_value_undefined();
 }
 
 static tsc_value_t tsc_http_response_write_head(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -5570,12 +5655,15 @@ static tsc_value_t tsc_http_response_write_head(void* env, tsc_value_t this_arg,
     if (!response || !args || args->len < 1) {
         tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.writeHead expects a status code"));
     }
+    if (response->headers_sent) {
+        tsc_throw_str(tsc_str_from_cstr("http.ServerResponse.writeHead after headers sent"));
+    }
     tsc_value_set_prop(response->value, tsc_str_from_lit("statusCode", 10), tsc_value_num(tsc_value_as_num(TSC_ARR(tsc_value_t, args, 0))));
     if (args->len > 1 && tsc_value_is_object(TSC_ARR(tsc_value_t, args, 1))) {
         tsc_array_t* keys = tsc_value_object_keys(TSC_ARR(tsc_value_t, args, 1));
         for (size_t i = 0; keys && i < keys->len; i++) {
             tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
-            tsc_object_set(response->headers_object, key, tsc_value_get_prop(TSC_ARR(tsc_value_t, args, 1), key));
+            tsc_http_set_header_value(response->headers_object, key, tsc_value_get_prop(TSC_ARR(tsc_value_t, args, 1), key));
         }
     }
     return this_arg;
@@ -5678,9 +5766,13 @@ static tsc_value_t tsc_http_make_request_response(tsc_http_connection_state_t* c
     response->event.emitter = tsc_event_emitter_new();
     tsc_child_add_event_methods(response_object, &response->event);
     tsc_object_set(response_object, tsc_str_from_lit("statusCode", 10), tsc_value_num(200.0));
+    tsc_object_set(response_object, tsc_str_from_lit("headersSent", 11), tsc_value_bool(false));
     tsc_http_sync_writable_props(&response->event, response->socket);
     tsc_http_attach_drain_bridge(&response->event, response->socket, &response->drain_listener, "httpResponseDrain");
     tsc_object_set(response_object, tsc_str_from_lit("setHeader", 9), tsc_value_function_generic_named(tsc_http_response_set_header, response, 2.0, tsc_str_from_lit("setHeader", 9)));
+    tsc_object_set(response_object, tsc_str_from_lit("getHeader", 9), tsc_value_function_generic_named(tsc_http_response_get_header, response, 1.0, tsc_str_from_lit("getHeader", 9)));
+    tsc_object_set(response_object, tsc_str_from_lit("hasHeader", 9), tsc_value_function_generic_named(tsc_http_response_has_header, response, 1.0, tsc_str_from_lit("hasHeader", 9)));
+    tsc_object_set(response_object, tsc_str_from_lit("removeHeader", 12), tsc_value_function_generic_named(tsc_http_response_remove_header, response, 1.0, tsc_str_from_lit("removeHeader", 12)));
     tsc_object_set(response_object, tsc_str_from_lit("writeHead", 9), tsc_value_function_generic_named(tsc_http_response_write_head, response, 1.0, tsc_str_from_lit("writeHead", 9)));
     tsc_object_set(response_object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_response_write, response, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(response_object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_http_response_end, response, 0.0, tsc_str_from_lit("end", 3)));
@@ -5910,6 +6002,18 @@ static tsc_value_t tsc_http_client_socket_value(const tsc_http_client_state_t* c
     return client && client->socket_object ? tsc_value_object(client->socket_object) : client->socket;
 }
 
+static void tsc_http_client_root_header_value(tsc_http_client_state_t* client, tsc_value_t value) {
+    if (!client || !value_is_box(value)) return;
+    tsc_value_tag_t tag = value_tag(value);
+    if (tag != TSC_VALUE_TAG_FUNCTION && tag != TSC_VALUE_TAG_STRING &&
+        tag != TSC_VALUE_TAG_ARRAY && tag != TSC_VALUE_TAG_OBJECT) return;
+    client->header_value_roots = (void**)TSC_GC_REALLOC(
+        client->header_value_roots,
+        (client->header_value_root_len + 1) * sizeof(void*)
+    );
+    client->header_value_roots[client->header_value_root_len++] = value_ptr(value);
+}
+
 static tsc_value_t tsc_http_client_drain(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     (void)args;
@@ -6126,6 +6230,7 @@ static bool tsc_http_client_try_send(tsc_http_client_state_t* client) {
             accepted = tsc_http_socket_write(socket, tsc_http_client_request_headers(client, false)) && accepted;
             client->request_headers_sent = true;
             client->request_sent = true;
+            tsc_value_set_prop(client->event.value, tsc_str_from_lit("headersSent", 11), tsc_value_bool(true));
         }
         client->request_pending_length = 0;
         for (size_t i = 0; client->request_chunks && i < client->request_chunks->len; i++) {
@@ -6156,6 +6261,8 @@ static bool tsc_http_client_try_send(tsc_http_client_state_t* client) {
         tsc_str_from_lit(client->body, client->body_len)
     );
     client->request_sent = true;
+    client->request_headers_sent = true;
+    tsc_value_set_prop(client->event.value, tsc_str_from_lit("headersSent", 11), tsc_value_bool(true));
     if (client->poolable) {
         tsc_http_socket_write(socket, output);
         client->request_end_sent = true;
@@ -6206,6 +6313,74 @@ static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_ar
     memcpy(client->body + client->body_len, data, len);
     client->body_len += len;
     return tsc_value_bool(true);
+}
+
+static tsc_value_t tsc_http_client_set_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !args || args->len < 2) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.setHeader expects name and value"));
+    }
+    if (client->request_headers_sent) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.setHeader after headers sent"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ClientRequest header name must be a string"));
+    tsc_value_t value = TSC_ARR(tsc_value_t, args, 1);
+    tsc_http_validate_header_name(name);
+    tsc_http_validate_header_value(name, tsc_value_to_string(value));
+    tsc_http_set_header_value(client->headers_object, name, value);
+    tsc_http_client_root_header_value(client, value);
+    client->poolable = !tsc_http_header_value_contains(
+        tsc_value_object(client->headers_object),
+        "connection",
+        "close"
+    );
+    return this_arg;
+}
+
+static tsc_value_t tsc_http_client_get_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.getHeader expects a name"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ClientRequest header name must be a string"));
+    tsc_http_validate_header_name(name);
+    return tsc_http_get_header_value(tsc_value_object(client->headers_object), name);
+}
+
+static tsc_value_t tsc_http_client_has_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.hasHeader expects a name"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ClientRequest header name must be a string"));
+    tsc_http_validate_header_name(name);
+    return tsc_value_bool(tsc_http_find_header_key(tsc_value_object(client->headers_object), name) != NULL);
+}
+
+static tsc_value_t tsc_http_client_remove_header(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)this_arg;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || !args || args->len < 1) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.removeHeader expects a name"));
+    }
+    if (client->request_headers_sent) {
+        tsc_throw_str(tsc_str_from_cstr("http.ClientRequest.removeHeader after headers sent"));
+    }
+    tsc_str_t* name = tsc_value_as_string(TSC_ARR(tsc_value_t, args, 0));
+    if (!name) tsc_throw_str(tsc_str_from_cstr("http.ClientRequest header name must be a string"));
+    tsc_http_validate_header_name(name);
+    (void)tsc_http_remove_header_value(client->headers_object, name);
+    client->poolable = !tsc_http_header_value_contains(
+        tsc_value_object(client->headers_object),
+        "connection",
+        "close"
+    );
+    return tsc_value_undefined();
 }
 
 static tsc_value_t tsc_http_client_end(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -6662,6 +6837,11 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->event.object = object;
     client->event.value = tsc_value_object(object);
     tsc_child_add_event_methods(object, &client->event);
+    tsc_object_set(object, tsc_str_from_lit("headersSent", 11), tsc_value_bool(false));
+    tsc_object_set(object, tsc_str_from_lit("setHeader", 9), tsc_value_function_generic_named(tsc_http_client_set_header, client, 2.0, tsc_str_from_lit("setHeader", 9)));
+    tsc_object_set(object, tsc_str_from_lit("getHeader", 9), tsc_value_function_generic_named(tsc_http_client_get_header, client, 1.0, tsc_str_from_lit("getHeader", 9)));
+    tsc_object_set(object, tsc_str_from_lit("hasHeader", 9), tsc_value_function_generic_named(tsc_http_client_has_header, client, 1.0, tsc_str_from_lit("hasHeader", 9)));
+    tsc_object_set(object, tsc_str_from_lit("removeHeader", 12), tsc_value_function_generic_named(tsc_http_client_remove_header, client, 1.0, tsc_str_from_lit("removeHeader", 12)));
     tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_client_write, client, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_http_client_end, client, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_http_client_destroy, client, 0.0, tsc_str_from_lit("destroy", 7)));

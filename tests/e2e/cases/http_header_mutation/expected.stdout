@@ -1,0 +1,10 @@
+request header: second true false
+request removed: false undefined false
+request final: final
+request: final undefined
+response header: second true false
+response removed: false undefined
+response before end: false final
+response after end: true
+client response: final ok
+server close
