@@ -2558,6 +2558,8 @@ interface HttpClientRequest {
     write(data: string | Buffer, ...ignored: any[]): boolean;
     end(data?: string | Buffer, ...ignored: any[]): this;
     setTimeout(timeout: number, callback?: () => void, ...ignored: any[]): this;
+    setNoDelay(noDelay?: boolean, ...ignored: any[]): this;
+    setSocketKeepAlive(enable?: boolean, initialDelay?: number, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;
 }
 interface HttpServer {

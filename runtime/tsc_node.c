@@ -6441,6 +6441,33 @@ static tsc_value_t tsc_http_client_connect(void* env, tsc_value_t this_arg, tsc_
     return tsc_value_undefined();
 }
 
+static tsc_value_t tsc_http_client_forward_socket_method(
+    tsc_http_client_state_t* client,
+    tsc_value_t this_arg,
+    tsc_array_t* args,
+    const char* method_name
+) {
+    if (!client) return this_arg;
+    tsc_value_t socket = tsc_http_client_socket_value(client);
+    tsc_value_t method = tsc_value_get_prop(socket, tsc_str_from_cstr(method_name));
+    if (!tsc_value_is_callable(method)) return this_arg;
+    size_t arg_len = args ? args->len : 0;
+    tsc_array_t* forwarded = tsc_array_new(sizeof(tsc_value_t), arg_len > 0 ? arg_len : 1);
+    for (size_t i = 0; i < arg_len; i++) {
+        tsc_array_push_value(forwarded, TSC_ARR(tsc_value_t, args, i));
+    }
+    (void)tsc_value_apply_function(method, socket, tsc_value_array(forwarded));
+    return this_arg;
+}
+
+static tsc_value_t tsc_http_client_set_no_delay(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    return tsc_http_client_forward_socket_method((tsc_http_client_state_t*)env, this_arg, args, "setNoDelay");
+}
+
+static tsc_value_t tsc_http_client_set_socket_keep_alive(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    return tsc_http_client_forward_socket_method((tsc_http_client_state_t*)env, this_arg, args, "setKeepAlive");
+}
+
 static tsc_value_t tsc_http_client_write(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
@@ -7059,6 +7086,8 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     tsc_value_t socket = tsc_http_client_socket_value(client);
     client->timeout_context = tsc_http_timeout_context_new(&client->event, socket, "httpClientTimeout");
     tsc_object_set(object, tsc_str_from_lit("setTimeout", 10), tsc_value_function_generic_named(tsc_http_message_set_timeout, client->timeout_context, 1.0, tsc_str_from_lit("setTimeout", 10)));
+    tsc_object_set(object, tsc_str_from_lit("setNoDelay", 10), tsc_value_function_generic_named(tsc_http_client_set_no_delay, client, 0.0, tsc_str_from_lit("setNoDelay", 10)));
+    tsc_object_set(object, tsc_str_from_lit("setSocketKeepAlive", 18), tsc_value_function_generic_named(tsc_http_client_set_socket_keep_alive, client, 0.0, tsc_str_from_lit("setSocketKeepAlive", 18)));
     client->data_listener = tsc_http_attach_socket_listener(socket, "data", tsc_http_client_data, client, 1.0, "httpClientData");
     client->end_listener = tsc_http_attach_socket_listener(socket, "end", tsc_http_client_end_read, client, 0.0, "httpClientEnd");
     tsc_http_sync_writable_props(&client->event, socket);
