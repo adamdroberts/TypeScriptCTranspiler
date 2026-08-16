@@ -91490,7 +91490,7 @@ class Emitter {
                             : `tsc_fs_promises_read_file_async(${path!}, ${result === "buffer" ? "true" : "false"}, ${requestSignal})`
                         : `tsc_promise_resolve(tsc_value_string(${this.emitFsReadFileResult(path!, result)}))`;
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${read})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${read})`
                         : read);
                 });
             }
@@ -91523,7 +91523,7 @@ class Emitter {
                     this.usesLibuv = true;
                     const write = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, options.append ? "true" : "false", options.exclusive ? "true" : "false", options.update ? "true" : "false", mode, options.flush ? "true" : "false", requestSignal);
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${write})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${write})`
                         : write);
                 });
             }
@@ -91556,7 +91556,7 @@ class Emitter {
                     this.usesLibuv = true;
                     const append = this.emitFsWriteFileAsyncCall(path, data, d.ty.kind === "buffer" ? "buffer" : "string", options.encoding, "true", options.exclusive ? "true" : "false", "false", mode, options.flush ? "true" : "false", requestSignal);
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${append})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${append})`
                         : append);
                 });
             }
@@ -91608,7 +91608,7 @@ class Emitter {
                         ? `tsc_promise_resolve_array(${value})`
                         : `tsc_promise_resolve(tsc_value_array(${value}))`;
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolved})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolved})`
                         : resolved);
                 });
             }
@@ -91635,7 +91635,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const statfs = `tsc_fs_promises_statfs_async(${path!}, ${requestSignal})`;
                     return signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${statfs})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${statfs})`
                         : settle(statfs);
                 });
             }
@@ -91663,7 +91663,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const stat = `tsc_fs_promises_stat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"}, ${requestSignal})`;
                     return signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${stat})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${stat})`
                         : settle(stat);
                 });
             }
@@ -91691,7 +91691,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const lstat = `tsc_fs_promises_lstat_async(${path!}, ${options.throwIfNoEntry ? "true" : "false"}, ${requestSignal})`;
                     return signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${lstat})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${lstat})`
                         : settle(lstat);
                 });
             }
@@ -91719,7 +91719,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const resolve = `tsc_fs_promises_realpath_async(${path!}, ${encoding}, ${requestSignal})`;
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolve})`
                         : resolve);
                 });
             }
@@ -91747,7 +91747,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const resolve = `tsc_fs_promises_readlink_async(${path!}, ${encoding}, ${requestSignal})`;
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolve})`
                         : resolve);
                 });
             }
@@ -91802,7 +91802,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const resolve = `tsc_fs_promises_mkdtemp_async(${path!}, ${encoding}, ${requestSignal})`;
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${resolve})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${resolve})`
                         : resolve);
                 });
             }
@@ -91922,7 +91922,7 @@ class Emitter {
                     const requestSignal = signal ?? "tsc_value_undefined()";
                     const access = `tsc_fs_promises_access_async(${path!}, 0.0, ${requestSignal})`;
                     return signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${access})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${access})`
                         : settle(access);
                 });
             }
@@ -91958,7 +91958,7 @@ class Emitter {
                             return `tsc_fs_promises_mkdir_async(${path}, ${mode}, ${requestSignal})`;
                         })();
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${mkdir})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${mkdir})`
                         : mkdir);
                 });
             }
@@ -91992,7 +91992,7 @@ class Emitter {
                             return `tsc_fs_promises_rm_async(${path!}, ${options.force ? "true" : "false"}, ${requestSignal})`;
                         })();
                     return settle(signal
-                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${rm})`
+                        ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${rm})`
                         : rm);
                 },
                 );
@@ -92029,7 +92029,7 @@ class Emitter {
                                 return `tsc_fs_promises_rmdir_async(${path!}, ${requestSignal})`;
                             })();
                         return settle(signal
-                            ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_string(tsc_value_to_string(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))))) : ${rmdir})`
+                            ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${rmdir})`
                             : rmdir);
                     },
                     );

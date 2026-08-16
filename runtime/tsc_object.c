@@ -1411,6 +1411,14 @@ tsc_value_t tsc_object_get_receiver(const tsc_object_t* o, const tsc_str_t* key,
         if (prop->accessor) return prop->getter ? prop->getter(prop->getter_env, receiver) : tsc_value_undefined();
         return prop->value;
     }
+    if (o->is_error && o->class_ptr) {
+        const tsc_error_t* error = (const tsc_error_t*)o->class_ptr;
+        if (str_lit_eq(key, "name")) return tsc_value_string(error->name);
+        if (str_lit_eq(key, "message")) return tsc_value_string(error->message);
+        if (str_lit_eq(key, "cause")) return error->cause;
+        if (str_lit_eq(key, "code")) return error->code;
+        if (str_lit_eq(key, "errors") && error->errors) return tsc_value_array(error->errors);
+    }
     if (o->is_promise) {
         tsc_value_t method = tsc_promise_get_method((tsc_promise_t*)o->class_ptr, key);
         if (!tsc_value_is_undefined(method)) return method;
@@ -1538,6 +1546,13 @@ bool tsc_object_has(const tsc_object_t* o, const tsc_str_t* key) {
     }
     ssize_t idx = object_find(o, key);
     if (idx >= 0) return true;
+    if (o->is_error && o->class_ptr) {
+        const tsc_error_t* error = (const tsc_error_t*)o->class_ptr;
+        if (str_lit_eq(key, "name") || str_lit_eq(key, "message")) return true;
+        if (str_lit_eq(key, "cause")) return !tsc_value_is_undefined(error->cause);
+        if (str_lit_eq(key, "code")) return !tsc_value_is_undefined(error->code);
+        if (str_lit_eq(key, "errors")) return error->errors != NULL;
+    }
     if (value_is_box(o->prototype) && value_tag(o->prototype) == TSC_VALUE_TAG_OBJECT) {
         return tsc_object_has((tsc_object_t*)value_ptr(o->prototype), key);
     }

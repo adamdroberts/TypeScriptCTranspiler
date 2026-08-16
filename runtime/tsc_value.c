@@ -86,6 +86,7 @@ tsc_str_t* tsc_value_object_to_string_tag(tsc_value_t v) {
             }
             if (tsc_proxy_trap_is_callable(v)) return tsc_str_from_lit("[object Function]", 17);
             if (value_proxy_chain_is_array(v)) return tsc_str_from_lit("[object Array]", 14);
+            if (o && o->is_error) return tsc_str_from_lit("[object Error]", 14);
             return tsc_str_from_lit("[object Object]", 15);
         }
     }

@@ -332,6 +332,15 @@ static tsc_abort_controller_state_t* abort_signal_state(tsc_value_t signal) {
     return object && object->class_ptr ? (tsc_abort_controller_state_t*)object->class_ptr : NULL;
 }
 
+tsc_value_t tsc_abort_error_value(void) {
+    tsc_error_t* error = tsc_error_new_named(
+        tsc_str_from_lit("AbortError", 10),
+        tsc_str_from_lit("This operation was aborted", 26)
+    );
+    error->code = tsc_value_num(20.0);
+    return tsc_value_error(error);
+}
+
 static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     tsc_abort_controller_state_t* state = (tsc_abort_controller_state_t*)env;
@@ -339,7 +348,8 @@ static tsc_value_t abort_controller_abort(void* env, tsc_value_t this_arg, tsc_a
     state->aborted = true;
     tsc_value_t reason = args && args->len > 0
         ? TSC_ARR(tsc_value_t, args, 0)
-        : tsc_value_string(tsc_str_from_lit("AbortError", 10));
+        : tsc_value_undefined();
+    if (tsc_value_is_undefined(reason)) reason = tsc_abort_error_value();
     tsc_object_set(state->signal, tsc_str_from_lit("aborted", 7), tsc_value_bool(true));
     tsc_object_set(state->signal, tsc_str_from_lit("reason", 6), reason);
     tsc_object_t* event = tsc_object_new();

@@ -1,0 +1,3 @@
+{
+  "description": "AbortController default and undefined reasons use an Error-shaped AbortError while explicit null remains unchanged"
+}

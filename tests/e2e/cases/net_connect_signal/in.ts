@@ -11,7 +11,7 @@ server.listen(0, "127.0.0.1", () => {
     if (!address) throw new Error("server address missing");
 
     const preController: any = new AbortController();
-    preController.abort("pre-stop");
+    preController.abort();
     const preClient: any = net.connect({
         port: address.port,
         host: "127.0.0.1",

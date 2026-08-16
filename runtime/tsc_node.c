@@ -1797,13 +1797,10 @@ static void tsc_child_emit_one_value(tsc_event_emitter_t* emitter, const char* n
 
 static tsc_value_t tsc_child_process_abort_reason(const tsc_child_process_async_t* child) {
     if (!child || tsc_value_is_nullish(child->abort_signal)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+        return tsc_abort_error_value();
     }
     tsc_value_t reason = tsc_value_get_prop(child->abort_signal, tsc_str_from_lit("reason", 6));
-    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
-    }
-    return reason;
+    return tsc_value_is_undefined(reason) ? tsc_abort_error_value() : reason;
 }
 
 static tsc_value_t tsc_child_stream_value_from_bytes(tsc_child_stream_t* stream, const uint8_t* data, size_t len) {
@@ -3924,13 +3921,10 @@ static void tsc_net_socket_emit_error(tsc_net_socket_t* socket, int error_number
 
 static tsc_value_t tsc_net_socket_abort_reason(const tsc_net_socket_t* socket) {
     if (!socket || tsc_value_is_nullish(socket->abort_signal)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+        return tsc_abort_error_value();
     }
     tsc_value_t reason = tsc_value_get_prop(socket->abort_signal, tsc_str_from_lit("reason", 6));
-    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
-    }
-    return reason;
+    return tsc_value_is_undefined(reason) ? tsc_abort_error_value() : reason;
 }
 
 static void tsc_net_socket_abort(void* env) {
@@ -3941,13 +3935,10 @@ static void tsc_net_socket_abort(void* env) {
 
 static tsc_value_t tsc_net_server_abort_reason(const tsc_net_server_t* server) {
     if (!server || tsc_value_is_nullish(server->abort_signal)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+        return tsc_abort_error_value();
     }
     tsc_value_t reason = tsc_value_get_prop(server->abort_signal, tsc_str_from_lit("reason", 6));
-    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
-    }
-    return reason;
+    return tsc_value_is_undefined(reason) ? tsc_abort_error_value() : reason;
 }
 
 static void tsc_net_server_abort(void* env) {
@@ -6270,13 +6261,10 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
 
 static tsc_value_t tsc_http_client_abort_reason(const tsc_http_client_state_t* client) {
     if (!client || tsc_value_is_nullish(client->abort_signal)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
+        return tsc_abort_error_value();
     }
     tsc_value_t reason = tsc_value_get_prop(client->abort_signal, tsc_str_from_lit("reason", 6));
-    if (tsc_value_is_undefined(reason) || tsc_value_is_nullish(reason)) {
-        return tsc_value_string(tsc_str_from_lit("AbortError", 10));
-    }
-    return reason;
+    return tsc_value_is_undefined(reason) ? tsc_abort_error_value() : reason;
 }
 
 static void tsc_http_client_abort_deferred(void* env) {
@@ -7259,6 +7247,9 @@ tsc_str_t* tsc_value_to_string(tsc_value_t v) {
             }
             if (tsc_proxy_trap_is_callable(v)) {
                 return tsc_str_from_lit("[function]", 10);
+            }
+            if (o && o->is_error) {
+                return tsc_error_to_string((const tsc_error_t*)o->class_ptr);
             }
             if (o && o->is_typed_array) {
                 return tsc_buffer_to_string((const tsc_buffer_t*)o->class_ptr, tsc_str_from_lit("utf8", 4));
@@ -16937,6 +16928,7 @@ tsc_error_t* tsc_error_new_named(tsc_str_t* name, tsc_str_t* message) {
     e->name = name ? name : tsc_str_from_lit("Error", 5);
     e->message = message ? message : tsc_str_from_lit("", 0);
     e->cause = tsc_value_undefined();
+    e->code = tsc_value_undefined();
     e->errors = NULL;
     e->error = tsc_value_undefined();
     e->suppressed = tsc_value_undefined();

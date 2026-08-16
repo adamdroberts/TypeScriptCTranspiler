@@ -420,6 +420,7 @@ typedef struct tsc_error {
     tsc_str_t* name;
     tsc_str_t* message;
     tsc_value_t cause;
+    tsc_value_t code;
     struct tsc_array* errors;
     tsc_value_t error;
     tsc_value_t suppressed;
@@ -659,6 +660,7 @@ tsc_value_t tsc_value_function_generic_named(tsc_generic_function_t fn, void* en
 tsc_value_t tsc_value_function_closure_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_value_function_builtin_named(tsc_generic_function_t fn, void* env, double length, tsc_str_t* name);
 tsc_value_t tsc_abort_controller_new(void);
+tsc_value_t tsc_abort_error_value(void);
 bool tsc_abort_signal_is_aborted(tsc_value_t signal);
 typedef void (*tsc_abort_callback_fn_t)(void* env);
 void tsc_abort_signal_add_callback(tsc_value_t signal, tsc_abort_callback_fn_t fn, void* env);
