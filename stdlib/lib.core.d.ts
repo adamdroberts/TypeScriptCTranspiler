@@ -2547,6 +2547,7 @@ interface HttpClientRequest {
     readonly writableLength: number;
     readonly writableNeedDrain: boolean;
     readonly headersSent: boolean;
+    readonly aborted: boolean;
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
@@ -2561,6 +2562,7 @@ interface HttpClientRequest {
     setNoDelay(noDelay?: boolean, ...ignored: any[]): this;
     setSocketKeepAlive(enable?: boolean, initialDelay?: number, ...ignored: any[]): this;
     destroy(...ignored: any[]): this;
+    abort(...ignored: any[]): this;
 }
 interface HttpServer {
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;

@@ -6132,6 +6132,7 @@ struct tsc_http_client_state {
     bool pool_release_scheduled;
     bool tls;
     bool destroyed;
+    bool aborted;
     tsc_http_client_pool_entry_t* pool_entry;
     tsc_net_socket_t* native_socket;
     tsc_value_t abort_signal;
@@ -6635,6 +6636,18 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
     return this_arg;
 }
 
+static tsc_value_t tsc_http_client_abort_request(void* env, tsc_value_t this_arg, tsc_array_t* args) {
+    (void)args;
+    tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    if (!client || client->destroyed || client->aborted || client->response_complete) return this_arg;
+    client->aborted = true;
+    tsc_value_set_prop(client->event.value, tsc_str_from_lit("aborted", 7), tsc_value_bool(true));
+    tsc_array_t* empty = tsc_array_new(sizeof(tsc_value_t), 1);
+    (void)tsc_http_client_destroy(client, this_arg, empty);
+    (void)tsc_event_emitter_emit(client->event.emitter, tsc_str_from_lit("abort", 5), empty);
+    return this_arg;
+}
+
 static tsc_value_t tsc_http_client_abort_reason(const tsc_http_client_state_t* client) {
     if (!client || tsc_value_is_nullish(client->abort_signal)) {
         return tsc_abort_error_value();
@@ -7050,6 +7063,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->event.value = tsc_value_object(object);
     tsc_child_add_event_methods(object, &client->event);
     tsc_object_set(object, tsc_str_from_lit("headersSent", 11), tsc_value_bool(false));
+    tsc_object_set(object, tsc_str_from_lit("aborted", 7), tsc_value_bool(false));
     tsc_object_set(object, tsc_str_from_lit("setHeader", 9), tsc_value_function_generic_named(tsc_http_client_set_header, client, 2.0, tsc_str_from_lit("setHeader", 9)));
     tsc_object_set(object, tsc_str_from_lit("getHeader", 9), tsc_value_function_generic_named(tsc_http_client_get_header, client, 1.0, tsc_str_from_lit("getHeader", 9)));
     tsc_object_set(object, tsc_str_from_lit("hasHeader", 9), tsc_value_function_generic_named(tsc_http_client_has_header, client, 1.0, tsc_str_from_lit("hasHeader", 9)));
@@ -7058,6 +7072,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     tsc_object_set(object, tsc_str_from_lit("write", 5), tsc_value_function_generic_named(tsc_http_client_write, client, 1.0, tsc_str_from_lit("write", 5)));
     tsc_object_set(object, tsc_str_from_lit("end", 3), tsc_value_function_generic_named(tsc_http_client_end, client, 0.0, tsc_str_from_lit("end", 3)));
     tsc_object_set(object, tsc_str_from_lit("destroy", 7), tsc_value_function_generic_named(tsc_http_client_destroy, client, 0.0, tsc_str_from_lit("destroy", 7)));
+    tsc_object_set(object, tsc_str_from_lit("abort", 5), tsc_value_function_generic_named(tsc_http_client_abort_request, client, 0.0, tsc_str_from_lit("abort", 5)));
     if (client->response_listener_identity) {
         tsc_value_t rooted_response_listener = value_box(TSC_VALUE_TAG_FUNCTION, (uintptr_t)client->response_listener_identity);
         tsc_object_set(object, tsc_str_from_lit("__httpResponseListener", 22), rooted_response_listener);
