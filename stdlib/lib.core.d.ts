@@ -2533,6 +2533,7 @@ interface HttpServerResponse {
     on(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     once(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
     off(eventName: string, listener: (...args: any[]) => void, ...ignored: any[]): this;
+    setTimeout(timeout: number, callback?: () => void, ...ignored: any[]): this;
     setHeader(name: string, value: string, ...ignored: any[]): this;
     getHeader(name: string, ...ignored: any[]): any;
     hasHeader(name: string, ...ignored: any[]): boolean;
