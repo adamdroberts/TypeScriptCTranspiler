@@ -1,0 +1,3 @@
+{
+    "description": "bounded for-await fiftieth direct body await rejection closes the events.on iterator"
+}
