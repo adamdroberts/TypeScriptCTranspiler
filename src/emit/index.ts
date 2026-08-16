@@ -975,6 +975,7 @@ class Emitter {
     private asyncAwaitHoistedPreludeSymbols = new Set<ts.Symbol>();
     private asyncAwaitHoistedPreludeDeclaredSymbols = new Set<ts.Symbol>();
     private catchStringSymbols = new Set<ts.Symbol>();
+    private catchValueSymbols = new Set<ts.Symbol>();
     private referencedTopLevelFunctions = new WeakSet<ts.FunctionDeclaration>();
     private referencedTopLevelLiftedArrows = new WeakSet<ts.VariableDeclaration>();
     private referencedTopLevelClasses = new WeakSet<ts.ClassDeclaration>();
@@ -72173,11 +72174,11 @@ class Emitter {
         t: ts.ThrowStatement,
     ): void {
         const e = this.emitExpr(t.expression);
-        const asStr = this.coerceToString(e, t.expression);
-        let thrown = asStr;
+        const asValue = this.coerce(e, T_VALUE, t.expression);
+        let thrown = asValue;
         if (this.syncUsingScopes.length > 0) {
             const thrownValue = this.freshTemp("_using_throw");
-            buf.line(`tsc_str_t* const ${thrownValue} = ${asStr};`);
+            buf.line(`tsc_value_t const ${thrownValue} = ${asValue};`);
             this.emitActiveSyncDisposals(buf);
             thrown = thrownValue;
         }
@@ -72186,10 +72187,17 @@ class Emitter {
             this.tryDepth === 0 &&
             this.asyncAwaitContinuationAdapterDepth === 0
         ) {
-            buf.line(`return tsc_promise_reject(tsc_value_string(${thrown}));`);
+            buf.line(`return tsc_promise_reject(${thrown});`);
             return;
         }
-        buf.line(`tsc_throw_str(${thrown});`);
+        buf.line(`tsc_throw_value(${thrown});`);
+    }
+
+    private catchBindingUsesValue(_catchClause: ts.CatchClause): boolean {
+        // Ordinary synchronous try/catch has a value-preserving runtime frame.
+        // Async/lazy continuation emitters use their own compatibility string
+        // bridge and do not pass through this direct emitter path.
+        return true;
     }
 
     private emitTry(buf: CBuf, ts0: ts.TryStatement): void {
@@ -72215,32 +72223,39 @@ class Emitter {
             buf.line(`tsc_try_push(&${catchEhVar});`);
             buf.open(`if (setjmp(${catchEhVar}.jb) == 0)`);
             let catchSym: ts.Symbol | undefined;
+            const catchUsesValue = this.catchBindingUsesValue(ts0.catchClause);
             if (ts0.catchClause.variableDeclaration) {
                 const vd = ts0.catchClause.variableDeclaration;
                 if (!ts.isIdentifier(vd.name))
                     unsupported(vd, "catch binding must be simple identifier");
                 catchSym = this.symbolForIdentifier(vd.name);
-                if (catchSym) this.catchStringSymbols.add(catchSym);
-                buf.line(
-                    `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`,
-                );
+                if (catchSym) {
+                    if (catchUsesValue) this.catchValueSymbols.add(catchSym);
+                    else this.catchStringSymbols.add(catchSym);
+                }
+                buf.line(catchUsesValue
+                    ? `tsc_value_t ${mangleIdent(vd.name.text)} = tsc_current_error_value();`
+                    : `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`);
             }
             try {
                 for (const s of ts0.catchClause.block.statements)
                     this.emitStmt(buf, s);
             } finally {
-                if (catchSym) this.catchStringSymbols.delete(catchSym);
+                if (catchSym) {
+                    if (catchUsesValue) this.catchValueSymbols.delete(catchSym);
+                    else this.catchStringSymbols.delete(catchSym);
+                }
             }
             buf.line(`tsc_try_pop();`);
             buf.close();
             buf.open("else");
-            buf.line(`tsc_str_t* const ${catchErrorVar} = tsc_current_error();`);
+            buf.line(`tsc_value_t const ${catchErrorVar} = tsc_current_error_value();`);
             buf.line(`tsc_try_frame_t ${finallyEhVar};`);
             buf.line(`tsc_try_push(&${finallyEhVar});`);
             buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
             for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
             buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_throw_str(${catchErrorVar});`);
+            buf.line(`tsc_throw_value(${catchErrorVar});`);
             buf.close();
             buf.open("else");
             buf.line("tsc_rethrow();");
@@ -72268,13 +72283,13 @@ class Emitter {
             buf.line(`tsc_try_pop();`);
             buf.close();
             buf.open("else");
-            buf.line(`tsc_str_t* const ${errorVar} = tsc_current_error();`);
+            buf.line(`tsc_value_t const ${errorVar} = tsc_current_error_value();`);
             buf.line(`tsc_try_frame_t ${finallyEhVar};`);
             buf.line(`tsc_try_push(&${finallyEhVar});`);
             buf.open(`if (setjmp(${finallyEhVar}.jb) == 0)`);
             for (const s of ts0.finallyBlock.statements) this.emitStmt(buf, s);
             buf.line(`tsc_try_pop();`);
-            buf.line(`tsc_throw_str(${errorVar});`);
+            buf.line(`tsc_throw_value(${errorVar});`);
             buf.close();
             buf.open("else");
             buf.line("tsc_rethrow();");
@@ -72300,21 +72315,28 @@ class Emitter {
         if (ts0.catchClause) {
             buf.open("else");
             let catchSym: ts.Symbol | undefined;
+            const catchUsesValue = this.catchBindingUsesValue(ts0.catchClause);
             if (ts0.catchClause.variableDeclaration) {
                 const vd = ts0.catchClause.variableDeclaration;
                 if (!ts.isIdentifier(vd.name))
                     unsupported(vd, "catch binding must be simple identifier");
                 catchSym = this.symbolForIdentifier(vd.name);
-                if (catchSym) this.catchStringSymbols.add(catchSym);
-                buf.line(
-                    `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`,
-                );
+                if (catchSym) {
+                    if (catchUsesValue) this.catchValueSymbols.add(catchSym);
+                    else this.catchStringSymbols.add(catchSym);
+                }
+                buf.line(catchUsesValue
+                    ? `tsc_value_t ${mangleIdent(vd.name.text)} = tsc_current_error_value();`
+                    : `tsc_str_t* ${mangleIdent(vd.name.text)} = tsc_current_error();`);
             }
             try {
                 for (const s of ts0.catchClause.block.statements)
                     this.emitStmt(buf, s);
             } finally {
-                if (catchSym) this.catchStringSymbols.delete(catchSym);
+                if (catchSym) {
+                    if (catchUsesValue) this.catchValueSymbols.delete(catchSym);
+                    else this.catchStringSymbols.delete(catchSym);
+                }
             }
             buf.close();
         } else {
@@ -72445,6 +72467,9 @@ class Emitter {
             const httpProp = httpExport ? this.emitHttpMetadataProperty(httpExport) : null;
             if (httpProp) return httpProp;
             const sym = this.symbolForIdentifier(expr);
+            if (sym && this.catchValueSymbols.has(sym)) {
+                return { c: this.identifierRead(expr), ty: T_VALUE };
+            }
             if (sym && this.catchStringSymbols.has(sym)) {
                 return { c: this.identifierRead(expr), ty: T_STRING };
             }
@@ -74644,6 +74669,7 @@ class Emitter {
     private storageType(expr: ts.Expression): CType {
         if (ts.isIdentifier(expr)) {
             const symbol = this.symbolForIdentifier(expr);
+            if (symbol && this.catchValueSymbols.has(symbol)) return T_VALUE;
             if (symbol && this.catchStringSymbols.has(symbol)) return T_STRING;
             return this.identifierDeclaredType(expr) ?? this.prepareType(mapType(expr, this.checker));
         }

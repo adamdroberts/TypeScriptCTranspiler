@@ -255,6 +255,8 @@ void tsc_dispatch_task_scheduled(void) {}
  * static exactly as before. */
 static TSC_TLS tsc_try_frame_t* g_try_top = NULL;
 static TSC_TLS tsc_str_t* g_current_error = NULL;
+static TSC_TLS tsc_value_t g_current_error_value;
+static TSC_TLS bool g_current_error_value_set = false;
 static struct timespec g_boot_time;
 static bool g_boot_time_set = false;
 static bool g_dynamic_stats_enabled = false;
@@ -457,7 +459,7 @@ static tsc_value_t abort_signal_throw_if_aborted(void* env, tsc_value_t this_arg
             tsc_value_object(state->signal),
             tsc_str_from_lit("reason", 6)
         );
-        tsc_throw_str(tsc_value_to_string(reason));
+        tsc_throw_value(reason);
     }
     return tsc_value_undefined();
 }
@@ -1584,6 +1586,24 @@ void tsc_try_pop(void) {
 
 void tsc_throw_str(tsc_str_t* message) {
     g_current_error = message ? message : tsc_str_from_lit("(unknown error)", 15);
+    g_current_error_value = tsc_value_string(g_current_error);
+    g_current_error_value_set = true;
+    if (g_try_top) {
+        tsc_try_frame_t* f = g_try_top;
+        g_try_top = f->prev;
+        longjmp(f->jb, 1);
+    }
+    fputs("Uncaught: ", stderr);
+    if (g_current_error) fwrite(g_current_error->data, 1, g_current_error->len, stderr);
+    fputc('\n', stderr);
+    exit(1);
+}
+
+void tsc_throw_value(tsc_value_t value) {
+    g_current_error_value = value;
+    g_current_error_value_set = true;
+    g_current_error = tsc_value_to_string(value);
+    if (!g_current_error) g_current_error = tsc_str_from_lit("(unknown error)", 15);
     if (g_try_top) {
         tsc_try_frame_t* f = g_try_top;
         g_try_top = f->prev;
@@ -1596,10 +1616,16 @@ void tsc_throw_str(tsc_str_t* message) {
 }
 
 void tsc_rethrow(void) {
+    if (g_current_error_value_set) tsc_throw_value(g_current_error_value);
     if (g_current_error) tsc_throw_str(g_current_error);
     exit(1);
 }
 
 tsc_str_t* tsc_current_error(void) {
     return g_current_error ? g_current_error : tsc_str_from_lit("(unknown error)", 15);
+}
+
+tsc_value_t tsc_current_error_value(void) {
+    if (g_current_error_value_set) return g_current_error_value;
+    return tsc_value_string(tsc_str_from_lit("(unknown error)", 15));
 }

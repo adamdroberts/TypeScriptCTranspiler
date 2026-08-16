@@ -1430,8 +1430,10 @@ typedef struct tsc_try_frame {
 void tsc_try_push(tsc_try_frame_t* f);
 void tsc_try_pop(void);
 void tsc_throw_str(tsc_str_t* message);
+void tsc_throw_value(tsc_value_t value);
 void tsc_rethrow(void);
 tsc_str_t* tsc_current_error(void);
+tsc_value_t tsc_current_error_value(void);
 
 tsc_value_t tsc_proxy_new(tsc_value_t target, tsc_value_t handler);
 tsc_value_t tsc_proxy_revocable(tsc_value_t target, tsc_value_t handler);

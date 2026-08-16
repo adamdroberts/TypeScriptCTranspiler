@@ -357,7 +357,7 @@ typedef struct tsc_regexp {
 
 ## Exceptions (`tsc_try_frame_t`)
 
-Thin `setjmp`/`longjmp` wrapper with a single global "current error" string. No stack traces yet.
+Thin `setjmp`/`longjmp` wrapper with a current `tsc_value_t` plus a compatibility string view. No stack traces yet; deferred async/lazy continuation bridges still consume the string view.
 
 ```c
 typedef struct tsc_try_frame {
@@ -370,9 +370,11 @@ typedef struct tsc_try_frame {
 |--------|-----------|-------|
 | `tsc_try_push(&frame)` | `void` | Push frame onto the try-chain. |
 | `tsc_try_pop()` | `void` | Pop after successful try body. |
-| `tsc_throw_str(msg)` | `noreturn-ish` | Stores msg, longjmp to top frame. If none, prints `Uncaught:` and exits 1. |
+| `tsc_throw_str(msg)` | `noreturn-ish` | Stores a string value plus its compatibility string view, then longjmps to the top frame. If none, prints `Uncaught:` and exits 1. |
+| `tsc_throw_value(value)` | `noreturn-ish` | Stores the original dynamic value plus its string view, then longjmps to the top frame. Synchronous catch bindings use the original value. |
 | `tsc_current_error()` | `tsc_str_t*` | Read inside `catch` to get the thrown value. |
-| `tsc_rethrow()` | `void` | Re-throw the current error (used for try without catch + finally). |
+| `tsc_current_error_value()` | `tsc_value_t` | Read the original thrown value inside a synchronous catch boundary. |
+| `tsc_rethrow()` | `void` | Re-throw the current value (used for try without catch + finally). |
 
 Generated `try { } catch (e) { }` expands to:
 

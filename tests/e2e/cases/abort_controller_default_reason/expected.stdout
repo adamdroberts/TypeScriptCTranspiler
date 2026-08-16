@@ -1,4 +1,11 @@
 default: AbortError This operation was aborted 20 AbortError: This operation was aborted [object Error] true
+default throw: true AbortError This operation was aborted 20 [object Error]
 undefined: AbortError This operation was aborted 20
 null: true
+null throw: true
+custom throw: true custom 901 [object Object]
+custom untyped throw: true
+nested throw: true
+finally: ran
+rethrow: true
 timer: true AbortError This operation was aborted 20
