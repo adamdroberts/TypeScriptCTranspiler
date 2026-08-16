@@ -2561,7 +2561,7 @@ interface HttpClientRequest {
     setTimeout(timeout: number, callback?: () => void, ...ignored: any[]): this;
     setNoDelay(noDelay?: boolean, ...ignored: any[]): this;
     setSocketKeepAlive(enable?: boolean, initialDelay?: number, ...ignored: any[]): this;
-    destroy(...ignored: any[]): this;
+    destroy(error?: any, callback?: () => void, ...ignored: any[]): this;
     abort(...ignored: any[]): this;
 }
 interface HttpServer {

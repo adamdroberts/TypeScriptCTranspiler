@@ -6610,18 +6610,35 @@ static void tsc_http_client_pool_drop_active(tsc_http_client_state_t* client) {
 }
 
 static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_array_t* args) {
-    (void)args;
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)env;
+    tsc_value_t error = tsc_value_undefined();
+    tsc_value_t callback = tsc_value_undefined();
+    if (args && args->len > 0) {
+        tsc_value_t first = TSC_ARR(tsc_value_t, args, 0);
+        if (tsc_value_is_callable(first)) {
+            callback = first;
+        } else {
+            if (!tsc_value_is_nullish(first)) error = first;
+            if (args->len > 1 && tsc_value_is_callable(TSC_ARR(tsc_value_t, args, 1))) {
+                callback = TSC_ARR(tsc_value_t, args, 1);
+            }
+        }
+    }
     if (client && !client->destroyed) {
         client->destroyed = true;
         client->abort_requested = false;
+        client->response_handled = true;
         tsc_http_timeout_context_dispose(client->timeout_context);
         if (client->abort_timer != 0.0) {
             tsc_clear_timeout(client->abort_timer);
             client->abort_timer = 0.0;
         }
+        if (!tsc_value_is_undefined(error)) {
+            tsc_child_emit_one_value(client->event.emitter, "error", error);
+        }
         if (client->pool_entry && client->pool_entry->active == client) {
             tsc_http_client_pool_drop_active(client);
+            tsc_net_socket_invoke_callback(callback);
             return this_arg;
         }
         tsc_value_t socket = tsc_http_client_socket_value(client);
@@ -6633,6 +6650,7 @@ static tsc_value_t tsc_http_client_destroy(void* env, tsc_value_t this_arg, tsc_
             (void)tsc_value_apply_function(destroy, socket, tsc_value_array(empty));
         }
     }
+    tsc_net_socket_invoke_callback(callback);
     return this_arg;
 }
 
