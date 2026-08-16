@@ -2520,6 +2520,7 @@ interface HttpRequestOptions {
     path?: string;
     method?: string;
     headers?: any;
+    auth?: string;
     signal?: any;
 }
 interface HttpServerResponse {

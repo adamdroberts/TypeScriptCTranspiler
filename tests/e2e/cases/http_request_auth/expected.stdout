@@ -1,0 +1,3 @@
+request: Basic YWxpY2U6c2VjcmV0
+get: Bearer explicit
+server close

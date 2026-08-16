@@ -6570,15 +6570,17 @@ static tsc_value_t tsc_http_client_end_read(void* env, tsc_value_t this_arg, tsc
     return tsc_value_undefined();
 }
 
-static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_value_t options) {
+static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_value_t options, tsc_str_t* auth) {
     client->headers_object = tsc_object_new();
     client->header_value_roots = NULL;
     client->header_value_root_len = 0;
     tsc_value_t headers = tsc_value_get_prop(options, tsc_str_from_lit("headers", 7));
-    if (!tsc_value_is_object(headers)) return;
-    tsc_array_t* keys = tsc_value_object_keys(headers);
-    if (keys && keys->len > 0) {
-        client->header_value_roots = (void**)TSC_GC_MALLOC(keys->len * sizeof(void*));
+    tsc_array_t* keys = tsc_value_is_object(headers) ? tsc_value_object_keys(headers) : NULL;
+    bool add_auth = auth && (!tsc_value_is_object(headers) || !tsc_http_has_header(headers, "authorization"));
+    size_t key_len = keys ? keys->len : 0;
+    size_t root_capacity = key_len + (add_auth ? 1 : 0);
+    if (root_capacity > 0) {
+        client->header_value_roots = (void**)TSC_GC_MALLOC(root_capacity * sizeof(void*));
     }
     for (size_t i = 0; keys && i < keys->len; i++) {
         tsc_str_t* key = ((tsc_str_t**)keys->data)[i];
@@ -6590,6 +6592,18 @@ static void tsc_http_client_copy_headers(tsc_http_client_state_t* client, tsc_va
                 tag == TSC_VALUE_TAG_ARRAY || tag == TSC_VALUE_TAG_OBJECT) {
                 client->header_value_roots[client->header_value_root_len++] = value_ptr(value);
             }
+        }
+    }
+    if (add_auth) {
+        tsc_str_t* encoded = str_from_base64_bytes((const uint8_t*)auth->data, auth->len);
+        tsc_str_t* authorization = tsc_str_concat_n(2, tsc_str_from_lit("Basic ", 6), encoded);
+        tsc_object_set(
+            client->headers_object,
+            tsc_str_from_lit("Authorization", 13),
+            tsc_value_string(authorization)
+        );
+        if (client->header_value_roots) {
+            client->header_value_roots[client->header_value_root_len++] = authorization;
         }
     }
 }
@@ -6629,6 +6643,8 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     bool reject_unauthorized = !tls || tsc_value_is_undefined(reject_value) || tsc_value_as_bool(reject_value);
     tsc_value_t servername_value = tsc_value_get_prop(options, tsc_str_from_lit("servername", 10));
     tsc_str_t* servername = tsc_value_as_string(servername_value);
+    tsc_value_t auth_value = tsc_value_get_prop(options, tsc_str_from_lit("auth", 4));
+    tsc_str_t* auth = tsc_value_is_nullish(auth_value) ? NULL : tsc_value_as_string(auth_value);
     tsc_value_t abort_signal = tsc_value_get_prop(options, tsc_str_from_lit("signal", 6));
 
     tsc_http_client_state_t* client = (tsc_http_client_state_t*)TSC_GC_MALLOC(sizeof(tsc_http_client_state_t));
@@ -6650,7 +6666,7 @@ static tsc_value_t tsc_http_request_internal(tsc_value_t options, tsc_value_t re
     client->response_input = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_body = (char*)TSC_GC_MALLOC_ATOMIC(TSC_HTTP_MAX_RESPONSE + 1);
     client->response_pending_data = tsc_array_new(sizeof(tsc_str_t*), 4);
-    tsc_http_client_copy_headers(client, tsc_value_object(client->options_object));
+    tsc_http_client_copy_headers(client, tsc_value_object(client->options_object), auth);
     client->poolable =
         !tsc_http_header_value_contains(tsc_value_object(client->headers_object), "connection", "close");
 

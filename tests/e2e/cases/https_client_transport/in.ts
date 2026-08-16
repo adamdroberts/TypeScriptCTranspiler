@@ -28,10 +28,10 @@ try {
 const server: any = createSecureServer({
     key: readFileSync(keyPath, "utf8"),
     cert: readFileSync(certPath, "utf8"),
-}, (_request: any, response: any) => {
+}, (request: any, response: any) => {
     response.statusCode = 202;
     response.setHeader("Content-Type", "text/plain");
-    response.end("secure-ok");
+    response.end("secure-ok:" + (request.headers["authorization"] || "missing"));
 });
 
 server.listen(0, "127.0.0.1", () => {
@@ -43,6 +43,7 @@ server.listen(0, "127.0.0.1", () => {
         path: "/secure",
         rejectUnauthorized: false,
         servername: "localhost",
+        auth: "tls-user:tls-pass",
     }, (response: any) => {
         response.on("data", (_chunk: any) => { /* response.body is updated by the bounded parser */ });
         response.on("end", () => {
