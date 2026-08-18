@@ -49223,3216 +49223,662 @@ class Emitter {
         const bodyAwaitConditionExpression = bodyAwaitConditionCandidate && ts.isAwaitExpression(bodyAwaitConditionCandidate)
             ? bodyAwaitConditionCandidate
             : null;
-        const bodyAwaitSecondIndex = bodyAwaitExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > 0 &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSecondStatement = bodyAwaitSecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSecondIndex]!)
-            ? directRoute!.statements[bodyAwaitSecondIndex]
-            : null;
-        const bodyAwaitSecondCandidate = bodyAwaitSecondStatement && ts.isExpressionStatement(bodyAwaitSecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSecondStatement.expression)
-            : null;
-        const bodyAwaitSecondExpression = bodyAwaitSecondCandidate && ts.isAwaitExpression(bodyAwaitSecondCandidate)
-            ? bodyAwaitSecondCandidate
-            : null;
-        const bodyAwaitThirdIndex = bodyAwaitSecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirdStatement = bodyAwaitThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitThirdIndex]
-            : null;
-        const bodyAwaitThirdCandidate = bodyAwaitThirdStatement && ts.isExpressionStatement(bodyAwaitThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirdStatement.expression)
-            : null;
-        const bodyAwaitThirdExpression = bodyAwaitThirdCandidate && ts.isAwaitExpression(bodyAwaitThirdCandidate)
-            ? bodyAwaitThirdCandidate
-            : null;
-        const bodyAwaitFourthIndex = bodyAwaitThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFourthStatement = bodyAwaitFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitFourthIndex]
-            : null;
-        const bodyAwaitFourthCandidate = bodyAwaitFourthStatement && ts.isExpressionStatement(bodyAwaitFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFourthStatement.expression)
-            : null;
-        const bodyAwaitFourthExpression = bodyAwaitFourthCandidate && ts.isAwaitExpression(bodyAwaitFourthCandidate)
-            ? bodyAwaitFourthCandidate
-            : null;
-        const bodyAwaitFifthIndex = bodyAwaitFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFifthStatement = bodyAwaitFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitFifthIndex]
-            : null;
-        const bodyAwaitFifthCandidate = bodyAwaitFifthStatement && ts.isExpressionStatement(bodyAwaitFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFifthStatement.expression)
-            : null;
-        const bodyAwaitFifthExpression = bodyAwaitFifthCandidate && ts.isAwaitExpression(bodyAwaitFifthCandidate)
-            ? bodyAwaitFifthCandidate
-            : null;
-        const bodyAwaitSixthIndex = bodyAwaitFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixthStatement = bodyAwaitSixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixthIndex]
-            : null;
-        const bodyAwaitSixthCandidate = bodyAwaitSixthStatement && ts.isExpressionStatement(bodyAwaitSixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixthStatement.expression)
-            : null;
-        const bodyAwaitSixthExpression = bodyAwaitSixthCandidate && ts.isAwaitExpression(bodyAwaitSixthCandidate)
-            ? bodyAwaitSixthCandidate
-            : null;
-        const bodyAwaitSeventhIndex = bodyAwaitSixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventhStatement = bodyAwaitSeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventhIndex]
-            : null;
-        const bodyAwaitSeventhCandidate = bodyAwaitSeventhStatement && ts.isExpressionStatement(bodyAwaitSeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventhStatement.expression)
-            : null;
-        const bodyAwaitSeventhExpression = bodyAwaitSeventhCandidate && ts.isAwaitExpression(bodyAwaitSeventhCandidate)
-            ? bodyAwaitSeventhCandidate
-            : null;
-        const bodyAwaitEighthIndex = bodyAwaitSeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEighthStatement = bodyAwaitEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitEighthIndex]
-            : null;
-        const bodyAwaitEighthCandidate = bodyAwaitEighthStatement && ts.isExpressionStatement(bodyAwaitEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEighthStatement.expression)
-            : null;
-        const bodyAwaitEighthExpression = bodyAwaitEighthCandidate && ts.isAwaitExpression(bodyAwaitEighthCandidate)
-            ? bodyAwaitEighthCandidate
-            : null;
-        const bodyAwaitNinthIndex = bodyAwaitEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinthStatement = bodyAwaitNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitNinthIndex]
-            : null;
-        const bodyAwaitNinthCandidate = bodyAwaitNinthStatement && ts.isExpressionStatement(bodyAwaitNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinthStatement.expression)
-            : null;
-        const bodyAwaitNinthExpression = bodyAwaitNinthCandidate && ts.isAwaitExpression(bodyAwaitNinthCandidate)
-            ? bodyAwaitNinthCandidate
-            : null;
-        const bodyAwaitTenthIndex = bodyAwaitNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTenthStatement = bodyAwaitTenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTenthIndex]!)
-            ? directRoute!.statements[bodyAwaitTenthIndex]
-            : null;
-        const bodyAwaitTenthCandidate = bodyAwaitTenthStatement && ts.isExpressionStatement(bodyAwaitTenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTenthStatement.expression)
-            : null;
-        const bodyAwaitTenthExpression = bodyAwaitTenthCandidate && ts.isAwaitExpression(bodyAwaitTenthCandidate)
-            ? bodyAwaitTenthCandidate
-            : null;
-        const bodyAwaitEleventhIndex = bodyAwaitTenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEleventhStatement = bodyAwaitEleventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEleventhIndex]!)
-            ? directRoute!.statements[bodyAwaitEleventhIndex]
-            : null;
-        const bodyAwaitEleventhCandidate = bodyAwaitEleventhStatement && ts.isExpressionStatement(bodyAwaitEleventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEleventhStatement.expression)
-            : null;
-        const bodyAwaitEleventhExpression = bodyAwaitEleventhCandidate && ts.isAwaitExpression(bodyAwaitEleventhCandidate)
-            ? bodyAwaitEleventhCandidate
-            : null;
-        const bodyAwaitTwelfthIndex = bodyAwaitEleventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEleventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwelfthStatement = bodyAwaitTwelfthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwelfthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwelfthIndex]
-            : null;
-        const bodyAwaitTwelfthCandidate = bodyAwaitTwelfthStatement && ts.isExpressionStatement(bodyAwaitTwelfthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwelfthStatement.expression)
-            : null;
-        const bodyAwaitTwelfthExpression = bodyAwaitTwelfthCandidate && ts.isAwaitExpression(bodyAwaitTwelfthCandidate)
-            ? bodyAwaitTwelfthCandidate
-            : null;
-        const bodyAwaitThirteenthIndex = bodyAwaitTwelfthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwelfthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirteenthStatement = bodyAwaitThirteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitThirteenthIndex]
-            : null;
-        const bodyAwaitThirteenthCandidate = bodyAwaitThirteenthStatement && ts.isExpressionStatement(bodyAwaitThirteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirteenthStatement.expression)
-            : null;
-        const bodyAwaitThirteenthExpression = bodyAwaitThirteenthCandidate && ts.isAwaitExpression(bodyAwaitThirteenthCandidate)
-            ? bodyAwaitThirteenthCandidate
-            : null;
-        const bodyAwaitFourteenthIndex = bodyAwaitThirteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFourteenthStatement = bodyAwaitFourteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFourteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitFourteenthIndex]
-            : null;
-        const bodyAwaitFourteenthCandidate = bodyAwaitFourteenthStatement && ts.isExpressionStatement(bodyAwaitFourteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFourteenthStatement.expression)
-            : null;
-        const bodyAwaitFourteenthExpression = bodyAwaitFourteenthCandidate && ts.isAwaitExpression(bodyAwaitFourteenthCandidate)
-            ? bodyAwaitFourteenthCandidate
-            : null;
-        const bodyAwaitFifteenthIndex = bodyAwaitFourteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFourteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFifteenthStatement = bodyAwaitFifteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFifteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitFifteenthIndex]
-            : null;
-        const bodyAwaitFifteenthCandidate = bodyAwaitFifteenthStatement && ts.isExpressionStatement(bodyAwaitFifteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFifteenthStatement.expression)
-            : null;
-        const bodyAwaitFifteenthExpression = bodyAwaitFifteenthCandidate && ts.isAwaitExpression(bodyAwaitFifteenthCandidate)
-            ? bodyAwaitFifteenthCandidate
-            : null;
-        const bodyAwaitSixteenthIndex = bodyAwaitFifteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFifteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixteenthStatement = bodyAwaitSixteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixteenthIndex]
-            : null;
-        const bodyAwaitSixteenthCandidate = bodyAwaitSixteenthStatement && ts.isExpressionStatement(bodyAwaitSixteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixteenthStatement.expression)
-            : null;
-        const bodyAwaitSixteenthExpression = bodyAwaitSixteenthCandidate && ts.isAwaitExpression(bodyAwaitSixteenthCandidate)
-            ? bodyAwaitSixteenthCandidate
-            : null;
-        const bodyAwaitSeventeenthIndex = bodyAwaitSixteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventeenthStatement = bodyAwaitSeventeenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventeenthIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventeenthIndex]
-            : null;
-        const bodyAwaitSeventeenthCandidate = bodyAwaitSeventeenthStatement && ts.isExpressionStatement(bodyAwaitSeventeenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventeenthStatement.expression)
-            : null;
-        const bodyAwaitSeventeenthExpression = bodyAwaitSeventeenthCandidate && ts.isAwaitExpression(bodyAwaitSeventeenthCandidate)
-            ? bodyAwaitSeventeenthCandidate
-            : null;
-        const bodyAwaitEighteenthIndex = bodyAwaitSeventeenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventeenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEighteenthStatement = bodyAwaitEighteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEighteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitEighteenthIndex]
-            : null;
-        const bodyAwaitEighteenthCandidate = bodyAwaitEighteenthStatement && ts.isExpressionStatement(bodyAwaitEighteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEighteenthStatement.expression)
-            : null;
-        const bodyAwaitEighteenthExpression = bodyAwaitEighteenthCandidate && ts.isAwaitExpression(bodyAwaitEighteenthCandidate)
-            ? bodyAwaitEighteenthCandidate
-            : null;
-        const bodyAwaitNineteenthIndex = bodyAwaitEighteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEighteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNineteenthStatement = bodyAwaitNineteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNineteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitNineteenthIndex]
-            : null;
-        const bodyAwaitNineteenthCandidate = bodyAwaitNineteenthStatement && ts.isExpressionStatement(bodyAwaitNineteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNineteenthStatement.expression)
-            : null;
-        const bodyAwaitNineteenthExpression = bodyAwaitNineteenthCandidate && ts.isAwaitExpression(bodyAwaitNineteenthCandidate)
-            ? bodyAwaitNineteenthCandidate
-            : null;
-        const bodyAwaitTwentiethIndex = bodyAwaitNineteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNineteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentiethStatement = bodyAwaitTwentiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentiethIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentiethIndex]
-            : null;
-        const bodyAwaitTwentiethCandidate = bodyAwaitTwentiethStatement && ts.isExpressionStatement(bodyAwaitTwentiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentiethStatement.expression)
-            : null;
-        const bodyAwaitTwentiethExpression = bodyAwaitTwentiethCandidate && ts.isAwaitExpression(bodyAwaitTwentiethCandidate)
-            ? bodyAwaitTwentiethCandidate
-            : null;
-        const bodyAwaitTwentyFirstIndex = bodyAwaitTwentiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentyFirstStatement = bodyAwaitTwentyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentyFirstIndex]
-            : null;
-        const bodyAwaitTwentyFirstCandidate = bodyAwaitTwentyFirstStatement && ts.isExpressionStatement(bodyAwaitTwentyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentyFirstStatement.expression)
-            : null;
-        const bodyAwaitTwentyFirstExpression = bodyAwaitTwentyFirstCandidate && ts.isAwaitExpression(bodyAwaitTwentyFirstCandidate)
-            ? bodyAwaitTwentyFirstCandidate
-            : null;
-        const bodyAwaitTwentySecondIndex = bodyAwaitTwentyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentySecondStatement = bodyAwaitTwentySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentySecondIndex]
-            : null;
-        const bodyAwaitTwentySecondCandidate = bodyAwaitTwentySecondStatement && ts.isExpressionStatement(bodyAwaitTwentySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentySecondStatement.expression)
-            : null;
-        const bodyAwaitTwentySecondExpression = bodyAwaitTwentySecondCandidate && ts.isAwaitExpression(bodyAwaitTwentySecondCandidate)
-            ? bodyAwaitTwentySecondCandidate
-            : null;
-        const bodyAwaitTwentyThirdIndex = bodyAwaitTwentySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentyThirdStatement = bodyAwaitTwentyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentyThirdIndex]
-            : null;
-        const bodyAwaitTwentyThirdCandidate = bodyAwaitTwentyThirdStatement && ts.isExpressionStatement(bodyAwaitTwentyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentyThirdStatement.expression)
-            : null;
-        const bodyAwaitTwentyThirdExpression = bodyAwaitTwentyThirdCandidate && ts.isAwaitExpression(bodyAwaitTwentyThirdCandidate)
-            ? bodyAwaitTwentyThirdCandidate
-            : null;
-        const bodyAwaitTwentyFourthIndex = bodyAwaitTwentyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentyFourthStatement = bodyAwaitTwentyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentyFourthIndex]
-            : null;
-        const bodyAwaitTwentyFourthCandidate = bodyAwaitTwentyFourthStatement && ts.isExpressionStatement(bodyAwaitTwentyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentyFourthStatement.expression)
-            : null;
-        const bodyAwaitTwentyFourthExpression = bodyAwaitTwentyFourthCandidate && ts.isAwaitExpression(bodyAwaitTwentyFourthCandidate)
-            ? bodyAwaitTwentyFourthCandidate
-            : null;
-        const bodyAwaitTwentyFifthIndex = bodyAwaitTwentyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentyFifthStatement = bodyAwaitTwentyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentyFifthIndex]
-            : null;
-        const bodyAwaitTwentyFifthCandidate = bodyAwaitTwentyFifthStatement && ts.isExpressionStatement(bodyAwaitTwentyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentyFifthStatement.expression)
-            : null;
-        const bodyAwaitTwentyFifthExpression = bodyAwaitTwentyFifthCandidate && ts.isAwaitExpression(bodyAwaitTwentyFifthCandidate)
-            ? bodyAwaitTwentyFifthCandidate
-            : null;
-        const bodyAwaitTwentySixthIndex = bodyAwaitTwentyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentySixthStatement = bodyAwaitTwentySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentySixthIndex]
-            : null;
-        const bodyAwaitTwentySixthCandidate = bodyAwaitTwentySixthStatement && ts.isExpressionStatement(bodyAwaitTwentySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentySixthStatement.expression)
-            : null;
-        const bodyAwaitTwentySixthExpression = bodyAwaitTwentySixthCandidate && ts.isAwaitExpression(bodyAwaitTwentySixthCandidate)
-            ? bodyAwaitTwentySixthCandidate
-            : null;
-        const bodyAwaitTwentySeventhIndex = bodyAwaitTwentySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentySeventhStatement = bodyAwaitTwentySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentySeventhIndex]
-            : null;
-        const bodyAwaitTwentySeventhCandidate = bodyAwaitTwentySeventhStatement && ts.isExpressionStatement(bodyAwaitTwentySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentySeventhStatement.expression)
-            : null;
-        const bodyAwaitTwentySeventhExpression = bodyAwaitTwentySeventhCandidate && ts.isAwaitExpression(bodyAwaitTwentySeventhCandidate)
-            ? bodyAwaitTwentySeventhCandidate
-            : null;
-        const bodyAwaitTwentyEighthIndex = bodyAwaitTwentySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentyEighthStatement = bodyAwaitTwentyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentyEighthIndex]
-            : null;
-        const bodyAwaitTwentyEighthCandidate = bodyAwaitTwentyEighthStatement && ts.isExpressionStatement(bodyAwaitTwentyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentyEighthStatement.expression)
-            : null;
-        const bodyAwaitTwentyEighthExpression = bodyAwaitTwentyEighthCandidate && ts.isAwaitExpression(bodyAwaitTwentyEighthCandidate)
-            ? bodyAwaitTwentyEighthCandidate
-            : null;
-        const bodyAwaitTwentyNinthIndex = bodyAwaitTwentyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwentyNinthStatement = bodyAwaitTwentyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwentyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwentyNinthIndex]
-            : null;
-        const bodyAwaitTwentyNinthCandidate = bodyAwaitTwentyNinthStatement && ts.isExpressionStatement(bodyAwaitTwentyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwentyNinthStatement.expression)
-            : null;
-        const bodyAwaitTwentyNinthExpression = bodyAwaitTwentyNinthCandidate && ts.isAwaitExpression(bodyAwaitTwentyNinthCandidate)
-            ? bodyAwaitTwentyNinthCandidate
-            : null;
-        const bodyAwaitThirtiethIndex = bodyAwaitTwentyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwentyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtiethStatement = bodyAwaitThirtiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtiethIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtiethIndex]
-            : null;
-        const bodyAwaitThirtiethCandidate = bodyAwaitThirtiethStatement && ts.isExpressionStatement(bodyAwaitThirtiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtiethStatement.expression)
-            : null;
-        const bodyAwaitThirtiethExpression = bodyAwaitThirtiethCandidate && ts.isAwaitExpression(bodyAwaitThirtiethCandidate)
-            ? bodyAwaitThirtiethCandidate
-            : null;
-        const bodyAwaitThirtyFirstIndex = bodyAwaitThirtiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtyFirstStatement = bodyAwaitThirtyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtyFirstIndex]
-            : null;
-        const bodyAwaitThirtyFirstCandidate = bodyAwaitThirtyFirstStatement && ts.isExpressionStatement(bodyAwaitThirtyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtyFirstStatement.expression)
-            : null;
-        const bodyAwaitThirtyFirstExpression = bodyAwaitThirtyFirstCandidate && ts.isAwaitExpression(bodyAwaitThirtyFirstCandidate)
-            ? bodyAwaitThirtyFirstCandidate
-            : null;
-        const bodyAwaitThirtySecondIndex = bodyAwaitThirtyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtySecondStatement = bodyAwaitThirtySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtySecondIndex]
-            : null;
-        const bodyAwaitThirtySecondCandidate = bodyAwaitThirtySecondStatement && ts.isExpressionStatement(bodyAwaitThirtySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtySecondStatement.expression)
-            : null;
-        const bodyAwaitThirtySecondExpression = bodyAwaitThirtySecondCandidate && ts.isAwaitExpression(bodyAwaitThirtySecondCandidate)
-            ? bodyAwaitThirtySecondCandidate
-            : null;
-        const bodyAwaitThirtyThirdIndex = bodyAwaitThirtySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtyThirdStatement = bodyAwaitThirtyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtyThirdIndex]
-            : null;
-        const bodyAwaitThirtyThirdCandidate = bodyAwaitThirtyThirdStatement && ts.isExpressionStatement(bodyAwaitThirtyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtyThirdStatement.expression)
-            : null;
-        const bodyAwaitThirtyThirdExpression = bodyAwaitThirtyThirdCandidate && ts.isAwaitExpression(bodyAwaitThirtyThirdCandidate)
-            ? bodyAwaitThirtyThirdCandidate
-            : null;
-        const bodyAwaitThirtyFourthIndex = bodyAwaitThirtyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtyFourthStatement = bodyAwaitThirtyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtyFourthIndex]
-            : null;
-        const bodyAwaitThirtyFourthCandidate = bodyAwaitThirtyFourthStatement && ts.isExpressionStatement(bodyAwaitThirtyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtyFourthStatement.expression)
-            : null;
-        const bodyAwaitThirtyFourthExpression = bodyAwaitThirtyFourthCandidate && ts.isAwaitExpression(bodyAwaitThirtyFourthCandidate)
-            ? bodyAwaitThirtyFourthCandidate
-            : null;
-        const bodyAwaitThirtyFifthIndex = bodyAwaitThirtyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtyFifthStatement = bodyAwaitThirtyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtyFifthIndex]
-            : null;
-        const bodyAwaitThirtyFifthCandidate = bodyAwaitThirtyFifthStatement && ts.isExpressionStatement(bodyAwaitThirtyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtyFifthStatement.expression)
-            : null;
-        const bodyAwaitThirtyFifthExpression = bodyAwaitThirtyFifthCandidate && ts.isAwaitExpression(bodyAwaitThirtyFifthCandidate)
-            ? bodyAwaitThirtyFifthCandidate
-            : null;
-        const bodyAwaitThirtySixthIndex = bodyAwaitThirtyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtySixthStatement = bodyAwaitThirtySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtySixthIndex]
-            : null;
-        const bodyAwaitThirtySixthCandidate = bodyAwaitThirtySixthStatement && ts.isExpressionStatement(bodyAwaitThirtySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtySixthStatement.expression)
-            : null;
-        const bodyAwaitThirtySixthExpression = bodyAwaitThirtySixthCandidate && ts.isAwaitExpression(bodyAwaitThirtySixthCandidate)
-            ? bodyAwaitThirtySixthCandidate
-            : null;
-        const bodyAwaitThirtySeventhIndex = bodyAwaitThirtySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtySeventhStatement = bodyAwaitThirtySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtySeventhIndex]
-            : null;
-        const bodyAwaitThirtySeventhCandidate = bodyAwaitThirtySeventhStatement && ts.isExpressionStatement(bodyAwaitThirtySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtySeventhStatement.expression)
-            : null;
-        const bodyAwaitThirtySeventhExpression = bodyAwaitThirtySeventhCandidate && ts.isAwaitExpression(bodyAwaitThirtySeventhCandidate)
-            ? bodyAwaitThirtySeventhCandidate
-            : null;
-        const bodyAwaitThirtyEighthIndex = bodyAwaitThirtySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtyEighthStatement = bodyAwaitThirtyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtyEighthIndex]
-            : null;
-        const bodyAwaitThirtyEighthCandidate = bodyAwaitThirtyEighthStatement && ts.isExpressionStatement(bodyAwaitThirtyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtyEighthStatement.expression)
-            : null;
-        const bodyAwaitThirtyEighthExpression = bodyAwaitThirtyEighthCandidate && ts.isAwaitExpression(bodyAwaitThirtyEighthCandidate)
-            ? bodyAwaitThirtyEighthCandidate
-            : null;
-        const bodyAwaitThirtyNinthIndex = bodyAwaitThirtyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitThirtyNinthStatement = bodyAwaitThirtyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitThirtyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitThirtyNinthIndex]
-            : null;
-        const bodyAwaitThirtyNinthCandidate = bodyAwaitThirtyNinthStatement && ts.isExpressionStatement(bodyAwaitThirtyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitThirtyNinthStatement.expression)
-            : null;
-        const bodyAwaitThirtyNinthExpression = bodyAwaitThirtyNinthCandidate && ts.isAwaitExpression(bodyAwaitThirtyNinthCandidate)
-            ? bodyAwaitThirtyNinthCandidate
-            : null;
-        const bodyAwaitFortiethIndex = bodyAwaitThirtyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitThirtyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortiethStatement = bodyAwaitFortiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortiethIndex]!)
-            ? directRoute!.statements[bodyAwaitFortiethIndex]
-            : null;
-        const bodyAwaitFortiethCandidate = bodyAwaitFortiethStatement && ts.isExpressionStatement(bodyAwaitFortiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortiethStatement.expression)
-            : null;
-        const bodyAwaitFortiethExpression = bodyAwaitFortiethCandidate && ts.isAwaitExpression(bodyAwaitFortiethCandidate)
-            ? bodyAwaitFortiethCandidate
-            : null;
-        const bodyAwaitFortyFirstIndex = bodyAwaitFortiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortyFirstStatement = bodyAwaitFortyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitFortyFirstIndex]
-            : null;
-        const bodyAwaitFortyFirstCandidate = bodyAwaitFortyFirstStatement && ts.isExpressionStatement(bodyAwaitFortyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortyFirstStatement.expression)
-            : null;
-        const bodyAwaitFortyFirstExpression = bodyAwaitFortyFirstCandidate && ts.isAwaitExpression(bodyAwaitFortyFirstCandidate)
-            ? bodyAwaitFortyFirstCandidate
-            : null;
-        const bodyAwaitFortySecondIndex = bodyAwaitFortyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortySecondStatement = bodyAwaitFortySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitFortySecondIndex]
-            : null;
-        const bodyAwaitFortySecondCandidate = bodyAwaitFortySecondStatement && ts.isExpressionStatement(bodyAwaitFortySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortySecondStatement.expression)
-            : null;
-        const bodyAwaitFortySecondExpression = bodyAwaitFortySecondCandidate && ts.isAwaitExpression(bodyAwaitFortySecondCandidate)
-            ? bodyAwaitFortySecondCandidate
-            : null;
-        const bodyAwaitFortyThirdIndex = bodyAwaitFortySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortyThirdStatement = bodyAwaitFortyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitFortyThirdIndex]
-            : null;
-        const bodyAwaitFortyThirdCandidate = bodyAwaitFortyThirdStatement && ts.isExpressionStatement(bodyAwaitFortyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortyThirdStatement.expression)
-            : null;
-        const bodyAwaitFortyThirdExpression = bodyAwaitFortyThirdCandidate && ts.isAwaitExpression(bodyAwaitFortyThirdCandidate)
-            ? bodyAwaitFortyThirdCandidate
-            : null;
-        const bodyAwaitFortyFourthIndex = bodyAwaitFortyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortyFourthStatement = bodyAwaitFortyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitFortyFourthIndex]
-            : null;
-        const bodyAwaitFortyFourthCandidate = bodyAwaitFortyFourthStatement && ts.isExpressionStatement(bodyAwaitFortyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortyFourthStatement.expression)
-            : null;
-        const bodyAwaitFortyFourthExpression = bodyAwaitFortyFourthCandidate && ts.isAwaitExpression(bodyAwaitFortyFourthCandidate)
-            ? bodyAwaitFortyFourthCandidate
-            : null;
-        const bodyAwaitFortyFifthIndex = bodyAwaitFortyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortyFifthStatement = bodyAwaitFortyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitFortyFifthIndex]
-            : null;
-        const bodyAwaitFortyFifthCandidate = bodyAwaitFortyFifthStatement && ts.isExpressionStatement(bodyAwaitFortyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortyFifthStatement.expression)
-            : null;
-        const bodyAwaitFortyFifthExpression = bodyAwaitFortyFifthCandidate && ts.isAwaitExpression(bodyAwaitFortyFifthCandidate)
-            ? bodyAwaitFortyFifthCandidate
-            : null;
-        const bodyAwaitFortySixthIndex = bodyAwaitFortyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortySixthStatement = bodyAwaitFortySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitFortySixthIndex]
-            : null;
-        const bodyAwaitFortySixthCandidate = bodyAwaitFortySixthStatement && ts.isExpressionStatement(bodyAwaitFortySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortySixthStatement.expression)
-            : null;
-        const bodyAwaitFortySixthExpression = bodyAwaitFortySixthCandidate && ts.isAwaitExpression(bodyAwaitFortySixthCandidate)
-            ? bodyAwaitFortySixthCandidate
-            : null;
-        const bodyAwaitFortySeventhIndex = bodyAwaitFortySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortySeventhStatement = bodyAwaitFortySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitFortySeventhIndex]
-            : null;
-        const bodyAwaitFortySeventhCandidate = bodyAwaitFortySeventhStatement && ts.isExpressionStatement(bodyAwaitFortySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortySeventhStatement.expression)
-            : null;
-        const bodyAwaitFortySeventhExpression = bodyAwaitFortySeventhCandidate && ts.isAwaitExpression(bodyAwaitFortySeventhCandidate)
-            ? bodyAwaitFortySeventhCandidate
-            : null;
-        const bodyAwaitFortyEighthIndex = bodyAwaitFortySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortyEighthStatement = bodyAwaitFortyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitFortyEighthIndex]
-            : null;
-        const bodyAwaitFortyEighthCandidate = bodyAwaitFortyEighthStatement && ts.isExpressionStatement(bodyAwaitFortyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortyEighthStatement.expression)
-            : null;
-        const bodyAwaitFortyEighthExpression = bodyAwaitFortyEighthCandidate && ts.isAwaitExpression(bodyAwaitFortyEighthCandidate)
-            ? bodyAwaitFortyEighthCandidate
-            : null;
-        const bodyAwaitFortyNinthIndex = bodyAwaitFortyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFortyNinthStatement = bodyAwaitFortyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFortyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitFortyNinthIndex]
-            : null;
-        const bodyAwaitFortyNinthCandidate = bodyAwaitFortyNinthStatement && ts.isExpressionStatement(bodyAwaitFortyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFortyNinthStatement.expression)
-            : null;
-        const bodyAwaitFortyNinthExpression = bodyAwaitFortyNinthCandidate && ts.isAwaitExpression(bodyAwaitFortyNinthCandidate)
-            ? bodyAwaitFortyNinthCandidate
-            : null;
-        const bodyAwaitFiftiethIndex = bodyAwaitFortyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFortyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftiethStatement = bodyAwaitFiftiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftiethIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftiethIndex]
-            : null;
-        const bodyAwaitFiftiethCandidate = bodyAwaitFiftiethStatement && ts.isExpressionStatement(bodyAwaitFiftiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftiethStatement.expression)
-            : null;
-        const bodyAwaitFiftiethExpression = bodyAwaitFiftiethCandidate && ts.isAwaitExpression(bodyAwaitFiftiethCandidate)
-            ? bodyAwaitFiftiethCandidate
-            : null;
-        const bodyAwaitFiftyFirstIndex = bodyAwaitFiftiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftyFirstStatement = bodyAwaitFiftyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftyFirstIndex]
-            : null;
-        const bodyAwaitFiftyFirstCandidate = bodyAwaitFiftyFirstStatement && ts.isExpressionStatement(bodyAwaitFiftyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftyFirstStatement.expression)
-            : null;
-        const bodyAwaitFiftyFirstExpression = bodyAwaitFiftyFirstCandidate && ts.isAwaitExpression(bodyAwaitFiftyFirstCandidate)
-            ? bodyAwaitFiftyFirstCandidate
-            : null;
-        const bodyAwaitFiftySecondIndex = bodyAwaitFiftyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftySecondStatement = bodyAwaitFiftySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftySecondIndex]
-            : null;
-        const bodyAwaitFiftySecondCandidate = bodyAwaitFiftySecondStatement && ts.isExpressionStatement(bodyAwaitFiftySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftySecondStatement.expression)
-            : null;
-        const bodyAwaitFiftySecondExpression = bodyAwaitFiftySecondCandidate && ts.isAwaitExpression(bodyAwaitFiftySecondCandidate)
-            ? bodyAwaitFiftySecondCandidate
-            : null;
-        const bodyAwaitFiftyThirdIndex = bodyAwaitFiftySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftyThirdStatement = bodyAwaitFiftyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftyThirdIndex]
-            : null;
-        const bodyAwaitFiftyThirdCandidate = bodyAwaitFiftyThirdStatement && ts.isExpressionStatement(bodyAwaitFiftyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftyThirdStatement.expression)
-            : null;
-        const bodyAwaitFiftyThirdExpression = bodyAwaitFiftyThirdCandidate && ts.isAwaitExpression(bodyAwaitFiftyThirdCandidate)
-            ? bodyAwaitFiftyThirdCandidate
-            : null;
-        const bodyAwaitFiftyFourthIndex = bodyAwaitFiftyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftyFourthStatement = bodyAwaitFiftyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftyFourthIndex]
-            : null;
-        const bodyAwaitFiftyFourthCandidate = bodyAwaitFiftyFourthStatement && ts.isExpressionStatement(bodyAwaitFiftyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftyFourthStatement.expression)
-            : null;
-        const bodyAwaitFiftyFourthExpression = bodyAwaitFiftyFourthCandidate && ts.isAwaitExpression(bodyAwaitFiftyFourthCandidate)
-            ? bodyAwaitFiftyFourthCandidate
-            : null;
-        const bodyAwaitFiftyFifthIndex = bodyAwaitFiftyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftyFifthStatement = bodyAwaitFiftyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftyFifthIndex]
-            : null;
-        const bodyAwaitFiftyFifthCandidate = bodyAwaitFiftyFifthStatement && ts.isExpressionStatement(bodyAwaitFiftyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftyFifthStatement.expression)
-            : null;
-        const bodyAwaitFiftyFifthExpression = bodyAwaitFiftyFifthCandidate && ts.isAwaitExpression(bodyAwaitFiftyFifthCandidate)
-            ? bodyAwaitFiftyFifthCandidate
-            : null;
-        const bodyAwaitFiftySixthIndex = bodyAwaitFiftyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftySixthStatement = bodyAwaitFiftySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftySixthIndex]
-            : null;
-        const bodyAwaitFiftySixthCandidate = bodyAwaitFiftySixthStatement && ts.isExpressionStatement(bodyAwaitFiftySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftySixthStatement.expression)
-            : null;
-        const bodyAwaitFiftySixthExpression = bodyAwaitFiftySixthCandidate && ts.isAwaitExpression(bodyAwaitFiftySixthCandidate)
-            ? bodyAwaitFiftySixthCandidate
-            : null;
-        const bodyAwaitFiftySeventhIndex = bodyAwaitFiftySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftySeventhStatement = bodyAwaitFiftySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftySeventhIndex]
-            : null;
-        const bodyAwaitFiftySeventhCandidate = bodyAwaitFiftySeventhStatement && ts.isExpressionStatement(bodyAwaitFiftySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftySeventhStatement.expression)
-            : null;
-        const bodyAwaitFiftySeventhExpression = bodyAwaitFiftySeventhCandidate && ts.isAwaitExpression(bodyAwaitFiftySeventhCandidate)
-            ? bodyAwaitFiftySeventhCandidate
-            : null;
-        const bodyAwaitFiftyEighthIndex = bodyAwaitFiftySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftyEighthStatement = bodyAwaitFiftyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftyEighthIndex]
-            : null;
-        const bodyAwaitFiftyEighthCandidate = bodyAwaitFiftyEighthStatement && ts.isExpressionStatement(bodyAwaitFiftyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftyEighthStatement.expression)
-            : null;
-        const bodyAwaitFiftyEighthExpression = bodyAwaitFiftyEighthCandidate && ts.isAwaitExpression(bodyAwaitFiftyEighthCandidate)
-            ? bodyAwaitFiftyEighthCandidate
-            : null;
-        const bodyAwaitFiftyNinthIndex = bodyAwaitFiftyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitFiftyNinthStatement = bodyAwaitFiftyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitFiftyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitFiftyNinthIndex]
-            : null;
-        const bodyAwaitFiftyNinthCandidate = bodyAwaitFiftyNinthStatement && ts.isExpressionStatement(bodyAwaitFiftyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitFiftyNinthStatement.expression)
-            : null;
-        const bodyAwaitFiftyNinthExpression = bodyAwaitFiftyNinthCandidate && ts.isAwaitExpression(bodyAwaitFiftyNinthCandidate)
-            ? bodyAwaitFiftyNinthCandidate
-            : null;
-        const bodyAwaitSixtiethIndex = bodyAwaitFiftyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitFiftyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtiethStatement = bodyAwaitSixtiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtiethIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtiethIndex]
-            : null;
-        const bodyAwaitSixtiethCandidate = bodyAwaitSixtiethStatement && ts.isExpressionStatement(bodyAwaitSixtiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtiethStatement.expression)
-            : null;
-        const bodyAwaitSixtiethExpression = bodyAwaitSixtiethCandidate && ts.isAwaitExpression(bodyAwaitSixtiethCandidate)
-            ? bodyAwaitSixtiethCandidate
-            : null;
-        const bodyAwaitSixtyFirstIndex = bodyAwaitSixtiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtyFirstStatement = bodyAwaitSixtyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtyFirstIndex]
-            : null;
-        const bodyAwaitSixtyFirstCandidate = bodyAwaitSixtyFirstStatement && ts.isExpressionStatement(bodyAwaitSixtyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtyFirstStatement.expression)
-            : null;
-        const bodyAwaitSixtyFirstExpression = bodyAwaitSixtyFirstCandidate && ts.isAwaitExpression(bodyAwaitSixtyFirstCandidate)
-            ? bodyAwaitSixtyFirstCandidate
-            : null;
-        const bodyAwaitSixtySecondIndex = bodyAwaitSixtyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtySecondStatement = bodyAwaitSixtySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtySecondIndex]
-            : null;
-        const bodyAwaitSixtySecondCandidate = bodyAwaitSixtySecondStatement && ts.isExpressionStatement(bodyAwaitSixtySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtySecondStatement.expression)
-            : null;
-        const bodyAwaitSixtySecondExpression = bodyAwaitSixtySecondCandidate && ts.isAwaitExpression(bodyAwaitSixtySecondCandidate)
-            ? bodyAwaitSixtySecondCandidate
-            : null;
-        const bodyAwaitSixtyThirdIndex = bodyAwaitSixtySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtyThirdStatement = bodyAwaitSixtyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtyThirdIndex]
-            : null;
-        const bodyAwaitSixtyThirdCandidate = bodyAwaitSixtyThirdStatement && ts.isExpressionStatement(bodyAwaitSixtyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtyThirdStatement.expression)
-            : null;
-        const bodyAwaitSixtyThirdExpression = bodyAwaitSixtyThirdCandidate && ts.isAwaitExpression(bodyAwaitSixtyThirdCandidate)
-            ? bodyAwaitSixtyThirdCandidate
-            : null;
-        const bodyAwaitSixtyFourthIndex = bodyAwaitSixtyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtyFourthStatement = bodyAwaitSixtyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtyFourthIndex]
-            : null;
-        const bodyAwaitSixtyFourthCandidate = bodyAwaitSixtyFourthStatement && ts.isExpressionStatement(bodyAwaitSixtyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtyFourthStatement.expression)
-            : null;
-        const bodyAwaitSixtyFourthExpression = bodyAwaitSixtyFourthCandidate && ts.isAwaitExpression(bodyAwaitSixtyFourthCandidate)
-            ? bodyAwaitSixtyFourthCandidate
-            : null;
-        const bodyAwaitSixtyFifthIndex = bodyAwaitSixtyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtyFifthStatement = bodyAwaitSixtyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtyFifthIndex]
-            : null;
-        const bodyAwaitSixtyFifthCandidate = bodyAwaitSixtyFifthStatement && ts.isExpressionStatement(bodyAwaitSixtyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtyFifthStatement.expression)
-            : null;
-        const bodyAwaitSixtyFifthExpression = bodyAwaitSixtyFifthCandidate && ts.isAwaitExpression(bodyAwaitSixtyFifthCandidate)
-            ? bodyAwaitSixtyFifthCandidate
-            : null;
-        const bodyAwaitSixtySixthIndex = bodyAwaitSixtyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtySixthStatement = bodyAwaitSixtySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtySixthIndex]
-            : null;
-        const bodyAwaitSixtySixthCandidate = bodyAwaitSixtySixthStatement && ts.isExpressionStatement(bodyAwaitSixtySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtySixthStatement.expression)
-            : null;
-        const bodyAwaitSixtySixthExpression = bodyAwaitSixtySixthCandidate && ts.isAwaitExpression(bodyAwaitSixtySixthCandidate)
-            ? bodyAwaitSixtySixthCandidate
-            : null;
-        const bodyAwaitSixtySeventhIndex = bodyAwaitSixtySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtySeventhStatement = bodyAwaitSixtySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtySeventhIndex]
-            : null;
-        const bodyAwaitSixtySeventhCandidate = bodyAwaitSixtySeventhStatement && ts.isExpressionStatement(bodyAwaitSixtySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtySeventhStatement.expression)
-            : null;
-        const bodyAwaitSixtySeventhExpression = bodyAwaitSixtySeventhCandidate && ts.isAwaitExpression(bodyAwaitSixtySeventhCandidate)
-            ? bodyAwaitSixtySeventhCandidate
-            : null;
-        const bodyAwaitSixtyEighthIndex = bodyAwaitSixtySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtyEighthStatement = bodyAwaitSixtyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtyEighthIndex]
-            : null;
-        const bodyAwaitSixtyEighthCandidate = bodyAwaitSixtyEighthStatement && ts.isExpressionStatement(bodyAwaitSixtyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtyEighthStatement.expression)
-            : null;
-        const bodyAwaitSixtyEighthExpression = bodyAwaitSixtyEighthCandidate && ts.isAwaitExpression(bodyAwaitSixtyEighthCandidate)
-            ? bodyAwaitSixtyEighthCandidate
-            : null;
-        const bodyAwaitSixtyNinthIndex = bodyAwaitSixtyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSixtyNinthStatement = bodyAwaitSixtyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSixtyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitSixtyNinthIndex]
-            : null;
-        const bodyAwaitSixtyNinthCandidate = bodyAwaitSixtyNinthStatement && ts.isExpressionStatement(bodyAwaitSixtyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSixtyNinthStatement.expression)
-            : null;
-        const bodyAwaitSixtyNinthExpression = bodyAwaitSixtyNinthCandidate && ts.isAwaitExpression(bodyAwaitSixtyNinthCandidate)
-            ? bodyAwaitSixtyNinthCandidate
-            : null;
-        const bodyAwaitSeventiethIndex = bodyAwaitSixtyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSixtyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventiethStatement = bodyAwaitSeventiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventiethIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventiethIndex]
-            : null;
-        const bodyAwaitSeventiethCandidate = bodyAwaitSeventiethStatement && ts.isExpressionStatement(bodyAwaitSeventiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventiethStatement.expression)
-            : null;
-        const bodyAwaitSeventiethExpression = bodyAwaitSeventiethCandidate && ts.isAwaitExpression(bodyAwaitSeventiethCandidate)
-            ? bodyAwaitSeventiethCandidate
-            : null;
-        const bodyAwaitSeventyFirstIndex = bodyAwaitSeventiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventyFirstStatement = bodyAwaitSeventyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventyFirstIndex]
-            : null;
-        const bodyAwaitSeventyFirstCandidate = bodyAwaitSeventyFirstStatement && ts.isExpressionStatement(bodyAwaitSeventyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventyFirstStatement.expression)
-            : null;
-        const bodyAwaitSeventyFirstExpression = bodyAwaitSeventyFirstCandidate && ts.isAwaitExpression(bodyAwaitSeventyFirstCandidate)
-            ? bodyAwaitSeventyFirstCandidate
-            : null;
-        const bodyAwaitSeventySecondIndex = bodyAwaitSeventyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventySecondStatement = bodyAwaitSeventySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventySecondIndex]
-            : null;
-        const bodyAwaitSeventySecondCandidate = bodyAwaitSeventySecondStatement && ts.isExpressionStatement(bodyAwaitSeventySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventySecondStatement.expression)
-            : null;
-        const bodyAwaitSeventySecondExpression = bodyAwaitSeventySecondCandidate && ts.isAwaitExpression(bodyAwaitSeventySecondCandidate)
-            ? bodyAwaitSeventySecondCandidate
-            : null;
-        const bodyAwaitSeventyThirdIndex = bodyAwaitSeventySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventyThirdStatement = bodyAwaitSeventyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventyThirdIndex]
-            : null;
-        const bodyAwaitSeventyThirdCandidate = bodyAwaitSeventyThirdStatement && ts.isExpressionStatement(bodyAwaitSeventyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventyThirdStatement.expression)
-            : null;
-        const bodyAwaitSeventyThirdExpression = bodyAwaitSeventyThirdCandidate && ts.isAwaitExpression(bodyAwaitSeventyThirdCandidate)
-            ? bodyAwaitSeventyThirdCandidate
-            : null;
-        const bodyAwaitSeventyFourthIndex = bodyAwaitSeventyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventyFourthStatement = bodyAwaitSeventyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventyFourthIndex]
-            : null;
-        const bodyAwaitSeventyFourthCandidate = bodyAwaitSeventyFourthStatement && ts.isExpressionStatement(bodyAwaitSeventyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventyFourthStatement.expression)
-            : null;
-        const bodyAwaitSeventyFourthExpression = bodyAwaitSeventyFourthCandidate && ts.isAwaitExpression(bodyAwaitSeventyFourthCandidate)
-            ? bodyAwaitSeventyFourthCandidate
-            : null;
-        const bodyAwaitSeventyFifthIndex = bodyAwaitSeventyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventyFifthStatement = bodyAwaitSeventyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventyFifthIndex]
-            : null;
-        const bodyAwaitSeventyFifthCandidate = bodyAwaitSeventyFifthStatement && ts.isExpressionStatement(bodyAwaitSeventyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventyFifthStatement.expression)
-            : null;
-        const bodyAwaitSeventyFifthExpression = bodyAwaitSeventyFifthCandidate && ts.isAwaitExpression(bodyAwaitSeventyFifthCandidate)
-            ? bodyAwaitSeventyFifthCandidate
-            : null;
-        const bodyAwaitSeventySixthIndex = bodyAwaitSeventyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventySixthStatement = bodyAwaitSeventySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventySixthIndex]
-            : null;
-        const bodyAwaitSeventySixthCandidate = bodyAwaitSeventySixthStatement && ts.isExpressionStatement(bodyAwaitSeventySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventySixthStatement.expression)
-            : null;
-        const bodyAwaitSeventySixthExpression = bodyAwaitSeventySixthCandidate && ts.isAwaitExpression(bodyAwaitSeventySixthCandidate)
-            ? bodyAwaitSeventySixthCandidate
-            : null;
-        const bodyAwaitSeventySeventhIndex = bodyAwaitSeventySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventySeventhStatement = bodyAwaitSeventySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventySeventhIndex]
-            : null;
-        const bodyAwaitSeventySeventhCandidate = bodyAwaitSeventySeventhStatement && ts.isExpressionStatement(bodyAwaitSeventySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventySeventhStatement.expression)
-            : null;
-        const bodyAwaitSeventySeventhExpression = bodyAwaitSeventySeventhCandidate && ts.isAwaitExpression(bodyAwaitSeventySeventhCandidate)
-            ? bodyAwaitSeventySeventhCandidate
-            : null;
-        const bodyAwaitSeventyEighthIndex = bodyAwaitSeventySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventyEighthStatement = bodyAwaitSeventyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventyEighthIndex]
-            : null;
-        const bodyAwaitSeventyEighthCandidate = bodyAwaitSeventyEighthStatement && ts.isExpressionStatement(bodyAwaitSeventyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventyEighthStatement.expression)
-            : null;
-        const bodyAwaitSeventyEighthExpression = bodyAwaitSeventyEighthCandidate && ts.isAwaitExpression(bodyAwaitSeventyEighthCandidate)
-            ? bodyAwaitSeventyEighthCandidate
-            : null;
-        const bodyAwaitSeventyNinthIndex = bodyAwaitSeventyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitSeventyNinthStatement = bodyAwaitSeventyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitSeventyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitSeventyNinthIndex]
-            : null;
-        const bodyAwaitSeventyNinthCandidate = bodyAwaitSeventyNinthStatement && ts.isExpressionStatement(bodyAwaitSeventyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitSeventyNinthStatement.expression)
-            : null;
-        const bodyAwaitSeventyNinthExpression = bodyAwaitSeventyNinthCandidate && ts.isAwaitExpression(bodyAwaitSeventyNinthCandidate)
-            ? bodyAwaitSeventyNinthCandidate
-            : null;
-        const bodyAwaitEightiethIndex = bodyAwaitSeventyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitSeventyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightiethStatement = bodyAwaitEightiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightiethIndex]!)
-            ? directRoute!.statements[bodyAwaitEightiethIndex]
-            : null;
-        const bodyAwaitEightiethCandidate = bodyAwaitEightiethStatement && ts.isExpressionStatement(bodyAwaitEightiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightiethStatement.expression)
-            : null;
-        const bodyAwaitEightiethExpression = bodyAwaitEightiethCandidate && ts.isAwaitExpression(bodyAwaitEightiethCandidate)
-            ? bodyAwaitEightiethCandidate
-            : null;
-        const bodyAwaitEightyFirstIndex = bodyAwaitEightiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightyFirstStatement = bodyAwaitEightyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitEightyFirstIndex]
-            : null;
-        const bodyAwaitEightyFirstCandidate = bodyAwaitEightyFirstStatement && ts.isExpressionStatement(bodyAwaitEightyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightyFirstStatement.expression)
-            : null;
-        const bodyAwaitEightyFirstExpression = bodyAwaitEightyFirstCandidate && ts.isAwaitExpression(bodyAwaitEightyFirstCandidate)
-            ? bodyAwaitEightyFirstCandidate
-            : null;
-        const bodyAwaitEightySecondIndex = bodyAwaitEightyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightySecondStatement = bodyAwaitEightySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitEightySecondIndex]
-            : null;
-        const bodyAwaitEightySecondCandidate = bodyAwaitEightySecondStatement && ts.isExpressionStatement(bodyAwaitEightySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightySecondStatement.expression)
-            : null;
-        const bodyAwaitEightySecondExpression = bodyAwaitEightySecondCandidate && ts.isAwaitExpression(bodyAwaitEightySecondCandidate)
-            ? bodyAwaitEightySecondCandidate
-            : null;
-        const bodyAwaitEightyThirdIndex = bodyAwaitEightySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightyThirdStatement = bodyAwaitEightyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitEightyThirdIndex]
-            : null;
-        const bodyAwaitEightyThirdCandidate = bodyAwaitEightyThirdStatement && ts.isExpressionStatement(bodyAwaitEightyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightyThirdStatement.expression)
-            : null;
-        const bodyAwaitEightyThirdExpression = bodyAwaitEightyThirdCandidate && ts.isAwaitExpression(bodyAwaitEightyThirdCandidate)
-            ? bodyAwaitEightyThirdCandidate
-            : null;
-        const bodyAwaitEightyFourthIndex = bodyAwaitEightyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightyFourthStatement = bodyAwaitEightyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitEightyFourthIndex]
-            : null;
-        const bodyAwaitEightyFourthCandidate = bodyAwaitEightyFourthStatement && ts.isExpressionStatement(bodyAwaitEightyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightyFourthStatement.expression)
-            : null;
-        const bodyAwaitEightyFourthExpression = bodyAwaitEightyFourthCandidate && ts.isAwaitExpression(bodyAwaitEightyFourthCandidate)
-            ? bodyAwaitEightyFourthCandidate
-            : null;
-        const bodyAwaitEightyFifthIndex = bodyAwaitEightyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightyFifthStatement = bodyAwaitEightyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitEightyFifthIndex]
-            : null;
-        const bodyAwaitEightyFifthCandidate = bodyAwaitEightyFifthStatement && ts.isExpressionStatement(bodyAwaitEightyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightyFifthStatement.expression)
-            : null;
-        const bodyAwaitEightyFifthExpression = bodyAwaitEightyFifthCandidate && ts.isAwaitExpression(bodyAwaitEightyFifthCandidate)
-            ? bodyAwaitEightyFifthCandidate
-            : null;
-        const bodyAwaitEightySixthIndex = bodyAwaitEightyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightySixthStatement = bodyAwaitEightySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitEightySixthIndex]
-            : null;
-        const bodyAwaitEightySixthCandidate = bodyAwaitEightySixthStatement && ts.isExpressionStatement(bodyAwaitEightySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightySixthStatement.expression)
-            : null;
-        const bodyAwaitEightySixthExpression = bodyAwaitEightySixthCandidate && ts.isAwaitExpression(bodyAwaitEightySixthCandidate)
-            ? bodyAwaitEightySixthCandidate
-            : null;
-        const bodyAwaitEightySeventhIndex = bodyAwaitEightySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightySeventhStatement = bodyAwaitEightySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitEightySeventhIndex]
-            : null;
-        const bodyAwaitEightySeventhCandidate = bodyAwaitEightySeventhStatement && ts.isExpressionStatement(bodyAwaitEightySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightySeventhStatement.expression)
-            : null;
-        const bodyAwaitEightySeventhExpression = bodyAwaitEightySeventhCandidate && ts.isAwaitExpression(bodyAwaitEightySeventhCandidate)
-            ? bodyAwaitEightySeventhCandidate
-            : null;
-        const bodyAwaitEightyEighthIndex = bodyAwaitEightySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightyEighthStatement = bodyAwaitEightyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitEightyEighthIndex]
-            : null;
-        const bodyAwaitEightyEighthCandidate = bodyAwaitEightyEighthStatement && ts.isExpressionStatement(bodyAwaitEightyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightyEighthStatement.expression)
-            : null;
-        const bodyAwaitEightyEighthExpression = bodyAwaitEightyEighthCandidate && ts.isAwaitExpression(bodyAwaitEightyEighthCandidate)
-            ? bodyAwaitEightyEighthCandidate
-            : null;
-        const bodyAwaitEightyNinthIndex = bodyAwaitEightyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitEightyNinthStatement = bodyAwaitEightyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitEightyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitEightyNinthIndex]
-            : null;
-        const bodyAwaitEightyNinthCandidate = bodyAwaitEightyNinthStatement && ts.isExpressionStatement(bodyAwaitEightyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitEightyNinthStatement.expression)
-            : null;
-        const bodyAwaitEightyNinthExpression = bodyAwaitEightyNinthCandidate && ts.isAwaitExpression(bodyAwaitEightyNinthCandidate)
-            ? bodyAwaitEightyNinthCandidate
-            : null;
-        const bodyAwaitNinetiethIndex = bodyAwaitEightyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitEightyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetiethStatement = bodyAwaitNinetiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetiethIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetiethIndex]
-            : null;
-        const bodyAwaitNinetiethCandidate = bodyAwaitNinetiethStatement && ts.isExpressionStatement(bodyAwaitNinetiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetiethStatement.expression)
-            : null;
-        const bodyAwaitNinetiethExpression = bodyAwaitNinetiethCandidate && ts.isAwaitExpression(bodyAwaitNinetiethCandidate)
-            ? bodyAwaitNinetiethCandidate
-            : null;
-        const bodyAwaitNinetyFirstIndex = bodyAwaitNinetiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetyFirstStatement = bodyAwaitNinetyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetyFirstIndex]
-            : null;
-        const bodyAwaitNinetyFirstCandidate = bodyAwaitNinetyFirstStatement && ts.isExpressionStatement(bodyAwaitNinetyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetyFirstStatement.expression)
-            : null;
-        const bodyAwaitNinetyFirstExpression = bodyAwaitNinetyFirstCandidate && ts.isAwaitExpression(bodyAwaitNinetyFirstCandidate)
-            ? bodyAwaitNinetyFirstCandidate
-            : null;
-        const bodyAwaitNinetySecondIndex = bodyAwaitNinetyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetySecondStatement = bodyAwaitNinetySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetySecondIndex]
-            : null;
-        const bodyAwaitNinetySecondCandidate = bodyAwaitNinetySecondStatement && ts.isExpressionStatement(bodyAwaitNinetySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetySecondStatement.expression)
-            : null;
-        const bodyAwaitNinetySecondExpression = bodyAwaitNinetySecondCandidate && ts.isAwaitExpression(bodyAwaitNinetySecondCandidate)
-            ? bodyAwaitNinetySecondCandidate
-            : null;
-        const bodyAwaitNinetyThirdIndex = bodyAwaitNinetySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetyThirdStatement = bodyAwaitNinetyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetyThirdIndex]
-            : null;
-        const bodyAwaitNinetyThirdCandidate = bodyAwaitNinetyThirdStatement && ts.isExpressionStatement(bodyAwaitNinetyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetyThirdStatement.expression)
-            : null;
-        const bodyAwaitNinetyThirdExpression = bodyAwaitNinetyThirdCandidate && ts.isAwaitExpression(bodyAwaitNinetyThirdCandidate)
-            ? bodyAwaitNinetyThirdCandidate
-            : null;
-        const bodyAwaitNinetyFourthIndex = bodyAwaitNinetyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetyFourthStatement = bodyAwaitNinetyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetyFourthIndex]
-            : null;
-        const bodyAwaitNinetyFourthCandidate = bodyAwaitNinetyFourthStatement && ts.isExpressionStatement(bodyAwaitNinetyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetyFourthStatement.expression)
-            : null;
-        const bodyAwaitNinetyFourthExpression = bodyAwaitNinetyFourthCandidate && ts.isAwaitExpression(bodyAwaitNinetyFourthCandidate)
-            ? bodyAwaitNinetyFourthCandidate
-            : null;
-        const bodyAwaitNinetyFifthIndex = bodyAwaitNinetyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetyFifthStatement = bodyAwaitNinetyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetyFifthIndex]
-            : null;
-        const bodyAwaitNinetyFifthCandidate = bodyAwaitNinetyFifthStatement && ts.isExpressionStatement(bodyAwaitNinetyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetyFifthStatement.expression)
-            : null;
-        const bodyAwaitNinetyFifthExpression = bodyAwaitNinetyFifthCandidate && ts.isAwaitExpression(bodyAwaitNinetyFifthCandidate)
-            ? bodyAwaitNinetyFifthCandidate
-            : null;
-        const bodyAwaitNinetySixthIndex = bodyAwaitNinetyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetySixthStatement = bodyAwaitNinetySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetySixthIndex]
-            : null;
-        const bodyAwaitNinetySixthCandidate = bodyAwaitNinetySixthStatement && ts.isExpressionStatement(bodyAwaitNinetySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetySixthStatement.expression)
-            : null;
-        const bodyAwaitNinetySixthExpression = bodyAwaitNinetySixthCandidate && ts.isAwaitExpression(bodyAwaitNinetySixthCandidate)
-            ? bodyAwaitNinetySixthCandidate
-            : null;
-        const bodyAwaitNinetySeventhIndex = bodyAwaitNinetySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetySeventhStatement = bodyAwaitNinetySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetySeventhIndex]
-            : null;
-        const bodyAwaitNinetySeventhCandidate = bodyAwaitNinetySeventhStatement && ts.isExpressionStatement(bodyAwaitNinetySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetySeventhStatement.expression)
-            : null;
-        const bodyAwaitNinetySeventhExpression = bodyAwaitNinetySeventhCandidate && ts.isAwaitExpression(bodyAwaitNinetySeventhCandidate)
-            ? bodyAwaitNinetySeventhCandidate
-            : null;
-        const bodyAwaitNinetyEighthIndex = bodyAwaitNinetySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetyEighthStatement = bodyAwaitNinetyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetyEighthIndex]
-            : null;
-        const bodyAwaitNinetyEighthCandidate = bodyAwaitNinetyEighthStatement && ts.isExpressionStatement(bodyAwaitNinetyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetyEighthStatement.expression)
-            : null;
-        const bodyAwaitNinetyEighthExpression = bodyAwaitNinetyEighthCandidate && ts.isAwaitExpression(bodyAwaitNinetyEighthCandidate)
-            ? bodyAwaitNinetyEighthCandidate
-            : null;
-        const bodyAwaitNinetyNinthIndex = bodyAwaitNinetyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitNinetyNinthStatement = bodyAwaitNinetyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitNinetyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitNinetyNinthIndex]
-            : null;
-        const bodyAwaitNinetyNinthCandidate = bodyAwaitNinetyNinthStatement && ts.isExpressionStatement(bodyAwaitNinetyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitNinetyNinthStatement.expression)
-            : null;
-        const bodyAwaitNinetyNinthExpression = bodyAwaitNinetyNinthCandidate && ts.isAwaitExpression(bodyAwaitNinetyNinthCandidate)
-            ? bodyAwaitNinetyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredthIndex = bodyAwaitNinetyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitNinetyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredthStatement = bodyAwaitOneHundredthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredthIndex]
-            : null;
-        const bodyAwaitOneHundredthCandidate = bodyAwaitOneHundredthStatement && ts.isExpressionStatement(bodyAwaitOneHundredthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredthExpression = bodyAwaitOneHundredthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredthCandidate)
-            ? bodyAwaitOneHundredthCandidate
-            : null;
-        const bodyAwaitOneHundredFirstIndex = bodyAwaitOneHundredthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFirstStatement = bodyAwaitOneHundredFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFirstIndex]
-            : null;
-        const bodyAwaitOneHundredFirstCandidate = bodyAwaitOneHundredFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFirstExpression = bodyAwaitOneHundredFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFirstCandidate)
-            ? bodyAwaitOneHundredFirstCandidate
-            : null;
-        const bodyAwaitOneHundredSecondIndex = bodyAwaitOneHundredFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSecondStatement = bodyAwaitOneHundredSecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSecondIndex]
-            : null;
-        const bodyAwaitOneHundredSecondCandidate = bodyAwaitOneHundredSecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredSecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSecondExpression = bodyAwaitOneHundredSecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSecondCandidate)
-            ? bodyAwaitOneHundredSecondCandidate
-            : null;
-        const bodyAwaitOneHundredThirdIndex = bodyAwaitOneHundredSecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirdStatement = bodyAwaitOneHundredThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirdIndex]
-            : null;
-        const bodyAwaitOneHundredThirdCandidate = bodyAwaitOneHundredThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirdExpression = bodyAwaitOneHundredThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirdCandidate)
-            ? bodyAwaitOneHundredThirdCandidate
-            : null;
-        const bodyAwaitOneHundredFourthIndex = bodyAwaitOneHundredThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFourthStatement = bodyAwaitOneHundredFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFourthIndex]
-            : null;
-        const bodyAwaitOneHundredFourthCandidate = bodyAwaitOneHundredFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFourthExpression = bodyAwaitOneHundredFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFourthCandidate)
-            ? bodyAwaitOneHundredFourthCandidate
-            : null;
-        const bodyAwaitOneHundredFifthIndex = bodyAwaitOneHundredFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFifthStatement = bodyAwaitOneHundredFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFifthIndex]
-            : null;
-        const bodyAwaitOneHundredFifthCandidate = bodyAwaitOneHundredFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFifthExpression = bodyAwaitOneHundredFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFifthCandidate)
-            ? bodyAwaitOneHundredFifthCandidate
-            : null;
-        const bodyAwaitOneHundredSixthIndex = bodyAwaitOneHundredFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixthStatement = bodyAwaitOneHundredSixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixthIndex]
-            : null;
-        const bodyAwaitOneHundredSixthCandidate = bodyAwaitOneHundredSixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixthExpression = bodyAwaitOneHundredSixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixthCandidate)
-            ? bodyAwaitOneHundredSixthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventhIndex = bodyAwaitOneHundredSixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventhStatement = bodyAwaitOneHundredSeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventhIndex]
-            : null;
-        const bodyAwaitOneHundredSeventhCandidate = bodyAwaitOneHundredSeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventhExpression = bodyAwaitOneHundredSeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventhCandidate)
-            ? bodyAwaitOneHundredSeventhCandidate
-            : null;
-        const bodyAwaitOneHundredEighthIndex = bodyAwaitOneHundredSeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEighthStatement = bodyAwaitOneHundredEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEighthIndex]
-            : null;
-        const bodyAwaitOneHundredEighthCandidate = bodyAwaitOneHundredEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEighthExpression = bodyAwaitOneHundredEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEighthCandidate)
-            ? bodyAwaitOneHundredEighthCandidate
-            : null;
-        const bodyAwaitOneHundredNinthIndex = bodyAwaitOneHundredEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinthStatement = bodyAwaitOneHundredNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinthIndex]
-            : null;
-        const bodyAwaitOneHundredNinthCandidate = bodyAwaitOneHundredNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinthExpression = bodyAwaitOneHundredNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinthCandidate)
-            ? bodyAwaitOneHundredNinthCandidate
-            : null;
-        const bodyAwaitOneHundredTenthIndex = bodyAwaitOneHundredNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTenthStatement = bodyAwaitOneHundredTenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTenthIndex]
-            : null;
-        const bodyAwaitOneHundredTenthCandidate = bodyAwaitOneHundredTenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTenthExpression = bodyAwaitOneHundredTenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTenthCandidate)
-            ? bodyAwaitOneHundredTenthCandidate
-            : null;
-        const bodyAwaitOneHundredEleventhIndex = bodyAwaitOneHundredTenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEleventhStatement = bodyAwaitOneHundredEleventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEleventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEleventhIndex]
-            : null;
-        const bodyAwaitOneHundredEleventhCandidate = bodyAwaitOneHundredEleventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredEleventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEleventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEleventhExpression = bodyAwaitOneHundredEleventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEleventhCandidate)
-            ? bodyAwaitOneHundredEleventhCandidate
-            : null;
-        const bodyAwaitOneHundredTwelfthIndex = bodyAwaitOneHundredEleventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEleventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwelfthStatement = bodyAwaitOneHundredTwelfthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwelfthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwelfthIndex]
-            : null;
-        const bodyAwaitOneHundredTwelfthCandidate = bodyAwaitOneHundredTwelfthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwelfthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwelfthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwelfthExpression = bodyAwaitOneHundredTwelfthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwelfthCandidate)
-            ? bodyAwaitOneHundredTwelfthCandidate
-            : null;
-        const bodyAwaitOneHundredThirteenthIndex = bodyAwaitOneHundredTwelfthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwelfthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirteenthStatement = bodyAwaitOneHundredThirteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirteenthIndex]
-            : null;
-        const bodyAwaitOneHundredThirteenthCandidate = bodyAwaitOneHundredThirteenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirteenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirteenthExpression = bodyAwaitOneHundredThirteenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirteenthCandidate)
-            ? bodyAwaitOneHundredThirteenthCandidate
-            : null;
-        const bodyAwaitOneHundredFourteenthIndex = bodyAwaitOneHundredThirteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFourteenthStatement = bodyAwaitOneHundredFourteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFourteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFourteenthIndex]
-            : null;
-        const bodyAwaitOneHundredFourteenthCandidate = bodyAwaitOneHundredFourteenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFourteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFourteenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFourteenthExpression = bodyAwaitOneHundredFourteenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFourteenthCandidate)
-            ? bodyAwaitOneHundredFourteenthCandidate
-            : null;
-        const bodyAwaitOneHundredFifteenthIndex = bodyAwaitOneHundredFourteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFourteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFifteenthStatement = bodyAwaitOneHundredFifteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFifteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFifteenthIndex]
-            : null;
-        const bodyAwaitOneHundredFifteenthCandidate = bodyAwaitOneHundredFifteenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFifteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFifteenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFifteenthExpression = bodyAwaitOneHundredFifteenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFifteenthCandidate)
-            ? bodyAwaitOneHundredFifteenthCandidate
-            : null;
-        const bodyAwaitOneHundredSixteenthIndex = bodyAwaitOneHundredFifteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFifteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixteenthStatement = bodyAwaitOneHundredSixteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixteenthIndex]
-            : null;
-        const bodyAwaitOneHundredSixteenthCandidate = bodyAwaitOneHundredSixteenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixteenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixteenthExpression = bodyAwaitOneHundredSixteenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixteenthCandidate)
-            ? bodyAwaitOneHundredSixteenthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventeenthIndex = bodyAwaitOneHundredSixteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventeenthStatement = bodyAwaitOneHundredSeventeenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventeenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventeenthIndex]
-            : null;
-        const bodyAwaitOneHundredSeventeenthCandidate = bodyAwaitOneHundredSeventeenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventeenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventeenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventeenthExpression = bodyAwaitOneHundredSeventeenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventeenthCandidate)
-            ? bodyAwaitOneHundredSeventeenthCandidate
-            : null;
-        const bodyAwaitOneHundredEighteenthIndex = bodyAwaitOneHundredSeventeenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventeenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEighteenthStatement = bodyAwaitOneHundredEighteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEighteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEighteenthIndex]
-            : null;
-        const bodyAwaitOneHundredEighteenthCandidate = bodyAwaitOneHundredEighteenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEighteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEighteenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEighteenthExpression = bodyAwaitOneHundredEighteenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEighteenthCandidate)
-            ? bodyAwaitOneHundredEighteenthCandidate
-            : null;
-        const bodyAwaitOneHundredNineteenthIndex = bodyAwaitOneHundredEighteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEighteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNineteenthStatement = bodyAwaitOneHundredNineteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNineteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNineteenthIndex]
-            : null;
-        const bodyAwaitOneHundredNineteenthCandidate = bodyAwaitOneHundredNineteenthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNineteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNineteenthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNineteenthExpression = bodyAwaitOneHundredNineteenthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNineteenthCandidate)
-            ? bodyAwaitOneHundredNineteenthCandidate
-            : null;
-        const bodyAwaitOneHundredTwentiethIndex = bodyAwaitOneHundredNineteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNineteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentiethStatement = bodyAwaitOneHundredTwentiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentiethIndex]
-            : null;
-        const bodyAwaitOneHundredTwentiethCandidate = bodyAwaitOneHundredTwentiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentiethExpression = bodyAwaitOneHundredTwentiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentiethCandidate)
-            ? bodyAwaitOneHundredTwentiethCandidate
-            : null;
-        const bodyAwaitOneHundredTwentyFirstIndex = bodyAwaitOneHundredTwentiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentyFirstStatement = bodyAwaitOneHundredTwentyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredTwentyFirstCandidate = bodyAwaitOneHundredTwentyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentyFirstExpression = bodyAwaitOneHundredTwentyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentyFirstCandidate)
-            ? bodyAwaitOneHundredTwentyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredTwentySecondIndex = bodyAwaitOneHundredTwentyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentySecondStatement = bodyAwaitOneHundredTwentySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentySecondIndex]
-            : null;
-        const bodyAwaitOneHundredTwentySecondCandidate = bodyAwaitOneHundredTwentySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentySecondExpression = bodyAwaitOneHundredTwentySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentySecondCandidate)
-            ? bodyAwaitOneHundredTwentySecondCandidate
-            : null;
-        const bodyAwaitOneHundredTwentyThirdIndex = bodyAwaitOneHundredTwentySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentyThirdStatement = bodyAwaitOneHundredTwentyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredTwentyThirdCandidate = bodyAwaitOneHundredTwentyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentyThirdExpression = bodyAwaitOneHundredTwentyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentyThirdCandidate)
-            ? bodyAwaitOneHundredTwentyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredTwentyFourthIndex = bodyAwaitOneHundredTwentyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentyFourthStatement = bodyAwaitOneHundredTwentyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredTwentyFourthCandidate = bodyAwaitOneHundredTwentyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentyFourthExpression = bodyAwaitOneHundredTwentyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentyFourthCandidate)
-            ? bodyAwaitOneHundredTwentyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredTwentyFifthIndex = bodyAwaitOneHundredTwentyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentyFifthStatement = bodyAwaitOneHundredTwentyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredTwentyFifthCandidate = bodyAwaitOneHundredTwentyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentyFifthExpression = bodyAwaitOneHundredTwentyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentyFifthCandidate)
-            ? bodyAwaitOneHundredTwentyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredTwentySixthIndex = bodyAwaitOneHundredTwentyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentySixthStatement = bodyAwaitOneHundredTwentySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentySixthIndex]
-            : null;
-        const bodyAwaitOneHundredTwentySixthCandidate = bodyAwaitOneHundredTwentySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentySixthExpression = bodyAwaitOneHundredTwentySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentySixthCandidate)
-            ? bodyAwaitOneHundredTwentySixthCandidate
-            : null;
-        const bodyAwaitOneHundredTwentySeventhIndex = bodyAwaitOneHundredTwentySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentySeventhStatement = bodyAwaitOneHundredTwentySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredTwentySeventhCandidate = bodyAwaitOneHundredTwentySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentySeventhExpression = bodyAwaitOneHundredTwentySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentySeventhCandidate)
-            ? bodyAwaitOneHundredTwentySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredTwentyEighthIndex = bodyAwaitOneHundredTwentySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentyEighthStatement = bodyAwaitOneHundredTwentyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredTwentyEighthCandidate = bodyAwaitOneHundredTwentyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentyEighthExpression = bodyAwaitOneHundredTwentyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentyEighthCandidate)
-            ? bodyAwaitOneHundredTwentyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredTwentyNinthIndex = bodyAwaitOneHundredTwentyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredTwentyNinthStatement = bodyAwaitOneHundredTwentyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredTwentyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredTwentyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredTwentyNinthCandidate = bodyAwaitOneHundredTwentyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredTwentyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredTwentyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredTwentyNinthExpression = bodyAwaitOneHundredTwentyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredTwentyNinthCandidate)
-            ? bodyAwaitOneHundredTwentyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredThirtiethIndex = bodyAwaitOneHundredTwentyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredTwentyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtiethStatement = bodyAwaitOneHundredThirtiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtiethIndex]
-            : null;
-        const bodyAwaitOneHundredThirtiethCandidate = bodyAwaitOneHundredThirtiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtiethExpression = bodyAwaitOneHundredThirtiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtiethCandidate)
-            ? bodyAwaitOneHundredThirtiethCandidate
-            : null;
-        const bodyAwaitOneHundredThirtyFirstIndex = bodyAwaitOneHundredThirtiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtyFirstStatement = bodyAwaitOneHundredThirtyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredThirtyFirstCandidate = bodyAwaitOneHundredThirtyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtyFirstExpression = bodyAwaitOneHundredThirtyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtyFirstCandidate)
-            ? bodyAwaitOneHundredThirtyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredThirtySecondIndex = bodyAwaitOneHundredThirtyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtySecondStatement = bodyAwaitOneHundredThirtySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtySecondIndex]
-            : null;
-        const bodyAwaitOneHundredThirtySecondCandidate = bodyAwaitOneHundredThirtySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtySecondExpression = bodyAwaitOneHundredThirtySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtySecondCandidate)
-            ? bodyAwaitOneHundredThirtySecondCandidate
-            : null;
-        const bodyAwaitOneHundredThirtyThirdIndex = bodyAwaitOneHundredThirtySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtyThirdStatement = bodyAwaitOneHundredThirtyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredThirtyThirdCandidate = bodyAwaitOneHundredThirtyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtyThirdExpression = bodyAwaitOneHundredThirtyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtyThirdCandidate)
-            ? bodyAwaitOneHundredThirtyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredThirtyFourthIndex = bodyAwaitOneHundredThirtyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtyFourthStatement = bodyAwaitOneHundredThirtyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredThirtyFourthCandidate = bodyAwaitOneHundredThirtyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtyFourthExpression = bodyAwaitOneHundredThirtyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtyFourthCandidate)
-            ? bodyAwaitOneHundredThirtyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredThirtyFifthIndex = bodyAwaitOneHundredThirtyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtyFifthStatement = bodyAwaitOneHundredThirtyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredThirtyFifthCandidate = bodyAwaitOneHundredThirtyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtyFifthExpression = bodyAwaitOneHundredThirtyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtyFifthCandidate)
-            ? bodyAwaitOneHundredThirtyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredThirtySixthIndex = bodyAwaitOneHundredThirtyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtySixthStatement = bodyAwaitOneHundredThirtySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtySixthIndex]
-            : null;
-        const bodyAwaitOneHundredThirtySixthCandidate = bodyAwaitOneHundredThirtySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtySixthExpression = bodyAwaitOneHundredThirtySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtySixthCandidate)
-            ? bodyAwaitOneHundredThirtySixthCandidate
-            : null;
-        const bodyAwaitOneHundredThirtySeventhIndex = bodyAwaitOneHundredThirtySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtySeventhStatement = bodyAwaitOneHundredThirtySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredThirtySeventhCandidate = bodyAwaitOneHundredThirtySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtySeventhExpression = bodyAwaitOneHundredThirtySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtySeventhCandidate)
-            ? bodyAwaitOneHundredThirtySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredThirtyEighthIndex = bodyAwaitOneHundredThirtySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtyEighthStatement = bodyAwaitOneHundredThirtyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredThirtyEighthCandidate = bodyAwaitOneHundredThirtyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtyEighthExpression = bodyAwaitOneHundredThirtyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtyEighthCandidate)
-            ? bodyAwaitOneHundredThirtyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredThirtyNinthIndex = bodyAwaitOneHundredThirtyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredThirtyNinthStatement = bodyAwaitOneHundredThirtyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredThirtyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredThirtyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredThirtyNinthCandidate = bodyAwaitOneHundredThirtyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredThirtyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredThirtyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredThirtyNinthExpression = bodyAwaitOneHundredThirtyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredThirtyNinthCandidate)
-            ? bodyAwaitOneHundredThirtyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredFortiethIndex = bodyAwaitOneHundredThirtyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredThirtyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortiethStatement = bodyAwaitOneHundredFortiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortiethIndex]
-            : null;
-        const bodyAwaitOneHundredFortiethCandidate = bodyAwaitOneHundredFortiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortiethExpression = bodyAwaitOneHundredFortiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortiethCandidate)
-            ? bodyAwaitOneHundredFortiethCandidate
-            : null;
-        const bodyAwaitOneHundredFortyFirstIndex = bodyAwaitOneHundredFortiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortyFirstStatement = bodyAwaitOneHundredFortyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredFortyFirstCandidate = bodyAwaitOneHundredFortyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortyFirstExpression = bodyAwaitOneHundredFortyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortyFirstCandidate)
-            ? bodyAwaitOneHundredFortyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredFortySecondIndex = bodyAwaitOneHundredFortyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortySecondStatement = bodyAwaitOneHundredFortySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortySecondIndex]
-            : null;
-        const bodyAwaitOneHundredFortySecondCandidate = bodyAwaitOneHundredFortySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortySecondExpression = bodyAwaitOneHundredFortySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortySecondCandidate)
-            ? bodyAwaitOneHundredFortySecondCandidate
-            : null;
-        const bodyAwaitOneHundredFortyThirdIndex = bodyAwaitOneHundredFortySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortyThirdStatement = bodyAwaitOneHundredFortyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredFortyThirdCandidate = bodyAwaitOneHundredFortyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortyThirdExpression = bodyAwaitOneHundredFortyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortyThirdCandidate)
-            ? bodyAwaitOneHundredFortyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredFortyFourthIndex = bodyAwaitOneHundredFortyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortyFourthStatement = bodyAwaitOneHundredFortyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredFortyFourthCandidate = bodyAwaitOneHundredFortyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortyFourthExpression = bodyAwaitOneHundredFortyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortyFourthCandidate)
-            ? bodyAwaitOneHundredFortyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredFortyFifthIndex = bodyAwaitOneHundredFortyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortyFifthStatement = bodyAwaitOneHundredFortyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredFortyFifthCandidate = bodyAwaitOneHundredFortyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortyFifthExpression = bodyAwaitOneHundredFortyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortyFifthCandidate)
-            ? bodyAwaitOneHundredFortyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredFortySixthIndex = bodyAwaitOneHundredFortyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortySixthStatement = bodyAwaitOneHundredFortySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortySixthIndex]
-            : null;
-        const bodyAwaitOneHundredFortySixthCandidate = bodyAwaitOneHundredFortySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortySixthExpression = bodyAwaitOneHundredFortySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortySixthCandidate)
-            ? bodyAwaitOneHundredFortySixthCandidate
-            : null;
-        const bodyAwaitOneHundredFortySeventhIndex = bodyAwaitOneHundredFortySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortySeventhStatement = bodyAwaitOneHundredFortySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredFortySeventhCandidate = bodyAwaitOneHundredFortySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortySeventhExpression = bodyAwaitOneHundredFortySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortySeventhCandidate)
-            ? bodyAwaitOneHundredFortySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredFortyEighthIndex = bodyAwaitOneHundredFortySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortyEighthStatement = bodyAwaitOneHundredFortyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredFortyEighthCandidate = bodyAwaitOneHundredFortyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortyEighthExpression = bodyAwaitOneHundredFortyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortyEighthCandidate)
-            ? bodyAwaitOneHundredFortyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredFortyNinthIndex = bodyAwaitOneHundredFortyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFortyNinthStatement = bodyAwaitOneHundredFortyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFortyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFortyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredFortyNinthCandidate = bodyAwaitOneHundredFortyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFortyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFortyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFortyNinthExpression = bodyAwaitOneHundredFortyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFortyNinthCandidate)
-            ? bodyAwaitOneHundredFortyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredFiftiethIndex = bodyAwaitOneHundredFortyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFortyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftiethStatement = bodyAwaitOneHundredFiftiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftiethIndex]
-            : null;
-        const bodyAwaitOneHundredFiftiethCandidate = bodyAwaitOneHundredFiftiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftiethExpression = bodyAwaitOneHundredFiftiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftiethCandidate)
-            ? bodyAwaitOneHundredFiftiethCandidate
-            : null;
-        const bodyAwaitOneHundredFiftyFirstIndex = bodyAwaitOneHundredFiftiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftyFirstStatement = bodyAwaitOneHundredFiftyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredFiftyFirstCandidate = bodyAwaitOneHundredFiftyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftyFirstExpression = bodyAwaitOneHundredFiftyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftyFirstCandidate)
-            ? bodyAwaitOneHundredFiftyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredFiftySecondIndex = bodyAwaitOneHundredFiftyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftySecondStatement = bodyAwaitOneHundredFiftySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftySecondIndex]
-            : null;
-        const bodyAwaitOneHundredFiftySecondCandidate = bodyAwaitOneHundredFiftySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftySecondExpression = bodyAwaitOneHundredFiftySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftySecondCandidate)
-            ? bodyAwaitOneHundredFiftySecondCandidate
-            : null;
-        const bodyAwaitOneHundredFiftyThirdIndex = bodyAwaitOneHundredFiftySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftyThirdStatement = bodyAwaitOneHundredFiftyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredFiftyThirdCandidate = bodyAwaitOneHundredFiftyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftyThirdExpression = bodyAwaitOneHundredFiftyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftyThirdCandidate)
-            ? bodyAwaitOneHundredFiftyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredFiftyFourthIndex = bodyAwaitOneHundredFiftyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftyFourthStatement = bodyAwaitOneHundredFiftyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredFiftyFourthCandidate = bodyAwaitOneHundredFiftyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftyFourthExpression = bodyAwaitOneHundredFiftyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftyFourthCandidate)
-            ? bodyAwaitOneHundredFiftyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredFiftyFifthIndex = bodyAwaitOneHundredFiftyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftyFifthStatement = bodyAwaitOneHundredFiftyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredFiftyFifthCandidate = bodyAwaitOneHundredFiftyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftyFifthExpression = bodyAwaitOneHundredFiftyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftyFifthCandidate)
-            ? bodyAwaitOneHundredFiftyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredFiftySixthIndex = bodyAwaitOneHundredFiftyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftySixthStatement = bodyAwaitOneHundredFiftySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftySixthIndex]
-            : null;
-        const bodyAwaitOneHundredFiftySixthCandidate = bodyAwaitOneHundredFiftySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftySixthExpression = bodyAwaitOneHundredFiftySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftySixthCandidate)
-            ? bodyAwaitOneHundredFiftySixthCandidate
-            : null;
-        const bodyAwaitOneHundredFiftySeventhIndex = bodyAwaitOneHundredFiftySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftySeventhStatement = bodyAwaitOneHundredFiftySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredFiftySeventhCandidate = bodyAwaitOneHundredFiftySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftySeventhExpression = bodyAwaitOneHundredFiftySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftySeventhCandidate)
-            ? bodyAwaitOneHundredFiftySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredFiftyEighthIndex = bodyAwaitOneHundredFiftySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftyEighthStatement = bodyAwaitOneHundredFiftyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredFiftyEighthCandidate = bodyAwaitOneHundredFiftyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftyEighthExpression = bodyAwaitOneHundredFiftyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftyEighthCandidate)
-            ? bodyAwaitOneHundredFiftyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredFiftyNinthIndex = bodyAwaitOneHundredFiftyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredFiftyNinthStatement = bodyAwaitOneHundredFiftyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredFiftyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredFiftyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredFiftyNinthCandidate = bodyAwaitOneHundredFiftyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredFiftyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredFiftyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredFiftyNinthExpression = bodyAwaitOneHundredFiftyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredFiftyNinthCandidate)
-            ? bodyAwaitOneHundredFiftyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredSixtiethIndex = bodyAwaitOneHundredFiftyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredFiftyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtiethStatement = bodyAwaitOneHundredSixtiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtiethIndex]
-            : null;
-        const bodyAwaitOneHundredSixtiethCandidate = bodyAwaitOneHundredSixtiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtiethExpression = bodyAwaitOneHundredSixtiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtiethCandidate)
-            ? bodyAwaitOneHundredSixtiethCandidate
-            : null;
-        const bodyAwaitOneHundredSixtyFirstIndex = bodyAwaitOneHundredSixtiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtyFirstStatement = bodyAwaitOneHundredSixtyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredSixtyFirstCandidate = bodyAwaitOneHundredSixtyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtyFirstExpression = bodyAwaitOneHundredSixtyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtyFirstCandidate)
-            ? bodyAwaitOneHundredSixtyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredSixtySecondIndex = bodyAwaitOneHundredSixtyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtySecondStatement = bodyAwaitOneHundredSixtySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtySecondIndex]
-            : null;
-        const bodyAwaitOneHundredSixtySecondCandidate = bodyAwaitOneHundredSixtySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtySecondExpression = bodyAwaitOneHundredSixtySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtySecondCandidate)
-            ? bodyAwaitOneHundredSixtySecondCandidate
-            : null;
-        const bodyAwaitOneHundredSixtyThirdIndex = bodyAwaitOneHundredSixtySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtyThirdStatement = bodyAwaitOneHundredSixtyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredSixtyThirdCandidate = bodyAwaitOneHundredSixtyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtyThirdExpression = bodyAwaitOneHundredSixtyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtyThirdCandidate)
-            ? bodyAwaitOneHundredSixtyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredSixtyFourthIndex = bodyAwaitOneHundredSixtyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtyFourthStatement = bodyAwaitOneHundredSixtyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredSixtyFourthCandidate = bodyAwaitOneHundredSixtyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtyFourthExpression = bodyAwaitOneHundredSixtyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtyFourthCandidate)
-            ? bodyAwaitOneHundredSixtyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredSixtyFifthIndex = bodyAwaitOneHundredSixtyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtyFifthStatement = bodyAwaitOneHundredSixtyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredSixtyFifthCandidate = bodyAwaitOneHundredSixtyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtyFifthExpression = bodyAwaitOneHundredSixtyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtyFifthCandidate)
-            ? bodyAwaitOneHundredSixtyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredSixtySixthIndex = bodyAwaitOneHundredSixtyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtySixthStatement = bodyAwaitOneHundredSixtySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtySixthIndex]
-            : null;
-        const bodyAwaitOneHundredSixtySixthCandidate = bodyAwaitOneHundredSixtySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtySixthExpression = bodyAwaitOneHundredSixtySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtySixthCandidate)
-            ? bodyAwaitOneHundredSixtySixthCandidate
-            : null;
-        const bodyAwaitOneHundredSixtySeventhIndex = bodyAwaitOneHundredSixtySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtySeventhStatement = bodyAwaitOneHundredSixtySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredSixtySeventhCandidate = bodyAwaitOneHundredSixtySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtySeventhExpression = bodyAwaitOneHundredSixtySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtySeventhCandidate)
-            ? bodyAwaitOneHundredSixtySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredSixtyEighthIndex = bodyAwaitOneHundredSixtySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtyEighthStatement = bodyAwaitOneHundredSixtyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredSixtyEighthCandidate = bodyAwaitOneHundredSixtyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtyEighthExpression = bodyAwaitOneHundredSixtyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtyEighthCandidate)
-            ? bodyAwaitOneHundredSixtyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredSixtyNinthIndex = bodyAwaitOneHundredSixtyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSixtyNinthStatement = bodyAwaitOneHundredSixtyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSixtyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSixtyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredSixtyNinthCandidate = bodyAwaitOneHundredSixtyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSixtyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSixtyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSixtyNinthExpression = bodyAwaitOneHundredSixtyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSixtyNinthCandidate)
-            ? bodyAwaitOneHundredSixtyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventiethIndex = bodyAwaitOneHundredSixtyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSixtyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventiethStatement = bodyAwaitOneHundredSeventiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventiethIndex]
-            : null;
-        const bodyAwaitOneHundredSeventiethCandidate = bodyAwaitOneHundredSeventiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventiethExpression = bodyAwaitOneHundredSeventiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventiethCandidate)
-            ? bodyAwaitOneHundredSeventiethCandidate
-            : null;
-        const bodyAwaitOneHundredSeventyFirstIndex = bodyAwaitOneHundredSeventiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventyFirstStatement = bodyAwaitOneHundredSeventyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredSeventyFirstCandidate = bodyAwaitOneHundredSeventyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventyFirstExpression = bodyAwaitOneHundredSeventyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyFirstCandidate)
-            ? bodyAwaitOneHundredSeventyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredSeventySecondIndex = bodyAwaitOneHundredSeventyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventySecondStatement = bodyAwaitOneHundredSeventySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventySecondIndex]
-            : null;
-        const bodyAwaitOneHundredSeventySecondCandidate = bodyAwaitOneHundredSeventySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventySecondExpression = bodyAwaitOneHundredSeventySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventySecondCandidate)
-            ? bodyAwaitOneHundredSeventySecondCandidate
-            : null;
-        const bodyAwaitOneHundredSeventyThirdIndex = bodyAwaitOneHundredSeventySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventyThirdStatement = bodyAwaitOneHundredSeventyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredSeventyThirdCandidate = bodyAwaitOneHundredSeventyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventyThirdExpression = bodyAwaitOneHundredSeventyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyThirdCandidate)
-            ? bodyAwaitOneHundredSeventyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredSeventyFourthIndex = bodyAwaitOneHundredSeventyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventyFourthStatement = bodyAwaitOneHundredSeventyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredSeventyFourthCandidate = bodyAwaitOneHundredSeventyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventyFourthExpression = bodyAwaitOneHundredSeventyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyFourthCandidate)
-            ? bodyAwaitOneHundredSeventyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventyFifthIndex = bodyAwaitOneHundredSeventyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventyFifthStatement = bodyAwaitOneHundredSeventyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredSeventyFifthCandidate = bodyAwaitOneHundredSeventyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventyFifthExpression = bodyAwaitOneHundredSeventyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyFifthCandidate)
-            ? bodyAwaitOneHundredSeventyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventySixthIndex = bodyAwaitOneHundredSeventyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventySixthStatement = bodyAwaitOneHundredSeventySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventySixthIndex]
-            : null;
-        const bodyAwaitOneHundredSeventySixthCandidate = bodyAwaitOneHundredSeventySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventySixthExpression = bodyAwaitOneHundredSeventySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventySixthCandidate)
-            ? bodyAwaitOneHundredSeventySixthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventySeventhIndex = bodyAwaitOneHundredSeventySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventySeventhStatement = bodyAwaitOneHundredSeventySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredSeventySeventhCandidate = bodyAwaitOneHundredSeventySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventySeventhExpression = bodyAwaitOneHundredSeventySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventySeventhCandidate)
-            ? bodyAwaitOneHundredSeventySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredSeventyEighthIndex = bodyAwaitOneHundredSeventySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventyEighthStatement = bodyAwaitOneHundredSeventyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredSeventyEighthCandidate = bodyAwaitOneHundredSeventyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventyEighthExpression = bodyAwaitOneHundredSeventyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyEighthCandidate)
-            ? bodyAwaitOneHundredSeventyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredSeventyNinthIndex = bodyAwaitOneHundredSeventyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredSeventyNinthStatement = bodyAwaitOneHundredSeventyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredSeventyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredSeventyNinthCandidate = bodyAwaitOneHundredSeventyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredSeventyNinthExpression = bodyAwaitOneHundredSeventyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyNinthCandidate)
-            ? bodyAwaitOneHundredSeventyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredEightiethIndex = bodyAwaitOneHundredSeventyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightiethStatement = bodyAwaitOneHundredEightiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightiethIndex]
-            : null;
-        const bodyAwaitOneHundredEightiethCandidate = bodyAwaitOneHundredEightiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightiethExpression = bodyAwaitOneHundredEightiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightiethCandidate)
-            ? bodyAwaitOneHundredEightiethCandidate
-            : null;
-        const bodyAwaitOneHundredEightyFirstIndex = bodyAwaitOneHundredEightiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightyFirstStatement = bodyAwaitOneHundredEightyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredEightyFirstCandidate = bodyAwaitOneHundredEightyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightyFirstExpression = bodyAwaitOneHundredEightyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightyFirstCandidate)
-            ? bodyAwaitOneHundredEightyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredEightySecondIndex = bodyAwaitOneHundredEightyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightySecondStatement = bodyAwaitOneHundredEightySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightySecondIndex]
-            : null;
-        const bodyAwaitOneHundredEightySecondCandidate = bodyAwaitOneHundredEightySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightySecondExpression = bodyAwaitOneHundredEightySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightySecondCandidate)
-            ? bodyAwaitOneHundredEightySecondCandidate
-            : null;
-        const bodyAwaitOneHundredEightyThirdIndex = bodyAwaitOneHundredEightySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightyThirdStatement = bodyAwaitOneHundredEightyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredEightyThirdCandidate = bodyAwaitOneHundredEightyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightyThirdExpression = bodyAwaitOneHundredEightyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightyThirdCandidate)
-            ? bodyAwaitOneHundredEightyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredEightyFourthIndex = bodyAwaitOneHundredEightyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightyFourthStatement = bodyAwaitOneHundredEightyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredEightyFourthCandidate = bodyAwaitOneHundredEightyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightyFourthExpression = bodyAwaitOneHundredEightyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightyFourthCandidate)
-            ? bodyAwaitOneHundredEightyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredEightyFifthIndex = bodyAwaitOneHundredEightyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightyFifthStatement = bodyAwaitOneHundredEightyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredEightyFifthCandidate = bodyAwaitOneHundredEightyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightyFifthExpression = bodyAwaitOneHundredEightyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightyFifthCandidate)
-            ? bodyAwaitOneHundredEightyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredEightySixthIndex = bodyAwaitOneHundredEightyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightySixthStatement = bodyAwaitOneHundredEightySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightySixthIndex]
-            : null;
-        const bodyAwaitOneHundredEightySixthCandidate = bodyAwaitOneHundredEightySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightySixthExpression = bodyAwaitOneHundredEightySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightySixthCandidate)
-            ? bodyAwaitOneHundredEightySixthCandidate
-            : null;
-        const bodyAwaitOneHundredEightySeventhIndex = bodyAwaitOneHundredEightySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightySeventhStatement = bodyAwaitOneHundredEightySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredEightySeventhCandidate = bodyAwaitOneHundredEightySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightySeventhExpression = bodyAwaitOneHundredEightySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightySeventhCandidate)
-            ? bodyAwaitOneHundredEightySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredEightyEighthIndex = bodyAwaitOneHundredEightySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightyEighthStatement = bodyAwaitOneHundredEightyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredEightyEighthCandidate = bodyAwaitOneHundredEightyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightyEighthExpression = bodyAwaitOneHundredEightyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightyEighthCandidate)
-            ? bodyAwaitOneHundredEightyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredEightyNinthIndex = bodyAwaitOneHundredEightyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredEightyNinthStatement = bodyAwaitOneHundredEightyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredEightyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredEightyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredEightyNinthCandidate = bodyAwaitOneHundredEightyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredEightyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredEightyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredEightyNinthExpression = bodyAwaitOneHundredEightyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredEightyNinthCandidate)
-            ? bodyAwaitOneHundredEightyNinthCandidate
-            : null;
-        const bodyAwaitOneHundredNinetiethIndex = bodyAwaitOneHundredEightyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredEightyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetiethStatement = bodyAwaitOneHundredNinetiethIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetiethIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetiethIndex]
-            : null;
-        const bodyAwaitOneHundredNinetiethCandidate = bodyAwaitOneHundredNinetiethStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetiethStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetiethStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetiethExpression = bodyAwaitOneHundredNinetiethCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetiethCandidate)
-            ? bodyAwaitOneHundredNinetiethCandidate
-            : null;
-        const bodyAwaitOneHundredNinetyFirstIndex = bodyAwaitOneHundredNinetiethExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetiethIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetyFirstStatement = bodyAwaitOneHundredNinetyFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetyFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetyFirstIndex]
-            : null;
-        const bodyAwaitOneHundredNinetyFirstCandidate = bodyAwaitOneHundredNinetyFirstStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetyFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetyFirstStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetyFirstExpression = bodyAwaitOneHundredNinetyFirstCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetyFirstCandidate)
-            ? bodyAwaitOneHundredNinetyFirstCandidate
-            : null;
-        const bodyAwaitOneHundredNinetySecondIndex = bodyAwaitOneHundredNinetyFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetyFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetySecondStatement = bodyAwaitOneHundredNinetySecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetySecondIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetySecondIndex]
-            : null;
-        const bodyAwaitOneHundredNinetySecondCandidate = bodyAwaitOneHundredNinetySecondStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetySecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetySecondStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetySecondExpression = bodyAwaitOneHundredNinetySecondCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetySecondCandidate)
-            ? bodyAwaitOneHundredNinetySecondCandidate
-            : null;
-        const bodyAwaitOneHundredNinetyThirdIndex = bodyAwaitOneHundredNinetySecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetySecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetyThirdStatement = bodyAwaitOneHundredNinetyThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetyThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetyThirdIndex]
-            : null;
-        const bodyAwaitOneHundredNinetyThirdCandidate = bodyAwaitOneHundredNinetyThirdStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetyThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetyThirdStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetyThirdExpression = bodyAwaitOneHundredNinetyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetyThirdCandidate)
-            ? bodyAwaitOneHundredNinetyThirdCandidate
-            : null;
-        const bodyAwaitOneHundredNinetyFourthIndex = bodyAwaitOneHundredNinetyThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetyThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetyFourthStatement = bodyAwaitOneHundredNinetyFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetyFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetyFourthIndex]
-            : null;
-        const bodyAwaitOneHundredNinetyFourthCandidate = bodyAwaitOneHundredNinetyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetyFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetyFourthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetyFourthExpression = bodyAwaitOneHundredNinetyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetyFourthCandidate)
-            ? bodyAwaitOneHundredNinetyFourthCandidate
-            : null;
-        const bodyAwaitOneHundredNinetyFifthIndex = bodyAwaitOneHundredNinetyFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetyFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetyFifthStatement = bodyAwaitOneHundredNinetyFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetyFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetyFifthIndex]
-            : null;
-        const bodyAwaitOneHundredNinetyFifthCandidate = bodyAwaitOneHundredNinetyFifthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetyFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetyFifthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetyFifthExpression = bodyAwaitOneHundredNinetyFifthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetyFifthCandidate)
-            ? bodyAwaitOneHundredNinetyFifthCandidate
-            : null;
-        const bodyAwaitOneHundredNinetySixthIndex = bodyAwaitOneHundredNinetyFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetyFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetySixthStatement = bodyAwaitOneHundredNinetySixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetySixthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetySixthIndex]
-            : null;
-        const bodyAwaitOneHundredNinetySixthCandidate = bodyAwaitOneHundredNinetySixthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetySixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetySixthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetySixthExpression = bodyAwaitOneHundredNinetySixthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetySixthCandidate)
-            ? bodyAwaitOneHundredNinetySixthCandidate
-            : null;
-        const bodyAwaitOneHundredNinetySeventhIndex = bodyAwaitOneHundredNinetySixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetySixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetySeventhStatement = bodyAwaitOneHundredNinetySeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetySeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetySeventhIndex]
-            : null;
-        const bodyAwaitOneHundredNinetySeventhCandidate = bodyAwaitOneHundredNinetySeventhStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetySeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetySeventhStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetySeventhExpression = bodyAwaitOneHundredNinetySeventhCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetySeventhCandidate)
-            ? bodyAwaitOneHundredNinetySeventhCandidate
-            : null;
-        const bodyAwaitOneHundredNinetyEighthIndex = bodyAwaitOneHundredNinetySeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetySeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetyEighthStatement = bodyAwaitOneHundredNinetyEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetyEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetyEighthIndex]
-            : null;
-        const bodyAwaitOneHundredNinetyEighthCandidate = bodyAwaitOneHundredNinetyEighthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetyEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetyEighthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetyEighthExpression = bodyAwaitOneHundredNinetyEighthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetyEighthCandidate)
-            ? bodyAwaitOneHundredNinetyEighthCandidate
-            : null;
-        const bodyAwaitOneHundredNinetyNinthIndex = bodyAwaitOneHundredNinetyEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetyEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitOneHundredNinetyNinthStatement = bodyAwaitOneHundredNinetyNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredNinetyNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitOneHundredNinetyNinthIndex]
-            : null;
-        const bodyAwaitOneHundredNinetyNinthCandidate = bodyAwaitOneHundredNinetyNinthStatement && ts.isExpressionStatement(bodyAwaitOneHundredNinetyNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitOneHundredNinetyNinthStatement.expression)
-            : null;
-        const bodyAwaitOneHundredNinetyNinthExpression = bodyAwaitOneHundredNinetyNinthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredNinetyNinthCandidate)
-            ? bodyAwaitOneHundredNinetyNinthCandidate
-            : null;
-        const bodyAwaitTwoHundredthIndex = bodyAwaitOneHundredNinetyNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredNinetyNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredthStatement = bodyAwaitTwoHundredthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredthIndex]
-            : null;
-        const bodyAwaitTwoHundredthCandidate = bodyAwaitTwoHundredthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredthExpression = bodyAwaitTwoHundredthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredthCandidate)
-            ? bodyAwaitTwoHundredthCandidate
-            : null;
-        const bodyAwaitTwoHundredFirstIndex = bodyAwaitTwoHundredthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredFirstStatement = bodyAwaitTwoHundredFirstIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredFirstIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredFirstIndex]
-            : null;
-        const bodyAwaitTwoHundredFirstCandidate = bodyAwaitTwoHundredFirstStatement && ts.isExpressionStatement(bodyAwaitTwoHundredFirstStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredFirstStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredFirstExpression = bodyAwaitTwoHundredFirstCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredFirstCandidate)
-            ? bodyAwaitTwoHundredFirstCandidate
-            : null;
-        const bodyAwaitTwoHundredSecondIndex = bodyAwaitTwoHundredFirstExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredFirstIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredSecondStatement = bodyAwaitTwoHundredSecondIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredSecondIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredSecondIndex]
-            : null;
-        const bodyAwaitTwoHundredSecondCandidate = bodyAwaitTwoHundredSecondStatement && ts.isExpressionStatement(bodyAwaitTwoHundredSecondStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredSecondStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredSecondExpression = bodyAwaitTwoHundredSecondCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredSecondCandidate)
-            ? bodyAwaitTwoHundredSecondCandidate
-            : null;
-        const bodyAwaitTwoHundredThirdIndex = bodyAwaitTwoHundredSecondExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredSecondIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredThirdStatement = bodyAwaitTwoHundredThirdIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredThirdIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredThirdIndex]
-            : null;
-        const bodyAwaitTwoHundredThirdCandidate = bodyAwaitTwoHundredThirdStatement && ts.isExpressionStatement(bodyAwaitTwoHundredThirdStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredThirdStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredThirdExpression = bodyAwaitTwoHundredThirdCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredThirdCandidate)
-            ? bodyAwaitTwoHundredThirdCandidate
-            : null;
-        const bodyAwaitTwoHundredFourthIndex = bodyAwaitTwoHundredThirdExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredThirdIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredFourthStatement = bodyAwaitTwoHundredFourthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredFourthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredFourthIndex]
-            : null;
-        const bodyAwaitTwoHundredFourthCandidate = bodyAwaitTwoHundredFourthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredFourthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredFourthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredFourthExpression = bodyAwaitTwoHundredFourthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredFourthCandidate)
-            ? bodyAwaitTwoHundredFourthCandidate
-            : null;
-        const bodyAwaitTwoHundredFifthIndex = bodyAwaitTwoHundredFourthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredFourthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredFifthStatement = bodyAwaitTwoHundredFifthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredFifthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredFifthIndex]
-            : null;
-        const bodyAwaitTwoHundredFifthCandidate = bodyAwaitTwoHundredFifthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredFifthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredFifthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredFifthExpression = bodyAwaitTwoHundredFifthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredFifthCandidate)
-            ? bodyAwaitTwoHundredFifthCandidate
-            : null;
-        const bodyAwaitTwoHundredSixthIndex = bodyAwaitTwoHundredFifthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredFifthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredSixthStatement = bodyAwaitTwoHundredSixthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredSixthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredSixthIndex]
-            : null;
-        const bodyAwaitTwoHundredSixthCandidate = bodyAwaitTwoHundredSixthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredSixthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredSixthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredSixthExpression = bodyAwaitTwoHundredSixthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredSixthCandidate)
-            ? bodyAwaitTwoHundredSixthCandidate
-            : null;
-        const bodyAwaitTwoHundredSeventhIndex = bodyAwaitTwoHundredSixthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredSixthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredSeventhStatement = bodyAwaitTwoHundredSeventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredSeventhIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredSeventhIndex]
-            : null;
-        const bodyAwaitTwoHundredSeventhCandidate = bodyAwaitTwoHundredSeventhStatement && ts.isExpressionStatement(bodyAwaitTwoHundredSeventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredSeventhStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredSeventhExpression = bodyAwaitTwoHundredSeventhCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredSeventhCandidate)
-            ? bodyAwaitTwoHundredSeventhCandidate
-            : null;
-        const bodyAwaitTwoHundredEighthIndex = bodyAwaitTwoHundredSeventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredSeventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredEighthStatement = bodyAwaitTwoHundredEighthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredEighthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredEighthIndex]
-            : null;
-        const bodyAwaitTwoHundredEighthCandidate = bodyAwaitTwoHundredEighthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredEighthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredEighthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredEighthExpression = bodyAwaitTwoHundredEighthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredEighthCandidate)
-            ? bodyAwaitTwoHundredEighthCandidate
-            : null;
-        const bodyAwaitTwoHundredNinthIndex = bodyAwaitTwoHundredEighthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredEighthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredNinthStatement = bodyAwaitTwoHundredNinthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredNinthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredNinthIndex]
-            : null;
-        const bodyAwaitTwoHundredNinthCandidate = bodyAwaitTwoHundredNinthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredNinthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredNinthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredNinthExpression = bodyAwaitTwoHundredNinthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredNinthCandidate)
-            ? bodyAwaitTwoHundredNinthCandidate
-            : null;
-        const bodyAwaitTwoHundredTenthIndex = bodyAwaitTwoHundredNinthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredNinthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredTenthStatement = bodyAwaitTwoHundredTenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredTenthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredTenthIndex]
-            : null;
-        const bodyAwaitTwoHundredTenthCandidate = bodyAwaitTwoHundredTenthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredTenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredTenthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredTenthExpression = bodyAwaitTwoHundredTenthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredTenthCandidate)
-            ? bodyAwaitTwoHundredTenthCandidate
-            : null;
-        const bodyAwaitTwoHundredEleventhIndex = bodyAwaitTwoHundredTenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredTenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredEleventhStatement = bodyAwaitTwoHundredEleventhIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredEleventhIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredEleventhIndex]
-            : null;
-        const bodyAwaitTwoHundredEleventhCandidate = bodyAwaitTwoHundredEleventhStatement && ts.isExpressionStatement(bodyAwaitTwoHundredEleventhStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredEleventhStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredEleventhExpression = bodyAwaitTwoHundredEleventhCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredEleventhCandidate)
-            ? bodyAwaitTwoHundredEleventhCandidate
-            : null;
-        const bodyAwaitTwoHundredTwelfthIndex = bodyAwaitTwoHundredEleventhExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredEleventhIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredTwelfthStatement = bodyAwaitTwoHundredTwelfthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredTwelfthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredTwelfthIndex]
-            : null;
-        const bodyAwaitTwoHundredTwelfthCandidate = bodyAwaitTwoHundredTwelfthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredTwelfthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredTwelfthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredTwelfthExpression = bodyAwaitTwoHundredTwelfthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredTwelfthCandidate)
-            ? bodyAwaitTwoHundredTwelfthCandidate
-            : null;
-        const bodyAwaitTwoHundredThirteenthIndex = bodyAwaitTwoHundredTwelfthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredTwelfthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredThirteenthStatement = bodyAwaitTwoHundredThirteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredThirteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredThirteenthIndex]
-            : null;
-        const bodyAwaitTwoHundredThirteenthCandidate = bodyAwaitTwoHundredThirteenthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredThirteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredThirteenthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredThirteenthExpression = bodyAwaitTwoHundredThirteenthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredThirteenthCandidate)
-            ? bodyAwaitTwoHundredThirteenthCandidate
-            : null;
-        const bodyAwaitTwoHundredFourteenthIndex = bodyAwaitTwoHundredThirteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredThirteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredFourteenthStatement = bodyAwaitTwoHundredFourteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredFourteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredFourteenthIndex]
-            : null;
-        const bodyAwaitTwoHundredFourteenthCandidate = bodyAwaitTwoHundredFourteenthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredFourteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredFourteenthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredFourteenthExpression = bodyAwaitTwoHundredFourteenthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredFourteenthCandidate)
-            ? bodyAwaitTwoHundredFourteenthCandidate
-            : null;
-        const bodyAwaitTwoHundredFifteenthIndex = bodyAwaitTwoHundredFourteenthExpression && directRoute
-            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitTwoHundredFourteenthIndex &&
-                ts.isExpressionStatement(statement) &&
-                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
-            : -1;
-        const bodyAwaitTwoHundredFifteenthStatement = bodyAwaitTwoHundredFifteenthIndex >= 0 &&
-            ts.isExpressionStatement(directRoute!.statements[bodyAwaitTwoHundredFifteenthIndex]!)
-            ? directRoute!.statements[bodyAwaitTwoHundredFifteenthIndex]
-            : null;
-        const bodyAwaitTwoHundredFifteenthCandidate = bodyAwaitTwoHundredFifteenthStatement && ts.isExpressionStatement(bodyAwaitTwoHundredFifteenthStatement)
-            ? this.unwrapTransparentExpression(bodyAwaitTwoHundredFifteenthStatement.expression)
-            : null;
-        const bodyAwaitTwoHundredFifteenthExpression = bodyAwaitTwoHundredFifteenthCandidate && ts.isAwaitExpression(bodyAwaitTwoHundredFifteenthCandidate)
-            ? bodyAwaitTwoHundredFifteenthCandidate
-            : null;
+        const findBodyAwait = (afterIndex: number, previous: ts.AwaitExpression | null): { index: number; expression: ts.AwaitExpression } | null => {
+            if (!previous || !directRoute) return null;
+            const index = directRoute.statements.findIndex((statement, index) => index > afterIndex &&
+                ts.isExpressionStatement(statement) &&
+                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)));
+            if (index < 0) return null;
+            const statement = directRoute.statements[index];
+            if (!ts.isExpressionStatement(statement)) return null;
+            const candidate = this.unwrapTransparentExpression(statement.expression);
+            return ts.isAwaitExpression(candidate) ? { index, expression: candidate } : null;
+        };
+        const bodyAwaitSecondMatch = findBodyAwait(0, bodyAwaitExpression);
+        const bodyAwaitSecondIndex = bodyAwaitSecondMatch?.index ?? -1;
+        const bodyAwaitSecondExpression = bodyAwaitSecondMatch?.expression ?? null;
+        const bodyAwaitThirdMatch = findBodyAwait(bodyAwaitSecondIndex, bodyAwaitSecondExpression);
+        const bodyAwaitThirdIndex = bodyAwaitThirdMatch?.index ?? -1;
+        const bodyAwaitThirdExpression = bodyAwaitThirdMatch?.expression ?? null;
+        const bodyAwaitFourthMatch = findBodyAwait(bodyAwaitThirdIndex, bodyAwaitThirdExpression);
+        const bodyAwaitFourthIndex = bodyAwaitFourthMatch?.index ?? -1;
+        const bodyAwaitFourthExpression = bodyAwaitFourthMatch?.expression ?? null;
+        const bodyAwaitFifthMatch = findBodyAwait(bodyAwaitFourthIndex, bodyAwaitFourthExpression);
+        const bodyAwaitFifthIndex = bodyAwaitFifthMatch?.index ?? -1;
+        const bodyAwaitFifthExpression = bodyAwaitFifthMatch?.expression ?? null;
+        const bodyAwaitSixthMatch = findBodyAwait(bodyAwaitFifthIndex, bodyAwaitFifthExpression);
+        const bodyAwaitSixthIndex = bodyAwaitSixthMatch?.index ?? -1;
+        const bodyAwaitSixthExpression = bodyAwaitSixthMatch?.expression ?? null;
+        const bodyAwaitSeventhMatch = findBodyAwait(bodyAwaitSixthIndex, bodyAwaitSixthExpression);
+        const bodyAwaitSeventhIndex = bodyAwaitSeventhMatch?.index ?? -1;
+        const bodyAwaitSeventhExpression = bodyAwaitSeventhMatch?.expression ?? null;
+        const bodyAwaitEighthMatch = findBodyAwait(bodyAwaitSeventhIndex, bodyAwaitSeventhExpression);
+        const bodyAwaitEighthIndex = bodyAwaitEighthMatch?.index ?? -1;
+        const bodyAwaitEighthExpression = bodyAwaitEighthMatch?.expression ?? null;
+        const bodyAwaitNinthMatch = findBodyAwait(bodyAwaitEighthIndex, bodyAwaitEighthExpression);
+        const bodyAwaitNinthIndex = bodyAwaitNinthMatch?.index ?? -1;
+        const bodyAwaitNinthExpression = bodyAwaitNinthMatch?.expression ?? null;
+        const bodyAwaitTenthMatch = findBodyAwait(bodyAwaitNinthIndex, bodyAwaitNinthExpression);
+        const bodyAwaitTenthIndex = bodyAwaitTenthMatch?.index ?? -1;
+        const bodyAwaitTenthExpression = bodyAwaitTenthMatch?.expression ?? null;
+        const bodyAwaitEleventhMatch = findBodyAwait(bodyAwaitTenthIndex, bodyAwaitTenthExpression);
+        const bodyAwaitEleventhIndex = bodyAwaitEleventhMatch?.index ?? -1;
+        const bodyAwaitEleventhExpression = bodyAwaitEleventhMatch?.expression ?? null;
+        const bodyAwaitTwelfthMatch = findBodyAwait(bodyAwaitEleventhIndex, bodyAwaitEleventhExpression);
+        const bodyAwaitTwelfthIndex = bodyAwaitTwelfthMatch?.index ?? -1;
+        const bodyAwaitTwelfthExpression = bodyAwaitTwelfthMatch?.expression ?? null;
+        const bodyAwaitThirteenthMatch = findBodyAwait(bodyAwaitTwelfthIndex, bodyAwaitTwelfthExpression);
+        const bodyAwaitThirteenthIndex = bodyAwaitThirteenthMatch?.index ?? -1;
+        const bodyAwaitThirteenthExpression = bodyAwaitThirteenthMatch?.expression ?? null;
+        const bodyAwaitFourteenthMatch = findBodyAwait(bodyAwaitThirteenthIndex, bodyAwaitThirteenthExpression);
+        const bodyAwaitFourteenthIndex = bodyAwaitFourteenthMatch?.index ?? -1;
+        const bodyAwaitFourteenthExpression = bodyAwaitFourteenthMatch?.expression ?? null;
+        const bodyAwaitFifteenthMatch = findBodyAwait(bodyAwaitFourteenthIndex, bodyAwaitFourteenthExpression);
+        const bodyAwaitFifteenthIndex = bodyAwaitFifteenthMatch?.index ?? -1;
+        const bodyAwaitFifteenthExpression = bodyAwaitFifteenthMatch?.expression ?? null;
+        const bodyAwaitSixteenthMatch = findBodyAwait(bodyAwaitFifteenthIndex, bodyAwaitFifteenthExpression);
+        const bodyAwaitSixteenthIndex = bodyAwaitSixteenthMatch?.index ?? -1;
+        const bodyAwaitSixteenthExpression = bodyAwaitSixteenthMatch?.expression ?? null;
+        const bodyAwaitSeventeenthMatch = findBodyAwait(bodyAwaitSixteenthIndex, bodyAwaitSixteenthExpression);
+        const bodyAwaitSeventeenthIndex = bodyAwaitSeventeenthMatch?.index ?? -1;
+        const bodyAwaitSeventeenthExpression = bodyAwaitSeventeenthMatch?.expression ?? null;
+        const bodyAwaitEighteenthMatch = findBodyAwait(bodyAwaitSeventeenthIndex, bodyAwaitSeventeenthExpression);
+        const bodyAwaitEighteenthIndex = bodyAwaitEighteenthMatch?.index ?? -1;
+        const bodyAwaitEighteenthExpression = bodyAwaitEighteenthMatch?.expression ?? null;
+        const bodyAwaitNineteenthMatch = findBodyAwait(bodyAwaitEighteenthIndex, bodyAwaitEighteenthExpression);
+        const bodyAwaitNineteenthIndex = bodyAwaitNineteenthMatch?.index ?? -1;
+        const bodyAwaitNineteenthExpression = bodyAwaitNineteenthMatch?.expression ?? null;
+        const bodyAwaitTwentiethMatch = findBodyAwait(bodyAwaitNineteenthIndex, bodyAwaitNineteenthExpression);
+        const bodyAwaitTwentiethIndex = bodyAwaitTwentiethMatch?.index ?? -1;
+        const bodyAwaitTwentiethExpression = bodyAwaitTwentiethMatch?.expression ?? null;
+        const bodyAwaitTwentyFirstMatch = findBodyAwait(bodyAwaitTwentiethIndex, bodyAwaitTwentiethExpression);
+        const bodyAwaitTwentyFirstIndex = bodyAwaitTwentyFirstMatch?.index ?? -1;
+        const bodyAwaitTwentyFirstExpression = bodyAwaitTwentyFirstMatch?.expression ?? null;
+        const bodyAwaitTwentySecondMatch = findBodyAwait(bodyAwaitTwentyFirstIndex, bodyAwaitTwentyFirstExpression);
+        const bodyAwaitTwentySecondIndex = bodyAwaitTwentySecondMatch?.index ?? -1;
+        const bodyAwaitTwentySecondExpression = bodyAwaitTwentySecondMatch?.expression ?? null;
+        const bodyAwaitTwentyThirdMatch = findBodyAwait(bodyAwaitTwentySecondIndex, bodyAwaitTwentySecondExpression);
+        const bodyAwaitTwentyThirdIndex = bodyAwaitTwentyThirdMatch?.index ?? -1;
+        const bodyAwaitTwentyThirdExpression = bodyAwaitTwentyThirdMatch?.expression ?? null;
+        const bodyAwaitTwentyFourthMatch = findBodyAwait(bodyAwaitTwentyThirdIndex, bodyAwaitTwentyThirdExpression);
+        const bodyAwaitTwentyFourthIndex = bodyAwaitTwentyFourthMatch?.index ?? -1;
+        const bodyAwaitTwentyFourthExpression = bodyAwaitTwentyFourthMatch?.expression ?? null;
+        const bodyAwaitTwentyFifthMatch = findBodyAwait(bodyAwaitTwentyFourthIndex, bodyAwaitTwentyFourthExpression);
+        const bodyAwaitTwentyFifthIndex = bodyAwaitTwentyFifthMatch?.index ?? -1;
+        const bodyAwaitTwentyFifthExpression = bodyAwaitTwentyFifthMatch?.expression ?? null;
+        const bodyAwaitTwentySixthMatch = findBodyAwait(bodyAwaitTwentyFifthIndex, bodyAwaitTwentyFifthExpression);
+        const bodyAwaitTwentySixthIndex = bodyAwaitTwentySixthMatch?.index ?? -1;
+        const bodyAwaitTwentySixthExpression = bodyAwaitTwentySixthMatch?.expression ?? null;
+        const bodyAwaitTwentySeventhMatch = findBodyAwait(bodyAwaitTwentySixthIndex, bodyAwaitTwentySixthExpression);
+        const bodyAwaitTwentySeventhIndex = bodyAwaitTwentySeventhMatch?.index ?? -1;
+        const bodyAwaitTwentySeventhExpression = bodyAwaitTwentySeventhMatch?.expression ?? null;
+        const bodyAwaitTwentyEighthMatch = findBodyAwait(bodyAwaitTwentySeventhIndex, bodyAwaitTwentySeventhExpression);
+        const bodyAwaitTwentyEighthIndex = bodyAwaitTwentyEighthMatch?.index ?? -1;
+        const bodyAwaitTwentyEighthExpression = bodyAwaitTwentyEighthMatch?.expression ?? null;
+        const bodyAwaitTwentyNinthMatch = findBodyAwait(bodyAwaitTwentyEighthIndex, bodyAwaitTwentyEighthExpression);
+        const bodyAwaitTwentyNinthIndex = bodyAwaitTwentyNinthMatch?.index ?? -1;
+        const bodyAwaitTwentyNinthExpression = bodyAwaitTwentyNinthMatch?.expression ?? null;
+        const bodyAwaitThirtiethMatch = findBodyAwait(bodyAwaitTwentyNinthIndex, bodyAwaitTwentyNinthExpression);
+        const bodyAwaitThirtiethIndex = bodyAwaitThirtiethMatch?.index ?? -1;
+        const bodyAwaitThirtiethExpression = bodyAwaitThirtiethMatch?.expression ?? null;
+        const bodyAwaitThirtyFirstMatch = findBodyAwait(bodyAwaitThirtiethIndex, bodyAwaitThirtiethExpression);
+        const bodyAwaitThirtyFirstIndex = bodyAwaitThirtyFirstMatch?.index ?? -1;
+        const bodyAwaitThirtyFirstExpression = bodyAwaitThirtyFirstMatch?.expression ?? null;
+        const bodyAwaitThirtySecondMatch = findBodyAwait(bodyAwaitThirtyFirstIndex, bodyAwaitThirtyFirstExpression);
+        const bodyAwaitThirtySecondIndex = bodyAwaitThirtySecondMatch?.index ?? -1;
+        const bodyAwaitThirtySecondExpression = bodyAwaitThirtySecondMatch?.expression ?? null;
+        const bodyAwaitThirtyThirdMatch = findBodyAwait(bodyAwaitThirtySecondIndex, bodyAwaitThirtySecondExpression);
+        const bodyAwaitThirtyThirdIndex = bodyAwaitThirtyThirdMatch?.index ?? -1;
+        const bodyAwaitThirtyThirdExpression = bodyAwaitThirtyThirdMatch?.expression ?? null;
+        const bodyAwaitThirtyFourthMatch = findBodyAwait(bodyAwaitThirtyThirdIndex, bodyAwaitThirtyThirdExpression);
+        const bodyAwaitThirtyFourthIndex = bodyAwaitThirtyFourthMatch?.index ?? -1;
+        const bodyAwaitThirtyFourthExpression = bodyAwaitThirtyFourthMatch?.expression ?? null;
+        const bodyAwaitThirtyFifthMatch = findBodyAwait(bodyAwaitThirtyFourthIndex, bodyAwaitThirtyFourthExpression);
+        const bodyAwaitThirtyFifthIndex = bodyAwaitThirtyFifthMatch?.index ?? -1;
+        const bodyAwaitThirtyFifthExpression = bodyAwaitThirtyFifthMatch?.expression ?? null;
+        const bodyAwaitThirtySixthMatch = findBodyAwait(bodyAwaitThirtyFifthIndex, bodyAwaitThirtyFifthExpression);
+        const bodyAwaitThirtySixthIndex = bodyAwaitThirtySixthMatch?.index ?? -1;
+        const bodyAwaitThirtySixthExpression = bodyAwaitThirtySixthMatch?.expression ?? null;
+        const bodyAwaitThirtySeventhMatch = findBodyAwait(bodyAwaitThirtySixthIndex, bodyAwaitThirtySixthExpression);
+        const bodyAwaitThirtySeventhIndex = bodyAwaitThirtySeventhMatch?.index ?? -1;
+        const bodyAwaitThirtySeventhExpression = bodyAwaitThirtySeventhMatch?.expression ?? null;
+        const bodyAwaitThirtyEighthMatch = findBodyAwait(bodyAwaitThirtySeventhIndex, bodyAwaitThirtySeventhExpression);
+        const bodyAwaitThirtyEighthIndex = bodyAwaitThirtyEighthMatch?.index ?? -1;
+        const bodyAwaitThirtyEighthExpression = bodyAwaitThirtyEighthMatch?.expression ?? null;
+        const bodyAwaitThirtyNinthMatch = findBodyAwait(bodyAwaitThirtyEighthIndex, bodyAwaitThirtyEighthExpression);
+        const bodyAwaitThirtyNinthIndex = bodyAwaitThirtyNinthMatch?.index ?? -1;
+        const bodyAwaitThirtyNinthExpression = bodyAwaitThirtyNinthMatch?.expression ?? null;
+        const bodyAwaitFortiethMatch = findBodyAwait(bodyAwaitThirtyNinthIndex, bodyAwaitThirtyNinthExpression);
+        const bodyAwaitFortiethIndex = bodyAwaitFortiethMatch?.index ?? -1;
+        const bodyAwaitFortiethExpression = bodyAwaitFortiethMatch?.expression ?? null;
+        const bodyAwaitFortyFirstMatch = findBodyAwait(bodyAwaitFortiethIndex, bodyAwaitFortiethExpression);
+        const bodyAwaitFortyFirstIndex = bodyAwaitFortyFirstMatch?.index ?? -1;
+        const bodyAwaitFortyFirstExpression = bodyAwaitFortyFirstMatch?.expression ?? null;
+        const bodyAwaitFortySecondMatch = findBodyAwait(bodyAwaitFortyFirstIndex, bodyAwaitFortyFirstExpression);
+        const bodyAwaitFortySecondIndex = bodyAwaitFortySecondMatch?.index ?? -1;
+        const bodyAwaitFortySecondExpression = bodyAwaitFortySecondMatch?.expression ?? null;
+        const bodyAwaitFortyThirdMatch = findBodyAwait(bodyAwaitFortySecondIndex, bodyAwaitFortySecondExpression);
+        const bodyAwaitFortyThirdIndex = bodyAwaitFortyThirdMatch?.index ?? -1;
+        const bodyAwaitFortyThirdExpression = bodyAwaitFortyThirdMatch?.expression ?? null;
+        const bodyAwaitFortyFourthMatch = findBodyAwait(bodyAwaitFortyThirdIndex, bodyAwaitFortyThirdExpression);
+        const bodyAwaitFortyFourthIndex = bodyAwaitFortyFourthMatch?.index ?? -1;
+        const bodyAwaitFortyFourthExpression = bodyAwaitFortyFourthMatch?.expression ?? null;
+        const bodyAwaitFortyFifthMatch = findBodyAwait(bodyAwaitFortyFourthIndex, bodyAwaitFortyFourthExpression);
+        const bodyAwaitFortyFifthIndex = bodyAwaitFortyFifthMatch?.index ?? -1;
+        const bodyAwaitFortyFifthExpression = bodyAwaitFortyFifthMatch?.expression ?? null;
+        const bodyAwaitFortySixthMatch = findBodyAwait(bodyAwaitFortyFifthIndex, bodyAwaitFortyFifthExpression);
+        const bodyAwaitFortySixthIndex = bodyAwaitFortySixthMatch?.index ?? -1;
+        const bodyAwaitFortySixthExpression = bodyAwaitFortySixthMatch?.expression ?? null;
+        const bodyAwaitFortySeventhMatch = findBodyAwait(bodyAwaitFortySixthIndex, bodyAwaitFortySixthExpression);
+        const bodyAwaitFortySeventhIndex = bodyAwaitFortySeventhMatch?.index ?? -1;
+        const bodyAwaitFortySeventhExpression = bodyAwaitFortySeventhMatch?.expression ?? null;
+        const bodyAwaitFortyEighthMatch = findBodyAwait(bodyAwaitFortySeventhIndex, bodyAwaitFortySeventhExpression);
+        const bodyAwaitFortyEighthIndex = bodyAwaitFortyEighthMatch?.index ?? -1;
+        const bodyAwaitFortyEighthExpression = bodyAwaitFortyEighthMatch?.expression ?? null;
+        const bodyAwaitFortyNinthMatch = findBodyAwait(bodyAwaitFortyEighthIndex, bodyAwaitFortyEighthExpression);
+        const bodyAwaitFortyNinthIndex = bodyAwaitFortyNinthMatch?.index ?? -1;
+        const bodyAwaitFortyNinthExpression = bodyAwaitFortyNinthMatch?.expression ?? null;
+        const bodyAwaitFiftiethMatch = findBodyAwait(bodyAwaitFortyNinthIndex, bodyAwaitFortyNinthExpression);
+        const bodyAwaitFiftiethIndex = bodyAwaitFiftiethMatch?.index ?? -1;
+        const bodyAwaitFiftiethExpression = bodyAwaitFiftiethMatch?.expression ?? null;
+        const bodyAwaitFiftyFirstMatch = findBodyAwait(bodyAwaitFiftiethIndex, bodyAwaitFiftiethExpression);
+        const bodyAwaitFiftyFirstIndex = bodyAwaitFiftyFirstMatch?.index ?? -1;
+        const bodyAwaitFiftyFirstExpression = bodyAwaitFiftyFirstMatch?.expression ?? null;
+        const bodyAwaitFiftySecondMatch = findBodyAwait(bodyAwaitFiftyFirstIndex, bodyAwaitFiftyFirstExpression);
+        const bodyAwaitFiftySecondIndex = bodyAwaitFiftySecondMatch?.index ?? -1;
+        const bodyAwaitFiftySecondExpression = bodyAwaitFiftySecondMatch?.expression ?? null;
+        const bodyAwaitFiftyThirdMatch = findBodyAwait(bodyAwaitFiftySecondIndex, bodyAwaitFiftySecondExpression);
+        const bodyAwaitFiftyThirdIndex = bodyAwaitFiftyThirdMatch?.index ?? -1;
+        const bodyAwaitFiftyThirdExpression = bodyAwaitFiftyThirdMatch?.expression ?? null;
+        const bodyAwaitFiftyFourthMatch = findBodyAwait(bodyAwaitFiftyThirdIndex, bodyAwaitFiftyThirdExpression);
+        const bodyAwaitFiftyFourthIndex = bodyAwaitFiftyFourthMatch?.index ?? -1;
+        const bodyAwaitFiftyFourthExpression = bodyAwaitFiftyFourthMatch?.expression ?? null;
+        const bodyAwaitFiftyFifthMatch = findBodyAwait(bodyAwaitFiftyFourthIndex, bodyAwaitFiftyFourthExpression);
+        const bodyAwaitFiftyFifthIndex = bodyAwaitFiftyFifthMatch?.index ?? -1;
+        const bodyAwaitFiftyFifthExpression = bodyAwaitFiftyFifthMatch?.expression ?? null;
+        const bodyAwaitFiftySixthMatch = findBodyAwait(bodyAwaitFiftyFifthIndex, bodyAwaitFiftyFifthExpression);
+        const bodyAwaitFiftySixthIndex = bodyAwaitFiftySixthMatch?.index ?? -1;
+        const bodyAwaitFiftySixthExpression = bodyAwaitFiftySixthMatch?.expression ?? null;
+        const bodyAwaitFiftySeventhMatch = findBodyAwait(bodyAwaitFiftySixthIndex, bodyAwaitFiftySixthExpression);
+        const bodyAwaitFiftySeventhIndex = bodyAwaitFiftySeventhMatch?.index ?? -1;
+        const bodyAwaitFiftySeventhExpression = bodyAwaitFiftySeventhMatch?.expression ?? null;
+        const bodyAwaitFiftyEighthMatch = findBodyAwait(bodyAwaitFiftySeventhIndex, bodyAwaitFiftySeventhExpression);
+        const bodyAwaitFiftyEighthIndex = bodyAwaitFiftyEighthMatch?.index ?? -1;
+        const bodyAwaitFiftyEighthExpression = bodyAwaitFiftyEighthMatch?.expression ?? null;
+        const bodyAwaitFiftyNinthMatch = findBodyAwait(bodyAwaitFiftyEighthIndex, bodyAwaitFiftyEighthExpression);
+        const bodyAwaitFiftyNinthIndex = bodyAwaitFiftyNinthMatch?.index ?? -1;
+        const bodyAwaitFiftyNinthExpression = bodyAwaitFiftyNinthMatch?.expression ?? null;
+        const bodyAwaitSixtiethMatch = findBodyAwait(bodyAwaitFiftyNinthIndex, bodyAwaitFiftyNinthExpression);
+        const bodyAwaitSixtiethIndex = bodyAwaitSixtiethMatch?.index ?? -1;
+        const bodyAwaitSixtiethExpression = bodyAwaitSixtiethMatch?.expression ?? null;
+        const bodyAwaitSixtyFirstMatch = findBodyAwait(bodyAwaitSixtiethIndex, bodyAwaitSixtiethExpression);
+        const bodyAwaitSixtyFirstIndex = bodyAwaitSixtyFirstMatch?.index ?? -1;
+        const bodyAwaitSixtyFirstExpression = bodyAwaitSixtyFirstMatch?.expression ?? null;
+        const bodyAwaitSixtySecondMatch = findBodyAwait(bodyAwaitSixtyFirstIndex, bodyAwaitSixtyFirstExpression);
+        const bodyAwaitSixtySecondIndex = bodyAwaitSixtySecondMatch?.index ?? -1;
+        const bodyAwaitSixtySecondExpression = bodyAwaitSixtySecondMatch?.expression ?? null;
+        const bodyAwaitSixtyThirdMatch = findBodyAwait(bodyAwaitSixtySecondIndex, bodyAwaitSixtySecondExpression);
+        const bodyAwaitSixtyThirdIndex = bodyAwaitSixtyThirdMatch?.index ?? -1;
+        const bodyAwaitSixtyThirdExpression = bodyAwaitSixtyThirdMatch?.expression ?? null;
+        const bodyAwaitSixtyFourthMatch = findBodyAwait(bodyAwaitSixtyThirdIndex, bodyAwaitSixtyThirdExpression);
+        const bodyAwaitSixtyFourthIndex = bodyAwaitSixtyFourthMatch?.index ?? -1;
+        const bodyAwaitSixtyFourthExpression = bodyAwaitSixtyFourthMatch?.expression ?? null;
+        const bodyAwaitSixtyFifthMatch = findBodyAwait(bodyAwaitSixtyFourthIndex, bodyAwaitSixtyFourthExpression);
+        const bodyAwaitSixtyFifthIndex = bodyAwaitSixtyFifthMatch?.index ?? -1;
+        const bodyAwaitSixtyFifthExpression = bodyAwaitSixtyFifthMatch?.expression ?? null;
+        const bodyAwaitSixtySixthMatch = findBodyAwait(bodyAwaitSixtyFifthIndex, bodyAwaitSixtyFifthExpression);
+        const bodyAwaitSixtySixthIndex = bodyAwaitSixtySixthMatch?.index ?? -1;
+        const bodyAwaitSixtySixthExpression = bodyAwaitSixtySixthMatch?.expression ?? null;
+        const bodyAwaitSixtySeventhMatch = findBodyAwait(bodyAwaitSixtySixthIndex, bodyAwaitSixtySixthExpression);
+        const bodyAwaitSixtySeventhIndex = bodyAwaitSixtySeventhMatch?.index ?? -1;
+        const bodyAwaitSixtySeventhExpression = bodyAwaitSixtySeventhMatch?.expression ?? null;
+        const bodyAwaitSixtyEighthMatch = findBodyAwait(bodyAwaitSixtySeventhIndex, bodyAwaitSixtySeventhExpression);
+        const bodyAwaitSixtyEighthIndex = bodyAwaitSixtyEighthMatch?.index ?? -1;
+        const bodyAwaitSixtyEighthExpression = bodyAwaitSixtyEighthMatch?.expression ?? null;
+        const bodyAwaitSixtyNinthMatch = findBodyAwait(bodyAwaitSixtyEighthIndex, bodyAwaitSixtyEighthExpression);
+        const bodyAwaitSixtyNinthIndex = bodyAwaitSixtyNinthMatch?.index ?? -1;
+        const bodyAwaitSixtyNinthExpression = bodyAwaitSixtyNinthMatch?.expression ?? null;
+        const bodyAwaitSeventiethMatch = findBodyAwait(bodyAwaitSixtyNinthIndex, bodyAwaitSixtyNinthExpression);
+        const bodyAwaitSeventiethIndex = bodyAwaitSeventiethMatch?.index ?? -1;
+        const bodyAwaitSeventiethExpression = bodyAwaitSeventiethMatch?.expression ?? null;
+        const bodyAwaitSeventyFirstMatch = findBodyAwait(bodyAwaitSeventiethIndex, bodyAwaitSeventiethExpression);
+        const bodyAwaitSeventyFirstIndex = bodyAwaitSeventyFirstMatch?.index ?? -1;
+        const bodyAwaitSeventyFirstExpression = bodyAwaitSeventyFirstMatch?.expression ?? null;
+        const bodyAwaitSeventySecondMatch = findBodyAwait(bodyAwaitSeventyFirstIndex, bodyAwaitSeventyFirstExpression);
+        const bodyAwaitSeventySecondIndex = bodyAwaitSeventySecondMatch?.index ?? -1;
+        const bodyAwaitSeventySecondExpression = bodyAwaitSeventySecondMatch?.expression ?? null;
+        const bodyAwaitSeventyThirdMatch = findBodyAwait(bodyAwaitSeventySecondIndex, bodyAwaitSeventySecondExpression);
+        const bodyAwaitSeventyThirdIndex = bodyAwaitSeventyThirdMatch?.index ?? -1;
+        const bodyAwaitSeventyThirdExpression = bodyAwaitSeventyThirdMatch?.expression ?? null;
+        const bodyAwaitSeventyFourthMatch = findBodyAwait(bodyAwaitSeventyThirdIndex, bodyAwaitSeventyThirdExpression);
+        const bodyAwaitSeventyFourthIndex = bodyAwaitSeventyFourthMatch?.index ?? -1;
+        const bodyAwaitSeventyFourthExpression = bodyAwaitSeventyFourthMatch?.expression ?? null;
+        const bodyAwaitSeventyFifthMatch = findBodyAwait(bodyAwaitSeventyFourthIndex, bodyAwaitSeventyFourthExpression);
+        const bodyAwaitSeventyFifthIndex = bodyAwaitSeventyFifthMatch?.index ?? -1;
+        const bodyAwaitSeventyFifthExpression = bodyAwaitSeventyFifthMatch?.expression ?? null;
+        const bodyAwaitSeventySixthMatch = findBodyAwait(bodyAwaitSeventyFifthIndex, bodyAwaitSeventyFifthExpression);
+        const bodyAwaitSeventySixthIndex = bodyAwaitSeventySixthMatch?.index ?? -1;
+        const bodyAwaitSeventySixthExpression = bodyAwaitSeventySixthMatch?.expression ?? null;
+        const bodyAwaitSeventySeventhMatch = findBodyAwait(bodyAwaitSeventySixthIndex, bodyAwaitSeventySixthExpression);
+        const bodyAwaitSeventySeventhIndex = bodyAwaitSeventySeventhMatch?.index ?? -1;
+        const bodyAwaitSeventySeventhExpression = bodyAwaitSeventySeventhMatch?.expression ?? null;
+        const bodyAwaitSeventyEighthMatch = findBodyAwait(bodyAwaitSeventySeventhIndex, bodyAwaitSeventySeventhExpression);
+        const bodyAwaitSeventyEighthIndex = bodyAwaitSeventyEighthMatch?.index ?? -1;
+        const bodyAwaitSeventyEighthExpression = bodyAwaitSeventyEighthMatch?.expression ?? null;
+        const bodyAwaitSeventyNinthMatch = findBodyAwait(bodyAwaitSeventyEighthIndex, bodyAwaitSeventyEighthExpression);
+        const bodyAwaitSeventyNinthIndex = bodyAwaitSeventyNinthMatch?.index ?? -1;
+        const bodyAwaitSeventyNinthExpression = bodyAwaitSeventyNinthMatch?.expression ?? null;
+        const bodyAwaitEightiethMatch = findBodyAwait(bodyAwaitSeventyNinthIndex, bodyAwaitSeventyNinthExpression);
+        const bodyAwaitEightiethIndex = bodyAwaitEightiethMatch?.index ?? -1;
+        const bodyAwaitEightiethExpression = bodyAwaitEightiethMatch?.expression ?? null;
+        const bodyAwaitEightyFirstMatch = findBodyAwait(bodyAwaitEightiethIndex, bodyAwaitEightiethExpression);
+        const bodyAwaitEightyFirstIndex = bodyAwaitEightyFirstMatch?.index ?? -1;
+        const bodyAwaitEightyFirstExpression = bodyAwaitEightyFirstMatch?.expression ?? null;
+        const bodyAwaitEightySecondMatch = findBodyAwait(bodyAwaitEightyFirstIndex, bodyAwaitEightyFirstExpression);
+        const bodyAwaitEightySecondIndex = bodyAwaitEightySecondMatch?.index ?? -1;
+        const bodyAwaitEightySecondExpression = bodyAwaitEightySecondMatch?.expression ?? null;
+        const bodyAwaitEightyThirdMatch = findBodyAwait(bodyAwaitEightySecondIndex, bodyAwaitEightySecondExpression);
+        const bodyAwaitEightyThirdIndex = bodyAwaitEightyThirdMatch?.index ?? -1;
+        const bodyAwaitEightyThirdExpression = bodyAwaitEightyThirdMatch?.expression ?? null;
+        const bodyAwaitEightyFourthMatch = findBodyAwait(bodyAwaitEightyThirdIndex, bodyAwaitEightyThirdExpression);
+        const bodyAwaitEightyFourthIndex = bodyAwaitEightyFourthMatch?.index ?? -1;
+        const bodyAwaitEightyFourthExpression = bodyAwaitEightyFourthMatch?.expression ?? null;
+        const bodyAwaitEightyFifthMatch = findBodyAwait(bodyAwaitEightyFourthIndex, bodyAwaitEightyFourthExpression);
+        const bodyAwaitEightyFifthIndex = bodyAwaitEightyFifthMatch?.index ?? -1;
+        const bodyAwaitEightyFifthExpression = bodyAwaitEightyFifthMatch?.expression ?? null;
+        const bodyAwaitEightySixthMatch = findBodyAwait(bodyAwaitEightyFifthIndex, bodyAwaitEightyFifthExpression);
+        const bodyAwaitEightySixthIndex = bodyAwaitEightySixthMatch?.index ?? -1;
+        const bodyAwaitEightySixthExpression = bodyAwaitEightySixthMatch?.expression ?? null;
+        const bodyAwaitEightySeventhMatch = findBodyAwait(bodyAwaitEightySixthIndex, bodyAwaitEightySixthExpression);
+        const bodyAwaitEightySeventhIndex = bodyAwaitEightySeventhMatch?.index ?? -1;
+        const bodyAwaitEightySeventhExpression = bodyAwaitEightySeventhMatch?.expression ?? null;
+        const bodyAwaitEightyEighthMatch = findBodyAwait(bodyAwaitEightySeventhIndex, bodyAwaitEightySeventhExpression);
+        const bodyAwaitEightyEighthIndex = bodyAwaitEightyEighthMatch?.index ?? -1;
+        const bodyAwaitEightyEighthExpression = bodyAwaitEightyEighthMatch?.expression ?? null;
+        const bodyAwaitEightyNinthMatch = findBodyAwait(bodyAwaitEightyEighthIndex, bodyAwaitEightyEighthExpression);
+        const bodyAwaitEightyNinthIndex = bodyAwaitEightyNinthMatch?.index ?? -1;
+        const bodyAwaitEightyNinthExpression = bodyAwaitEightyNinthMatch?.expression ?? null;
+        const bodyAwaitNinetiethMatch = findBodyAwait(bodyAwaitEightyNinthIndex, bodyAwaitEightyNinthExpression);
+        const bodyAwaitNinetiethIndex = bodyAwaitNinetiethMatch?.index ?? -1;
+        const bodyAwaitNinetiethExpression = bodyAwaitNinetiethMatch?.expression ?? null;
+        const bodyAwaitNinetyFirstMatch = findBodyAwait(bodyAwaitNinetiethIndex, bodyAwaitNinetiethExpression);
+        const bodyAwaitNinetyFirstIndex = bodyAwaitNinetyFirstMatch?.index ?? -1;
+        const bodyAwaitNinetyFirstExpression = bodyAwaitNinetyFirstMatch?.expression ?? null;
+        const bodyAwaitNinetySecondMatch = findBodyAwait(bodyAwaitNinetyFirstIndex, bodyAwaitNinetyFirstExpression);
+        const bodyAwaitNinetySecondIndex = bodyAwaitNinetySecondMatch?.index ?? -1;
+        const bodyAwaitNinetySecondExpression = bodyAwaitNinetySecondMatch?.expression ?? null;
+        const bodyAwaitNinetyThirdMatch = findBodyAwait(bodyAwaitNinetySecondIndex, bodyAwaitNinetySecondExpression);
+        const bodyAwaitNinetyThirdIndex = bodyAwaitNinetyThirdMatch?.index ?? -1;
+        const bodyAwaitNinetyThirdExpression = bodyAwaitNinetyThirdMatch?.expression ?? null;
+        const bodyAwaitNinetyFourthMatch = findBodyAwait(bodyAwaitNinetyThirdIndex, bodyAwaitNinetyThirdExpression);
+        const bodyAwaitNinetyFourthIndex = bodyAwaitNinetyFourthMatch?.index ?? -1;
+        const bodyAwaitNinetyFourthExpression = bodyAwaitNinetyFourthMatch?.expression ?? null;
+        const bodyAwaitNinetyFifthMatch = findBodyAwait(bodyAwaitNinetyFourthIndex, bodyAwaitNinetyFourthExpression);
+        const bodyAwaitNinetyFifthIndex = bodyAwaitNinetyFifthMatch?.index ?? -1;
+        const bodyAwaitNinetyFifthExpression = bodyAwaitNinetyFifthMatch?.expression ?? null;
+        const bodyAwaitNinetySixthMatch = findBodyAwait(bodyAwaitNinetyFifthIndex, bodyAwaitNinetyFifthExpression);
+        const bodyAwaitNinetySixthIndex = bodyAwaitNinetySixthMatch?.index ?? -1;
+        const bodyAwaitNinetySixthExpression = bodyAwaitNinetySixthMatch?.expression ?? null;
+        const bodyAwaitNinetySeventhMatch = findBodyAwait(bodyAwaitNinetySixthIndex, bodyAwaitNinetySixthExpression);
+        const bodyAwaitNinetySeventhIndex = bodyAwaitNinetySeventhMatch?.index ?? -1;
+        const bodyAwaitNinetySeventhExpression = bodyAwaitNinetySeventhMatch?.expression ?? null;
+        const bodyAwaitNinetyEighthMatch = findBodyAwait(bodyAwaitNinetySeventhIndex, bodyAwaitNinetySeventhExpression);
+        const bodyAwaitNinetyEighthIndex = bodyAwaitNinetyEighthMatch?.index ?? -1;
+        const bodyAwaitNinetyEighthExpression = bodyAwaitNinetyEighthMatch?.expression ?? null;
+        const bodyAwaitNinetyNinthMatch = findBodyAwait(bodyAwaitNinetyEighthIndex, bodyAwaitNinetyEighthExpression);
+        const bodyAwaitNinetyNinthIndex = bodyAwaitNinetyNinthMatch?.index ?? -1;
+        const bodyAwaitNinetyNinthExpression = bodyAwaitNinetyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredthMatch = findBodyAwait(bodyAwaitNinetyNinthIndex, bodyAwaitNinetyNinthExpression);
+        const bodyAwaitOneHundredthIndex = bodyAwaitOneHundredthMatch?.index ?? -1;
+        const bodyAwaitOneHundredthExpression = bodyAwaitOneHundredthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFirstMatch = findBodyAwait(bodyAwaitOneHundredthIndex, bodyAwaitOneHundredthExpression);
+        const bodyAwaitOneHundredFirstIndex = bodyAwaitOneHundredFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredFirstExpression = bodyAwaitOneHundredFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredSecondMatch = findBodyAwait(bodyAwaitOneHundredFirstIndex, bodyAwaitOneHundredFirstExpression);
+        const bodyAwaitOneHundredSecondIndex = bodyAwaitOneHundredSecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredSecondExpression = bodyAwaitOneHundredSecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirdMatch = findBodyAwait(bodyAwaitOneHundredSecondIndex, bodyAwaitOneHundredSecondExpression);
+        const bodyAwaitOneHundredThirdIndex = bodyAwaitOneHundredThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirdExpression = bodyAwaitOneHundredThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredFourthMatch = findBodyAwait(bodyAwaitOneHundredThirdIndex, bodyAwaitOneHundredThirdExpression);
+        const bodyAwaitOneHundredFourthIndex = bodyAwaitOneHundredFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFourthExpression = bodyAwaitOneHundredFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFifthMatch = findBodyAwait(bodyAwaitOneHundredFourthIndex, bodyAwaitOneHundredFourthExpression);
+        const bodyAwaitOneHundredFifthIndex = bodyAwaitOneHundredFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFifthExpression = bodyAwaitOneHundredFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixthMatch = findBodyAwait(bodyAwaitOneHundredFifthIndex, bodyAwaitOneHundredFifthExpression);
+        const bodyAwaitOneHundredSixthIndex = bodyAwaitOneHundredSixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixthExpression = bodyAwaitOneHundredSixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventhMatch = findBodyAwait(bodyAwaitOneHundredSixthIndex, bodyAwaitOneHundredSixthExpression);
+        const bodyAwaitOneHundredSeventhIndex = bodyAwaitOneHundredSeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventhExpression = bodyAwaitOneHundredSeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredEighthMatch = findBodyAwait(bodyAwaitOneHundredSeventhIndex, bodyAwaitOneHundredSeventhExpression);
+        const bodyAwaitOneHundredEighthIndex = bodyAwaitOneHundredEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEighthExpression = bodyAwaitOneHundredEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinthMatch = findBodyAwait(bodyAwaitOneHundredEighthIndex, bodyAwaitOneHundredEighthExpression);
+        const bodyAwaitOneHundredNinthIndex = bodyAwaitOneHundredNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinthExpression = bodyAwaitOneHundredNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredTenthMatch = findBodyAwait(bodyAwaitOneHundredNinthIndex, bodyAwaitOneHundredNinthExpression);
+        const bodyAwaitOneHundredTenthIndex = bodyAwaitOneHundredTenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTenthExpression = bodyAwaitOneHundredTenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEleventhMatch = findBodyAwait(bodyAwaitOneHundredTenthIndex, bodyAwaitOneHundredTenthExpression);
+        const bodyAwaitOneHundredEleventhIndex = bodyAwaitOneHundredEleventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredEleventhExpression = bodyAwaitOneHundredEleventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwelfthMatch = findBodyAwait(bodyAwaitOneHundredEleventhIndex, bodyAwaitOneHundredEleventhExpression);
+        const bodyAwaitOneHundredTwelfthIndex = bodyAwaitOneHundredTwelfthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwelfthExpression = bodyAwaitOneHundredTwelfthMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirteenthMatch = findBodyAwait(bodyAwaitOneHundredTwelfthIndex, bodyAwaitOneHundredTwelfthExpression);
+        const bodyAwaitOneHundredThirteenthIndex = bodyAwaitOneHundredThirteenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirteenthExpression = bodyAwaitOneHundredThirteenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFourteenthMatch = findBodyAwait(bodyAwaitOneHundredThirteenthIndex, bodyAwaitOneHundredThirteenthExpression);
+        const bodyAwaitOneHundredFourteenthIndex = bodyAwaitOneHundredFourteenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFourteenthExpression = bodyAwaitOneHundredFourteenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFifteenthMatch = findBodyAwait(bodyAwaitOneHundredFourteenthIndex, bodyAwaitOneHundredFourteenthExpression);
+        const bodyAwaitOneHundredFifteenthIndex = bodyAwaitOneHundredFifteenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFifteenthExpression = bodyAwaitOneHundredFifteenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixteenthMatch = findBodyAwait(bodyAwaitOneHundredFifteenthIndex, bodyAwaitOneHundredFifteenthExpression);
+        const bodyAwaitOneHundredSixteenthIndex = bodyAwaitOneHundredSixteenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixteenthExpression = bodyAwaitOneHundredSixteenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventeenthMatch = findBodyAwait(bodyAwaitOneHundredSixteenthIndex, bodyAwaitOneHundredSixteenthExpression);
+        const bodyAwaitOneHundredSeventeenthIndex = bodyAwaitOneHundredSeventeenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventeenthExpression = bodyAwaitOneHundredSeventeenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEighteenthMatch = findBodyAwait(bodyAwaitOneHundredSeventeenthIndex, bodyAwaitOneHundredSeventeenthExpression);
+        const bodyAwaitOneHundredEighteenthIndex = bodyAwaitOneHundredEighteenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEighteenthExpression = bodyAwaitOneHundredEighteenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNineteenthMatch = findBodyAwait(bodyAwaitOneHundredEighteenthIndex, bodyAwaitOneHundredEighteenthExpression);
+        const bodyAwaitOneHundredNineteenthIndex = bodyAwaitOneHundredNineteenthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNineteenthExpression = bodyAwaitOneHundredNineteenthMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentiethMatch = findBodyAwait(bodyAwaitOneHundredNineteenthIndex, bodyAwaitOneHundredNineteenthExpression);
+        const bodyAwaitOneHundredTwentiethIndex = bodyAwaitOneHundredTwentiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentiethExpression = bodyAwaitOneHundredTwentiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentyFirstMatch = findBodyAwait(bodyAwaitOneHundredTwentiethIndex, bodyAwaitOneHundredTwentiethExpression);
+        const bodyAwaitOneHundredTwentyFirstIndex = bodyAwaitOneHundredTwentyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentyFirstExpression = bodyAwaitOneHundredTwentyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentySecondMatch = findBodyAwait(bodyAwaitOneHundredTwentyFirstIndex, bodyAwaitOneHundredTwentyFirstExpression);
+        const bodyAwaitOneHundredTwentySecondIndex = bodyAwaitOneHundredTwentySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentySecondExpression = bodyAwaitOneHundredTwentySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentyThirdMatch = findBodyAwait(bodyAwaitOneHundredTwentySecondIndex, bodyAwaitOneHundredTwentySecondExpression);
+        const bodyAwaitOneHundredTwentyThirdIndex = bodyAwaitOneHundredTwentyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentyThirdExpression = bodyAwaitOneHundredTwentyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentyFourthMatch = findBodyAwait(bodyAwaitOneHundredTwentyThirdIndex, bodyAwaitOneHundredTwentyThirdExpression);
+        const bodyAwaitOneHundredTwentyFourthIndex = bodyAwaitOneHundredTwentyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentyFourthExpression = bodyAwaitOneHundredTwentyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentyFifthMatch = findBodyAwait(bodyAwaitOneHundredTwentyFourthIndex, bodyAwaitOneHundredTwentyFourthExpression);
+        const bodyAwaitOneHundredTwentyFifthIndex = bodyAwaitOneHundredTwentyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentyFifthExpression = bodyAwaitOneHundredTwentyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentySixthMatch = findBodyAwait(bodyAwaitOneHundredTwentyFifthIndex, bodyAwaitOneHundredTwentyFifthExpression);
+        const bodyAwaitOneHundredTwentySixthIndex = bodyAwaitOneHundredTwentySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentySixthExpression = bodyAwaitOneHundredTwentySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentySeventhMatch = findBodyAwait(bodyAwaitOneHundredTwentySixthIndex, bodyAwaitOneHundredTwentySixthExpression);
+        const bodyAwaitOneHundredTwentySeventhIndex = bodyAwaitOneHundredTwentySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentySeventhExpression = bodyAwaitOneHundredTwentySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentyEighthMatch = findBodyAwait(bodyAwaitOneHundredTwentySeventhIndex, bodyAwaitOneHundredTwentySeventhExpression);
+        const bodyAwaitOneHundredTwentyEighthIndex = bodyAwaitOneHundredTwentyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentyEighthExpression = bodyAwaitOneHundredTwentyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredTwentyNinthMatch = findBodyAwait(bodyAwaitOneHundredTwentyEighthIndex, bodyAwaitOneHundredTwentyEighthExpression);
+        const bodyAwaitOneHundredTwentyNinthIndex = bodyAwaitOneHundredTwentyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredTwentyNinthExpression = bodyAwaitOneHundredTwentyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtiethMatch = findBodyAwait(bodyAwaitOneHundredTwentyNinthIndex, bodyAwaitOneHundredTwentyNinthExpression);
+        const bodyAwaitOneHundredThirtiethIndex = bodyAwaitOneHundredThirtiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtiethExpression = bodyAwaitOneHundredThirtiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtyFirstMatch = findBodyAwait(bodyAwaitOneHundredThirtiethIndex, bodyAwaitOneHundredThirtiethExpression);
+        const bodyAwaitOneHundredThirtyFirstIndex = bodyAwaitOneHundredThirtyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtyFirstExpression = bodyAwaitOneHundredThirtyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtySecondMatch = findBodyAwait(bodyAwaitOneHundredThirtyFirstIndex, bodyAwaitOneHundredThirtyFirstExpression);
+        const bodyAwaitOneHundredThirtySecondIndex = bodyAwaitOneHundredThirtySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtySecondExpression = bodyAwaitOneHundredThirtySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtyThirdMatch = findBodyAwait(bodyAwaitOneHundredThirtySecondIndex, bodyAwaitOneHundredThirtySecondExpression);
+        const bodyAwaitOneHundredThirtyThirdIndex = bodyAwaitOneHundredThirtyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtyThirdExpression = bodyAwaitOneHundredThirtyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtyFourthMatch = findBodyAwait(bodyAwaitOneHundredThirtyThirdIndex, bodyAwaitOneHundredThirtyThirdExpression);
+        const bodyAwaitOneHundredThirtyFourthIndex = bodyAwaitOneHundredThirtyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtyFourthExpression = bodyAwaitOneHundredThirtyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtyFifthMatch = findBodyAwait(bodyAwaitOneHundredThirtyFourthIndex, bodyAwaitOneHundredThirtyFourthExpression);
+        const bodyAwaitOneHundredThirtyFifthIndex = bodyAwaitOneHundredThirtyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtyFifthExpression = bodyAwaitOneHundredThirtyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtySixthMatch = findBodyAwait(bodyAwaitOneHundredThirtyFifthIndex, bodyAwaitOneHundredThirtyFifthExpression);
+        const bodyAwaitOneHundredThirtySixthIndex = bodyAwaitOneHundredThirtySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtySixthExpression = bodyAwaitOneHundredThirtySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtySeventhMatch = findBodyAwait(bodyAwaitOneHundredThirtySixthIndex, bodyAwaitOneHundredThirtySixthExpression);
+        const bodyAwaitOneHundredThirtySeventhIndex = bodyAwaitOneHundredThirtySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtySeventhExpression = bodyAwaitOneHundredThirtySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtyEighthMatch = findBodyAwait(bodyAwaitOneHundredThirtySeventhIndex, bodyAwaitOneHundredThirtySeventhExpression);
+        const bodyAwaitOneHundredThirtyEighthIndex = bodyAwaitOneHundredThirtyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtyEighthExpression = bodyAwaitOneHundredThirtyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredThirtyNinthMatch = findBodyAwait(bodyAwaitOneHundredThirtyEighthIndex, bodyAwaitOneHundredThirtyEighthExpression);
+        const bodyAwaitOneHundredThirtyNinthIndex = bodyAwaitOneHundredThirtyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredThirtyNinthExpression = bodyAwaitOneHundredThirtyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortiethMatch = findBodyAwait(bodyAwaitOneHundredThirtyNinthIndex, bodyAwaitOneHundredThirtyNinthExpression);
+        const bodyAwaitOneHundredFortiethIndex = bodyAwaitOneHundredFortiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortiethExpression = bodyAwaitOneHundredFortiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortyFirstMatch = findBodyAwait(bodyAwaitOneHundredFortiethIndex, bodyAwaitOneHundredFortiethExpression);
+        const bodyAwaitOneHundredFortyFirstIndex = bodyAwaitOneHundredFortyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortyFirstExpression = bodyAwaitOneHundredFortyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortySecondMatch = findBodyAwait(bodyAwaitOneHundredFortyFirstIndex, bodyAwaitOneHundredFortyFirstExpression);
+        const bodyAwaitOneHundredFortySecondIndex = bodyAwaitOneHundredFortySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortySecondExpression = bodyAwaitOneHundredFortySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortyThirdMatch = findBodyAwait(bodyAwaitOneHundredFortySecondIndex, bodyAwaitOneHundredFortySecondExpression);
+        const bodyAwaitOneHundredFortyThirdIndex = bodyAwaitOneHundredFortyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortyThirdExpression = bodyAwaitOneHundredFortyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortyFourthMatch = findBodyAwait(bodyAwaitOneHundredFortyThirdIndex, bodyAwaitOneHundredFortyThirdExpression);
+        const bodyAwaitOneHundredFortyFourthIndex = bodyAwaitOneHundredFortyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortyFourthExpression = bodyAwaitOneHundredFortyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortyFifthMatch = findBodyAwait(bodyAwaitOneHundredFortyFourthIndex, bodyAwaitOneHundredFortyFourthExpression);
+        const bodyAwaitOneHundredFortyFifthIndex = bodyAwaitOneHundredFortyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortyFifthExpression = bodyAwaitOneHundredFortyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortySixthMatch = findBodyAwait(bodyAwaitOneHundredFortyFifthIndex, bodyAwaitOneHundredFortyFifthExpression);
+        const bodyAwaitOneHundredFortySixthIndex = bodyAwaitOneHundredFortySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortySixthExpression = bodyAwaitOneHundredFortySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortySeventhMatch = findBodyAwait(bodyAwaitOneHundredFortySixthIndex, bodyAwaitOneHundredFortySixthExpression);
+        const bodyAwaitOneHundredFortySeventhIndex = bodyAwaitOneHundredFortySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortySeventhExpression = bodyAwaitOneHundredFortySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortyEighthMatch = findBodyAwait(bodyAwaitOneHundredFortySeventhIndex, bodyAwaitOneHundredFortySeventhExpression);
+        const bodyAwaitOneHundredFortyEighthIndex = bodyAwaitOneHundredFortyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortyEighthExpression = bodyAwaitOneHundredFortyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFortyNinthMatch = findBodyAwait(bodyAwaitOneHundredFortyEighthIndex, bodyAwaitOneHundredFortyEighthExpression);
+        const bodyAwaitOneHundredFortyNinthIndex = bodyAwaitOneHundredFortyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFortyNinthExpression = bodyAwaitOneHundredFortyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftiethMatch = findBodyAwait(bodyAwaitOneHundredFortyNinthIndex, bodyAwaitOneHundredFortyNinthExpression);
+        const bodyAwaitOneHundredFiftiethIndex = bodyAwaitOneHundredFiftiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftiethExpression = bodyAwaitOneHundredFiftiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftyFirstMatch = findBodyAwait(bodyAwaitOneHundredFiftiethIndex, bodyAwaitOneHundredFiftiethExpression);
+        const bodyAwaitOneHundredFiftyFirstIndex = bodyAwaitOneHundredFiftyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftyFirstExpression = bodyAwaitOneHundredFiftyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftySecondMatch = findBodyAwait(bodyAwaitOneHundredFiftyFirstIndex, bodyAwaitOneHundredFiftyFirstExpression);
+        const bodyAwaitOneHundredFiftySecondIndex = bodyAwaitOneHundredFiftySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftySecondExpression = bodyAwaitOneHundredFiftySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftyThirdMatch = findBodyAwait(bodyAwaitOneHundredFiftySecondIndex, bodyAwaitOneHundredFiftySecondExpression);
+        const bodyAwaitOneHundredFiftyThirdIndex = bodyAwaitOneHundredFiftyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftyThirdExpression = bodyAwaitOneHundredFiftyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftyFourthMatch = findBodyAwait(bodyAwaitOneHundredFiftyThirdIndex, bodyAwaitOneHundredFiftyThirdExpression);
+        const bodyAwaitOneHundredFiftyFourthIndex = bodyAwaitOneHundredFiftyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftyFourthExpression = bodyAwaitOneHundredFiftyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftyFifthMatch = findBodyAwait(bodyAwaitOneHundredFiftyFourthIndex, bodyAwaitOneHundredFiftyFourthExpression);
+        const bodyAwaitOneHundredFiftyFifthIndex = bodyAwaitOneHundredFiftyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftyFifthExpression = bodyAwaitOneHundredFiftyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftySixthMatch = findBodyAwait(bodyAwaitOneHundredFiftyFifthIndex, bodyAwaitOneHundredFiftyFifthExpression);
+        const bodyAwaitOneHundredFiftySixthIndex = bodyAwaitOneHundredFiftySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftySixthExpression = bodyAwaitOneHundredFiftySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftySeventhMatch = findBodyAwait(bodyAwaitOneHundredFiftySixthIndex, bodyAwaitOneHundredFiftySixthExpression);
+        const bodyAwaitOneHundredFiftySeventhIndex = bodyAwaitOneHundredFiftySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftySeventhExpression = bodyAwaitOneHundredFiftySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftyEighthMatch = findBodyAwait(bodyAwaitOneHundredFiftySeventhIndex, bodyAwaitOneHundredFiftySeventhExpression);
+        const bodyAwaitOneHundredFiftyEighthIndex = bodyAwaitOneHundredFiftyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftyEighthExpression = bodyAwaitOneHundredFiftyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredFiftyNinthMatch = findBodyAwait(bodyAwaitOneHundredFiftyEighthIndex, bodyAwaitOneHundredFiftyEighthExpression);
+        const bodyAwaitOneHundredFiftyNinthIndex = bodyAwaitOneHundredFiftyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredFiftyNinthExpression = bodyAwaitOneHundredFiftyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtiethMatch = findBodyAwait(bodyAwaitOneHundredFiftyNinthIndex, bodyAwaitOneHundredFiftyNinthExpression);
+        const bodyAwaitOneHundredSixtiethIndex = bodyAwaitOneHundredSixtiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtiethExpression = bodyAwaitOneHundredSixtiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtyFirstMatch = findBodyAwait(bodyAwaitOneHundredSixtiethIndex, bodyAwaitOneHundredSixtiethExpression);
+        const bodyAwaitOneHundredSixtyFirstIndex = bodyAwaitOneHundredSixtyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtyFirstExpression = bodyAwaitOneHundredSixtyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtySecondMatch = findBodyAwait(bodyAwaitOneHundredSixtyFirstIndex, bodyAwaitOneHundredSixtyFirstExpression);
+        const bodyAwaitOneHundredSixtySecondIndex = bodyAwaitOneHundredSixtySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtySecondExpression = bodyAwaitOneHundredSixtySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtyThirdMatch = findBodyAwait(bodyAwaitOneHundredSixtySecondIndex, bodyAwaitOneHundredSixtySecondExpression);
+        const bodyAwaitOneHundredSixtyThirdIndex = bodyAwaitOneHundredSixtyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtyThirdExpression = bodyAwaitOneHundredSixtyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtyFourthMatch = findBodyAwait(bodyAwaitOneHundredSixtyThirdIndex, bodyAwaitOneHundredSixtyThirdExpression);
+        const bodyAwaitOneHundredSixtyFourthIndex = bodyAwaitOneHundredSixtyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtyFourthExpression = bodyAwaitOneHundredSixtyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtyFifthMatch = findBodyAwait(bodyAwaitOneHundredSixtyFourthIndex, bodyAwaitOneHundredSixtyFourthExpression);
+        const bodyAwaitOneHundredSixtyFifthIndex = bodyAwaitOneHundredSixtyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtyFifthExpression = bodyAwaitOneHundredSixtyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtySixthMatch = findBodyAwait(bodyAwaitOneHundredSixtyFifthIndex, bodyAwaitOneHundredSixtyFifthExpression);
+        const bodyAwaitOneHundredSixtySixthIndex = bodyAwaitOneHundredSixtySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtySixthExpression = bodyAwaitOneHundredSixtySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtySeventhMatch = findBodyAwait(bodyAwaitOneHundredSixtySixthIndex, bodyAwaitOneHundredSixtySixthExpression);
+        const bodyAwaitOneHundredSixtySeventhIndex = bodyAwaitOneHundredSixtySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtySeventhExpression = bodyAwaitOneHundredSixtySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtyEighthMatch = findBodyAwait(bodyAwaitOneHundredSixtySeventhIndex, bodyAwaitOneHundredSixtySeventhExpression);
+        const bodyAwaitOneHundredSixtyEighthIndex = bodyAwaitOneHundredSixtyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtyEighthExpression = bodyAwaitOneHundredSixtyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSixtyNinthMatch = findBodyAwait(bodyAwaitOneHundredSixtyEighthIndex, bodyAwaitOneHundredSixtyEighthExpression);
+        const bodyAwaitOneHundredSixtyNinthIndex = bodyAwaitOneHundredSixtyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSixtyNinthExpression = bodyAwaitOneHundredSixtyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventiethMatch = findBodyAwait(bodyAwaitOneHundredSixtyNinthIndex, bodyAwaitOneHundredSixtyNinthExpression);
+        const bodyAwaitOneHundredSeventiethIndex = bodyAwaitOneHundredSeventiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventiethExpression = bodyAwaitOneHundredSeventiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventyFirstMatch = findBodyAwait(bodyAwaitOneHundredSeventiethIndex, bodyAwaitOneHundredSeventiethExpression);
+        const bodyAwaitOneHundredSeventyFirstIndex = bodyAwaitOneHundredSeventyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventyFirstExpression = bodyAwaitOneHundredSeventyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventySecondMatch = findBodyAwait(bodyAwaitOneHundredSeventyFirstIndex, bodyAwaitOneHundredSeventyFirstExpression);
+        const bodyAwaitOneHundredSeventySecondIndex = bodyAwaitOneHundredSeventySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventySecondExpression = bodyAwaitOneHundredSeventySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventyThirdMatch = findBodyAwait(bodyAwaitOneHundredSeventySecondIndex, bodyAwaitOneHundredSeventySecondExpression);
+        const bodyAwaitOneHundredSeventyThirdIndex = bodyAwaitOneHundredSeventyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventyThirdExpression = bodyAwaitOneHundredSeventyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventyFourthMatch = findBodyAwait(bodyAwaitOneHundredSeventyThirdIndex, bodyAwaitOneHundredSeventyThirdExpression);
+        const bodyAwaitOneHundredSeventyFourthIndex = bodyAwaitOneHundredSeventyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventyFourthExpression = bodyAwaitOneHundredSeventyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventyFifthMatch = findBodyAwait(bodyAwaitOneHundredSeventyFourthIndex, bodyAwaitOneHundredSeventyFourthExpression);
+        const bodyAwaitOneHundredSeventyFifthIndex = bodyAwaitOneHundredSeventyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventyFifthExpression = bodyAwaitOneHundredSeventyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventySixthMatch = findBodyAwait(bodyAwaitOneHundredSeventyFifthIndex, bodyAwaitOneHundredSeventyFifthExpression);
+        const bodyAwaitOneHundredSeventySixthIndex = bodyAwaitOneHundredSeventySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventySixthExpression = bodyAwaitOneHundredSeventySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventySeventhMatch = findBodyAwait(bodyAwaitOneHundredSeventySixthIndex, bodyAwaitOneHundredSeventySixthExpression);
+        const bodyAwaitOneHundredSeventySeventhIndex = bodyAwaitOneHundredSeventySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventySeventhExpression = bodyAwaitOneHundredSeventySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventyEighthMatch = findBodyAwait(bodyAwaitOneHundredSeventySeventhIndex, bodyAwaitOneHundredSeventySeventhExpression);
+        const bodyAwaitOneHundredSeventyEighthIndex = bodyAwaitOneHundredSeventyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventyEighthExpression = bodyAwaitOneHundredSeventyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredSeventyNinthMatch = findBodyAwait(bodyAwaitOneHundredSeventyEighthIndex, bodyAwaitOneHundredSeventyEighthExpression);
+        const bodyAwaitOneHundredSeventyNinthIndex = bodyAwaitOneHundredSeventyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredSeventyNinthExpression = bodyAwaitOneHundredSeventyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightiethMatch = findBodyAwait(bodyAwaitOneHundredSeventyNinthIndex, bodyAwaitOneHundredSeventyNinthExpression);
+        const bodyAwaitOneHundredEightiethIndex = bodyAwaitOneHundredEightiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightiethExpression = bodyAwaitOneHundredEightiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightyFirstMatch = findBodyAwait(bodyAwaitOneHundredEightiethIndex, bodyAwaitOneHundredEightiethExpression);
+        const bodyAwaitOneHundredEightyFirstIndex = bodyAwaitOneHundredEightyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightyFirstExpression = bodyAwaitOneHundredEightyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightySecondMatch = findBodyAwait(bodyAwaitOneHundredEightyFirstIndex, bodyAwaitOneHundredEightyFirstExpression);
+        const bodyAwaitOneHundredEightySecondIndex = bodyAwaitOneHundredEightySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightySecondExpression = bodyAwaitOneHundredEightySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightyThirdMatch = findBodyAwait(bodyAwaitOneHundredEightySecondIndex, bodyAwaitOneHundredEightySecondExpression);
+        const bodyAwaitOneHundredEightyThirdIndex = bodyAwaitOneHundredEightyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightyThirdExpression = bodyAwaitOneHundredEightyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightyFourthMatch = findBodyAwait(bodyAwaitOneHundredEightyThirdIndex, bodyAwaitOneHundredEightyThirdExpression);
+        const bodyAwaitOneHundredEightyFourthIndex = bodyAwaitOneHundredEightyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightyFourthExpression = bodyAwaitOneHundredEightyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightyFifthMatch = findBodyAwait(bodyAwaitOneHundredEightyFourthIndex, bodyAwaitOneHundredEightyFourthExpression);
+        const bodyAwaitOneHundredEightyFifthIndex = bodyAwaitOneHundredEightyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightyFifthExpression = bodyAwaitOneHundredEightyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightySixthMatch = findBodyAwait(bodyAwaitOneHundredEightyFifthIndex, bodyAwaitOneHundredEightyFifthExpression);
+        const bodyAwaitOneHundredEightySixthIndex = bodyAwaitOneHundredEightySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightySixthExpression = bodyAwaitOneHundredEightySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightySeventhMatch = findBodyAwait(bodyAwaitOneHundredEightySixthIndex, bodyAwaitOneHundredEightySixthExpression);
+        const bodyAwaitOneHundredEightySeventhIndex = bodyAwaitOneHundredEightySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightySeventhExpression = bodyAwaitOneHundredEightySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightyEighthMatch = findBodyAwait(bodyAwaitOneHundredEightySeventhIndex, bodyAwaitOneHundredEightySeventhExpression);
+        const bodyAwaitOneHundredEightyEighthIndex = bodyAwaitOneHundredEightyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightyEighthExpression = bodyAwaitOneHundredEightyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredEightyNinthMatch = findBodyAwait(bodyAwaitOneHundredEightyEighthIndex, bodyAwaitOneHundredEightyEighthExpression);
+        const bodyAwaitOneHundredEightyNinthIndex = bodyAwaitOneHundredEightyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredEightyNinthExpression = bodyAwaitOneHundredEightyNinthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetiethMatch = findBodyAwait(bodyAwaitOneHundredEightyNinthIndex, bodyAwaitOneHundredEightyNinthExpression);
+        const bodyAwaitOneHundredNinetiethIndex = bodyAwaitOneHundredNinetiethMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetiethExpression = bodyAwaitOneHundredNinetiethMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetyFirstMatch = findBodyAwait(bodyAwaitOneHundredNinetiethIndex, bodyAwaitOneHundredNinetiethExpression);
+        const bodyAwaitOneHundredNinetyFirstIndex = bodyAwaitOneHundredNinetyFirstMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetyFirstExpression = bodyAwaitOneHundredNinetyFirstMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetySecondMatch = findBodyAwait(bodyAwaitOneHundredNinetyFirstIndex, bodyAwaitOneHundredNinetyFirstExpression);
+        const bodyAwaitOneHundredNinetySecondIndex = bodyAwaitOneHundredNinetySecondMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetySecondExpression = bodyAwaitOneHundredNinetySecondMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetyThirdMatch = findBodyAwait(bodyAwaitOneHundredNinetySecondIndex, bodyAwaitOneHundredNinetySecondExpression);
+        const bodyAwaitOneHundredNinetyThirdIndex = bodyAwaitOneHundredNinetyThirdMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetyThirdExpression = bodyAwaitOneHundredNinetyThirdMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetyFourthMatch = findBodyAwait(bodyAwaitOneHundredNinetyThirdIndex, bodyAwaitOneHundredNinetyThirdExpression);
+        const bodyAwaitOneHundredNinetyFourthIndex = bodyAwaitOneHundredNinetyFourthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetyFourthExpression = bodyAwaitOneHundredNinetyFourthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetyFifthMatch = findBodyAwait(bodyAwaitOneHundredNinetyFourthIndex, bodyAwaitOneHundredNinetyFourthExpression);
+        const bodyAwaitOneHundredNinetyFifthIndex = bodyAwaitOneHundredNinetyFifthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetyFifthExpression = bodyAwaitOneHundredNinetyFifthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetySixthMatch = findBodyAwait(bodyAwaitOneHundredNinetyFifthIndex, bodyAwaitOneHundredNinetyFifthExpression);
+        const bodyAwaitOneHundredNinetySixthIndex = bodyAwaitOneHundredNinetySixthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetySixthExpression = bodyAwaitOneHundredNinetySixthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetySeventhMatch = findBodyAwait(bodyAwaitOneHundredNinetySixthIndex, bodyAwaitOneHundredNinetySixthExpression);
+        const bodyAwaitOneHundredNinetySeventhIndex = bodyAwaitOneHundredNinetySeventhMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetySeventhExpression = bodyAwaitOneHundredNinetySeventhMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetyEighthMatch = findBodyAwait(bodyAwaitOneHundredNinetySeventhIndex, bodyAwaitOneHundredNinetySeventhExpression);
+        const bodyAwaitOneHundredNinetyEighthIndex = bodyAwaitOneHundredNinetyEighthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetyEighthExpression = bodyAwaitOneHundredNinetyEighthMatch?.expression ?? null;
+        const bodyAwaitOneHundredNinetyNinthMatch = findBodyAwait(bodyAwaitOneHundredNinetyEighthIndex, bodyAwaitOneHundredNinetyEighthExpression);
+        const bodyAwaitOneHundredNinetyNinthIndex = bodyAwaitOneHundredNinetyNinthMatch?.index ?? -1;
+        const bodyAwaitOneHundredNinetyNinthExpression = bodyAwaitOneHundredNinetyNinthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredthMatch = findBodyAwait(bodyAwaitOneHundredNinetyNinthIndex, bodyAwaitOneHundredNinetyNinthExpression);
+        const bodyAwaitTwoHundredthIndex = bodyAwaitTwoHundredthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredthExpression = bodyAwaitTwoHundredthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredFirstMatch = findBodyAwait(bodyAwaitTwoHundredthIndex, bodyAwaitTwoHundredthExpression);
+        const bodyAwaitTwoHundredFirstIndex = bodyAwaitTwoHundredFirstMatch?.index ?? -1;
+        const bodyAwaitTwoHundredFirstExpression = bodyAwaitTwoHundredFirstMatch?.expression ?? null;
+        const bodyAwaitTwoHundredSecondMatch = findBodyAwait(bodyAwaitTwoHundredFirstIndex, bodyAwaitTwoHundredFirstExpression);
+        const bodyAwaitTwoHundredSecondIndex = bodyAwaitTwoHundredSecondMatch?.index ?? -1;
+        const bodyAwaitTwoHundredSecondExpression = bodyAwaitTwoHundredSecondMatch?.expression ?? null;
+        const bodyAwaitTwoHundredThirdMatch = findBodyAwait(bodyAwaitTwoHundredSecondIndex, bodyAwaitTwoHundredSecondExpression);
+        const bodyAwaitTwoHundredThirdIndex = bodyAwaitTwoHundredThirdMatch?.index ?? -1;
+        const bodyAwaitTwoHundredThirdExpression = bodyAwaitTwoHundredThirdMatch?.expression ?? null;
+        const bodyAwaitTwoHundredFourthMatch = findBodyAwait(bodyAwaitTwoHundredThirdIndex, bodyAwaitTwoHundredThirdExpression);
+        const bodyAwaitTwoHundredFourthIndex = bodyAwaitTwoHundredFourthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredFourthExpression = bodyAwaitTwoHundredFourthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredFifthMatch = findBodyAwait(bodyAwaitTwoHundredFourthIndex, bodyAwaitTwoHundredFourthExpression);
+        const bodyAwaitTwoHundredFifthIndex = bodyAwaitTwoHundredFifthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredFifthExpression = bodyAwaitTwoHundredFifthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredSixthMatch = findBodyAwait(bodyAwaitTwoHundredFifthIndex, bodyAwaitTwoHundredFifthExpression);
+        const bodyAwaitTwoHundredSixthIndex = bodyAwaitTwoHundredSixthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredSixthExpression = bodyAwaitTwoHundredSixthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredSeventhMatch = findBodyAwait(bodyAwaitTwoHundredSixthIndex, bodyAwaitTwoHundredSixthExpression);
+        const bodyAwaitTwoHundredSeventhIndex = bodyAwaitTwoHundredSeventhMatch?.index ?? -1;
+        const bodyAwaitTwoHundredSeventhExpression = bodyAwaitTwoHundredSeventhMatch?.expression ?? null;
+        const bodyAwaitTwoHundredEighthMatch = findBodyAwait(bodyAwaitTwoHundredSeventhIndex, bodyAwaitTwoHundredSeventhExpression);
+        const bodyAwaitTwoHundredEighthIndex = bodyAwaitTwoHundredEighthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredEighthExpression = bodyAwaitTwoHundredEighthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredNinthMatch = findBodyAwait(bodyAwaitTwoHundredEighthIndex, bodyAwaitTwoHundredEighthExpression);
+        const bodyAwaitTwoHundredNinthIndex = bodyAwaitTwoHundredNinthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredNinthExpression = bodyAwaitTwoHundredNinthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredTenthMatch = findBodyAwait(bodyAwaitTwoHundredNinthIndex, bodyAwaitTwoHundredNinthExpression);
+        const bodyAwaitTwoHundredTenthIndex = bodyAwaitTwoHundredTenthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredTenthExpression = bodyAwaitTwoHundredTenthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredEleventhMatch = findBodyAwait(bodyAwaitTwoHundredTenthIndex, bodyAwaitTwoHundredTenthExpression);
+        const bodyAwaitTwoHundredEleventhIndex = bodyAwaitTwoHundredEleventhMatch?.index ?? -1;
+        const bodyAwaitTwoHundredEleventhExpression = bodyAwaitTwoHundredEleventhMatch?.expression ?? null;
+        const bodyAwaitTwoHundredTwelfthMatch = findBodyAwait(bodyAwaitTwoHundredEleventhIndex, bodyAwaitTwoHundredEleventhExpression);
+        const bodyAwaitTwoHundredTwelfthIndex = bodyAwaitTwoHundredTwelfthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredTwelfthExpression = bodyAwaitTwoHundredTwelfthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredThirteenthMatch = findBodyAwait(bodyAwaitTwoHundredTwelfthIndex, bodyAwaitTwoHundredTwelfthExpression);
+        const bodyAwaitTwoHundredThirteenthIndex = bodyAwaitTwoHundredThirteenthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredThirteenthExpression = bodyAwaitTwoHundredThirteenthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredFourteenthMatch = findBodyAwait(bodyAwaitTwoHundredThirteenthIndex, bodyAwaitTwoHundredThirteenthExpression);
+        const bodyAwaitTwoHundredFourteenthIndex = bodyAwaitTwoHundredFourteenthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredFourteenthExpression = bodyAwaitTwoHundredFourteenthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredFifteenthMatch = findBodyAwait(bodyAwaitTwoHundredFourteenthIndex, bodyAwaitTwoHundredFourteenthExpression);
+        const bodyAwaitTwoHundredFifteenthIndex = bodyAwaitTwoHundredFifteenthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredFifteenthExpression = bodyAwaitTwoHundredFifteenthMatch?.expression ?? null;
+        const bodyAwaitTwoHundredSixteenthMatch = findBodyAwait(bodyAwaitTwoHundredFifteenthIndex, bodyAwaitTwoHundredFifteenthExpression);
+        const bodyAwaitTwoHundredSixteenthIndex = bodyAwaitTwoHundredSixteenthMatch?.index ?? -1;
+        const bodyAwaitTwoHundredSixteenthExpression = bodyAwaitTwoHundredSixteenthMatch?.expression ?? null;
         const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length === 0 && directRoute.control === "return" && directRoute.expression
             ? this.unwrapTransparentExpression(directRoute.expression)
             : null;
@@ -53081,9 +50527,14 @@ class Emitter {
         const bodyAwaitBetweenTwoHundredFourteenthAndTwoHundredFifteenthStatements = bodyAwaitTwoHundredFifteenthExpression
             ? directRoute!.statements.slice(bodyAwaitTwoHundredFourteenthIndex + 1, bodyAwaitTwoHundredFifteenthIndex)
             : [];
+        const bodyAwaitBetweenTwoHundredFifteenthAndTwoHundredSixteenthStatements = bodyAwaitTwoHundredSixteenthExpression
+            ? directRoute!.statements.slice(bodyAwaitTwoHundredFifteenthIndex + 1, bodyAwaitTwoHundredSixteenthIndex)
+            : [];
         const bodyAwaitPostludeStatements = bodyAwaitExpression
             ? bodyIf
                 ? bodyPrefix.slice(1)
+                : bodyAwaitTwoHundredSixteenthExpression
+                    ? directRoute!.statements.slice(bodyAwaitTwoHundredSixteenthIndex + 1)
                 : bodyAwaitTwoHundredFifteenthExpression
                     ? directRoute!.statements.slice(bodyAwaitTwoHundredFifteenthIndex + 1)
                 : bodyAwaitTwoHundredFourteenthExpression
@@ -53730,6 +51181,7 @@ class Emitter {
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenTwoHundredTwelfthAndTwoHundredThirteenthStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenTwoHundredThirteenthAndTwoHundredFourteenthStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenTwoHundredFourteenthAndTwoHundredFifteenthStatements)) return false;
+        if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenTwoHundredFifteenthAndTwoHundredSixteenthStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitPostludeStatements)) return false;
         const bodyAwaitIfPrefix = Boolean(bodyIf && bodyAwaitExpression && !bodyAwaitConditionExpression);
         const bodyAwaitConditionAfterPrefix = Boolean(bodyIf && bodyAwaitExpression && bodyAwaitConditionExpression);
@@ -53908,6 +51360,7 @@ class Emitter {
         if (bodyAwaitTwoHundredTwelfthExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenTwoHundredTwelfthAndTwoHundredThirteenthStatements);
         if (bodyAwaitTwoHundredThirteenthExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenTwoHundredThirteenthAndTwoHundredFourteenthStatements);
         if (bodyAwaitTwoHundredFourteenthExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenTwoHundredFourteenthAndTwoHundredFifteenthStatements);
+        if (bodyAwaitTwoHundredFifteenthExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenTwoHundredFifteenthAndTwoHundredSixteenthStatements);
         const bodyAwaitInterstageLocals: BodyAwaitInterstageLocal[] = [];
         const bodyAwaitInterstageLocalsBySymbol = new Map<ts.Symbol, BodyAwaitInterstageLocal>();
         let bodyAwaitInterstageLocalsSupported = true;
@@ -54138,6 +51591,7 @@ class Emitter {
         if (bodyAwaitTwoHundredThirteenthExpression) allowedBodyAwaitExpressions.push(bodyAwaitTwoHundredThirteenthExpression);
         if (bodyAwaitTwoHundredFourteenthExpression) allowedBodyAwaitExpressions.push(bodyAwaitTwoHundredFourteenthExpression);
         if (bodyAwaitTwoHundredFifteenthExpression) allowedBodyAwaitExpressions.push(bodyAwaitTwoHundredFifteenthExpression);
+        if (bodyAwaitTwoHundredSixteenthExpression) allowedBodyAwaitExpressions.push(bodyAwaitTwoHundredSixteenthExpression);
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
             if (
@@ -55954,6 +53408,14 @@ class Emitter {
             ))
             : null;
         if (bodyAwaitTwoHundredFifteenthExpression && bodyAwaitTwoHundredFifteenthPromiseType?.kind !== "promise") return false;
+        const bodyAwaitTwoHundredSixteenthPromiseType = bodyAwaitTwoHundredSixteenthExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitTwoHundredSixteenthExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitTwoHundredSixteenthExpression.expression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitTwoHundredSixteenthExpression && bodyAwaitTwoHundredSixteenthPromiseType?.kind !== "promise") return false;
         if (bodyReturnAwaitExpression && bodyReturnAwaitedType?.kind === "never") return false;
 
         let usesThis = false;
@@ -60002,6 +57464,24 @@ class Emitter {
             target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitTwoHundredFifteenthPromiseType!, bodyAwaitTwoHundredFifteenthExpression!.expression)};`);
             return sourceVar;
         };
+        const emitBodyAwaitTwoHundredSixteenthSource = (target: CBuf): string => {
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                source = this.emitExpr(bodyAwaitTwoHundredSixteenthExpression!.expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_for_await_body_source");
+            target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitTwoHundredSixteenthPromiseType!, bodyAwaitTwoHundredSixteenthExpression!.expression)};`);
+            return sourceVar;
+        };
         const emitBodyAwaitConditionSource = (target: CBuf): string => {
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
             this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
@@ -63555,6 +61035,22 @@ class Emitter {
             callback.line(`state->receiver = ${twoHundredFifteenthSourceVar};`);
             callback.open(`if (tsc_promise_is_pending(${twoHundredFifteenthSourceVar}))`);
             callback.line(`tsc_promise_add_callback(${twoHundredFifteenthSourceVar}, ${name}, state);`);
+            callback.close();
+            callback.open("else");
+            callback.line(`tsc_queue_microtask(${name}, state);`);
+            callback.close();
+            callback.line("tsc_try_pop();");
+            callback.line("return;");
+            callback.close();
+        }
+        if (bodyAwaitTwoHundredSixteenthExpression) {
+            callback.open("if (state->body_await_stage == 215)");
+            emitBodyAwaitInterstageStatements(bodyAwaitBetweenTwoHundredFifteenthAndTwoHundredSixteenthStatements);
+            const twoHundredSixteenthSourceVar = emitBodyAwaitTwoHundredSixteenthSource(callback);
+            callback.line("state->body_await_stage = 216;");
+            callback.line(`state->receiver = ${twoHundredSixteenthSourceVar};`);
+            callback.open(`if (tsc_promise_is_pending(${twoHundredSixteenthSourceVar}))`);
+            callback.line(`tsc_promise_add_callback(${twoHundredSixteenthSourceVar}, ${name}, state);`);
             callback.close();
             callback.open("else");
             callback.line(`tsc_queue_microtask(${name}, state);`);
