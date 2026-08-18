@@ -51802,6 +51802,21 @@ class Emitter {
         const bodyAwaitOneHundredSeventyThirdExpression = bodyAwaitOneHundredSeventyThirdCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyThirdCandidate)
             ? bodyAwaitOneHundredSeventyThirdCandidate
             : null;
+        const bodyAwaitOneHundredSeventyFourthIndex = bodyAwaitOneHundredSeventyThirdExpression && directRoute
+            ? directRoute.statements.findIndex((statement, index) => index > bodyAwaitOneHundredSeventyThirdIndex &&
+                ts.isExpressionStatement(statement) &&
+                ts.isAwaitExpression(this.unwrapTransparentExpression(statement.expression)))
+            : -1;
+        const bodyAwaitOneHundredSeventyFourthStatement = bodyAwaitOneHundredSeventyFourthIndex >= 0 &&
+            ts.isExpressionStatement(directRoute!.statements[bodyAwaitOneHundredSeventyFourthIndex]!)
+            ? directRoute!.statements[bodyAwaitOneHundredSeventyFourthIndex]
+            : null;
+        const bodyAwaitOneHundredSeventyFourthCandidate = bodyAwaitOneHundredSeventyFourthStatement && ts.isExpressionStatement(bodyAwaitOneHundredSeventyFourthStatement)
+            ? this.unwrapTransparentExpression(bodyAwaitOneHundredSeventyFourthStatement.expression)
+            : null;
+        const bodyAwaitOneHundredSeventyFourthExpression = bodyAwaitOneHundredSeventyFourthCandidate && ts.isAwaitExpression(bodyAwaitOneHundredSeventyFourthCandidate)
+            ? bodyAwaitOneHundredSeventyFourthCandidate
+            : null;
         const bodyReturnAwaitCandidate = !bodyIf && directRoute && directRoute.statements.length === 0 && directRoute.control === "return" && directRoute.expression
             ? this.unwrapTransparentExpression(directRoute.expression)
             : null;
@@ -52324,9 +52339,14 @@ class Emitter {
         const bodyAwaitBetweenOneHundredSeventySecondAndOneHundredSeventyThirdStatements = bodyAwaitOneHundredSeventyThirdExpression
             ? directRoute!.statements.slice(bodyAwaitOneHundredSeventySecondIndex + 1, bodyAwaitOneHundredSeventyThirdIndex)
             : [];
+        const bodyAwaitBetweenOneHundredSeventyThirdAndOneHundredSeventyFourthStatements = bodyAwaitOneHundredSeventyFourthExpression
+            ? directRoute!.statements.slice(bodyAwaitOneHundredSeventyThirdIndex + 1, bodyAwaitOneHundredSeventyFourthIndex)
+            : [];
         const bodyAwaitPostludeStatements = bodyAwaitExpression
             ? bodyIf
                 ? bodyPrefix.slice(1)
+                : bodyAwaitOneHundredSeventyFourthExpression
+                    ? directRoute!.statements.slice(bodyAwaitOneHundredSeventyFourthIndex + 1)
                 : bodyAwaitOneHundredSeventyThirdExpression
                     ? directRoute!.statements.slice(bodyAwaitOneHundredSeventyThirdIndex + 1)
                 : bodyAwaitOneHundredSeventySecondExpression
@@ -52847,6 +52867,7 @@ class Emitter {
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenOneHundredSeventiethAndOneHundredSeventyFirstStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenOneHundredSeventyFirstAndOneHundredSeventySecondStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenOneHundredSeventySecondAndOneHundredSeventyThirdStatements)) return false;
+        if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitBetweenOneHundredSeventyThirdAndOneHundredSeventyFourthStatements)) return false;
         if (bodyAwaitExpression && !awaitFreeBodyAwaitStatements(bodyAwaitPostludeStatements)) return false;
         const bodyAwaitIfPrefix = Boolean(bodyIf && bodyAwaitExpression && !bodyAwaitConditionExpression);
         const bodyAwaitConditionAfterPrefix = Boolean(bodyIf && bodyAwaitExpression && bodyAwaitConditionExpression);
@@ -52983,6 +53004,7 @@ class Emitter {
         if (bodyAwaitOneHundredSeventiethExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenOneHundredSeventiethAndOneHundredSeventyFirstStatements);
         if (bodyAwaitOneHundredSeventyFirstExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenOneHundredSeventyFirstAndOneHundredSeventySecondStatements);
         if (bodyAwaitOneHundredSeventySecondExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenOneHundredSeventySecondAndOneHundredSeventyThirdStatements);
+        if (bodyAwaitOneHundredSeventyThirdExpression) bodyAwaitInterstageStatements.push(...bodyAwaitBetweenOneHundredSeventyThirdAndOneHundredSeventyFourthStatements);
         const bodyAwaitInterstageLocals: BodyAwaitInterstageLocal[] = [];
         const bodyAwaitInterstageLocalsBySymbol = new Map<ts.Symbol, BodyAwaitInterstageLocal>();
         let bodyAwaitInterstageLocalsSupported = true;
@@ -53171,6 +53193,7 @@ class Emitter {
         if (bodyAwaitOneHundredSeventyFirstExpression) allowedBodyAwaitExpressions.push(bodyAwaitOneHundredSeventyFirstExpression);
         if (bodyAwaitOneHundredSeventySecondExpression) allowedBodyAwaitExpressions.push(bodyAwaitOneHundredSeventySecondExpression);
         if (bodyAwaitOneHundredSeventyThirdExpression) allowedBodyAwaitExpressions.push(bodyAwaitOneHundredSeventyThirdExpression);
+        if (bodyAwaitOneHundredSeventyFourthExpression) allowedBodyAwaitExpressions.push(bodyAwaitOneHundredSeventyFourthExpression);
         const visitBody = (node: ts.Node): void => {
             if (!bodySupported) return;
             if (
@@ -54651,6 +54674,14 @@ class Emitter {
             ))
             : null;
         if (bodyAwaitOneHundredSeventyThirdExpression && bodyAwaitOneHundredSeventyThirdPromiseType?.kind !== "promise") return false;
+        const bodyAwaitOneHundredSeventyFourthPromiseType = bodyAwaitOneHundredSeventyFourthExpression
+            ? this.prepareType(mapTsType(
+                bodyAwaitOneHundredSeventyFourthExpression.expression,
+                this.checker.getTypeAtLocation(bodyAwaitOneHundredSeventyFourthExpression.expression),
+                this.checker,
+            ))
+            : null;
+        if (bodyAwaitOneHundredSeventyFourthExpression && bodyAwaitOneHundredSeventyFourthPromiseType?.kind !== "promise") return false;
         if (bodyReturnAwaitExpression && bodyReturnAwaitedType?.kind === "never") return false;
 
         let usesThis = false;
@@ -57943,6 +57974,24 @@ class Emitter {
             target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitOneHundredSeventyThirdPromiseType!, bodyAwaitOneHundredSeventyThirdExpression!.expression)};`);
             return sourceVar;
         };
+        const emitBodyAwaitOneHundredSeventyFourthSource = (target: CBuf): string => {
+            this.argumentValueScopes.push(bodyAwaitPostludeScope);
+            this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
+            if (usesThis && thisValue) this.functionThisStack.push({ c: "state->this_arg", ty: thisValue.ty });
+            let source: EmitResult;
+            this.asyncAwaitContinuationAdapterDepth++;
+            try {
+                source = this.emitExpr(bodyAwaitOneHundredSeventyFourthExpression!.expression);
+            } finally {
+                this.asyncAwaitContinuationAdapterDepth--;
+                if (usesThis && thisValue) this.functionThisStack.pop();
+                this.argumentValueTypeScopes.pop();
+                this.argumentValueScopes.pop();
+            }
+            const sourceVar = this.freshTemp("_for_await_body_source");
+            target.line(`tsc_promise_t* const ${sourceVar} = ${this.coerce(source, bodyAwaitOneHundredSeventyFourthPromiseType!, bodyAwaitOneHundredSeventyFourthExpression!.expression)};`);
+            return sourceVar;
+        };
         const emitBodyAwaitConditionSource = (target: CBuf): string => {
             this.argumentValueScopes.push(bodyAwaitPostludeScope);
             this.argumentValueTypeScopes.push(bodyAwaitPostludeScopeTypes);
@@ -60824,6 +60873,22 @@ class Emitter {
             callback.line(`state->receiver = ${oneHundredSeventyThirdSourceVar};`);
             callback.open(`if (tsc_promise_is_pending(${oneHundredSeventyThirdSourceVar}))`);
             callback.line(`tsc_promise_add_callback(${oneHundredSeventyThirdSourceVar}, ${name}, state);`);
+            callback.close();
+            callback.open("else");
+            callback.line(`tsc_queue_microtask(${name}, state);`);
+            callback.close();
+            callback.line("tsc_try_pop();");
+            callback.line("return;");
+            callback.close();
+        }
+        if (bodyAwaitOneHundredSeventyFourthExpression) {
+            callback.open("if (state->body_await_stage == 173)");
+            emitBodyAwaitInterstageStatements(bodyAwaitBetweenOneHundredSeventyThirdAndOneHundredSeventyFourthStatements);
+            const oneHundredSeventyFourthSourceVar = emitBodyAwaitOneHundredSeventyFourthSource(callback);
+            callback.line("state->body_await_stage = 174;");
+            callback.line(`state->receiver = ${oneHundredSeventyFourthSourceVar};`);
+            callback.open(`if (tsc_promise_is_pending(${oneHundredSeventyFourthSourceVar}))`);
+            callback.line(`tsc_promise_add_callback(${oneHundredSeventyFourthSourceVar}, ${name}, state);`);
             callback.close();
             callback.open("else");
             callback.line(`tsc_queue_microtask(${name}, state);`);
