@@ -1,0 +1,3 @@
+{
+  "description": "libuv-backed fs.promises descriptor truncate, sync, mode, ownership, and timestamp operations"
+}

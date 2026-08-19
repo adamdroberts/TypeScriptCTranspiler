@@ -1747,6 +1747,12 @@ interface FSPromises {
     readdir(path: FSPathLike, options?: FSPromisesReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
     statfs(path: FSPathLike, options?: FSPromisesStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
     fstat(fd: number, options?: FSDescriptorStatsOptions, ...ignored: any[]): Promise<FSStats>;
+    ftruncate(fd: number, len?: number, ...ignored: any[]): Promise<void>;
+    fsync(fd: number, ...ignored: any[]): Promise<void>;
+    fdatasync(fd: number, ...ignored: any[]): Promise<void>;
+    fchmod(fd: number, mode: number, ...ignored: any[]): Promise<void>;
+    fchown(fd: number, uid: number, gid: number, ...ignored: any[]): Promise<void>;
+    futimes(fd: number, atime: FSFileTime, mtime: FSFileTime, ...ignored: any[]): Promise<void>;
     stat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
     lstat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSBufferEncoding | FSPromisesFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
@@ -1893,6 +1899,12 @@ declare module "fs/promises" {
     export const readdir: FSPromises["readdir"];
     export const statfs: FSPromises["statfs"];
     export const fstat: FSPromises["fstat"];
+    export const ftruncate: FSPromises["ftruncate"];
+    export const fsync: FSPromises["fsync"];
+    export const fdatasync: FSPromises["fdatasync"];
+    export const fchmod: FSPromises["fchmod"];
+    export const fchown: FSPromises["fchown"];
+    export const futimes: FSPromises["futimes"];
     export const stat: FSPromises["stat"];
     export const lstat: FSPromises["lstat"];
     export const realpath: FSPromises["realpath"];
@@ -1925,6 +1937,12 @@ declare module "node:fs/promises" {
     export const readdir: FSPromises["readdir"];
     export const statfs: FSPromises["statfs"];
     export const fstat: FSPromises["fstat"];
+    export const ftruncate: FSPromises["ftruncate"];
+    export const fsync: FSPromises["fsync"];
+    export const fdatasync: FSPromises["fdatasync"];
+    export const fchmod: FSPromises["fchmod"];
+    export const fchown: FSPromises["fchown"];
+    export const futimes: FSPromises["futimes"];
     export const stat: FSPromises["stat"];
     export const lstat: FSPromises["lstat"];
     export const realpath: FSPromises["realpath"];

@@ -94030,6 +94030,12 @@ class Emitter {
             "opendir",
             "statfs",
             "fstat",
+            "ftruncate",
+            "fsync",
+            "fdatasync",
+            "fchmod",
+            "fchown",
+            "futimes",
             "stat",
             "lstat",
             "realpath",
@@ -110329,6 +110335,87 @@ class Emitter {
                 ], ([fd]) => {
                     this.usesLibuv = true;
                     return settle(`tsc_fs_promises_fstat_async(${fd!})`);
+                });
+            }
+            case "ftruncate": {
+                if (args.length < 1) unsupported(call, "fs.promises.ftruncate needs a file descriptor and optional length");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.promises.ftruncate file descriptor must be a number");
+                const lenArg = args[1] ? this.staticOptionValue(args[1]) : undefined;
+                const len = lenArg && !this.isUndefinedExpression(lenArg) ? this.emitExpr(lenArg) : undefined;
+                return this.emitSequencedExpr(mapped, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    {
+                        value: len ?? { c: "0.0", ty: T_NUMBER },
+                        target: T_NUMBER,
+                        node: args[1] ?? call,
+                    },
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([fd, length]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_ftruncate_async(${fd!}, ${length!})`);
+                });
+            }
+            case "fsync":
+            case "fdatasync": {
+                if (args.length < 1) unsupported(call, `fs.promises.${name} needs a file descriptor`);
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, `fs.promises.${name} file descriptor must be a number`);
+                return this.emitSequencedExpr(mapped, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    ...this.ignoredArgumentSpecs(args, 1),
+                ], ([fd]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_${name}_async(${fd!})`);
+                });
+            }
+            case "fchmod": {
+                if (args.length < 2) unsupported(call, "fs.promises.fchmod needs a file descriptor and numeric mode");
+                const fdExpr = this.emitExpr(args[0]!);
+                const modeExpr = this.emitExpr(args[1]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.promises.fchmod file descriptor must be a number");
+                if (modeExpr.ty.kind !== "number") unsupported(args[1]!, "fs.promises.fchmod mode must be a number");
+                return this.emitSequencedExpr(mapped, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: modeExpr, target: T_NUMBER, node: args[1]! },
+                    ...this.ignoredArgumentSpecs(args, 2),
+                ], ([fd, mode]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_fchmod_async(${fd!}, ${mode!})`);
+                });
+            }
+            case "fchown": {
+                if (args.length < 3) unsupported(call, "fs.promises.fchown needs a file descriptor, uid, and gid");
+                const fdExpr = this.emitExpr(args[0]!);
+                const uidExpr = this.emitExpr(args[1]!);
+                const gidExpr = this.emitExpr(args[2]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.promises.fchown file descriptor must be a number");
+                if (uidExpr.ty.kind !== "number") unsupported(args[1]!, "fs.promises.fchown uid must be a number");
+                if (gidExpr.ty.kind !== "number") unsupported(args[2]!, "fs.promises.fchown gid must be a number");
+                return this.emitSequencedExpr(mapped, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    { value: uidExpr, target: T_NUMBER, node: args[1]! },
+                    { value: gidExpr, target: T_NUMBER, node: args[2]! },
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([fd, uid, gid]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_fchown_async(${fd!}, ${uid!}, ${gid!})`);
+                });
+            }
+            case "futimes": {
+                if (args.length < 3) unsupported(call, "fs.promises.futimes needs a file descriptor, atime, and mtime");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.promises.futimes file descriptor must be a number");
+                const atime = this.emitFsTimeArg(args[1]!, "fs.promises.futimes atime");
+                const mtime = this.emitFsTimeArg(args[2]!, "fs.promises.futimes mtime");
+                return this.emitSequencedExpr(mapped, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    atime,
+                    mtime,
+                    ...this.ignoredArgumentSpecs(args, 3),
+                ], ([fd, atimeValue, mtimeValue]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_futimes_async(${fd!}, ${this.fsTimeArgC(atimeValue!, atime.value.ty)}, ${this.fsTimeArgC(mtimeValue!, mtime.value.ty)})`);
                 });
             }
             case "stat": {

@@ -8093,6 +8093,7 @@ typedef struct tsc_fs_file_handle_truncate_async {
     tsc_promise_t* promise;
     int fd;
     int64_t length;
+    const char* error_message;
     struct tsc_fs_file_handle_truncate_async* next;
 } tsc_fs_file_handle_truncate_async_t;
 
@@ -8101,6 +8102,7 @@ typedef struct tsc_fs_file_handle_sync_async {
     tsc_promise_t* promise;
     int fd;
     bool data_sync;
+    const char* error_message;
     struct tsc_fs_file_handle_sync_async* next;
 } tsc_fs_file_handle_sync_async_t;
 
@@ -8114,6 +8116,7 @@ typedef struct tsc_fs_file_handle_metadata_async {
     int gid;
     double atime;
     double mtime;
+    const char* error_message;
     struct tsc_fs_file_handle_metadata_async* next;
 } tsc_fs_file_handle_metadata_async_t;
 
@@ -8432,12 +8435,45 @@ static void tsc_fs_file_handle_truncate_async_cb(tsc_uv_fs_t* req) {
     if (result < 0) {
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle.truncate: could not truncate file handle"))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
     } else {
         tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
     }
     tsc_fs_file_handle_truncate_async_remove(task);
+}
+
+static tsc_promise_t* tsc_fs_file_handle_truncate_request_start(
+    int fd,
+    int64_t length,
+    const char* error_message
+) {
+    const char* resolved_error = error_message
+        ? error_message
+        : "fs.promises.FileHandle.truncate: could not truncate file handle";
+    if (fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(resolved_error)));
+    }
+    tsc_promise_t* promise = tsc_promise_pending();
+    tsc_fs_file_handle_truncate_async_t* task = (tsc_fs_file_handle_truncate_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_truncate_async_t));
+    memset(task, 0, sizeof(*task));
+    task->promise = promise;
+    task->fd = fd;
+    task->length = length;
+    task->error_message = resolved_error;
+    task->next = g_tsc_fs_file_handle_truncate_async;
+    g_tsc_fs_file_handle_truncate_async = task;
+    g_tsc_fs_uv_loop = uv_default_loop();
+    int rc = uv_fs_ftruncate(g_tsc_fs_uv_loop, &task->req, task->fd, task->length, tsc_fs_file_handle_truncate_async_cb);
+    if (rc < 0) {
+        uv_fs_req_cleanup(&task->req);
+        tsc_promise_reject_in_place(
+            promise,
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
+        );
+        tsc_fs_file_handle_truncate_async_remove(task);
+    }
+    return promise;
 }
 
 static tsc_promise_t* tsc_fs_file_handle_truncate_start(tsc_fs_file_handle_t* handle, tsc_array_t* args) {
@@ -8458,30 +8494,21 @@ static tsc_promise_t* tsc_fs_file_handle_truncate_start(tsc_fs_file_handle_t* ha
         }
         length = (int64_t)length_number;
     }
-    tsc_promise_t* promise = tsc_promise_pending();
-    tsc_fs_file_handle_truncate_async_t* task = (tsc_fs_file_handle_truncate_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_truncate_async_t));
-    memset(task, 0, sizeof(*task));
-    task->promise = promise;
-    task->fd = handle->fd;
-    task->length = length;
-    task->next = g_tsc_fs_file_handle_truncate_async;
-    g_tsc_fs_file_handle_truncate_async = task;
-    g_tsc_fs_uv_loop = uv_default_loop();
-    int rc = uv_fs_ftruncate(g_tsc_fs_uv_loop, &task->req, task->fd, task->length, tsc_fs_file_handle_truncate_async_cb);
-    if (rc < 0) {
-        uv_fs_req_cleanup(&task->req);
-        tsc_promise_reject_in_place(
-            promise,
-            tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle.truncate: could not truncate file handle"))
-        );
-        tsc_fs_file_handle_truncate_async_remove(task);
-    }
-    return promise;
+    return tsc_fs_file_handle_truncate_request_start(handle->fd, length, NULL);
 }
 
 static tsc_value_t tsc_fs_file_handle_truncate_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     return tsc_value_promise(tsc_fs_file_handle_truncate_start((tsc_fs_file_handle_t*)env, args));
+}
+
+tsc_promise_t* tsc_fs_promises_ftruncate_async(double fd, double length) {
+    const char* error_message = "fs.promises.ftruncate: could not truncate file descriptor";
+    if (!isfinite(fd) || fd < 0.0 || fd != floor(fd) || fd > (double)INT_MAX ||
+        !isfinite(length) || length < 0.0 || length != floor(length) || length > 9007199254740991.0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
+    }
+    return tsc_fs_file_handle_truncate_request_start((int)fd, (int64_t)length, error_message);
 }
 
 static void tsc_fs_file_handle_sync_async_remove(tsc_fs_file_handle_sync_async_t* task) {
@@ -8503,9 +8530,7 @@ static void tsc_fs_file_handle_sync_async_cb(tsc_uv_fs_t* req) {
     if (result < 0) {
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(tsc_str_from_cstr(task->data_sync
-                ? "fs.promises.FileHandle.datasync: could not sync file handle"
-                : "fs.promises.FileHandle.sync: could not sync file handle"))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
     } else {
         tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
@@ -8513,16 +8538,26 @@ static void tsc_fs_file_handle_sync_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_file_handle_sync_async_remove(task);
 }
 
-static tsc_promise_t* tsc_fs_file_handle_sync_start(tsc_fs_file_handle_t* handle, bool data_sync) {
-    if (!handle || handle->closed || handle->fd < 0) {
-        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+static tsc_promise_t* tsc_fs_file_handle_sync_request_start(
+    int fd,
+    bool data_sync,
+    const char* error_message
+) {
+    const char* resolved_error = error_message
+        ? error_message
+        : (data_sync
+            ? "fs.promises.FileHandle.datasync: could not sync file handle"
+            : "fs.promises.FileHandle.sync: could not sync file handle");
+    if (fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(resolved_error)));
     }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_file_handle_sync_async_t* task = (tsc_fs_file_handle_sync_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_sync_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
-    task->fd = handle->fd;
+    task->fd = fd;
     task->data_sync = data_sync;
+    task->error_message = resolved_error;
     task->next = g_tsc_fs_file_handle_sync_async;
     g_tsc_fs_file_handle_sync_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -8533,13 +8568,18 @@ static tsc_promise_t* tsc_fs_file_handle_sync_start(tsc_fs_file_handle_t* handle
         uv_fs_req_cleanup(&task->req);
         tsc_promise_reject_in_place(
             promise,
-            tsc_value_string(tsc_str_from_cstr(data_sync
-                ? "fs.promises.FileHandle.datasync: could not sync file handle"
-                : "fs.promises.FileHandle.sync: could not sync file handle"))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
         tsc_fs_file_handle_sync_async_remove(task);
     }
     return promise;
+}
+
+static tsc_promise_t* tsc_fs_file_handle_sync_start(tsc_fs_file_handle_t* handle, bool data_sync) {
+    if (!handle || handle->closed || handle->fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+    }
+    return tsc_fs_file_handle_sync_request_start(handle->fd, data_sync, NULL);
 }
 
 static tsc_value_t tsc_fs_file_handle_sync_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -8552,6 +8592,22 @@ static tsc_value_t tsc_fs_file_handle_datasync_builtin(void* env, tsc_value_t th
     (void)this_arg;
     (void)args;
     return tsc_value_promise(tsc_fs_file_handle_sync_start((tsc_fs_file_handle_t*)env, true));
+}
+
+tsc_promise_t* tsc_fs_promises_fsync_async(double fd) {
+    const char* error_message = "fs.promises.fsync: could not sync file descriptor";
+    if (!isfinite(fd) || fd < 0.0 || fd != floor(fd) || fd > (double)INT_MAX) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
+    }
+    return tsc_fs_file_handle_sync_request_start((int)fd, false, error_message);
+}
+
+tsc_promise_t* tsc_fs_promises_fdatasync_async(double fd) {
+    const char* error_message = "fs.promises.fdatasync: could not sync file descriptor";
+    if (!isfinite(fd) || fd < 0.0 || fd != floor(fd) || fd > (double)INT_MAX) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
+    }
+    return tsc_fs_file_handle_sync_request_start((int)fd, true, error_message);
 }
 
 static void tsc_fs_file_handle_append_async_remove(tsc_fs_file_handle_append_async_t* task) {
@@ -8812,6 +8868,10 @@ static const char* tsc_fs_file_handle_metadata_error(int operation) {
     }
 }
 
+static const char* tsc_fs_file_handle_metadata_resolved_error(int operation, const char* error_message) {
+    return error_message ? error_message : tsc_fs_file_handle_metadata_error(operation);
+}
+
 static void tsc_fs_file_handle_metadata_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_file_handle_metadata_async_t* task = (tsc_fs_file_handle_metadata_async_t*)req;
     ssize_t result = uv_fs_get_result(req);
@@ -8819,7 +8879,7 @@ static void tsc_fs_file_handle_metadata_async_cb(tsc_uv_fs_t* req) {
     if (result < 0) {
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(tsc_str_from_cstr(tsc_fs_file_handle_metadata_error(task->operation)))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
     } else {
         tsc_promise_fulfill_in_place(task->promise, tsc_value_undefined());
@@ -8861,43 +8921,32 @@ static double tsc_fs_file_handle_metadata_time(tsc_value_t value) {
     return number;
 }
 
-static tsc_promise_t* tsc_fs_file_handle_metadata_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, int operation) {
-    if (!handle || handle->closed || handle->fd < 0) {
-        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+static tsc_promise_t* tsc_fs_file_handle_metadata_request_start(
+    int fd,
+    int operation,
+    int mode,
+    int uid,
+    int gid,
+    double atime,
+    double mtime,
+    const char* error_message
+) {
+    const char* resolved_error = tsc_fs_file_handle_metadata_resolved_error(operation, error_message);
+    if (fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(resolved_error)));
     }
-    size_t required = operation == TSC_FS_FILE_HANDLE_CHMOD ? 1 : 2;
-    if (!args || args->len < required) {
-        tsc_throw_str(tsc_str_from_cstr(operation == TSC_FS_FILE_HANDLE_CHMOD
-            ? "fs.promises.FileHandle.chmod needs a mode"
-            : operation == TSC_FS_FILE_HANDLE_CHOWN
-                ? "fs.promises.FileHandle.chown needs uid and gid"
-                : "fs.promises.FileHandle.utimes needs atime and mtime"));
-        return NULL;
-    }
-
+    tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_file_handle_metadata_async_t* task = (tsc_fs_file_handle_metadata_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_metadata_async_t));
     memset(task, 0, sizeof(*task));
-    task->promise = tsc_promise_pending();
-    task->fd = handle->fd;
+    task->promise = promise;
+    task->fd = fd;
     task->operation = operation;
-    if (operation == TSC_FS_FILE_HANDLE_CHMOD) {
-        task->mode = (int)tsc_fs_file_handle_metadata_integer(
-            TSC_ARR(tsc_value_t, args, 0),
-            "fs.promises.FileHandle.chmod mode must be a non-negative safe integer"
-        );
-    } else if (operation == TSC_FS_FILE_HANDLE_CHOWN) {
-        task->uid = (int)tsc_fs_file_handle_metadata_integer(
-            TSC_ARR(tsc_value_t, args, 0),
-            "fs.promises.FileHandle.chown uid must be a non-negative safe integer"
-        );
-        task->gid = (int)tsc_fs_file_handle_metadata_integer(
-            TSC_ARR(tsc_value_t, args, 1),
-            "fs.promises.FileHandle.chown gid must be a non-negative safe integer"
-        );
-    } else {
-        task->atime = tsc_fs_file_handle_metadata_time(TSC_ARR(tsc_value_t, args, 0));
-        task->mtime = tsc_fs_file_handle_metadata_time(TSC_ARR(tsc_value_t, args, 1));
-    }
+    task->mode = mode;
+    task->uid = uid;
+    task->gid = gid;
+    task->atime = atime;
+    task->mtime = mtime;
+    task->error_message = resolved_error;
     task->next = g_tsc_fs_file_handle_metadata_async;
     g_tsc_fs_file_handle_metadata_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -8917,11 +8966,51 @@ static tsc_promise_t* tsc_fs_file_handle_metadata_start(tsc_fs_file_handle_t* ha
         uv_fs_req_cleanup(&task->req);
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(tsc_str_from_cstr(tsc_fs_file_handle_metadata_error(operation)))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
         tsc_fs_file_handle_metadata_async_remove(task);
     }
-    return task->promise;
+    return promise;
+}
+
+static tsc_promise_t* tsc_fs_file_handle_metadata_start(tsc_fs_file_handle_t* handle, tsc_array_t* args, int operation) {
+    if (!handle || handle->closed || handle->fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+    }
+    size_t required = operation == TSC_FS_FILE_HANDLE_CHMOD ? 1 : 2;
+    if (!args || args->len < required) {
+        tsc_throw_str(tsc_str_from_cstr(operation == TSC_FS_FILE_HANDLE_CHMOD
+            ? "fs.promises.FileHandle.chmod needs a mode"
+            : operation == TSC_FS_FILE_HANDLE_CHOWN
+                ? "fs.promises.FileHandle.chown needs uid and gid"
+                : "fs.promises.FileHandle.utimes needs atime and mtime"));
+        return NULL;
+    }
+
+    int mode = 0;
+    int uid = 0;
+    int gid = 0;
+    double atime = 0.0;
+    double mtime = 0.0;
+    if (operation == TSC_FS_FILE_HANDLE_CHMOD) {
+        mode = (int)tsc_fs_file_handle_metadata_integer(
+            TSC_ARR(tsc_value_t, args, 0),
+            "fs.promises.FileHandle.chmod mode must be a non-negative safe integer"
+        );
+    } else if (operation == TSC_FS_FILE_HANDLE_CHOWN) {
+        uid = (int)tsc_fs_file_handle_metadata_integer(
+            TSC_ARR(tsc_value_t, args, 0),
+            "fs.promises.FileHandle.chown uid must be a non-negative safe integer"
+        );
+        gid = (int)tsc_fs_file_handle_metadata_integer(
+            TSC_ARR(tsc_value_t, args, 1),
+            "fs.promises.FileHandle.chown gid must be a non-negative safe integer"
+        );
+    } else {
+        atime = tsc_fs_file_handle_metadata_time(TSC_ARR(tsc_value_t, args, 0));
+        mtime = tsc_fs_file_handle_metadata_time(TSC_ARR(tsc_value_t, args, 1));
+    }
+    return tsc_fs_file_handle_metadata_request_start(handle->fd, operation, mode, uid, gid, atime, mtime, NULL);
 }
 
 static tsc_value_t tsc_fs_file_handle_chmod_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
@@ -8937,6 +9026,31 @@ static tsc_value_t tsc_fs_file_handle_chown_builtin(void* env, tsc_value_t this_
 static tsc_value_t tsc_fs_file_handle_utimes_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {
     (void)this_arg;
     return tsc_value_promise(tsc_fs_file_handle_metadata_start((tsc_fs_file_handle_t*)env, args, TSC_FS_FILE_HANDLE_UTIMES));
+}
+
+tsc_promise_t* tsc_fs_promises_fchmod_async(double fd, double mode) {
+    const char* error_message = "fs.promises.fchmod: could not change mode";
+    if (!isfinite(fd) || fd < 0.0 || fd != floor(fd) || fd > (double)INT_MAX) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
+    }
+    return tsc_fs_file_handle_metadata_request_start((int)fd, TSC_FS_FILE_HANDLE_CHMOD, (int)mode, 0, 0, 0.0, 0.0, error_message);
+}
+
+tsc_promise_t* tsc_fs_promises_fchown_async(double fd, double uid, double gid) {
+    const char* error_message = "fs.promises.fchown: could not change ownership";
+    if (!isfinite(fd) || fd < 0.0 || fd != floor(fd) || fd > (double)INT_MAX) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
+    }
+    return tsc_fs_file_handle_metadata_request_start((int)fd, TSC_FS_FILE_HANDLE_CHOWN, 0, (int)uid, (int)gid, 0.0, 0.0, error_message);
+}
+
+tsc_promise_t* tsc_fs_promises_futimes_async(double fd, double atime, double mtime) {
+    const char* error_message = "fs.promises.futimes: could not update timestamps";
+    if (!isfinite(fd) || fd < 0.0 || fd != floor(fd) || fd > (double)INT_MAX ||
+        !isfinite(atime) || !isfinite(mtime)) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
+    }
+    return tsc_fs_file_handle_metadata_request_start((int)fd, TSC_FS_FILE_HANDLE_UTIMES, 0, 0, 0, atime, mtime, error_message);
 }
 
 static size_t tsc_fs_file_handle_io_index(tsc_value_t value) {
