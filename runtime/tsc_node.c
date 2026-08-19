@@ -9175,6 +9175,24 @@ static tsc_value_t tsc_fs_file_handle_write_builtin(void* env, tsc_value_t this_
         tsc_value_t data = TSC_ARR(tsc_value_t, args, 0);
         if (value_is_box(data) && value_tag(data) == TSC_VALUE_TAG_STRING) {
             tsc_str_t* encoding = NULL;
+            tsc_value_t position = tsc_value_null();
+            if (args->len > 1 && tsc_value_is_object(TSC_ARR(tsc_value_t, args, 1))) {
+                tsc_value_t options = TSC_ARR(tsc_value_t, args, 1);
+                tsc_value_t position_value = tsc_value_get_prop(options, tsc_str_from_lit("position", 8));
+                if (!tsc_value_is_undefined(position_value)) {
+                    position = position_value;
+                }
+                tsc_value_t encoding_value = tsc_value_get_prop(options, tsc_str_from_lit("encoding", 8));
+                if (!tsc_value_is_undefined(encoding_value) && !tsc_value_is_nullish(encoding_value)) {
+                    if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
+                        tsc_throw_str(tsc_str_from_cstr("fs.promises.FileHandle.write encoding must be a string"));
+                        return tsc_value_undefined();
+                    }
+                    encoding = tsc_value_as_string(encoding_value);
+                }
+            } else {
+                position = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_null();
+            }
             if (args->len > 2 && !tsc_value_is_nullish(TSC_ARR(tsc_value_t, args, 2))) {
                 tsc_value_t encoding_value = TSC_ARR(tsc_value_t, args, 2);
                 if (!value_is_box(encoding_value) || value_tag(encoding_value) != TSC_VALUE_TAG_STRING) {
@@ -9188,7 +9206,6 @@ static tsc_value_t tsc_fs_file_handle_write_builtin(void* env, tsc_value_t this_
             tsc_array_t* io_args = tsc_array_new(sizeof(tsc_value_t), 4);
             tsc_value_t offset = tsc_value_num(0.0);
             tsc_value_t length = tsc_value_num((double)buffer->len);
-            tsc_value_t position = args->len > 1 ? TSC_ARR(tsc_value_t, args, 1) : tsc_value_null();
             tsc_array_push_raw(io_args, &buffer_value);
             tsc_array_push_raw(io_args, &offset);
             tsc_array_push_raw(io_args, &length);

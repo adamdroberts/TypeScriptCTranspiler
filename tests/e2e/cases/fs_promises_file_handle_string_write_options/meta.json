@@ -1,0 +1,3 @@
+{
+  "description": "fs.promises.FileHandle.write supports string data with an options object for position and encoding"
+}
