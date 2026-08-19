@@ -94029,6 +94029,7 @@ class Emitter {
             "readdir",
             "opendir",
             "statfs",
+            "fstat",
             "stat",
             "lstat",
             "realpath",
@@ -110309,6 +110310,25 @@ class Emitter {
                     return signal
                         ? `(tsc_abort_signal_is_aborted(${signal}) ? tsc_promise_reject(tsc_value_get_prop(${signal}, tsc_str_from_lit("reason", 6))) : ${statfs})`
                         : settle(statfs);
+                });
+            }
+            case "fstat": {
+                if (args.length < 1) unsupported(call, "fs.promises.fstat needs a file descriptor and optional { bigint: false } options");
+                this.validateFsStatFsOptions(args[1], "fs.promises.fstat");
+                if (mapped.elem?.kind !== "fsstats") unsupported(call, "fs.promises.fstat result must be Promise<FSStats>");
+                const fdExpr = this.emitExpr(args[0]!);
+                if (fdExpr.ty.kind !== "number") unsupported(args[0]!, "fs.promises.fstat file descriptor must be a number");
+                const optionSpecs: SequencedCallArg[] = [];
+                if (args[1] && this.shouldEvaluateSideEffectfulVoidDefault(args[1])) {
+                    optionSpecs.push({ value: this.emitExpr(args[1]), target: T_VOID, node: args[1] });
+                }
+                return this.emitSequencedExpr(mapped, [
+                    { value: fdExpr, target: T_NUMBER, node: args[0]! },
+                    ...optionSpecs,
+                    ...this.ignoredArgumentSpecs(args, args[1] ? 2 : 1),
+                ], ([fd]) => {
+                    this.usesLibuv = true;
+                    return settle(`tsc_fs_promises_fstat_async(${fd!})`);
                 });
             }
             case "stat": {

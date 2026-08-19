@@ -1273,6 +1273,7 @@ tsc_array_t* tsc_fs_dirents_encode_names(tsc_array_t* entries, const tsc_str_t* 
 tsc_fs_stats_t* tsc_fs_stat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_stat_sync_no_throw(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_fstat_sync(double fd);
+tsc_promise_t* tsc_fs_promises_fstat_async(double fd);
 tsc_promise_t* tsc_fs_promises_stat_async(const tsc_str_t* path, bool throw_if_no_entry, tsc_value_t signal);
 tsc_fs_stats_t* tsc_fs_lstat_sync(const tsc_str_t* path);
 tsc_fs_stats_t* tsc_fs_lstat_sync_no_throw(const tsc_str_t* path);

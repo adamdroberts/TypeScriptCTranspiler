@@ -6,6 +6,7 @@ All meaningful changes to `typescriptc` land here. Newest at the top.
 
 ### Added
 
+- Bounded `fs.promises.fstat` support: namespace and `fs/promises` named imports now return libuv-backed `FSStats` for numeric descriptors, accept `{ bigint: false }`, and reject closed descriptors. Test: `fs_promises_fstat`.
 - Bounded `fs.promises.open` FileHandle string-write options: `write(string, { position?, encoding? })` now reuses the asynchronous byte-write path and preserves the original string in the `{ bytesWritten, buffer }` result. Test: `fs_promises_file_handle_string_write_options`.
 - Bounded AbortSignal default-reason and exception-value support: `AbortController.abort()` and `abort(undefined)` create an error-shaped `AbortError` reason with Node-compatible message and code `20`, while synchronous `throwIfAborted()` preserves that identity plus explicit `null` and custom object reasons through typed or untyped catch bindings, including `finally`/rethrow paths; propagation through timers, filesystem Promise pre-aborts, and native net/HTTP/child-process cancellation remains intact, while deferred async/lazy continuation catches remain on the compatibility string bridge. Tests: `abort_controller_default_reason`, `net_connect_signal`.
 - Bounded HTTP header mutation/introspection support: `ClientRequest` and `ServerResponse` now provide case-insensitive `setHeader` / `getHeader` / `hasHeader` / `removeHeader` methods with validation, replacement, and pre-send mutation guards, plus synchronized `headersSent` state. Test: `http_header_mutation`.

@@ -1,5 +1,6 @@
 # Implemented features
 
+- Bounded `fs.promises.fstat` support now returns libuv-backed `FSStats` for numeric descriptors through namespace and `fs/promises` named imports, accepts `{ bigint: false }`, and rejects closed descriptors. Test: `fs_promises_fstat`.
 - Bounded `fs.promises.open` FileHandle string-write options now accept `write(string, { position?, encoding? })` through the existing asynchronous byte-write path and preserve the original string in the `{ bytesWritten, buffer }` result. Test: `fs_promises_file_handle_string_write_options`.
 - Verified bounded AbortSignal default-reason and exception-value coverage: `AbortController.abort()` and `abort(undefined)` preserve an error-shaped `AbortError` reason with Node-compatible message and code `20`, while synchronous `throwIfAborted()` preserves that identity plus explicit `null` and custom object reasons through typed or untyped catch bindings, including `finally`/rethrow paths; propagation through timers, filesystem Promise pre-aborts, and native net/HTTP/child-process cancellation remains intact, while deferred async/lazy continuation catches remain on the compatibility string bridge. Tests: `abort_controller_default_reason`, `net_connect_signal`.
 - Verified bounded HTTP header mutation/introspection coverage: `ClientRequest` and `ServerResponse` now expose case-insensitive `setHeader` / `getHeader` / `hasHeader` / `removeHeader` methods with validation, replacement, and pre-send mutation guards, while both objects synchronize `headersSent` when request or response headers are written. Test: `http_header_mutation`.
@@ -4803,6 +4804,7 @@ Tests: `strings`, `string_at`, `string_concat`, `string_for_of`, `string_last_in
 | `https_request_signal` | https.request pre-aborted and in-flight AbortSignal cancellation |
 | `fs_promises_file_handle_string_write` | FileHandle string write supports position/encoding and preserves the string result buffer |
 | `fs_promises_file_handle_string_write_options` | FileHandle string write supports position/encoding options objects and preserves the string result buffer |
+| `fs_promises_fstat` | libuv-backed fs.promises.fstat namespace/named descriptor metadata and closed-descriptor rejection |
 | `fs_promises_file_handle_read_lines` | bounded UTF-8 FileHandle readLines async iterator, line splitting, direct return, and for-await consumption |
 | `fs_promises_file_handle_read_lines_abort` | FileHandle readLines AbortSignal cancellation for pending and pre-aborted iterators |
 | `fs_promises_file_handle_read_lines_range` | FileHandle readLines inclusive start/end byte ranges preserve descriptor position |

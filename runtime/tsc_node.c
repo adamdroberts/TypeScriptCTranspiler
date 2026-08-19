@@ -8084,6 +8084,7 @@ typedef struct tsc_fs_file_handle_stat_async {
     tsc_promise_t* promise;
     int fd;
     bool req_pending;
+    const char* error_message;
     struct tsc_fs_file_handle_stat_async* next;
 } tsc_fs_file_handle_stat_async_t;
 
@@ -8345,7 +8346,7 @@ static void tsc_fs_file_handle_stat_async_cb(tsc_uv_fs_t* req) {
         uv_fs_req_cleanup(req);
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle.stat: could not stat file handle"))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
         tsc_fs_file_handle_stat_async_remove(task);
         return;
@@ -8355,7 +8356,7 @@ static void tsc_fs_file_handle_stat_async_cb(tsc_uv_fs_t* req) {
         uv_fs_req_cleanup(req);
         tsc_promise_reject_in_place(
             task->promise,
-            tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle.stat: could not stat file handle"))
+            tsc_value_string(tsc_str_from_cstr(task->error_message))
         );
         tsc_fs_file_handle_stat_async_remove(task);
         return;
@@ -8367,15 +8368,16 @@ static void tsc_fs_file_handle_stat_async_cb(tsc_uv_fs_t* req) {
     tsc_fs_file_handle_stat_async_remove(task);
 }
 
-static tsc_promise_t* tsc_fs_file_handle_stat_start(tsc_fs_file_handle_t* handle) {
-    if (!handle || handle->closed || handle->fd < 0) {
-        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+static tsc_promise_t* tsc_fs_fstat_async_start(int fd, const char* error_message) {
+    if (fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr(error_message)));
     }
     tsc_promise_t* promise = tsc_promise_pending();
     tsc_fs_file_handle_stat_async_t* task = (tsc_fs_file_handle_stat_async_t*)TSC_GC_MALLOC(sizeof(tsc_fs_file_handle_stat_async_t));
     memset(task, 0, sizeof(*task));
     task->promise = promise;
-    task->fd = handle->fd;
+    task->fd = fd;
+    task->error_message = error_message;
     task->next = g_tsc_fs_file_handle_stat_async;
     g_tsc_fs_file_handle_stat_async = task;
     g_tsc_fs_uv_loop = uv_default_loop();
@@ -8385,13 +8387,24 @@ static tsc_promise_t* tsc_fs_file_handle_stat_start(tsc_fs_file_handle_t* handle
         uv_fs_req_cleanup(&task->req);
         tsc_promise_reject_in_place(
             promise,
-            tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle.stat: could not stat file handle"))
+            tsc_value_string(tsc_str_from_cstr(error_message))
         );
         tsc_fs_file_handle_stat_async_remove(task);
     } else {
         task->req_pending = true;
     }
     return promise;
+}
+
+static tsc_promise_t* tsc_fs_file_handle_stat_start(tsc_fs_file_handle_t* handle) {
+    if (!handle || handle->closed || handle->fd < 0) {
+        return tsc_promise_reject(tsc_value_string(tsc_str_from_cstr("fs.promises.FileHandle is closed")));
+    }
+    return tsc_fs_fstat_async_start(handle->fd, "fs.promises.FileHandle.stat: could not stat file handle");
+}
+
+tsc_promise_t* tsc_fs_promises_fstat_async(double fd) {
+    return tsc_fs_fstat_async_start((int)fd, "fs.promises.fstat: could not stat file descriptor");
 }
 
 static tsc_value_t tsc_fs_file_handle_stat_builtin(void* env, tsc_value_t this_arg, tsc_array_t* args) {

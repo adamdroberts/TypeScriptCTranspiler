@@ -1746,6 +1746,7 @@ interface FSPromises {
     readdir(path: FSPathLike, options: FSPromisesReaddirDirentOptions, ...ignored: any[]): Promise<FSDirent[]>;
     readdir(path: FSPathLike, options?: FSPromisesReaddirStringOptions, ...ignored: any[]): Promise<string[]>;
     statfs(path: FSPathLike, options?: FSPromisesStatFsOptions, ...ignored: any[]): Promise<FSStatFs>;
+    fstat(fd: number, options?: FSDescriptorStatsOptions, ...ignored: any[]): Promise<FSStats>;
     stat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
     lstat(path: FSPathLike, options?: FSPromisesStatsOptions, ...ignored: any[]): Promise<FSStats>;
     realpath(path: FSPathLike, options: FSBufferEncoding | FSPromisesFileBufferEncodingOptions, ...ignored: any[]): Promise<Buffer>;
@@ -1891,6 +1892,7 @@ declare module "fs/promises" {
     export const opendir: FSPromises["opendir"];
     export const readdir: FSPromises["readdir"];
     export const statfs: FSPromises["statfs"];
+    export const fstat: FSPromises["fstat"];
     export const stat: FSPromises["stat"];
     export const lstat: FSPromises["lstat"];
     export const realpath: FSPromises["realpath"];
@@ -1922,6 +1924,7 @@ declare module "node:fs/promises" {
     export const opendir: FSPromises["opendir"];
     export const readdir: FSPromises["readdir"];
     export const statfs: FSPromises["statfs"];
+    export const fstat: FSPromises["fstat"];
     export const stat: FSPromises["stat"];
     export const lstat: FSPromises["lstat"];
     export const realpath: FSPromises["realpath"];
