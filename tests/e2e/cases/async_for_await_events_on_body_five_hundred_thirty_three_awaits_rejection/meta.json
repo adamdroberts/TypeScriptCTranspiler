@@ -1,0 +1,3 @@
+{
+  "description": "bounded for-await body closes the iterator on the five hundred thirty-third rejection"
+}
