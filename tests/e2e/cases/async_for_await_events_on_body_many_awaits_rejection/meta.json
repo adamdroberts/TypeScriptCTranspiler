@@ -1,0 +1,3 @@
+{
+  "description": "generalized for-await body closes the iterator when stage 600 rejects"
+}
