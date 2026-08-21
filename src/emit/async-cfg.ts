@@ -13,6 +13,48 @@ export interface AsyncControlFlowExceptionTarget {
     readonly target: AsyncControlFlowTarget;
 }
 
+type AsyncBindingOperation =
+    | {
+        readonly kind: "source";
+        readonly resultSlot: number;
+        readonly valueSlot: number;
+    }
+    | {
+        readonly kind: "check";
+        readonly valueSlot: number;
+    }
+    | {
+        readonly kind: "property";
+        readonly sourceSlot: number;
+        readonly valueSlot: number;
+        readonly name: ts.PropertyName;
+    }
+    | {
+        readonly kind: "element";
+        readonly sourceSlot: number;
+        readonly valueSlot: number;
+        readonly index: number;
+    }
+    | {
+        readonly kind: "default-test";
+        readonly valueSlot: number;
+        readonly defaultTarget: AsyncControlFlowTarget;
+    }
+    | {
+        readonly kind: "default-apply";
+        readonly resultSlot: number;
+        readonly valueSlot: number;
+    }
+    | {
+        readonly kind: "assign";
+        readonly identifier: ts.Identifier;
+        readonly valueSlot: number;
+    }
+    | {
+        readonly kind: "release";
+        readonly valueSlot: number;
+    };
+
 type AsyncControlFlowStateCore =
     | {
         readonly kind: "sync";
@@ -174,6 +216,12 @@ type AsyncControlFlowStateCore =
         readonly next: AsyncControlFlowTarget;
     }
     | {
+        readonly kind: "binding-op";
+        readonly id: number;
+        readonly operation: AsyncBindingOperation;
+        readonly next: AsyncControlFlowTarget;
+    }
+    | {
         readonly kind: "throw-route";
         readonly id: number;
         readonly expression: ts.Expression;
@@ -256,6 +304,7 @@ export interface AsyncControlFlowGraph {
     readonly finallyCount: number;
     readonly iteratorCount: number;
     readonly asyncIteratorCount: number;
+    readonly bindingValueCount: number;
     readonly expressionAwaits: readonly ts.AwaitExpression[];
     readonly expressionSyncs: readonly ts.Expression[];
     readonly expressionResults: readonly ts.Expression[];
@@ -299,6 +348,7 @@ export function planAsyncControlFlowGraph(
     let finallyCount = 0;
     let iteratorCount = 0;
     let asyncIteratorCount = 0;
+    let bindingValueCount = 0;
     const expressionAwaits: ts.AwaitExpression[] = [];
     const expressionAwaitSlots = new Map<ts.AwaitExpression, number>();
     const expressionSyncs: ts.Expression[] = [];
@@ -926,6 +976,106 @@ export function planAsyncControlFlowGraph(
             null,
             resultSlot,
         );
+    };
+
+    const buildBindingOperation = (
+        operation: AsyncBindingOperation,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget => {
+        const id = reserve();
+        return setState({ kind: "binding-op", id, operation, next }, context.exceptionTarget);
+    };
+
+    const buildBindingElement = (
+        element: ts.BindingElement,
+        valueSlot: number,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget | null => {
+        const bound = buildBindingName(element.name, valueSlot, next, context);
+        if (!bound || !element.initializer) return bound;
+        const resultSlot = expressionResults.push(element.initializer) - 1;
+        const apply = buildBindingOperation({
+            kind: "default-apply",
+            resultSlot,
+            valueSlot,
+        }, bound, context);
+        const defaultTarget = buildExpressionResult(
+            element.initializer,
+            resultSlot,
+            apply,
+            context,
+        );
+        if (!defaultTarget) return null;
+        return buildBindingOperation({
+            kind: "default-test",
+            valueSlot,
+            defaultTarget,
+        }, bound, context);
+    };
+
+    const buildBindingName = (
+        binding: ts.BindingName,
+        valueSlot: number,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget | null => {
+        const release = buildBindingOperation({ kind: "release", valueSlot }, next, context);
+        if (ts.isIdentifier(binding)) {
+            return buildBindingOperation({
+                kind: "assign",
+                identifier: binding,
+                valueSlot,
+            }, release, context);
+        }
+        let entry = release;
+        for (let index = binding.elements.length - 1; index >= 0; index--) {
+            const element = binding.elements[index];
+            if (!element || element.kind === ts.SyntaxKind.OmittedExpression) continue;
+            if (element.dotDotDotToken) return null;
+            const childSlot = bindingValueCount++;
+            const child = buildBindingElement(element, childSlot, entry, context);
+            if (!child) return null;
+            if (ts.isArrayBindingPattern(binding)) {
+                entry = buildBindingOperation({
+                    kind: "element",
+                    sourceSlot: valueSlot,
+                    valueSlot: childSlot,
+                    index,
+                }, child, context);
+                continue;
+            }
+            const propertyName = element.propertyName ??
+                (ts.isIdentifier(element.name) ? element.name : null);
+            if (!propertyName ||
+                (ts.isComputedPropertyName(propertyName) && containsAwait(propertyName.expression))) {
+                return null;
+            }
+            entry = buildBindingOperation({
+                kind: "property",
+                sourceSlot: valueSlot,
+                valueSlot: childSlot,
+                name: propertyName,
+            }, child, context);
+        }
+        return buildBindingOperation({ kind: "check", valueSlot }, entry, context);
+    };
+
+    const buildSuspendingBinding = (
+        binding: ts.BindingName,
+        resultSlot: number,
+        next: AsyncControlFlowTarget,
+        context: BuildContext,
+    ): AsyncControlFlowTarget | null => {
+        const valueSlot = bindingValueCount++;
+        const bound = buildBindingName(binding, valueSlot, next, context);
+        if (!bound) return null;
+        return buildBindingOperation({
+            kind: "source",
+            resultSlot,
+            valueSlot,
+        }, bound, context);
     };
 
     const buildSequence = (
@@ -1798,19 +1948,33 @@ export function planAsyncControlFlowGraph(
                     ? unwrapExpression(declaration.initializer)
                     : null;
                 if (!ts.isIdentifier(declaration.name)) {
-                    if (!initializer || containsSuspendingBindingExpression(declaration.name)) {
+                    if (!initializer) {
                         supported = false;
                         return next;
                     }
                     const resultSlot = expressionResults.push(declaration.initializer!) - 1;
-                    const bindId = reserve();
-                    const bind = setState({
-                        kind: "binding-init",
-                        id: bindId,
-                        binding: declaration.name,
-                        resultSlot,
-                        next,
-                    }, context.exceptionTarget);
+                    let bind: AsyncControlFlowTarget | null;
+                    if (containsSuspendingBindingExpression(declaration.name)) {
+                        bind = buildSuspendingBinding(
+                            declaration.name,
+                            resultSlot,
+                            next,
+                            context,
+                        );
+                    } else {
+                        const bindId = reserve();
+                        bind = setState({
+                            kind: "binding-init",
+                            id: bindId,
+                            binding: declaration.name,
+                            resultSlot,
+                            next,
+                        }, context.exceptionTarget);
+                    }
+                    if (!bind) {
+                        supported = false;
+                        return next;
+                    }
                     const entry = buildExpressionResult(
                         declaration.initializer!,
                         resultSlot,
@@ -1963,6 +2127,12 @@ export function planAsyncControlFlowGraph(
             case "binding-init":
                 targets.push(state.next);
                 break;
+            case "binding-op":
+                targets.push(state.next);
+                if (state.operation.kind === "default-test") {
+                    targets.push(state.operation.defaultTarget);
+                }
+                break;
             case "expression-complete":
                 if (state.branch) {
                     targets.push(state.branch.truthy, state.branch.falsy);
@@ -2070,6 +2240,7 @@ export function planAsyncControlFlowGraph(
         finallyCount,
         iteratorCount,
         asyncIteratorCount,
+        bindingValueCount,
         expressionAwaits,
         expressionSyncs,
         expressionResults,

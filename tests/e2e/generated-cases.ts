@@ -3,7 +3,12 @@ interface AsyncLeadingAwaitChainSpec {
     awaitCount: number;
 }
 
-type GeneratedCaseSpec = AsyncLeadingAwaitChainSpec;
+interface AsyncBindingDefaultDepthSpec {
+    generator: "async-binding-default-depth";
+    depth: number;
+}
+
+type GeneratedCaseSpec = AsyncLeadingAwaitChainSpec | AsyncBindingDefaultDepthSpec;
 
 function parseSpec(raw: string, filename: string): GeneratedCaseSpec {
     let value: unknown;
@@ -16,17 +21,27 @@ function parseSpec(raw: string, filename: string): GeneratedCaseSpec {
         throw new Error(`invalid generated case spec ${filename}: expected an object`);
     }
     const spec = value as Record<string, unknown>;
-    if (spec.generator !== "async-leading-await-chain") {
-        throw new Error(`invalid generated case spec ${filename}: unknown generator ${String(spec.generator)}`);
+    if (spec.generator === "async-leading-await-chain") {
+        const awaitCount = spec.awaitCount;
+        if (typeof awaitCount !== "number" || !Number.isInteger(awaitCount) || awaitCount < 2) {
+            throw new Error(`invalid generated case spec ${filename}: awaitCount must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            awaitCount,
+        };
     }
-    const awaitCount = spec.awaitCount;
-    if (typeof awaitCount !== "number" || !Number.isInteger(awaitCount) || awaitCount < 2) {
-        throw new Error(`invalid generated case spec ${filename}: awaitCount must be an integer of at least 2`);
+    if (spec.generator === "async-binding-default-depth") {
+        const depth = spec.depth;
+        if (typeof depth !== "number" || !Number.isInteger(depth) || depth < 2) {
+            throw new Error(`invalid generated case spec ${filename}: depth must be an integer of at least 2`);
+        }
+        return {
+            generator: spec.generator,
+            depth,
+        };
     }
-    return {
-        generator: spec.generator,
-        awaitCount,
-    };
+    throw new Error(`invalid generated case spec ${filename}: unknown generator ${String(spec.generator)}`);
 }
 
 function leadingAwaitChain(indent: string, seed: string, awaitCount: number): string[] {
@@ -110,10 +125,40 @@ function asyncLeadingAwaitChainSource(awaitCount: number): string {
     ].join("\n");
 }
 
+function asyncBindingDefaultDepthSource(depth: number): string {
+    let pattern = "leaf = await leafValue()";
+    for (let index = depth - 1; index >= 0; index--) {
+        pattern = `level${index}: { ${pattern} } = await objectValue()`;
+    }
+    return [
+        "let calls = 0;",
+        "",
+        "function objectValue(): Promise<any> {",
+        "    calls++;",
+        "    return Promise.resolve({});",
+        "}",
+        "",
+        "function leafValue(): Promise<number> {",
+        "    calls++;",
+        "    return Promise.resolve(73);",
+        "}",
+        "",
+        "async function bindingDepth(): Promise<boolean> {",
+        `    const { ${pattern} }: any = {};`,
+        `    return leaf === 73 && calls === ${depth + 1};`,
+        "}",
+        "",
+        'bindingDepth().then((result) => console.log("binding depth:", result));',
+        "",
+    ].join("\n");
+}
+
 export function generateE2eCaseSource(raw: string, filename: string): string {
     const spec = parseSpec(raw, filename);
     switch (spec.generator) {
         case "async-leading-await-chain":
             return asyncLeadingAwaitChainSource(spec.awaitCount);
+        case "async-binding-default-depth":
+            return asyncBindingDefaultDepthSource(spec.depth);
     }
 }

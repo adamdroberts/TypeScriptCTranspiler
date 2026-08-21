@@ -26578,6 +26578,31 @@ class Emitter {
                 if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
                     return false;
                 }
+            } else if (stateNode.kind === "binding-op") {
+                const operation = stateNode.operation;
+                const valueSlots = operation.kind === "source" || operation.kind === "check" ||
+                    operation.kind === "default-test" || operation.kind === "default-apply" ||
+                    operation.kind === "assign" || operation.kind === "release"
+                    ? [operation.valueSlot]
+                    : [operation.sourceSlot, operation.valueSlot];
+                if (valueSlots.some((slot) => slot < 0 || slot >= graph.bindingValueCount)) {
+                    return false;
+                }
+                if (operation.kind === "source" || operation.kind === "default-apply") {
+                    const storageType = expressionResultTypes[operation.resultSlot];
+                    if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                        return false;
+                    }
+                }
+                if (operation.kind === "assign") {
+                    const symbol = this.symbolForIdentifier(operation.identifier);
+                    if (!symbol || !fieldBySymbol.has(symbol)) return false;
+                }
+                if (operation.kind === "property" && ts.isComputedPropertyName(operation.name)) {
+                    const keyType = this.prepareType(mapType(operation.name.expression, this.checker));
+                    if (keyType.kind !== "number" && keyType.kind !== "string" &&
+                        keyType.kind !== "symbol") return false;
+                }
             } else if (stateNode.kind === "await-condition" || stateNode.kind === "await-logical-condition" ||
                 stateNode.kind === "await-completion" ||
                 stateNode.kind === "await-next" ||
@@ -26647,6 +26672,10 @@ class Emitter {
             if (storageType.kind === "value") {
                 this.structDecls.line(`void* expression_result_${slot}_gc_root;`);
             }
+        }
+        for (let slot = 0; slot < graph.bindingValueCount; slot++) {
+            this.structDecls.line(`tsc_value_t binding_value_${slot};`);
+            this.structDecls.line(`void* binding_value_${slot}_gc_root;`);
         }
         for (let slot = 0; slot < graph.iteratorCount; slot++) {
             this.structDecls.line(`tsc_array_t* iterator_values_${slot};`);
@@ -26965,6 +26994,56 @@ class Emitter {
                         assignIdentifier,
                     );
                 }
+            };
+            const emitBindingValueAssignment = (
+                slot: number,
+                value: EmitResult,
+                node: ts.Node,
+            ): void => {
+                callback.line(`state->binding_value_${slot} = ${this.coerce(value, T_VALUE, node)};`);
+                callback.line(
+                    `state->binding_value_${slot}_gc_root = ` +
+                    `tsc_value_gc_root(state->binding_value_${slot});`,
+                );
+            };
+            const releaseExpressionResult = (slot: number): boolean => {
+                const storageType = expressionResultTypes[slot];
+                if (!storageType || storageType.kind === "void" || storageType.kind === "never") {
+                    return false;
+                }
+                callback.line(`state->expression_result_${slot} = ${this.zeroValue(storageType)};`);
+                if (storageType.kind === "value") {
+                    callback.line(`state->expression_result_${slot}_gc_root = NULL;`);
+                }
+                return true;
+            };
+            const bindingPropertyValue = (
+                source: string,
+                name: ts.PropertyName,
+            ): EmitResult | null => {
+                if (ts.isComputedPropertyName(name)) {
+                    const key = this.emitExpr(name.expression);
+                    const keyType = this.prepareType(key.ty);
+                    if (keyType.kind === "number") {
+                        return { c: `tsc_value_get_index(${source}, ${key.c})`, ty: T_VALUE };
+                    }
+                    if (keyType.kind === "symbol") {
+                        return { c: `tsc_value_get_symbol_prop(${source}, ${key.c})`, ty: T_VALUE };
+                    }
+                    if (keyType.kind !== "string") return null;
+                    return { c: `tsc_value_get_prop(${source}, ${key.c})`, ty: T_VALUE };
+                }
+                const key = ts.isIdentifier(name) || ts.isStringLiteralLike(name)
+                    ? name.text
+                    : ts.isNumericLiteral(name)
+                        ? String(Number(name.text))
+                        : null;
+                if (key === null) return null;
+                return {
+                    c: `tsc_value_get_prop(${source}, ` +
+                        `tsc_str_from_lit("${escapeCString(key)}", ${utf8ByteLen(key)}))`,
+                    ty: T_VALUE,
+                };
             };
             for (const stateNode of [...graph.states].sort((left, right) => left.id - right.id)) {
                 callback.open(`case ${stateNode.id}:`);
@@ -27605,6 +27684,58 @@ class Emitter {
                         callback.line(`state->expression_result_${stateNode.resultSlot}_gc_root = NULL;`);
                     }
                     emitTransition(stateNode.next.id);
+                } else if (stateNode.kind === "binding-op") {
+                    const operation = stateNode.operation;
+                    if (operation.kind === "source" || operation.kind === "default-apply") {
+                        const storageType = expressionResultTypes[operation.resultSlot];
+                        const expression = graph.expressionResults[operation.resultSlot];
+                        if (!storageType || !expression || storageType.kind === "void" ||
+                            storageType.kind === "never") return false;
+                        emitBindingValueAssignment(operation.valueSlot, {
+                            c: `state->expression_result_${operation.resultSlot}`,
+                            ty: storageType,
+                        }, expression);
+                        if (!releaseExpressionResult(operation.resultSlot)) return false;
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "check") {
+                        callback.open(`if (tsc_value_is_nullish(state->binding_value_${operation.valueSlot}))`);
+                        callback.line(
+                            `tsc_throw_str(tsc_str_from_cstr("Cannot destructure null or undefined"));`,
+                        );
+                        callback.close();
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "property") {
+                        const value = bindingPropertyValue(
+                            `state->binding_value_${operation.sourceSlot}`,
+                            operation.name,
+                        );
+                        if (!value) return false;
+                        emitBindingValueAssignment(operation.valueSlot, value, operation.name);
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "element") {
+                        emitBindingValueAssignment(operation.valueSlot, {
+                            c: `tsc_value_get_index(state->binding_value_${operation.sourceSlot}, ${operation.index}.0)`,
+                            ty: T_VALUE,
+                        }, body);
+                        emitTransition(stateNode.next.id);
+                    } else if (operation.kind === "default-test") {
+                        callback.line(
+                            `state->pc = tsc_value_is_undefined(state->binding_value_${operation.valueSlot}) ` +
+                            `? ${operation.defaultTarget.id} : ${stateNode.next.id};`,
+                        );
+                        callback.line("continue;");
+                    } else if (operation.kind === "assign") {
+                        emitCfgBinding(
+                            operation.identifier,
+                            { c: `state->binding_value_${operation.valueSlot}`, ty: T_VALUE },
+                            "declaration",
+                        );
+                        emitTransition(stateNode.next.id);
+                    } else {
+                        callback.line(`state->binding_value_${operation.valueSlot} = tsc_value_undefined();`);
+                        callback.line(`state->binding_value_${operation.valueSlot}_gc_root = NULL;`);
+                        emitTransition(stateNode.next.id);
+                    }
                 } else if (stateNode.kind === "throw-route") {
                     const thrown = this.emitExpr(stateNode.expression);
                     const boxed = this.coerce(thrown, T_VALUE, stateNode.expression);
@@ -27783,6 +27914,10 @@ class Emitter {
             if (storageType.kind === "value") {
                 buf.line(`${env}->expression_result_${slot}_gc_root = NULL;`);
             }
+        }
+        for (let slot = 0; slot < graph.bindingValueCount; slot++) {
+            buf.line(`${env}->binding_value_${slot} = tsc_value_undefined();`);
+            buf.line(`${env}->binding_value_${slot}_gc_root = NULL;`);
         }
         for (let slot = 0; slot < graph.iteratorCount; slot++) {
             buf.line(`${env}->iterator_values_${slot} = NULL;`);

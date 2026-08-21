@@ -1,0 +1,3 @@
+{
+  "description": "Suspending computed binding keys remain fail-closed until they are represented by an ordered key-result operation in the canonical binding graph"
+}
